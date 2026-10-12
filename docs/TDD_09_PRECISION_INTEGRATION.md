@@ -13,7 +13,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 |-------|-------|--------|
 | 80 | Neutral trace types, generalized beam geometry, oracle v2 | Done (awaiting doc confirmation) |
 | 81 | Reflections, partial/one-sided inversions, terminals, passes | Done (user sign-off) |
-| 82 | Portals (rigid motion) | Planned |
+| 82 | Portals (rigid motion) | In progress (red tests committed) |
 | 83 | Projective effects (physical) + full switch-over | Planned |
 | 84 | Delete the legacy solver | Planned |
 | 85 | State flags (ConfigResolver + StateChange) | Planned |
@@ -296,14 +296,40 @@ Rounding never decides an endpoint, an incidence, a tangency or a root at the an
 
 ## Stage 82: Portals (rigid motion)
 
+### Overview
+Portal pairs on the beam solver.
+
+**Transform.** A portal surface S carries the rigid motion T(z) = a z + d, with a = unit(cos θ, sin θ) of the float64 values. Its pair is S' = T(S), built as T of the source; it carries T⁻¹, and scene defs record the pair id. A hit at h maps the beam onto S':
+- p' = T(h), τ' = a·τ_h, κ' = κ;
+- the new beam departs S'.
+
+**Stack.** Hitting the pair of the top entry pops it: the earlier beam object is restored, resumed at T⁻¹ of the point hit. Legacy's quirk of excluding the just-hit surface at the exit after a pop is **fixed**: the departure surface is the one the beam actually leaves.
+
+**Exactness through portals.**
+- Known endpoints map to the pair's corresponding endpoints.
+- Other known points survive only when T(k) is exactly representable.
+- Exact lines carry through translations.
+- Plans mixing mirrors and θ = 0 portals keep an exact aim image.
+
+**Oracle data:**
+- `bench/fixtures/stage82_portals.json` (`gen_fixtures_stage82.py`).
+- The scene corpus now includes the two portal levels: 288 scenarios. The corpus is now seeded per scene.
+
 ### Unit Tests Added (written first)
-- `test_portal_beam_map`
+`tests/test_stage82_portals.gd`:
+- `test_portal_beam_map`: closed form. The outgoing beam contains T(z), ahead of the exit, with κ preserved.
+- `test_portal_translate_and_departure`: covers the departure root on the paired surface.
+- `test_pop_across_pair_resumes_exactly`: the restored beam is the original object and stays exactly straight.
+- `test_portal_stack_rules`: a mirror between the portal hits means the pair pushes its own transform.
+- `test_portal_rotation_and_arcs`
+- `test_plan_through_portal_level`
+- `test_plan_through_portal_reaches_cursor`: 24 corpus scenarios, ≤ 0.01 px, cursor exact.
 - `test_after_portal_gap_flag`
-- `test_departure_root_on_paired_surface`
-- `test_pop_across_pair_resumes_exactly`
-- `test_plan_through_portal_reaches_cursor`
-- `test_portal_pair_construction_without_frames`
 - `test_fast_twin_portal`
+
+`tests/test_stage81_scene_switch.gd`: the portal levels move to the beam solver.
+
+Moved to Stage 84: `test_portal_pair_construction_without_frames`. Rewriting `create_portal_pair` without `Point.transformed` belongs with deleting the provenance transforms, which Stage 71's tests still assert. The beam solver does not use them.
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
 - [ ] The portal path appears on the paired side with a visible gap.

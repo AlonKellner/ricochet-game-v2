@@ -165,7 +165,8 @@
     "d": [
      300.0,
      0.0
-    ]
+    ],
+    "pair": 7
    },
    "right": {
     "interactive": true,
@@ -174,7 +175,8 @@
     "d": [
      300.0,
      0.0
-    ]
+    ],
+    "pair": 7
    },
    "is_target": false,
    "player_solid": false
@@ -203,7 +205,8 @@
     "d": [
      -300.0,
      0.0
-    ]
+    ],
+    "pair": 6
    },
    "right": {
     "interactive": true,
@@ -212,7 +215,8 @@
     "d": [
      -300.0,
      0.0
-    ]
+    ],
+    "pair": 6
    },
    "is_target": false,
    "player_solid": false
@@ -241,7 +245,8 @@
     "d": [
      550.0,
      0.0
-    ]
+    ],
+    "pair": 9
    },
    "right": {
     "interactive": true,
@@ -250,7 +255,8 @@
     "d": [
      550.0,
      0.0
-    ]
+    ],
+    "pair": 9
    },
    "is_target": false,
    "player_solid": false
@@ -279,7 +285,8 @@
     "d": [
      -550.0,
      0.0
-    ]
+    ],
+    "pair": 8
    },
    "right": {
     "interactive": true,
@@ -288,7 +295,8 @@
     "d": [
      -550.0,
      0.0
-    ]
+    ],
+    "pair": 8
    },
    "is_target": false,
    "player_solid": false

@@ -24,7 +24,7 @@ import trace2 as T                      # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 OUT = os.path.join(ROOT, "bench", "scenes_corpus")
-SUPPORTED = {"pass", "terminal", "reflection", "inversion"}
+SUPPORTED = {"pass", "terminal", "reflection", "inversion", "portal"}
 LONG_PLAN_SCENES = ("two_mirrors", "three_mirrors", "parallel_mirrors")
 D = 40
 
@@ -51,7 +51,7 @@ def plannable(surfs):
     for d in surfs:
         for side, key in (("LEFT", "left"), ("RIGHT", "right")):
             c = d.get(key)
-            if c is not None and c["type"] in ("reflection", "inversion") and c.get("interactive"):
+            if c is not None and c["type"] in ("reflection", "inversion", "portal") and c.get("interactive"):
                 out.append((int(d["id"]), side))
     return out
 
@@ -111,6 +111,7 @@ def main():
         if not surfs or not scene_ok(surfs):
             continue
         pl_choices = plannable(surfs)
+        rng = random.Random(f"{args.seed}:{name}")     # per scene: adding scenes changes nothing else
         made = 0
         attempts = 0
         while made < args.per_scene and attempts < args.per_scene * 20:

@@ -110,7 +110,7 @@ func test_falls_back_to_tracer_for_unsupported_scenes():
 	var supported: Array = [RoomBuilder.create_block_surface(Vector2(0, 0), Vector2(100, 0), Vector2(50, 0))]
 	assert_true(BeamTracer.scene_supported(supported), "terminal blocks are supported (Stage 81)")
 	var seg := Segment.from_coords(Vector2(0, 0), Vector2(0, 100), Vector2(0, 50))
-	var res := RigidMotionEffect.create_portal_pair(seg, 0.0, Vector2(500, 0))
-	var cfg := SideConfig.new(res.source_effect, true)
-	var portal := Surface.new(seg, cfg, cfg, false, true)
-	assert_false(BeamTracer.scene_supported([portal]), "portals are not supported yet -> Tracer (Stage 82)")
+	var proj := LineNormalProjection.new(false)
+	var cfg := SideConfig.new(proj, true)
+	var surf := Surface.new(seg, cfg, cfg, false, true)
+	assert_false(BeamTracer.scene_supported([surf]), "projections are not supported yet -> Tracer (Stage 83)")

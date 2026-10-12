@@ -1,8 +1,8 @@
 extends GutTest
 
 # Stage 81: every scene made of mirrors, inversions, blocks and pass-throughs
-# is solved by the beam solver; portal / projective scenes still fall back to
-# the legacy Tracer (Stages 82-83).
+# is solved by the beam solver (Stage 82: portals too); projective scenes
+# still fall back to the legacy Tracer (Stage 83).
 
 const BEAM_SCENES := [
 	"res://scenes/main.tscn",
@@ -26,16 +26,16 @@ const BEAM_SCENES := [
 	"res://scenes/test_levels/three_mirrors.tscn",
 	"res://scenes/test_levels/two_mirrors.tscn",
 	"res://scenes/test_levels/two_sided_mirror.tscn",
+	"res://scenes/playground/portals.tscn",       # Stage 82
+	"res://scenes/test_levels/portals.tscn",      # Stage 82
 ]
 
 const LEGACY_SCENES := [
-	"res://scenes/playground/portals.tscn",
 	"res://scenes/playground/projective.tscn",
 	"res://scenes/playground/projective_arcs.tscn",
 	"res://scenes/playground/projective_lines.tscn",
 	"res://scenes/playground/directional_arcs.tscn",
 	"res://scenes/playground/directional_lines.tscn",
-	"res://scenes/test_levels/portals.tscn",
 ]
 
 func _solver_for(path: String) -> String:
@@ -57,6 +57,6 @@ func test_mirror_scenes_use_beam():
 	for path in BEAM_SCENES:
 		assert_eq(await _solver_for(path), "beam/supported", path)
 
-func test_portal_and_projective_scenes_fall_back():
+func test_projective_scenes_fall_back():
 	for path in LEGACY_SCENES:
 		assert_eq(await _solver_for(path), "tracer/unsupported", path)

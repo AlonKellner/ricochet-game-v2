@@ -284,16 +284,40 @@
   }
  ],
  "player": [
-  1106.625244140625,
-  619.6137084960938
+  668.0039672851562,
+  688.1863403320312
  ],
  "cursor": [
-  1228.9007568359375,
-  390.3363952636719
+  1297.807861328125,
+  373.649658203125
  ],
  "plan": [
   {
+   "surface_id": 6,
+   "side": "LEFT"
+  },
+  {
    "surface_id": 5,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 6,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 5,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 6,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 5,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 6,
    "side": "LEFT"
   }
  ]

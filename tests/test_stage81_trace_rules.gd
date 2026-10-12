@@ -56,7 +56,7 @@ func _check(events: Array, expected: Array, label: String, tol: float) -> bool:
 		if x.has("x") and e.point != null:
 			var d := Vector2(e.point.fx(), e.point.fy()).distance_to(Vector2(String(x["x"]).to_float(), String(x["y"]).to_float()))
 			if d > tol:
-				fail_test("%s event %d: point off by %g" % [label, i, d])
+				fail_test("%s event %d: point off by %s" % [label, i, d])
 				return false
 	return true
 
@@ -218,4 +218,4 @@ func test_scene_corpus_matches_oracle():
 		if not _check(res.physical, se[1]["physical"], name + " physical", CORPUS_TOL):
 			bad += 1
 	assert_eq(bad, 0, "%d scenarios: planned and physical match the oracle" % names.size())
-	assert_eq(names.size(), 264)
+	assert_eq(names.size(), 288)

@@ -236,9 +236,10 @@ def build_surfaces(props):
 
     def portal(s, e, v, theta, d):
         apply, inv_d = portal_transform(theta, d)
-        ca = _cfg("portal", True, theta=theta, d=[f32(d[0]), f32(d[1])])
+        src, tgt = len(out) + 1, len(out) + 2
+        ca = _cfg("portal", True, theta=theta, d=[f32(d[0]), f32(d[1])], pair=tgt)
         add(s, e, v, ca, ca, player_solid=False)
-        cb = _cfg("portal", True, theta=-theta, d=list(inv_d))
+        cb = _cfg("portal", True, theta=-theta, d=list(inv_d), pair=src)
         add(apply(s), apply(e), apply(v), cb, cb, player_solid=False)
 
     for a in arcs("portal_lines", 7):

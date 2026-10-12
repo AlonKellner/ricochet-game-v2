@@ -1,8 +1,14 @@
 """Oracle v2: arbitrary-precision trace semantics for general scenes (Stage 81).
 
 Surfaces are line / arc / full-circle segments with per-side configs:
-None or {"type": "pass"} (no effect), "terminal", "reflection", "inversion".
-(Portals: Stage 82; projectives: Stage 83/87.)
+None or {"type": "pass"} (no effect), "terminal", "reflection", "inversion",
+"portal" {theta, d, pair} (projectives: Stage 83/87).
+
+Portals (Stage 82): surface S with rigid motion T(z) = a z + d, a = unit(cos
+theta, sin theta) of the float64 values, paired with S' = T(S) (which carries
+T^-1). A hit at h maps the beam onto S': p' = T(h), tau' = a tau_h, kappa'
+= kappa; the new beam departs S'. Hitting the pair of the stack's top pops it:
+the earlier beam is restored, resumed at T^-1 of the point hit (on S).
 
 Rules (TDD_09 "Target architecture" + "Legacy quirks"):
 - Every carrier crossing is an event (counts toward MAX_HITS = 32, as do the
@@ -51,6 +57,7 @@ Rules (TDD_09 "Target architecture" + "Legacy quirks"):
 
 from __future__ import annotations
 
+import math
 from dataclasses import dataclass, field
 from fractions import Fraction
 
@@ -63,7 +70,7 @@ from geometry import (LEFT, RIGHT, P, Seg, endpoint_blocked_sides, line_hits, on
 MAX_HITS = 32
 PHYSICAL = 0
 PLANNED = 1
-TRANSFORMATIVE = ("reflection", "inversion")
+TRANSFORMATIVE = ("reflection", "inversion", "portal")
 
 
 # ---------------------------------------------------------------- scene
@@ -81,6 +88,20 @@ class Surface:
         if cfg is None or cfg.get("type") == "pass":
             return None
         return cfg["type"]
+
+    def portal(self):
+        """(a, d, pair id) of a portal surface, else None."""
+        for cfg in (self.left, self.right):
+            if cfg is not None and cfg.get("type") == "portal":
+                c, sn = math.cos(cfg["theta"]), math.sin(cfg["theta"])
+                a = mp.mpc(c, sn)
+                return a / abs(a), P(cfg["d"]), int(cfg["pair"])
+        return None
+
+
+def portal_map(surf, z, inverse=False):
+    a, d, _ = surf.portal()
+    return mp.conj(a) * (z - d) if inverse else a * z + d
 
 
 def surface_from_json(d):
@@ -113,6 +134,9 @@ def apply_effect(beam: Beam, t, surf: Surface, etype, h=None) -> Beam:
     provenance (snapped endpoint, departure point), else beam.at(t)."""
     if h is None:
         h = beam.at(t)
+    if etype == "portal":
+        a, d, _ = surf.portal()
+        return Beam(a * h + d, a * beam.tangent_at(t), beam.kappa)
     if surf.seg.kind == "line":
         assert etype == "reflection"
         tau_h = beam.tangent_at(t)
@@ -128,8 +152,11 @@ def apply_effect(beam: Beam, t, surf: Surface, etype, h=None) -> Beam:
     return Beam(h, tau2 / abs(tau2), -beam.kappa - 2 * cross(tau_h, u) / (circ.R ** 2))
 
 
-def map_point(z, surf: Surface):
-    """The surface's transform applied to a point (None = infinity)."""
+def map_point(z, surf: Surface, inverse=False):
+    """The surface's transform (or its inverse) applied to a point (None =
+    infinity)."""
+    if surf.portal() is not None:
+        return None if z is None else portal_map(surf, z, inverse)
     seg = surf.seg
     if seg.kind == "line":
         if z is None:
@@ -210,6 +237,7 @@ class StackEntry:
     other: object
     known: list = field(default_factory=list)
     line: object = None
+    pop_id: int = None          # the surface whose hit pops this entry (sid, or a portal's pair)
 
 
 @dataclass
@@ -457,23 +485,31 @@ def _other_root(beam, surf: Surface, t, fresh, depart, t0):
 
 
 def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, pt, pt_exact):
-    if walk.stack and walk.stack[-1].sid == surf.id:
+    if walk.stack and walk.stack[-1].pop_id == surf.id:
         top = walk.stack.pop()
+        src = {s.id: s for s in walk.surfaces}[top.sid]
+        # the point on the restored beam: T^-1(pt) for a portal, pt otherwise
+        q = portal_map(src, pt, inverse=True) if src.portal() is not None else pt
         if rehit:
             t_res = top.t_hit
         elif fresh and depart == surf.id:
             t_res = top.other
         else:
-            dh = abs(top.beam.at(top.t_hit) - pt)
-            do = abs(top.beam.at(top.other) - pt)
+            dh = abs(top.beam.at(top.t_hit) - q)
+            do = abs(top.beam.at(top.other) - q)
             t_res = top.t_hit if dh < do else top.other
         walk.known = top.known
         walk.line = top.line
-        return top.beam, surf.id, t_res, False
+        return top.beam, top.sid, t_res, False
     other = _other_root(beam, surf, t, fresh, depart, t0)
-    walk.stack.append(StackEntry(beam, surf.id, t, other, walk.known, walk.line))
+    portal = surf.portal()
+    pop_id = portal[2] if portal is not None else surf.id
+    walk.stack.append(StackEntry(beam, surf.id, t, other, walk.known, walk.line, pop_id))
     nb = apply_effect(beam, t, surf, etype, pt)
     old_known = walk.known
+    if portal is not None:
+        _portal_known(walk, surf, pt, pt_exact, old_known, nb)
+        return nb, pop_id, mp.mpf(0), True
     walk.known = [(pt, mp.mpf(0), surf.id)] if pt_exact else []
     walk.known += [(k, nb.param_of(k), None) for k, _, _ in old_known if k != pt and incident(k, surf)]
     if walk.line is not None and surf.seg.kind == "line":
@@ -507,6 +543,61 @@ def _tangent(line, seg):
     nx, ny, w, rr = _center_h(seg)
     d = (a * nx + b * ny) / w - c
     return d * d == rr * (a * a + b * b)
+
+
+def _exact_point(F2):
+    """The exact rational point as a float64 data point (mpc), or None if it
+    is not exactly representable."""
+    x, y = float(F2[0]), float(F2[1])
+    if Fraction(x) == F2[0] and Fraction(y) == F2[1]:
+        return mp.mpc(x, y)
+    return None
+
+
+def _portal_image(surf, k):
+    """T(k) as exact data: endpoint correspondence (the pair is built as T of
+    the source) or, for a translation, an exactly representable k + d."""
+    pair = {s.id: s for s in WALK_SURFACES}[surf.portal()[2]]
+    if not surf.seg.full:
+        if k == surf.seg.S:
+            return pair.seg.S
+        if k == surf.seg.E:
+            return pair.seg.E
+    cfg = surf.left if surf.left and surf.left.get("type") == "portal" else surf.right
+    if cfg["theta"] != 0:
+        return None
+    K = FC(k)
+    return _exact_point((K[0] + F(cfg["d"][0]), K[1] + F(cfg["d"][1])))
+
+
+def _portal_known(walk, surf, pt, pt_exact, old_known, nb):
+    """Known points and exact line after a portal push (rigid image)."""
+    global WALK_SURFACES
+    WALK_SURFACES = walk.surfaces
+    pair_id = surf.portal()[2]
+    known = []
+    if pt_exact:
+        h2 = _portal_image(surf, pt)
+        if h2 is not None:
+            known.append((h2, mp.mpf(0), pair_id))
+    for k, _, _ in old_known:
+        if k == pt:
+            continue
+        k2 = _portal_image(surf, k)
+        if k2 is not None and not any(x[0] == k2 for x in known):
+            known.append((k2, nb.param_of(k2), None))
+    walk.known = known
+    cfg = surf.left if surf.left and surf.left.get("type") == "portal" else surf.right
+    if walk.line is not None and cfg["theta"] == 0:
+        a, b, c = walk.line
+        walk.line = (a, b, c + a * F(cfg["d"][0]) + b * F(cfg["d"][1]))
+        _add_line_endpoints(walk, nb)
+    else:
+        walk.line = None
+    return True
+
+
+WALK_SURFACES = []
 
 
 def _line_through_center(line, seg):
@@ -546,8 +637,10 @@ def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="
 def aim_image(surfaces, plan, cursor):
     by_id = {s.id: s for s in surfaces}
     z = P(cursor)
-    for sid, _side in reversed(plan):
-        z = map_point(z, by_id[sid])
+    for sid, side in reversed(plan):
+        if by_id[sid].effect(side) not in TRANSFORMATIVE:
+            continue
+        z = map_point(z, by_id[sid], inverse=True)
         if z is None:
             return None
     return z
@@ -570,6 +663,12 @@ def initial_line(surfaces, player, cursor, plan):
     for sid, side in reversed(list(plan)):
         surf = by_id.get(sid)
         if surf is None or surf.effect(side) not in TRANSFORMATIVE:
+            continue
+        if surf.portal() is not None:
+            cfg = surf.left if surf.left and surf.left.get("type") == "portal" else surf.right
+            if cfg["theta"] != 0:
+                return None
+            X = (X[0] - F(cfg["d"][0]), X[1] - F(cfg["d"][1]))
             continue
         if surf.seg.kind != "line":
             return None

@@ -120,6 +120,20 @@ static func defs_from_surfaces(game_surfaces: Array) -> Array:
 	var out: Array = []
 	for s in game_surfaces:
 		out.append(describe_surface(s))
+	# portal pairs: the surface whose transform is this one's inverse
+	var state := GameState.new()
+	for i in game_surfaces.size():
+		for key in ["left", "right"]:
+			var cfg = out[i][key]
+			if cfg == null or cfg["type"] != "portal":
+				continue
+			var e: Effect = game_surfaces[i].active_side_config(Side.Value.LEFT if key == "left" else Side.Value.RIGHT, state).effect
+			for j in game_surfaces.size():
+				var c2: SideConfig = game_surfaces[j].active_side_config(Side.Value.LEFT, state)
+				if j != i and c2 != null and c2.effect is RigidMotionEffect \
+						and c2.effect.get_tracked_transform() == e.get_tracked_transform().inverse:
+					cfg["pair"] = game_surfaces[j].id
+					break
 	return out
 
 static func _v(p: Vector2):

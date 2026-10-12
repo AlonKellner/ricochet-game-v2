@@ -112,3 +112,77 @@ def test_partial_blockage_does_not_leak():
     p = line(2, (200, -100), (200, 100), PASS, PASS)
     w = T.trace_physical_direction([a, p], (0, 0), mp.mpc(1, 0))
     assert [(e.surface_id, e.applied) for e in w.events if e.kind == "hit"][:2] == [(1, False), (2, False)]
+
+
+# ---------------------------------------------------------------- portals (Stage 82)
+
+def portal_pair(sid, a, b, theta, d):
+    """Source sid (a -> b) and its pair sid + 1 = T(source), T(z) = e^{i theta} z + d."""
+    import math
+    c, s = math.cos(theta), math.sin(theta)
+    T = lambda p: (c * p[0] - s * p[1] + d[0], s * p[0] + c * p[1] + d[1])
+    en = (c, -s)
+    inv_d = [-(en[0] * d[0] - en[1] * d[1]), -(en[0] * d[1] + en[1] * d[0])]
+    ca = {"type": "portal", "interactive": True, "theta": theta, "d": list(d), "pair": sid + 1}
+    cb = {"type": "portal", "interactive": True, "theta": -theta, "d": inv_d, "pair": sid}
+    return line(sid, a, b, ca, ca), line(sid + 1, T(a), T(b), cb, cb)
+
+
+def test_portal_translates_beam():
+    src, tgt = portal_pair(1, (100, -500), (100, 500), 0.0, (300, 0))
+    wall = line(3, (600, -500), (600, 500), TERM, TERM)
+    w = T.trace_physical_direction([src, tgt, wall], (0, 0), mp.mpc(1, 0.25))
+    ev = w.events
+    assert (ev[0].surface_id, ev[0].applied) == (1, True)
+    assert abs(ev[0].point - mp.mpc(100, 25)) < mp.mpf(10) ** -40
+    # exits at T(h) = (400, 25), same direction: the next event is the wall at
+    # y = 25 + 200 * 0.25, not the paired surface at the exit point
+    assert (ev[1].surface_id, ev[1].terminal) == (3, True)
+    assert abs(ev[1].point - mp.mpc(600, 75)) < mp.mpf(10) ** -40
+
+
+def test_portal_mirror_then_pair_pushes():
+    # src -> exit at the pair, mirror, back into the pair: the top of the
+    # stack is the mirror, so the pair pushes its own transform (T^-1)
+    src, tgt = portal_pair(1, (100, -500), (100, 500), 0.0, (300, 0))
+    m = line(3, (500, -500), (500, 500), REFL, REFL)
+    wall = line(4, (-200, -500), (-200, 500), TERM, TERM)
+    w = T.trace_physical_direction([src, tgt, m, wall], (0, 0), mp.mpc(1, 0.25))
+    hits = [(e.surface_id, e.applied) for e in w.events if e.kind == "hit"]
+    assert hits[:4] == [(1, True), (3, True), (2, True), (4, True)], hits
+    assert abs(w.events[2].point - mp.mpc(400, 75)) < mp.mpf(10) ** -40
+    # exits at T^-1(400, 75) = (100, 75) going -x, to the wall at y = 75 + 300/4
+    assert abs(w.events[3].point - mp.mpc(-200, 150)) < mp.mpf(10) ** -40
+
+
+def test_portal_pop_via_departure_rehit():
+    # short portals: the exit beam wraps through infinity, misses the source
+    # segment (off-segment pass) and returns to its departure point on the
+    # pair (re-hit) -> pop: the original beam resumes at the source hit point
+    src, tgt = portal_pair(1, (100, -10), (100, 10), 0.0, (300, 0))
+    w = T.trace_physical_direction([src, tgt], (0, 0), mp.mpc(1, 0.0625))
+    ev = w.events
+    got = [(e.surface_id, e.applied, e.on_segment, e.rehit) for e in ev[:4]]
+    assert got == [(1, True, True, False), (1, False, False, False), (2, True, True, True), (2, False, False, False)], got
+    assert abs(ev[0].point - mp.mpc(100, 6.25)) < mp.mpf(10) ** -40
+    assert abs(ev[1].point - mp.mpc(100, -12.5)) < mp.mpf(10) ** -40
+    assert abs(ev[2].point - mp.mpc(400, 6.25)) < mp.mpf(10) ** -40
+    # restored original beam, from the source hit point onwards
+    assert abs(ev[3].point - mp.mpc(400, 25)) < mp.mpf(10) ** -40
+
+
+def test_portal_rotation():
+    import math
+    src, tgt = portal_pair(1, (100, -500), (100, 500), math.pi / 2, (0, 0))
+    w = T.trace_physical_direction([src, tgt], (0, 0), mp.mpc(1, 0.25))
+    e0 = w.events[0]
+    assert e0.surface_id == 1 and e0.applied
+    # the exit beam is the rotated beam: its point is T(h) = i h
+    e1 = w.events[1]
+    assert e1.kind in ("hit", "escape", "max")
+
+
+def test_planned_through_portal_aims_at_preimage():
+    src, tgt = portal_pair(1, (100, -500), (100, 500), 0.0, (300, 0))
+    img = T.aim_image([src, tgt], [(1, "RIGHT")], (500, 100))
+    assert img == mp.mpc(200, 100)
