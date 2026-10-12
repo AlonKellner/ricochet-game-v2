@@ -12,7 +12,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 | Stage | Topic | Status |
 |-------|-------|--------|
 | 80 | Neutral trace types, generalized beam geometry, oracle v2 | Done (awaiting doc confirmation) |
-| 81 | Reflections, partial/one-sided inversions, terminals, passes | In progress (red tests committed) |
+| 81 | Reflections, partial/one-sided inversions, terminals, passes | Done (user sign-off) |
 | 82 | Portals (rigid motion) | Planned |
 | 83 | Projective effects (physical) + full switch-over | Planned |
 | 84 | Delete the legacy solver | Planned |
@@ -252,12 +252,12 @@ Rounding never decides an endpoint, an incidence, a tangency or a root at the an
 - **MAX_HITS:** a trace cut at 32 events ends at the next crossing, drawn up to it with no effect.
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
-- [ ] Mirrors, arcs and blocks look identical to before at shallow depth.
-- [ ] Deep mirror plans stay attached to the cursor.
-- [ ] One-sided mirrors and pass-throughs behave as before.
-- [ ] Firing follows the preview.
-- [ ] Aiming exactly at segment endpoints and room corners (cursor or player on them) behaves sensibly: corners block, endpoint grazes pass.
-- [ ] Rule changes are acceptable:
+- [x] Mirrors, arcs and blocks look identical to before at shallow depth.
+- [x] Deep mirror plans stay attached to the cursor.
+- [x] One-sided mirrors and pass-throughs behave as before.
+- [x] Firing follows the preview.
+- [x] Aiming exactly at segment endpoints and room corners (cursor or player on them) behaves sensibly: corners block, endpoint grazes pass.
+- [x] Rule changes are acceptable:
   - the departure point is re-hit after a full loop;
   - a reflection exactly at the cursor reaches the cursor immediately;
   - a tangent touch is not a hit.
@@ -275,7 +275,7 @@ Rounding never decides an endpoint, an incidence, a tangency or a root at the an
 | Benchmarks (v2 corpora) | [x] | Ladder 161/161 (depth 1–15) and stress 40/40 (depth 16–25), planned and physical, ≤ 0.01 px. Legacy Tracer: 3/161 and 0/40. f64 alone: planned 161/161, physical 112/161 (needs the ladder). |
 | Estimator calibration | [x] | Coverage: planned 100%, physical 99.7%. 0 missed escalations. Anchored-prefix events now get a per-beam angle gain, which grows with distance from the anchor. |
 | Per-frame cost (warm caches, f64 accepted) | [x] | inversion_grid 5.2 ms (legacy 5.9), circle_no_walls 3.5 (2.75), main 2.5 (0.95), two_mirrors 1.2. Exact lines are lazy: a float bound plus exact coefficients only at near-coincidences. |
-| Stage complete | [ ] | Awaiting user sign-off on the interactive checklist. |
+| Stage complete | [x] | User signed off on the interactive checklist and the rule changes. |
 
 ### Files Modified/Created
 
