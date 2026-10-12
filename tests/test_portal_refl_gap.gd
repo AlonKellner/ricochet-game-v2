@@ -34,10 +34,13 @@ func _trace_raw(scene: Node) -> Tracer.TracedPath:
 		aim_ray, -1.0,
 		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cache, CURSOR)
 
-func _trace_via_renderer(scene: Node) -> Tracer.TracedPath:
+# legacy: pin the renderer to the legacy Tracer (frame diagnostics inspect its
+# normalized frames; removed with Tracer in Stage 84)
+func _trace_via_renderer(scene: Node, legacy: bool = false) -> Tracer.TracedPath:
 	var player := scene.get_node("Player")
 	var cursor := scene.get_node("Cursor")
 	var renderer := scene.get_node("PathRenderer")
+	renderer.use_beam_tracer = not legacy
 	player.global_position = PLAYER
 	cursor.global_position = CURSOR
 	renderer._compute_trace()
@@ -70,7 +73,7 @@ func test_frame_transitions_at_gaps() -> void:
 	await get_tree().process_frame
 
 	var raw_path := _trace_raw(scene)
-	var rendered_path := _trace_via_renderer(scene)
+	var rendered_path := _trace_via_renderer(scene, true)
 
 	gut.p("=== FRAME TRANSITIONS (raw) ===")
 	_analyze_frame_transitions(raw_path, "RAW")
@@ -239,6 +242,7 @@ func test_investigate_violations() -> void:
 	var cursor := scene.get_node("Cursor")
 	player.global_position = PLAYER
 	cursor.global_position = CURSOR
+	renderer.use_beam_tracer = false     # inspects legacy frames (Stage 84)
 	renderer._compute_trace()
 
 	var physical_path: Tracer.TracedPath = renderer.get_traced_path()

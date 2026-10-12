@@ -68,15 +68,17 @@ func test_portal_beam_map():
 	var checked := 0
 	for i in 100:
 		var theta: float = 0.0 if i % 3 == 0 else rng.randf_range(-PI, PI)
-		var d := Vector2(rng.randf_range(-500, 500), rng.randf_range(-500, 500))
+		# float64 throughout (Vector2 is float32 in this build)
+		var dxv: float = rng.randf_range(-500, 500)
+		var dyv: float = rng.randf_range(-500, 500)
 		var c := cos(theta)
 		var sn := sin(theta)
-		var inv_d := [-(c * d.x + sn * d.y), -(c * d.y - sn * d.x)]
+		var inv_d := [-(c * dxv + sn * dyv), -(c * dyv - sn * dxv)]
 		var src := {"id": 1, "line": true, "start": [100.0, -400.0], "end": [100.0, 400.0], "via": [100.0, 0.0], "full": false,
-			"left": {"type": "portal", "theta": theta, "d": [d.x, d.y], "pair": 2},
-			"right": {"type": "portal", "theta": theta, "d": [d.x, d.y], "pair": 2}}
-		var tgt := {"id": 2, "line": true, "start": [c * 100.0 + sn * 400.0 + d.x, sn * 100.0 - c * 400.0 + d.y],
-			"end": [c * 100.0 - sn * 400.0 + d.x, sn * 100.0 + c * 400.0 + d.y], "via": [c * 100.0 + d.x, sn * 100.0 + d.y], "full": false,
+			"left": {"type": "portal", "theta": theta, "d": [dxv, dyv], "pair": 2},
+			"right": {"type": "portal", "theta": theta, "d": [dxv, dyv], "pair": 2}}
+		var tgt := {"id": 2, "line": true, "start": [c * 100.0 + sn * 400.0 + dxv, sn * 100.0 - c * 400.0 + dyv],
+			"end": [c * 100.0 - sn * 400.0 + dxv, sn * 100.0 + c * 400.0 + dyv], "via": [c * 100.0 + dxv, sn * 100.0 + dyv], "full": false,
 			"left": {"type": "portal", "theta": -theta, "d": inv_d, "pair": 1},
 			"right": {"type": "portal", "theta": -theta, "d": inv_d, "pair": 1}}
 		var scene := BeamScene.from_defs(ctx, [src, tgt])
@@ -97,10 +99,12 @@ func test_portal_beam_map():
 		assert_eq(out.kappa.to_float(), k, "beam %d: curvature preserved" % i)
 		for dt in [5.0, 23.0]:
 			var z := b.at(t.add(ctx.num(dt)))
-			var tz := Vector2(c * z.fx() - sn * z.fy() + d.x, sn * z.fx() + c * z.fy() + d.y)
-			var u = out.param_of(ctx.cn(tz.x, tz.y))
+			var tzx: float = c * z.fx() - sn * z.fy() + dxv
+			var tzy: float = sn * z.fx() + c * z.fy() + dyv
+			var u = out.param_of(ctx.cn(tzx, tzy))
 			var back := out.at(u)
-			assert_lt(Vector2(back.fx(), back.fy()).distance_to(tz), 1e-7, "beam %d: T(z) on the outgoing beam" % i)
+			var err := sqrt((back.fx() - tzx) * (back.fx() - tzx) + (back.fy() - tzy) * (back.fy() - tzy))
+			assert_lt(err, 1e-9, "beam %d: T(z) on the outgoing beam" % i)
 			assert_gt(u.to_float(), 0.0, "beam %d: ahead of the exit point" % i)
 		checked += 1
 	assert_gt(checked, 60)

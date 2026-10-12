@@ -13,9 +13,23 @@ extends RefCounted
 # h: the hit point when known exactly by provenance (snapped endpoint,
 # departure point); the new beam departs from it. null: beam.at(t).
 static func apply(beam: HPBeam, t, surf: BeamScene.Surf, _etype: String, h: CN = null) -> HPBeam:
+	if surf.portal:
+		return portal(beam, t, surf, h)
 	if surf.seg.kind == BeamGeom.Kind.LINE:
 		return reflect_line(beam, t, surf.seg, h)
 	return beam.invert_at(t, surf.seg.circ, h)
+
+# Portal: the rigid image of the beam, departing the paired surface at T(h):
+# p' = a h + d, tau' = a tau_h, kappa' = kappa.
+static func portal(beam: HPBeam, t, surf: BeamScene.Surf, h_exact: CN = null) -> HPBeam:
+	var h := beam.at(t) if h_exact == null else h_exact
+	return HPBeam.make(surf.alpha.mul(h).add(surf.dvec), surf.alpha.mul(beam.tangent_at(t)), beam.kappa)
+
+# T(z) of a portal surface (inverse: T^-1(z) = conj(a)(z - d)).
+static func portal_point(z: CN, surf: BeamScene.Surf, inverse: bool = false) -> CN:
+	if inverse:
+		return surf.alpha.conj().mul(z.sub(surf.dvec))
+	return surf.alpha.mul(z).add(surf.dvec)
 
 static func u2(seg: BeamGeom.Seg) -> CN:
 	var D := seg.e.sub(seg.s)
@@ -27,8 +41,11 @@ static func reflect_line(beam: HPBeam, t, seg: BeamGeom.Seg, h_exact: CN = null)
 	var tau2 := u2(seg).mul(th.conj()).unit()
 	return HPBeam.make(h, tau2, beam.kappa.neg())
 
-# The surface's transform applied to a point (null = infinity).
-static func map_point(z, surf: BeamScene.Surf):
+# The surface's transform (or its inverse) applied to a point (null =
+# infinity). Reflections and inversions are their own inverses.
+static func map_point(z, surf: BeamScene.Surf, inverse: bool = false):
+	if surf.portal:
+		return null if z == null else portal_point(z, surf, inverse)
 	var seg := surf.seg
 	if seg.kind == BeamGeom.Kind.LINE:
 		if z == null:
@@ -48,6 +65,14 @@ static func map_pole(parent: Array, surf: BeamScene.Surf) -> Array:
 	var Q0 = parent[1]
 	var d0 = parent[2]
 	var seg := surf.seg
+	if surf.portal:
+		# rigid: infinity is fixed, differences rotate
+		var Pp := portal_point(P0, surf)
+		if Q0 == null:
+			return [Pp, null, null]
+		var Qp := portal_point(Q0, surf)
+		var dp: CN = surf.alpha.mul(d0)
+		return [Qp.add(dp), Qp, dp]
 	if seg.kind == BeamGeom.Kind.LINE:
 		var P1: CN = map_point(P0, surf)
 		if Q0 == null:

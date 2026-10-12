@@ -335,6 +335,36 @@ Moved to Stage 84: `test_portal_pair_construction_without_frames`. Rewriting `cr
 - [ ] The portal path appears on the paired side with a visible gap.
 - [ ] Planning through portals works.
 - [ ] Firing follows the preview.
+- [ ] Line and arc portals in `test_levels/portals` and `playground/portals` behave as before, including going back through the pair.
+
+### Validation Summary
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Red tests fail for the right reason | [x] | 9/9 portal tests plus the scene switch failed on assertions (commit `9b853c2`) |
+| All unit tests pass | [x] | Full suite 881/881 |
+| Scene corpus vs oracle | [x] | 288/288, including 24 portal-level scenarios; planned and physical ≤ 0.01 px, cursor exact |
+| Parity harness | [x] | 542 same, 34 legacy wrong (beam = oracle), 0 unclassified |
+| Benchmarks | [x] | Ladder 161/161 and stress 40/40 |
+| Estimator calibration | [x] | Planned 98.2%, physical 99.2%, 0 missed escalations. Anchored-prefix gains have their own constant (`PREFIX_GAIN_SCALE`, C = 64): prefix errors do not compound. |
+| Per-frame cost (median / p90) | [x] | portals levels 2.4/5.1 and 2.0/3.5 ms; main 1.7/2.3; inversion_grid 6.3/7.9. Rare chaotic frames legitimately climb to 112 bits (cached afterwards). |
+| Stage complete | [ ] | Awaiting user sign-off. |
+
+Notes:
+- **Fixed:** the planned residual compared a portal's hit point with the next beam, which starts at T(hit). That forced needless climbs; teleports are now excluded from the next-beam check.
+- **Legacy diagnostics pinned to Tracer:** `test_portal_refl_gap.gd`'s frame diagnostics read `step.frame`, which the beam solver does not have. They are removed with Tracer in Stage 84.
+
+### Files Modified/Created
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `scripts/math/precision/beam_scene.gd` | Modify | Portal data per surface (a at the tier and its float64 twin, d, pair); pair ids in scene defs |
+| `scripts/math/precision/beam_effects.gd` | Modify | Rigid beam map; point and pole maps with inverses |
+| `scripts/math/precision/beam_solver.gd` | Modify | Pop on the pair; departure from the paired surface; anchored chain for portals; known points and exact lines through portals; teleport and popped event flags |
+| `scripts/math/precision/fast_solver.gd`, `exact.gd` | Modify | Raw rigid-map twin; lazy translated exact lines |
+| `scripts/math/precision/beam_tracer.gd`, `precision_ladder.gd` | Modify | The step after a portal starts at the exit and carries `after_portal`; stack from event flags; teleport residual fix |
+| `docs/research/oracle/{trace2,tscn_import,gen_fixtures_stage82,gen_scene_corpus,test_trace2}.py` | Modify/Create | Portal semantics in the oracle, fixtures, corpus |
+| `tests/test_stage82_portals.gd`; `tests/test_stage81_{scene_switch,trace_rules}.gd`, `tests/test_precision_integration.gd`, `tests/test_portal_refl_gap.gd` | Create/Modify | Stage 82 specification; portal levels on beam; legacy diagnostics pinned |
 
 ---
 

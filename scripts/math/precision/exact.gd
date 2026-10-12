@@ -233,8 +233,27 @@ class Line extends RefCounted:
 
 	func exact() -> Array:
 		if _exact == null:
-			_exact = Exact.reflect_line(parent.exact(), mirror[0], mirror[1], mirror[2], mirror[3])
+			var L: Array = parent.exact()
+			if mirror.size() == 2:
+				# translated by (dx, dy): c' = c + a dx + b dy
+				_exact = [L[0], L[1], Exact.add(L[2], Exact.add(Exact.mul(L[0], Exact.of(mirror[0])), Exact.mul(L[1], Exact.of(mirror[1]))))]
+			else:
+				_exact = Exact.reflect_line(L, mirror[0], mirror[1], mirror[2], mirror[3])
 		return _exact
+
+	# The translation by (dx, dy) (float64 part with its bound).
+	func translated(dx: float, dy: float) -> Line:
+		var o := Line.new()
+		o.parent = self
+		o.mirror = PackedFloat64Array([dx, dy])
+		o.fa = fa
+		o.ea = ea
+		o.fb = fb
+		o.eb = eb
+		var c2 := Exact._eadd([fc, ec], Exact._eadd(Exact._emul([fa, ea], [dx, 0.0]), Exact._emul([fb, eb], [dy, 0.0])))
+		o.fc = c2[0]
+		o.ec = c2[1]
+		return o
 
 	# The reflection in the mirror line s -> e (float64 part with its bound).
 	func reflected(sx: float, sy: float, ex: float, ey: float) -> Line:

@@ -56,7 +56,11 @@ extends RefCounted
 enum Mode { PHYSICAL = 0, PLANNED = 1 }
 
 const MAX_HITS := 32
-const TRANSFORMATIVE := ["reflection", "inversion"]
+# Anchored-prefix gains are scaled to their own calibration constant
+# (C_prefix = ErrorEstimate.C * PREFIX_GAIN_SCALE): their errors do not
+# compound like the forward continuation's (calibrated on the bench corpus).
+const PREFIX_GAIN_SCALE := 64.0 / 4096.0
+const TRANSFORMATIVE := ["reflection", "inversion", "portal"]
 
 class Event extends RefCounted:
 	var kind: String          # "hit" | "cursor" | "origin" | "escape" | "max"
@@ -66,6 +70,8 @@ class Event extends RefCounted:
 	var terminal: bool = false
 	var on_segment: bool = false
 	var rehit: bool = false   # the departure point, re-hit after the full loop
+	var popped: bool = false  # the applied effect popped the transform stack
+	var teleport: bool = false # the applied effect was a portal (the next arc starts elsewhere)
 	var point: CN = null      # null for escape
 	var beam: HPBeam          # beam the arc leading to this event lies on
 	var t_from                # arc start parameter on `beam`
@@ -99,7 +105,8 @@ class StackEntry extends RefCounted:
 	var other
 	var known: Array = []     # the beam's known points (Walk.known)
 	var line = null           # the beam's exact line data (Walk.line)
-	static func make(p_beam, p_sid: int, p_t_hit, p_other, p_known: Array = [], p_line = null) -> StackEntry:
+	var pop_id: int = -1      # the surface whose hit pops this entry (sid; a portal's pair)
+	static func make(p_beam, p_sid: int, p_t_hit, p_other, p_known: Array = [], p_line = null, p_pop_id: int = -1) -> StackEntry:
 		var o := StackEntry.new()
 		o.beam = p_beam
 		o.sid = p_sid
@@ -107,6 +114,7 @@ class StackEntry extends RefCounted:
 		o.other = p_other
 		o.known = p_known
 		o.line = p_line
+		o.pop_id = p_sid if p_pop_id < 0 else p_pop_id
 		return o
 
 # ---------------------------------------------------------------- backend
@@ -188,6 +196,11 @@ class AnchorChain extends RefCounted:
 	static func _key(st: Array) -> String:
 		return ",".join(st.map(func(x): return str(x)))
 
+	# The surface whose application pops an entry pushed by sid.
+	static func _pop_id(scene: BeamScene, sid: int) -> int:
+		var s: BeamScene.Surf = scene.by_id.get(sid)
+		return s.pair if s != null and s.portal else sid
+
 	static func build(scene: BeamScene, player: CN, cursor: CN, plan: Array) -> AnchorChain:
 		var K := plan.size()
 		var stacks: Array = [[]]
@@ -198,7 +211,7 @@ class AnchorChain extends RefCounted:
 			var t: bool = surf != null and surf.effect(item.left) in TRANSFORMATIVE
 			changes.append(t)
 			if t:
-				if not st.is_empty() and st.back() == item.surface_id:
+				if not st.is_empty() and _pop_id(scene, st.back()) == item.surface_id:
 					st.pop_back()
 				else:
 					st.append(item.surface_id)
@@ -229,7 +242,7 @@ class AnchorChain extends RefCounted:
 			else:
 				if X[j + 1] == null:
 					return null
-				X[j] = BeamEffects.map_point(X[j + 1], scene.by_id[plan[j].surface_id])
+				X[j] = BeamEffects.map_point(X[j + 1], scene.by_id[plan[j].surface_id], true)
 			seen[key] = X[j]
 		var chain := AnchorChain.new()
 		var beam_of := {}
@@ -361,6 +374,12 @@ static func _initial_line(scene: BeamScene, player: CN, cursor: CN, plan: Array)
 	for j in range(plan.size() - 1, -1, -1):
 		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
 		if surf == null or not (surf.effect(plan[j].left) in TRANSFORMATIVE):
+			continue
+		if surf.portal:
+			if surf.theta != 0.0:
+				return null
+			# T^-1(X) = X - d (homogeneous: X - d w)
+			X = [Exact.sub(X[0], Exact.mul(Exact.of(surf.dx), X[2])), Exact.sub(X[1], Exact.mul(Exact.of(surf.dy), X[2])), X[2]]
 			continue
 		if not surf.line:
 			return null
@@ -581,7 +600,7 @@ static func _event(w: Walk, kind: String, beam, t_from, t_to, margin: float) -> 
 			# anchored prefix: sensitivity to the anchored beam's own angle
 			# (its construction rounding), per beam -- grows with distance
 			# from the anchor
-			g = w.bk.prefix_gain(beam, t_to)
+			g = w.bk.prefix_gain(beam, t_to) * PREFIX_GAIN_SCALE
 	w.gains.append(g)
 	return e
 
@@ -693,7 +712,10 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 						break
 			if do in TRANSFORMATIVE:
 				var pt_exact: bool = (cand[3] != null or (rehit and fresh)) and _known_index(w.known, pt) >= 0
+				var depth := w.stack.size()
 				next = _apply(w, beam, t, surf, do, depart, fresh, t0, rehit, pt, pt_exact)
+				e.popped = w.stack.size() < depth
+				e.teleport = surf.portal or (e.popped and w.scene.by_id[next[1]].portal)
 				if diverged and not w.seeded:
 					w.seeded = true
 					next[0] = bk.seed(next[0])
@@ -720,8 +742,12 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart: int, fresh: bool, t0, rehit: bool, pt: CN,
 		pt_exact: bool = false) -> Array:
 	var bk = w.bk
-	if not w.stack.is_empty() and w.stack.back().sid == surf.id:
+	if not w.stack.is_empty() and w.stack.back().pop_id == surf.id:
 		var top: StackEntry = w.stack.pop_back()
+		var src: BeamScene.Surf = w.scene.by_id[top.sid]
+		# the point on the restored beam: T^-1(pt) for a portal, pt itself for
+		# a self-inverse effect (its carrier is fixed)
+		var q: CN = BeamEffects.portal_point(pt, src, true) if src.portal else pt
 		var t_res
 		if rehit:
 			t_res = top.t_hit
@@ -729,33 +755,39 @@ static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart
 			t_res = top.other
 		else:
 			# the shared point actually hit: one of the two (distinct) points
-			var dh: float = bk.point(top.beam, top.t_hit).sub(pt).abs2().to_float()
-			var dd: float = bk.point(top.beam, top.other).sub(pt).abs2().to_float()
+			var dh: float = bk.point(top.beam, top.t_hit).sub(q).abs2().to_float()
+			var dd: float = bk.point(top.beam, top.other).sub(q).abs2().to_float()
 			t_res = top.t_hit if dh < dd else top.other
 		w.known = top.known
 		w.line = top.line
-		return [bk.reseed(top.beam) if w.seeded else top.beam, surf.id, t_res, false]
+		return [bk.reseed(top.beam) if w.seeded else top.beam, top.sid, t_res, false]
 	var other = _other_root(w, beam, surf, depart, t0, t)
-	w.stack.append(StackEntry.make(beam, surf.id, t, other, w.known, w.line))
+	var pop_id: int = surf.pair if surf.portal else surf.id
+	w.stack.append(StackEntry.make(beam, surf.id, t, other, w.known, w.line, pop_id))
 	var old_known := w.known
+	# the surface the new beam departs from, and the departure point
+	var dsurf: BeamScene.Surf = w.scene.by_id[surf.pair] if surf.portal else surf
+	var exit: CN = BeamEffects.portal_point(pt, surf) if surf.portal else pt
 	var res: Array
 	if w.anchored and w.chain != null:
-		# anchored: the exact beam of the next plan frame; it departs surf at
-		# the root nearest the hit (both of its roots on surf are shared with
-		# the current beam's, one of them at pt)
+		# anchored: the exact beam of the next plan frame; it departs dsurf at
+		# the root nearest the exit point
 		var nb = bk.from_hp(w.chain.beams[w.plan_index])
 		var best = null
 		var best_d := INF
-		for r in bk.roots(nb, surf, false):
-			var d: float = bk.point(nb, r).sub(pt).abs2().to_float()
+		for r in bk.roots(nb, dsurf, false):
+			var d: float = bk.point(nb, r).sub(exit).abs2().to_float()
 			if d < best_d:
 				best_d = d
 				best = r
 		if best == null:
-			best = bk.param_of(nb, pt)
-		res = [nb, surf.id, best, false]
+			best = bk.param_of(nb, exit)
+		res = [nb, dsurf.id, best, false]
 	else:
-		res = [bk.apply(beam, t, surf, etype, pt), surf.id, bk.zero(), true]
+		res = [bk.apply(beam, t, surf, etype, pt), dsurf.id, bk.zero(), true]
+	if surf.portal:
+		_portal_known(w, surf, pt, pt_exact, old_known, res)
+		return res
 	# known points of the new beam: its departure point (if exact), and the
 	# old beam's known points on surf's carrier (fixed by the effect)
 	w.known = [[pt, res[2], surf.id]] if pt_exact else []
@@ -775,6 +807,54 @@ static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart
 	else:
 		w.line = null
 	return res
+
+# T(k) of a portal as exact data: the pair is built as T of the source, so
+# endpoints map to endpoints; otherwise a translation's k + d when exactly
+# representable. null: not exact data.
+static func _portal_image(w: Walk, surf: BeamScene.Surf, k: CN):
+	var pair: BeamScene.Surf = w.scene.by_id[surf.pair]
+	var which := BeamGeom.endpoint_at(surf.seg, k)
+	if which == 1:
+		return pair.seg.s
+	if which == 2:
+		return pair.seg.e
+	if surf.theta != 0.0:
+		return null
+	var ex := Exact.add(Exact.of(k.fx()), Exact.of(surf.dx))
+	var ey := Exact.add(Exact.of(k.fy()), Exact.of(surf.dy))
+	var fx := ex.to_float()
+	var fy := ey.to_float()
+	if Exact.of(fx).cmp(ex) != 0 or Exact.of(fy).cmp(ey) != 0:
+		return null
+	return _cn_like(k, fx, fy)
+
+static func _cn_like(k: CN, x: float, y: float) -> CN:
+	if k.re is BigFloat:
+		var n: int = k.re.limbs.size()
+		return CN.make(BigFloat.from_float(x, n), BigFloat.from_float(y, n))
+	if k.re is DualNum:
+		return CN.make(DualNum.of(x), DualNum.of(y))
+	return CN.make(F64Num.of(x), F64Num.of(y))
+
+# Known points and exact line after a portal push (the rigid image).
+static func _portal_known(w: Walk, surf: BeamScene.Surf, pt: CN, pt_exact: bool, old_known: Array, res: Array) -> void:
+	var known: Array = []
+	if pt_exact:
+		var h2 = _portal_image(w, surf, pt)
+		if h2 != null:
+			known.append([h2, res[2], surf.pair])
+	for k in old_known:
+		if BeamGeom._eq(k[0], pt):
+			continue
+		var k2 = _portal_image(w, surf, k[0])
+		if k2 != null and _known_index(known, k2) < 0:
+			known.append([k2, w.bk.param_of(res[0], k2), -1])
+	w.known = known
+	if w.line != null and surf.theta == 0.0:
+		w.line = w.line.translated(surf.dx, surf.dy)
+		_add_line_endpoints(w, res[0])
+	else:
+		w.line = null
 
 # Exact: the current exact line is tangent to surf's circle (computed once
 # per line, for every circle surface).

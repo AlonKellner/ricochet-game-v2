@@ -223,8 +223,8 @@ static func event_distance(a: Array, b: Array) -> Array:
 	return out
 
 # A-posteriori residual estimate for the anchored planned trace: every event
-# point must lie on its surface's carrier and, for applied hits, on the next
-# beam (constructed independently). Inconsistency ~ error, since nothing
+# point must lie on its surface's carrier and, for applied non-portal hits, on
+# the next beam (constructed independently). Inconsistency ~ error, since nothing
 # propagates. float64 only.
 static func planned_residuals(events: Array, scene: BeamScene) -> Array:
 	var out: Array = []
@@ -242,7 +242,8 @@ static func planned_residuals(events: Array, scene: BeamScene) -> Array:
 				res = absf(dx * (y - s.sy) - dy * (x - s.sx)) / sqrt(dx * dx + dy * dy)
 			else:
 				res = absf(sqrt((x - s.cx) * (x - s.cx) + (y - s.cy) * (y - s.cy)) - s.r)
-			if e.applied and not e.terminal and i + 1 < events.size():
+			# (a portal's next beam starts at T(point), elsewhere: no shared point)
+			if e.applied and not e.terminal and not e.teleport and i + 1 < events.size():
 				var nx: BeamSolver.Event = events[i + 1]
 				if nx.raw != null:
 					var rb: PackedFloat64Array = nx.raw

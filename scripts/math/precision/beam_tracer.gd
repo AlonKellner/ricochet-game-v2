@@ -123,10 +123,14 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 	var stack: Array = []
 	var bits: int = NumCtx.with_limbs(limbs).bits()
 	var prev_pt = null
+	var gap := false           # the previous event teleported (portal)
 	for i in events.size():
 		var e: BeamSolver.Event = events[i]
 		var fid := _frame_id(stack, frames)
-		var steps := _steps_for(e, fid, null, prev_pt)
+		# after a portal the arc starts at the exit point (its own t_from)
+		var steps := _steps_for(e, fid, null, null if gap else prev_pt)
+		var gap_pending := gap
+		gap = false
 		if e.point != null:
 			prev_pt = Vector2(e.point.fx(), e.point.fy())
 		var surf: Surface = by_id.get(e.surface_id)
@@ -136,6 +140,10 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 			# event's effect still applies
 			if s.start == s.end and not is_inf(s.start.x):
 				continue
+			# the first emitted step after a portal marks the intended gap
+			if gap_pending:
+				s.after_portal = true
+				gap_pending = false
 			# a finite step on a curved beam is an arc step (curvature is exact:
 			# reflections keep a straight beam exactly straight); the renderer
 			# draws near-straight arcs as lines
@@ -148,10 +156,11 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 			appended = true
 		var last: Tracer.Step = path.steps.back() if appended else null
 		if e.kind == "hit" and e.applied and not e.terminal:
-			if not stack.is_empty() and stack.back() == e.surface_id:
+			if e.popped:
 				stack.pop_back()
 			else:
 				stack.append(e.surface_id)
+			gap = e.teleport
 		if e.kind == "hit" and last != null:
 			var side := Side.Value.LEFT if e.left else Side.Value.RIGHT
 			last.hit = Intersection.HitRecord.new(e.t_to.to_float(), last.end, surf.segment if surf else null, side, e.on_segment)

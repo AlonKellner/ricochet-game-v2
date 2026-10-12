@@ -402,10 +402,28 @@ static func surf_hits(b: PackedFloat64Array, s: BeamScene.Surf, depart_on: bool)
 		return line_hits(b, s.sx, s.sy, s.ex, s.ey, depart_on)
 	return circle_hits(b, s.cx, s.cy, s.r2, depart_on)
 
+# Portal (BeamEffects.portal twin): p' = a h + d, tau' = a tau_h, kappa' = kappa.
+static func portal(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.Surf,
+		has_h: bool = false, hx: float = 0.0, hy: float = 0.0) -> PackedFloat64Array:
+	var h := at(b, t, dt)
+	if has_h:
+		h[0] = hx
+		h[1] = hy
+	var th := tangent_at(b, t, dt)
+	var ar := s.pa
+	var ai := s.pb
+	return PackedFloat64Array([
+		(ar * h[0] - ai * h[1]) + s.dx, (ar * h[1] + ai * h[0]) + s.dy,
+		ar * th[0] - ai * th[1], ar * th[1] + ai * th[0], b[K],
+		ar * h[2] - ai * h[3], ar * h[3] + ai * h[2],
+		ar * th[2] - ai * th[3], ar * th[3] + ai * th[2], b[DK]])
+
 # The surface's transformative effect at t (BeamEffects.apply twin).
 # has_h: (hx, hy) is the hit point, exact by provenance (else at(t)).
 static func apply_surf(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.Surf,
 		has_h: bool = false, hx: float = 0.0, hy: float = 0.0) -> PackedFloat64Array:
+	if s.portal:
+		return portal(b, t, dt, s, has_h, hx, hy)
 	if s.line:
 		return reflect_line(b, t, dt, s.sx, s.sy, s.ex, s.ey, has_h, hx, hy)
 	return invert_circle(b, t, dt, s.cx, s.cy, s.r, s.r2, has_h, hx, hy)

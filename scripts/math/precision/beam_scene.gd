@@ -7,10 +7,12 @@ extends RefCounted
 # bench/scenes/*.surfaces.json):
 #   {id, line, start, end, via, full, circle: {center, radius} | null,
 #    left, right: {type, interactive, ...} | null, is_target, player_solid}
-# Effect types: "" (pass), "terminal", "reflection", "inversion".
+# Effect types: "" (pass), "terminal", "reflection", "inversion", "portal"
+# (rigid motion z -> a z + d onto the paired surface, a = unit(cos θ, sin θ)
+# of the float64 values; {theta, d, pair}).
 
-const SUPPORTED_TYPES := ["pass", "terminal", "reflection", "inversion"]
-const TRANSFORMATIVE := ["reflection", "inversion"]
+const SUPPORTED_TYPES := ["pass", "terminal", "reflection", "inversion", "portal"]
+const TRANSFORMATIVE := ["reflection", "inversion", "portal"]
 
 class Surf extends RefCounted:
 	var id: int
@@ -29,6 +31,17 @@ class Surf extends RefCounted:
 	var cy: float
 	var r: float
 	var r2: float
+	# portal: rigid motion a z + d (a at the scene's tier, and its float64
+	# twin pa + i pb), the paired surface id
+	var portal: bool = false
+	var alpha: CN = null
+	var dvec: CN = null
+	var pa: float = 1.0
+	var pb: float = 0.0
+	var dx: float = 0.0
+	var dy: float = 0.0
+	var theta: float = 0.0
+	var pair: int = -1
 	var has_v: bool = false   # via point (null for full lines: V at infinity)
 	var vx: float
 	var vy: float
@@ -100,6 +113,21 @@ static func from_defs(ctx: NumCtx, defs: Array) -> BeamScene:
 			s.r2 = s.r * s.r
 		s.left_type = _type_of(d.get("left"))
 		s.right_type = _type_of(d.get("right"))
+		for key in ["left", "right"]:
+			var cfg = d.get(key)
+			if cfg != null and String(cfg.get("type", "")) == "portal":
+				s.portal = true
+				s.theta = float(cfg["theta"])
+				s.dx = float(cfg["d"][0])
+				s.dy = float(cfg["d"][1])
+				s.pair = int(cfg["pair"])
+				s.alpha = ctx.cn(cos(s.theta), sin(s.theta)).unit()
+				s.dvec = ctx.cn(s.dx, s.dy)
+				var c := cos(s.theta)
+				var sn := sin(s.theta)
+				var ab := sqrt(c * c + sn * sn)
+				s.pa = c / ab
+				s.pb = sn / ab
 		s.is_target = bool(d.get("is_target", false))
 		sc.surfaces.append(s)
 		sc.by_id[s.id] = s
