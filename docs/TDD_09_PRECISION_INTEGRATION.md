@@ -14,7 +14,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 | 80 | Neutral trace types, generalized beam geometry, oracle v2 | Done (awaiting doc confirmation) |
 | 81 | Reflections, partial/one-sided inversions, terminals, passes | Done (user sign-off) |
 | 82 | Portals (rigid motion) | Done (user sign-off) |
-| 83 | Projective effects (physical) + full switch-over | Planned |
+| 83 | Projective effects (physical) + full switch-over | In progress (red tests committed) |
 | 84 | Delete the legacy solver | Planned |
 | 85 | State flags (ConfigResolver + StateChange) | Planned |
 | 86 | Ghost mode & toggler surfaces | Planned |
@@ -369,6 +369,34 @@ Notes:
 ---
 
 ## Stage 83: Projective effects (physical) + full switch-over
+
+### Overview
+Projectives on the beam solver, and every scene switched to it.
+
+**Projective exit.** At the hit h the beam leaves as a straight line from h along ±axis. The axis is:
+- the carrier normal (line normal projection);
+- the radius h − c (circle normal projection);
+- the fixed normal (directional projections).
+
+The sign is exact:
+- **through:** sign(exit·∇f) = sign(dir·∇f), so the beam exits to the far side;
+- **back:** it returns to the approach side;
+- an axis tangent to the carrier exits along +axis (through) or −axis (back).
+
+This replaces legacy's `determine_side(hit + axis)` probe. That probe had an effective threshold of > −0.5 instead of > 0 for circle-directional surfaces.
+
+**After a projective:**
+- the stack clears and a new epoch begins;
+- the beam departs the surface;
+- plan bookkeeping by id.
+
+**PLANNED mode** consumes a projective plan entry without applying it, and aiming skips it, until Stage 87. Legacy instead discarded the whole plan.
+
+**Degenerate inputs are native.** When a point at infinity appears in the anchored construction (player or cursor exactly at an inversion center), the solver walks forward from the exact aim direction. When the aim image itself is at infinity, it walks straight at the cursor.
+
+**Oracle data:**
+- `bench/fixtures/stage83_projective.json` (`gen_fixtures_stage83.py`).
+- The scene corpus covers all 29 scenes: 348 scenarios.
 
 ### Unit Tests Added (written first)
 - `test_projective_exit_directions`

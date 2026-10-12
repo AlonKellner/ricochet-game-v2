@@ -106,11 +106,11 @@ func test_merged_view_aligned_until_first_divergence():
 			break
 	assert_gte(aligned, 5, "first planned steps aligned with physical")
 
-func test_falls_back_to_tracer_for_unsupported_scenes():
+func test_every_effect_type_is_supported():
 	var supported: Array = [RoomBuilder.create_block_surface(Vector2(0, 0), Vector2(100, 0), Vector2(50, 0))]
 	assert_true(BeamTracer.scene_supported(supported), "terminal blocks are supported (Stage 81)")
 	var seg := Segment.from_coords(Vector2(0, 0), Vector2(0, 100), Vector2(0, 50))
 	var proj := LineNormalProjection.new(false)
 	var cfg := SideConfig.new(proj, true)
 	var surf := Surface.new(seg, cfg, cfg, false, true)
-	assert_false(BeamTracer.scene_supported([surf]), "projections are not supported yet -> Tracer (Stage 83)")
+	assert_true(BeamTracer.scene_supported([surf]), "projections are supported (Stage 83)")

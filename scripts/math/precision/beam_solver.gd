@@ -72,6 +72,8 @@ class Event extends RefCounted:
 	var rehit: bool = false   # the departure point, re-hit after the full loop
 	var popped: bool = false  # the applied effect popped the transform stack
 	var teleport: bool = false # the applied effect was a portal (the next arc starts elsewhere)
+	var projective: bool = false # STUB (Stage 83 red): the applied effect was a projective
+	var epoch: int = 0        # STUB (Stage 83 red): projectives start a new epoch
 	var point: CN = null      # null for escape
 	var beam: HPBeam          # beam the arc leading to this event lies on
 	var t_from                # arc start parameter on `beam`

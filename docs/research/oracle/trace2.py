@@ -2,7 +2,19 @@
 
 Surfaces are line / arc / full-circle segments with per-side configs:
 None or {"type": "pass"} (no effect), "terminal", "reflection", "inversion",
-"portal" {theta, d, pair} (projectives: Stage 83/87).
+"portal" {theta, d, pair}, and the projectives {back, normal}:
+"line_normal_projection", "circle_normal_projection",
+"line_directional_projection", "circle_directional_projection" (Stage 83;
+planning through them: Stage 87).
+
+Projectives (PHYSICAL): at the hit h the beam leaves as a straight line from h
+along +-axis -- the carrier normal (line), the radius h - c (circle), or the
+fixed normal (directional). The sign is exact: "through" exits to the far side
+(sign(exit . grad) = sign(dir . grad)), "back" (project_back) returns to the
+approach side; an axis tangent to the carrier (axis . grad = 0) exits along
++axis (through) / -axis (back). The transform stack clears; the new beam
+departs the surface (departure re-hit as usual). PLANNED mode consumes a
+projective plan entry without applying it (until Stage 87).
 
 Portals (Stage 82): surface S with rigid motion T(z) = a z + d, a = unit(cos
 theta, sin theta) of the float64 values, paired with S' = T(S) (which carries
@@ -71,6 +83,8 @@ MAX_HITS = 32
 PHYSICAL = 0
 PLANNED = 1
 TRANSFORMATIVE = ("reflection", "inversion", "portal")
+PROJECTIVE = ("line_normal_projection", "circle_normal_projection",
+              "line_directional_projection", "circle_directional_projection")
 
 
 # ---------------------------------------------------------------- scene
@@ -437,7 +451,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             do = None
             if walk.mode == PHYSICAL:
                 do = physical_decision(walk, surf, side, full_block)
-                if do in TRANSFORMATIVE:
+                if do in TRANSFORMATIVE or do in PROJECTIVE:
                     _plan_bookkeeping(walk, sid)
             elif walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side):
                 walk.plan_index += 1
@@ -452,6 +466,11 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 beam, depart, t0, fresh = _apply(walk, beam, t, surf, do, depart, fresh, t0, rehit, pt, pt_exact)
                 applied = True
                 break
+            if do in PROJECTIVE:
+                beam = _project(walk, beam, t, surf, side, pt, pt_exact)
+                depart, t0, fresh = sid, mp.mpf(0), True
+                applied = True
+                break
         if not applied:
             # nothing fired on the full loop: a line escapes through infinity;
             # a circle closes at its departure point (beam.at(t0)) and repeats
@@ -463,6 +482,54 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     walk.events.append(Event("origin", point=beam.p if fresh else beam.at(t0)))
             walk.done = True
             return
+
+
+def _cfg_of(surf: Surface, side):
+    return surf.left if side == LEFT else surf.right
+
+
+def _project(walk: Walk, beam, t, surf: Surface, side, pt, pt_exact):
+    """Projective effect at pt: a straight beam along +-axis; clears the stack."""
+    cfg = _cfg_of(surf, side)
+    etype = cfg["type"]
+    seg = surf.seg
+    g = seg.grad(pt)
+    if etype == "line_normal_projection":
+        axis = g
+    elif etype == "circle_normal_projection":
+        axis = pt - seg.c
+    else:
+        axis = P(cfg["normal"])
+    d = beam.tangent_at(t)
+    a_g = dot(axis, g)
+    if a_g == 0:
+        sgn = 1
+    else:
+        sgn = (1 if a_g > 0 else -1) * (1 if dot(d, g) > 0 else -1)
+    if cfg.get("back"):
+        sgn = -sgn
+    exit = axis * sgn
+    nb = Beam(pt, exit / abs(exit), mp.mpf(0))
+    walk.stack = []
+    walk.known = [(pt, mp.mpf(0), surf.id)] if pt_exact else []
+    walk.line = None
+    if pt_exact:
+        # exact data line: through pt along the axis (exact for line normals,
+        # full-circle radii and directional normals)
+        if etype == "line_normal_projection":
+            D = _sub(FC(seg.E), FC(seg.S))
+            ax = (-D[1], D[0])
+        elif etype == "circle_normal_projection":
+            nx, ny, w, _rr = _center_h(seg)
+            K = FC(pt)
+            ax = (K[0] * w - nx, K[1] * w - ny)
+        else:
+            ax = FC(P(cfg["normal"]))
+        K = FC(pt)
+        a, b = -ax[1], ax[0]
+        walk.line = (a, b, a * K[0] + b * K[1])
+        _add_line_endpoints(walk, nb)
+    return nb
 
 
 def _plan_bookkeeping(walk: Walk, sid):
@@ -683,18 +750,21 @@ def initial_line(surfaces, player, cursor, plan):
     return (a, b, a * Pp[0] + b * Pp[1])
 
 
-def planned(surfaces, player, cursor, plan):
-    """Planned trace = forward PLANNED-mode walk of the exact aim direction."""
+def _aim(surfaces, player, cursor, plan):
+    """(direction, exact line or None): the exact aim image's direction, or --
+    when the image is at infinity (aim undetermined) -- straight at the cursor."""
     d = exact_direction(surfaces, plan, player, cursor)
     if d is None:
-        d = P(cursor) - P(player)
-    return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED,
-                                line=initial_line(surfaces, player, cursor, plan))
+        return P(cursor) - P(player), "direction"
+    return d, initial_line(surfaces, player, cursor, plan)
+
+
+def planned(surfaces, player, cursor, plan):
+    """Planned trace = forward PLANNED-mode walk of the exact aim direction."""
+    d, line = _aim(surfaces, player, cursor, plan)
+    return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line)
 
 
 def physical(surfaces, player, cursor, plan):
-    d = exact_direction(surfaces, plan, player, cursor)
-    if d is None:
-        d = P(cursor) - P(player)
-    return trace_mode_direction(surfaces, player, d, plan, P(cursor), PHYSICAL,
-                                line=initial_line(surfaces, player, cursor, plan))
+    d, line = _aim(surfaces, player, cursor, plan)
+    return trace_mode_direction(surfaces, player, d, plan, P(cursor), PHYSICAL, line=line)

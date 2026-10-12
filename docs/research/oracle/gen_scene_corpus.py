@@ -24,7 +24,8 @@ import trace2 as T                      # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 OUT = os.path.join(ROOT, "bench", "scenes_corpus")
-SUPPORTED = {"pass", "terminal", "reflection", "inversion", "portal"}
+SUPPORTED = {"pass", "terminal", "reflection", "inversion", "portal", "line_normal_projection",
+             "circle_normal_projection", "line_directional_projection", "circle_directional_projection"}
 LONG_PLAN_SCENES = ("two_mirrors", "three_mirrors", "parallel_mirrors")
 D = 40
 
@@ -51,7 +52,7 @@ def plannable(surfs):
     for d in surfs:
         for side, key in (("LEFT", "left"), ("RIGHT", "right")):
             c = d.get(key)
-            if c is not None and c["type"] in ("reflection", "inversion", "portal") and c.get("interactive"):
+            if c is not None and c["type"] != "pass" and c["type"] != "terminal" and c.get("interactive"):
                 out.append((int(d["id"]), side))
     return out
 

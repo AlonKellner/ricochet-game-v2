@@ -1,0 +1,54 @@
+{
+ "planned": [
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "641.3626098632812500000000000000000000000",
+   "y": "307.0569152832031250000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 1,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "643.3912032523853438612862814824727517226",
+   "y": "240.0000000000000000000000000000000000000"
+  }
+ ],
+ "physical": [
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "641.3626098632812500000000000000000000000",
+   "y": "307.0569152832031250000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 1,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "643.3912032523853438612862814824727517226",
+   "y": "240.0000000000000000000000000000000000000"
+  }
+ ],
+ "planned_targets": [],
+ "physical_targets": [],
+ "name": "playground__projective_arcs__09",
+ "dps": 120
+}

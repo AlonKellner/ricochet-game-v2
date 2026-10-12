@@ -186,3 +186,71 @@ def test_planned_through_portal_aims_at_preimage():
     src, tgt = portal_pair(1, (100, -500), (100, 500), 0.0, (300, 0))
     img = T.aim_image([src, tgt], [(1, "RIGHT")], (500, 100))
     assert img == mp.mpc(200, 100)
+
+
+# ---------------------------------------------------------------- projectives (Stage 83)
+
+def proj(kind, back=False, normal=None):
+    c = {"type": kind, "interactive": True, "back": back}
+    if normal is not None:
+        c["normal"] = list(normal)
+    return c
+
+
+def test_line_normal_projection_through_and_back():
+    wall = line(9, (-1000, -1000), (-1000, 1000), TERM, TERM)
+    far = line(8, (1000, -1000), (1000, 1000), TERM, TERM)
+    for back in (False, True):
+        p = line(1, (250, -500), (250, 500), proj("line_normal_projection", back), proj("line_normal_projection", back))
+        # beam from (100, 200) towards (600, 400): crosses x = 250 at y = 260
+        w = T.trace_physical_direction([p, wall, far], (100, 200), mp.mpc(500, 200))
+        hits = [e for e in w.events if e.kind == "hit"]
+        assert hits[0].surface_id == 1 and hits[0].applied
+        assert abs(hits[0].point - mp.mpc(250, 260)) < mp.mpf(10) ** -40
+        # exit is horizontal (the line normal): the next hit is at y = 260
+        assert hits[1].terminal and abs(hits[1].point.imag - 260) < mp.mpf(10) ** -40
+        assert (hits[1].point.real > 0) == (not back)
+
+
+def test_circle_normal_projection_from_inside_exits_outward():
+    a = {"id": 1, "line": False, "start": [200, 100], "end": [200, 300], "via": [300, 200], "full": False,
+         "left": proj("circle_normal_projection"), "right": proj("circle_normal_projection"), "is_target": False}
+    arc_s = T.surface_from_json(a)
+    far = line(8, (1000, -1000), (1000, 1000), TERM, TERM)
+    w = T.trace_physical_direction([arc_s, far], (250, 200), mp.mpc(1, 0))
+    hits = [e for e in w.events if e.kind == "hit"]
+    assert hits[0].surface_id == 1 and hits[0].applied and abs(hits[0].point - mp.mpc(300, 200)) < mp.mpf(10) ** -40
+    assert abs(hits[1].point - mp.mpc(1000, 200)) < mp.mpf(10) ** -40
+
+
+def test_directional_projection_fixed_normal():
+    p = line(1, (300, -500), (300, 500), proj("line_directional_projection", False, (1, 1)),
+             proj("line_directional_projection", False, (1, 1)))
+    far = line(8, (1000, -5000), (1000, 5000), TERM, TERM)
+    w = T.trace_physical_direction([p, far], (0, 0), mp.mpc(1, 0.1))
+    hits = [e for e in w.events if e.kind == "hit"]
+    # crossing +x: through exits along +(1,1)
+    h = hits[0].point
+    assert abs(hits[1].point - (h + (1000 - h.real) * mp.mpc(1, 1))) < mp.mpf(10) ** -40
+
+
+def test_directional_parallel_axis_convention():
+    # normal parallel to the line: axis . grad = 0 -> +axis (through)
+    p = line(1, (300, -500), (300, 500), proj("line_directional_projection", False, (0, 1)),
+             proj("line_directional_projection", False, (0, 1)))
+    top = line(8, (-5000, 1000), (5000, 1000), TERM, TERM)
+    w = T.trace_physical_direction([p, top], (0, 0), mp.mpc(1, 0))
+    hits = [e for e in w.events if e.kind == "hit"]
+    assert hits[1].surface_id == 8 and abs(hits[1].point - mp.mpc(300, 1000)) < mp.mpf(10) ** -40
+
+
+def test_projective_clears_stack():
+    m = line(1, (100, -500), (100, 500), REFL, REFL)
+    p = line(2, (300, -500), (300, 500), proj("line_normal_projection"), proj("line_normal_projection"))
+    w = T.trace_physical_direction([m, p], (500, 0), mp.mpc(-1, 0.25))
+    hits = [e for e in w.events if e.kind == "hit"]
+    assert hits[0].surface_id == 2 and hits[0].applied
+    # after the projective the beam is a fresh straight line along -x; it
+    # reflects on the mirror (a push on an empty stack), never a pop
+    assert hits[1].surface_id == 1 and hits[1].applied
+    assert abs(hits[1].point - mp.mpc(100, 50)) < mp.mpf(10) ** -40

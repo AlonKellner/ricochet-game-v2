@@ -923,3 +923,16 @@ static func check_S12(segment: Segment, test_points: Array[Vector2]) -> Array[St
 			violations.append("S12: point %s side=%d expected=%d" % [point, side, expected_side])
 	return violations
 
+# ---------------------------------------------------------------- beam events (STUB, Stage 83 red)
+
+static func check_effect_law(_events: Array, _scene: BeamScene) -> Array[String]:
+	return []
+
+static func check_event_on_beam(_events: Array, _scene: BeamScene) -> Array[String]:
+	return []
+
+static func check_beam_order(_events: Array) -> Array[String]:
+	return []
+
+static func check_plan_effects_applied_events(_events: Array, _plan: Array, _cursor_reached: bool) -> Array[String]:
+	return []

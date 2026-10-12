@@ -16,7 +16,10 @@ const ARC2_VIA := Vector2(1500, 700)
 
 enum PairType { REFL_REFL, REFL_SEMI, REFL_PROJ, REFL_DIR, SEMI_SEMI, SEMI_PROJ, SEMI_DIR, PROJ_PROJ, PROJ_DIR, DIR_DIR, PORTAL }
 
-const _CHECKER_SUPPORTED := [PairType.REFL_REFL, PairType.REFL_SEMI, PairType.SEMI_SEMI, PairType.PORTAL]
+# Stage 83: every effect pair is beam-solved and checked
+const _CHECKER_SUPPORTED := [PairType.REFL_REFL, PairType.REFL_SEMI, PairType.REFL_PROJ, PairType.REFL_DIR,
+	PairType.SEMI_SEMI, PairType.SEMI_PROJ, PairType.SEMI_DIR, PairType.PROJ_PROJ, PairType.PROJ_DIR,
+	PairType.DIR_DIR, PairType.PORTAL]
 
 const _NON_PORTAL_PAIRS := [
 	PairType.REFL_REFL, PairType.REFL_SEMI, PairType.REFL_PROJ, PairType.REFL_DIR,

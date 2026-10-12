@@ -218,4 +218,4 @@ func test_scene_corpus_matches_oracle():
 		if not _check(res.physical, se[1]["physical"], name + " physical", CORPUS_TOL):
 			bad += 1
 	assert_eq(bad, 0, "%d scenarios: planned and physical match the oracle" % names.size())
-	assert_eq(names.size(), 288)
+	assert_eq(names.size(), 348)
