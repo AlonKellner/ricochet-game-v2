@@ -83,14 +83,14 @@ func test_arc_beam_vs_line():
 	assert_gt(checked, 300, "fixture coverage")
 
 func test_tangent_line_double_root():
-	# circle beam of radius 10 centered (0,10) through the origin, heading +x;
-	# the line x = 10 touches it at (10,10) (closed form)
+	# circle beam of radius 8 centered (0,8) through the origin, heading +x
+	# (κ = 0.125 is exact in binary); the line x = 8 touches it at (8,8), t = 16
 	for ctx: NumCtx in [NumCtx.f64(), NumCtx.with_limbs(4)]:
-		var b := HPBeam.make(ctx.cn(0, 0), ctx.cn(1, 0), ctx.num(0.1))
-		var recs := BeamGeom.hit_records(b, _line(ctx, Vector2(10, -50), Vector2(10, 50)), false)
+		var b := HPBeam.make(ctx.cn(0, 0), ctx.cn(1, 0), ctx.num(0.125))
+		var recs := BeamGeom.hit_records(b, _line(ctx, Vector2(8, -50), Vector2(8, 50)), false)
 		assert_gt(recs.size(), 0, "%s: tangency found" % ctx.name())
 		for rr in recs:
-			assert_almost_eq(Vector2(rr["point"].fx(), rr["point"].fy()), Vector2(10, 10), Vector2(1e-6, 1e-6))
+			assert_almost_eq(Vector2(rr["point"].fx(), rr["point"].fy()), Vector2(8, 8), Vector2(1e-12, 1e-12))
 
 # ---------------------------------------------------------------- on-segment, endpoints
 

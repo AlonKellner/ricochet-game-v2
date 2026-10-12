@@ -187,10 +187,86 @@ static func hits(b: PackedFloat64Array, sc: Scene, i: int, depart_on: bool) -> P
 		out.append(0.0)
 	return out
 
-# Stage 80 RED stub: roots of beam ∩ line through (sx,sy)->(ex,ey), as
-# [t0, dt0, t1, dt1, ...] (BeamGeom.hits twin with the inline dual).
-static func line_hits(_b: PackedFloat64Array, _sx: float, _sy: float, _ex: float, _ey: float, _depart_on: bool) -> PackedFloat64Array:
-	return PackedFloat64Array()
+# Roots of beam ∩ line through (sx,sy)->(ex,ey) as [t0, dt0, t1, dt1, ...]:
+# BeamGeom.hits twin (same float64 operation order -> bit-identical values)
+# with the tangent-linear derivative carried inline.
+static func line_hits(b: PackedFloat64Array, sx: float, sy: float, ex: float, ey: float, depart_on: bool) -> PackedFloat64Array:
+	var out := PackedFloat64Array()
+	var Dx := ex - sx
+	var Dy := ey - sy
+	var gx := -Dy
+	var gy := Dx
+	var wx := b[PX] - sx
+	var wy := b[PY] - sy
+	var dwx := b[DPX]
+	var dwy := b[DPY]
+	var tx := b[TX]
+	var ty := b[TY]
+	var dtx := b[DTX]
+	var dty := b[DTY]
+	var k := b[K]
+	var dk := b[DK]
+	var fp := Dx * wy - Dy * wx
+	var dfp := Dx * dwy - Dy * dwx
+	var c1 := gx * tx + gy * ty
+	var dc1 := gx * dtx + gy * dty
+	var kk := k * k
+	var dkk := dk * k + k * dk
+	var crg := tx * gy - ty * gx
+	var dcrg := dtx * gy - dty * gx
+	var a := (fp * kk) * 0.25
+	var da := (dfp * kk + fp * dkk) * 0.25
+	var h := k * 0.5
+	var dh := dk * 0.5
+	var bb := h * crg
+	var dbb := dh * crg + h * dcrg
+	var c2 := a + bb
+	var dc2 := da + dbb
+	if depart_on:
+		if c2 == 0.0:
+			return out
+		var t := (-c1) / c2
+		out.append(t)
+		out.append(((-dc1) - t * dc2) / c2)
+		return out
+	if c2 == 0.0:
+		if c1 == 0.0:
+			return out
+		var t1 := (-fp) / c1
+		out.append(t1)
+		out.append(((-dfp) - t1 * dc1) / c1)
+		return out
+	var c1s := c1 * c1
+	var dc1s := dc1 * c1 + c1 * dc1
+	var c2c0 := c2 * fp
+	var dc2c0 := dc2 * fp + c2 * dfp
+	var disc := c1s - c2c0 * 4.0
+	var ddisc := dc1s - dc2c0 * 4.0
+	if disc < 0.0:
+		return out
+	var sq := sqrt(disc)
+	var dsq := ddisc / (2.0 * sq) if sq != 0.0 else 0.0
+	var big: float
+	var dbig: float
+	if not (c1 < 0.0):
+		big = -(c1 + sq)
+		dbig = -(dc1 + dsq)
+	else:
+		big = -(c1 - sq)
+		dbig = -(dc1 - dsq)
+	if big == 0.0:
+		out.append(fp - fp)
+		out.append(0.0)
+		return out
+	var two_c2 := c2 * 2.0
+	var r1 := big / two_c2
+	out.append(r1)
+	out.append((dbig - r1 * (dc2 * 2.0)) / two_c2)
+	var two_c0 := fp * 2.0
+	var r2 := two_c0 / big
+	out.append(r2)
+	out.append((dfp * 2.0 - r2 * dbig) / big)
+	return out
 
 static func is_entering(b: PackedFloat64Array, t: float, sc: Scene, i: int) -> bool:
 	var h := at(b, t, 0.0)

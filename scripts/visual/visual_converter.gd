@@ -46,13 +46,13 @@ static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2, surfaces
 			var clip := _clip_to_bounds(step.start, step_via.normalized(), bounds)
 			if clip != step.start:
 				var via_mid := (step.start + clip) / 2.0
-				result.steps.append(Tracer.Step.new(step.start, clip, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
+				result.steps.append(_piece(step, step.start, clip, step.hit, via_mid, true))
 			continue
 		if start_inf and not end_inf and not via_inf:
 			var clip := _clip_to_bounds(step.end, step_via.normalized(), bounds)
 			if clip != step.end:
 				var via_mid := (clip + step.end) / 2.0
-				result.steps.append(Tracer.Step.new(clip, step.end, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
+				result.steps.append(_piece(step, clip, step.end, step.hit, via_mid, true))
 			continue
 		var start_in := grown.has_point(step.start)
 		var end_in := grown.has_point(step.end)
@@ -60,32 +60,47 @@ static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2, surfaces
 			var vis_dir := (step.end - step.start).normalized()
 			if vis_dir == Vector2.ZERO:
 				var via_mid := (step.start + step.end) / 2.0
-				result.steps.append(Tracer.Step.new(step.start, step.end, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
+				result.steps.append(_piece(step, step.start, step.end, step.hit, via_mid, true))
 				continue
 			var esc := _clip_to_bounds(step.start, -vis_dir, bounds)
 			var ret := _clip_to_bounds(step.end, vis_dir, bounds)
 			var via_out := (step.start + esc) / 2.0 if step.start != esc else step.start
 			var via_in := (ret + step.end) / 2.0 if ret != step.end else step.end
-			result.steps.append(Tracer.Step.new(step.start, esc, step.frame_id, null, step.ray, step.frame, via_out, false))
-			result.steps.append(Tracer.Step.new(ret, step.end, step.frame_id, step.hit, step.ray, step.frame, via_in, false))
+			result.steps.append(_piece(step, step.start, esc, null, via_out, true))
+			result.steps.append(_piece(step, ret, step.end, step.hit, via_in, false))
 			if i < path.cursor_index:
 				cursor_shift += 1
 		elif start_in:
 			var vis_dir := (step.end - step.start).normalized()
 			var clip := _clip_to_bounds(step.start, vis_dir, bounds)
 			var via_mid := (step.start + clip) / 2.0
-			result.steps.append(Tracer.Step.new(step.start, clip, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
+			result.steps.append(_piece(step, step.start, clip, step.hit, via_mid, true))
 		elif end_in:
 			var vis_dir := (step.end - step.start).normalized()
 			var clip := _clip_to_bounds(step.end, -vis_dir, bounds)
 			var via_mid := (clip + step.end) / 2.0
-			result.steps.append(Tracer.Step.new(clip, step.end, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
+			result.steps.append(_piece(step, clip, step.end, step.hit, via_mid, true))
 		else:
 			var via_mid := (step.start + step.end) / 2.0
-			result.steps.append(Tracer.Step.new(step.start, step.end, step.frame_id, step.hit, step.ray, step.frame, via_mid, false))
+			result.steps.append(_piece(step, step.start, step.end, step.hit, via_mid, true))
 	if path.cursor_index >= 0:
 		result.cursor_index = path.cursor_index + cursor_shift
 	return result
+
+# A display piece of `step`: geometry from the arguments, metadata from the
+# step. The piece carrying the hit gets the hit's surface/side data; only the
+# first piece of a split keeps after_portal (it starts the step).
+static func _piece(step: Tracer.Step, p_start: Vector2, p_end: Vector2, hit, via: Vector2, first: bool) -> Tracer.Step:
+	var piece := Tracer.Step.new(p_start, p_end, step.frame_id, hit, step.ray, step.frame, via, false)
+	piece.type = step.type
+	piece.est_error = step.est_error
+	piece.precision_bits = step.precision_bits
+	piece.after_portal = step.after_portal if first else false
+	if hit != null:
+		piece.surface_id = step.surface_id
+		piece.hit_side = step.hit_side
+		piece.hit_on_segment = step.hit_on_segment
+	return piece
 
 static func _snap_step(step: Tracer.Step, surfaces: Array = []) -> Tracer.Step:
 	var display_end := compute_display_end(step, surfaces)
@@ -93,12 +108,7 @@ static func _snap_step(step: Tracer.Step, surfaces: Array = []) -> Tracer.Step:
 		return step
 	var result := Tracer.Step.new(step.start, display_end, step.frame_id, step.hit, step.ray, step.frame, step.via, step.is_arc_step)
 	result.type = step.type
-	result.surface_id = step.surface_id
-	result.hit_side = step.hit_side
-	result.hit_on_segment = step.hit_on_segment
-	result.after_portal = step.after_portal
-	result.est_error = step.est_error
-	result.precision_bits = step.precision_bits
+	result.copy_meta_from(step)
 	return result
 
 static func _clip_to_bounds(origin: Vector2, dir: Vector2, bounds: Rect2) -> Vector2:

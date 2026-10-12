@@ -1,49 +1,10 @@
 class_name Tracer
 extends RefCounted
 
-class Step extends RefCounted:
-	var start: Vector2
-	var end: Vector2
-	var via: Vector2
-	var frame_id: int
-	var hit: Intersection.HitRecord
-	var ray: Ray
-	var frame: MobiusTransform
-	var is_arc_step: bool
-	var type: int = StepTypes.Type.ALIGNED
-	var surface_id: int = -1
-	var hit_side: int = -1
-	var hit_on_segment: bool = false
-	var after_portal: bool = false
-	var est_error: float = -1.0     # estimated px error of this step's end (BeamTracer), -1 = unknown
-	var precision_bits: int = 0     # arithmetic precision the step was computed at (0 = float32 Tracer)
-
-	func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: Intersection.HitRecord = null, p_ray: Ray = null, p_frame: MobiusTransform = null, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
-		start = p_start
-		end = p_end
-		frame_id = p_frame_id
-		hit = p_hit
-		ray = p_ray
-		frame = p_frame
-		via = p_via if p_via != Vector2.ZERO else (p_start + p_end) / 2.0
-		is_arc_step = p_is_arc
-
-	func with_type(new_type: int) -> Step:
-		var copy := Step.new(start, end, frame_id, hit, ray, frame, via, is_arc_step)
-		copy.type = new_type
-		copy.surface_id = surface_id
-		copy.hit_side = hit_side
-		copy.hit_on_segment = hit_on_segment
-		copy.after_portal = after_portal
-		copy.est_error = est_error
-		copy.precision_bits = precision_bits
-		return copy
-
-class TracedPath extends RefCounted:
-	var steps: Array = []
-	var targets_hit: Dictionary = {}
-	var cursor_index: int = -1
-	var hit_count: int = 0
+# Trace types live in their own classes (TraceStep / TracePath); these
+# aliases keep existing references working.
+const Step = preload("res://scripts/math/trace_step.gd")
+const TracedPath = preload("res://scripts/math/trace_path.gd")
 
 class TraceState:
 	var path: TracedPath

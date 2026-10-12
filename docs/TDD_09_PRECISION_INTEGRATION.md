@@ -11,7 +11,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 
 | Stage | Topic | Status |
 |-------|-------|--------|
-| 80 | Neutral trace types, generalized beam geometry, oracle v2 | In progress |
+| 80 | Neutral trace types, generalized beam geometry, oracle v2 | Done (awaiting doc confirmation) |
 | 81 | Reflections, partial/one-sided inversions, terminals, passes | Planned |
 | 82 | Portals (rigid motion) | Planned |
 | 83 | Projective effects (physical) + full switch-over | Planned |
@@ -130,17 +130,32 @@ Stage 79 plus the precision solver (commit `5e7d2f3`).
 ### Interactive User Tests
 None (no gameplay change). The user confirms this document.
 
-### Validation Summary (filled in after implementation)
+### Validation Summary
 
 | Check | Status | Notes |
 |-------|--------|-------|
-| Red tests fail for the right reason | [ ] | |
-| All unit tests pass | [ ] | |
-| All prior regression tests pass | [ ] | |
-| Stage complete | [ ] | |
+| Red tests fail for the right reason | [x] | 11/11 failed on assertions with API stubs, no parse errors (commit `26ad6d4`). Two initially vacuous tests were strengthened before committing red. |
+| All unit tests pass | [x] | 11/11 Stage 80 tests; oracle pytest 40/40, including 27 scene round trips. |
+| All prior regression tests pass | [x] | 848/848. |
+| Stage complete | [ ] | Awaiting user confirmation of this document. |
+
+Notes:
+- `test_tangent_line_double_root` first used κ = 0.1. That value is not exact in binary, so the line genuinely missed the circle. It now uses κ = 0.125, which is exact.
+- The oracle `.tscn` importer reproduces the game's surfaces exactly, including float32 rounding and ids, for every level scene.
 
 ### Files Modified/Created
-(filled in after implementation)
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `scripts/math/trace_step.gd`, `trace_path.gd`, `trace_hit.gd` | Create | Neutral trace types (`copy_meta_from` helper) |
+| `scripts/math/tracer.gd`, `intersection.gd` | Modify | `Step`, `TracedPath` and `HitRecord` become preload aliases |
+| `scripts/visual/visual_converter.gd` | Modify | `_piece` keeps metadata on clipped and split steps; `_snap_step` uses `copy_meta_from` |
+| `scripts/math/precision/beam_geom.gd` | Create | Precision-generic segment geometry |
+| `scripts/math/precision/fast_solver.gd` | Modify | `line_hits` raw-float twin with dual |
+| `scripts/testing/dump_scene_surfaces.gd` | Create | Game-side surface dump (importer ground truth) |
+| `docs/research/oracle/{geometry,tscn_import,gen_fixtures_stage80,test_oracle_v2}.py` | Create | Oracle v2 |
+| `bench/fixtures/stage80_geometry.json`, `bench/scenes/*.surfaces.json` | Create | Fixtures |
+| `tests/test_stage80_trace_types.gd`, `tests/test_stage80_beam_geometry.gd` | Create | Stage 80 specification tests |
 
 ---
 
