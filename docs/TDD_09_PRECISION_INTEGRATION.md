@@ -13,7 +13,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 |-------|-------|--------|
 | 80 | Neutral trace types, generalized beam geometry, oracle v2 | Done (awaiting doc confirmation) |
 | 81 | Reflections, partial/one-sided inversions, terminals, passes | Done (user sign-off) |
-| 82 | Portals (rigid motion) | In progress (red tests committed) |
+| 82 | Portals (rigid motion) | Done (user sign-off) |
 | 83 | Projective effects (physical) + full switch-over | Planned |
 | 84 | Delete the legacy solver | Planned |
 | 85 | State flags (ConfigResolver + StateChange) | Planned |
@@ -332,10 +332,10 @@ Portal pairs on the beam solver.
 Moved to Stage 84: `test_portal_pair_construction_without_frames`. Rewriting `create_portal_pair` without `Point.transformed` belongs with deleting the provenance transforms, which Stage 71's tests still assert. The beam solver does not use them.
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
-- [ ] The portal path appears on the paired side with a visible gap.
-- [ ] Planning through portals works.
-- [ ] Firing follows the preview.
-- [ ] Line and arc portals in `test_levels/portals` and `playground/portals` behave as before, including going back through the pair.
+- [x] The portal path appears on the paired side with a visible gap.
+- [x] Planning through portals works.
+- [x] Firing follows the preview.
+- [x] Line and arc portals in `test_levels/portals` and `playground/portals` behave as before, including going back through the pair.
 
 ### Validation Summary
 
@@ -348,7 +348,7 @@ Moved to Stage 84: `test_portal_pair_construction_without_frames`. Rewriting `cr
 | Benchmarks | [x] | Ladder 161/161 and stress 40/40 |
 | Estimator calibration | [x] | Planned 98.2%, physical 99.2%, 0 missed escalations. Anchored-prefix gains have their own constant (`PREFIX_GAIN_SCALE`, C = 64): prefix errors do not compound. |
 | Per-frame cost (median / p90) | [x] | portals levels 2.4/5.1 and 2.0/3.5 ms; main 1.7/2.3; inversion_grid 6.3/7.9. Rare chaotic frames legitimately climb to 112 bits (cached afterwards). |
-| Stage complete | [ ] | Awaiting user sign-off. |
+| Stage complete | [x] | User signed off. |
 
 Notes:
 - **Fixed:** the planned residual compared a portal's hit point with the next beam, which starts at T(hit). That forced needless climbs; teleports are now excluded from the next-beam check.
