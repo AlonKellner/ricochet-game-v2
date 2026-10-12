@@ -187,6 +187,11 @@ static func hits(b: PackedFloat64Array, sc: Scene, i: int, depart_on: bool) -> P
 		out.append(0.0)
 	return out
 
+# Stage 80 RED stub: roots of beam ∩ line through (sx,sy)->(ex,ey), as
+# [t0, dt0, t1, dt1, ...] (BeamGeom.hits twin with the inline dual).
+static func line_hits(_b: PackedFloat64Array, _sx: float, _sy: float, _ex: float, _ey: float, _depart_on: bool) -> PackedFloat64Array:
+	return PackedFloat64Array()
+
 static func is_entering(b: PackedFloat64Array, t: float, sc: Scene, i: int) -> bool:
 	var h := at(b, t, 0.0)
 	var d := tangent_at(b, t, 0.0)
