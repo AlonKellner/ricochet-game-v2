@@ -282,10 +282,44 @@ class Line extends RefCounted:
 		o.ec = c2[1]
 		return o
 
+	# Exact: this line and the carriers of segments p -> q and r -> s meet at
+	# one point (det [L; A; B] == 0).
+	func concurrent(px: float, py: float, qx: float, qy: float, rx: float, ry: float, sx: float, sy: float) -> bool:
+		# float filter (scalar; first-order rigorous bound with generous
+		# constants: every intermediate carries at most a few ulps relative)
+		var a1 := py - qy
+		var b1 := qx - px
+		var c1 := a1 * px + b1 * py
+		var a2 := ry - sy
+		var b2 := sx - rx
+		var c2 := a2 * rx + b2 * ry
+		var c1m := absf(a1 * px) + absf(b1 * py)
+		var c2m := absf(a2 * rx) + absf(b2 * ry)
+		var m1 := b1 * c2 - b2 * c1
+		var m2 := a1 * c2 - a2 * c1
+		var m3 := a1 * b2 - a2 * b1
+		var m1m := absf(b1) * c2m + absf(b2) * c1m
+		var m2m := absf(a1) * c2m + absf(a2) * c1m
+		var m3m := absf(a1 * b2) + absf(a2 * b1)
+		var det := fa * m1 - fb * m2 + fc * m3
+		var bound := 32.0 * U * (absf(fa) * m1m + absf(fb) * m2m + absf(fc) * m3m) \
+			+ ea * m1m + eb * m2m + ec * m3m
+		if absf(det) > bound:
+			return false
+		var L := exact()
+		var A := Exact.line_through(px, py, qx, qy)
+		var B := Exact.line_through(rx, ry, sx, sy)
+		var e1 := Exact.sub(Exact.mul(A[1], B[2]), Exact.mul(B[1], A[2]))
+		var e2 := Exact.sub(Exact.mul(A[0], B[2]), Exact.mul(B[0], A[2]))
+		var e3 := Exact.sub(Exact.mul(A[0], B[1]), Exact.mul(B[0], A[1]))
+		return Exact.add(Exact.sub(Exact.mul(L[0], e1), Exact.mul(L[1], e2)), Exact.mul(L[2], e3)).is_zero()
+
 	# Exact: (x, y) on the line (exact float data point).
 	func contains(x: float, y: float) -> bool:
-		var v := Exact._eadd(Exact._esub(Exact._emul([fa, ea], [x, 0.0]), [fc, ec]), Exact._emul([fb, eb], [y, 0.0]))
-		if absf(v[0]) > v[1]:
+		var l := fa * x
+		var r := fb * y
+		var v := l + r - fc
+		if absf(v) > 4.0 * U * (absf(l) + absf(r) + absf(fc)) + ea * absf(x) + eb * absf(y) + ec:
 			return false
 		var L := exact()
 		return Exact.sub(Exact.add(Exact.mul(L[0], Exact.of(x)), Exact.mul(L[1], Exact.of(y))), L[2]).is_zero()

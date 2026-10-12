@@ -416,8 +416,57 @@ This replaces legacy's `determine_side(hit + axis)` probe. That probe had an eff
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
 - [ ] Every playground scene behaves as before or better.
-- [ ] Projective scenes.
-- [ ] Standing at circle centers or aiming there causes no glitches.
+- [ ] Projective scenes:
+  - `projective`, `projective_lines`, `projective_arcs`, `directional_lines`, `directional_arcs`;
+  - through and back variants exit to the right side.
+- [ ] Standing at circle centers or aiming there causes no glitches. The path is native, with no fallback.
+- [ ] Rule changes are acceptable:
+  - a plan containing a projective aims through its other entries (legacy ignored the whole plan);
+  - circle-directional exits use the exact side rule.
+
+### Exactness rules added in Stage 83 (oracle `trace2` = solver)
+- **Projective exits** are exact lines when the hit point is exact and the axis is exact data.
+- **Through an inversion center:** any beam through a known point that is exactly the inversion center inverts to an exactly straight beam.
+- **Vias** (segment midpoints and arc vias) are known points on exact lines, like endpoints.
+- **Concurrency:** on an exact line, adjacent crossings of two line carriers that meet the line at one point (exact 3×3 determinant) share a parameter. The id rule orders them, and the pair's zero gap is not a decision margin.
+- **The departure re-hit** uses the departure record only at its own parameter (it matters after pops).
+- **`param_of` near a circle beam's antipode** uses the well-conditioned form 1/Re(den/w). The two forms are the same algebra for points on the beam; straight beams keep Re(w/den), which is the orthogonal projection of an off-beam cursor.
+
+### Validation Summary
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Red tests fail for the right reason | [x] | Projective, switch-over and invariant tests failed on assertions with stubs (commit `76a0f4c`) |
+| All unit tests pass | [x] | Full suite 893/893 |
+| Scene corpus vs oracle | [x] | 348/348 over all 29 scenes; planned and physical ≤ 0.01 px |
+| Parity harness | [x] | 644 same, 52 legacy wrong (beam = oracle), 0 unclassified |
+| Invariant sweeps | [x] | Zero violations: every scene, plan sweeps, all 30 effect combos (projective and directional now included), precision sweeps |
+| Benchmarks | [x] | Ladder 161/161 and stress 40/40 |
+| Estimator calibration | [x] | Planned 98.2%, physical 99.2%, 0 missed escalations |
+| Per-frame cost (median / p90) | [x] | inversion_grid 6.5/7.9 ms; projective 2.9/7.6; projective_lines 1.5/1.8; directional_arcs 1.8/2.1; main 1.7/2.3; portals 2.3/10.4 |
+| Stage complete | [ ] | Awaiting user sign-off. |
+
+**Invariant checker:**
+- **New:** `EFFECT_LAW`, `EVENT_ON_BEAM`, `BEAM_ORDER` (pure checks over solver events).
+- **Rewritten on events:** `PLAN_EFFECTS_APPLIED`, `HITPOINT_ON_CARRIER`, `ON_SEGMENT_CONSISTENCY`.
+- **Rewritten without legacy ray parameters:** `PHYSICAL_CONTINUITY`.
+- **Rewritten for the beam solver:** `DIRECTION_ONLY` compares the planned shot against a converged shot without plan aimed at the image. The comparison is bounded by tangent-linear sensitivity to the float64 rounding of that image.
+- **Retired from `check_all`:** `S18`, `BACK_TRANSFORM`, `RAY_ALIGNMENT`, `ARC_MIDPOINT`, `PARAM_MONOTONICITY`, `POST_INVERSION_ARC`, `SHARED_RAY` (legacy frames).
+
+**Fallbacks:** the renderer and the firing code fall back to Tracer only under the debug toggle `BeamTracer.LEGACY_FALLBACK` (off by default), or when explicitly pinned (`use_beam_tracer = false`, legacy diagnostics).
+
+### Files Modified/Created
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `scripts/math/precision/beam_scene.gd`, `beam_effects.gd`, `fast_solver.gd` | Modify | Projective sides; exact exit rule and its raw twin (with the circle-normal derivative) |
+| `scripts/math/precision/beam_solver.gd` | Modify | Projective firing (stack clear, epochs, exact exit lines); native degenerate inputs; straightening through inversion centers; vias as known points; concurrency ties; departure-record parameter match |
+| `scripts/math/precision/hp_beam.gd` | Modify | Well-conditioned `param_of` near the antipode (circle beams) |
+| `scripts/math/precision/exact.gd` | Modify | Concurrency predicate; scalar certified filters |
+| `scripts/math/precision/beam_tracer.gd`, `scripts/visual/path_renderer.gd`, `scripts/game/game_manager.gd` | Modify | Epoch frame ids; legacy fallback behind `LEGACY_FALLBACK` |
+| `scripts/testing/invariant_checker.gd` | Modify | Event-based invariants; legacy-frame checks retired |
+| `docs/research/oracle/{trace2,test_trace2,gen_fixtures_stage83,gen_scene_corpus}.py` | Modify/Create | Projectives, degenerate aims, exactness rules, all-scene corpus |
+| `tests/test_stage83_{projective,invariants}.gd`; `tests/test_stage81_*`, `test_precision_integration.gd`, `test_invariant_combos.gd` | Create/Modify | Stage 83 specification; switch-over; all combos checked |
 
 ---
 

@@ -61,6 +61,8 @@ const MAX_HITS := 32
 # compound like the forward continuation's (calibrated on the bench corpus).
 const PREFIX_GAIN_SCALE := 64.0 / 4096.0
 const TRANSFORMATIVE := ["reflection", "inversion", "portal"]
+const PROJECTIVE := ["line_normal_projection", "circle_normal_projection", "line_directional_projection",
+	"circle_directional_projection"]
 
 class Event extends RefCounted:
 	var kind: String          # "hit" | "cursor" | "origin" | "escape" | "max"
@@ -72,8 +74,8 @@ class Event extends RefCounted:
 	var rehit: bool = false   # the departure point, re-hit after the full loop
 	var popped: bool = false  # the applied effect popped the transform stack
 	var teleport: bool = false # the applied effect was a portal (the next arc starts elsewhere)
-	var projective: bool = false # STUB (Stage 83 red): the applied effect was a projective
-	var epoch: int = 0        # STUB (Stage 83 red): projectives start a new epoch
+	var projective: bool = false # the applied effect was a projective
+	var epoch: int = 0        # projectives start a new epoch (the stack is cleared)
 	var point: CN = null      # null for escape
 	var beam: HPBeam          # beam the arc leading to this event lies on
 	var t_from                # arc start parameter on `beam`
@@ -142,6 +144,8 @@ class NumBackend extends RefCounted:
 		return beam.param_of(z)
 	func apply(beam: HPBeam, t, surf: BeamScene.Surf, etype: String, h: CN = null) -> HPBeam:
 		return BeamEffects.apply(beam, t, surf, etype, h)
+	func project(beam: HPBeam, t, surf: BeamScene.Surf, left: bool, h: CN = null) -> HPBeam:
+		return BeamEffects.project(beam, t, surf, left, h)
 	func straight(beam: HPBeam) -> bool:
 		return beam.kappa.is_zero()
 	# the same beam with curvature exactly zero (provenance: it is a line)
@@ -279,6 +283,7 @@ class Walk extends RefCounted:
 	var seeded: bool = false
 	var chain: AnchorChain = null
 	var anchored: bool = false
+	var epoch: int = 0
 	var known: Array = []     # known points on the current beam: [CN, t, skip surface id]
 	var line = null           # exact implicit line of the current beam (Exact.Line), or null
 	var incidence := {}       # cache: [x, y, surface id] -> exact incidence
@@ -307,12 +312,15 @@ static func run_direction(bk, scene: BeamScene, player: CN, dir: CN, plan: Array
 	walk_from(w, b0, -1, null)
 	return w
 
-# Segment endpoints exactly on the current exact line are known points.
+# Segment data points (endpoints, via) exactly on the current exact line are
+# known points.
 static func _add_line_endpoints(w: Walk, b) -> void:
 	for s in w.scene.surfaces:
 		if s.seg.full:
 			continue
-		for ep in [s.seg.s, s.seg.e]:
+		for ep in [s.seg.s, s.seg.e, s.seg.v]:
+			if ep == null:
+				continue
 			if _known_index(w.known, ep) < 0 and w.line.contains(ep.fx(), ep.fy()):
 				w.known.append([ep, w.bk.param_of(b, ep), -1])
 
@@ -350,7 +358,7 @@ static func physical(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan
 static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int = MAX_HITS) -> Walk:
 	var chain := AnchorChain.build(scene, player, cursor, plan)
 	if chain == null:
-		return null
+		return _run_degenerate(bk, scene, player, cursor, plan, mode, max_events)
 	var w := _new_walk(bk, scene, plan, cursor, mode, max_events)
 	w.chain = chain
 	w.anchored = true
@@ -387,6 +395,41 @@ static func _initial_line(scene: BeamScene, player: CN, cursor: CN, plan: Array)
 			return null
 		X = Exact.reflect_point_h(X, surf.sx, surf.sy, surf.ex, surf.ey)
 	return Exact.Line.from_exact(Exact.line_through_h(player.fx(), player.fy(), X))
+
+# A point at infinity in the anchored construction (player / cursor exactly at
+# an inversion center): forward walk from the exact aim direction, or -- when
+# the aim image itself is at infinity (the aim is undetermined) -- straight at
+# the cursor (oracle trace2._aim). null only for player = cursor.
+static func _run_degenerate(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int) -> Walk:
+	var X = cursor
+	for j in range(plan.size() - 1, -1, -1):
+		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+		if surf == null or not (surf.effect(plan[j].left) in TRANSFORMATIVE):
+			continue
+		X = BeamEffects.map_point(X, surf, true)
+		if X == null:
+			break
+	var dir: CN
+	var line = null
+	if X == null or X.sub(player).is_zero():
+		dir = cursor.sub(player)
+		if dir.is_zero():
+			return null
+		line = Exact.Line.from_exact(Exact.line_through(player.fx(), player.fy(), cursor.fx(), cursor.fy()))
+	else:
+		dir = X.sub(player)
+		line = _initial_line(scene, player, cursor, plan)
+	var w := _new_walk(bk, scene, plan, cursor, mode, max_events)
+	var b0 = bk.from_hp(HPBeam.make(player, dir.unit(), player.re.sub(player.re)))
+	if mode == Mode.PHYSICAL:
+		b0 = bk.seed(b0)
+		w.seeded = true
+	w.known = [[player, bk.zero(), -1]]
+	w.line = line
+	if w.line != null:
+		_add_line_endpoints(w, b0)
+	walk_from(w, b0, -1, null)
+	return w
 
 static func _new_walk(bk, scene: BeamScene, plan: Array, cursor, mode: int, max_events: int) -> Walk:
 	var w := Walk.new()
@@ -444,7 +487,8 @@ static func _candidates(w: Walk, beam, depart: int, fresh: bool, t0) -> Array:
 		var tc = bk.param_of(beam, w.cursor)
 		var ki := _known_index(w.known, w.cursor)
 		# the cursor exactly at the departure point is reached immediately
-		if (fresh and BeamGeom._eq(bk.origin(beam), w.cursor)) or (ki >= 0 and w.known[ki][2] == depart and depart >= 0):
+		if (fresh and BeamGeom._eq(bk.origin(beam), w.cursor)) \
+				or (ki >= 0 and w.known[ki][2] == depart and depart >= 0 and w.known[ki][1].cmp(t0) == 0):
 			tc = t0
 			cursor_now = true
 		cands.append([tc, null, false, null])
@@ -461,11 +505,13 @@ static func _candidates(w: Walk, beam, depart: int, fresh: bool, t0) -> Array:
 		var ia: int = -1 if a[1] == null else a[1].id
 		var ib: int = -1 if b[1] == null else b[1].id
 		return ia < ib)
+	if w.line != null:
+		_concurrent_ties(w, cands)
 	if depart >= 0:
 		# the departure re-hit is at the departure point (exact when known)
 		var dep_pt = null
 		for k in w.known:
-			if k[2] == depart:
+			if k[2] == depart and k[1].cmp(t0) == 0:
 				dep_pt = k[0]
 		cands.append([t0, w.scene.by_id[depart], true, dep_pt])
 	return cands
@@ -475,6 +521,26 @@ static func _known_index(known: Array, z: CN) -> int:
 		if BeamGeom._eq(known[i][0], z):
 			return i
 	return -1
+
+# On an exact line, adjacent crossings of two line carriers that meet the line
+# at the same point (exact concurrency) share one parameter, ordered by id; the
+# pair is marked (cand[4]) so its zero gap is not a decision margin.
+static func _concurrent_ties(w: Walk, cands: Array) -> void:
+	for i in cands.size() - 1:
+		var x: Array = cands[i]
+		var y: Array = cands[i + 1]
+		if x[1] == null or y[1] == null or x[2] or y[2] or not x[1].line or not y[1].line:
+			continue
+		var p: BeamScene.Surf = x[1]
+		var q: BeamScene.Surf = y[1]
+		if not w.line.concurrent(p.sx, p.sy, p.ex, p.ey, q.sx, q.sy, q.ex, q.ey):
+			continue
+		var lo: BeamScene.Surf = p if p.id < q.id else q
+		var hi: BeamScene.Surf = q if p.id < q.id else p
+		var t = x[0]
+		var pt = x[3] if x[3] != null else y[3]
+		cands[i] = [t, lo, false, pt, i]
+		cands[i + 1] = [t, hi, false, pt, i]
 
 # A surface whose carrier contains the known point kp (on the beam at kt) is
 # hit exactly there: its root nearest kp becomes (kt, kp). skip: the
@@ -527,13 +593,16 @@ static func _gaps(w: Walk, beam, cands: Array) -> Array:
 			# numerical decision (two exact provenance points are ordered by
 			# their exact shared parameter and the id rule, not by rounding)
 			var exact_i: bool = cands[i][3] != null
+			var tie_i: int = cands[i][4] if cands[i].size() > 4 else -1
 			var l := i - 1
-			while l >= 0 and (cands[l][1] == null or (exact_i and cands[l][3] != null)):
+			while l >= 0 and (cands[l][1] == null or (exact_i and cands[l][3] != null) \
+					or (tie_i >= 0 and cands[l].size() > 4 and cands[l][4] == tie_i)):
 				l -= 1
 			if l >= 0:
 				g = minf(g, _d64(pts[i], pts[l][0], pts[l][1]))
 			var r := i + 1
-			while r < cands.size() and (cands[r][1] == null or (exact_i and cands[r][3] != null)):
+			while r < cands.size() and (cands[r][1] == null or (exact_i and cands[r][3] != null) \
+					or (tie_i >= 0 and cands[r].size() > 4 and cands[r][4] == tie_i)):
 				r += 1
 			if r < cands.size():
 				g = minf(g, _d64(pts[i], pts[r][0], pts[r][1]))
@@ -593,6 +662,7 @@ static func _event(w: Walk, kind: String, beam, t_from, t_to, margin: float) -> 
 		e.point = w.bk.point(beam, t_to)
 	e.margin = margin
 	e.seeded = w.seeded
+	e.epoch = w.epoch
 	w.events.append(e)
 	var g := 0.0
 	if t_to != null:
@@ -681,7 +751,7 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 				do = phys_do
 				if w.anchored and not (phys_do == plan_do and (phys_do != "" or not plan_match)):
 					diverged = true
-				if do in TRANSFORMATIVE:
+				if do in TRANSFORMATIVE or do in PROJECTIVE:
 					_plan_bookkeeping(w, surf.id)
 			else:
 				if plan_match:
@@ -719,6 +789,14 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 				e.popped = w.stack.size() < depth
 				e.teleport = surf.portal or (e.popped and w.scene.by_id[next[1]].portal)
 				if diverged and not w.seeded:
+					w.seeded = true
+					next[0] = bk.seed(next[0])
+				break
+			if do in PROJECTIVE:
+				var pt_exact2: bool = (cand[3] != null or (rehit and fresh)) and _known_index(w.known, pt) >= 0
+				next = _project(w, beam, t, surf, left, pt, pt_exact2)
+				e.projective = true
+				if not w.seeded:
 					w.seeded = true
 					next[0] = bk.seed(next[0])
 				break
@@ -808,7 +886,59 @@ static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart
 		_add_line_endpoints(w, res[0])
 	else:
 		w.line = null
+		if not surf.line:
+			for k in old_known:
+				if _is_center(k[0], surf):
+					# the old beam passes exactly through the inversion center
+					# (a known point): its image is exactly a line
+					res[0] = bk.straightened(res[0])
+					break
 	return res
+
+# Exact: the point is the center of surf's circle.
+static func _is_center(k: CN, surf: BeamScene.Surf) -> bool:
+	var kx := k.fx()
+	var ky := k.fy()
+	if surf.full:
+		# both exact float data: equality is exact
+		return kx == surf.cx and ky == surf.cy
+	var ec: Array = surf.exact_circle()
+	var e := 2.0 * _ecc(ec)
+	if absf(kx - ec[2]) > e or absf(ky - ec[3]) > e:
+		return false
+	var C: Array = ec[0]
+	return Exact.sub(Exact.mul(Exact.of(kx), C[2]), C[0]).is_zero() \
+		and Exact.sub(Exact.mul(Exact.of(ky), C[2]), C[1]).is_zero()
+
+# Projective effect at pt: a fresh straight beam departing surf; the stack
+# clears and a new epoch begins (the anchored path ends: projectives are not
+# planned until Stage 87). [beam, depart, t0, fresh].
+static func _project(w: Walk, beam, t, surf: BeamScene.Surf, left: bool, pt: CN, pt_exact: bool) -> Array:
+	var nb = w.bk.project(beam, t, surf, left, pt)
+	w.stack.clear()
+	w.epoch += 1
+	w.anchored = false
+	w.known = [[pt, w.bk.zero(), surf.id]] if pt_exact else []
+	w.line = null
+	if pt_exact:
+		# an exact data line: through pt along the exact axis
+		var etype := surf.effect(left)
+		var pr: Array = surf.left_proj if left else surf.right_proj
+		var px := pt.fx()
+		var py := pt.fy()
+		var L: Array
+		if etype == "line_normal_projection":
+			# perpendicular to the segment: (E - S) . (z - pt) = 0
+			var a := Exact.sub(Exact.of(surf.ex), Exact.of(surf.sx))
+			var b := Exact.sub(Exact.of(surf.ey), Exact.of(surf.sy))
+			L = [a, b, Exact.add(Exact.mul(a, Exact.of(px)), Exact.mul(b, Exact.of(py)))]
+		elif etype == "circle_normal_projection":
+			L = Exact.line_through_h(px, py, surf.exact_circle()[0])
+		else:
+			L = Exact.line_from_dir(px, py, pr[1], pr[2])
+		w.line = Exact.Line.from_exact(L)
+		_add_line_endpoints(w, nb)
+	return [nb, surf.id, w.bk.zero(), true]
 
 # T(k) of a portal as exact data: the pair is built as T of the source, so
 # endpoints map to endpoints; otherwise a translation's k + d when exactly

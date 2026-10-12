@@ -11,8 +11,11 @@ extends RefCounted
 # (rigid motion z -> a z + d onto the paired surface, a = unit(cos θ, sin θ)
 # of the float64 values; {theta, d, pair}).
 
-const SUPPORTED_TYPES := ["pass", "terminal", "reflection", "inversion", "portal"]
+const SUPPORTED_TYPES := ["pass", "terminal", "reflection", "inversion", "portal",
+	"line_normal_projection", "circle_normal_projection", "line_directional_projection", "circle_directional_projection"]
 const TRANSFORMATIVE := ["reflection", "inversion", "portal"]
+const PROJECTIVE := ["line_normal_projection", "circle_normal_projection", "line_directional_projection",
+	"circle_directional_projection"]
 
 class Surf extends RefCounted:
 	var id: int
@@ -42,6 +45,9 @@ class Surf extends RefCounted:
 	var dy: float = 0.0
 	var theta: float = 0.0
 	var pair: int = -1
+	# projectives per side: [back, nx, ny] (normal for directional types)
+	var left_proj: Array = []
+	var right_proj: Array = []
 	var has_v: bool = false   # via point (null for full lines: V at infinity)
 	var vx: float
 	var vy: float
@@ -113,6 +119,15 @@ static func from_defs(ctx: NumCtx, defs: Array) -> BeamScene:
 			s.r2 = s.r * s.r
 		s.left_type = _type_of(d.get("left"))
 		s.right_type = _type_of(d.get("right"))
+		for key in ["left", "right"]:
+			var pc = d.get(key)
+			if pc != null and String(pc.get("type", "")) in PROJECTIVE:
+				var nrm = pc.get("normal")
+				var pr := [bool(pc.get("back", false)), 0.0 if nrm == null else float(nrm[0]), 0.0 if nrm == null else float(nrm[1])]
+				if key == "left":
+					s.left_proj = pr
+				else:
+					s.right_proj = pr
 		for key in ["left", "right"]:
 			var cfg = d.get(key)
 			if cfg != null and String(cfg.get("type", "")) == "portal":

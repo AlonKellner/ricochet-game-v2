@@ -54,9 +54,17 @@ func _compute_trace() -> void:
 		plan_entries = plan.entries
 
 	var bounds := VisualConverter.DEFAULT_BOUNDS
-	# Precision-converging beam solver for scenes it supports (full inversion
-	# circles + effect-free surfaces); the frame-based Tracer otherwise.
+	# Precision-converging beam solver (every scene since Stage 83). The legacy
+	# frame-based Tracer runs only when pinned (use_beam_tracer = false, legacy
+	# diagnostics) or as a debug fallback (BeamTracer.LEGACY_FALLBACK).
 	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, plan_entries) if use_beam_tracer else null
+	if pair == null and use_beam_tracer and not BeamTracer.LEGACY_FALLBACK:
+		last_solver = "beam"
+		last_beam_result = null
+		_traced_path = null
+		_planned_path = null
+		_merged_steps = []
+		return
 	last_solver = "beam" if pair != null else "tracer"
 	if pair != null:
 		last_beam_result = pair.result

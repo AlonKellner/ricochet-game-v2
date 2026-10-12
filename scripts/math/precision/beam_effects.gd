@@ -25,6 +25,40 @@ static func portal(beam: HPBeam, t, surf: BeamScene.Surf, h_exact: CN = null) ->
 	var h := beam.at(t) if h_exact == null else h_exact
 	return HPBeam.make(surf.alpha.mul(h).add(surf.dvec), surf.alpha.mul(beam.tangent_at(t)), beam.kappa)
 
+# Projective effect of the side `left` at h: a straight beam from h along
+# +-axis (carrier normal / radius h - c / fixed normal). The sign is exact:
+# "through" exits to the far side, sign(exit . grad) = sign(dir . grad);
+# "back" returns to the approach side; an axis tangent to the carrier exits
+# along +axis (through) / -axis (back).
+static func project(beam: HPBeam, t, surf: BeamScene.Surf, left: bool, h_exact: CN = null) -> HPBeam:
+	var h := beam.at(t) if h_exact == null else h_exact
+	var etype := surf.effect(left)
+	var pr: Array = surf.left_proj if left else surf.right_proj
+	var g := BeamGeom._grad(surf.seg, h)
+	var axis: CN
+	if etype == "line_normal_projection":
+		axis = g
+	elif etype == "circle_normal_projection":
+		axis = h.sub(surf.seg.circ.c)
+	else:
+		axis = CN.make(h.re.sub(h.re).add(_num_like(h.re, pr[1])), h.re.sub(h.re).add(_num_like(h.re, pr[2])))
+	var ag = CN.dot(axis, g)
+	var flip := false
+	if not ag.is_zero():
+		var dg = CN.dot(beam.tangent_at(t), g)
+		flip = ag.is_negative() != dg.is_negative()
+	if pr[0]:
+		flip = not flip
+	var ex := axis.neg() if flip else axis
+	return HPBeam.make(h, ex.unit(), beam.kappa.sub(beam.kappa))
+
+static func _num_like(x, f: float):
+	if x is F64Num:
+		return F64Num.of(f)
+	if x is DualNum:
+		return DualNum.of(f)
+	return BigFloat.from_float(f, x.limbs.size())
+
 # T(z) of a portal surface (inverse: T^-1(z) = conj(a)(z - d)).
 static func portal_point(z: CN, surf: BeamScene.Surf, inverse: bool = false) -> CN:
 	if inverse:

@@ -78,11 +78,22 @@ func tangent_at(t) -> CN:
 	var f := _f(t)
 	return tau.mul(f).mul(f).unit()
 
+# t = Re(w / den), w = z - p, den = tau + i kappa w / 2 (real for z on the
+# beam; for a point off a straight beam: its orthogonal projection). Near the
+# antipode of a circle beam den -> 0: there t = 1 / Re(den / w), which stays
+# well-conditioned -- the same exact algebra for points on the beam (circle
+# beams are only asked about such points); the branch only picks the stable
+# form.
 func param_of(z: CN):
 	var w := z.sub(p)
 	var den := tau.add(w.mul_i().scale(kappa).scale(_one_like(kappa).mul_pow2(-1)))
 	if den.is_zero():
 		return inf_like(kappa)      # z is the antipode
+	if not kappa.is_zero() and w.abs2().cmp(den.abs2()) > 0:
+		var qre = den.div(w).re
+		if qre.is_zero():
+			return inf_like(kappa)
+		return _one_like(kappa).div(qre)
 	return w.div(den).re
 
 # Real roots of beam ∩ circle. depart_on: p lies exactly on the circle

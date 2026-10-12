@@ -6,9 +6,8 @@ extends RefCounted
 # renderer, merge, invariant checker, debug dump and arrow flight work
 # unchanged.
 #
-# Applicable to scenes whose side effects the beam solver implements
-# (BeamScene.SUPPORTED_TYPES: pass, terminal, reflection, inversion). Anything
-# else is not supported and callers fall back to Tracer (until Stages 82-83).
+# Applicable to every scene (BeamScene.SUPPORTED_TYPES covers every effect
+# type, Stage 83). null only for player = cursor (no line, UX7).
 
 const TOL := 0.01            # px, PHYSICAL-PREVIEW-MATCH tolerance
 
@@ -16,6 +15,10 @@ class Pair extends RefCounted:
 	var planned: Tracer.TracedPath
 	var physical: Tracer.TracedPath
 	var result: PrecisionLadder.Result
+
+# Debug toggle: fall back to the legacy Tracer when trace_pair returns null
+# (off: every scene is beam-solved since Stage 83; removed in Stage 84).
+static var LEGACY_FALLBACK := false
 
 static var _cache_key: String = ""
 static var _cache_pair: Pair = null
@@ -126,7 +129,7 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 	var gap := false           # the previous event teleported (portal)
 	for i in events.size():
 		var e: BeamSolver.Event = events[i]
-		var fid := _frame_id(stack, frames)
+		var fid := _frame_id(stack, frames, e.epoch)
 		# after a portal the arc starts at the exit point (its own t_from)
 		var steps := _steps_for(e, fid, null, null if gap else prev_pt)
 		var gap_pending := gap
@@ -156,7 +159,9 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 			appended = true
 		var last: Tracer.Step = path.steps.back() if appended else null
 		if e.kind == "hit" and e.applied and not e.terminal:
-			if e.popped:
+			if e.projective:
+				stack.clear()
+			elif e.popped:
 				stack.pop_back()
 			else:
 				stack.append(e.surface_id)
@@ -176,10 +181,12 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 	path.hit_count = events.size()
 	return path
 
-static func _frame_id(stack: Array, frames: Dictionary) -> int:
-	if stack.is_empty():
+# frame id per (epoch, transform stack): a projective starts a new epoch, so
+# frames after it are new even when the stack signature repeats
+static func _frame_id(stack: Array, frames: Dictionary, epoch: int = 0) -> int:
+	if stack.is_empty() and epoch == 0:
 		return MobiusTransform.IDENTITY_ID
-	var key := ",".join(stack.map(func(x): return str(x)))
+	var key := "%d|%s" % [epoch, ",".join(stack.map(func(x): return str(x)))]
 	if not frames.has(key):
 		frames[key] = {"id": frames.size() + 1}
 	return frames[key]["id"]

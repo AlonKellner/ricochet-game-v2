@@ -180,9 +180,12 @@ func _try_fire() -> void:
 	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, entries)
 	if pair != null:
 		path = pair.physical
-	else:
+	elif BeamTracer.LEGACY_FALLBACK:
 		var dir := _compute_aim_direction(player_pos, cursor_pos, surfaces)
 		path = Tracer.trace(player_pos, dir, surfaces, game_state)
+	else:
+		_checkpoints.pop()
+		return
 
 	if _path_renderer:
 		_path_renderer.modulate.a = 0.25

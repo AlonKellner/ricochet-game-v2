@@ -38,16 +38,15 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 	violations.append_array(check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos, cursor_pos))
 	if plan_applied:
 		violations.append_array(check_PLAN_EFFECTS_APPLIED(player_pos, cursor_pos, plan_entries))
-	violations.append_array(check_BACK_TRANSFORM_ALIGNMENT(player_pos, cursor_pos))
 	violations.append_array(check_PHYSICS_COMPLIANCE(player_pos, cursor_pos))
 	violations.append_array(check_HITPOINT_ON_CARRIER(player_pos, cursor_pos))
-	violations.append_array(check_S18_FRAME_DETERMINANT(player_pos, cursor_pos))
 	violations.append_array(check_ON_SEGMENT_CONSISTENCY(player_pos, cursor_pos))
-	violations.append_array(check_SHARED_RAY(player_pos, cursor_pos))
-	violations.append_array(check_RAY_ALIGNMENT(player_pos, cursor_pos))
-	violations.append_array(check_ARC_MIDPOINT_ALIGNMENT(player_pos, cursor_pos))
-	violations.append_array(check_PARAMETER_MONOTONICITY(player_pos, cursor_pos))
-	violations.append_array(check_POST_INVERSION_ARC(player_pos, cursor_pos))
+	# beam-solver events (Stage 83): the legacy frame checks (S18,
+	# BACK_TRANSFORM, RAY_ALIGNMENT, ARC_MIDPOINT, PARAM_MONOTONICITY,
+	# POST_INVERSION_ARC, SHARED_RAY) have no beam counterpart and are retired
+	violations.append_array(check_EFFECT_LAW(player_pos, cursor_pos))
+	violations.append_array(check_EVENT_ON_BEAM(player_pos, cursor_pos))
+	violations.append_array(check_BEAM_ORDER(player_pos, cursor_pos))
 	violations.append_array(check_VIA_ON_ARC(player_pos, cursor_pos))
 	violations.append_array(check_VISUAL_ON_PHYSICAL_CARRIER(player_pos, cursor_pos))
 	if plan_applied:
@@ -240,10 +239,8 @@ func check_PHYSICAL_CONTINUITY(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 	for i in range(1, physical.steps.size()):
 		var prev: Tracer.Step = physical.steps[i - 1]
 		var curr: Tracer.Step = physical.steps[i]
-		# Only skip gaps at escape/return boundaries (beyond-hit with t < 0)
-		var prev_is_escape: bool = (prev.hit == null) or (prev.hit != null and prev.hit.t < 0.0)
-		var curr_is_return: bool = (curr.hit != null and curr.hit.t < 0.0)
-		if prev_is_escape or curr_is_return:
+		# steps without a hit (cursor / escape pieces) bound no contact
+		if prev.hit == null:
 			continue
 		var gap := prev.end.distance_to(curr.start)
 		var tol := 1.5 + 0.001 * i
@@ -330,25 +327,20 @@ func check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos: Vector2, cursor_pos: Vect
 	return violations
 
 func check_PLAN_EFFECTS_APPLIED(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array) -> Array[String]:
-	var violations: Array[String] = []
-	if not _renderer or player_pos == cursor_pos or plan_entries.size() == 0:
-		return violations
-	var planned_path = _renderer.get_planned_path()
-	if planned_path == null or planned_path.steps.size() < 2:
-		return violations
-	# cursor_index == -1 means the plan wasn't consumed (geometrically infeasible)
-	if planned_path.cursor_index < 0:
-		return violations
-	var ci: int = planned_path.cursor_index
-	var frame_changes := 0
-	for i in range(1, mini(ci + 1, planned_path.steps.size())):
-		var prev: Tracer.Step = planned_path.steps[i - 1]
-		var curr: Tracer.Step = planned_path.steps[i]
-		if prev.frame_id != curr.frame_id:
-			frame_changes += 1
-	if frame_changes < plan_entries.size():
-		violations.append("PLAN-EFFECTS: expected %d frame changes for %d plan entries, got %d" % [plan_entries.size(), plan_entries.size(), frame_changes])
-	return violations
+	var r = _beam_result()
+	if r == null or player_pos == cursor_pos or plan_entries.size() == 0:
+		return [] as Array[String]
+	var reached := false
+	for e in r.planned:
+		if e.kind == "cursor":
+			reached = true
+	if not reached:
+		return [] as Array[String]
+	var sc := _beam_scene()
+	var items: Array = BeamTracer.plan_items(plan_entries).filter(func(it):
+		var su: BeamScene.Surf = sc.by_id.get(it.surface_id)
+		return su != null and su.effect(it.left) in BeamScene.TRANSFORMATIVE)
+	return check_plan_effects_applied_events(r.planned, items, true)
 
 func check_BACK_TRANSFORM_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
@@ -447,27 +439,14 @@ func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array
 	return violations
 
 func check_HITPOINT_ON_CARRIER(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
-	var violations: Array[String] = []
-	if not _renderer or player_pos == cursor_pos:
-		return violations
-	var _traces := _get_named_traces()
-	for trace_name in _traces:
-		var path: Tracer.TracedPath = _traces[trace_name]
-		for i in path.steps.size():
-			var step: Tracer.Step = path.steps[i]
-			if step.hit == null or step.hit.segment == null:
-				continue
-			var carrier := step.hit.segment.get_carrier()
-			var pt := step.hit.point.coords
-			if absf(pt.x) > 1e8 or absf(pt.y) > 1e8:
-				continue
-			var eval_val := carrier.evaluate(pt)
-			var grad_mag := sqrt(carrier.b * carrier.b + carrier.c * carrier.c + 4.0 * carrier.a * carrier.a * (pt.x * pt.x + pt.y * pt.y))
-			var dist := absf(eval_val) / maxf(grad_mag, 1e-10)
-			var tol := 1.0 + 55.0 * i
-			if dist > tol:
-				violations.append("HITPOINT-ON-CARRIER: %s step %d dist=%.4f at %s" % [trace_name, i, dist, pt])
-	return violations
+	var r = _beam_result()
+	if r == null or player_pos == cursor_pos:
+		return [] as Array[String]
+	var sc := _beam_scene()
+	var out: Array[String] = []
+	for events in [r.planned, r.physical]:
+		out.append_array(_carrier_violations(events, sc))
+	return out
 
 func check_S18_FRAME_DETERMINANT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
@@ -488,20 +467,25 @@ func check_S18_FRAME_DETERMINANT(player_pos: Vector2, cursor_pos: Vector2) -> Ar
 	return violations
 
 func check_ON_SEGMENT_CONSISTENCY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
-	var violations: Array[String] = []
-	if not _renderer or player_pos == cursor_pos:
-		return violations
-	var _traces := _get_named_traces()
-	for trace_name in _traces:
-		var path: Tracer.TracedPath = _traces[trace_name]
-		for i in path.steps.size():
-			var step: Tracer.Step = path.steps[i]
-			if step.hit == null or step.hit.segment == null:
+	var r = _beam_result()
+	if r == null or player_pos == cursor_pos:
+		return [] as Array[String]
+	var sc := _beam_scene()
+	var out: Array[String] = []
+	for events in [r.planned, r.physical]:
+		for i in events.size():
+			var e: BeamSolver.Event = events[i]
+			if e.kind != "hit" or e.point == null:
 				continue
-			var recomputed := Intersection.is_on_segment(step.hit.point.coords, step.hit.segment)
-			if step.hit.on_segment != recomputed:
-				violations.append("ON-SEGMENT-CONSISTENCY: %s step %d stored=%s recomputed=%s at %s" % [trace_name, i, step.hit.on_segment, recomputed, step.hit.point.coords])
-	return violations
+			var s: BeamScene.Surf = sc.by_id[e.surface_id]
+			var p := CN.make(F64Num.of(e.point.fx()), F64Num.of(e.point.fy()))
+			if BeamGeom.on_segment(s.seg, p) == e.on_segment:
+				continue
+			# a higher-tier point rounded onto the other side of an endpoint
+			var near := minf(Vector2(p.fx() - s.sx, p.fy() - s.sy).length(), Vector2(p.fx() - s.ex, p.fy() - s.ey).length())
+			if near > 1e-9 * maxf(1.0, Vector2(p.fx(), p.fy()).length()):
+				out.append("ON-SEGMENT-CONSISTENCY: event %d s=%d stored=%s recomputed=%s at (%s, %s)" % [i, e.surface_id, e.on_segment, not e.on_segment, p.fx(), p.fy()])
+	return out
 
 func check_SHARED_RAY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
@@ -733,69 +717,55 @@ func check_VISUAL_ON_PHYSICAL_CARRIER(player_pos: Vector2, cursor_pos: Vector2) 
 				violations.append("VISUAL-ON-CARRIER: %s step %d visual endpoint %s not on any physical carrier" % [trace_name, i, end_pos])
 	return violations
 
+# The physical trace depends only on the aim direction: the planned shot's
+# physical hits equal those of a shot without plan aimed at the cursor's
+# image (beam solver, converged; projective plans until Stage 87 are skipped).
 func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array) -> Array[String]:
-	var violations: Array[String] = []
-	if plan_entries.size() == 0:
-		return violations
-	if not _renderer or player_pos == cursor_pos:
-		return violations
-
-	var surfaces: Array = []
-	var parent := _renderer.get_parent()
-	if parent and "surfaces" in parent:
-		surfaces = parent.surfaces
-
-	var cache := TransformCache.new()
-	var aim_dir := Planner.compute_aim_direction(
-		player_pos, cursor_pos, plan_entries, surfaces, GameState.new(), cache)
-	if aim_dir.is_zero_length():
-		return violations
-
-	var aim_point = Planner._compute_image(cursor_pos, plan_entries, surfaces, GameState.new())
-	if aim_point == null:
-		return violations
-	if is_nan(aim_point.x) or is_nan(aim_point.y) or is_inf(aim_point.x) or is_inf(aim_point.y):
-		return violations
-	if aim_point.distance_to(player_pos) < 0.001:
-		return violations
-
-	var trace_with_plan := Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
-		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL,
-		plan_entries, null, cursor_pos)
-
-	var trace_no_plan := Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
-		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL,
-		[], null, aim_point)
-
-	var orig_geo := _extract_trace_geometry(trace_with_plan)
-	var ref_geo := _extract_trace_geometry(trace_no_plan)
-
-	if orig_geo.size() == 0 and ref_geo.size() == 0:
-		return violations
-
-	var both_at_max := trace_with_plan.hit_count >= Tracer.MAX_HITS \
-		and trace_no_plan.hit_count >= Tracer.MAX_HITS
-
-	if orig_geo.size() != ref_geo.size() and not both_at_max:
-		violations.append("DIRECTION-ONLY: segment count mismatch: with_plan=%d no_plan=%d" % [orig_geo.size(), ref_geo.size()])
-		return violations
-
-	var compare_count := mini(orig_geo.size(), ref_geo.size())
-	var tol := 1.0
-	for i in compare_count:
-		var o: Dictionary = orig_geo[i]
-		var r: Dictionary = ref_geo[i]
-		var start_dist: float = o.start.distance_to(r.start)
-		if start_dist > tol:
-			violations.append("DIRECTION-ONLY: segment %d start mismatch: orig=%s ref=%s dist=%.2f" % [i, o.start, r.start, start_dist])
-		var is_last := i == compare_count - 1
-		if both_at_max and is_last:
+	var out: Array[String] = []
+	var r = _beam_result()
+	if plan_entries.size() == 0 or r == null or player_pos == cursor_pos:
+		return out
+	var sc := _beam_scene()
+	var ctx := NumCtx.f64()
+	var X = ctx.cn(cursor_pos.x, cursor_pos.y)
+	for j in range(plan_entries.size() - 1, -1, -1):
+		var surf: BeamScene.Surf = sc.by_id.get(plan_entries[j].surface_id)
+		var etype := "" if surf == null else surf.effect(plan_entries[j].side == Side.Value.LEFT)
+		if etype in BeamScene.PROJECTIVE:
+			return out
+		if not (etype in BeamScene.TRANSFORMATIVE):
 			continue
-		var end_dist: float = o.end.distance_to(r.end)
-		if end_dist > tol:
-			violations.append("DIRECTION-ONLY: segment %d end mismatch: orig=%s ref=%s dist=%.2f" % [i, o.end, r.end, end_dist])
-
-	return violations
+		X = BeamEffects.map_point(X, surf, true)
+		if X == null:
+			return out
+	var img := Vector2(X.fx(), X.fy())
+	if not (is_finite(img.x) and is_finite(img.y)) or img == player_pos:
+		return out
+	var ref := PrecisionLadder.solve(_defs(), [player_pos.x, player_pos.y], [X.fx(), X.fy()], [],
+		BeamSolver.MAX_HITS, BeamSolver.MAX_HITS, BeamTracer.TOL)
+	# the reference aims at the float64 rounding of the image: compare only
+	# while the rounding of the aim angle (bound delta) cannot move an event
+	# by more than 0.005 px (tangent-linear gains of the reference trace)
+	var sens := ErrorEstimate.physical_sensitivity(_defs(), [player_pos.x, player_pos.y], [X.fx(), X.fy()], [], BeamSolver.MAX_HITS)
+	var delta: float = 64.0 * Exact.U * maxf(1.0, img.length()) / maxf(img.distance_to(player_pos), 1e-300)
+	var a: Array = r.physical.filter(func(e): return e.kind == "hit")
+	var b: Array = ref.physical.filter(func(e): return e.kind == "hit")
+	var hit_gain: Array = []
+	for k in sens.events.size():
+		if sens.events[k].kind == "hit":
+			hit_gain.append(sens.gain[k])
+	var n := mini(a.size(), b.size()) - 1     # the event budget differs by the cursor
+	for i in maxi(n, 0):
+		if i < hit_gain.size() and hit_gain[i] * delta > 0.005:
+			break
+		if a[i].surface_id != b[i].surface_id or a[i].left != b[i].left:
+			out.append("DIRECTION-ONLY: hit %d s=%d vs s=%d without plan" % [i, a[i].surface_id, b[i].surface_id])
+			return out
+		var d := Vector2(a[i].point.fx() - b[i].point.fx(), a[i].point.fy() - b[i].point.fy()).length()
+		if d > 0.05:
+			out.append("DIRECTION-ONLY: hit %d off by %s px" % [i, d])
+			return out
+	return out
 
 static func _extract_trace_geometry(path: Tracer.TracedPath) -> Array:
 	var segments: Array = []
@@ -923,16 +893,156 @@ static func check_S12(segment: Segment, test_points: Array[Vector2]) -> Array[St
 			violations.append("S12: point %s side=%d expected=%d" % [point, side, expected_side])
 	return violations
 
-# ---------------------------------------------------------------- beam events (STUB, Stage 83 red)
+# ---------------------------------------------------------------- beam events
 
-static func check_effect_law(_events: Array, _scene: BeamScene) -> Array[String]:
-	return []
+func _beam_result():
+	return _renderer.last_beam_result if _renderer and "last_beam_result" in _renderer else null
 
-static func check_event_on_beam(_events: Array, _scene: BeamScene) -> Array[String]:
-	return []
+var _defs_cache: Array = []
+var _scene_cache: BeamScene = null
 
-static func check_beam_order(_events: Array) -> Array[String]:
-	return []
+func _defs() -> Array:
+	var parent := _renderer.get_parent()
+	var surfaces: Array = parent.surfaces if parent and "surfaces" in parent else []
+	var d := BeamScene.defs_from_surfaces(surfaces)
+	if _scene_cache == null or str(d) != str(_defs_cache):
+		_defs_cache = d
+		_scene_cache = BeamScene.from_defs(NumCtx.f64(), d)
+	return _defs_cache
 
-static func check_plan_effects_applied_events(_events: Array, _plan: Array, _cursor_reached: bool) -> Array[String]:
-	return []
+func _beam_scene() -> BeamScene:
+	_defs()
+	return _scene_cache
+
+func check_EFFECT_LAW(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var r = _beam_result()
+	if r == null or player_pos == cursor_pos:
+		return [] as Array[String]
+	var out: Array[String] = []
+	out.append_array(check_effect_law(r.planned, _beam_scene()))
+	out.append_array(check_effect_law(r.physical, _beam_scene()))
+	return out
+
+func check_EVENT_ON_BEAM(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var r = _beam_result()
+	if r == null or player_pos == cursor_pos:
+		return [] as Array[String]
+	var out: Array[String] = []
+	out.append_array(check_event_on_beam(r.planned, _beam_scene()))
+	out.append_array(check_event_on_beam(r.physical, _beam_scene()))
+	return out
+
+func check_BEAM_ORDER(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
+	var r = _beam_result()
+	if r == null or player_pos == cursor_pos:
+		return [] as Array[String]
+	var out: Array[String] = []
+	out.append_array(check_beam_order(r.planned))
+	out.append_array(check_beam_order(r.physical))
+	return out
+
+static func _f64_beam(b: HPBeam) -> HPBeam:
+	return HPBeam.make(CN.make(F64Num.of(b.p.fx()), F64Num.of(b.p.fy())), CN.make(F64Num.of(b.tau.fx()), F64Num.of(b.tau.fy())),
+		F64Num.of(b.kappa.to_float()))
+
+static func _f64_t(t) -> F64Num:
+	return F64Num.of(t.to_float())
+
+static func _tol(x: float, y: float) -> float:
+	return 1e-6 * maxf(1.0, Vector2(x, y).length())
+
+# Every applied effect maps its beam by its exact law: the next beam passes
+# through the law's departure point with the law's tangent and curvature
+# (pops restore an earlier beam and are checked by BEAM_ORDER / identity).
+static func check_effect_law(events: Array, scene: BeamScene) -> Array[String]:
+	var out: Array[String] = []
+	for i in events.size() - 1:
+		var e: BeamSolver.Event = events[i]
+		if e.kind != "hit" or not e.applied or e.terminal or e.popped or e.point == null:
+			continue
+		var s: BeamScene.Surf = scene.by_id[e.surface_id]
+		var b := _f64_beam(e.beam)
+		var t := _f64_t(e.t_to)
+		var h := CN.make(F64Num.of(e.point.fx()), F64Num.of(e.point.fy()))
+		var law: HPBeam
+		if e.projective:
+			law = BeamEffects.project(b, t, s, e.left, h)
+		else:
+			law = BeamEffects.apply(b, t, s, s.effect(e.left), h)
+		var nb := _f64_beam(events[i + 1].beam)
+		var u = nb.param_of(law.p)
+		var q := nb.at(u)
+		var tol := _tol(law.p.fx(), law.p.fy())
+		var dp := Vector2(q.fx() - law.p.fx(), q.fy() - law.p.fy()).length()
+		var tg := nb.tangent_at(u)
+		var dt := Vector2(tg.fx() - law.tau.fx(), tg.fy() - law.tau.fy()).length()
+		var dk := absf(nb.kappa.to_float() - law.kappa.to_float())
+		if dp > tol or dt > 1e-6 or dk > 1e-6 * maxf(1e-3, absf(law.kappa.to_float())):
+			out.append("EFFECT-LAW: event %d s=%d: next beam off the law (point %s, tangent %s, curvature %s)" % [i, e.surface_id, dp, dt, dk])
+	return out
+
+static func _carrier_violations(events: Array, scene: BeamScene) -> Array[String]:
+	var out: Array[String] = []
+	for i in events.size():
+		var e: BeamSolver.Event = events[i]
+		if e.kind != "hit" or e.point == null:
+			continue
+		var s: BeamScene.Surf = scene.by_id[e.surface_id]
+		var x := e.point.fx()
+		var y := e.point.fy()
+		var d: float
+		if s.line:
+			var dx := s.ex - s.sx
+			var dy := s.ey - s.sy
+			d = absf(dx * (y - s.sy) - dy * (x - s.sx)) / sqrt(dx * dx + dy * dy)
+		else:
+			d = absf(Vector2(x - s.cx, y - s.cy).length() - s.r)
+		if d > _tol(x, y):
+			out.append("HITPOINT-ON-CARRIER: event %d s=%d off its carrier by %s" % [i, e.surface_id, d])
+	return out
+
+# Every event point lies on its beam (at its parameter) and every hit on its
+# surface's carrier.
+static func check_event_on_beam(events: Array, scene: BeamScene) -> Array[String]:
+	var out: Array[String] = []
+	for i in events.size():
+		var e: BeamSolver.Event = events[i]
+		if e.point == null or e.t_to == null:
+			continue
+		var b := e.beam
+		var qa := FastSolver.at_view(FastSolver.beam(b.p.fx(), b.p.fy(), b.tau.fx(), b.tau.fy(), b.kappa.to_float()), e.t_to.to_float())
+		var d := Vector2(qa[0] - e.point.fx(), qa[1] - e.point.fy()).length()
+		if d > _tol(e.point.fx(), e.point.fy()):
+			out.append("EVENT-ON-BEAM: event %d (%s) off its beam by %s" % [i, e.kind, d])
+	out.append_array(_carrier_violations(events, scene))
+	return out
+
+# Consecutive events on the same beam chain their parameters: each arc starts
+# where the previous one ended (walk order).
+static func check_beam_order(events: Array) -> Array[String]:
+	var out: Array[String] = []
+	for i in range(1, events.size()):
+		var a: BeamSolver.Event = events[i - 1]
+		var b: BeamSolver.Event = events[i]
+		if a.beam != b.beam or a.t_to == null or b.t_from == null:
+			continue
+		if a.t_to.to_float() != b.t_from.to_float():
+			out.append("BEAM-ORDER: event %d starts at t=%s, event %d ended at t=%s" % [i, b.t_from.to_float(), i - 1, a.t_to.to_float()])
+	return out
+
+# The planned trace applies exactly the plan's transformative entries, in
+# order, before the cursor.
+static func check_plan_effects_applied_events(events: Array, plan: Array, _cursor_reached: bool) -> Array[String]:
+	var out: Array[String] = []
+	var applied: Array = []
+	for e in events:
+		if e.kind == "cursor":
+			break
+		if e.kind == "hit" and e.applied and not e.terminal and not e.projective:
+			applied.append([e.surface_id, e.left])
+	var want: Array = []
+	for item in plan:
+		want.append([item.surface_id, item.left])
+	if applied != want:
+		out.append("PLAN-EFFECTS: applied %s, plan %s" % [str(applied), str(want)])
+	return out

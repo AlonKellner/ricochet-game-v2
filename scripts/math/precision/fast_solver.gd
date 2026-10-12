@@ -137,6 +137,13 @@ static func param_of(b: PackedFloat64Array, zx: float, zy: float) -> float:
 	var d := denx * denx + deny * deny
 	if denx == 0.0 and deny == 0.0:
 		return INF      # z is the antipode
+	var ww := wx * wx + wy * wy
+	if k != 0.0 and ww > d:
+		# near the antipode: t = 1 / Re(den / w) (HPBeam.param_of twin)
+		var qre := (denx * wx - deny * (-wy)) / ww
+		if qre == 0.0:
+			return INF
+		return 1.0 / qre
 	var nre := wx * denx - wy * (-deny)
 	return nre / d
 
@@ -418,6 +425,60 @@ static func portal(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.Surf
 		ar * h[2] - ai * h[3], ar * h[3] + ai * h[2],
 		ar * th[2] - ai * th[3], ar * th[3] + ai * th[2], b[DK]])
 
+# Projective (BeamEffects.project twin): straight beam from h along +-axis.
+static func project(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.Surf, left: bool,
+		has_h: bool = false, hx: float = 0.0, hy: float = 0.0) -> PackedFloat64Array:
+	var h := at(b, t, dt)
+	if has_h:
+		h[0] = hx
+		h[1] = hy
+	var etype := s.effect(left)
+	var pr: Array = s.left_proj if left else s.right_proj
+	var gx: float
+	var gy: float
+	if s.line:
+		gx = -(s.ey - s.sy)
+		gy = s.ex - s.sx
+	else:
+		gx = (h[0] - s.cx) * 2.0
+		gy = (h[1] - s.cy) * 2.0
+	var ax: float
+	var ay: float
+	if etype == "line_normal_projection":
+		ax = gx
+		ay = gy
+	elif etype == "circle_normal_projection":
+		ax = h[0] - s.cx
+		ay = h[1] - s.cy
+	else:
+		ax = pr[1]
+		ay = pr[2]
+	var ag := ax * gx + ay * gy
+	var flip := false
+	if ag != 0.0:
+		var th := tangent_at(b, t, 0.0)
+		var dg := th[0] * gx + th[1] * gy
+		flip = (ag < 0.0) != (dg < 0.0)
+	if pr[0]:
+		flip = not flip
+	if flip:
+		ax = -ax
+		ay = -ay
+	var n := sqrt(ax * ax + ay * ay)
+	var ux := ax / n
+	var uy := ay / n
+	# derivative of the exit direction: only the radius depends on the hit
+	var dux := 0.0
+	var duy := 0.0
+	if etype == "circle_normal_projection":
+		var sg := -1.0 if flip else 1.0
+		var dax := sg * h[2]
+		var day := sg * h[3]
+		var proj := ux * dax + uy * day
+		dux = (dax - ux * proj) / n
+		duy = (day - uy * proj) / n
+	return PackedFloat64Array([h[0], h[1], ux, uy, 0.0, h[2], h[3], dux, duy, 0.0])
+
 # The surface's transformative effect at t (BeamEffects.apply twin).
 # has_h: (hx, hy) is the hit point, exact by provenance (else at(t)).
 static func apply_surf(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.Surf,
@@ -552,6 +613,10 @@ class Backend extends RefCounted:
 		return FastSolver.apply_surf(b, t.v, t.d, surf, true, h.fx(), h.fy())
 	func straight(b: PackedFloat64Array) -> bool:
 		return b[K] == 0.0
+	func project(b: PackedFloat64Array, t: DualNum, surf: BeamScene.Surf, left: bool, h: CN = null) -> PackedFloat64Array:
+		if h == null:
+			return FastSolver.project(b, t.v, t.d, surf, left)
+		return FastSolver.project(b, t.v, t.d, surf, left, true, h.fx(), h.fy())
 	func straightened(b: PackedFloat64Array) -> PackedFloat64Array:
 		var o := PackedFloat64Array(b)
 		o[K] = 0.0

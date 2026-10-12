@@ -50,7 +50,7 @@ Rules (TDD_09 "Target architecture" + "Legacy quirks"):
   complete and matched, the beam is B_K), the departure point of a beam born
   at an exact hit point, every known point of the previous beam lying on the
   carrier of the surface applied (an effect fixes its carrier pointwise), and
-  every segment endpoint on an exact line (below). Pops restore the earlier
+  every segment data point (endpoints, via) on an exact line (below). Pops restore the earlier
   beam's known points.
 - Exact lines: a straight beam defined by exact data, in implicit form
   a x + b y = c (Fractions) -- the initial beam of a direction trace or of a
@@ -58,9 +58,13 @@ Rules (TDD_09 "Target architecture" + "Legacy quirks"):
   image is exact), the reflection of an exact line in a line mirror (an exact
   map of the coefficients), and an exact line inverted in a circle whose
   center it contains exactly (it maps onto itself: the new beam is exactly
-  straight).
+  straight). Any beam through a known point that is exactly the inversion
+  center inverts to an exactly straight beam.
 - Tangency: an exact line exactly tangent to a circle carrier touches it
   without crossing: no event.
+- Concurrency: on an exact line, adjacent crossings of two line carriers that
+  meet the line at the same point share one parameter (the id rule orders
+  them).
 - Incidence (exact predicates on the data, Fractions): a surface whose
   carrier contains a known point exactly is hit exactly there: its root
   nearest the point takes the point's parameter and the exact point. No
@@ -339,12 +343,43 @@ def reflect_line_data(line, seg):
 
 
 def _add_line_endpoints(walk: Walk, beam):
+    """Segment data points (endpoints and via) exactly on the exact line."""
     for s in walk.surfaces:
         if s.seg.full:
             continue
-        for ep in (s.seg.S, s.seg.E):
+        for ep in (s.seg.S, s.seg.E, s.seg.V):
+            if ep is None:
+                continue
             if not any(k[0] == ep for k in walk.known) and on_line(walk.line, ep):
                 walk.known.append((ep, beam.param_of(ep), None))
+
+
+def _line_coeffs(seg):
+    S, E = FC(seg.S), FC(seg.E)
+    a, b = -(E[1] - S[1]), E[0] - S[0]
+    return a, b, a * S[0] + b * S[1]
+
+
+def _concurrent_ties(walk: Walk, cands):
+    """On an exact line, adjacent crossings of two line carriers that meet the
+    line at the same point (exact concurrency) share one parameter: the id
+    rule orders them, never rounding."""
+    by_id = {s.id: s for s in walk.surfaces}
+    a, b, c = walk.line
+    out = list(cands)
+    i = 0
+    while i + 1 < len(out):
+        x, y = out[i], out[i + 1]
+        if x[1] == 1 and y[1] == 1 and by_id[x[2]].seg.kind == "line" and by_id[y[2]].seg.kind == "line":
+            a1, b1, c1 = _line_coeffs(by_id[x[2]].seg)
+            a2, b2, c2 = _line_coeffs(by_id[y[2]].seg)
+            det = a * (b1 * c2 - b2 * c1) - b * (a1 * c2 - a2 * c1) + c * (a1 * b2 - a2 * b1)
+            if det == 0:
+                lo, hi = (x, y) if x[2] < y[2] else (y, x)
+                out[i] = (x[0], 1, lo[2], x[3], False)
+                out[i + 1] = (x[0], 1, hi[2], x[3], False)
+        i += 1
+    return out
 
 
 def _junction_blocked(walk: Walk, surf: Surface, pt, direction):
@@ -426,6 +461,8 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 cands[best] = (sort_key(kt, t0), 1, s.id, kt, False)
                 snapped[(s.id, kt)] = kp
         cands.sort(key=lambda c: (c[0], c[1], c[2]))
+        if walk.line is not None:
+            cands = _concurrent_ties(walk, cands)
         if depart is not None:
             cands.append(((2, 0), 2, depart, t0, True))      # departure re-hit, last
         applied = False
@@ -588,6 +625,10 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
         _add_line_endpoints(walk, nb)
     else:
         walk.line = None
+        if surf.seg.kind != "line" and any(_is_center(k, surf.seg) for k, _, _ in old_known):
+            # the old beam passes exactly through the inversion center (a
+            # known point): its image is exactly a line
+            nb = Beam(nb.p, nb.tau, mp.mpf(0))
     return nb, surf.id, mp.mpf(0), True
 
 
@@ -665,6 +706,12 @@ def _portal_known(walk, surf, pt, pt_exact, old_known, nb):
 
 
 WALK_SURFACES = []
+
+
+def _is_center(k, seg):
+    nx, ny, w, _rr = _center_h(seg)
+    K = FC(k)
+    return K[0] * w == nx and K[1] * w == ny
 
 
 def _line_through_center(line, seg):
