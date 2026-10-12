@@ -623,6 +623,10 @@ func check_PARAMETER_MONOTONICITY(player_pos: Vector2, cursor_pos: Vector2) -> A
 				continue
 			if curr.after_portal:
 				continue
+			# hit.t is the normalized-frame ray parameter; steps without a
+			# normalized frame (BeamTracer) do not define it
+			if prev.frame == null or curr.frame == null:
+				continue
 			if prev.hit == null or curr.hit == null:
 				continue
 			if prev.hit.segment == null or curr.hit.segment == null:

@@ -1,0 +1,181 @@
+{
+ "name": "grid60_chain_d22_003",
+ "player": [
+  1681.859375,
+  312.7835693359375
+ ],
+ "cursor": [
+  1844.4000244140625,
+  559.0878295898438
+ ],
+ "circles": [
+  {
+   "id": 1,
+   "center": [
+    760.0,
+    380.0
+   ],
+   "radius": 60.0
+  },
+  {
+   "id": 2,
+   "center": [
+    960.0,
+    380.0
+   ],
+   "radius": 60.0
+  },
+  {
+   "id": 3,
+   "center": [
+    1160.0,
+    380.0
+   ],
+   "radius": 60.0
+  },
+  {
+   "id": 4,
+   "center": [
+    760.0,
+    540.0
+   ],
+   "radius": 60.0
+  },
+  {
+   "id": 5,
+   "center": [
+    960.0,
+    540.0
+   ],
+   "radius": 60.0
+  },
+  {
+   "id": 6,
+   "center": [
+    1160.0,
+    540.0
+   ],
+   "radius": 60.0
+  },
+  {
+   "id": 7,
+   "center": [
+    760.0,
+    700.0
+   ],
+   "radius": 60.0
+  },
+  {
+   "id": 8,
+   "center": [
+    960.0,
+    700.0
+   ],
+   "radius": 60.0
+  },
+  {
+   "id": 9,
+   "center": [
+    1160.0,
+    700.0
+   ],
+   "radius": 60.0
+  }
+ ],
+ "walls": true,
+ "plan": [
+  {
+   "surface_id": 3,
+   "side": "RIGHT"
+  },
+  {
+   "surface_id": 8,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 6,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 1,
+   "side": "RIGHT"
+  },
+  {
+   "surface_id": 9,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 2,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 9,
+   "side": "RIGHT"
+  },
+  {
+   "surface_id": 6,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 3,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 2,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 3,
+   "side": "RIGHT"
+  },
+  {
+   "surface_id": 6,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 5,
+   "side": "RIGHT"
+  },
+  {
+   "surface_id": 4,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 9,
+   "side": "RIGHT"
+  },
+  {
+   "surface_id": 2,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 1,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 7,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 6,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 9,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 1,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 2,
+   "side": "LEFT"
+  }
+ ],
+ "tags": [
+  "grid60",
+  "depth22",
+  "chain"
+ ]
+}

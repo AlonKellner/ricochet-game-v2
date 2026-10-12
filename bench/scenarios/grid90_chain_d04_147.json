@@ -1,0 +1,109 @@
+{
+ "name": "grid90_chain_d04_147",
+ "player": [
+  1625.9237060546875,
+  1023.8508911132812
+ ],
+ "cursor": [
+  438.8746032714844,
+  141.66696166992188
+ ],
+ "circles": [
+  {
+   "id": 1,
+   "center": [
+    760.0,
+    380.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 2,
+   "center": [
+    960.0,
+    380.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 3,
+   "center": [
+    1160.0,
+    380.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 4,
+   "center": [
+    760.0,
+    540.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 5,
+   "center": [
+    960.0,
+    540.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 6,
+   "center": [
+    1160.0,
+    540.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 7,
+   "center": [
+    760.0,
+    700.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 8,
+   "center": [
+    960.0,
+    700.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 9,
+   "center": [
+    1160.0,
+    700.0
+   ],
+   "radius": 90.0
+  }
+ ],
+ "walls": true,
+ "plan": [
+  {
+   "surface_id": 7,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 3,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 6,
+   "side": "RIGHT"
+  },
+  {
+   "surface_id": 2,
+   "side": "LEFT"
+  }
+ ],
+ "tags": [
+  "grid90",
+  "depth4",
+  "chain"
+ ]
+}

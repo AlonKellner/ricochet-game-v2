@@ -1,0 +1,141 @@
+{
+ "name": "grid90_chain_d12_104",
+ "player": [
+  1331.24169921875,
+  658.4447631835938
+ ],
+ "cursor": [
+  339.5527038574219,
+  255.3013153076172
+ ],
+ "circles": [
+  {
+   "id": 1,
+   "center": [
+    760.0,
+    380.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 2,
+   "center": [
+    960.0,
+    380.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 3,
+   "center": [
+    1160.0,
+    380.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 4,
+   "center": [
+    760.0,
+    540.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 5,
+   "center": [
+    960.0,
+    540.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 6,
+   "center": [
+    1160.0,
+    540.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 7,
+   "center": [
+    760.0,
+    700.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 8,
+   "center": [
+    960.0,
+    700.0
+   ],
+   "radius": 90.0
+  },
+  {
+   "id": 9,
+   "center": [
+    1160.0,
+    700.0
+   ],
+   "radius": 90.0
+  }
+ ],
+ "walls": true,
+ "plan": [
+  {
+   "surface_id": 5,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 1,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 3,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 8,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 2,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 6,
+   "side": "RIGHT"
+  },
+  {
+   "surface_id": 3,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 8,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 3,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 6,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 2,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 1,
+   "side": "LEFT"
+  }
+ ],
+ "tags": [
+  "grid90",
+  "depth12",
+  "chain"
+ ]
+}

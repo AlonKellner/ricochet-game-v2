@@ -40,3 +40,6 @@ __pycache__/
 
 # Generated test output
 violations.json
+
+# Precision benchmark outputs (regenerate with make bench)
+bench/results/

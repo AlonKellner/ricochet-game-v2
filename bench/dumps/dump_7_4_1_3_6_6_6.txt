@@ -1,0 +1,27 @@
+=== DEBUG STATE (F12) ===
+Player: (586.5286, 676.5275)
+Cursor: (1253.306, 610.1299)
+Aim vector: (0.995078, -0.09909) (len=670.07)
+Surfaces: 13
+  Surface 1: ((820.0, 380.0) → (730.0, 328.04)) len=103.9 L=inversion R=inversion SOLID
+  Surface 2: ((1020.0, 380.0) → (930.0, 328.04)) len=103.9 L=inversion R=inversion SOLID
+  Surface 3: ((1220.0, 380.0) → (1130.0, 328.04)) len=103.9 L=inversion R=inversion SOLID
+  Surface 4: ((820.0, 540.0) → (730.0, 488.04)) len=103.9 L=inversion R=inversion SOLID
+  Surface 5: ((1020.0, 540.0) → (930.0, 488.04)) len=103.9 L=inversion R=inversion SOLID
+  Surface 6: ((1220.0, 540.0) → (1130.0, 488.04)) len=103.9 L=inversion R=inversion SOLID
+  Surface 7: ((820.0, 700.0) → (730.0, 648.04)) len=103.9 L=inversion R=inversion SOLID
+  Surface 8: ((1020.0, 700.0) → (930.0, 648.04)) len=103.9 L=inversion R=inversion SOLID
+  Surface 9: ((1220.0, 700.0) → (1130.0, 648.04)) len=103.9 L=inversion R=inversion SOLID
+  Surface 10: ((0.0, 0.0) → (1920.0, 0.0)) len=1920.0 L=pass R=pass
+  Surface 11: ((1920.0, 0.0) → (1920.0, 1080.0)) len=1080.0 L=pass R=pass
+  Surface 12: ((1920.0, 1080.0) → (0.0, 1080.0)) len=1920.0 L=pass R=pass
+  Surface 13: ((0.0, 1080.0) → (0.0, 0.0)) len=1080.0 L=pass R=pass
+Plan: 7 entries
+  [0] surface_id=7 side=LEFT
+  [1] surface_id=4 side=LEFT
+  [2] surface_id=1 side=LEFT
+  [3] surface_id=3 side=LEFT
+  [4] surface_id=6 side=LEFT
+  [5] surface_id=6 side=LEFT
+  [6] surface_id=6 side=LEFT
+=== END DEBUG STATE ===

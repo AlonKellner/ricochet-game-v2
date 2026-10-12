@@ -100,3 +100,30 @@ func test_multi_step_line_then_arc() -> void:
 	assert_eq(r.step_index, 1, "Should be on the arc step")
 	assert_almost_eq(r.position, Vector2(0, 2), Vector2(0.01, 0.01),
 		"After line + half arc, should be at arc midpoint")
+
+
+# --- Large arc that leaves the screen and comes back (user report) ---
+# start=(900,100) end=(1000,100) via=(950,-500): center (950,-197.9), r=302.1.
+# The arc goes the long way: out through the top edge at x~721.7 and back in
+# at x~1178.3, then down to the end. The arrow must re-appear at the top edge,
+# not jump straight to the end.
+func test_arc_out_of_screen_resumes_at_reentry_edge() -> void:
+	var step := _make_arc_step(Vector2(900, 100), Vector2(1000, 100), Vector2(950, -500))
+	var bounds := VisualConverter.DEFAULT_BOUNDS
+	var idx := 0
+	var prog := 0.0
+	var pos := step.start
+	var seen_reentry := false
+	var frames := 0
+	while idx < 1 and frames < 2000:
+		var r := Arrow.advance([step], idx, prog, pos, 20.0, bounds)
+		idx = r.step_index
+		prog = r.progress
+		pos = r.position
+		frames += 1
+		if absf(pos.y) <= 2.0 and absf(pos.x - 1178.3) <= 3.0:
+			seen_reentry = true
+		if idx < 1:
+			assert_true(bounds.grow(2.0).has_point(pos), "arrow stays on screen while flying: %s" % pos)
+	assert_true(seen_reentry, "arrow re-appears where the arc re-enters the screen")
+	assert_eq(pos, step.end, "flight still ends at the step end")

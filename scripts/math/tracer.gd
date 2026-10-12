@@ -15,6 +15,8 @@ class Step extends RefCounted:
 	var hit_side: int = -1
 	var hit_on_segment: bool = false
 	var after_portal: bool = false
+	var est_error: float = -1.0     # estimated px error of this step's end (BeamTracer), -1 = unknown
+	var precision_bits: int = 0     # arithmetic precision the step was computed at (0 = float32 Tracer)
 
 	func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: Intersection.HitRecord = null, p_ray: Ray = null, p_frame: MobiusTransform = null, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
 		start = p_start
@@ -33,6 +35,8 @@ class Step extends RefCounted:
 		copy.hit_side = hit_side
 		copy.hit_on_segment = hit_on_segment
 		copy.after_portal = after_portal
+		copy.est_error = est_error
+		copy.precision_bits = precision_bits
 		return copy
 
 class TracedPath extends RefCounted:

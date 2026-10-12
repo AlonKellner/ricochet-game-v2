@@ -31,11 +31,13 @@ static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2, surfaces
 		var step_via := step.via
 		var via_inf := is_inf(step_via.x) and is_inf(step_via.y)
 		if (end_inf or start_inf) and via_inf and step.ray != null:
+			# For steps to/from infinity `via` is the direction to clip along
+			# (see Tracer._add_escape_steps), not a point.
 			var dir := step.ray.direction.to_normalized()
 			if end_inf and not start_inf:
-				step_via = step.start + dir
+				step_via = dir
 			elif start_inf and not end_inf:
-				step_via = step.end - dir
+				step_via = -dir
 			via_inf = is_inf(step_via.x) and is_inf(step_via.y)
 		if not via_inf and not end_inf and not start_inf:
 			result.steps.append(_snap_step(step, surfaces))
@@ -95,6 +97,8 @@ static func _snap_step(step: Tracer.Step, surfaces: Array = []) -> Tracer.Step:
 	result.hit_side = step.hit_side
 	result.hit_on_segment = step.hit_on_segment
 	result.after_portal = step.after_portal
+	result.est_error = step.est_error
+	result.precision_bits = step.precision_bits
 	return result
 
 static func _clip_to_bounds(origin: Vector2, dir: Vector2, bounds: Rect2) -> Vector2:

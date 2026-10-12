@@ -44,7 +44,13 @@ static func dump(gm) -> void:
 		lines.append("  [%d] surface_id=%d side=%s" % [i, entry.surface_id, side_name])
 
 	if path_renderer:
-		lines.append("Display mode: %s (F11 to cycle)" % path_renderer.DISPLAY_MODE_NAMES[path_renderer.display_mode])
+		lines.append("Display mode: %s (TAB to cycle)" % path_renderer.DISPLAY_MODE_NAMES[path_renderer.display_mode])
+		lines.append("Solver: %s" % path_renderer.last_solver)
+		var br: PrecisionLadder.Result = path_renderer.last_beam_result
+		if br != null:
+			lines.append("  planned: %d bits   physical: %d bits (tiers tried %s, converged=%s)   %.1f ms" % [
+				NumCtx.with_limbs(br.planned_tier).bits(), NumCtx.with_limbs(br.physical_tier).bits(),
+				str(br.tiers_tried.map(func(l): return NumCtx.with_limbs(l).bits())), br.converged, br.usec / 1000.0])
 
 	if player and cursor and path_renderer:
 		var plan_entries: Array = []
@@ -89,8 +95,10 @@ static func _dump_trace(lines: PackedStringArray, trace_name: String, prefix: St
 			var hit: Intersection.HitRecord = step.hit
 			var side_name := "L" if hit.side == Side.Value.LEFT else "R"
 			var on_seg_str := "on" if hit.on_segment else "off"
-			var surf_id := _find_surface_id(hit.segment, surfaces)
+			var surf_id := str(step.surface_id) if step.surface_id >= 0 else _find_surface_id(hit.segment, surfaces)
 			parts.append("[hit t=%.4f side=%s %s-seg surf=%s]" % [hit.t, side_name, on_seg_str, surf_id])
+		if step.precision_bits > 0:
+			parts.append("err≈%s@%db" % [String.num_scientific(step.est_error), step.precision_bits])
 		if i == path.cursor_index:
 			parts.append("<-- CURSOR")
 		lines.append(" ".join(parts))

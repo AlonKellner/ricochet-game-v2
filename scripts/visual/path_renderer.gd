@@ -17,6 +17,9 @@ var _traced_path: Tracer.TracedPath = null
 var _planned_path: Tracer.TracedPath = null
 var _merged_steps: Array = []
 var _physical_hits: Dictionary = {}
+var use_beam_tracer := true
+var last_solver := ""
+var last_beam_result: PrecisionLadder.Result = null
 
 func _ready() -> void:
 	_player = get_node_or_null("../Player")
@@ -50,19 +53,29 @@ func _compute_trace() -> void:
 	if plan and not plan.is_empty():
 		plan_entries = plan.entries
 
-	var cache := TransformCache.new()
-	var aim_dir: Direction = Planner.compute_aim_direction(
-		player_pos, cursor_pos, plan_entries, surfaces, GameState.new(), cache)
-	var aim_ray := Ray.from_coords(player_pos, aim_dir)
 	var bounds := VisualConverter.DEFAULT_BOUNDS
-	_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
-	_traced_path = VisualConverter.prepare_for_display(_traced_path, bounds, surfaces)
-	_planned_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
-	_planned_path = VisualConverter.prepare_for_display(_planned_path, bounds, surfaces)
+	# Precision-converging beam solver for scenes it supports (full inversion
+	# circles + effect-free surfaces); the frame-based Tracer otherwise.
+	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, plan_entries) if use_beam_tracer else null
+	last_solver = "beam" if pair != null else "tracer"
+	if pair != null:
+		last_beam_result = pair.result
+		_traced_path = VisualConverter.prepare_for_display(pair.physical, bounds, surfaces)
+		_planned_path = VisualConverter.prepare_for_display(pair.planned, bounds, surfaces)
+	else:
+		last_beam_result = null
+		var cache := TransformCache.new()
+		var aim_dir: Direction = Planner.compute_aim_direction(
+			player_pos, cursor_pos, plan_entries, surfaces, GameState.new(), cache)
+		var aim_ray := Ray.from_coords(player_pos, aim_dir)
+		_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
+			aim_ray, -1.0,
+			Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
+		_traced_path = VisualConverter.prepare_for_display(_traced_path, bounds, surfaces)
+		_planned_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
+			aim_ray, -1.0,
+			Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
+		_planned_path = VisualConverter.prepare_for_display(_planned_path, bounds, surfaces)
 
 	var ci: int = _planned_path.cursor_index
 	if ci < 0:

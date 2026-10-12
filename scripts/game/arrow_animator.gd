@@ -124,11 +124,23 @@ static func advance(steps: Array, step_index: int, progress: float,
 			r.progress = 0.0
 
 		if not tolerant.has_point(r.position):
-			# Complete current step if mid-way through
+			# Off screen mid-step. An arc may come back on screen within the same
+			# step (e.g. a large arc out of screen and back to a hit): resume
+			# where it re-enters the bounds. Otherwise complete the step.
 			if r.progress > 0.0 and r.step_index < steps.size():
-				r.position = steps[r.step_index].end
-				r.step_index += 1
-				r.progress = 0.0
+				var cur: Tracer.Step = steps[r.step_index]
+				var resumed := false
+				if _is_arc(cur):
+					var arc_len := _arc_length(cur)
+					var t_re := _arc_reentry(cur, r.progress / arc_len, bounds)
+					if t_re >= 0.0:
+						r.progress = t_re * arc_len
+						r.position = _arc_interpolate(cur, t_re).position
+						resumed = true
+				if not resumed:
+					r.position = cur.end
+					r.step_index += 1
+					r.progress = 0.0
 			# Skip through off-bounds step endpoints until finding an on-bounds start
 			while not tolerant.has_point(r.position) and r.step_index < steps.size():
 				if tolerant.has_point(steps[r.step_index].start):
@@ -143,6 +155,38 @@ static func advance(steps: Array, step_index: int, progress: float,
 
 	r.finished = r.step_index >= steps.size()
 	return r
+
+# Smallest arc parameter t in (t_now, 1] at which the arc crosses the edge of
+# `rect` (the next crossing after leaving it is where it re-enters), or -1.
+static func _arc_reentry(step: Tracer.Step, t_now: float, rect: Rect2) -> float:
+	var p := VisualConverter.arc_params(step.start, step.via, step.end)
+	var ctr: Vector2 = p.center
+	var radius: float = p.radius
+	var span: float = p.span
+	if span <= 0.0:
+		return -1.0
+	var sa := (step.start - ctr).angle()
+	var dirn := -1.0 if p.clockwise else 1.0
+	var pts: Array[Vector2] = []
+	for x in [rect.position.x, rect.end.x]:
+		var h2: float = radius * radius - (x - ctr.x) * (x - ctr.x)
+		if h2 >= 0.0:
+			for y in [ctr.y - sqrt(h2), ctr.y + sqrt(h2)]:
+				if y >= rect.position.y and y <= rect.end.y:
+					pts.append(Vector2(x, y))
+	for y in [rect.position.y, rect.end.y]:
+		var h2: float = radius * radius - (y - ctr.y) * (y - ctr.y)
+		if h2 >= 0.0:
+			for x in [ctr.x - sqrt(h2), ctr.x + sqrt(h2)]:
+				if x >= rect.position.x and x <= rect.end.x:
+					pts.append(Vector2(x, y))
+	var best := -1.0
+	for q in pts:
+		var d := fposmod(((q - ctr).angle() - sa) * dirn, TAU)
+		var t := d / span
+		if t > t_now and t <= 1.0 and (best < 0.0 or t < best):
+			best = t
+	return best
 
 static func _update_direction(r: AdvanceResult, steps: Array) -> void:
 	if r.step_index < steps.size():

@@ -175,8 +175,14 @@ func _try_fire() -> void:
 	_checkpoints.push(_capture_checkpoint())
 
 	var surfaces := _get_surfaces()
-	var dir := _compute_aim_direction(player_pos, cursor_pos, surfaces)
-	var path := Tracer.trace(player_pos, dir, surfaces, game_state)
+	var entries: Array = plan.entries if not plan.is_empty() else []
+	var path: Tracer.TracedPath
+	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, entries)
+	if pair != null:
+		path = pair.physical
+	else:
+		var dir := _compute_aim_direction(player_pos, cursor_pos, surfaces)
+		path = Tracer.trace(player_pos, dir, surfaces, game_state)
 
 	if _path_renderer:
 		_path_renderer.modulate.a = 0.25
