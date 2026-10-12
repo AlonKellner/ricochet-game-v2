@@ -2,6 +2,13 @@
  "scene": "res://scenes/test_levels/circle_no_walls.tscn",
  "surfaces": [
   {
+   "circle": {
+    "center": [
+     960.0,
+     540.0
+    ],
+    "radius": 200.0
+   },
    "id": 1,
    "start": [
     1160.0,
@@ -29,6 +36,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 2,
    "start": [
     0.0,
@@ -56,6 +64,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 3,
    "start": [
     1920.0,
@@ -83,6 +92,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 4,
    "start": [
     1920.0,
@@ -110,6 +120,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 5,
    "start": [
     0.0,

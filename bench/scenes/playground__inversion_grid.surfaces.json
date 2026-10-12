@@ -2,6 +2,13 @@
  "scene": "res://scenes/playground/inversion_grid.tscn",
  "surfaces": [
   {
+   "circle": {
+    "center": [
+     760.0,
+     380.0
+    ],
+    "radius": 60.0
+   },
    "id": 1,
    "start": [
     820.0,
@@ -29,6 +36,13 @@
    "player_solid": true
   },
   {
+   "circle": {
+    "center": [
+     960.0,
+     380.0
+    ],
+    "radius": 60.0
+   },
    "id": 2,
    "start": [
     1020.0,
@@ -56,6 +70,13 @@
    "player_solid": true
   },
   {
+   "circle": {
+    "center": [
+     1160.0,
+     380.0
+    ],
+    "radius": 60.0
+   },
    "id": 3,
    "start": [
     1220.0,
@@ -83,6 +104,13 @@
    "player_solid": true
   },
   {
+   "circle": {
+    "center": [
+     760.0,
+     540.0
+    ],
+    "radius": 60.0
+   },
    "id": 4,
    "start": [
     820.0,
@@ -110,6 +138,13 @@
    "player_solid": true
   },
   {
+   "circle": {
+    "center": [
+     960.0,
+     540.0
+    ],
+    "radius": 60.0
+   },
    "id": 5,
    "start": [
     1020.0,
@@ -137,6 +172,13 @@
    "player_solid": true
   },
   {
+   "circle": {
+    "center": [
+     1160.0,
+     540.0
+    ],
+    "radius": 60.0
+   },
    "id": 6,
    "start": [
     1220.0,
@@ -164,6 +206,13 @@
    "player_solid": true
   },
   {
+   "circle": {
+    "center": [
+     760.0,
+     700.0
+    ],
+    "radius": 60.0
+   },
    "id": 7,
    "start": [
     820.0,
@@ -191,6 +240,13 @@
    "player_solid": true
   },
   {
+   "circle": {
+    "center": [
+     960.0,
+     700.0
+    ],
+    "radius": 60.0
+   },
    "id": 8,
    "start": [
     1020.0,
@@ -218,6 +274,13 @@
    "player_solid": true
   },
   {
+   "circle": {
+    "center": [
+     1160.0,
+     700.0
+    ],
+    "radius": 60.0
+   },
    "id": 9,
    "start": [
     1220.0,
@@ -245,6 +308,7 @@
    "player_solid": true
   },
   {
+   "circle": null,
    "id": 10,
    "start": [
     0.0,
@@ -272,6 +336,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 11,
    "start": [
     1920.0,
@@ -299,6 +364,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 12,
    "start": [
     1920.0,
@@ -326,6 +392,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 13,
    "start": [
     0.0,

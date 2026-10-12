@@ -1,0 +1,239 @@
+{
+ "name": "test_levels__combo_base__07",
+ "scene": "res://scenes/test_levels/combo_base.tscn",
+ "surfaces": [
+  {
+   "circle": null,
+   "id": 1,
+   "start": [
+    200.0,
+    100.0
+   ],
+   "end": [
+    1700.0,
+    100.0
+   ],
+   "via": [
+    950.0,
+    100.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 2,
+   "start": [
+    1700.0,
+    100.0
+   ],
+   "end": [
+    1700.0,
+    900.0
+   ],
+   "via": [
+    1700.0,
+    500.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 3,
+   "start": [
+    1700.0,
+    900.0
+   ],
+   "end": [
+    200.0,
+    900.0
+   ],
+   "via": [
+    950.0,
+    900.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 4,
+   "start": [
+    200.0,
+    900.0
+   ],
+   "end": [
+    200.0,
+    100.0
+   ],
+   "via": [
+    200.0,
+    500.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 5,
+   "start": [
+    0.0,
+    0.0
+   ],
+   "end": [
+    1920.0,
+    0.0
+   ],
+   "via": [
+    960.0,
+    0.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 6,
+   "start": [
+    1920.0,
+    0.0
+   ],
+   "end": [
+    1920.0,
+    1080.0
+   ],
+   "via": [
+    1920.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 7,
+   "start": [
+    1920.0,
+    1080.0
+   ],
+   "end": [
+    0.0,
+    1080.0
+   ],
+   "via": [
+    960.0,
+    1080.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 8,
+   "start": [
+    0.0,
+    1080.0
+   ],
+   "end": [
+    0.0,
+    0.0
+   ],
+   "via": [
+    0.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  }
+ ],
+ "player": [
+  1037.5057373046875,
+  288.612060546875
+ ],
+ "cursor": [
+  1144.166748046875,
+  399.48748779296875
+ ],
+ "plan": []
+}

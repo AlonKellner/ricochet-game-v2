@@ -43,6 +43,10 @@ class Scene extends RefCounted:
 	func size() -> int:
 		return ids.size()
 
+	# STUB (Stage 81 red): scene-dump defs
+	static func from_defs(_defs: Array) -> Scene:
+		return Scene.new()
+
 class Out extends RefCounted:
 	var events: Array = []    # BeamSolver.Event (F64Num points / beams)
 	var gain: Array = []      # per event |d point / d seed angle| (0 = unseeded)
@@ -360,6 +364,14 @@ static func _inv(z: PackedFloat64Array, sc: Scene, i: int) -> PackedFloat64Array
 	var uy := z[1] - sc.cy[i]
 	var s := (ux * ux + uy * uy)
 	return PackedFloat64Array([sc.cx[i] + (ux * sc.r2[i]) / s, sc.cy[i] + (uy * sc.r2[i]) / s])
+
+# STUB (Stage 81 red): reflection of beam b at t in the line s -> e
+static func reflect_line(_b: PackedFloat64Array, _t: float, _dt: float, _sx: float, _sy: float, _ex: float, _ey: float) -> PackedFloat64Array:
+	return PackedFloat64Array()
+
+# STUB (Stage 81 red): BeamSolver.trace_direction twin
+static func trace_direction(_sc: Scene, _player: PackedFloat64Array, _dir: PackedFloat64Array, _plan: Array, _cursor, _mode: int) -> Out:
+	return Out.new()
 
 # ---------------------------------------------------------------- events
 

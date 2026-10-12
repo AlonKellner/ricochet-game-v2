@@ -1,0 +1,170 @@
+{
+ "planned": [
+  {
+   "kind": "hit",
+   "surface_id": 7,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "688.2736826028436003050870870868063770298",
+   "y": "609.7621384920814356685427953919288942684"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": true,
+   "x": "685.0293056007567838164036657490427469716",
+   "y": "612.1406668836325623187375955954051854638"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 8,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "612.9129442417655459993285621361862349636",
+   "y": "665.0108520925003593332500623467253712616"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 8,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "x": "496.4982840662184763687509908221567495076",
+   "y": "750.3571525508666046014940987179689456679"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 8,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "612.9129442417655459993285621361862349636",
+   "y": "665.0108520925003593332500623467253712616"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 8,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": true,
+   "x": "496.4982840662184763687509908221567495076",
+   "y": "750.3571525508666046014940987179689456679"
+  },
+  {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "496.4982840662184763687509908221567495076",
+   "y": "750.3571525508666046014940987179689456679"
+  }
+ ],
+ "physical": [
+  {
+   "kind": "hit",
+   "surface_id": 7,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "688.2736826028436003050870870868063770298",
+   "y": "609.7621384920814356685427953919288942684"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "x": "685.0293056007567838164036657490427469716",
+   "y": "612.1406668836325623187375955954051854638"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 7,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "689.3638465271768451758763146304000746961",
+   "y": "613.1182478209023058921386243319988881123"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 7,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "x": "1075.513522785117648261475655517568985133",
+   "y": "700.2076464102058612060241973652641127354"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 7,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "689.3638465271768451758763146304000746961",
+   "y": "613.1182478209023058921386243319988881123"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "x": "686.0601254811619989162432957569461832565",
+   "y": "617.0886023095775947979678196333416796310"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 7,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "691.8501511172131278992700165357516575608",
+   "y": "620.1936285163866274010239397270411298051"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 7,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "793.9592894768512428851204381258393412168",
+   "y": "740.7477404046946307661258871810415403870"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 3,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "x": "769.1108915307444233866560691736590015318",
+   "y": "940.0000000000000000000000000000000000000"
+  }
+ ],
+ "planned_targets": [],
+ "physical_targets": [],
+ "name": "playground__two_sided__01",
+ "dps": 120
+}

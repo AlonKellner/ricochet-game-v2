@@ -1,0 +1,282 @@
+{
+ "name": "test_levels__full_circle_mirror__06",
+ "scene": "res://scenes/test_levels/full_circle_mirror.tscn",
+ "surfaces": [
+  {
+   "circle": null,
+   "id": 1,
+   "start": [
+    160.0,
+    90.0
+   ],
+   "end": [
+    1760.0,
+    90.0
+   ],
+   "via": [
+    960.0,
+    90.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 2,
+   "start": [
+    1760.0,
+    90.0
+   ],
+   "end": [
+    1760.0,
+    990.0
+   ],
+   "via": [
+    1760.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 3,
+   "start": [
+    1760.0,
+    990.0
+   ],
+   "end": [
+    160.0,
+    990.0
+   ],
+   "via": [
+    960.0,
+    990.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 4,
+   "start": [
+    160.0,
+    990.0
+   ],
+   "end": [
+    160.0,
+    90.0
+   ],
+   "via": [
+    160.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": {
+    "center": [
+     960.0,
+     540.0
+    ],
+    "radius": 200.0
+   },
+   "id": 5,
+   "start": [
+    1160.0,
+    540.0
+   ],
+   "end": [
+    860.0,
+    366.79998779296875
+   ],
+   "via": [
+    860.0,
+    713.2000122070312
+   ],
+   "full": true,
+   "line": false,
+   "left": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "right": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 6,
+   "start": [
+    0.0,
+    0.0
+   ],
+   "end": [
+    1920.0,
+    0.0
+   ],
+   "via": [
+    960.0,
+    0.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 7,
+   "start": [
+    1920.0,
+    0.0
+   ],
+   "end": [
+    1920.0,
+    1080.0
+   ],
+   "via": [
+    1920.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 8,
+   "start": [
+    1920.0,
+    1080.0
+   ],
+   "end": [
+    0.0,
+    1080.0
+   ],
+   "via": [
+    960.0,
+    1080.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 9,
+   "start": [
+    0.0,
+    1080.0
+   ],
+   "end": [
+    0.0,
+    0.0
+   ],
+   "via": [
+    0.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  }
+ ],
+ "player": [
+  1261.5269775390625,
+  533.4569702148438
+ ],
+ "cursor": [
+  1061.8814697265625,
+  446.3522033691406
+ ],
+ "plan": [
+  {
+   "surface_id": 5,
+   "side": "LEFT"
+  },
+  {
+   "surface_id": 5,
+   "side": "RIGHT"
+  }
+ ]
+}

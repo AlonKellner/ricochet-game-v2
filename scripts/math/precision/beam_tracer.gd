@@ -50,6 +50,10 @@ static func circle_defs_for(surfaces: Array, plan_entries: Array) -> Variant:
 			return null
 	return defs
 
+# STUB (Stage 81 red): capability check per effect type
+static func scene_supported(surfaces: Array) -> bool:
+	return circle_defs_for(surfaces, []) != null
+
 static func plan_items(plan_entries: Array) -> Array:
 	var out: Array = []
 	for e in plan_entries:

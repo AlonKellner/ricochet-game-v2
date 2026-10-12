@@ -1,0 +1,110 @@
+{
+ "planned": [
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "x": "1110.818204304215101090735658818711248321",
+   "y": "450.4021030511561883246873746415456266092"
+  },
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "1067.622802734375000000000000000000000000",
+   "y": "817.6809082031250000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "935.4891837756200058394380955829256164833",
+   "y": "757.4889201685656354418330847367480998397"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": true,
+   "x": "1110.818204304215101090735658818711248321",
+   "y": "450.4021030511561883246873746415456266092"
+  },
+  {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "1110.818204304215101090735658818711248321",
+   "y": "450.4021030511561883246873746415456266092"
+  }
+ ],
+ "physical": [
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "x": "1110.818204304215101090735658818711248321",
+   "y": "450.4021030511561883246873746415456266092"
+  },
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "1067.622802734375000000000000000000000000",
+   "y": "817.6809082031250000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "935.4891837756200058394380955829256164833",
+   "y": "757.4889201685656354418330847367480998397"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": true,
+   "x": "1110.818204304215101090735658818711248321",
+   "y": "450.4021030511561883246873746415456266092"
+  },
+  {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "x": "1110.818204304215101090735658818711248321",
+   "y": "450.4021030511561883246873746415456266092"
+  }
+ ],
+ "planned_targets": [],
+ "physical_targets": [],
+ "name": "test_levels__room_with_inversion__01",
+ "dps": 120
+}

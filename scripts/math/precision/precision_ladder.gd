@@ -43,6 +43,8 @@ static func solve(circle_defs: Array, player: Array, cursor: Array, plan: Array,
 		post_events: int, max_physical: int, tol: float, verify: bool = false) -> Result:
 	var t0 := Time.get_ticks_usec()
 	var r := Result.new()
+	if not circle_defs.is_empty() and circle_defs[0] is Dictionary:
+		return r   # STUB (Stage 81 red): scene-dump defs not supported yet
 	# ---- planned
 	var sq := ErrorEstimate.planned_sensitivity(circle_defs, player, cursor, plan, post_events)
 	var est_q := ErrorEstimate.estimate(sq, NumCtx.f64().eps())
@@ -151,7 +153,7 @@ static func climb(limbs: int, first_events: Array, tol: float, compute: Callable
 
 static func _physical_at(limbs: int, circle_defs: Array, player: Array, cursor: Array, plan: Array, max_physical: int) -> Array:
 	var ctx := NumCtx.with_limbs(limbs)
-	return BeamSolver.physical(ctx, BeamSolver.make_circles(ctx, circle_defs),
+	return BeamSolver.physical_circles(ctx, BeamSolver.make_circles(ctx, circle_defs),
 		ctx.cn(player[0], player[1]), ctx.cn(cursor[0], cursor[1]), plan, max_physical)
 
 static func _worst(a: Array) -> float:

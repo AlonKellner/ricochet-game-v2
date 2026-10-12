@@ -2,6 +2,7 @@
  "scene": "res://scenes/test_levels/portals.tscn",
  "surfaces": [
   {
+   "circle": null,
    "id": 1,
    "start": [
     560.0,
@@ -29,6 +30,7 @@
    "player_solid": true
   },
   {
+   "circle": null,
    "id": 2,
    "start": [
     1360.0,
@@ -56,6 +58,7 @@
    "player_solid": true
   },
   {
+   "circle": null,
    "id": 3,
    "start": [
     1360.0,
@@ -83,6 +86,7 @@
    "player_solid": true
   },
   {
+   "circle": null,
    "id": 4,
    "start": [
     560.0,
@@ -110,6 +114,7 @@
    "player_solid": true
   },
   {
+   "circle": null,
    "id": 5,
    "start": [
     960.0,
@@ -137,6 +142,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 6,
    "start": [
     830.0,
@@ -174,6 +180,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 7,
    "start": [
     1130.0,
@@ -211,6 +218,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 8,
    "start": [
     700.0,
@@ -248,6 +256,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 9,
    "start": [
     1250.0,
@@ -285,6 +294,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 10,
    "start": [
     0.0,
@@ -312,6 +322,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 11,
    "start": [
     1920.0,
@@ -339,6 +350,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 12,
    "start": [
     1920.0,
@@ -366,6 +378,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 13,
    "start": [
     0.0,

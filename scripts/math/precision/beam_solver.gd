@@ -38,6 +38,9 @@ class Event extends RefCounted:
 	var seeded: bool = false  # lies on the sensitive forward continuation (the
 	                          # beam chain starting at the tangent-linear seed)
 	var raw = null            # FastSolver: raw float beam of `beam` (provenance)
+	var terminal: bool = false
+	var on_segment: bool = false
+	var rehit: bool = false
 
 	func describe() -> String:
 		var p := "" if point == null else " (%.6f, %.6f)" % [point.fx(), point.fy()]
@@ -449,16 +452,30 @@ static func continue_from(ctx: NumCtx, circles: Array, beam: HPBeam, depart_id: 
 			break
 	return events
 
+# ---------------------------------------------------------------- scenes (STUB, Stage 81 red)
+
+static func trace_direction(_ctx: NumCtx, _scene: BeamScene, _player: CN, _dir: CN, _plan: Array, _cursor, _mode: int) -> Array:
+	return []
+
+static func planned(_ctx: NumCtx, _scene: BeamScene, _player: CN, _cursor: CN, _plan: Array, _max_events: int = 32) -> Array:
+	return []
+
+static func physical(_ctx: NumCtx, _scene: BeamScene, _player: CN, _cursor: CN, _plan: Array, _max_events: int = 32) -> Array:
+	return []
+
+static func targets_of(_scene: BeamScene, _events: Array) -> Array:
+	return []
+
 # ---------------------------------------------------------------- physical
 
-static func physical(ctx: NumCtx, circles: Array, player: CN, cursor: CN, plan: Array, max_events: int) -> Array:
+static func physical_circles(ctx: NumCtx, circles: Array, player: CN, cursor: CN, plan: Array, max_events: int) -> Array:
 	if plan.is_empty():
 		var dir := cursor.sub(player)
 		var b0 := _seed(HPBeam.make(player, dir.unit(), ctx.zero()))
 		return continue_from(ctx, circles, b0, -1, plan, 0, true, cursor, false,
 			Mode.PHYSICAL, Mode.PHYSICAL, max_events)
-	var planned := anchored_planned(ctx, circles, player, cursor, plan, max_events, true)
-	if planned.is_empty():
+	var pl_events := anchored_planned(ctx, circles, player, cursor, plan, max_events, true)
+	if pl_events.is_empty():
 		return []
 	var by_id := {}
 	for c in circles:
@@ -466,7 +483,7 @@ static func physical(ctx: NumCtx, circles: Array, player: CN, cursor: CN, plan: 
 	var out: Array = []
 	var plan_index := 0
 	var stack: Array = []
-	for e in planned:
+	for e in pl_events:
 		if out.size() >= max_events:
 			break
 		if e.kind == "hit" and not e.applied:

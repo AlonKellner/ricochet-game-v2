@@ -12,7 +12,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 | Stage | Topic | Status |
 |-------|-------|--------|
 | 80 | Neutral trace types, generalized beam geometry, oracle v2 | Done (awaiting doc confirmation) |
-| 81 | Reflections, partial/one-sided inversions, terminals, passes | Planned |
+| 81 | Reflections, partial/one-sided inversions, terminals, passes | In progress (red tests committed) |
 | 82 | Portals (rigid motion) | Planned |
 | 83 | Projective effects (physical) + full switch-over | Planned |
 | 84 | Delete the legacy solver | Planned |
@@ -172,6 +172,24 @@ pass-throughs.
 - `test_arc_reflection_equals_inversion`
 - `test_fast_twin_reflection`
 
+**Oracle data:**
+- `bench/fixtures/stage81_rules.json`: hand-built rule scenes (`gen_fixtures_stage81.py`).
+- `bench/scenes_corpus/`: 264 scenarios over the 22 supported real levels, 12 per level (`gen_scene_corpus.py`). Each is stable when re-traced at double precision. Plans reach depth 10 in the mirror levels.
+
+**Oracle validation against legacy** (first 8 events, before writing the red tests). Every difference was classified as a legacy error or an intended change; none is an oracle error.
+
+| Difference | Count | Classification |
+|---|---|---|
+| Same event, point off by ≤ 0.2 px | 11 | Legacy float32: far-away points, post-inversion arcs |
+| `inversion_grid` event divergence | 10 | Legacy precision loss. Oracle v2 equals the validated v1 oracle on all 24 traces of these scenarios (v2's wall and pass events ignored) |
+| Legacy hit point not on its claimed surface (`two_sided__06`, `__07`) | 2 | Legacy wrong |
+| Side label (`two_sided__04`, event 7) | 1 | Legacy wrong. The beam crossed x = 1660 moving +x (RIGHT), reflected at x = 1843 and travels to x = 934. A circle or line crosses a line at most twice, so this second crossing is in −x, which is LEFT. Legacy's conjugating-frame flip mislabels it |
+| Origin re-hit (`semi_circle_mirror__01`, planned) | 1 | Intended change: the departure re-hit is an ordinary hit (*Legacy quirks*) |
+
+**End events:**
+- `escape` (a straight beam) has no point.
+- `origin` (a circle closing its loop) is at the departure point `beam.at(t0)`.
+
 `tests/test_stage81_trace_rules.gd` (expected values from the oracle corpus):
 - `test_terminal_ends_trace_at_hit`
 - `test_pass_surfaces_emit_events`
@@ -183,12 +201,18 @@ pass-throughs.
 - `test_planned_reflection_chain_reaches_cursor`
 - `test_zero_length_rule_same_in_planned`
 - `test_departure_rehit_is_ordinary_hit`
+- `test_targets_recorded_on_segment`
+- `test_fast_twin_trace_rules`: the FastSolver walk is bit-identical to the generic float64 walk
+- `test_planned_reflection_chain_reaches_cursor` (corpus)
+- `test_scene_corpus_matches_oracle`: all 264 scenarios, planned and physical, ≤ 0.01 px
 
-`tests/test_solver_parity.gd`:
-- `test_parity_shallow_all_supported_scenes`
+`tests/test_solver_parity.gd`, using the harness `scripts/testing/solver_parity.gd`:
+- `test_scene_defs_match_dump`: the solver's game-surface conversion equals the dumped data the oracle traced
+- `test_parity_shallow_all_supported_scenes`: legacy vs beam on the corpus. A difference is allowed only where beam agrees with the oracle
 
 `tests/test_stage81_scene_switch.gd`:
 - `test_mirror_scenes_use_beam`
+- `test_portal_and_projective_scenes_fall_back` (until Stages 82 and 83)
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
 - [ ] Mirrors, arcs and blocks look identical to before at shallow depth.

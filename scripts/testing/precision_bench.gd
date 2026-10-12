@@ -129,7 +129,7 @@ static func run_beam(scn: Dictionary, ctx: NumCtx, n_planned: int, n_physical: i
 	var cursor := ctx.cn(scn["cursor"][0], scn["cursor"][1])
 	var plan := plan_items(scn)
 	var planned := BeamSolver.anchored_planned(ctx, circles, player, cursor, plan, 5)
-	var phys := BeamSolver.physical(ctx, circles, player, cursor, plan, n_physical)
+	var phys := BeamSolver.physical_circles(ctx, circles, player, cursor, plan, n_physical)
 	return {"planned": beam_events(planned), "physical": beam_events(phys)}
 
 static func run_ladder(scn: Dictionary, n_physical: int, verify: bool = false) -> Dictionary:

@@ -105,6 +105,18 @@ def seg_from_v4(v):
     return s, e, via
 
 
+def full_circle_carrier(cx, cy, r):
+    """Exact float64 carrier of a full circle: center (from the float32 center)
+    and radius, as GeneralizedCircle.from_circle -> center()/radius()."""
+    ctr32 = v2(cx, cy)
+    a = 1.0
+    b = -2.0 * ctr32[0]
+    c = -2.0 * ctr32[1]
+    d = ctr32[0] * ctr32[0] + ctr32[1] * ctr32[1] - r * r
+    return {"center": [-b / (2.0 * a), -c / (2.0 * a)],
+            "radius": math.sqrt((b * b + c * c - 4.0 * a * d) / (4.0 * a * a))}
+
+
 def full_circle_points(cx, cy, r):
     ctr32 = v2(cx, cy)
     # GeneralizedCircle.from_circle(center, r) then center()/radius()
@@ -149,10 +161,11 @@ PASS0 = {"type": "pass", "interactive": False}
 def build_surfaces(props):
     out = []
 
-    def add(s, e, via, left, right, full=False, is_target=False, player_solid=True, line=None):
+    def add(s, e, via, left, right, full=False, is_target=False, player_solid=True, line=None, circle=None):
         if line is None:
             line = False if full else derive_is_line(s, e, via)
         out.append({
+            "circle": circle,
             "id": len(out) + 1, "start": list(s), "end": list(e),
             "via": None if via is None else list(via), "full": full, "line": line,
             "left": left, "right": right, "is_target": is_target, "player_solid": player_solid,
@@ -191,7 +204,7 @@ def build_surfaces(props):
         add(v2(a[0], a[1]), v2(a[2], a[3]), v2(a[4], a[5]), _cfg("inversion", True), PASS0)
     for a in arcs("full_inversion_arcs", 3):
         s, e, v = full_circle_points(*a)
-        add(s, e, v, _cfg("inversion", True), _cfg("inversion", True), full=True)
+        add(s, e, v, _cfg("inversion", True), _cfg("inversion", True), full=True, circle=full_circle_carrier(*a))
     for a in arcs("semi_reflective_arcs", 6):
         add(v2(a[0], a[1]), v2(a[2], a[3]), v2(a[4], a[5]), _cfg("reflection", True), PASS0, player_solid=False)
     for a in arcs("reflective_arcs", 6):
@@ -199,7 +212,8 @@ def build_surfaces(props):
             player_solid=False)
     for a in arcs("full_reflective_arcs", 3):
         s, e, v = full_circle_points(*a)
-        add(s, e, v, _cfg("reflection", True), _cfg("reflection", True), full=True, player_solid=False)
+        add(s, e, v, _cfg("reflection", True), _cfg("reflection", True), full=True, player_solid=False,
+            circle=full_circle_carrier(*a))
     for key, back in [("normal_projection_lines", False), ("normal_projection_back_lines", True)]:
         for v in lines(key):
             c = _cfg("line_normal_projection", True, back=back)

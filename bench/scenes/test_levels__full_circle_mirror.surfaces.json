@@ -2,6 +2,7 @@
  "scene": "res://scenes/test_levels/full_circle_mirror.tscn",
  "surfaces": [
   {
+   "circle": null,
    "id": 1,
    "start": [
     160.0,
@@ -29,6 +30,7 @@
    "player_solid": true
   },
   {
+   "circle": null,
    "id": 2,
    "start": [
     1760.0,
@@ -56,6 +58,7 @@
    "player_solid": true
   },
   {
+   "circle": null,
    "id": 3,
    "start": [
     1760.0,
@@ -83,6 +86,7 @@
    "player_solid": true
   },
   {
+   "circle": null,
    "id": 4,
    "start": [
     160.0,
@@ -110,6 +114,13 @@
    "player_solid": true
   },
   {
+   "circle": {
+    "center": [
+     960.0,
+     540.0
+    ],
+    "radius": 200.0
+   },
    "id": 5,
    "start": [
     1160.0,
@@ -137,6 +148,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 6,
    "start": [
     0.0,
@@ -164,6 +176,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 7,
    "start": [
     1920.0,
@@ -191,6 +204,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 8,
    "start": [
     1920.0,
@@ -218,6 +232,7 @@
    "player_solid": false
   },
   {
+   "circle": null,
    "id": 9,
    "start": [
     0.0,

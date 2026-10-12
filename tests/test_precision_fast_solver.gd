@@ -49,7 +49,7 @@ func test_physical_bit_identical_to_generic_f64():
 	for name in _scenarios():
 		var inp := _inputs(name)
 		var ctx := NumCtx.f64()
-		var gen := BeamSolver.physical(ctx, BeamSolver.make_circles(ctx, inp["defs"]),
+		var gen := BeamSolver.physical_circles(ctx, BeamSolver.make_circles(ctx, inp["defs"]),
 			ctx.cn(inp["player"][0], inp["player"][1]), ctx.cn(inp["cursor"][0], inp["cursor"][1]), inp["plan"], 16)
 		var fast := FastSolver.physical(FastSolver.Scene.make(inp["defs"]), inp["player"], inp["cursor"], inp["plan"], 16)
 		_same_events(fast.events, gen, name + " physical")
@@ -58,7 +58,7 @@ func test_gains_match_dual_numbers():
 	for name in _scenarios():
 		var inp := _inputs(name)
 		var ctx := NumCtx.dual()
-		var dual := BeamSolver.physical(ctx, BeamSolver.make_circles(ctx, inp["defs"]),
+		var dual := BeamSolver.physical_circles(ctx, BeamSolver.make_circles(ctx, inp["defs"]),
 			ctx.cn(inp["player"][0], inp["player"][1]), ctx.cn(inp["cursor"][0], inp["cursor"][1]), inp["plan"], 16)
 		var fast := FastSolver.physical(FastSolver.Scene.make(inp["defs"]), inp["player"], inp["cursor"], inp["plan"], 16)
 		for i in mini(dual.size(), fast.gain.size()):

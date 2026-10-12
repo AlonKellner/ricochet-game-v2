@@ -51,7 +51,13 @@ static func _v(p: Vector2):
 
 static func describe_surface(s: Surface) -> Dictionary:
 	var state := GameState.new()
+	var carrier := s.segment.get_carrier()
+	var circle = null
+	if s.segment.full and not carrier.is_line():
+		# exact carrier of a full circle (float64): center and radius
+		circle = {"center": [-carrier.b / (2.0 * carrier.a), -carrier.c / (2.0 * carrier.a)], "radius": carrier.radius()}
 	return {
+		"circle": circle,
 		"id": s.id,
 		"start": _v(s.segment.start.coords),
 		"end": _v(s.segment.end.coords),
