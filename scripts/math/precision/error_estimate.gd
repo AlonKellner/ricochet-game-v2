@@ -33,12 +33,18 @@ class Sensitivity extends RefCounted:
 
 # FastSolver computes the float64 trace and the tangent-linear gains in one
 # raw-float pass (bit-identical to BeamSolver over DualNum values).
-static func physical_sensitivity(circle_defs: Array, player: Array, cursor: Array, plan: Array, max_events: int) -> Sensitivity:
-	var out := FastSolver.physical(FastSolver.Scene.make(circle_defs), PackedFloat64Array(player), PackedFloat64Array(cursor), plan, max_events)
+# defs: scene defs (BeamScene).
+# fsc: the float64 scene of defs, when the caller already has it.
+static func physical_sensitivity(defs: Array, player: Array, cursor: Array, plan: Array, max_events: int,
+		fsc: FastSolver.Scene = null) -> Sensitivity:
+	var sc := fsc if fsc != null else FastSolver.Scene.from_defs(defs)
+	var out := FastSolver.physical(sc, PackedFloat64Array(player), PackedFloat64Array(cursor), plan, max_events)
 	return _collect(out.events, out.gain)
 
-static func planned_sensitivity(circle_defs: Array, player: Array, cursor: Array, plan: Array, post_events: int) -> Sensitivity:
-	var out := FastSolver.anchored_planned(FastSolver.Scene.make(circle_defs), PackedFloat64Array(player), PackedFloat64Array(cursor), plan, post_events)
+static func planned_sensitivity(defs: Array, player: Array, cursor: Array, plan: Array, max_events: int,
+		fsc: FastSolver.Scene = null) -> Sensitivity:
+	var sc := fsc if fsc != null else FastSolver.Scene.from_defs(defs)
+	var out := FastSolver.planned(sc, PackedFloat64Array(player), PackedFloat64Array(cursor), plan, max_events)
 	return _collect(out.events, out.gain)
 
 static func _collect(ev: Array, gains: Array) -> Sensitivity:
@@ -62,13 +68,12 @@ static func _collect(ev: Array, gains: Array) -> Sensitivity:
 # Derivatives are smooth in the state, so this rounding does not matter, and
 # the gains describe the true (high-precision) branch -- unlike gains from the
 # float64 trajectory, which may have taken a different branch.
-static func replay(events: Array, circle_defs: Array) -> Sensitivity:
-	var sc := FastSolver.Scene.make(circle_defs)
+static func replay(events: Array, defs: Array, fsc: FastSolver.Scene = null) -> Sensitivity:
+	var scene: BeamScene = fsc.scene if fsc != null else BeamScene.from_defs(NumCtx.f64(), defs)
 	var s := Sensitivity.new()
 	s.events = events
 	var db = null                # dual beam (PackedFloat64Array) or null before the seed
 	var cur_beam: HPBeam = null
-	var depart := -1
 	var envelope := 0.0
 	for e in events:
 		var g := 0.0
@@ -85,21 +90,24 @@ static func replay(events: Array, circle_defs: Array) -> Sensitivity:
 			if e.point != null and e.t_to != null:
 				var tf: float = e.t_to.to_float()
 				var dt := 0.0
-				var i: int = sc.index_of.get(e.surface_id, -1)
-				if i >= 0:
-					var hs := FastSolver.hits(db, sc, i, depart == e.surface_id)
+				var surf: BeamScene.Surf = scene.by_id.get(e.surface_id) if e.kind == "hit" else null
+				if surf != null:
+					# the root this event is (nearest in t), with its derivative
+					var hs := FastSolver.surf_hits(db, surf, false)
 					var best := INF
 					var j := 0
 					while j < hs.size():
+						if hs[j] == tf:
+							dt = hs[j + 1]
+							break
 						if absf(hs[j] - tf) < best:
 							best = absf(hs[j] - tf)
 							dt = hs[j + 1]
 						j += 2
 				var h := FastSolver.at(db, tf, dt)
 				g = sqrt(h[2] * h[2] + h[3] * h[3])
-				if e.kind == "hit" and e.applied and i >= 0:
-					db = FastSolver.invert_at(db, tf, dt, sc, i)
-					depart = e.surface_id
+				if e.kind == "hit" and e.applied and not e.terminal and surf != null:
+					db = FastSolver.apply_surf(db, tf, dt, surf)
 		envelope = maxf(envelope, g)
 		s.gain.append(envelope)
 	s.max_gain = envelope

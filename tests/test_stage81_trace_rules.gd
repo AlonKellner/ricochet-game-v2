@@ -113,6 +113,30 @@ func test_departure_rehit_is_ordinary_hit():
 	if ev.size() > 1:
 		assert_true(ev[1].rehit, "second event is the departure re-hit")
 
+func test_provenance_points_snap_to_endpoints():
+	# the beam is constructed through the cursor / player: a segment endpoint
+	# exactly there is hit exactly there (junction full block -> reflection),
+	# whatever the computed root's rounding
+	_check_fixture("cursor_at_junction_physical")
+	_check_fixture("cursor_at_junction_planned")
+	_check_fixture("player_at_arc_endpoint")
+	_check_fixture("player_at_arc_endpoint_planned")
+	# known points propagate through effects (an inversion fixes its circle)
+	_check_fixture("propagated_endpoint_physical")
+	# exact incidence on an exact initial line (collinear data)
+	_check_fixture("collinear_endpoint_physical")
+	_check_fixture("collinear_endpoint_direction")
+	# incidence of a known point inside a mirror, then the exact reflected line
+	_check_fixture("reflected_exact_line_endpoint")
+	# mirror-only plan: exact aim image -> exact initial line
+	_check_fixture("planned_mirror_exact_image")
+	_check_fixture("planned_mirror_exact_image_physical")
+	# an exact line through an inversion center stays exactly straight
+	_check_fixture("line_through_inversion_center")
+	# an exact line tangent to a circle touches it without crossing
+	_check_fixture("tangent_line_no_crossing")
+	_check_fixture("tangent_line_no_crossing_planned")
+
 func test_targets_recorded_on_segment():
 	_check_fixture("target_recorded_on_segment")
 	var fx: Dictionary = _fx["target_recorded_on_segment"]

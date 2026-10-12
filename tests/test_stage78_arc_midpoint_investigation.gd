@@ -2,6 +2,8 @@ extends GutTest
 
 # Investigation of ARC-MIDPOINT-ALIGNMENT violations.
 # Read-only diagnostics — no production code changes.
+# These investigate the legacy Tracer's normalized-frame arcs, so the renderer
+# is pinned to it (use_beam_tracer = false); removed with Tracer in Stage 84.
 
 const COMBO_BASE := "res://scenes/test_levels/combo_base.tscn"
 const VIOLATIONS_PATH := "res://violations.json"
@@ -58,6 +60,7 @@ func _setup_checker(scene: Node, player_pos: Vector2, cursor_pos: Vector2) -> In
 	if cursor_node:
 		cursor_node.global_position = cursor_pos
 	if renderer:
+		renderer.use_beam_tracer = false
 		renderer._compute_trace()
 	var checker := InvariantChecker.new()
 	checker.setup(scene)
@@ -464,6 +467,7 @@ func test_exp6_statistical_sweep() -> void:
 
 				player_node.global_position = player_pos
 				cursor_node.global_position = cursor_pos
+				renderer.use_beam_tracer = false
 				renderer._compute_trace()
 
 				var traces := {}

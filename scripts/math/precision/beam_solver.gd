@@ -1,50 +1,84 @@
 class_name BeamSolver
 extends RefCounted
 
-# Precision-generic trajectory solver for scenes of full inversion circles
-# (plus effect-free pass-through surfaces, which never change the beam).
+# Precision-generic trajectory solver for scenes of line / arc / full-circle
+# surfaces with reflection, inversion, terminal and pass sides (BeamScene).
+# The trace rules are those of the mpmath oracle (docs/research/oracle/
+# trace2.py), which is the specification:
+#   - every carrier crossing is an event; MAX_HITS = 32 counts every event
+#     (cursor and the final origin/escape event too); a trace cut by MAX_HITS
+#     ends with a "max" event at the next crossing (drawn up to it);
+#   - PHYSICAL: an effect fires only on a fully blocked hit (on-segment
+#     interior, or an exact endpoint whose blocked sides, including other
+#     segments sharing that endpoint, cover both sides); terminal ends the
+#     trace; plan bookkeeping by surface id;
+#   - PLANNED: the next plan entry fires on an id AND side match, even
+#     off-segment; everything else passes (terminals included);
+#   - after applying at h on S the new beam departs S at h; the departure point
+#     is re-hit last (after the full loop), as an ordinary hit;
+#   - provenance stack: re-applying the surface on top of the stack pops it,
+#     restoring the earlier beam object exactly, resumed at the shared point
+#     actually hit;
+#   - projective order from the current parameter; ties: cursor first, then
+#     surface id;
+#   - provenance (known) points: exact data points a beam passes through --
+#     the player (initial beam, t = 0), the cursor (whenever it is a
+#     candidate: plan complete and matched, the beam is B_K), the departure
+#     point of a beam born at an exact hit point, every known point of the
+#     previous beam on the carrier of the surface applied (an effect fixes
+#     its carrier pointwise), and every segment endpoint on an exact line.
+#     Pops restore the earlier beam's known points;
+#   - exact lines: a straight beam defined by exact data, kept in implicit
+#     form a x + b y = c with exact coefficients -- the initial beam of a
+#     direction trace or of a trace without plan (player -> cursor), and the
+#     reflection of an exact line in a line mirror (an exact polynomial map of
+#     the coefficients, whatever the hit point's rounding);
+#   - incidence (Exact predicates on the data): a surface whose carrier
+#     contains a known point exactly is hit exactly there (its nearest root
+#     takes the point's parameter and the exact point). No rounding decides
+#     an endpoint or an incidence;
 #
-# Planned trace: cursor-anchored construction. Beam B_j (after j plan
-# entries) is the circle through P_j = F_j(player), X_j = F_j(F_K^-1(cursor))
-# and Q_j = F_j(inf), oriented P -> X -> Q. P_j and Q_j are pushed forward and
-# X_j pulled back from the cursor, all by contractive maps, and P_j - Q_j is
-# tracked as an exact difference. Each B_j is built independently, so errors
-# never accumulate along the chain: exact to ~1e-13 px in float64 at any depth.
+# One walker implements the rules for every tier. A backend supplies the beam
+# math: NumBackend (HPBeam over any NumCtx) or FastSolver.Backend (raw float64
+# with the tangent-linear derivative inline, bit-identical to NumBackend over
+# F64Num). Topology decisions (on-segment, side, endpoint blockage) always run
+# the shared precision-generic BeamGeom code.
 #
-# Physical trace: identical to the planned path up to the first planned pass
-# event (physical applies it), then a forward continuation, which is
-# genuinely sensitive and is run on a precision ladder (see PrecisionLadder).
-#
-# Provenance (no tolerances): applying the inversion of the surface whose
-# inversion produced the current beam cancels it (I_S o I_S = id, Tracer's
-# source-based stack pop). The earlier beam is restored EXACTLY (same object)
-# and the trace resumes at its other recorded intersection with S -- which is,
-# by definition, the same shared point (B ∩ S = I_S(B) ∩ S). Nothing is
-# recomputed, so e.g. a straight beam stays exactly straight.
+# Anchored planned path: beam B_j (after plan entry j) is the circle through
+# P_j = F_j(player), X_j = F_j(F_K^-1(cursor)) and Q_j = F_j(inf), oriented
+# P -> X -> Q, with P - Q tracked exactly (AnchorChain). Each B_j is built
+# independently, so errors never accumulate along the plan. The walker swaps
+# B_{j+1} in whenever plan entry j fires on the anchored path (PLANNED mode,
+# or PHYSICAL mode before its first divergence from the planned decisions).
+# After the divergence (or the cursor) the trace is a forward continuation,
+# seeded for ErrorEstimate and solved on PrecisionLadder.
 
 enum Mode { PHYSICAL = 0, PLANNED = 1 }
 
+const MAX_HITS := 32
+const TRANSFORMATIVE := ["reflection", "inversion"]
+
 class Event extends RefCounted:
-	var kind: String          # "hit" | "cursor" | "origin" | "escape"
+	var kind: String          # "hit" | "cursor" | "origin" | "escape" | "max"
 	var surface_id: int = -1
-	var left: bool = false    # side: true = LEFT (beam enters the circle)
-	var applied: bool = false
+	var left: bool = false    # side the beam comes from: true = LEFT
+	var applied: bool = false # the side's effect fired (terminal included)
+	var terminal: bool = false
+	var on_segment: bool = false
+	var rehit: bool = false   # the departure point, re-hit after the full loop
 	var point: CN = null      # null for escape
 	var beam: HPBeam          # beam the arc leading to this event lies on
 	var t_from                # arc start parameter on `beam`
 	var t_to                  # arc end parameter on `beam` (null = infinity)
-	var margin: float = INF   # px gap to the nearest competing candidate of the
-	                          # ordering/root decision that produced this event
-	var seeded: bool = false  # lies on the sensitive forward continuation (the
-	                          # beam chain starting at the tangent-linear seed)
+	var margin: float = INF   # px gap to the nearest competing candidate or
+	                          # endpoint of the decision that produced this event
+	var seeded: bool = false  # lies on the sensitive forward continuation
 	var raw = null            # FastSolver: raw float beam of `beam` (provenance)
-	var terminal: bool = false
-	var on_segment: bool = false
-	var rehit: bool = false
 
 	func describe() -> String:
 		var p := "" if point == null else " (%.6f, %.6f)" % [point.fx(), point.fy()]
-		return "%s s=%d %s%s%s" % [kind, surface_id, "L" if left else "R", " applied" if applied else "", p]
+		return "%s s=%d %s%s%s%s" % [kind, surface_id, "L" if left else "R", " applied" if applied else "",
+			"" if on_segment else " off", p]
 
 class PlanItem extends RefCounted:
 	var surface_id: int
@@ -59,19 +93,304 @@ class PlanItem extends RefCounted:
 # the other intersection of that beam with sid (where a cancelling re-hit of
 # sid resumes it).
 class StackEntry extends RefCounted:
-	var beam                  # HPBeam (or FastSolver raw beam)
+	var beam
 	var sid: int
 	var t_hit
 	var other
-	static func make(p_beam, p_sid: int, p_t_hit, p_other) -> StackEntry:
+	var known: Array = []     # the beam's known points (Walk.known)
+	var line = null           # the beam's exact line data (Walk.line)
+	static func make(p_beam, p_sid: int, p_t_hit, p_other, p_known: Array = [], p_line = null) -> StackEntry:
 		var o := StackEntry.new()
 		o.beam = p_beam
 		o.sid = p_sid
 		o.t_hit = p_t_hit
 		o.other = p_other
+		o.known = p_known
+		o.line = p_line
 		return o
 
-# ---------------------------------------------------------------- ordering
+# ---------------------------------------------------------------- backend
+
+# HPBeam over a NumCtx (any tier).
+class NumBackend extends RefCounted:
+	var ctx: NumCtx
+
+	static func make(p_ctx: NumCtx) -> NumBackend:
+		var b := NumBackend.new()
+		b.ctx = p_ctx
+		return b
+
+	func roots(beam: HPBeam, surf: BeamScene.Surf, depart_on: bool) -> Array:
+		return BeamGeom.hits(beam, surf.seg, depart_on)
+	func point(beam: HPBeam, t) -> CN:
+		return beam.at(t)
+	func tangent(beam: HPBeam, t) -> CN:
+		return beam.tangent_at(t)
+	func origin(beam: HPBeam) -> CN:
+		return beam.p
+	func param_of(beam: HPBeam, z: CN):
+		return beam.param_of(z)
+	func apply(beam: HPBeam, t, surf: BeamScene.Surf, etype: String, h: CN = null) -> HPBeam:
+		return BeamEffects.apply(beam, t, surf, etype, h)
+	func straight(beam: HPBeam) -> bool:
+		return beam.kappa.is_zero()
+	# the same beam with curvature exactly zero (provenance: it is a line)
+	func straightened(beam: HPBeam) -> HPBeam:
+		if beam.kappa is DualNum:
+			return HPBeam.make(beam.p, beam.tau, DualNum.of(0.0, beam.kappa.d))
+		return HPBeam.make(beam.p, beam.tau, beam.kappa.sub(beam.kappa))
+	func zero():
+		return ctx.zero()
+	func seed(beam: HPBeam) -> HPBeam:
+		return BeamSolver._seed(beam)
+	func reseed(beam: HPBeam) -> HPBeam:
+		return BeamSolver._reseed_if_unseeded(beam)
+	func from_hp(b: HPBeam) -> HPBeam:
+		return b
+	func hp(beam: HPBeam) -> HPBeam:
+		return beam
+	func raw(_beam: HPBeam):
+		return null
+	func ev_t(t):
+		return t
+	func gain(beam: HPBeam, t) -> float:
+		if not (beam.kappa is DualNum):
+			return 0.0
+		var h := beam.at(t)
+		return sqrt(h.re.d * h.re.d + h.im.d * h.im.d)
+	# [point, on_segment, side LEFT, fully blocked] of the hit at t on surf
+	# (at_origin: the hit is the beam's own point p; known_pt: the exact point,
+	# both by provenance).
+	func classify(scene: BeamScene, beam: HPBeam, t, surf: BeamScene.Surf, at_origin: bool, known_pt = null) -> Array:
+		var pt: CN = known_pt if known_pt != null else (beam.p if at_origin else beam.at(t))
+		var tang := beam.tangent_at(t)
+		var on_seg := BeamGeom.on_segment(surf.seg, pt)
+		return [pt, on_seg, BeamGeom.side_left(surf.seg, pt, tang), BeamSolver._full_block(scene, surf, pt, tang, on_seg)]
+	func prefix_gain(_beam: HPBeam, _t) -> float:
+		return 0.0
+	# float64 view of a point (decision margins only)
+	func f64_point(beam: HPBeam, t) -> PackedFloat64Array:
+		if beam.kappa is BigFloat:
+			var bf := FastSolver.beam(beam.p.fx(), beam.p.fy(), beam.tau.fx(), beam.tau.fy(), beam.kappa.to_float())
+			var h := FastSolver.at_view(bf, t.to_float())
+			return PackedFloat64Array([h[0], h[1]])
+		var z := beam.at(t)
+		return PackedFloat64Array([z.fx(), z.fy()])
+
+# ---------------------------------------------------------------- anchored chain
+
+# Anchored beams B_0..B_K of a plan (one object per transform-stack frame: a
+# popped frame IS the earlier beam object). null if the construction is
+# degenerate (a pole or image at infinity, or player = cursor image).
+class AnchorChain extends RefCounted:
+	var beams: Array = []
+
+	static func _key(st: Array) -> String:
+		return ",".join(st.map(func(x): return str(x)))
+
+	static func build(scene: BeamScene, player: CN, cursor: CN, plan: Array) -> AnchorChain:
+		var K := plan.size()
+		var stacks: Array = [[]]
+		var st: Array = []
+		var changes: Array = []      # plan entry j changes the frame
+		for item in plan:
+			var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
+			var t: bool = surf != null and surf.effect(item.left) in TRANSFORMATIVE
+			changes.append(t)
+			if t:
+				if not st.is_empty() and st.back() == item.surface_id:
+					st.pop_back()
+				else:
+					st.append(item.surface_id)
+			stacks.append(st.duplicate())
+		# pole chain: key -> [P, Q or null, delta or null]
+		var memo := {"": [player, null, null]}
+		for s in stacks:
+			for n in range(1, s.size() + 1):
+				var key := _key(s.slice(0, n))
+				if memo.has(key):
+					continue
+				var parent: Array = memo[_key(s.slice(0, n - 1))]
+				if parent[0] == null:
+					return null
+				memo[key] = BeamEffects.map_pole(parent, scene.by_id[s[n - 1]])
+		# image chain X_j, memoized by frame (exact provenance across pops)
+		var X: Array = []
+		X.resize(K + 1)
+		var seen := {}
+		for j in range(K, -1, -1):
+			var key := _key(stacks[j])
+			if seen.has(key):
+				X[j] = seen[key]
+			elif j == K:
+				X[j] = cursor
+			elif not changes[j]:
+				X[j] = X[j + 1]
+			else:
+				if X[j + 1] == null:
+					return null
+				X[j] = BeamEffects.map_point(X[j + 1], scene.by_id[plan[j].surface_id])
+			seen[key] = X[j]
+		var chain := AnchorChain.new()
+		var beam_of := {}
+		for j in K + 1:
+			var key := _key(stacks[j])
+			if not beam_of.has(key):
+				var pc: Array = memo[key]
+				if pc[0] == null or X[j] == null or X[j].sub(pc[0]).is_zero():
+					return null
+				beam_of[key] = HPBeam.through(pc[0], X[j], pc[2])
+			chain.beams.append(beam_of[key])
+		return chain
+
+# ---------------------------------------------------------------- walk state
+
+class Walk extends RefCounted:
+	var bk
+	var scene: BeamScene
+	var plan: Array = []
+	var cursor = null         # CN or null
+	var mode: int = Mode.PHYSICAL
+	var post_mode: int = Mode.PHYSICAL
+	var plan_index: int = 0
+	var plan_matched: bool = true
+	var cursor_done: bool = false
+	var count: int = 0
+	var max_events: int = MAX_HITS
+	var events: Array = []
+	var gains: Array = []
+	var stack: Array = []
+	var done: bool = false
+	var seeded: bool = false
+	var chain: AnchorChain = null
+	var anchored: bool = false
+	var known: Array = []     # known points on the current beam: [CN, t, skip surface id]
+	var line = null           # exact implicit line of the current beam (Exact.Line), or null
+	var incidence := {}       # cache: [x, y, surface id] -> exact incidence
+	var tangent_line = null   # the line `tangent` was computed for
+	var tangent := {}         # surface id -> exact tangency of tangent_line
+	var hp_src = null         # beam whose HPBeam view is hp_view (events share it)
+	var hp_view: HPBeam = null
+
+# ---------------------------------------------------------------- entry points
+
+# Walk an explicit direction from the player (forward shooting).
+static func trace_direction(ctx: NumCtx, scene: BeamScene, player: CN, dir: CN, plan: Array, cursor, mode: int,
+		max_events: int = MAX_HITS) -> Array:
+	return run_direction(NumBackend.make(ctx), scene, player, dir, plan, cursor, mode, max_events).events
+
+static func run_direction(bk, scene: BeamScene, player: CN, dir: CN, plan: Array, cursor, mode: int,
+		max_events: int = MAX_HITS) -> Walk:
+	var w := _new_walk(bk, scene, plan, cursor, mode, max_events)
+	var b0 = bk.from_hp(HPBeam.make(player, dir.unit(), player.re.sub(player.re)))
+	if mode == Mode.PHYSICAL:
+		b0 = bk.seed(b0)
+		w.seeded = true
+	w.known = [[player, bk.zero(), -1]]
+	w.line = Exact.Line.from_exact(Exact.line_from_dir(player.fx(), player.fy(), dir.fx(), dir.fy()))
+	_add_line_endpoints(w, b0)
+	walk_from(w, b0, -1, null)
+	return w
+
+# Segment endpoints exactly on the current exact line are known points.
+static func _add_line_endpoints(w: Walk, b) -> void:
+	for s in w.scene.surfaces:
+		if s.seg.full:
+			continue
+		for ep in [s.seg.s, s.seg.e]:
+			if _known_index(w.known, ep) < 0 and w.line.contains(ep.fx(), ep.fy()):
+				w.known.append([ep, w.bk.param_of(b, ep), -1])
+
+# Exact: the known point k lies on surf's carrier (cached per walk).
+static func _incident(w: Walk, k: CN, surf: BeamScene.Surf) -> bool:
+	if BeamGeom.endpoint_at(surf.seg, k) != 0:
+		return true
+	var kx := k.fx()
+	var ky := k.fy()
+	var key := [kx, ky, surf.id]
+	if w.incidence.has(key):
+		return w.incidence[key]
+	var r: bool
+	if surf.line:
+		r = Exact.orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, kx, ky)
+	elif surf.full:
+		r = Exact.on_circle_zero(surf.cx, surf.cy, surf.r, kx, ky)
+	else:
+		r = Exact.incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, kx, ky)
+	w.incidence[key] = r
+	return r
+
+# Planned trace (anchored), then its post-cursor physical continuation.
+static func planned(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS) -> Array:
+	var w := run(NumBackend.make(ctx), scene, player, cursor, plan, Mode.PLANNED, max_events)
+	return [] if w == null else w.events
+
+# Physical trace: on the anchored planned path until the first divergence.
+static func physical(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS) -> Array:
+	var w := run(NumBackend.make(ctx), scene, player, cursor, plan, Mode.PHYSICAL, max_events)
+	return [] if w == null else w.events
+
+# null if the anchored construction is degenerate (player = cursor, or a pole
+# / image at infinity: Stage 83).
+static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int = MAX_HITS) -> Walk:
+	var chain := AnchorChain.build(scene, player, cursor, plan)
+	if chain == null:
+		return null
+	var w := _new_walk(bk, scene, plan, cursor, mode, max_events)
+	w.chain = chain
+	w.anchored = true
+	var b0 = bk.from_hp(chain.beams[0])
+	if mode == Mode.PHYSICAL and plan.is_empty():
+		# no plan: the physical trace is the forward continuation from the start
+		b0 = bk.seed(b0)
+		w.seeded = true
+		w.anchored = false
+	w.known = [[player, bk.zero(), -1]]
+	w.line = _initial_line(scene, player, cursor, plan)
+	if w.line != null:
+		_add_line_endpoints(w, b0)
+	walk_from(w, b0, -1, null)
+	return w
+
+# The exact implicit line of B_0, when it is exact data: the line player ->
+# F_K^-1(cursor) with every frame change of the plan a line reflection (the
+# image is then an exact rational point, carried homogeneously). null if the
+# plan has an inversion.
+static func _initial_line(scene: BeamScene, player: CN, cursor: CN, plan: Array):
+	var X: Array = [Exact.of(cursor.fx()), Exact.of(cursor.fy()), Exact.of(1.0)]
+	for j in range(plan.size() - 1, -1, -1):
+		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+		if surf == null or not (surf.effect(plan[j].left) in TRANSFORMATIVE):
+			continue
+		if not surf.line:
+			return null
+		X = Exact.reflect_point_h(X, surf.sx, surf.sy, surf.ex, surf.ey)
+	return Exact.Line.from_exact(Exact.line_through_h(player.fx(), player.fy(), X))
+
+static func _new_walk(bk, scene: BeamScene, plan: Array, cursor, mode: int, max_events: int) -> Walk:
+	var w := Walk.new()
+	w.bk = bk
+	w.scene = scene
+	w.plan = plan
+	w.cursor = cursor
+	w.mode = mode
+	w.post_mode = Mode.PHYSICAL
+	w.max_events = max_events
+	return w
+
+# Ids of target surfaces hit on-segment.
+static func targets_of(scene: BeamScene, events: Array) -> Array:
+	var ids := {}
+	for e in events:
+		if e.kind == "hit" and e.on_segment:
+			var s: BeamScene.Surf = scene.by_id.get(e.surface_id)
+			if s != null and s.is_target:
+				ids[e.surface_id] = true
+	var out: Array = ids.keys()
+	out.sort()
+	return out
+
+# ---------------------------------------------------------------- walker
 
 # Projective order along a beam starting at t0: true if a comes before b.
 static func _before(a, b, t0) -> bool:
@@ -81,453 +400,403 @@ static func _before(a, b, t0) -> bool:
 		return ka < kb
 	return a.cmp(b) < 0
 
-# Roots of `beam` ∩ `c` that are candidates for the next event.
-#   fresh: the beam's own point p (t = 0) is the departure point, exactly on
-#          the departure surface (hits() then uses the exact P = 0 form).
-#   not fresh: the trace sits at parameter t0 on the beam; on the departure
-#          surface the root equal to t0 (same computation -> same value) is
-#          the departure itself.
-static func _roots(beam: HPBeam, c: HPBeam.Circle, fresh: bool, depart_id: int, t0) -> Array:
-	if fresh:
-		var rs := beam.hits(c, depart_id == c.id)
-		return rs.filter(func(t): return not t.is_zero())
-	var rs2 := beam.hits(c, false)
-	if c.id == depart_id:
-		return rs2.filter(func(t): return t.cmp(t0) != 0)
-	return rs2
+# Candidates [t, surf (null = cursor), rehit, exact point or null] in walk order.
+static func _candidates(w: Walk, beam, depart: int, fresh: bool, t0) -> Array:
+	var bk = w.bk
+	var cands: Array = []
+	for s in w.scene.surfaces:
+		if w.line != null and not s.line and _tangent(w, s):
+			continue      # a tangent touch is not a crossing (exact)
+		var rs: Array
+		if fresh:
+			rs = bk.roots(beam, s, depart == s.id)
+			if depart == s.id:
+				rs = rs.filter(func(t): return not t.is_zero())
+		else:
+			rs = bk.roots(beam, s, false)
+			if depart == s.id:
+				rs = rs.filter(func(t): return t.cmp(t0) != 0)
+		for t in rs:
+			cands.append([t, s, false, null])
+	var cursor_now := false
+	if not w.cursor_done and w.plan_index >= w.plan.size() and w.plan_matched and w.cursor != null:
+		var tc = bk.param_of(beam, w.cursor)
+		var ki := _known_index(w.known, w.cursor)
+		# the cursor exactly at the departure point is reached immediately
+		if (fresh and BeamGeom._eq(bk.origin(beam), w.cursor)) or (ki >= 0 and w.known[ki][2] == depart and depart >= 0):
+			tc = t0
+			cursor_now = true
+		cands.append([tc, null, false, null])
+		if ki < 0:
+			w.known.append([w.cursor, tc, -1])
+	for kp in w.known:
+		_snap(w, beam, cands, kp)
+	cands.sort_custom(func(a, b):
+		if cursor_now and (a[1] == null) != (b[1] == null):
+			return a[1] == null
+		var c: int = a[0].cmp(b[0])
+		if c != 0:
+			return _before(a[0], b[0], t0)
+		var ia: int = -1 if a[1] == null else a[1].id
+		var ib: int = -1 if b[1] == null else b[1].id
+		return ia < ib)
+	if depart >= 0:
+		# the departure re-hit is at the departure point (exact when known)
+		var dep_pt = null
+		for k in w.known:
+			if k[2] == depart:
+				dep_pt = k[0]
+		cands.append([t0, w.scene.by_id[depart], true, dep_pt])
+	return cands
 
-# Cancelling re-hit of the surface of stack entry `top` at parameter t on
-# `cur`. beam_old ∩ S = cur ∩ S = {h (where top was applied), h'}; resume
-# beam_old at whichever of the two this hit is. If cur was born at h (fresh,
-# departing S) its departure root is excluded, so the hit is h' by
-# construction; otherwise identify the point (the two are distinct).
-static func _resume_param(top: StackEntry, cur: HPBeam, t, born_at_hit: bool):
-	if born_at_hit:
-		return top.other
-	var p := cur.at(t)
-	var old: HPBeam = top.beam
-	var d_hit: float = old.at(top.t_hit).sub(p).abs2().to_float()
-	var d_other: float = old.at(top.other).sub(p).abs2().to_float()
-	return top.t_hit if d_hit < d_other else top.other
+static func _known_index(known: Array, z: CN) -> int:
+	for i in known.size():
+		if BeamGeom._eq(known[i][0], z):
+			return i
+	return -1
 
-# The other intersection of `beam` with c, given the one we apply at (t).
-static func _other_root(beam: HPBeam, c: HPBeam.Circle, _fresh: bool, depart_id: int, t0, t):
-	if c.id == depart_id:
-		# beam ∩ c = {departure point, t}
-		return t0
-	for r in beam.hits(c, false):
-		if r.cmp(t) != 0:
-			return r
-	return t  # tangent: a single (double) root
+# A surface whose carrier contains the known point kp (on the beam at kt) is
+# hit exactly there: its root nearest kp becomes (kt, kp). skip: the
+# departure surface for the departure point (its departure root is excluded).
+static func _snap(w: Walk, beam, cands: Array, rec: Array) -> void:
+	var kp: CN = rec[0]
+	var kt = rec[1]
+	var skip: int = rec[2]
+	if rec.size() < 4:
+		# the surfaces whose carrier contains kp (exact; once per record)
+		var inc: Array = []
+		for s0 in w.scene.surfaces:
+			if _incident(w, kp, s0):
+				inc.append(s0)
+		rec.append(inc)
+	for s in rec[3]:
+		if s.id == skip:
+			continue
+		# which of the (distinct) roots is the known point: compared at the
+		# tier's precision
+		var best := -1
+		var best_d := INF
+		for i in cands.size():
+			if cands[i][1] != s:
+				continue
+			var d: float = w.bk.point(beam, cands[i][0]).sub(kp).abs2().to_float()
+			if d < best_d:
+				best_d = d
+				best = i
+		if best >= 0:
+			cands[best] = [kt, s, false, kp]
 
-# Anchored beams (not built at a hit point): the departure root is either
-# known exactly (after a cancelling pop: dep_t) or identified as the root
-# whose point is the departure point (B ∩ S shares both points with the
-# previous beam ∩ S; the nearer one is the departure).
-static func _roots_anchored(B: HPBeam, c: HPBeam.Circle, dep_id: int, dep_t, dep_pt: CN) -> Array:
-	var ts := B.hits(c, false)
-	if c.id != dep_id or ts.is_empty():
-		return ts
-	if dep_t != null:
-		return ts.filter(func(t): return t.cmp(dep_t) != 0)
-	var best := 0
-	var best_d := INF
-	for i in ts.size():
-		var d: float = B.at(ts[i]).sub(dep_pt).abs2().to_float()
-		if d < best_d:
-			best_d = d
-			best = i
-	ts.remove_at(best)
-	return ts
-
-# The root of B ∩ c at the departure point (B ∩ c shares both points with the
-# previous beam ∩ c; the one at the departure point is the nearer).
-static func _departure_root(B: HPBeam, c: HPBeam.Circle, dep_pt: CN):
-	var best = null
-	var best_d := INF
-	for t in B.hits(c, false):
-		var d: float = B.at(t).sub(dep_pt).abs2().to_float()
-		if d < best_d:
-			best_d = d
-			best = t
-	return best
-
-# Per candidate: px distance to its neighbours in the sorted order (an
-# ordering decision is only as reliable as this gap is large vs. the error;
-# used by ErrorEstimate to decide precision, never to decide topology).
-static func _candidate_gaps(beam: HPBeam, cands: Array) -> Array:
+# Per candidate: px distance to its neighbours in the walk order (and, for a
+# segment, to its endpoints): an ordering / on-segment decision is only as
+# reliable as this gap is large vs. the error. Used by ErrorEstimate to decide
+# precision, never to decide topology.
+static func _gaps(w: Walk, beam, cands: Array) -> Array:
 	var pts: Array = []
 	for cand in cands:
-		pts.append(_point_f64(beam, cand[0]))
+		if cand[3] != null:
+			pts.append(PackedFloat64Array([cand[3].fx(), cand[3].fy()]))
+		else:
+			pts.append(w.bk.f64_point(beam, cand[0]))
 	var gaps: Array = []
 	for i in cands.size():
 		var g := INF
-		# surface candidates only: the cursor is not an effect, its order
-		# relative to a coincident hit changes nothing
-		if cands[i][1] != null:
+		var s = cands[i][1]
+		if s != null:
+			# neighbours: surface candidates whose order against this one is a
+			# numerical decision (two exact provenance points are ordered by
+			# their exact shared parameter and the id rule, not by rounding)
+			var exact_i: bool = cands[i][3] != null
 			var l := i - 1
-			while l >= 0 and cands[l][1] == null:
+			while l >= 0 and (cands[l][1] == null or (exact_i and cands[l][3] != null)):
 				l -= 1
 			if l >= 0:
-				g = minf(g, _dist(pts[i], pts[l]))
+				g = minf(g, _d64(pts[i], pts[l][0], pts[l][1]))
 			var r := i + 1
-			while r < cands.size() and cands[r][1] == null:
+			while r < cands.size() and (cands[r][1] == null or (exact_i and cands[r][3] != null)):
 				r += 1
 			if r < cands.size():
-				g = minf(g, _dist(pts[i], pts[r]))
+				g = minf(g, _d64(pts[i], pts[r][0], pts[r][1]))
+			if not s.seg.full:
+				var ds := _d64(pts[i], s.sx, s.sy)
+				var de := _d64(pts[i], s.ex, s.ey)
+				# an exact endpoint hit is decided by provenance, not by a margin
+				if ds > 0.0:
+					g = minf(g, ds)
+				if de > 0.0:
+					g = minf(g, de)
 		gaps.append(g)
 	return gaps
 
-# float64 distance between two points of any tier
-static func _dist(a: CN, b: CN) -> float:
-	var dx: float = a.fx() - b.fx()
-	var dy: float = a.fy() - b.fy()
+static func _d64(a: PackedFloat64Array, x: float, y: float) -> float:
+	var dx := a[0] - x
+	var dy := a[1] - y
 	return sqrt(dx * dx + dy * dy)
 
-static func _is_hp(beam: HPBeam) -> bool:
-	return beam.kappa is BigFloat
+# Blocked sides at an exact endpoint, incl. other segments sharing it.
+static func _full_block(scene: BeamScene, surf: BeamScene.Surf, pt: CN, tang: CN, on_seg: bool) -> bool:
+	if not on_seg:
+		return false
+	if BeamGeom.endpoint_at(surf.seg, pt) == 0:
+		return true
+	var bl := false
+	var br := false
+	for s in scene.surfaces:
+		var which := BeamGeom.endpoint_at(s.seg, pt)
+		if which == 0:
+			continue
+		var b := BeamGeom.blocked_sides(s.seg, which, tang)
+		bl = bl or b[0]
+		br = br or b[1]
+	return bl and br
 
-static func _f64_beam(beam: HPBeam) -> PackedFloat64Array:
-	return FastSolver.beam(beam.p.fx(), beam.p.fy(), beam.tau.fx(), beam.tau.fy(), beam.kappa.to_float())
-
-# float64 view of a point (for margins / display only)
-static func _point_f64(B: HPBeam, t) -> CN:
-	if not _is_hp(B):
-		return B.at(t)
-	var h := FastSolver.at(_f64_beam(B), t.to_float(), 0.0)
-	return CN.make(F64Num.of(h[0]), F64Num.of(h[1]))
-
-# ---------------------------------------------------------------- planned
-
-static func _stack_key(st: Array) -> String:
-	return ",".join(st.map(func(x): return str(x)))
-
-# stop_after_first_pass: return as soon as the first pass event is emitted
-# (all a physical trace needs from the planned path).
-static func anchored_planned(ctx: NumCtx, circles: Array, player: CN, cursor: CN, plan: Array, post_events: int = 5, stop_after_first_pass: bool = false) -> Array:
-	var by_id := {}
-	for c in circles:
-		by_id[c.id] = c
-	var K := plan.size()
-	# transform stacks (immediate repeat of the same surface pops, like Tracer)
-	var stacks: Array = [[]]
-	var st: Array = []
-	for item in plan:
-		if not st.is_empty() and st.back() == item.surface_id:
-			st.pop_back()
+static func _plan_bookkeeping(w: Walk, sid: int) -> void:
+	if w.plan_index < w.plan.size():
+		if sid == w.plan[w.plan_index].surface_id:
+			w.plan_index += 1
 		else:
-			st.append(item.surface_id)
-		stacks.append(st.duplicate())
-	# pole chain: key -> [P, Q or null, delta or null]
-	var memo := {"": [player, null, null]}
-	for s in stacks:
-		for n in range(1, s.size() + 1):
-			var key := _stack_key(s.slice(0, n))
-			if memo.has(key):
-				continue
-			var parent: Array = memo[_stack_key(s.slice(0, n - 1))]
-			var circ: HPBeam.Circle = by_id[s[n - 1]]
-			memo[key] = _push_pole(parent, circ)
-	# image chain X_j, memoized by frame (exact provenance across pops)
-	var X: Array = []
-	X.resize(K + 1)
-	var seen := {}
-	for j in range(K, -1, -1):
-		var key := _stack_key(stacks[j])
-		if seen.has(key):
-			X[j] = seen[key]
-		elif j == K:
-			X[j] = cursor
-		else:
-			X[j] = HPBeam.invert_point(X[j + 1], by_id[plan[j].surface_id])
-		seen[key] = X[j]
-	# one beam object per frame (a popped frame IS the earlier beam object)
-	var beam_of := {}
-	var beams: Array = []
-	for j in K + 1:
-		var key := _stack_key(stacks[j])
-		if not beam_of.has(key):
-			var pc: Array = memo[key]
-			beam_of[key] = HPBeam.through(pc[0], X[j], pc[2])
-		beams.append(beam_of[key])
+			w.plan_matched = false
+	else:
+		w.plan_matched = false
 
-	var events: Array = []
-	var astack: Array = []        # StackEntry, mirrors `stacks`
-	var t_start = ctx.zero()
-	var dep_id := -1
-	var dep_t = null              # exact departure parameter (after a pop)
-	var dep_pt: CN = null
-	for j in K + 1:
-		var B: HPBeam = beams[j]
-		var t_end
-		var end_circ: HPBeam.Circle = null
-		if j < K:
-			end_circ = by_id[plan[j].surface_id]
-			var cand: Array = []
-			for t in _roots_anchored(B, end_circ, dep_id, dep_t, dep_pt):
-				if B.is_entering(t, end_circ) == plan[j].left:
-					cand.append(t)
-			if cand.is_empty():
-				# The plan cannot be followed (e.g. a cancelling pair aims straight
-				# at the cursor and the line misses the surface). Planned mode then
-				# applies nothing more: the beam passes every surface and the trace
-				# ends; the cursor is never reached (Tracer semantics).
-				var t_dep = null   # null: fresh start at B's own point (the player)
-				if j > 0:
-					t_dep = dep_t if dep_t != null else _departure_root(B, by_id[dep_id], dep_pt)
-				events.append_array(continue_from(ctx, circles, B, dep_id, plan, j, false, null, true,
-					Mode.PLANNED, Mode.PLANNED, post_events + 64, false, astack, t_dep))
-				return events
-			t_end = cand[0]
-			for t in cand:
-				if _before(t, t_end, t_start):
-					t_end = t
-		else:
-			t_end = B.param_of(cursor)
-		# pass events strictly between t_start and t_end
-		var passes: Array = []
-		for c in circles:
-			for t in _roots_anchored(B, c, dep_id, dep_t, dep_pt):
-				if c == end_circ and t.cmp(t_end) == 0:
-					continue
-				if t.cmp(t_start) != 0 and _before(t, t_end, t_start):
-					passes.append([t, c])
-		passes.sort_custom(func(a, b): return _before(a[0], b[0], t_start))
-		# decision margins (precision control only)
-		var end_pt := B.at(t_end)
-		var end_margin := INF
-		if end_circ != null:
-			for t in B.hits(end_circ, false):
-				if t.cmp(t_end) != 0:
-					end_margin = minf(end_margin, _dist(_point_f64(B, t), end_pt))
-		if end_circ != null:
-			for pr in passes:
-				end_margin = minf(end_margin, _dist(_point_f64(B, pr[0]), end_pt))
-		var t_prev = t_start
-		for pr in passes:
-			events.append(_event("hit", pr[1].id, B.is_entering(pr[0], pr[1]), false, B, t_prev, pr[0]))
-			events.back().margin = _dist(events.back().point, end_pt) if end_circ != null else INF
-			t_prev = pr[0]
-			if stop_after_first_pass:
-				return events
-		if j < K:
-			var e := _event("hit", plan[j].surface_id, plan[j].left, true, B, t_prev, t_end)
-			e.margin = end_margin
-			events.append(e)
-			var sid: int = plan[j].surface_id
-			if not astack.is_empty() and astack.back().sid == sid:
-				# cancelling re-hit: resume the earlier beam at its other root
-				var top: StackEntry = astack.pop_back()
-				t_start = top.other
-				dep_id = sid
-				dep_t = top.other
-				dep_pt = null
-			else:
-				var other = null
-				for r in B.hits(end_circ, false):
-					if r.cmp(t_end) != 0:
-						other = r
-				astack.append(StackEntry.make(B, sid, t_end, other if other != null else t_end))
-				dep_id = sid
-				dep_t = null
-				dep_pt = e.point
-				t_start = beams[j + 1].param_of(dep_pt)
-		else:
-			events.append(_event("cursor", -1, false, false, B, t_prev, t_end))
-			events.back().margin = end_margin
-			if post_events > 0:
-				var cur := _seed(B.rebased_at(t_end))
-				events.append_array(continue_from(ctx, circles, cur, -1, plan, K, true, null, true,
-					Mode.PHYSICAL, Mode.PHYSICAL, post_events, true, astack.duplicate()))
-	return events
-
-static func _push_pole(parent: Array, circ: HPBeam.Circle) -> Array:
-	var P0: CN = parent[0]
-	var Q0 = parent[1]
-	var d0 = parent[2]
-	var P1 := HPBeam.invert_point(P0, circ)
-	if Q0 == null:
-		var u := P0.sub(circ.c)
-		return [P1, circ.c, u.scale(circ.r2).div_real(u.abs2())]
-	var uq: CN = Q0.sub(circ.c)
-	if uq.is_zero():
-		return [P1, null, null]
-	var Q1 := HPBeam.invert_point(Q0, circ)
-	# delta' = -R^2 conj(delta / ((P0 - c)(Q0 - c)))
-	var d1: CN = d0.div(P0.sub(circ.c).mul(uq)).conj().scale(circ.r2).neg()
-	return [Q1.add(d1), Q1, d1]
-
-static func _event(kind: String, sid: int, left: bool, applied: bool, beam: HPBeam, t_from, t_to) -> Event:
+static func _event(w: Walk, kind: String, beam, t_from, t_to, margin: float) -> Event:
 	var e := Event.new()
 	e.kind = kind
-	e.surface_id = sid
-	e.left = left
-	e.applied = applied
-	e.beam = beam
-	e.t_from = t_from
-	e.t_to = t_to
+	if w.hp_view == null or not is_same(w.hp_src, beam):
+		w.hp_src = beam
+		w.hp_view = w.bk.hp(beam)
+	e.beam = w.hp_view
+	e.raw = w.bk.raw(beam)
+	e.t_from = w.bk.ev_t(t_from)
+	e.t_to = null if t_to == null else w.bk.ev_t(t_to)
 	if t_to != null:
-		e.point = beam.at(t_to)
+		e.point = w.bk.point(beam, t_to)
+	e.margin = margin
+	e.seeded = w.seeded
+	w.events.append(e)
+	var g := 0.0
+	if t_to != null:
+		if w.seeded:
+			g = w.bk.gain(beam, t_to)
+		elif w.anchored:
+			# anchored prefix: sensitivity to the anchored beam's own angle
+			# (its construction rounding), per beam -- grows with distance
+			# from the anchor
+			g = w.bk.prefix_gain(beam, t_to)
+	w.gains.append(g)
 	return e
 
-# ---------------------------------------------------------------- forward
+# The other intersection of `beam` with surf, given the one applied at t.
+static func _other_root(w: Walk, beam, surf: BeamScene.Surf, depart: int, t0, t):
+	if surf.id == depart:
+		return t0
+	for r in w.bk.roots(beam, surf, false):
+		if r.cmp(t) != 0:
+			return r
+	return t   # tangent / straight beam: a single root
 
-# Forward trace. The trace starts on `beam` either at its own point p
-# (t_start == null: "fresh", p exactly on surface depart_id or on none) or at
-# parameter t_start (after a cancelling pop). `stack` holds the transform
-# stack entries (StackEntry) of the beams that led here.
-static func continue_from(ctx: NumCtx, circles: Array, beam: HPBeam, depart_id: int, plan: Array,
-		plan_index: int, plan_matched: bool, cursor, cursor_done: bool, mode: int, post_mode: int,
-		max_events: int, seeded: bool = true, stack: Array = [], t_start = null) -> Array:
-	var events: Array = []
-	var cur_mode := mode
+# Forward walk. depart: id of the surface the beam departs from (-1: none).
+# t_start null: fresh (the beam's own point p is the departure, t = 0);
+# otherwise resumed at t_start.
+static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
+	var bk = w.bk
 	var fresh: bool = t_start == null
-	var t0 = ctx.zero() if fresh else t_start
-	while events.size() < max_events:
-		var cands: Array = []
-		for c in circles:
-			for t in _roots(beam, c, fresh, depart_id, t0):
-				cands.append([t, c])
-		if not cursor_done and plan_index >= plan.size() and plan_matched and cursor != null:
-			cands.append([beam.param_of(cursor), null])
-		var t_origin = t0
-		cands.sort_custom(func(a, b): return _before(a[0], b[0], t_origin))
-		var gaps := _candidate_gaps(beam, cands)
-		var applied := false
-		var t_prev = t0
-		for ci in cands.size():
+	var t0 = bk.zero() if fresh else t_start
+	var skip := 0          # candidates already processed (in-place reseed)
+	var t_prev = t0
+	while not w.done:
+		var cands := _candidates(w, beam, depart, fresh, t0)
+		var gaps := _gaps(w, beam, cands)
+		var next = null    # [beam, depart, t0, fresh] after an applied effect
+		var restart := false
+		var ci := skip
+		skip = 0
+		while ci < cands.size():
 			var cand: Array = cands[ci]
-			if events.size() >= max_events:
-				break
 			var t = cand[0]
-			var c: HPBeam.Circle = cand[1]
-			if c == null:
-				events.append(_event("cursor", -1, false, false, beam, t_prev, t))
-				events.back().margin = gaps[ci]
-				events.back().seeded = seeded
+			var surf: BeamScene.Surf = cand[1]
+			var rehit: bool = cand[2]
+			w.count += 1
+			if w.count > w.max_events:
+				# cut at the next crossing: drawn up to it, no effect
+				var me := _event(w, "max", beam, t_prev, t, INF)
+				if cand[3] != null:
+					me.point = cand[3]
+				elif rehit and fresh:
+					me.point = bk.origin(beam)
+				w.done = true
+				return
+			if surf == null:
+				_event(w, "cursor", beam, t_prev, t, gaps[ci])
 				t_prev = t
-				cursor_done = true
-				cur_mode = post_mode
+				w.cursor_done = true
+				w.mode = w.post_mode
+				# the post-cursor continuation is the sensitive part
+				w.anchored = false
+				if not w.seeded:
+					w.seeded = true
+					var sb = bk.seed(beam)
+					if sb != beam:
+						# same values, same candidates -- minus the cursor,
+						# which is done: skip the ci processed before it
+						beam = sb
+						skip = ci
+						restart = true
+						break
+				ci += 1
 				continue
-			var left := beam.is_entering(t, c)
-			var do_apply := false
-			if cur_mode == Mode.PHYSICAL:
-				do_apply = true
-				if plan_index < plan.size():
-					if c.id == plan[plan_index].surface_id:
-						plan_index += 1
-					else:
-						plan_matched = false
-				else:
-					plan_matched = false
-			elif plan_index < plan.size() and c.id == plan[plan_index].surface_id and left == plan[plan_index].left:
-				do_apply = true
-				plan_index += 1
-			events.append(_event("hit", c.id, left, do_apply, beam, t_prev, t))
-			events.back().margin = gaps[ci]
-			events.back().seeded = seeded
-			t_prev = t
-			if do_apply:
-				if not stack.is_empty() and stack.back().sid == c.id:
-					var top: StackEntry = stack.pop_back()
-					t0 = _resume_param(top, beam, t, fresh and depart_id == c.id)
-					beam = _reseed_if_unseeded(top.beam)
-					fresh = false
-				else:
-					var other = _other_root(beam, c, fresh, depart_id, t0, t)
-					stack.append(StackEntry.make(beam, c.id, t, other))
-					beam = beam.invert_at(t, c)
-					t0 = ctx.zero()
-					fresh = true
-				depart_id = c.id
-				applied = true
-				break
-		if not applied:
-			if events.size() < max_events:
-				if beam.kappa.is_zero():
-					events.append(_event("escape", -1, false, false, beam, t_prev, null))
-				else:
-					events.append(_event("origin", -1, false, false, beam, t_prev, t0))
-				events.back().seeded = seeded
-			break
-	return events
-
-# ---------------------------------------------------------------- scenes (STUB, Stage 81 red)
-
-static func trace_direction(_ctx: NumCtx, _scene: BeamScene, _player: CN, _dir: CN, _plan: Array, _cursor, _mode: int) -> Array:
-	return []
-
-static func planned(_ctx: NumCtx, _scene: BeamScene, _player: CN, _cursor: CN, _plan: Array, _max_events: int = 32) -> Array:
-	return []
-
-static func physical(_ctx: NumCtx, _scene: BeamScene, _player: CN, _cursor: CN, _plan: Array, _max_events: int = 32) -> Array:
-	return []
-
-static func targets_of(_scene: BeamScene, _events: Array) -> Array:
-	return []
-
-# ---------------------------------------------------------------- physical
-
-static func physical_circles(ctx: NumCtx, circles: Array, player: CN, cursor: CN, plan: Array, max_events: int) -> Array:
-	if plan.is_empty():
-		var dir := cursor.sub(player)
-		var b0 := _seed(HPBeam.make(player, dir.unit(), ctx.zero()))
-		return continue_from(ctx, circles, b0, -1, plan, 0, true, cursor, false,
-			Mode.PHYSICAL, Mode.PHYSICAL, max_events)
-	var pl_events := anchored_planned(ctx, circles, player, cursor, plan, max_events, true)
-	if pl_events.is_empty():
-		return []
-	var by_id := {}
-	for c in circles:
-		by_id[c.id] = c
-	var out: Array = []
-	var plan_index := 0
-	var stack: Array = []
-	for e in pl_events:
-		if out.size() >= max_events:
-			break
-		if e.kind == "hit" and not e.applied:
-			# first divergence: physical applies what planned passes through
-			var circ: HPBeam.Circle = by_id[e.surface_id]
-			var d := _event("hit", e.surface_id, e.left, true, e.beam, e.t_from, e.t_to)
-			d.margin = e.margin
-			out.append(d)
-			var matched: bool = plan_index < plan.size() and plan[plan_index].surface_id == e.surface_id
-			var rest: Array
-			if not stack.is_empty() and stack.back().sid == e.surface_id:
-				var top: StackEntry = stack.pop_back()
-				var t_res = _resume_param(top, e.beam, e.t_to, false)
-				rest = continue_from(ctx, circles, _seed(top.beam), e.surface_id, plan,
-					plan_index + (1 if matched else 0), matched, cursor, false,
-					Mode.PHYSICAL, Mode.PHYSICAL, max_events - out.size(), true, stack, t_res)
+			var cl: Array = bk.classify(w.scene, beam, t, surf, rehit and fresh, cand[3])
+			var pt: CN = cl[0]
+			var on_seg: bool = cl[1]
+			var left: bool = cl[2]
+			var full_block: bool = cl[3]
+			var eff := surf.effect(left)
+			var plan_match: bool = w.plan_index < w.plan.size() and w.plan[w.plan_index].surface_id == surf.id \
+				and w.plan[w.plan_index].left == left
+			var plan_do: String = (eff if eff in TRANSFORMATIVE else "") if plan_match else ""
+			var phys_do: String = eff if full_block else ""
+			var do := ""
+			var diverged := false
+			if w.mode == Mode.PHYSICAL:
+				do = phys_do
+				if w.anchored and not (phys_do == plan_do and (phys_do != "" or not plan_match)):
+					diverged = true
+				if do in TRANSFORMATIVE:
+					_plan_bookkeeping(w, surf.id)
 			else:
-				var other = null
-				for r in e.beam.hits(circ, false):
-					if r.cmp(e.t_to) != 0:
-						other = r
-				stack.append(StackEntry.make(e.beam, e.surface_id, e.t_to, other if other != null else e.t_to))
-				var nb: HPBeam = _seed(e.beam.invert_at(e.t_to, circ))
-				rest = continue_from(ctx, circles, nb, e.surface_id, plan,
-					plan_index + (1 if matched else 0), matched, cursor, false,
-					Mode.PHYSICAL, Mode.PHYSICAL, max_events - out.size(), true, stack)
-			out.append_array(rest)
-			return out
-		out.append(e)
-		if e.kind == "hit":
-			plan_index += 1
-			_track(stack, e, by_id)
-	return out
+				if plan_match:
+					w.plan_index += 1
+				do = plan_do
+			var e := _event(w, "hit", beam, t_prev, t, gaps[ci])
+			e.surface_id = surf.id
+			e.left = left
+			e.applied = do != ""
+			e.terminal = do == "terminal"
+			e.on_segment = on_seg
+			e.rehit = rehit
+			if (rehit and fresh) or cand[3] != null:
+				e.point = pt
+			t_prev = t
+			if do == "terminal":
+				w.done = true
+				return
+			if diverged:
+				w.anchored = false
+				if do == "" and not w.seeded:
+					# physical passes where planned applies: the continuation
+					# is this same beam, from here on
+					w.seeded = true
+					var sb = bk.seed(beam)
+					if sb != beam:
+						beam = sb
+						skip = ci + 1
+						restart = true
+						break
+			if do in TRANSFORMATIVE:
+				var pt_exact: bool = (cand[3] != null or (rehit and fresh)) and _known_index(w.known, pt) >= 0
+				next = _apply(w, beam, t, surf, do, depart, fresh, t0, rehit, pt, pt_exact)
+				if diverged and not w.seeded:
+					w.seeded = true
+					next[0] = bk.seed(next[0])
+				break
+			ci += 1
+		if restart:
+			continue
+		if next == null:
+			w.count += 1
+			if w.count <= w.max_events:
+				var t_end = null if bk.straight(beam) else t0
+				var oe := _event(w, "escape" if bk.straight(beam) else "origin", beam, t_prev, t_end, INF)
+				if t_end != null and fresh:
+					oe.point = bk.origin(beam)
+			w.done = true
+			return
+		beam = next[0]
+		depart = next[1]
+		t0 = next[2]
+		fresh = next[3]
+		t_prev = t0
 
-# Mirror the transform stack along applied planned events.
-static func _track(stack: Array, e: Event, by_id: Dictionary) -> void:
-	if not stack.is_empty() and stack.back().sid == e.surface_id:
-		stack.pop_back()
-		return
-	var other = null
-	for r in e.beam.hits(by_id[e.surface_id], false):
-		if r.cmp(e.t_to) != 0:
-			other = r
-	stack.append(StackEntry.make(e.beam, e.surface_id, e.t_to, other if other != null else e.t_to))
+# Apply surf's effect at t: [beam, depart, t0, fresh] to continue with.
+static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart: int, fresh: bool, t0, rehit: bool, pt: CN,
+		pt_exact: bool = false) -> Array:
+	var bk = w.bk
+	if not w.stack.is_empty() and w.stack.back().sid == surf.id:
+		var top: StackEntry = w.stack.pop_back()
+		var t_res
+		if rehit:
+			t_res = top.t_hit
+		elif fresh and depart == surf.id:
+			t_res = top.other
+		else:
+			# the shared point actually hit: one of the two (distinct) points
+			var dh: float = bk.point(top.beam, top.t_hit).sub(pt).abs2().to_float()
+			var dd: float = bk.point(top.beam, top.other).sub(pt).abs2().to_float()
+			t_res = top.t_hit if dh < dd else top.other
+		w.known = top.known
+		w.line = top.line
+		return [bk.reseed(top.beam) if w.seeded else top.beam, surf.id, t_res, false]
+	var other = _other_root(w, beam, surf, depart, t0, t)
+	w.stack.append(StackEntry.make(beam, surf.id, t, other, w.known, w.line))
+	var old_known := w.known
+	var res: Array
+	if w.anchored and w.chain != null:
+		# anchored: the exact beam of the next plan frame; it departs surf at
+		# the root nearest the hit (both of its roots on surf are shared with
+		# the current beam's, one of them at pt)
+		var nb = bk.from_hp(w.chain.beams[w.plan_index])
+		var best = null
+		var best_d := INF
+		for r in bk.roots(nb, surf, false):
+			var d: float = bk.point(nb, r).sub(pt).abs2().to_float()
+			if d < best_d:
+				best_d = d
+				best = r
+		if best == null:
+			best = bk.param_of(nb, pt)
+		res = [nb, surf.id, best, false]
+	else:
+		res = [bk.apply(beam, t, surf, etype, pt), surf.id, bk.zero(), true]
+	# known points of the new beam: its departure point (if exact), and the
+	# old beam's known points on surf's carrier (fixed by the effect)
+	w.known = [[pt, res[2], surf.id]] if pt_exact else []
+	for k in old_known:
+		if not BeamGeom._eq(k[0], pt) and _incident(w, k[0], surf):
+			w.known.append([k[0], bk.param_of(res[0], k[0]), -1])
+	# an exact line stays exact through a line reflection; through an
+	# inversion only if it passes exactly through the circle's center (the
+	# line maps onto itself: the new beam is exactly straight)
+	if w.line != null and surf.line:
+		w.line = w.line.reflected(surf.sx, surf.sy, surf.ex, surf.ey)
+		_add_line_endpoints(w, res[0])
+	elif w.line != null and _line_through_center(w.line, surf):
+		res[0] = bk.straightened(res[0])
+		w.known = w.known.filter(func(k): return k[2] == surf.id)
+		_add_line_endpoints(w, res[0])
+	else:
+		w.line = null
+	return res
+
+# Exact: the current exact line is tangent to surf's circle (computed once
+# per line, for every circle surface).
+static func _tangent(w: Walk, surf: BeamScene.Surf) -> bool:
+	if not is_same(w.tangent_line, w.line):
+		w.tangent = {}
+		for s in w.scene.surfaces:
+			if not s.line:
+				var ec: Array = s.exact_circle()
+				w.tangent[s.id] = w.line.tangent_to(ec[0], ec[1], ec[2], ec[3], ec[4], _ecc(ec), 8.0 * Exact.U * absf(ec[4]))
+		w.tangent_line = w.line
+	return w.tangent.get(surf.id, false)
+
+static func _line_through_center(L: Exact.Line, surf: BeamScene.Surf) -> bool:
+	if surf.full:
+		return L.contains(surf.cx, surf.cy)
+	var ec: Array = surf.exact_circle()
+	return L.contains_h(ec[0], ec[2], ec[3], _ecc(ec))
+
+# Bound on the float rounding of an exact circle's center (C / w, rounded parts).
+static func _ecc(ec: Array) -> float:
+	return 6.0 * Exact.U * maxf(absf(ec[2]), absf(ec[3]))
 
 # ---------------------------------------------------------------- helpers
 
@@ -551,18 +820,11 @@ static func _seed(b: HPBeam) -> HPBeam:
 	var tau := CN.make(DualNum.of(tx, -ty), DualNum.of(ty, tx))
 	return HPBeam.make(p, tau, DualNum.of(b.kappa.v))
 
-# FastSolver twin: a beam restored from the unseeded (planned) prefix gets a
-# tangent-linear seed (its own rounding error enters the continuation here).
+# A beam restored from the unseeded (anchored) prefix gets a tangent-linear
+# seed (its own rounding error enters the continuation here).
 static func _reseed_if_unseeded(b: HPBeam) -> HPBeam:
 	if not (b.kappa is DualNum):
 		return b
 	if b.p.re.d == 0.0 and b.p.im.d == 0.0 and b.tau.re.d == 0.0 and b.tau.im.d == 0.0 and b.kappa.d == 0.0:
 		return _seed(b)
 	return b
-
-static func make_circles(ctx: NumCtx, defs: Array) -> Array:
-	# defs: [[id, cx, cy, r], ...] (exact float64 game data)
-	var out: Array = []
-	for d in defs:
-		out.append(HPBeam.Circle.make(d[0], ctx.cn(d[1], d[2]), ctx.num(d[3])))
-	return out

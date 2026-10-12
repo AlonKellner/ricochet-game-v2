@@ -126,6 +126,52 @@ def main():
     semi = arc(5, (1160, 540), (760, 540), (960, 340), REFL, REFL)
     fx.append(fixture("departure_rehit_off_segment_planned", [semi], (651.6652221679688, 793.6358032226562),
                       cursor=(1024.504638671875, 802.863525390625), plan=[(5, "RIGHT")], mode="planned"))
+    # provenance: the cursor is exactly the shared endpoint of a Y junction;
+    # the aim is irrational, so only provenance (not the computed root) puts
+    # the hit on the endpoint -> junction full block -> lower id reflects
+    fx.append(fixture("cursor_at_junction_physical", yj, (100.25, 13.75), cursor=(500.0, 0.0), mode="physical"))
+    fx.append(fixture("cursor_at_junction_planned", yj, (100.25, 13.75), cursor=(500.0, 0.0), mode="planned"))
+    # provenance: the player stands exactly on an arc endpoint
+    pa = arc(1, (500, 0), (300, 0), (400, -100), INV, INV)
+    fx.append(fixture("player_at_arc_endpoint", [pa] + room(2), (500.0, 0.0), cursor=(431.125, 77.375), mode="physical"))
+    fx.append(fixture("player_at_arc_endpoint_planned", [pa] + room(2), (500.0, 0.0), cursor=(431.125, 77.375),
+                      plan=[(1, "LEFT")], mode="planned"))
+    # provenance propagates through effects: the cursor is an arc endpoint on
+    # the arc's carrier; the beam is inverted at the arc's other crossing, and
+    # the inverted beam passes exactly through the cursor (a fixed point of
+    # the inversion): that hit is exactly the endpoint
+    pe = arc(7, (400, 250), (300, 250), (350, 200), REFL, REFL)
+    fx.append(fixture("propagated_endpoint_physical", [pe] + room(1, 200, 100, 1700, 900), (210.0, 110.0),
+                      cursor=(400.0, 250.0), mode="physical"))
+    # exact incidence: the player -> cursor line passes exactly through an arc
+    # endpoint (collinear exact data), not a constructed point
+    fx.append(fixture("collinear_endpoint_physical", [pe] + room(1, 200, 100, 1700, 900), (200.0, 100.0),
+                      cursor=(600.0, 700.0), mode="physical"))
+    fx.append(fixture("collinear_endpoint_direction", [pe] + room(1, 200, 100, 1700, 900), (200.0, 100.0),
+                      direction=(2.0, 3.0), mode="physical"))
+    # exact chain: the cursor lies inside mirror 6 (incidence -> exact hit
+    # point); the reflected exact line passes exactly through arc 8's endpoint
+    m6 = line(6, (1300, 300), (1300, 700), REFL, REFL)
+    a8 = arc(8, (1550, 750), (1450, 750), (1500, 700), REFL, REFL)
+    fx.append(fixture("reflected_exact_line_endpoint", [m6, a8] + room(1, 200, 100, 1700, 900), (1690.0, 110.0),
+                      cursor=(1300.0, 500.0), mode="physical"))
+    # mirror-only plan: the aim image is an exact rational point, so the
+    # initial line is exact data (real level, sweep case)
+    tm = json.load(open(os.path.join(ROOT, "bench", "scenes", "test_levels__three_mirrors.surfaces.json")))["surfaces"]
+    fx.append(fixture("planned_mirror_exact_image", tm, (1350.0, 540.0), cursor=(800.0, 300.0),
+                      plan=[(4, "LEFT")], mode="planned"))
+    fx.append(fixture("planned_mirror_exact_image_physical", tm, (1350.0, 540.0), cursor=(800.0, 300.0),
+                      plan=[(4, "LEFT")], mode="physical"))
+    # an exact line through a circle mirror's center maps onto itself: the
+    # inverted beam is exactly straight (real level, sweep case: the screen
+    # diagonal through the center and the corner cursor)
+    cw = json.load(open(os.path.join(ROOT, "bench", "scenes", "test_levels__circle_no_walls.surfaces.json")))["surfaces"]
+    fx.append(fixture("line_through_inversion_center", cw, (1440.0, 810.0), cursor=(0.0, 0.0), mode="physical"))
+    # exact tangency: the player -> cursor line x = 820 touches the grid
+    # circles 1, 4, 7 without crossing them (real level, sweep case)
+    ig = json.load(open(os.path.join(ROOT, "bench", "scenes", "playground__inversion_grid.surfaces.json")))["surfaces"]
+    fx.append(fixture("tangent_line_no_crossing", ig, (820.0, 380.0), cursor=(820.0, 700.0), mode="physical"))
+    fx.append(fixture("tangent_line_no_crossing_planned", ig, (820.0, 380.0), cursor=(820.0, 700.0), mode="planned"))
     # targets: on-segment hits of target surfaces are recorded
     fx.append(fixture("target_recorded_on_segment",
                       [line(1, (500, -100), (500, 100), None, None, target=True)] + room(2), (100, 0), direction=(1, 0.0625)))

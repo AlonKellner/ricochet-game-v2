@@ -49,6 +49,11 @@ func from_string(s: String):
 		return num(s.to_float())
 	return BigFloat.from_string(s, limbs)
 
+func inf():
+	if limbs <= 0:
+		return num(INF)
+	return BigFloat.infinity(limbs)
+
 func zero():
 	return num(0.0)
 

@@ -6,6 +6,8 @@ extends RefCounted
 # Local projective parametrization (same wrap order as Tracer's ray t):
 #   z(t) = p + t*tau / (1 - i*kappa*t/2)
 # t = 0 is p; t -> +inf continues forward, wraps to -inf, returns to 0-.
+# The parameter is projective: t = inf (exact, Num.is_inf) is the antipode of
+# p on a circle beam, where a root of degree-dropping equations lies.
 # Inversion of the beam at a point h on circle (c, R):
 #   tau'   = -conj(tau_h) * ((h - c)/R)^2
 #   kappa' = -kappa - 2 cross(tau_h, h - c) / R^2
@@ -40,6 +42,14 @@ static func make(p_p: CN, p_tau: CN, p_kappa) -> HPBeam:
 func _f(t) -> CN:
 	return CN.make(_one_like(t), kappa.mul(t).mul_pow2(-1))
 
+# +infinity of t's tier (the antipode's parameter)
+static func inf_like(x):
+	if x is F64Num:
+		return F64Num.of(INF)
+	if x is DualNum:
+		return DualNum.of(INF)
+	return BigFloat.infinity(x.limbs.size())
+
 func _one_like(t):
 	if t is F64Num:
 		return F64Num.of(1.0)
@@ -48,6 +58,8 @@ func _one_like(t):
 	return BigFloat.from_int(1, t.limbs.size())
 
 func at(t) -> CN:
+	if t.is_inf():
+		return at_infinity()
 	# t*tau / (1 - i k t/2) = t*tau*(1 + i k t/2) / (1 + k^2 t^2 / 4)
 	var f := _f(t)
 	var den = f.abs2()
@@ -61,12 +73,16 @@ func at_infinity():
 	return p.add(tau.mul_i().scale(_one_like(kappa).mul_pow2(1)).div_real(kappa))
 
 func tangent_at(t) -> CN:
+	if t.is_inf():
+		return tau.neg()
 	var f := _f(t)
 	return tau.mul(f).mul(f).unit()
 
 func param_of(z: CN):
 	var w := z.sub(p)
 	var den := tau.add(w.mul_i().scale(kappa).scale(_one_like(kappa).mul_pow2(-1)))
+	if den.is_zero():
+		return inf_like(kappa)      # z is the antipode
 	return w.div(den).re
 
 # Real roots of beam ∩ circle. depart_on: p lies exactly on the circle
@@ -81,6 +97,8 @@ func hits(circ: Circle, depart_on: bool) -> Array:
 		var a2_d = one.sub(k.mul(CN.cross(tau, q)))
 		if not a2_d.is_zero():
 			roots.append(tq.mul_pow2(1).div(a2_d))
+		elif not k.is_zero():
+			roots.append(inf_like(k))   # the other crossing is the antipode
 		return roots
 	# power of p w.r.t. the circle, without a square root: exact whenever the
 	# inputs are (e.g. p exactly on the circle gives exactly 0 at every tier)
@@ -95,6 +113,8 @@ func hits(circ: Circle, depart_on: bool) -> Array:
 		roots.append(P.div(big))
 		if not a2.is_zero():
 			roots.append(big.div(a2))
+		elif not k.is_zero():
+			roots.append(inf_like(k))   # the other crossing is the antipode
 	elif not a2.is_zero():
 		roots.append(k.sub(k))
 	return roots
@@ -104,8 +124,9 @@ func is_entering(t, circ: Circle) -> bool:
 	var d := tangent_at(t)
 	return CN.dot(d, h.sub(circ.c)).is_negative()
 
-func invert_at(t, circ: Circle) -> HPBeam:
-	var h := at(t)
+# h_exact: the hit point when known exactly by provenance (else at(t)).
+func invert_at(t, circ: Circle, h_exact: CN = null) -> HPBeam:
+	var h := at(t) if h_exact == null else h_exact
 	var tau_h := tangent_at(t)
 	var u := h.sub(circ.c)
 	var nu := u.div_real(circ.r)

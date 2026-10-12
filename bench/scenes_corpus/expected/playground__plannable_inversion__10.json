@@ -7,6 +7,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "937.3115202055285349118810967006129049458",
    "y": "240.0000000000000000000000000000000000000"
   },
@@ -17,6 +18,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "1125.493469615186501960925196466400766749",
    "y": "0.0"
   },
@@ -27,6 +29,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "1360.000000000000000000000000000000000000",
    "y": "-299.0805838121832587728045649971825356184"
   },
@@ -37,6 +40,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "1920.000000000000000000000000000000000000",
    "y": "-1013.282984316714628823427703532258619596"
   },
@@ -47,6 +51,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "0.0",
    "y": "1435.410960270250068492994485730859382612"
   },
@@ -57,6 +62,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "278.6746972717256502402267475203553886348",
    "y": "1080.000000000000000000000000000000000000"
   },
@@ -67,6 +73,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "466.8566466813836172892708472861432504379",
    "y": "840.0000000000000000000000000000000000000"
   },
@@ -77,6 +84,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "560.0000000000000000000000000000000000000",
    "y": "721.2085597657186984423713471957832986351"
   },
@@ -86,7 +94,8 @@
    "side": "",
    "applied": false,
    "terminal": false,
-   "on_segment": false
+   "on_segment": false,
+   "rehit": false
   }
  ],
  "physical": [
@@ -97,6 +106,7 @@
    "applied": true,
    "terminal": true,
    "on_segment": true,
+   "rehit": false,
    "x": "937.3115202055285349118810967006129049458",
    "y": "240.0000000000000000000000000000000000000"
   }

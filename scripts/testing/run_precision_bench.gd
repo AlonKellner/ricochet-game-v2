@@ -47,7 +47,7 @@ func _init() -> void:
 				results.append({"scenario": name, "depth": scn["plan"].size(), "strategy": strat, "trace": kind,
 					"ok": cmp["ok"], "max_err": cmp["max_err"], "mismatch": cmp["mismatch"],
 					"matched": cmp["matched"], "total": cmp["total"], "usec": usec,
-					"max_sens": exp["max_sens_to_cursor"], "tier": out.get("tier", -1),
+					"max_sens": exp.get("max_sens_to_cursor", -1.0), "tier": out.get("tier", -1),
 					"converged": out.get("converged", true), "calib": cmp["calib"],
 					"max_gain": out.get("max_gain", -1.0), "tiers_tried": out.get("tiers_tried", []),
 					"usec_planned": out.get("usec_planned", -1), "usec_physical": out.get("usec_physical", -1)})

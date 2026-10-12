@@ -26,6 +26,7 @@ class Seg extends RefCounted:
 	var e: CN
 	var v = null                        # CN, or null = the point at infinity
 	var circ: HPBeam.Circle = null      # circle carriers: center c, radius r, r²
+	var _wind_nonneg = null             # cached sign of winding(seg) (constant)
 
 	func c() -> CN:
 		return circ.c
@@ -107,14 +108,16 @@ static func hits(beam: HPBeam, seg: Seg, depart_on: bool) -> Array:
 	var c0 = co[0]
 	var c1 = co[1]
 	var c2 = co[2]
+	# degree drop (c2 = 0): a curved beam meets the line at its antipode, t = inf
+	var at_inf: Array = [] if beam.kappa.is_zero() else [HPBeam.inf_like(beam.kappa)]
 	if depart_on:
 		if c2.is_zero():
-			return []
+			return at_inf
 		return [c1.neg().div(c2)]
 	if c2.is_zero():
 		if c1.is_zero():
-			return []
-		return [c0.neg().div(c1)]
+			return at_inf
+		return [c0.neg().div(c1)] + at_inf
 	var disc = c1.mul(c1).sub(c2.mul(c0).mul_pow2(2))
 	if disc.is_negative():
 		return []
@@ -188,8 +191,9 @@ static func winding(seg: Seg):
 static func side_left(seg: Seg, p: CN, dir: CN) -> bool:
 	var approach = CN.dot(dir, _grad(seg, p)).neg()
 	var approach_pos: bool = not approach.is_negative() and not approach.is_zero()
-	var w = winding(seg)
-	if not w.is_negative():
+	if seg._wind_nonneg == null:
+		seg._wind_nonneg = not winding(seg).is_negative()
+	if seg._wind_nonneg:
 		return approach_pos
 	return not approach_pos
 

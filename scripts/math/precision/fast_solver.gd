@@ -1,14 +1,17 @@
 class_name FastSolver
 extends RefCounted
 
-# Raw-float twin of BeamSolver for the float64 tier, ~50x faster than the
-# precision-generic code (which wraps every scalar in an object). It performs
-# the same operations in the same order, so float64 values are bit-identical
-# to BeamSolver over F64Num, and it carries the tangent-linear derivative
-# (DualNum semantics) inline for ErrorEstimate. BigFloat tiers use BeamSolver.
+# Raw-float backend of BeamSolver for the float64 tier, ~50x faster than the
+# precision-generic code (which wraps every scalar in an object). The beam
+# math performs the same operations in the same order as HPBeam / BeamGeom /
+# BeamEffects, so float64 values are bit-identical to BeamSolver over F64Num,
+# and it carries the tangent-linear derivative (DualNum semantics) inline for
+# ErrorEstimate. The trace rules are BeamSolver's walker (one implementation);
+# topology decisions run the shared BeamGeom code on the (bit-identical)
+# float64 points. BigFloat tiers use BeamSolver.NumBackend.
 #
 # Beam: PackedFloat64Array [px, py, tx, ty, k, dpx, dpy, dtx, dty, dk]
-# Circles: parallel arrays (see Scene).
+# Parameters t on the walker side: DualNum (value, derivative).
 
 const PX := 0
 const PY := 1
@@ -21,31 +24,14 @@ const DTX := 7
 const DTY := 8
 const DK := 9
 
+# A BeamScene at float64 (its raw geometry feeds the raw math).
 class Scene extends RefCounted:
-	var ids: PackedInt64Array
-	var cx: PackedFloat64Array
-	var cy: PackedFloat64Array
-	var r: PackedFloat64Array
-	var r2: PackedFloat64Array
-	var index_of: Dictionary = {}
+	var scene: BeamScene
 
-	static func make(defs: Array) -> Scene:
+	static func from_defs(defs: Array) -> Scene:
 		var s := Scene.new()
-		for d in defs:
-			s.index_of[int(d[0])] = s.ids.size()
-			s.ids.append(int(d[0]))
-			s.cx.append(float(d[1]))
-			s.cy.append(float(d[2]))
-			s.r.append(float(d[3]))
-			s.r2.append(float(d[3]) * float(d[3]))
+		s.scene = BeamScene.from_defs(NumCtx.f64(), defs)
 		return s
-
-	func size() -> int:
-		return ids.size()
-
-	# STUB (Stage 81 red): scene-dump defs
-	static func from_defs(_defs: Array) -> Scene:
-		return Scene.new()
 
 class Out extends RefCounted:
 	var events: Array = []    # BeamSolver.Event (F64Num points / beams)
@@ -61,6 +47,8 @@ static func seeded(b: PackedFloat64Array) -> PackedFloat64Array:
 
 # z(t) and dz: returns [x, y, dx, dy]
 static func at(b: PackedFloat64Array, t: float, dt: float) -> PackedFloat64Array:
+	if t == INF:
+		return antipode(b)
 	var k := b[K]
 	var dk := b[DK]
 	var tx := b[TX]
@@ -88,7 +76,35 @@ static func at(b: PackedFloat64Array, t: float, dt: float) -> PackedFloat64Array
 	return PackedFloat64Array([b[PX] + re3, b[PY] + im3, b[DPX] + dre3, b[DPY] + dim3])
 
 # unit tangent at t: [tx, ty, dtx, dty]
+# t = inf: p + 2 i tau / kappa (HPBeam.at_infinity twin) with its derivative.
+static func antipode(b: PackedFloat64Array) -> PackedFloat64Array:
+	var k := b[K]
+	var dk := b[DK]
+	var x := b[PX] + ((-b[TY]) * 2.0) / k
+	var y := b[PY] + (b[TX] * 2.0) / k
+	var dx := b[DPX] + (-2.0) * (b[DTY] * k - b[TY] * dk) / (k * k)
+	var dy := b[DPY] + 2.0 * (b[DTX] * k - b[TX] * dk) / (k * k)
+	return PackedFloat64Array([x, y, dx, dy])
+
+# Point at t for display and margins only: no overflow for huge |t| (the
+# parametrization is evaluated as tau / (1/t - i kappa/2) there).
+static func at_view(b: PackedFloat64Array, t: float) -> PackedFloat64Array:
+	if is_inf(t):
+		return antipode(b)
+	var u := b[K] * t * 0.5
+	if absf(u) <= 1.0:
+		return at(b, t, 0.0)
+	var wr := 1.0 / t
+	var wi := -b[K] * 0.5
+	var d := wr * wr + wi * wi
+	# tau / (wr + i wi) = tau * (wr - i wi) / d
+	var x := (b[TX] * wr + b[TY] * wi) / d
+	var y := (b[TY] * wr - b[TX] * wi) / d
+	return PackedFloat64Array([b[PX] + x, b[PY] + y])
+
 static func tangent_at(b: PackedFloat64Array, t: float, dt: float) -> PackedFloat64Array:
+	if t == INF:
+		return PackedFloat64Array([-b[TX], -b[TY], -b[DTX], -b[DTY]])
 	var k := b[K]
 	var tx := b[TX]
 	var ty := b[TY]
@@ -119,14 +135,17 @@ static func param_of(b: PackedFloat64Array, zx: float, zy: float) -> float:
 	var denx := b[TX] + ((-wy) * k) * 0.5
 	var deny := b[TY] + (wx * k) * 0.5
 	var d := denx * denx + deny * deny
+	if denx == 0.0 and deny == 0.0:
+		return INF      # z is the antipode
 	var nre := wx * denx - wy * (-deny)
 	return nre / d
 
-# Roots of beam ∩ circle i: [t0, dt0, t1, dt1, ...]
-static func hits(b: PackedFloat64Array, sc: Scene, i: int, depart_on: bool) -> PackedFloat64Array:
+# Roots of beam ∩ circle (cx, cy, R²): [t0, dt0, t1, dt1, ...]
+# (HPBeam.hits twin: same float64 operation order -> bit-identical values).
+static func circle_hits(b: PackedFloat64Array, cx: float, cy: float, r2: float, depart_on: bool) -> PackedFloat64Array:
 	var out := PackedFloat64Array()
-	var qx := sc.cx[i] - b[PX]
-	var qy := sc.cy[i] - b[PY]
+	var qx := cx - b[PX]
+	var qy := cy - b[PY]
 	var dqx := -b[DPX]
 	var dqy := -b[DPY]
 	var tx := b[TX]
@@ -147,10 +166,13 @@ static func hits(b: PackedFloat64Array, sc: Scene, i: int, depart_on: bool) -> P
 			var t := num / a2d
 			out.append(t)
 			out.append((dtq * 2.0 - t * da2d) / a2d)
+		elif k != 0.0:
+			out.append(INF)     # the other crossing is the antipode
+			out.append(0.0)
 		return out
 	var qa2 := qx * qx + qy * qy
 	var dqa2 := (dqx * qx + qx * dqx) + (dqy * qy + qy * dqy)
-	var P := qa2 - sc.r2[i]
+	var P := qa2 - r2
 	var dP := dqa2
 	var kcr := k * cr
 	var dkcr := dk * cr + k * dcr
@@ -186,6 +208,9 @@ static func hits(b: PackedFloat64Array, sc: Scene, i: int, depart_on: bool) -> P
 			var t2 := big / a2
 			out.append(t2)
 			out.append((dbig - t2 * da2) / a2)
+		elif k != 0.0:
+			out.append(INF)     # the other crossing is the antipode
+			out.append(0.0)
 	elif a2 != 0.0:
 		out.append(0.0)
 		out.append(0.0)
@@ -226,19 +251,26 @@ static func line_hits(b: PackedFloat64Array, sx: float, sy: float, ex: float, ey
 	var dbb := dh * crg + h * dcrg
 	var c2 := a + bb
 	var dc2 := da + dbb
+	# degree drop (c2 = 0): a curved beam meets the line at its antipode, t = inf
+	var curved: bool = b[K] != 0.0
 	if depart_on:
 		if c2 == 0.0:
+			if curved:
+				out.append(INF)
+				out.append(0.0)
 			return out
 		var t := (-c1) / c2
 		out.append(t)
 		out.append(((-dc1) - t * dc2) / c2)
 		return out
 	if c2 == 0.0:
-		if c1 == 0.0:
-			return out
-		var t1 := (-fp) / c1
-		out.append(t1)
-		out.append(((-dfp) - t1 * dc1) / c1)
+		if c1 != 0.0:
+			var t1 := (-fp) / c1
+			out.append(t1)
+			out.append(((-dfp) - t1 * dc1) / c1)
+		if curved:
+			out.append(INF)
+			out.append(0.0)
 		return out
 	var c1s := c1 * c1
 	var dc1s := dc1 * c1 + c1 * dc1
@@ -272,19 +304,18 @@ static func line_hits(b: PackedFloat64Array, sx: float, sy: float, ex: float, ey
 	out.append((dfp * 2.0 - r2 * dbig) / big)
 	return out
 
-static func is_entering(b: PackedFloat64Array, t: float, sc: Scene, i: int) -> bool:
-	var h := at(b, t, 0.0)
-	var d := tangent_at(b, t, 0.0)
-	return (d[0] * (h[0] - sc.cx[i]) + d[1] * (h[1] - sc.cy[i])) < 0.0
-
-static func invert_at(b: PackedFloat64Array, t: float, dt: float, sc: Scene, i: int) -> PackedFloat64Array:
+# Inversion of the beam at t in the circle (cx, cy, R) (HPBeam.invert_at twin).
+static func invert_circle(b: PackedFloat64Array, t: float, dt: float, cx: float, cy: float, r: float, r2: float,
+		has_h: bool = false, hx: float = 0.0, hy: float = 0.0) -> PackedFloat64Array:
 	var h := at(b, t, dt)
+	if has_h:
+		h[0] = hx
+		h[1] = hy
 	var th := tangent_at(b, t, dt)
-	var ux := h[0] - sc.cx[i]
-	var uy := h[1] - sc.cy[i]
+	var ux := h[0] - cx
+	var uy := h[1] - cy
 	var dux := h[2]
 	var duy := h[3]
-	var r := sc.r[i]
 	var nux := ux / r
 	var nuy := uy / r
 	var dnux := dux / r
@@ -323,515 +354,270 @@ static func invert_at(b: PackedFloat64Array, t: float, dt: float, sc: Scene, i: 
 	var dc := (th[2] * uy + thx0 * duy) - (th[3] * ux + thy0 * dux)
 	var c2 := c * 2.0
 	var dc2 := dc * 2.0
-	var q := c2 / sc.r2[i]
-	var dq := dc2 / sc.r2[i]
+	var q := c2 / r2
+	var dq := dc2 / r2
 	var k2 := (-b[K]) - q
 	var dk2 := (-b[DK]) - dq
 	return PackedFloat64Array([h[0], h[1], tx2, ty2, k2, h[2], h[3], dtx2, dty2, dk2])
 
-static func rebased_at(b: PackedFloat64Array, t: float, dt: float) -> PackedFloat64Array:
+
+# Reflection of the beam at t in the line s -> e (BeamEffects.reflect_line
+# twin): h' = h, tau' = unit(u² conj(tau_h)), u² = D²/|D|², kappa' = -kappa.
+static func reflect_line(b: PackedFloat64Array, t: float, dt: float, sx: float, sy: float, ex: float, ey: float,
+		has_h: bool = false, hx: float = 0.0, hy: float = 0.0) -> PackedFloat64Array:
 	var h := at(b, t, dt)
+	if has_h:
+		h[0] = hx
+		h[1] = hy
 	var th := tangent_at(b, t, dt)
-	return PackedFloat64Array([h[0], h[1], th[0], th[1], b[K], h[2], h[3], th[2], th[3], b[DK]])
+	var Dx := ex - sx
+	var Dy := ey - sy
+	var dre := Dx * Dx - Dy * Dy
+	var dim := Dx * Dy + Dy * Dx
+	var n := Dx * Dx + Dy * Dy
+	var u2r := dre / n
+	var u2i := dim / n
+	# conj(tau_h)
+	var cx := th[0]
+	var cy := -th[1]
+	var dcx := th[2]
+	var dcy := -th[3]
+	var re := u2r * cx - u2i * cy
+	var im := u2r * cy + u2i * cx
+	var dre2 := u2r * dcx - u2i * dcy
+	var dim2 := u2r * dcy + u2i * dcx
+	var a2 := re * re + im * im
+	var da2 := (dre2 * re + re * dre2) + (dim2 * im + im * dim2)
+	var a := sqrt(a2)
+	var da := da2 / (2.0 * a) if a != 0.0 else 0.0
+	var tx2 := re / a
+	var ty2 := im / a
+	return PackedFloat64Array([h[0], h[1], tx2, ty2, -b[K], h[2], h[3], (dre2 - tx2 * da) / a, (dim2 - ty2 * da) / a, -b[DK]])
 
-# Oriented circle P -> X -> Q (Q = P - delta), anchored at P. has_delta false
-# -> Q is infinity (a line). delta is passed as float64 components: it can be
-# as small as 1e-40 and must keep full relative precision.
-static func through(Px: float, Py: float, Xx: float, Xy: float, has_delta: bool, dlx: float, dly: float) -> PackedFloat64Array:
-	var ax := Xx - Px
-	var ay := Xy - Py
-	if not has_delta:
-		var a := sqrt(ax * ax + ay * ay)
-		return beam(Px, Py, ax / a, ay / a, ax - ax)
-	var bx: float = -dlx
-	var by: float = -dly
-	var aa := ax * ax + ay * ay
-	var bb := bx * bx + by * by
-	# g = |a|^2 J(b) - |b|^2 J(a), J(v) = (v.y, -v.x); tau = -i * unit(g)
-	var gx := by * aa - ay * bb
-	var gy := (-bx) * aa - (-ax) * bb
-	var tx := gy
-	var ty := -gx
-	var tl := sqrt(tx * tx + ty * ty)
-	var cross := ax * by - ay * bx
-	var bax := bx - ax
-	var bay := by - ay
-	var den := (sqrt(aa) * sqrt(bb)) * sqrt(bax * bax + bay * bay)
-	return beam(Px, Py, tx / tl, ty / tl, (cross * 2.0) / den)
+# ---------------------------------------------------------------- surfaces
 
-static func _inv(z: PackedFloat64Array, sc: Scene, i: int) -> PackedFloat64Array:
-	var ux := z[0] - sc.cx[i]
-	var uy := z[1] - sc.cy[i]
-	var s := (ux * ux + uy * uy)
-	return PackedFloat64Array([sc.cx[i] + (ux * sc.r2[i]) / s, sc.cy[i] + (uy * sc.r2[i]) / s])
+# Roots of the beam with a scene surface's carrier: [t0, dt0, t1, dt1, ...].
+static func surf_hits(b: PackedFloat64Array, s: BeamScene.Surf, depart_on: bool) -> PackedFloat64Array:
+	if s.line:
+		return line_hits(b, s.sx, s.sy, s.ex, s.ey, depart_on)
+	return circle_hits(b, s.cx, s.cy, s.r2, depart_on)
 
-# STUB (Stage 81 red): reflection of beam b at t in the line s -> e
-static func reflect_line(_b: PackedFloat64Array, _t: float, _dt: float, _sx: float, _sy: float, _ex: float, _ey: float) -> PackedFloat64Array:
-	return PackedFloat64Array()
+# The surface's transformative effect at t (BeamEffects.apply twin).
+# has_h: (hx, hy) is the hit point, exact by provenance (else at(t)).
+static func apply_surf(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.Surf,
+		has_h: bool = false, hx: float = 0.0, hy: float = 0.0) -> PackedFloat64Array:
+	if s.line:
+		return reflect_line(b, t, dt, s.sx, s.sy, s.ex, s.ey, has_h, hx, hy)
+	return invert_circle(b, t, dt, s.cx, s.cy, s.r, s.r2, has_h, hx, hy)
 
-# STUB (Stage 81 red): BeamSolver.trace_direction twin
-static func trace_direction(_sc: Scene, _player: PackedFloat64Array, _dir: PackedFloat64Array, _plan: Array, _cursor, _mode: int) -> Out:
-	return Out.new()
+# ---------------------------------------------------------------- decisions
+# Raw twins of BeamGeom's topology decisions (same float64 operation order,
+# hence the same decisions as the generic code over F64Num).
 
-# ---------------------------------------------------------------- events
+# BeamGeom.on_segment: Re(CR(S, P; E, V)) >= 0 (homogeneous; V at infinity
+# for full lines).
+static func on_segment(s: BeamScene.Surf, px: float, py: float) -> bool:
+	if s.full:
+		return true
+	var svx: float
+	var svy: float
+	var evx: float
+	var evy: float
+	if s.has_v:
+		svx = s.sx - s.vx
+		svy = s.sy - s.vy
+		evx = s.ex - s.vx
+		evy = s.ey - s.vy
+	else:
+		# V = (1, 0) with weight 0: _hdet(z, 1, V, 0) = -V
+		svx = -1.0
+		svy = -0.0
+		evx = -1.0
+		evy = -0.0
+	var epx := s.ex - px
+	var epy := s.ey - py
+	var spx := s.sx - px
+	var spy := s.sy - py
+	var nre := svx * epx - svy * epy
+	var nim := svx * epy + svy * epx
+	var dre := spx * evx - spy * evy
+	var dim := spx * evy + spy * evx
+	return not ((nre * dre + nim * dim) < 0.0)
 
-static func _before(a: float, b: float, t0: float) -> bool:
-	var ka: int = 0 if a > t0 else 1
-	var kb: int = 0 if b > t0 else 1
-	if ka != kb:
-		return ka < kb
-	return a < b
+# BeamGeom.side_left (winding sign cached on the generic segment).
+static func side_left(s: BeamScene.Surf, px: float, py: float, dx: float, dy: float) -> bool:
+	var gx: float
+	var gy: float
+	if s.line:
+		gx = -(s.ey - s.sy)
+		gy = s.ex - s.sx
+	else:
+		gx = (px - s.cx) * 2.0
+		gy = (py - s.cy) * 2.0
+	var approach := -(dx * gx + dy * gy)
+	var approach_pos := not (approach < 0.0) and approach != 0.0
+	if s.seg._wind_nonneg == null:
+		s.seg._wind_nonneg = not BeamGeom.winding(s.seg).is_negative()
+	return approach_pos if s.seg._wind_nonneg else not approach_pos
 
-static func _mk_event(kind: String, sid: int, left: bool, applied: bool, b: PackedFloat64Array,
-		t_from: float, t_to, margin: float) -> BeamSolver.Event:
-	var e := BeamSolver.Event.new()
-	e.kind = kind
-	e.surface_id = sid
-	e.left = left
-	e.applied = applied
-	e.beam = HPBeam.make(CN.make(F64Num.of(b[PX]), F64Num.of(b[PY])), CN.make(F64Num.of(b[TX]), F64Num.of(b[TY])), F64Num.of(b[K]))
-	e.t_from = F64Num.of(t_from)
-	e.t_to = null if t_to == null else F64Num.of(t_to)
-	if t_to != null:
-		var h := at(b, t_to, 0.0)
-		e.point = CN.make(F64Num.of(h[0]), F64Num.of(h[1]))
-	e.margin = margin
-	e.raw = b
-	return e
+# BeamGeom.endpoint_at: 1 / 2 if the point is exactly the start / end.
+static func endpoint_at(s: BeamScene.Surf, px: float, py: float) -> int:
+	if s.full:
+		return 0
+	if px == s.sx and py == s.sy:
+		return 1
+	if px == s.ex and py == s.ey:
+		return 2
+	return 0
 
-static func _gain(b: PackedFloat64Array, t, dt: float) -> float:
-	if t == null:
-		return 0.0
-	var h := at(b, t, dt)
-	return sqrt(h[2] * h[2] + h[3] * h[3])
-
-static func _dist(ax: float, ay: float, bx: float, by: float) -> float:
-	var dx := ax - bx
-	var dy := ay - by
-	return sqrt(dx * dx + dy * dy)
-
-# ---------------------------------------------------------------- forward
-
-# Roots of beam ∩ circle i that are candidates, as [t, dt, ...] (BeamSolver._roots).
-static func _cand_roots(b: PackedFloat64Array, sc: Scene, i: int, fresh: bool, depart: int, t0: float) -> PackedFloat64Array:
-	if fresh:
-		var hs := hits(b, sc, i, depart == sc.ids[i])
-		var o := PackedFloat64Array()
-		var j := 0
-		while j < hs.size():
-			if hs[j] != 0.0:
-				o.append(hs[j])
-				o.append(hs[j + 1])
-			j += 2
-		return o
-	var hs2 := hits(b, sc, i, false)
-	if sc.ids[i] != depart:
-		return hs2
-	var o2 := PackedFloat64Array()
-	var q := 0
-	while q < hs2.size():
-		if hs2[q] != t0:
-			o2.append(hs2[q])
-			o2.append(hs2[q + 1])
-		q += 2
-	return o2
-
-# BeamSolver._resume_param twin.
-static func _resume_param(top: BeamSolver.StackEntry, cur: PackedFloat64Array, t: float, born_at_hit: bool) -> float:
-	if born_at_hit:
-		return top.other
-	var p := at(cur, t, 0.0)
-	var h := at(top.beam, top.t_hit, 0.0)
-	var o := at(top.beam, top.other, 0.0)
-	var d_hit := (h[0] - p[0]) * (h[0] - p[0]) + (h[1] - p[1]) * (h[1] - p[1])
-	var d_other := (o[0] - p[0]) * (o[0] - p[0]) + (o[1] - p[1]) * (o[1] - p[1])
-	return top.t_hit if d_hit < d_other else top.other
-
-# The other intersection of b with circle i, given the applied one t.
-static func _other_root(b: PackedFloat64Array, sc: Scene, i: int, depart: int, t0: float, t: float) -> float:
-	if sc.ids[i] == depart:
-		return t0
-	var hs := hits(b, sc, i, false)
-	var q := 0
-	while q < hs.size():
-		if hs[q] != t:
-			return hs[q]
-		q += 2
-	return t
-
-# Forward trace (BeamSolver.continue_from twin). t_start null: fresh start at
-# the beam's own point. stack: Array of BeamSolver.StackEntry with raw beams.
-static func continue_from(sc: Scene, b: PackedFloat64Array, depart: int, plan: Array, plan_index: int,
-		plan_matched: bool, cursor, cursor_done: bool, mode: int, post_mode: int, max_events: int, out: Out,
-		stack: Array = [], t_start = null) -> void:
-	var cur_mode := mode
-	var n0 := out.events.size()
-	var fresh: bool = t_start == null
-	var t0: float = 0.0 if fresh else float(t_start)
-	while out.events.size() - n0 < max_events:
-		# candidates: [t, dt, circle index or -1 for cursor]
-		var cands: Array = []
-		for i in sc.size():
-			var hs := _cand_roots(b, sc, i, fresh, depart, t0)
-			var j := 0
-			while j < hs.size():
-				cands.append([hs[j], hs[j + 1], i])
-				j += 2
-		if not cursor_done and plan_index >= plan.size() and plan_matched and cursor != null:
-			cands.append([param_of(b, cursor.x, cursor.y), 0.0, -1])
-		var t_origin := t0
-		cands.sort_custom(func(x, y): return _before(x[0], y[0], t_origin))
-		var pts: Array = []
-		for c in cands:
-			pts.append(at(b, c[0], 0.0))
-		var applied := false
-		var t_prev := t0
-		for ci in cands.size():
-			if out.events.size() - n0 >= max_events:
-				break
-			var t: float = cands[ci][0]
-			var dt: float = cands[ci][1]
-			var i: int = cands[ci][2]
-			# decision margin vs. neighbouring SURFACE candidates (the cursor is not
-			# an effect: its order relative to a coincident hit changes nothing)
-			var margin := INF
-			if i >= 0:
-				var cl := ci - 1
-				while cl >= 0 and cands[cl][2] < 0:
-					cl -= 1
-				if cl >= 0:
-					margin = minf(margin, _dist(pts[ci][0], pts[ci][1], pts[cl][0], pts[cl][1]))
-				var cr := ci + 1
-				while cr < cands.size() and cands[cr][2] < 0:
-					cr += 1
-				if cr < cands.size():
-					margin = minf(margin, _dist(pts[ci][0], pts[ci][1], pts[cr][0], pts[cr][1]))
-			if i < 0:
-				out.events.append(_mk_event("cursor", -1, false, false, b, t_prev, t, margin))
-				out.gain.append(_gain(b, t, dt))
-				t_prev = t
-				cursor_done = true
-				cur_mode = post_mode
-				continue
-			var sid: int = sc.ids[i]
-			var left := is_entering(b, t, sc, i)
-			var do_apply := false
-			if cur_mode == BeamSolver.Mode.PHYSICAL:
-				do_apply = true
-				if plan_index < plan.size():
-					if sid == plan[plan_index].surface_id:
-						plan_index += 1
-					else:
-						plan_matched = false
-				else:
-					plan_matched = false
-			elif plan_index < plan.size() and sid == plan[plan_index].surface_id and left == plan[plan_index].left:
-				do_apply = true
-				plan_index += 1
-			out.events.append(_mk_event("hit", sid, left, do_apply, b, t_prev, t, margin))
-			out.gain.append(_gain(b, t, dt))
-			t_prev = t
-			if do_apply:
-				if not stack.is_empty() and stack.back().sid == sid:
-					# cancelling re-hit: restore the earlier beam exactly
-					var top: BeamSolver.StackEntry = stack.pop_back()
-					t0 = _resume_param(top, b, t, fresh and depart == sid)
-					b = top.beam
-					# a beam restored from the unseeded (planned) prefix carries its
-					# own rounding error into the sensitive continuation: seed it
-					if b[DPX] == 0.0 and b[DPY] == 0.0 and b[DTX] == 0.0 and b[DTY] == 0.0 and b[DK] == 0.0:
-						b = seeded(b)
-					fresh = false
-				else:
-					var other := _other_root(b, sc, i, depart, t0, t)
-					stack.append(BeamSolver.StackEntry.make(b, sid, t, other))
-					b = invert_at(b, t, dt, sc, i)
-					t0 = 0.0
-					fresh = true
-				depart = sid
-				applied = true
-				break
-		if not applied:
-			if out.events.size() - n0 < max_events:
-				if b[K] == 0.0:
-					out.events.append(_mk_event("escape", -1, false, false, b, t_prev, null, INF))
-				else:
-					out.events.append(_mk_event("origin", -1, false, false, b, t_prev, t0, INF))
-				out.gain.append(0.0)
-			break
-
-# ---------------------------------------------------------------- planned
-
-# player / cursor: PackedFloat64Array [x, y] (float64)
-static func anchored_planned(sc: Scene, player: PackedFloat64Array, cursor: PackedFloat64Array, plan: Array, post_events: int) -> Out:
-	var out := Out.new()
-	var K_ := plan.size()
-	var stacks: Array = [[]]
-	var st: Array = []
-	for item in plan:
-		if not st.is_empty() and st.back() == item.surface_id:
-			st.pop_back()
+# BeamGeom.blocked_sides: [blocked_left, blocked_right] through endpoint `which`.
+static func blocked_sides(s: BeamScene.Surf, which: int, dx: float, dy: float) -> Array:
+	var tx: float
+	var ty: float
+	if s.line:
+		tx = (s.ex - s.sx) if which == 1 else (s.sx - s.ex)
+		ty = (s.ey - s.sy) if which == 1 else (s.sy - s.ey)
+	else:
+		var epx: float = s.sx if which == 1 else s.ex
+		var epy: float = s.sy if which == 1 else s.ey
+		var rx := epx - s.cx
+		var ry := epy - s.cy
+		var refx := s.vx - epx
+		var refy := s.vy - epy
+		# ccw = (-ry, rx), cw = (ry, -rx)
+		var dccw := (-ry) * refx + rx * refy
+		var dcw := ry * refx + (-rx) * refy
+		if not (dccw < dcw):
+			tx = -ry
+			ty = rx
 		else:
-			st.append(item.surface_id)
-		stacks.append(st.duplicate())
-	# pole chain: key -> [Px, Py, Qx, Qy, dx, dy, has_q]
-	var memo := {"": PackedFloat64Array([player[0], player[1], 0.0, 0.0, 0.0, 0.0, 0.0])}
-	for s in stacks:
-		for n in range(1, s.size() + 1):
-			var key := BeamSolver._stack_key(s.slice(0, n))
-			if memo.has(key):
-				continue
-			var parent: PackedFloat64Array = memo[BeamSolver._stack_key(s.slice(0, n - 1))]
-			memo[key] = _push_pole(parent, sc, sc.index_of[s[n - 1]])
-	var X: Array = []
-	X.resize(K_ + 1)
-	var seen := {}
-	for j in range(K_, -1, -1):
-		var key := BeamSolver._stack_key(stacks[j])
-		if seen.has(key):
-			X[j] = seen[key]
-		elif j == K_:
-			X[j] = cursor
-		else:
-			X[j] = _inv(X[j + 1], sc, sc.index_of[plan[j].surface_id])
-		seen[key] = X[j]
-	var beam_of := {}
-	var beams: Array = []
-	for j in K_ + 1:
-		var key := BeamSolver._stack_key(stacks[j])
-		if not beam_of.has(key):
-			var pc: PackedFloat64Array = memo[key]
-			var xj: PackedFloat64Array = X[j]
-			beam_of[key] = through(pc[0], pc[1], xj[0], xj[1], pc[6] != 0.0, pc[4], pc[5])
-		beams.append(beam_of[key])
-	var astack: Array = []
-	var t_start := 0.0
-	var prev_i := -1
-	var prev_t = null       # exact departure parameter after a pop
-	var prev_x := 0.0
-	var prev_y := 0.0
-	for j in K_ + 1:
-		var B: PackedFloat64Array = beams[j]
-		var t_end: float
-		var end_i := -1
-		if j < K_:
-			end_i = sc.index_of[plan[j].surface_id]
-			var roots := _roots_excluding(B, sc, end_i, prev_i, prev_x, prev_y, prev_t)
-			var cand: Array = []
-			for t in roots:
-				if is_entering(B, t, sc, end_i) == plan[j].left:
-					cand.append(t)
-			if cand.is_empty():
-				# plan cannot be followed: planned mode passes everything and ends
-				# (BeamSolver.anchored_planned)
-				var t_dep = null   # null: fresh start at B's own point (the player)
-				if j > 0:
-					t_dep = prev_t if prev_t != null else _departure_root(B, sc, prev_i, prev_x, prev_y)
-				continue_from(sc, B, sc.ids[prev_i] if prev_i >= 0 else -1, plan, j, false, null, true,
-					BeamSolver.Mode.PLANNED, BeamSolver.Mode.PLANNED, post_events + 64, out, astack, t_dep)
-				return out
-			t_end = cand[0]
-			for t in cand:
-				if _before(t, t_end, t_start):
-					t_end = t
-		else:
-			t_end = param_of(B, cursor[0], cursor[1])
-		var passes: Array = []
-		for i in sc.size():
-			for t in _roots_excluding(B, sc, i, prev_i, prev_x, prev_y, prev_t):
-				if i == end_i and t == t_end:
-					continue
-				if t != t_start and _before(t, t_end, t_start):
-					passes.append([t, i])
-		passes.sort_custom(func(x, y): return _before(x[0], y[0], t_start))
-		var ep := at(B, t_end, 0.0)
-		var end_margin := INF
-		var end_is_hit := end_i >= 0
-		if end_i >= 0:
-			var hs := hits(B, sc, end_i, false)
-			var q := 0
-			while q < hs.size():
-				if hs[q] != t_end:
-					var o := at(B, hs[q], 0.0)
-					end_margin = minf(end_margin, _dist(o[0], o[1], ep[0], ep[1]))
-				q += 2
-		if end_is_hit:
-			for pr in passes:
-				var o := at(B, pr[0], 0.0)
-				end_margin = minf(end_margin, _dist(o[0], o[1], ep[0], ep[1]))
-		var t_prev := t_start
-		for pr in passes:
-			var o := at(B, pr[0], 0.0)
-			out.events.append(_mk_event("hit", sc.ids[pr[1]], is_entering(B, pr[0], sc, pr[1]), false, B, t_prev, pr[0], _dist(o[0], o[1], ep[0], ep[1]) if end_is_hit else INF))
-			out.gain.append(0.0)
-			t_prev = pr[0]
-		if j < K_:
-			out.events.append(_mk_event("hit", plan[j].surface_id, plan[j].left, true, B, t_prev, t_end, end_margin))
-			out.gain.append(0.0)
-			var sid: int = plan[j].surface_id
-			prev_i = end_i
-			if not astack.is_empty() and astack.back().sid == sid:
-				var top: BeamSolver.StackEntry = astack.pop_back()
-				t_start = top.other
-				prev_t = top.other
-			else:
-				var other := t_end
-				var hs := hits(B, sc, end_i, false)
-				var q := 0
-				while q < hs.size():
-					if hs[q] != t_end:
-						other = hs[q]
-					q += 2
-				astack.append(BeamSolver.StackEntry.make(B, sid, t_end, other))
-				prev_t = null
-				prev_x = ep[0]
-				prev_y = ep[1]
-				t_start = param_of(beams[j + 1], prev_x, prev_y)
-		else:
-			out.events.append(_mk_event("cursor", -1, false, false, B, t_prev, t_end, end_margin))
-			out.gain.append(0.0)
-			if post_events > 0:
-				var cur := seeded(rebased_at(B, t_end, 0.0))
-				continue_from(sc, cur, -1, plan, K_, true, null, true,
-					BeamSolver.Mode.PHYSICAL, BeamSolver.Mode.PHYSICAL, post_events, out, astack.duplicate())
-	return out
+			tx = ry
+			ty = -rx
+	var c := dx * ty - dy * tx
+	if c == 0.0:
+		return [true, true]
+	if not (c < 0.0):
+		return [false, true]
+	return [true, false]
 
-static func _push_pole(parent: PackedFloat64Array, sc: Scene, i: int) -> PackedFloat64Array:
-	var P1 := _inv(PackedFloat64Array([parent[0], parent[1]]), sc, i)
-	var cx := sc.cx[i]
-	var cy := sc.cy[i]
-	if parent[6] == 0.0:
-		var ux := parent[0] - cx
-		var uy := parent[1] - cy
-		var s := ux * ux + uy * uy
-		return PackedFloat64Array([P1[0], P1[1], cx, cy, (ux * sc.r2[i]) / s, (uy * sc.r2[i]) / s, 1.0])
-	var uqx := parent[2] - cx
-	var uqy := parent[3] - cy
-	if uqx == 0.0 and uqy == 0.0:
-		return PackedFloat64Array([P1[0], P1[1], 0.0, 0.0, 0.0, 0.0, 0.0])
-	var Q1 := _inv(PackedFloat64Array([parent[2], parent[3]]), sc, i)
-	# delta' = -R^2 conj(delta / ((P0 - c)(Q0 - c)))
-	var apx := parent[0] - cx
-	var apy := parent[1] - cy
-	var mr := apx * uqx - apy * uqy
-	var mi := apx * uqy + apy * uqx
-	var dx := parent[4]
-	var dy := parent[5]
-	var mm := mr * mr + mi * mi
-	var nr := dx * mr - dy * (-mi)
-	var ni := dx * (-mi) + dy * mr
-	var qr := nr / mm
-	var qi := ni / mm
-	var d1x := -(qr * sc.r2[i])
-	var d1y := -((-qi) * sc.r2[i])
-	return PackedFloat64Array([Q1[0] + d1x, Q1[1] + d1y, Q1[0], Q1[1], d1x, d1y, 1.0])
+# ---------------------------------------------------------------- backend
 
-static func _departure_root(B: PackedFloat64Array, sc: Scene, i: int, px: float, py: float) -> float:
-	var hs := hits(B, sc, i, false)
-	var best := 0.0
-	var best_d := INF
-	var q := 0
-	while q < hs.size():
-		var h := at(B, hs[q], 0.0)
-		var d := (h[0] - px) * (h[0] - px) + (h[1] - py) * (h[1] - py)
-		if d < best_d:
-			best_d = d
-			best = hs[q]
-		q += 2
-	return best
+static func _f64cn(x: float, y: float) -> CN:
+	return CN.make(F64Num.of(x), F64Num.of(y))
 
-static func _roots_excluding(B: PackedFloat64Array, sc: Scene, i: int, prev_i: int, px: float, py: float, prev_t = null) -> Array:
-	var hs := hits(B, sc, i, false)
-	var ts: Array = []
-	var q := 0
-	while q < hs.size():
-		ts.append(hs[q])
-		q += 2
-	if prev_i == i and prev_t != null:
-		return ts.filter(func(t): return t != prev_t)
-	if prev_i == i and not ts.is_empty():
-		var best := 0
-		var best_d := INF
-		for k in ts.size():
-			var h := at(B, ts[k], 0.0)
-			var d := (h[0] - px) * (h[0] - px) + (h[1] - py) * (h[1] - py)
-			if d < best_d:
-				best_d = d
-				best = k
-		ts.remove_at(best)
-	return ts
+# BeamSolver walker backend over raw beams.
+class Backend extends RefCounted:
+	static func make() -> Backend:
+		return Backend.new()
 
-# ---------------------------------------------------------------- physical
-
-static func physical(sc: Scene, player: PackedFloat64Array, cursor: PackedFloat64Array, plan: Array, max_events: int) -> Out:
-	if plan.is_empty():
-		var dx := cursor[0] - player[0]
-		var dy := cursor[1] - player[1]
-		var l := sqrt(dx * dx + dy * dy)
-		var out0 := Out.new()
-		continue_from(sc, seeded(beam(player[0], player[1], dx / l, dy / l, 0.0)), -1, plan, 0, true,
-			_CursorXY.make(cursor), false,
-			BeamSolver.Mode.PHYSICAL, BeamSolver.Mode.PHYSICAL, max_events, out0)
-		return out0
-	var planned := anchored_planned(sc, player, cursor, plan, max_events)
-	var out := Out.new()
-	if planned.events.is_empty():
+	func roots(b: PackedFloat64Array, surf: BeamScene.Surf, depart_on: bool) -> Array:
+		var raw := FastSolver.surf_hits(b, surf, depart_on)
+		var out: Array = []
+		var i := 0
+		while i < raw.size():
+			out.append(DualNum.of(raw[i], raw[i + 1]))
+			i += 2
 		return out
-	var plan_index := 0
-	var stack: Array = []
-	for n in planned.events.size():
-		if out.events.size() >= max_events:
-			break
-		var e: BeamSolver.Event = planned.events[n]
-		var i: int = sc.index_of.get(e.surface_id, -1)
-		if e.kind == "hit" and not e.applied:
-			var Bv: PackedFloat64Array = e.raw
-			var d := _mk_event("hit", e.surface_id, e.left, true, Bv, e.t_from.v, e.t_to.v, e.margin)
-			out.events.append(d)
-			out.gain.append(0.0)
-			var matched: bool = plan_index < plan.size() and plan[plan_index].surface_id == e.surface_id
-			if not stack.is_empty() and stack.back().sid == e.surface_id:
-				var top: BeamSolver.StackEntry = stack.pop_back()
-				var t_res := _resume_param(top, Bv, e.t_to.v, false)
-				continue_from(sc, seeded(top.beam), e.surface_id, plan, plan_index + (1 if matched else 0), matched,
-					_CursorXY.make(cursor), false, BeamSolver.Mode.PHYSICAL, BeamSolver.Mode.PHYSICAL,
-					max_events - out.events.size(), out, stack, t_res)
-			else:
-				stack.append(BeamSolver.StackEntry.make(Bv, e.surface_id, e.t_to.v, _other_of(Bv, sc, i, e.t_to.v)))
-				var nb := seeded(invert_at(Bv, e.t_to.v, 0.0, sc, i))
-				continue_from(sc, nb, e.surface_id, plan, plan_index + (1 if matched else 0), matched,
-					_CursorXY.make(cursor), false, BeamSolver.Mode.PHYSICAL, BeamSolver.Mode.PHYSICAL,
-					max_events - out.events.size(), out, stack)
-			return out
-		out.events.append(e)
-		out.gain.append(planned.gain[n])
-		if e.kind == "hit":
-			plan_index += 1
-			if not stack.is_empty() and stack.back().sid == e.surface_id:
-				stack.pop_back()
-			else:
-				stack.append(BeamSolver.StackEntry.make(e.raw, e.surface_id, e.t_to.v, _other_of(e.raw, sc, i, e.t_to.v)))
-	return out
-
-static func _other_of(b: PackedFloat64Array, sc: Scene, i: int, t: float) -> float:
-	var other := t
-	var hs := hits(b, sc, i, false)
-	var q := 0
-	while q < hs.size():
-		if hs[q] != t:
-			other = hs[q]
-		q += 2
-	return other
-
-static func _beam_of(e: BeamSolver.Event) -> PackedFloat64Array:
-	var b: HPBeam = e.beam
-	return beam(b.p.re.v, b.p.im.v, b.tau.re.v, b.tau.im.v, b.kappa.v)
-
-class _CursorXY extends RefCounted:
-	var x: float
-	var y: float
-	static func make(c: PackedFloat64Array) -> _CursorXY:
-		var o := _CursorXY.new()
-		o.x = c[0]
-		o.y = c[1]
+	func point(b: PackedFloat64Array, t: DualNum) -> CN:
+		var h := FastSolver.at(b, t.v, 0.0)
+		return FastSolver._f64cn(h[0], h[1])
+	func tangent(b: PackedFloat64Array, t: DualNum) -> CN:
+		var g := FastSolver.tangent_at(b, t.v, 0.0)
+		return FastSolver._f64cn(g[0], g[1])
+	func origin(b: PackedFloat64Array) -> CN:
+		return FastSolver._f64cn(b[PX], b[PY])
+	func param_of(b: PackedFloat64Array, z: CN) -> DualNum:
+		return DualNum.of(FastSolver.param_of(b, z.fx(), z.fy()))
+	func apply(b: PackedFloat64Array, t: DualNum, surf: BeamScene.Surf, _etype: String, h: CN = null) -> PackedFloat64Array:
+		if h == null:
+			return FastSolver.apply_surf(b, t.v, t.d, surf)
+		return FastSolver.apply_surf(b, t.v, t.d, surf, true, h.fx(), h.fy())
+	func straight(b: PackedFloat64Array) -> bool:
+		return b[K] == 0.0
+	func straightened(b: PackedFloat64Array) -> PackedFloat64Array:
+		var o := PackedFloat64Array(b)
+		o[K] = 0.0
 		return o
+	func zero() -> DualNum:
+		return DualNum.of(0.0)
+	func seed(b: PackedFloat64Array) -> PackedFloat64Array:
+		return FastSolver.seeded(b)
+	func reseed(b: PackedFloat64Array) -> PackedFloat64Array:
+		if b[DPX] == 0.0 and b[DPY] == 0.0 and b[DTX] == 0.0 and b[DTY] == 0.0 and b[DK] == 0.0:
+			return FastSolver.seeded(b)
+		return b
+	func from_hp(hb: HPBeam) -> PackedFloat64Array:
+		return FastSolver.beam(hb.p.fx(), hb.p.fy(), hb.tau.fx(), hb.tau.fy(), hb.kappa.to_float())
+	func hp(b: PackedFloat64Array) -> HPBeam:
+		return HPBeam.make(FastSolver._f64cn(b[PX], b[PY]), FastSolver._f64cn(b[TX], b[TY]), F64Num.of(b[K]))
+	func raw(b: PackedFloat64Array):
+		return b
+	func ev_t(t: DualNum) -> F64Num:
+		return F64Num.of(t.v)
+	func gain(b: PackedFloat64Array, t: DualNum) -> float:
+		var h := FastSolver.at(b, t.v, t.d)
+		return sqrt(h[2] * h[2] + h[3] * h[3])
+	func classify(scene: BeamScene, b: PackedFloat64Array, t: DualNum, surf: BeamScene.Surf, at_origin: bool, known_pt = null) -> Array:
+		var px: float
+		var py: float
+		if known_pt != null:
+			px = known_pt.fx()
+			py = known_pt.fy()
+		elif at_origin:
+			px = b[PX]
+			py = b[PY]
+		else:
+			var h := FastSolver.at(b, t.v, 0.0)
+			px = h[0]
+			py = h[1]
+		var g := FastSolver.tangent_at(b, t.v, 0.0)
+		var on_seg := FastSolver.on_segment(surf, px, py)
+		var left := FastSolver.side_left(surf, px, py, g[0], g[1])
+		var fb := false
+		if on_seg:
+			if FastSolver.endpoint_at(surf, px, py) == 0:
+				fb = true
+			else:
+				var bl := false
+				var br := false
+				for s in scene.surfaces:
+					var which := FastSolver.endpoint_at(s, px, py)
+					if which == 0:
+						continue
+					var bs := FastSolver.blocked_sides(s, which, g[0], g[1])
+					bl = bl or bs[0]
+					br = br or bs[1]
+				fb = bl and br
+		return [FastSolver._f64cn(px, py), on_seg, left, fb]
+	func prefix_gain(b: PackedFloat64Array, t: DualNum) -> float:
+		var h := FastSolver.at(FastSolver.seeded(b), t.v, 0.0)
+		return sqrt(h[2] * h[2] + h[3] * h[3])
+	func f64_point(b: PackedFloat64Array, t: DualNum) -> PackedFloat64Array:
+		var h := FastSolver.at_view(b, t.v)
+		return PackedFloat64Array([h[0], h[1]])
+
+# ---------------------------------------------------------------- entry points
+
+static func _out(w) -> Out:
+	var o := Out.new()
+	if w != null:
+		o.events = w.events
+		o.gain = w.gains
+	return o
+
+static func _cn(a) -> CN:
+	return _f64cn(float(a[0]), float(a[1]))
+
+static func trace_direction(sc: Scene, player: PackedFloat64Array, dir: PackedFloat64Array, plan: Array, cursor, mode: int,
+		max_events: int = BeamSolver.MAX_HITS) -> Out:
+	return _out(BeamSolver.run_direction(Backend.make(), sc.scene, _cn(player), _cn(dir), plan,
+		null if cursor == null else _cn(cursor), mode, max_events))
+
+# Planned trace (anchored chain built at float64, generic) with gains.
+static func planned(sc: Scene, player: PackedFloat64Array, cursor: PackedFloat64Array, plan: Array,
+		max_events: int = BeamSolver.MAX_HITS) -> Out:
+	return _out(BeamSolver.run(Backend.make(), sc.scene, _cn(player), _cn(cursor), plan, BeamSolver.Mode.PLANNED, max_events))
+
+static func physical(sc: Scene, player: PackedFloat64Array, cursor: PackedFloat64Array, plan: Array,
+		max_events: int = BeamSolver.MAX_HITS) -> Out:
+	return _out(BeamSolver.run(Backend.make(), sc.scene, _cn(player), _cn(cursor), plan, BeamSolver.Mode.PHYSICAL, max_events))

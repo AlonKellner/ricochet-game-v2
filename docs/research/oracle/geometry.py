@@ -97,7 +97,9 @@ def line_hits(beam: Beam, seg: Seg):
     c1 = dot(g, beam.tau)
     c2 = fp * k * k / 4 + (k / 2) * cross(beam.tau, g)
     if c2 == 0:
-        return [] if c1 == 0 else [-c0 / c1]
+        # degree drop: a curved beam meets the line at its antipode (t = inf)
+        at_inf = [mp.inf] if k != 0 else []
+        return at_inf if c1 == 0 else [-c0 / c1] + at_inf
     disc = c1 * c1 - 4 * c2 * c0
     if disc < 0:
         return []

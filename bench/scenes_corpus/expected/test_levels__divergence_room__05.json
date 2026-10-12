@@ -7,6 +7,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "892.4461729826727886057605652961594501879",
    "y": "840.0000000000000000000000000000000000000"
   },
@@ -17,6 +18,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "960.0000000000000000000000000000000000000",
    "y": "990.6147525132006582570606891848257422814"
   },
@@ -27,6 +29,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "1000.091129493407329371434217480841691043",
    "y": "1080.000000000000000000000000000000000000"
   },
@@ -37,6 +40,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "1360.000000000000000000000000000000000000",
    "y": "1882.435448176045896963025999591603118704"
   },
@@ -47,6 +51,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "1920.000000000000000000000000000000000000",
    "y": "3130.984422104029231151377434161091445695"
   },
@@ -57,6 +62,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "9.913835302014254778414158421213060729780e-119",
    "y": "-1149.754917077627914637256055791439961132"
   },
@@ -67,6 +73,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "515.6888251951018959259027826497716071955",
    "y": "0.0"
   },
@@ -77,6 +84,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "560.0000000000000000000000000000000000000",
    "y": "98.79405685035541955109537877804836585923"
   },
@@ -87,6 +95,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "623.3337817058364366915764348344538480505",
    "y": "240.0000000000000000000000000000000000000"
   },
@@ -96,7 +105,8 @@
    "side": "",
    "applied": false,
    "terminal": false,
-   "on_segment": false
+   "on_segment": false,
+   "rehit": false
   }
  ],
  "physical": [
@@ -107,6 +117,7 @@
    "applied": true,
    "terminal": true,
    "on_segment": true,
+   "rehit": false,
    "x": "892.4461729826727886057605652961594501879",
    "y": "840.0000000000000000000000000000000000000"
   }

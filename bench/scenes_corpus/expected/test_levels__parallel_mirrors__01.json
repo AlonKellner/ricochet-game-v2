@@ -7,6 +7,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "300.0000000000000000000000000000000000000",
    "y": "377.1919725240476660900534412698824015800"
   },
@@ -17,6 +18,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "9.913835302014254778414158421213060729780e-119",
    "y": "385.1171971492956933428149554604329708173"
   },
@@ -27,6 +29,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "-17219.05022356896266205718640148432932087",
    "y": "840.0000000000000000000000000000000000000"
   },
@@ -37,6 +40,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "-26303.96622337845616811640757445713249220",
    "y": "1080.000000000000000000000000000000000000"
   },
@@ -47,6 +51,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "14578.15577576426460915008770392048177876",
    "y": "0.0"
   },
@@ -57,6 +62,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "5493.239775954771103090866530947678607438",
    "y": "240.0000000000000000000000000000000000000"
   },
@@ -67,6 +73,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "1920.000000000000000000000000000000000000",
    "y": "334.3957595477083189251412646409093276986"
   },
@@ -77,6 +84,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "1700.000000000000000000000000000000000000",
    "y": "340.2075909395568722438330417139797451393"
   },
@@ -87,6 +95,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "1200.000000000000000000000000000000000000",
    "y": "353.4162986483035843317688986982306938681"
   },
@@ -97,6 +106,7 @@
    "applied": true,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "700.0000000000000000000000000000000000000",
    "y": "366.6250063570502964197047556824816425969"
   },
@@ -107,6 +117,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "1200.000000000000000000000000000000000000",
    "y": "379.8337140657970085076406126667325913258"
   },
@@ -117,6 +128,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "1700.000000000000000000000000000000000000",
    "y": "393.0424217745437205955764696509835400546"
   },
@@ -127,6 +139,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "1920.000000000000000000000000000000000000",
    "y": "398.8542531663922739142682467240539574953"
   },
@@ -137,6 +150,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "18619.05022356896266205718640148432932087",
    "y": "840.0000000000000000000000000000000000000"
   },
@@ -147,6 +161,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "27703.96622337845616811640757445713249220",
    "y": "1080.000000000000000000000000000000000000"
   },
@@ -157,6 +172,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "-13178.15577576426460915008770392048177876",
    "y": "0.0"
   },
@@ -167,6 +183,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "-4093.239775954771103090866530947678607438",
    "y": "240.0000000000000000000000000000000000000"
   },
@@ -177,6 +194,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "0.0",
    "y": "348.1328155648048994965945559045303143766"
   },
@@ -187,6 +205,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "300.0000000000000000000000000000000000000",
    "y": "356.0580401900529267493560700950808836139"
   },
@@ -197,6 +216,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": true,
    "x": "700.0000000000000000000000000000000000000",
    "y": "366.6250063570502964197047556824816425969"
   },
@@ -206,7 +226,8 @@
    "side": "",
    "applied": false,
    "terminal": false,
-   "on_segment": false
+   "on_segment": false,
+   "rehit": false
   }
  ],
  "physical": [
@@ -217,6 +238,7 @@
    "applied": true,
    "terminal": true,
    "on_segment": true,
+   "rehit": false,
    "x": "300.0000000000000000000000000000000000000",
    "y": "377.1919725240476660900534412698824015800"
   }

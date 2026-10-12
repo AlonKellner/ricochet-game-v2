@@ -6,14 +6,11 @@ extends RefCounted
 # renderer, merge, invariant checker, debug dump and arrow flight work
 # unchanged.
 #
-# Applicable to scenes made of full-circle inversion surfaces (same inversion
-# on both sides) plus effect-free surfaces (which never change the beam and
-# are ignored). Anything else returns null from `circle_defs_for` and callers
-# fall back to Tracer.
+# Applicable to scenes whose side effects the beam solver implements
+# (BeamScene.SUPPORTED_TYPES: pass, terminal, reflection, inversion). Anything
+# else is not supported and callers fall back to Tracer (until Stages 82-83).
 
 const TOL := 0.01            # px, PHYSICAL-PREVIEW-MATCH tolerance
-const POST_CURSOR_EVENTS := 8
-const MAX_PHYSICAL_EVENTS := 24
 
 class Pair extends RefCounted:
 	var planned: Tracer.TracedPath
@@ -22,37 +19,12 @@ class Pair extends RefCounted:
 
 static var _cache_key: String = ""
 static var _cache_pair: Pair = null
+static var _scene_key: String = ""
+static var _scene: FastSolver.Scene = null
 
-# [[id, cx, cy, r], ...] or null if the scene is not supported.
-static func circle_defs_for(surfaces: Array, plan_entries: Array) -> Variant:
-	var defs: Array = []
-	var ids := {}
-	var state := GameState.new()
-	for surf in surfaces:
-		var l: SideConfig = surf.active_side_config(Side.Value.LEFT, state)
-		var r: SideConfig = surf.active_side_config(Side.Value.RIGHT, state)
-		var le: Effect = l.effect if l != null else null
-		var re: Effect = r.effect if r != null else null
-		if le == null and re == null:
-			continue
-		if not (le is CircleInversionEffect and re is CircleInversionEffect and surf.segment.full):
-			return null
-		var carrier: GeneralizedCircle = surf.segment.get_carrier()
-		if carrier.is_line():
-			return null
-		# center() returns a float32 Vector2; recompute in float64
-		var cx: float = -carrier.b / (2.0 * carrier.a)
-		var cy: float = -carrier.c / (2.0 * carrier.a)
-		defs.append([surf.id, cx, cy, carrier.radius()])
-		ids[surf.id] = true
-	for e in plan_entries:
-		if not ids.has(e.surface_id):
-			return null
-	return defs
-
-# STUB (Stage 81 red): capability check per effect type
+# Capability check per effect type.
 static func scene_supported(surfaces: Array) -> bool:
-	return circle_defs_for(surfaces, []) != null
+	return BeamScene.supported(BeamScene.defs_from_surfaces(surfaces))
 
 static func plan_items(plan_entries: Array) -> Array:
 	var out: Array = []
@@ -60,19 +32,24 @@ static func plan_items(plan_entries: Array) -> Array:
 		out.append(BeamSolver.PlanItem.make(e.surface_id, e.side == Side.Value.LEFT))
 	return out
 
-# Planned + physical traces, or null if the scene is not supported.
+# Planned + physical traces, or null if the scene is not supported or the
+# input is degenerate (player = cursor, a pole / image at infinity).
 static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_entries: Array) -> Pair:
-	var defs = circle_defs_for(surfaces, plan_entries)
-	if defs == null:
+	var defs := BeamScene.defs_from_surfaces(surfaces)
+	if not BeamScene.supported(defs):
 		return null
-	if _degenerate(defs, player, cursor):
+	if player == cursor:
 		return null
+	var skey := str(defs)
 	var key := "%s|%s|%s|%s" % [var_to_str(player), var_to_str(cursor),
-		str(plan_entries.map(func(e): return [e.surface_id, e.side])), str(defs)]
+		str(plan_entries.map(func(e): return [e.surface_id, e.side])), skey]
 	if key == _cache_key and _cache_pair != null:
 		return _cache_pair
+	if skey != _scene_key or _scene == null:
+		_scene = FastSolver.Scene.from_defs(defs)
+		_scene_key = skey
 	var res := PrecisionLadder.solve(defs, [player.x, player.y], [cursor.x, cursor.y],
-		plan_items(plan_entries), MAX_PHYSICAL_EVENTS, MAX_PHYSICAL_EVENTS, TOL)
+		plan_items(plan_entries), BeamSolver.MAX_HITS, BeamSolver.MAX_HITS, TOL, false, _scene)
 	if res.planned.is_empty() or res.physical.is_empty() or not _finite(res.planned) or not _finite(res.physical):
 		return null
 	# Identical up to and including the cursor -> one trajectory: share it, so
@@ -91,22 +68,19 @@ static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_e
 	pair.result = res
 	# one trajectory from one aim: every step references the same aim ray
 	var aim := Ray.from_coords(player, Direction.from_coords(player, cursor))
-	pair.planned = to_path(res.planned, res.planned_err, res.planned_tier, by_id, frames, aim)
 	pair.physical = to_path(res.physical, res.physical_err, res.physical_tier, by_id, frames, aim)
+	if is_same(res.planned, res.physical):
+		# one trajectory: the same steps
+		pair.planned = Tracer.TracedPath.new()
+		pair.planned.steps = pair.physical.steps.duplicate()
+		pair.planned.targets_hit = pair.physical.targets_hit.duplicate()
+		pair.planned.cursor_index = pair.physical.cursor_index
+		pair.planned.hit_count = pair.physical.hit_count
+	else:
+		pair.planned = to_path(res.planned, res.planned_err, res.planned_tier, by_id, frames, aim)
 	_cache_key = key
 	_cache_pair = pair
 	return pair
-
-# Inputs the beam model does not define: player == cursor, or player/cursor
-# exactly at an inversion center (its image is the point at infinity).
-static func _degenerate(defs: Array, player: Vector2, cursor: Vector2) -> bool:
-	if player == cursor:
-		return true
-	for d in defs:
-		var c := Vector2(d[1], d[2])
-		if player == c or cursor == c:
-			return true
-	return false
 
 static func _finite(events: Array) -> bool:
 	for e in events:
@@ -136,6 +110,8 @@ static func _same_prefix(a: Array, b: Array, n: int) -> bool:
 static func clear_cache() -> void:
 	_cache_key = ""
 	_cache_pair = null
+	_scene_key = ""
+	_scene = null
 
 # ---------------------------------------------------------------- conversion
 
@@ -160,32 +136,34 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 			# event's effect still applies
 			if s.start == s.end and not is_inf(s.start.x):
 				continue
-			# like Tracer: every finite step after an inversion is an arc step
-			# (inversions map lines to circles); the renderer draws
-			# near-straight ones as lines
+			# a finite step on a curved beam is an arc step (curvature is exact:
+			# reflections keep a straight beam exactly straight); the renderer
+			# draws near-straight arcs as lines
 			if not is_inf(s.start.x) and not is_inf(s.end.x):
-				s.is_arc_step = not stack.is_empty()
+				s.is_arc_step = not e.beam.kappa.is_zero()
 			s.ray = aim
 			s.est_error = errs[i] if i < errs.size() else -1.0
 			s.precision_bits = bits
 			path.steps.append(s)
 			appended = true
 		var last: Tracer.Step = path.steps.back() if appended else null
-		if e.kind == "hit" and e.applied:
+		if e.kind == "hit" and e.applied and not e.terminal:
 			if not stack.is_empty() and stack.back() == e.surface_id:
 				stack.pop_back()
 			else:
 				stack.append(e.surface_id)
 		if e.kind == "hit" and last != null:
 			var side := Side.Value.LEFT if e.left else Side.Value.RIGHT
-			last.hit = Intersection.HitRecord.new(e.t_to.to_float(), last.end, surf.segment if surf else null, side, true)
+			last.hit = Intersection.HitRecord.new(e.t_to.to_float(), last.end, surf.segment if surf else null, side, e.on_segment)
 			last.surface_id = e.surface_id
 			last.hit_side = side
-			last.hit_on_segment = true
-			if surf and surf.is_target:
+			last.hit_on_segment = e.on_segment
+			if surf and surf.is_target and e.on_segment:
 				path.targets_hit[surf.id] = true
 		if e.kind == "cursor":
 			path.cursor_index = path.steps.size()
+		if e.kind == "max":
+			break
 	path.hit_count = events.size()
 	return path
 
@@ -210,7 +188,7 @@ static func _steps_for(e: BeamSolver.Event, fid: int, frame: MobiusTransform, pr
 	if prev_pt != null:
 		start = prev_pt
 	else:
-		var h0 := FastSolver.at(bf, tf, 0.0)
+		var h0 := FastSolver.at_view(bf, tf)
 		start = Vector2(h0[0], h0[1])
 	var is_line: bool = bf[FastSolver.K] == 0.0
 	# Steps to/from infinity follow Tracer's escape-step convention
@@ -223,8 +201,15 @@ static func _steps_for(e: BeamSolver.Event, fid: int, frame: MobiusTransform, pr
 	var tt: float = e.t_to.to_float()
 	var end := Vector2(e.point.fx(), e.point.fy())
 	var via: Vector2
-	if tt > tf or (tt == tf):
-		var m := FastSolver.at(bf, (tf + tt) * 0.5, 0.0)
+	if not is_line and (is_inf(tt) or is_inf(tf)):
+		# an end at the antipode (t = inf): any parameter strictly between the
+		# ends is on the arc
+		var span := 4.0 / absf(bf[FastSolver.K])
+		var tm: float = (maxf(tf, 0.0) + span) if is_inf(tt) else (minf(tt, 0.0) - span)
+		var m := FastSolver.at_view(bf, tm)
+		via = Vector2(m[0], m[1])
+	elif tt > tf or (tt == tf):
+		var m := FastSolver.at_view(bf, (tf + tt) * 0.5)
 		via = Vector2(m[0], m[1])
 	elif not is_line:
 		# wraps through t = infinity: the arc passes the antipode of p

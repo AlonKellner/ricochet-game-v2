@@ -250,17 +250,15 @@ Bugs found by manual testing and the sweep, now covered by tests:
   ambiguities, which is what the dump shows.
 
 ## 8. Scope and limits
-- `BeamTracer` handles full inversion circles (same inversion on both sides)
-  plus effect-free surfaces. Other scenes fall back to `Tracer` unchanged.
-  Extending to reflections/portals/partial arcs: multiple shooting (§3.3).
-- After the beam returns to its departure point without applying anything,
-  the trace ends ("origin"). `Tracer` instead re-applies the departure surface
-  after a wrap; this tail is excluded from comparisons.
-- Event cap: 24 events per trace; when planned and physical agree up to the
-  cursor they share one trajectory (identical post-cursor tails).
-- Deep plans exceed the 5 ms budget only when BigFloat is needed (rare at
-  depth ≤ 15). Results are cached per (player, cursor, plan), so a static
-  scene costs nothing.
+- **Updated in Stage 81 (`docs/TDD_09_PRECISION_INTEGRATION.md`).** `BeamTracer` now handles every scene made of mirrors (lines and arcs), inversions (full circles and partial or one-sided arcs), terminals and pass-throughs. Portal and projective scenes fall back to `Tracer` until Stages 82 and 83.
+- **The rules are oracle v2 (`docs/research/oracle/trace2.py`):**
+  - walls are events;
+  - the departure point is re-hit as an ordinary hit;
+  - MAX_HITS = 32 counts every event.
+
+  The corpora in `bench/` were regenerated under v2 (`regen_bench_v2.py`). The v1 results above (§1–7) describe the circle-only solver.
+- **Exactness.** Endpoints, incidences, tangency and roots at the antipode (t = ∞) are decided by provenance and exact predicates (`Exact`), never by rounding.
+- Planned and physical traces share one climb when they agree through the cursor. Results are cached per (player, cursor, plan), and the scene per surface set.
 
 ## 9. Reproduction
 ```bash

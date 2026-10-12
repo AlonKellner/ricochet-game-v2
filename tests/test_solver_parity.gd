@@ -25,7 +25,7 @@ func test_scene_defs_match_dump():
 		if not ("surfaces" in scene):
 			continue
 		var defs: Array = BeamScene.defs_from_surfaces(scene.surfaces)
-		assert_true(JSON.parse_string(JSON.stringify(defs)) == dump["surfaces"], fn)
+		assert_true(JSON.parse_string(JSON.stringify(defs, "", false, true)) == dump["surfaces"], fn)
 
 func test_parity_shallow_all_supported_scenes():
 	var counts := {"same": 0, "legacy_wrong": 0, "unclassified": 0}

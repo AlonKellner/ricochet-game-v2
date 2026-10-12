@@ -7,6 +7,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "1760.000000000000000000000000000000000000",
    "y": "833.7549531365285398019508403667278113620"
   },
@@ -17,6 +18,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "1920.000000000000000000000000000000000000",
    "y": "848.2246830032997753020170731429162949297"
   },
@@ -27,6 +29,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "3487.689993409236861537789978610818754577",
    "y": "990.0000000000000000000000000000000000000"
   },
@@ -37,6 +40,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "4482.870976923561792786850261180818609073",
    "y": "1080.000000000000000000000000000000000000"
   },
@@ -47,6 +51,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "-7459.300825248337382201873129659179644872",
    "y": "9.913835302014254778414158421213060729780e-119"
   },
@@ -57,6 +62,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": false,
+   "rehit": false,
    "x": "-6464.119841734012450952812847089179790376",
    "y": "90.00000000000000000000000000000000000000"
   },
@@ -67,6 +73,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "-9.913835302014254778414158421213060729780e-119",
    "y": "674.5879246020449493012222798286544921174"
   },
@@ -77,6 +84,7 @@
    "applied": false,
    "terminal": false,
    "on_segment": true,
+   "rehit": false,
    "x": "160.0000000000000000000000000000000000000",
    "y": "689.0576544688161848012885126048429756851"
   },
@@ -86,7 +94,8 @@
    "side": "",
    "applied": false,
    "terminal": false,
-   "on_segment": false
+   "on_segment": false,
+   "rehit": false
   }
  ],
  "physical": [
@@ -97,6 +106,7 @@
    "applied": true,
    "terminal": true,
    "on_segment": true,
+   "rehit": false,
    "x": "1760.000000000000000000000000000000000000",
    "y": "833.7549531365285398019508403667278113620"
   }

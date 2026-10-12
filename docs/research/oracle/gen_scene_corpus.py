@@ -58,7 +58,7 @@ def plannable(surfs):
 
 def ev_json(e):
     o = {"kind": e.kind, "surface_id": e.surface_id, "side": e.side, "applied": e.applied,
-         "terminal": e.terminal, "on_segment": e.on_segment}
+         "terminal": e.terminal, "on_segment": e.on_segment, "rehit": e.rehit}
     if e.point is not None:
         o["x"] = s(e.point.real)
         o["y"] = s(e.point.imag)

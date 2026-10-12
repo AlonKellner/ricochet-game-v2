@@ -145,5 +145,425 @@
   "grid90",
   "depth14",
   "chain"
+ ],
+ "surfaces": [
+  {
+   "circle": {
+    "center": [
+     760.0,
+     380.0
+    ],
+    "radius": 90.0
+   },
+   "id": 1,
+   "start": [
+    850.0,
+    380.0
+   ],
+   "end": [
+    715.0,
+    302.05999755859375
+   ],
+   "via": [
+    715.0,
+    457.94000244140625
+   ],
+   "full": true,
+   "line": false,
+   "left": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "right": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": {
+    "center": [
+     960.0,
+     380.0
+    ],
+    "radius": 90.0
+   },
+   "id": 2,
+   "start": [
+    1050.0,
+    380.0
+   ],
+   "end": [
+    915.0,
+    302.05999755859375
+   ],
+   "via": [
+    915.0,
+    457.94000244140625
+   ],
+   "full": true,
+   "line": false,
+   "left": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "right": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": {
+    "center": [
+     1160.0,
+     380.0
+    ],
+    "radius": 90.0
+   },
+   "id": 3,
+   "start": [
+    1250.0,
+    380.0
+   ],
+   "end": [
+    1115.0,
+    302.05999755859375
+   ],
+   "via": [
+    1115.0,
+    457.94000244140625
+   ],
+   "full": true,
+   "line": false,
+   "left": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "right": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": {
+    "center": [
+     760.0,
+     540.0
+    ],
+    "radius": 90.0
+   },
+   "id": 4,
+   "start": [
+    850.0,
+    540.0
+   ],
+   "end": [
+    715.0,
+    462.05999755859375
+   ],
+   "via": [
+    715.0,
+    617.9400024414062
+   ],
+   "full": true,
+   "line": false,
+   "left": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "right": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": {
+    "center": [
+     960.0,
+     540.0
+    ],
+    "radius": 90.0
+   },
+   "id": 5,
+   "start": [
+    1050.0,
+    540.0
+   ],
+   "end": [
+    915.0,
+    462.05999755859375
+   ],
+   "via": [
+    915.0,
+    617.9400024414062
+   ],
+   "full": true,
+   "line": false,
+   "left": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "right": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": {
+    "center": [
+     1160.0,
+     540.0
+    ],
+    "radius": 90.0
+   },
+   "id": 6,
+   "start": [
+    1250.0,
+    540.0
+   ],
+   "end": [
+    1115.0,
+    462.05999755859375
+   ],
+   "via": [
+    1115.0,
+    617.9400024414062
+   ],
+   "full": true,
+   "line": false,
+   "left": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "right": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": {
+    "center": [
+     760.0,
+     700.0
+    ],
+    "radius": 90.0
+   },
+   "id": 7,
+   "start": [
+    850.0,
+    700.0
+   ],
+   "end": [
+    715.0,
+    622.0599975585938
+   ],
+   "via": [
+    715.0,
+    777.9400024414062
+   ],
+   "full": true,
+   "line": false,
+   "left": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "right": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": {
+    "center": [
+     960.0,
+     700.0
+    ],
+    "radius": 90.0
+   },
+   "id": 8,
+   "start": [
+    1050.0,
+    700.0
+   ],
+   "end": [
+    915.0,
+    622.0599975585938
+   ],
+   "via": [
+    915.0,
+    777.9400024414062
+   ],
+   "full": true,
+   "line": false,
+   "left": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "right": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": {
+    "center": [
+     1160.0,
+     700.0
+    ],
+    "radius": 90.0
+   },
+   "id": 9,
+   "start": [
+    1250.0,
+    700.0
+   ],
+   "end": [
+    1115.0,
+    622.0599975585938
+   ],
+   "via": [
+    1115.0,
+    777.9400024414062
+   ],
+   "full": true,
+   "line": false,
+   "left": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "right": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 10,
+   "start": [
+    0.0,
+    0.0
+   ],
+   "end": [
+    1920.0,
+    0.0
+   ],
+   "via": [
+    960.0,
+    0.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 11,
+   "start": [
+    1920.0,
+    0.0
+   ],
+   "end": [
+    1920.0,
+    1080.0
+   ],
+   "via": [
+    1920.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 12,
+   "start": [
+    1920.0,
+    1080.0
+   ],
+   "end": [
+    0.0,
+    1080.0
+   ],
+   "via": [
+    960.0,
+    1080.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 13,
+   "start": [
+    0.0,
+    1080.0
+   ],
+   "end": [
+    0.0,
+    0.0
+   ],
+   "via": [
+    0.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "is_target": false,
+   "player_solid": false
+  }
  ]
 }

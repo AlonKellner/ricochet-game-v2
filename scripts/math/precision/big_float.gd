@@ -21,6 +21,18 @@ static func zero(n: int) -> BigFloat:
 	z.limbs.resize(n)
 	return z
 
+# +infinity (the projective parameter's t = inf): a reserved exponent, so
+# comparisons order it above every finite value and to_float() gives INF.
+const INF_EXP := 1 << 40
+
+static func infinity(n: int) -> BigFloat:
+	var r := BigFloat.from_int(1, n)
+	r.exp = INF_EXP
+	return r
+
+func is_inf() -> bool:
+	return sign > 0 and exp >= INF_EXP
+
 static func limbs_for_bits(bits: int) -> int:
 	return maxi(2, (bits + BITS - 1) / BITS)
 
@@ -269,7 +281,22 @@ func div(o: BigFloat) -> BigFloat:
 		x = x.mul(two.sub(b_scaled.mul(x)))
 		correct_bits *= 2
 	var r := self.with_limbs(wp).mul(x).mul_pow2(-e_b)
-	return r.with_limbs(n)
+	# exact correction: the magnitude becomes floor(|a| / |b|) at r's
+	# exponent, so the result is the correctly truncated quotient (exact
+	# whenever the quotient is representable, as in IEEE arithmetic)
+	var sh: int = exp - o.exp - r.exp
+	var N := _ishl(limbs, maxi(sh, 0))
+	var D := _ishl(o.limbs, maxi(-sh, 0))
+	var Q := _itrim(r.limbs)
+	var QD := _imul(Q, D)
+	while _icmp(QD, N) > 0:
+		Q = _isub(Q, ONE_LIMB)
+		QD = _isub(QD, D)
+	var QD1 := _iadd(QD, D)
+	while _icmp(QD1, N) <= 0:
+		Q = _iadd(Q, ONE_LIMB)
+		QD1 = _iadd(QD1, D)
+	return _normalize(Q, r.exp, sign * o.sign, n)
 
 func sqrt_val() -> BigFloat:
 	var n := limbs.size()
@@ -291,7 +318,18 @@ func sqrt_val() -> BigFloat:
 		y = y.mul(three.sub(a_s.mul(y).mul(y))).mul_pow2(-1)
 		correct_bits *= 2
 	var r := a_s.mul(y).mul_pow2(e / 2)
-	return r.with_limbs(n)
+	# exact correction: the magnitude becomes floor(sqrt(a)) at r's exponent
+	# (exact for perfect squares)
+	var sh: int = exp - 2 * r.exp
+	var A := _ishl(limbs, maxi(sh, 0))
+	var R := _itrim(r.limbs)
+	while _icmp(_ishl(_imul(R, R), maxi(-sh, 0)), A) > 0:
+		R = _isub(R, ONE_LIMB)
+	var R1 := _iadd(R, ONE_LIMB)
+	while _icmp(_ishl(_imul(R1, R1), maxi(-sh, 0)), A) <= 0:
+		R = R1
+		R1 = _iadd(R, ONE_LIMB)
+	return _normalize(R, r.exp, 1, n)
 
 # Bits of the integer `src` (exponent src_exp) re-expressed in a frame whose
 # bit 0 has exponent frame_exp, truncated to `len` limbs.
@@ -346,6 +384,90 @@ static func _normalize(arr: PackedInt64Array, e: int, s: int, n: int) -> BigFloa
 		r.limbs[k] = v & MASK
 	r.exp = e + BITS * (top - (n - 1)) - lshift
 	return r
+
+# ---------------------------------------------------------------- exact integers
+# Non-negative integers as little-endian limb arrays (base 2^BITS), used for
+# the exact correction steps of div / sqrt_val.
+
+const ONE_LIMB := [1]
+
+static func _itrim(a) -> PackedInt64Array:
+	var r := PackedInt64Array(a)
+	var k := r.size()
+	while k > 0 and r[k - 1] == 0:
+		k -= 1
+	r.resize(k)
+	return r
+
+static func _ishl(a: PackedInt64Array, bits: int) -> PackedInt64Array:
+	var q: int = bits / BITS
+	var rb: int = bits - q * BITS
+	var out := PackedInt64Array()
+	out.resize(a.size() + q + 1)
+	var carry := 0
+	for i in a.size():
+		var v: int = (a[i] << rb) | carry
+		out[i + q] = v & MASK
+		carry = v >> BITS
+	out[a.size() + q] = carry
+	return _itrim(out)
+
+static func _imul(a: PackedInt64Array, b: PackedInt64Array) -> PackedInt64Array:
+	var cols := PackedInt64Array()
+	cols.resize(a.size() + b.size() + 1)
+	for i in a.size():
+		var ai: int = a[i]
+		if ai == 0:
+			continue
+		var carry := 0
+		for j in b.size():
+			var v: int = cols[i + j] + ai * b[j] + carry
+			cols[i + j] = v & MASK
+			carry = v >> BITS
+		var k := i + b.size()
+		while carry > 0:
+			var v2: int = cols[k] + carry
+			cols[k] = v2 & MASK
+			carry = v2 >> BITS
+			k += 1
+	return _itrim(cols)
+
+static func _icmp(a: PackedInt64Array, b: PackedInt64Array) -> int:
+	var x := _itrim(a)
+	var y := _itrim(b)
+	if x.size() != y.size():
+		return 1 if x.size() > y.size() else -1
+	for k in range(x.size() - 1, -1, -1):
+		if x[k] != y[k]:
+			return 1 if x[k] > y[k] else -1
+	return 0
+
+static func _iadd(a, b) -> PackedInt64Array:
+	var n := maxi(a.size(), b.size())
+	var out := PackedInt64Array()
+	out.resize(n + 1)
+	var carry := 0
+	for i in n:
+		var v: int = (a[i] if i < a.size() else 0) + (b[i] if i < b.size() else 0) + carry
+		out[i] = v & MASK
+		carry = v >> BITS
+	out[n] = carry
+	return _itrim(out)
+
+# a - b, a >= b
+static func _isub(a, b) -> PackedInt64Array:
+	var out := PackedInt64Array()
+	out.resize(a.size())
+	var borrow := 0
+	for i in a.size():
+		var v: int = a[i] - (b[i] if i < b.size() else 0) - borrow
+		if v < 0:
+			v += BASE
+			borrow = 1
+		else:
+			borrow = 0
+		out[i] = v
+	return _itrim(out)
 
 func _to_string() -> String:
 	return "BigFloat(%s, %d limbs)" % [String.num(to_float(), 17), limbs.size()]

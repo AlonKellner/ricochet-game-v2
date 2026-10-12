@@ -42,15 +42,19 @@ static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2, surfaces
 		if not via_inf and not end_inf and not start_inf:
 			result.steps.append(_snap_step(step, surfaces))
 			continue
+		# Steps to / from infinity are clipped to the bounds. A step without a
+		# hit that leaves (enters) the bounds exactly at its finite end keeps a
+		# zero-length piece there, so the path still starts at the player; a
+		# zero-length piece is never emitted for a hit.
 		if end_inf and not start_inf and not via_inf:
 			var clip := _clip_to_bounds(step.start, step_via.normalized(), bounds)
-			if clip != step.start:
+			if clip != step.start or step.hit == null:
 				var via_mid := (step.start + clip) / 2.0
 				result.steps.append(_piece(step, step.start, clip, step.hit, via_mid, true))
 			continue
 		if start_inf and not end_inf and not via_inf:
 			var clip := _clip_to_bounds(step.end, step_via.normalized(), bounds)
-			if clip != step.end:
+			if clip != step.end or step.hit == null:
 				var via_mid := (clip + step.end) / 2.0
 				result.steps.append(_piece(step, clip, step.end, step.hit, via_mid, true))
 			continue

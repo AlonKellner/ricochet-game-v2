@@ -52,9 +52,14 @@ class Beam:
     kappa: mp.mpf
 
     def at(self, t):
+        if mp.isinf(t):
+            # t = infinity: the antipode of p on a circle beam
+            return self.p + 2j * self.tau / self.kappa
         return self.p + t * self.tau / (1 - 1j * self.kappa * t / 2)
 
     def tangent_at(self, t):
+        if mp.isinf(t):
+            return -self.tau
         f = 1 + 1j * self.kappa * t / 2
         v = self.tau * f * f
         return v / abs(v)
@@ -89,6 +94,8 @@ def circle_hits(beam: Beam, circ: Circle, depart_on: bool):
         # a2 t^2 - 2 tq t = 0 -> t = 2 tq / a2
         if a2 != 0:
             roots.append(2 * tq / a2)
+        elif k != 0:
+            roots.append(mp.inf)        # the other crossing is the antipode
         return roots
     disc = tq * tq - a2 * P
     if disc < 0:
@@ -100,6 +107,8 @@ def circle_hits(beam: Beam, circ: Circle, depart_on: bool):
         roots.append(P / big)
         if a2 != 0:
             roots.append(big / a2)
+        elif k != 0:
+            roots.append(mp.inf)        # the other crossing is the antipode
     elif a2 != 0:
         roots.append(mp.mpf(0))
     return roots

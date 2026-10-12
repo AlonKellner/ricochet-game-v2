@@ -15,6 +15,9 @@ static func of(x: float, dx: float = 0.0) -> DualNum:
 	n.d = dx
 	return n
 
+func is_inf() -> bool:
+	return v == INF
+
 func is_zero() -> bool:
 	return v == 0.0
 

@@ -214,11 +214,83 @@ pass-throughs.
 - `test_mirror_scenes_use_beam`
 - `test_portal_and_projective_scenes_fall_back` (until Stages 82 and 83)
 
+**Added during GREEN** (each from a failure found while greening; red first):
+- `test_stage81_trace_rules.gd::test_provenance_points_snap_to_endpoints`: oracle fixtures for every exactness rule below (cursor at a junction, player on an arc endpoint, a point carried through an inversion, collinear data, a reflected exact line, a mirror-only plan, a line through an inversion center, a tangent line).
+- `tests/test_stage81_bigfloat_exact.gd`: BigFloat division and square root are correctly truncated, so representable results are exact. It fails on the old code: 80000/200 gave 399.99… and sqrt(1) gave 0.99….
+
+### What Is Introduced
+
+| Category | Item |
+|---|---|
+| Solver | One rule walker (`BeamSolver.walk_from`) mirroring oracle `trace2`, over two math backends: `BeamSolver.NumBackend` (any tier) and `FastSolver.Backend` (raw float64 with the inline dual, bit-identical to F64Num). The anchored chain (`AnchorChain`) is a hook: in PLANNED mode, and in PHYSICAL mode until the first divergence. |
+| Scene | `BeamScene` (scene defs: `BeamScene.defs_from_surfaces`, which is also what the dump script and the oracle use). `BeamEffects` holds the beam, point and pole maps. |
+| Exactness | `Exact` (`scripts/math/precision/exact.gd`): exact predicates (orient, on-circle, incircle, implicit lines, line reflection, homogeneous points, circumcenter, tangency). A float64 evaluation with a certified error bound handles the cheap case, and exact BigFloat arithmetic handles everything else. |
+| Projective parameter | t = ∞ is an exact value in every tier (`Num.is_inf`, `BigFloat.infinity`). It is the antipode of a circle beam, where degree-dropping roots lie. |
+| Precision | `PrecisionLadder` and `ErrorEstimate` work on scene defs. Planned shares physical's climb when they agree through the cursor. The FastSolver scene is cached across frames. |
+| Game | `BeamTracer.scene_supported` (capability per effect type). Mirror, arc, block and pass scenes use the beam solver. The F12 dump lists the beam events. |
+
+### Exactness rules (oracle `trace2` = solver)
+
+Rounding never decides an endpoint, an incidence, a tangency or a root at the antipode:
+- **Known points:** exact data points a beam passes through. These are:
+  - the player;
+  - the cursor (on B_K);
+  - an exact departure point;
+  - known points lying on the applied surface's carrier (the effect fixes its carrier, so they carry over to the new beam);
+  - segment endpoints on an exact line.
+
+  Pops restore the earlier beam's known points.
+
+  A surface whose carrier contains a known point exactly is hit exactly there: its root nearest that point takes the point's parameter and the exact point. A cursor exactly at the departure point is reached immediately.
+- **Exact lines:** kept in implicit form a x + b y = c with exact coefficients. They come from:
+  - a direction trace;
+  - a trace without plan;
+  - a plan made only of mirror reflections (the aim image is then an exact rational point).
+
+  An exact line stays exact through every line reflection. An exact line through an inversion center stays exactly straight.
+- **Tangency:** an exact line exactly tangent to a circle carrier touches it without crossing, so it is not an event.
+- **MAX_HITS:** a trace cut at 32 events ends at the next crossing, drawn up to it with no effect.
+
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
 - [ ] Mirrors, arcs and blocks look identical to before at shallow depth.
 - [ ] Deep mirror plans stay attached to the cursor.
 - [ ] One-sided mirrors and pass-throughs behave as before.
 - [ ] Firing follows the preview.
+- [ ] Aiming exactly at segment endpoints and room corners (cursor or player on them) behaves sensibly: corners block, endpoint grazes pass.
+- [ ] Rule changes are acceptable:
+  - the departure point is re-hit after a full loop;
+  - a reflection exactly at the cursor reaches the cursor immediately;
+  - a tangent touch is not a hit.
+
+### Validation Summary
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Red tests fail for the right reason | [x] | 19/20 failed on assertions with stubs (commit `c4a40c3`). The projective/portal fallback test was already true. |
+| All unit tests pass | [x] | Full suite 872/872 (848 prior + 24 Stage 81) |
+| Scene corpus vs oracle | [x] | 264/264 scenarios, planned and physical, full traces, ≤ 0.01 px |
+| Parity harness | [x] | 503 same, 25 legacy wrong (beam = oracle), 0 unclassified |
+| Invariant sweeps (all scenes, combos, plans, precision) | [x] | 0 violations, including endpoint, corner, collinear and tangency coincidences |
+| FastSolver ↔ generic | [x] | bit-identical events on fixtures and the bench corpus; gains match DualNum |
+| Benchmarks (v2 corpora) | [x] | Ladder 161/161 (depth 1–15) and stress 40/40 (depth 16–25), planned and physical, ≤ 0.01 px. Legacy Tracer: 3/161 and 0/40. f64 alone: planned 161/161, physical 112/161 (needs the ladder). |
+| Estimator calibration | [x] | Coverage: planned 100%, physical 99.7%. 0 missed escalations. Anchored-prefix events now get a per-beam angle gain, which grows with distance from the anchor. |
+| Per-frame cost (warm caches, f64 accepted) | [x] | inversion_grid 5.2 ms (legacy 5.9), circle_no_walls 3.5 (2.75), main 2.5 (0.95), two_mirrors 1.2. Exact lines are lazy: a float bound plus exact coefficients only at near-coincidences. |
+| Stage complete | [ ] | Awaiting user sign-off on the interactive checklist. |
+
+### Files Modified/Created
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `scripts/math/precision/beam_solver.gd` | Rewrite | Generalized walker, backends, anchored chain, provenance |
+| `scripts/math/precision/fast_solver.gd` | Rewrite | Raw-float math and twins (reflection, classification, antipode), walker backend |
+| `scripts/math/precision/beam_scene.gd`, `beam_effects.gd`, `exact.gd` | Create | Scene defs, beam maps, exact predicates |
+| `scripts/math/precision/big_float.gd`, `f64_num.gd`, `dual_num.gd`, `num_ctx.gd`, `hp_beam.gd`, `beam_geom.gd` | Modify | Correctly truncated div and sqrt; exact infinity; antipode; degree-drop roots; cached winding |
+| `scripts/math/precision/precision_ladder.gd`, `error_estimate.gd`, `beam_tracer.gd` | Modify | Scene defs, shared climb, scene cache, capability check, `max` and on-segment in paths |
+| `scripts/visual/visual_converter.gd` | Modify | Zero-length piece for a clipped hit-less step to infinity (path starts at the player) |
+| `scripts/game/debug_dumper.gd`, `scripts/testing/{dump_scene_surfaces,precision_bench,run_precision_bench,solver_parity}.gd` | Modify/Create | Beam events in the F12 dump, shared defs conversion, bench on scene defs, parity harness |
+| `docs/research/oracle/{trace2,beam,geometry,gen_fixtures_stage81,gen_scene_corpus,regen_bench_v2}.py` | Modify/Create | Oracle v2 rules, exactness, projective parameter, corpora |
+| `bench/scenarios`, `bench/expected`, `bench/stress/*`, `bench/scenes_corpus`, `bench/fixtures/stage81_rules.json` | Regenerate | v2 semantics |
+| `tests/test_stage81_*.gd`, `tests/test_solver_parity.gd`; `tests/test_precision_{fast_solver,integration}.gd`, `tests/test_stage78_arc_midpoint_investigation.gd` | Create / Modify | Stage 81 tests; migration to the new API; legacy investigation pinned to Tracer |
 
 ---
 

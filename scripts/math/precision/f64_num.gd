@@ -11,6 +11,11 @@ static func of(x: float) -> F64Num:
 	n.v = x
 	return n
 
+# The projective parameter's t = +infinity (exact, never a rounding result
+# other than IEEE overflow).
+func is_inf() -> bool:
+	return v == INF
+
 func is_zero() -> bool:
 	return v == 0.0
 

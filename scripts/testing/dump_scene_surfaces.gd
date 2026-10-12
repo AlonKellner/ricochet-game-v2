@@ -37,70 +37,8 @@ func _surfaces_of(path: String):
 		return null
 	root.add_child(scene)
 	await process_frame
-	var out: Array = []
-	for s in scene.surfaces:
-		out.append(describe_surface(s))
+	# the solver's own conversion (BeamTracer feeds the same defs to the solver)
+	var out: Array = BeamScene.defs_from_surfaces(scene.surfaces)
 	scene.queue_free()
 	await process_frame
 	return out
-
-static func _v(p: Vector2):
-	if is_inf(p.x) or is_inf(p.y):
-		return null
-	return [p.x, p.y]
-
-static func describe_surface(s: Surface) -> Dictionary:
-	var state := GameState.new()
-	var carrier := s.segment.get_carrier()
-	var circle = null
-	if s.segment.full and not carrier.is_line():
-		# exact carrier of a full circle (float64): center and radius
-		circle = {"center": [-carrier.b / (2.0 * carrier.a), -carrier.c / (2.0 * carrier.a)], "radius": carrier.radius()}
-	return {
-		"circle": circle,
-		"id": s.id,
-		"start": _v(s.segment.start.coords),
-		"end": _v(s.segment.end.coords),
-		"via": _v(s.segment.via.coords),
-		"full": s.segment.full,
-		"line": s.segment.get_carrier().is_line(),
-		"left": describe_config(s.active_side_config(Side.Value.LEFT, state)),
-		"right": describe_config(s.active_side_config(Side.Value.RIGHT, state)),
-		"is_target": s.is_target,
-		"player_solid": s.player_solid,
-	}
-
-static func describe_config(cfg: SideConfig):
-	if cfg == null:
-		return null
-	var e: Effect = cfg.effect
-	var d := {"interactive": cfg.interactive}
-	if e == null:
-		d["type"] = "pass"
-	elif e is TerminalEffect:
-		d["type"] = "terminal"
-	elif e is CircleInversionEffect:
-		d["type"] = "inversion"
-	elif e is ReflectionEffect:
-		d["type"] = "reflection"
-	elif e is RigidMotionEffect:
-		d["type"] = "portal"
-		d["theta"] = e._theta
-		d["d"] = [e._d.x, e._d.y]
-	elif e is LineNormalProjection:
-		d["type"] = "line_normal_projection"
-		d["back"] = e._project_back
-	elif e is CircleNormalProjection:
-		d["type"] = "circle_normal_projection"
-		d["back"] = e._project_back
-	elif e is LineDirectionalProjection:
-		d["type"] = "line_directional_projection"
-		d["back"] = e._project_back
-		d["normal"] = [e._normal.x, e._normal.y]
-	elif e is CircleDirectionalProjection:
-		d["type"] = "circle_directional_projection"
-		d["back"] = e._project_back
-		d["normal"] = [e._normal.x, e._normal.y]
-	else:
-		d["type"] = "unknown:" + str(e.get_script().get_global_name())
-	return d

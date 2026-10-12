@@ -51,6 +51,12 @@ static func dump(gm) -> void:
 			lines.append("  planned: %d bits   physical: %d bits (tiers tried %s, converged=%s)   %.1f ms" % [
 				NumCtx.with_limbs(br.planned_tier).bits(), NumCtx.with_limbs(br.physical_tier).bits(),
 				str(br.tiers_tried.map(func(l): return NumCtx.with_limbs(l).bits())), br.converged, br.usec / 1000.0])
+			for label in ["planned", "physical"]:
+				var evs: Array = br.planned if label == "planned" else br.physical
+				lines.append("  beam %s events (%d):" % [label, evs.size()])
+				for i in evs.size():
+					var e: BeamSolver.Event = evs[i]
+					lines.append("    [%d] %s%s%s" % [i, e.describe(), " terminal" if e.terminal else "", " rehit" if e.rehit else ""])
 
 	if player and cursor and path_renderer:
 		var plan_entries: Array = []
