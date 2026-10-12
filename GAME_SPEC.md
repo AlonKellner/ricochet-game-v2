@@ -2,7 +2,7 @@
 
 This is the single source of truth for the ricochet game: design, principles, architecture, data structures, algorithms, game loop, player interaction, level editing, implementation phasing, and testing strategy. It is self-contained — no other document is required to implement the full game.
 
-Engine: **Godot 4.6+** with **GDScript**. Developed against Godot 4.6.x stable. Target migration to 4.7.x once stable. IDE: **VSCode**.
+Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. IDE: **VSCode**.
 
 > **At a glance:** A 2D puzzle game where the player plans ricochet shots through mirrors, portals, and lenses. The core loop: aim → plan a sequence of surface bounces → fire → watch the arrow follow (or diverge from) the plan. The engine uses Möbius geometry to unify lines and circles. The hardest implementation areas are: the planning algorithm (§13), the visibility system (§15), and the Möbius frame transform (§5–6). Start with Phase 0 (§28).
 

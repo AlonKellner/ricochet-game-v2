@@ -2,7 +2,7 @@
 
 ## Stack
 
-- **Engine**: Godot 4.6+ (GDScript only)
+- **Engine**: Godot 4.7+ (GDScript only)
 - **Testing**: GUT 9.6.0 (Godot Unit Test)
 - **IDE**: VSCode
 
