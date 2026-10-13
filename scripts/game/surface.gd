@@ -38,10 +38,7 @@ func set_side_link(side: Side.Value, link: SideLink) -> void:
 func _auto_link(side: Side.Value, config: SideConfig) -> void:
 	if config == null or not config.interactive:
 		return
-	if config.effect == null or not config.effect.is_transformative():
-		return
-	var tracked := config.effect.get_tracked_transform()
-	if tracked.inverse == tracked:
+	if config.effect != null and config.effect.is_self_inverse():
 		set_side_link(side, SideLink.from_self(self, side))
 
 static func reset_id_counter() -> void:

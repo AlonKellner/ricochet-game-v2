@@ -178,14 +178,10 @@ func _try_fire() -> void:
 	var entries: Array = plan.entries if not plan.is_empty() else []
 	var path: TracePath
 	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, entries)
-	if pair != null:
-		path = pair.physical
-	elif BeamTracer.LEGACY_FALLBACK:
-		var dir := _compute_aim_direction(player_pos, cursor_pos, surfaces)
-		path = Tracer.trace(player_pos, dir, surfaces, game_state)
-	else:
+	if pair == null:
 		_checkpoints.pop()
 		return
+	path = pair.physical
 
 	if _path_renderer:
 		_path_renderer.modulate.a = 0.25
@@ -229,10 +225,6 @@ func _restore_checkpoint(data: CheckpointData) -> void:
 	plan.restore_from(data.plan_entries)
 	targets_hit = data.targets_hit.duplicate()
 	_refresh_ui()
-
-func _compute_aim_direction(player_pos: Vector2, cursor_pos: Vector2, surfaces: Array) -> Direction:
-	var entries: Array = plan.entries if not plan.is_empty() else []
-	return Planner.compute_aim_direction(player_pos, cursor_pos, entries, surfaces, game_state)
 
 func _get_surfaces() -> Array:
 	if _level_settings and "surfaces" in _level_settings:

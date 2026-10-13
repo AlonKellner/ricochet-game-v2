@@ -342,46 +342,6 @@ func check_PLAN_EFFECTS_APPLIED(player_pos: Vector2, cursor_pos: Vector2, plan_e
 		return su != null and su.effect(it.left) in BeamScene.TRANSFORMATIVE)
 	return check_plan_effects_applied_events(r.planned, items, true)
 
-func check_BACK_TRANSFORM_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
-	var violations: Array[String] = []
-	if not _renderer or player_pos == cursor_pos:
-		return violations
-	var path: TracePath = _renderer.get_traced_path()
-	if path == null or path.steps.size() == 0:
-		return violations
-	var bounds := VisualConverter.DEFAULT_BOUNDS
-	var check_limit: int = path.cursor_index if path.cursor_index >= 0 else path.steps.size()
-	check_limit = mini(check_limit, path.steps.size())
-	var portal_seen := false
-	for i in check_limit:
-		var step: TraceStep = path.steps[i]
-		if step.after_portal:
-			portal_seen = true
-		if portal_seen:
-			continue
-		if step.hit == null:
-			continue
-		if step.start == step.end:
-			continue
-		if step.frame == null or step.ray == null:
-			continue
-		if step.frame.id != MobiusTransform.IDENTITY_ID:
-			continue
-		var frame_inv := step.frame.invert()
-		var aim_dir := step.ray.direction.to_vector().normalized()
-		var origin := step.ray.origin.coords
-		var bt_start := frame_inv.apply(step.start)
-		var bt_end := frame_inv.apply(step.end)
-		if not _is_at_bounds(step.start, bounds):
-			var cross_s := (bt_start - origin).cross(aim_dir)
-			if absf(cross_s) > 1.0:
-				violations.append("BACK-TRANSFORM-ALIGNMENT: step %d start cross=%.2f (bt=%s)" % [i, cross_s, bt_start])
-		if not _is_at_bounds(step.end, bounds):
-			var cross_e := (bt_end - origin).cross(aim_dir)
-			if absf(cross_e) > 1.0:
-				violations.append("BACK-TRANSFORM-ALIGNMENT: step %d end cross=%.2f (bt=%s)" % [i, cross_e, bt_end])
-	return violations
-
 func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
@@ -408,7 +368,7 @@ func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array
 			continue
 		if step.start == step.end:
 			continue
-		if step.frame_id != MobiusTransform.IDENTITY_ID:
+		if step.frame_id != TraceStep.IDENTITY_FRAME:
 			continue
 		for surf in surfaces:
 			var s: Surface = surf
@@ -448,24 +408,6 @@ func check_HITPOINT_ON_CARRIER(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 		out.append_array(_carrier_violations(events, sc))
 	return out
 
-func check_S18_FRAME_DETERMINANT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
-	var violations: Array[String] = []
-	if not _renderer or player_pos == cursor_pos:
-		return violations
-	var _traces := _get_named_traces()
-	for trace_name in _traces:
-		var path: TracePath = _traces[trace_name]
-		for i in path.steps.size():
-			var step: TraceStep = path.steps[i]
-			if step.frame == null:
-				continue
-			var det_re: float = (step.frame.a_re * step.frame.d_re - step.frame.a_im * step.frame.d_im) - (step.frame.b_re * step.frame.c_re - step.frame.b_im * step.frame.c_im)
-			var det_im: float = (step.frame.a_re * step.frame.d_im + step.frame.a_im * step.frame.d_re) - (step.frame.b_re * step.frame.c_im + step.frame.b_im * step.frame.c_re)
-			var det_mod2: float = det_re * det_re + det_im * det_im
-			if det_mod2 == 0.0:
-				violations.append("S18-FRAME-DET: %s step %d |det|^2 = 0" % [trace_name, i])
-	return violations
-
 func check_ON_SEGMENT_CONSISTENCY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var r = _beam_result()
 	if r == null or player_pos == cursor_pos:
@@ -486,167 +428,6 @@ func check_ON_SEGMENT_CONSISTENCY(player_pos: Vector2, cursor_pos: Vector2) -> A
 			if near > 1e-9 * maxf(1.0, Vector2(p.fx(), p.fy()).length()):
 				out.append("ON-SEGMENT-CONSISTENCY: event %d s=%d stored=%s recomputed=%s at (%s, %s)" % [i, e.surface_id, e.on_segment, not e.on_segment, p.fx(), p.fy()])
 	return out
-
-func check_SHARED_RAY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
-	var violations: Array[String] = []
-	if not _renderer or player_pos == cursor_pos:
-		return violations
-	# Within each transformative sub-chain, all steps share the same ray instance.
-	# Currently no projective effects exist, so the entire trace is one sub-chain.
-	# When projective effects are added, split at projective-effect hitpoints.
-	var _traces := _get_named_traces()
-	for trace_name in _traces:
-		var path: TracePath = _traces[trace_name]
-		if path.steps.size() == 0:
-			continue
-		var first_ray: Ray = path.steps[0].ray
-		if first_ray == null:
-			continue
-		for i in range(1, path.steps.size()):
-			var step: TraceStep = path.steps[i]
-			if step.ray == null:
-				violations.append("SHARED-RAY: %s step %d has null ray" % [trace_name, i])
-				continue
-			if step.ray != first_ray:
-				violations.append("SHARED-RAY: %s step %d ray is different instance from step 0" % [trace_name, i])
-	return violations
-
-func check_RAY_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
-	var violations: Array[String] = []
-	if not _renderer or player_pos == cursor_pos:
-		return violations
-	var bounds := VisualConverter.DEFAULT_BOUNDS
-	# Back-transforming visual endpoints through frame.invert() should place
-	# them on the original ray line. Only checked for involutory frames
-	# (identity and single reflections).
-	var _traces := _get_named_traces()
-	for trace_name in _traces:
-		var path: TracePath = _traces[trace_name]
-		if path.steps.size() == 0:
-			continue
-		var first_step: TraceStep = path.steps[0]
-		if first_step.ray == null:
-			continue
-		var origin := first_step.ray.origin.coords
-		var aim_dir := first_step.ray.direction.to_vector().normalized()
-		var portal_seen := false
-		for i in path.steps.size():
-			var step: TraceStep = path.steps[i]
-			if step.after_portal:
-				portal_seen = true
-			if portal_seen:
-				continue
-			if step.frame == null or step.ray == null:
-				continue
-			if step.start == step.end:
-				continue
-			if step.hit == null:
-				continue
-			if step.frame.id != MobiusTransform.IDENTITY_ID:
-				continue
-			var frame_inv := step.frame.invert()
-			var threshold := 5.0 if step.is_arc_step else 1.0
-			if not _is_at_bounds(step.start, bounds):
-				var bt_start := frame_inv.apply(step.start)
-				var cross_s := (bt_start - origin).cross(aim_dir)
-				if absf(cross_s) > threshold:
-					violations.append("RAY-ALIGNMENT: %s step %d start cross=%.2f (bt=%s)" % [trace_name, i, cross_s, bt_start])
-			if not _is_at_bounds(step.end, bounds):
-				var bt_end := frame_inv.apply(step.end)
-				var cross_e := (bt_end - origin).cross(aim_dir)
-				if absf(cross_e) > threshold:
-					violations.append("RAY-ALIGNMENT: %s step %d end cross=%.2f (bt=%s)" % [trace_name, i, cross_e, bt_end])
-	return violations
-
-func check_ARC_MIDPOINT_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
-	var violations: Array[String] = []
-	if not _renderer or player_pos == cursor_pos:
-		return violations
-	var bounds := VisualConverter.DEFAULT_BOUNDS
-	var _traces := _get_named_traces()
-	for trace_name in _traces:
-		var path: TracePath = _traces[trace_name]
-		if path.steps.size() == 0:
-			continue
-		var first_step: TraceStep = path.steps[0]
-		if first_step.ray == null:
-			continue
-		var origin := first_step.ray.origin.coords
-		var aim_dir := first_step.ray.direction.to_vector().normalized()
-		for i in path.steps.size():
-			var step: TraceStep = path.steps[i]
-			if not step.is_arc_step or step.frame == null or step.ray == null:
-				continue
-			if step.hit == null:
-				continue
-			if not VisualConverter.is_arc(step.start, step.via, step.end):
-				continue
-			if _is_at_bounds(step.start, bounds) or _is_at_bounds(step.end, bounds):
-				continue
-			var bt_via := step.frame.invert().apply(step.via)
-			if is_inf(bt_via.x) or is_inf(bt_via.y) or bt_via.length() > 1e5:
-				continue
-			var cross := (bt_via - origin).cross(aim_dir)
-			if absf(cross) > 10.0:
-				violations.append("ARC-MIDPOINT-ALIGNMENT: %s step %d cross=%.2f (via=%s bt=%s)" % [trace_name, i, cross, step.via, bt_via])
-	return violations
-
-func check_PARAMETER_MONOTONICITY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
-	var violations: Array[String] = []
-	if not _renderer or player_pos == cursor_pos:
-		return violations
-	var _traces := _get_named_traces()
-	for trace_name in _traces:
-		var path: TracePath = _traces[trace_name]
-		if path.steps.size() < 2:
-			continue
-		for i in range(1, path.steps.size()):
-			var prev: TraceStep = path.steps[i - 1]
-			var curr: TraceStep = path.steps[i]
-			if prev.frame_id != curr.frame_id:
-				continue
-			if curr.after_portal:
-				continue
-			# hit.t is the normalized-frame ray parameter; steps without a
-			# normalized frame (BeamTracer) do not define it
-			if prev.frame == null or curr.frame == null:
-				continue
-			if prev.hit == null or curr.hit == null:
-				continue
-			if prev.hit.segment == null or curr.hit.segment == null:
-				continue
-			if prev.hit.t > 0.0 and curr.hit.t <= 0.0:
-				continue
-			if curr.hit.t <= 0.0:
-				continue
-			if curr.hit.t < prev.hit.t:
-				violations.append("PARAM-MONOTONICITY: %s step %d t=%.4f < prev t=%.4f (frame=%d)" % [trace_name, i, curr.hit.t, prev.hit.t, curr.frame_id])
-	return violations
-
-static func _is_ray_through_pole(ray: Ray, frame: MobiusTransform) -> bool:
-	var pole := frame.pole()
-	if is_inf(pole.x) or is_inf(pole.y) or is_nan(pole.x) or is_nan(pole.y):
-		return false
-	var origin := ray.origin.coords
-	var dir := ray.direction.to_normalized()
-	var to_pole := pole - origin
-	var cross := to_pole.cross(dir)
-	return absf(cross) < 1.0
-
-func check_POST_INVERSION_ARC(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
-	var violations: Array[String] = []
-	if not _renderer or player_pos == cursor_pos:
-		return violations
-	var _traces := _get_named_traces()
-	for trace_name in _traces:
-		var path: TracePath = _traces[trace_name]
-		for i in path.steps.size():
-			var step: TraceStep = path.steps[i]
-			if step.frame != null and step.frame.maps_lines_to_arcs() and not step.is_arc_step and step.hit != null:
-				if step.ray != null and _is_ray_through_pole(step.ray, step.frame):
-					continue
-				violations.append("POST-INVERSION-ARC: %s step %d in inversive frame (fid=%d) has is_arc_step=false" % [trace_name, i, step.frame_id])
-	return violations
 
 func check_VIA_ON_ARC(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
@@ -709,7 +490,7 @@ func check_VISUAL_ON_PHYSICAL_CARRIER(player_pos: Vector2, cursor_pos: Vector2) 
 			if not on_carrier:
 				if not step.hit_on_segment:
 					continue
-				if step.frame_id != MobiusTransform.IDENTITY_ID and step.hit.segment != null:
+				if step.frame_id != TraceStep.IDENTITY_FRAME and step.hit.segment != null:
 					var nc := step.hit.segment.get_carrier()
 					var norm_err := _geometric_carrier_dist(step.hit.point.coords, nc)
 					if norm_err < 1.0:

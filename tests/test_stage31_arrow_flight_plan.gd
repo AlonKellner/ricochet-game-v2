@@ -128,7 +128,7 @@ func test_stage31_preview_hidden_during_flight() -> void:
 func test_stage31_camera_bounds_arc_flight() -> void:
 	var Arrow := preload("res://scripts/game/arrow_animator.gd")
 	var step := TraceStep.new(
-		Vector2(2, 0), Vector2(-2, 0), 0, null, null, null, Vector2(0, 2), true)
+		Vector2(2, 0), Vector2(-2, 0), 0, null, null, Vector2(0, 2), true)
 	var arc_len := 2.0 * PI
 	var r := Arrow.advance([step], 0, 0.0, step.start, arc_len * 0.5,
 		VisualConverter.DEFAULT_BOUNDS)

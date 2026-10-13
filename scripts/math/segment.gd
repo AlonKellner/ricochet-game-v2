@@ -7,7 +7,6 @@ var via: Point
 var full: bool = false
 
 var _carrier: GeneralizedCircle = null
-var _provenance_carrier: GeneralizedCircle = null
 
 func _init(p_start: Point, p_end: Point, p_via: Point) -> void:
 	start = p_start
@@ -38,21 +37,6 @@ static func full_from_carrier(carrier: GeneralizedCircle) -> Segment:
 		seg = Segment.new(Point.at(p1), Point.at(p3), Point.at(p2))
 	seg.full = true
 	seg._carrier = carrier
-	return seg
-
-func transformed(t: TrackedTransform) -> Segment:
-	if t.carrier != null and t.inverse == t and _carrier != null and t.carrier == _carrier:
-		return self
-	var new_s := start.transformed(t)
-	var new_e := end.transformed(t)
-	var new_v := via.transformed(t)
-	var seg := Segment.new(new_s, new_e, new_v)
-	seg.full = full
-	var source_carrier := _carrier if _carrier != null else _provenance_carrier
-	if source_carrier != null and new_s.transforms.is_empty() and new_e.transforms.is_empty() and new_v.transforms.is_empty():
-		seg._carrier = source_carrier
-	elif source_carrier != null:
-		seg._provenance_carrier = source_carrier
 	return seg
 
 func get_carrier() -> GeneralizedCircle:

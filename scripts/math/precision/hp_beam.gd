@@ -3,7 +3,7 @@ extends RefCounted
 
 # Oriented generalized circle in visual space, precision-generic.
 #   point p, unit tangent tau, signed curvature kappa (w.r.t. normal i*tau).
-# Local projective parametrization (same wrap order as Tracer's ray t):
+# Local projective parametrization (wraps through infinity like a projective line):
 #   z(t) = p + t*tau / (1 - i*kappa*t/2)
 # t = 0 is p; t -> +inf continues forward, wraps to -inf, returns to 0-.
 # The parameter is projective: t = inf (exact, Num.is_inf) is the antipode of

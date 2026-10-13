@@ -4,7 +4,7 @@ extends RefCounted
 # Precision-generic segment geometry for the beam solver (any Num tier:
 # F64Num, DualNum, BigFloat). Every decision here (on-segment, side, endpoint
 # blockage) is computed at the tier's precision, following the definitions of
-# the game's original code (scripts/math/intersection.gd, segment.gd):
+# the game's original definitions (the legacy intersection module, segment.gd):
 #   - side: approach = -dir·∇f(P), winding = -(E - S) × ∇f(V);
 #           LEFT iff (winding >= 0) == (approach > 0). Invariant under any
 #           nonzero scaling of the carrier function f.

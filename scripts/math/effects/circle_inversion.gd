@@ -4,22 +4,9 @@ extends TransformativeEffect
 func _init(carrier: GeneralizedCircle) -> void:
 	assert(not carrier.is_line(), "CircleInversionEffect requires a circle carrier (a != 0)")
 	_carrier = carrier
-	var ctr := carrier.center()
-	var r2 := carrier.radius() * carrier.radius()
-	var ctr_mod2 := ctr.x * ctr.x + ctr.y * ctr.y
 
-	var alpha := ctr
-	var beta := Vector2(r2 - ctr_mod2, 0.0)
-	var gamma := Vector2(1.0, 0.0)
-	var delta := Vector2(-ctr.x, ctr.y)
-
-	_mobius = MobiusTransform.new(alpha, beta, gamma, delta, true)
-	_tracked = TrackedTransform.from_self_inverse(_mobius, carrier)
-
-func _create_normalized(carrier: GeneralizedCircle) -> Effect:
-	if carrier.is_line():
-		return self
-	return CircleInversionEffect.new(carrier)
+func is_self_inverse() -> bool:
+	return true
 
 func get_display_name() -> String:
 	return "inversion"

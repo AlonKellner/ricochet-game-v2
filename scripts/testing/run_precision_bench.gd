@@ -13,7 +13,7 @@ func _init() -> void:
 		args[kv[0]] = kv[1] if kv.size() > 1 else "1"
 	var filter: String = args.get("filter", "")
 	PrecisionBench.use_corpus(args.get("dir", ""))
-	var strategies: Array = String(args.get("strategies", "s0_tracer,beam_f64,beam_big112,ladder")).split(",")
+	var strategies: Array = String(args.get("strategies", "beam_f64,beam_big112,ladder")).split(",")
 	if args.get("dir", "") == "stress":
 		BUCKETS = [[16, 17], [18, 19], [20, 21], [22, 23], [24, 25]]
 	var names := PrecisionBench.list_scenarios(filter)
@@ -27,8 +27,6 @@ func _init() -> void:
 			var t0 := Time.get_ticks_usec()
 			var out: Dictionary
 			match strat:
-				"s0_tracer":
-					out = PrecisionBench.run_s0(scn, n_pl, n_ph)
 				"beam_f64":
 					out = PrecisionBench.run_beam(scn, NumCtx.f64(), n_pl, n_ph)
 				"ladder":

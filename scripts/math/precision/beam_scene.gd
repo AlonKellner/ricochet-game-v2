@@ -155,6 +155,9 @@ static func supported(defs: Array) -> bool:
 			var cfg = d.get(key)
 			if cfg != null and not (String(cfg.get("type", "")) in SUPPORTED_TYPES):
 				return false
+			# a portal needs its paired surface (the beam departs from it)
+			if cfg != null and String(cfg.get("type", "")) == "portal" and cfg.get("pair") == null:
+				return false
 	return true
 
 # ---------------------------------------------------------------- game surfaces
@@ -173,8 +176,7 @@ static func defs_from_surfaces(game_surfaces: Array) -> Array:
 			var e: Effect = game_surfaces[i].active_side_config(Side.Value.LEFT if key == "left" else Side.Value.RIGHT, state).effect
 			for j in game_surfaces.size():
 				var c2: SideConfig = game_surfaces[j].active_side_config(Side.Value.LEFT, state)
-				if j != i and c2 != null and c2.effect is RigidMotionEffect \
-						and c2.effect.get_tracked_transform() == e.get_tracked_transform().inverse:
+				if j != i and c2 != null and c2.effect != null and c2.effect == e.partner():
 					cfg["pair"] = game_surfaces[j].id
 					break
 	return out

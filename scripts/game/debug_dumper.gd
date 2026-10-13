@@ -63,13 +63,11 @@ static func dump(gm) -> void:
 		var p: PlanManager = path_renderer._get_plan()
 		if p and not p.is_empty():
 			plan_entries = p.entries
-		var aim_dir: Direction = Planner.compute_aim_direction(
-			player_pos, cursor_pos, plan_entries, surfaces, GameState.new())
-		lines.append("Planner aim: direction=%s end=%s" % [aim_dir.to_normalized(), aim_dir.end.coords])
-		if plan_entries.size() > 0:
-			var image = aim_dir.end.coords
-			lines.append("  Image (aim target): %s" % image)
-			lines.append("  Cursor→Image dist: %.2f" % cursor_pos.distance_to(image))
+		var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, plan_entries)
+		if pair != null and not pair.result.planned.is_empty():
+			# the shot's aim: the exact initial tangent of the planned beam
+			var b0: HPBeam = pair.result.planned[0].beam
+			lines.append("Beam aim: direction=%s" % Vector2(b0.tau.fx(), b0.tau.fy()))
 
 	_dump_trace(lines, "Physical", "P", path_renderer.get_traced_path() if path_renderer else null, surfaces)
 	_dump_trace(lines, "Planned", "L", path_renderer.get_planned_path() if path_renderer else null, surfaces)
@@ -93,8 +91,6 @@ static func _dump_trace(lines: PackedStringArray, trace_name: String, prefix: St
 		parts.append("fid=%d" % step.frame_id)
 		if step.is_arc_step:
 			parts.append("ARC")
-		if step.frame and step.frame.conjugating:
-			parts.append("CONJ")
 		if step.hit == null:
 			parts.append("[virt]")
 		else:

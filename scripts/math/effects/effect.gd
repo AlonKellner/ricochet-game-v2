@@ -12,24 +12,10 @@ func is_terminal() -> bool:
 func is_transformative() -> bool:
 	return kind() == Kind.TRANSFORMATIVE
 
-# Stage 84 stub
+# An involution (reflection, inversion): applying it twice is the identity, so
+# a side with it links to itself (plan chevrons) and re-hitting it pops.
 func is_self_inverse() -> bool:
 	return false
-
-func get_mobius() -> MobiusTransform:
-	return MobiusTransform.identity()
-
-func get_inverse_mobius() -> MobiusTransform:
-	return get_mobius().invert()
-
-func get_tracked_transform() -> TrackedTransform:
-	return TrackedTransform.identity()
-
-func apply_forward(_hit_point: Vector2, _segment: Segment, _side: int) -> Ray:
-	return null
-
-func normalized(_carrier: GeneralizedCircle) -> Effect:
-	return self
 
 func get_display_name() -> String:
 	return "pass"

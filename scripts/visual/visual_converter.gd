@@ -47,7 +47,7 @@ static func prepare_for_display(path: TracePath, bounds: Rect2, surfaces: Array 
 		var via_inf := is_inf(step_via.x) and is_inf(step_via.y)
 		if (end_inf or start_inf) and via_inf and step.ray != null:
 			# For steps to/from infinity `via` is the direction to clip along
-			# (see Tracer._add_escape_steps), not a point.
+			# (escape-step convention, BeamTracer._steps_for), not a point.
 			var dir := step.ray.direction.to_normalized()
 			if end_inf and not start_inf:
 				step_via = dir
@@ -110,7 +110,7 @@ static func prepare_for_display(path: TracePath, bounds: Rect2, surfaces: Array 
 # step. The piece carrying the hit gets the hit's surface/side data; only the
 # first piece of a split keeps after_portal (it starts the step).
 static func _piece(step: TraceStep, p_start: Vector2, p_end: Vector2, hit, via: Vector2, first: bool) -> TraceStep:
-	var piece := TraceStep.new(p_start, p_end, step.frame_id, hit, step.ray, step.frame, via, false)
+	var piece := TraceStep.new(p_start, p_end, step.frame_id, hit, step.ray, via, false)
 	piece.type = step.type
 	piece.est_error = step.est_error
 	piece.precision_bits = step.precision_bits
@@ -125,7 +125,7 @@ static func _snap_step(step: TraceStep, surfaces: Array = []) -> TraceStep:
 	var display_end := compute_display_end(step, surfaces)
 	if display_end == step.end or display_end == step.start:
 		return step
-	var result := TraceStep.new(step.start, display_end, step.frame_id, step.hit, step.ray, step.frame, step.via, step.is_arc_step)
+	var result := TraceStep.new(step.start, display_end, step.frame_id, step.hit, step.ray, step.via, step.is_arc_step)
 	result.type = step.type
 	result.copy_meta_from(step)
 	return result

@@ -5,10 +5,9 @@ extends RefCounted
 # (bench/scenarios + bench/expected: scenarios from docs/research/oracle/gen_corpus.py,
 # expected traces under the v2 rules from regen_bench_v2.py). Scenario
 # "surfaces" are scene defs (BeamScene); "circles" / "walls" build the same
-# scene for the legacy Tracer.
+# scene as game surfaces (build_surfaces).
 #
 # Strategies:
-#   s0_tracer        current Tracer (normalized frame, float32 points)
 #   beam_f64         BeamSolver at float64 (anchored planned + forward physical)
 #   beam_big<bits>   BeamSolver at BigFloat precision
 #   ladder           PrecisionLadder (f64 -> BigFloat tiers until converged)
@@ -53,7 +52,6 @@ static func list_scenarios(filter: String = "") -> Array:
 
 static func build_surfaces(scn: Dictionary) -> Array:
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 	var surfaces: Array = []
 	for c in scn["circles"]:
 		var carrier := GeneralizedCircle.from_circle(Vector2(c["center"][0], c["center"][1]), c["radius"])
@@ -86,40 +84,6 @@ static func scene_defs(scn: Dictionary) -> Array:
 	return scn["surfaces"]
 
 # ---------------------------------------------------------------- strategies
-
-static func run_s0(scn: Dictionary, n_planned: int, n_physical: int) -> Dictionary:
-	var surfaces := build_surfaces(scn)
-	var player := Vector2(scn["player"][0], scn["player"][1])
-	var cursor := Vector2(scn["cursor"][0], scn["cursor"][1])
-	var plan := plan_entries(scn)
-	var gs := GameState.new()
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, gs, cache)
-	var ray := Ray.from_coords(player, aim)
-	var phys := Tracer.trace(player, aim, surfaces, gs, ray, -1.0, TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan, cache, cursor)
-	var planned := Tracer.trace(player, aim, surfaces, gs, ray, -1.0, TraceMode.PLANNED, TraceMode.PHYSICAL, plan, cache, cursor)
-	return {"planned": _tracer_events(planned), "physical": _tracer_events(phys)}
-
-static func _tracer_events(path: TracePath) -> Array:
-	var out: Array = []
-	for i in path.steps.size():
-		var s: TraceStep = path.steps[i]
-		if s.surface_id >= 0 and s.hit != null:
-			var e := Ev.new()
-			e.kind = "hit"
-			e.surface_id = s.surface_id
-			e.left = s.hit_side == Side.Value.LEFT
-			e.px = s.end.x
-			e.py = s.end.y
-			out.append(e)
-		if path.cursor_index == i + 1:
-			var c := Ev.new()
-			c.kind = "cursor"
-			c.surface_id = -1
-			c.px = s.end.x
-			c.py = s.end.y
-			out.append(c)
-	return out
 
 static func run_beam(scn: Dictionary, ctx: NumCtx, n_planned: int, n_physical: int) -> Dictionary:
 	var scene := BeamScene.from_defs(ctx, scene_defs(scn))

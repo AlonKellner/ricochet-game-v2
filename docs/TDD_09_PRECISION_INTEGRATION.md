@@ -15,7 +15,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 | 81 | Reflections, partial/one-sided inversions, terminals, passes | Done (user sign-off) |
 | 82 | Portals (rigid motion) | Done (user sign-off) |
 | 83 | Projective effects (physical) + full switch-over | Done (user sign-off) |
-| 84 | Delete the legacy solver | Planned |
+| 84 | Delete the legacy solver | In progress (green; awaiting user sign-off) |
 | 85 | State flags (ConfigResolver + StateChange) | Planned |
 | 86 | Ghost mode & toggler surfaces | Planned |
 | 87 | Plannable projectives (mixed chains) | Planned |
@@ -472,16 +472,73 @@ This replaces legacy's `determine_side(hit + axis)` probe. That probe had an eff
 
 ## Stage 84: Delete the legacy solver
 
-### Unit Tests Added (written first)
-- Ported behavioural tests, running through a `TestTrace` helper on the beam
-  solver.
-- `test_no_legacy_symbols`
-- `test_surface_self_links_without_tracked`
-- A migration table for every deleted test (intent, and the ported test that
-  covers it or "internal to removed representation").
+### Overview
+The beam solver is the only solver. The legacy frame-based machinery is deleted:
+- `Tracer`, `Planner`, `TransformCache`, `TrackedTransform`, `MobiusTransform`;
+- the intersection module (`Intersection.project_onto_carrier` moved to `VisualConverter`, with an exact center test instead of `< 1e-12`);
+- the Möbius and tracked-transform state of effects, and `Effect.normalized`;
+- the projections' `apply_forward` (the beam's exact exit rule is in `BeamEffects`);
+- Point and Segment provenance transforms, and `GeneralizedCircle.transformed_by`;
+- `TraceStep.frame`;
+- the parity harness, the `s0_tracer` bench strategy, `LEGACY_FALLBACK` / `use_beam_tracer`, and the retired invariant checks.
 
-### Interactive User Tests
-- [ ] Smoke test every scene.
+**What replaced them:**
+- `Effect.is_self_inverse()` (reflection, inversion) drives surface self-links.
+- Portal pairs are built directly: B = T(A) with T(z) = e^{iθ}z + d, and the inverse motion is (−θ, −e^{−iθ}d). Each effect knows its pair (`partner()`, held weakly). `BeamScene` pairs portals through `partner()`, and a portal without its paired surface is unsupported.
+- `TraceStep.IDENTITY_FRAME` (0) replaces `MobiusTransform.IDENTITY_ID`.
+
+**Test migration:**
+- Behavioural tests were ported through `TestTrace` (`scripts/testing/test_trace.gd`), which has `Tracer.trace`'s signature and runs `BeamTracer.trace_pair`.
+- Legacy-internals tests were deleted. All 298 are listed in [`docs/stage84_test_migration.md`](stage84_test_migration.md), each with its intent and either the covering test or the reason.
+- Assertions that encoded legacy representation details were changed to the beam semantics, each with a comment:
+  - per-step frame objects become `frame_id` transitions;
+  - "frame resets to identity after a projective" becomes "a fresh epoch frame";
+  - the step ray is the shared aim ray, not the caller's object;
+  - lone portal surfaces become full pairs.
+- Legacy-parity geometry tests (`test_stage80_beam_geometry`) now compare against legacy results frozen before deletion.
+
+**Expectation changes (review at sign-off):**
+- `test_stage43_bounce_point_on_carrier`: PLANNED fires on the first crossing matching id and side, here off the arc at (100,200), not the legacy (300,200). This is the Stage 81 rule.
+- `test_trace_ends_violation_1` and `test_player_blocks_ray_looping_through_infinity`: with the cursor on a wall corner, the trace ends at the cursor (cursor-first tie). The beam has no player block.
+
+### Unit Tests Added (written first)
+- `test_no_legacy_symbols`: no legacy files; no legacy identifiers in `scripts/` (comments stripped).
+- `test_surface_self_links_without_tracked`: self-links follow `is_self_inverse()`.
+- `test_portal_pair_construction_without_frames`: target points equal the closed form exactly; the inverse motion; `partner()`; `BeamScene` pairing.
+- Ported behavioural tests (TestTrace), with the migration table.
+
+### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
+- [ ] Smoke test every scene (`scenes/`, `scenes/test_levels/`, `scenes/playground/`):
+  - the preview draws;
+  - plans work;
+  - firing works;
+  - the F12 dump works (it now prints the beam aim, not the Planner aim).
+- [ ] Portal scenes: chevrons and plan links unchanged; paths through portals unchanged.
+- [ ] Mirror and inversion surfaces still self-link in the plan UI.
+
+### Validation Summary
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Red tests fail for the right reason | [x] | Before deletion: 595 pass; only the 3 Stage 84 tests failed, on assertions (commit `9d70b56`) |
+| Ported tests pass before deletion | [x] | Full suite, legacy code still present |
+| All unit tests pass | [x] | Full suite 598/598 after deletion (893 before: 298 deleted, 3 added) |
+| Scene corpus vs oracle, ladder, sweeps | [x] | Part of the suite: `test_stage81_trace_rules`, `test_precision_*`, `test_invariant_*` (zero violations) |
+| Stage complete | [ ] | Awaiting user sign-off |
+
+### Files Modified/Created/Deleted
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `scripts/math/{tracer,planner,transform_cache,tracked_transform,mobius_transform,intersection}.gd`, `scripts/testing/solver_parity.gd` | Delete | Legacy solver |
+| `scripts/math/trace_mode.gd`, `scripts/testing/test_trace.gd` | Create | `TraceMode` constants; `TestTrace` helper |
+| `scripts/math/effects/*.gd` | Modify | Effects without Möbius/tracked state; `is_self_inverse`; portal `partner()`; direct `create_portal_pair`; `apply_forward` removed |
+| `scripts/math/{point,segment,generalized_circle,trace_step}.gd` | Modify | Provenance transforms, `transformed_by`, `TraceStep.frame` removed; `IDENTITY_FRAME` |
+| `scripts/game/surface.gd`, `scripts/math/precision/beam_scene.gd` | Modify | Self-links by `is_self_inverse`; portal pairing by `partner()` |
+| `scripts/math/precision/beam_tracer.gd`, `scripts/visual/{path_renderer,visual_converter}.gd`, `scripts/game/{game_manager,debug_dumper}.gd` | Modify | No fallback; no frames; `project_onto_carrier` moved |
+| `scripts/testing/{invariant_checker,precision_bench,run_precision_bench,dump_scene_surfaces,violation_viewer}.gd`, `Makefile` | Modify | Retired checks and `s0_tracer` removed |
+| `tests/*` | Modify/Delete | Ports and deletions (see the migration table); `tests/test_stage84_no_legacy.gd` |
+| `GAME_SPEC.md` (2.5.0), `CHANGELOG.md`, `CLAUDE.md`, `docs/precision_benchmark_findings.md`, `docs/stage84_test_migration.md` | Modify/Create | Docs describe the beam solver |
 
 ---
 

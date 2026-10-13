@@ -1,8 +1,7 @@
 class_name TraceStep
 extends RefCounted
 
-# One displayed step of a trace (visual space). Formerly TraceStep (still
-# available under that name as an alias). Produced by both solvers.
+# One displayed step of a trace (visual space), produced by BeamTracer.
 
 var start: Vector2
 var end: Vector2
@@ -10,7 +9,6 @@ var via: Vector2
 var frame_id: int
 var hit: TraceHit
 var ray: Ray
-var frame: MobiusTransform
 var is_arc_step: bool
 var type: int = StepTypes.Type.ALIGNED
 var surface_id: int = -1
@@ -18,23 +16,22 @@ var hit_side: int = -1
 var hit_on_segment: bool = false
 var after_portal: bool = false
 var est_error: float = -1.0     # estimated px error of this step's end (BeamTracer), -1 = unknown
-var precision_bits: int = 0     # arithmetic precision the step was computed at (0 = float32 Tracer)
+var precision_bits: int = 0     # arithmetic precision the step was computed at (0 = unknown)
 
 # frame_id of the untransformed frame (empty transform stack, epoch 0)
 const IDENTITY_FRAME := 0
 
-func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: TraceHit = null, p_ray: Ray = null, p_frame: MobiusTransform = null, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
+func _init(p_start: Vector2 = Vector2.ZERO, p_end: Vector2 = Vector2.ZERO, p_frame_id: int = 0, p_hit: TraceHit = null, p_ray: Ray = null, p_via: Vector2 = Vector2.ZERO, p_is_arc: bool = false) -> void:
 	start = p_start
 	end = p_end
 	frame_id = p_frame_id
 	hit = p_hit
 	ray = p_ray
-	frame = p_frame
 	via = p_via if p_via != Vector2.ZERO else (p_start + p_end) / 2.0
 	is_arc_step = p_is_arc
 
 func with_type(new_type: int) -> TraceStep:
-	var copy := TraceStep.new(start, end, frame_id, hit, ray, frame, via, is_arc_step)
+	var copy := TraceStep.new(start, end, frame_id, hit, ray, via, is_arc_step)
 	copy.type = new_type
 	copy.copy_meta_from(self)
 	return copy

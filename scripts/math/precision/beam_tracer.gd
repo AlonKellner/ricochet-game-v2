@@ -16,10 +16,6 @@ class Pair extends RefCounted:
 	var physical: TracePath
 	var result: PrecisionLadder.Result
 
-# Debug toggle: fall back to the legacy Tracer when trace_pair returns null
-# (off: every scene is beam-solved since Stage 83; removed in Stage 84).
-static var LEGACY_FALLBACK := false
-
 static var _cache_key: String = ""
 static var _cache_pair: Pair = null
 static var _scene_key: String = ""
@@ -56,8 +52,8 @@ static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_e
 	if res.planned.is_empty() or res.physical.is_empty() or not _finite(res.planned) or not _finite(res.physical):
 		return null
 	# Identical up to and including the cursor -> one trajectory: share it, so
-	# planned and physical post-cursor tails are the same steps (Tracer runs
-	# both with the same post-cursor mode, so its tails coincide too).
+	# planned and physical post-cursor tails are the same steps (both continue
+	# PHYSICAL after the cursor).
 	var ci := _cursor_event(res.planned)
 	if ci >= 0 and _same_prefix(res.planned, res.physical, ci + 1):
 		res.planned = res.physical
@@ -118,9 +114,8 @@ static func clear_cache() -> void:
 
 # ---------------------------------------------------------------- conversion
 
-# Steps carry no normalized frame (frame = null): the beam model never maps
-# back to Tracer's normalized coordinates, which collapse numerically for deep
-# inversion chains. frame_id identifies the transform stack (merge alignment).
+# Steps are in visual space; frame_id identifies the (epoch, transform stack)
+# (merge alignment).
 static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, frames: Dictionary, aim: Ray = null) -> TracePath:
 	var path := TracePath.new()
 	var stack: Array = []
@@ -131,7 +126,7 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 		var e: BeamSolver.Event = events[i]
 		var fid := _frame_id(stack, frames, e.epoch)
 		# after a portal the arc starts at the exit point (its own t_from)
-		var steps := _steps_for(e, fid, null, null if gap else prev_pt)
+		var steps := _steps_for(e, fid, null if gap else prev_pt)
 		var gap_pending := gap
 		gap = false
 		if e.point != null:
@@ -139,7 +134,7 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 		var surf: Surface = by_id.get(e.surface_id)
 		var appended := false
 		for s in steps:
-			# zero-length steps are not emitted (Tracer skips them too); the
+			# zero-length steps are not emitted; the
 			# event's effect still applies
 			if s.start == s.end and not is_inf(s.start.x):
 				continue
@@ -185,7 +180,7 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 # frames after it are new even when the stack signature repeats
 static func _frame_id(stack: Array, frames: Dictionary, epoch: int = 0) -> int:
 	if stack.is_empty() and epoch == 0:
-		return MobiusTransform.IDENTITY_ID
+		return TraceStep.IDENTITY_FRAME
 	var key := "%d|%s" % [epoch, ",".join(stack.map(func(x): return str(x)))]
 	if not frames.has(key):
 		frames[key] = {"id": frames.size() + 1}
@@ -196,7 +191,7 @@ static func _frame_id(stack: Array, frames: Dictionary, epoch: int = 0) -> int:
 # prev_pt: the previous event's point -- the arc's start, exactly (never
 # re-evaluated from t_from, which can sit at the parametrization's singular
 # point, t -> infinity, after a provenance resume).
-static func _steps_for(e: BeamSolver.Event, fid: int, frame: MobiusTransform, prev_pt = null) -> Array:
+static func _steps_for(e: BeamSolver.Event, fid: int, prev_pt = null) -> Array:
 	var b: HPBeam = e.beam
 	var bf := FastSolver.beam(b.p.fx(), b.p.fy(), b.tau.fx(), b.tau.fy(), b.kappa.to_float())
 	var tf: float = e.t_from.to_float()
@@ -207,12 +202,12 @@ static func _steps_for(e: BeamSolver.Event, fid: int, frame: MobiusTransform, pr
 		var h0 := FastSolver.at_view(bf, tf)
 		start = Vector2(h0[0], h0[1])
 	var is_line: bool = bf[FastSolver.K] == 0.0
-	# Steps to/from infinity follow Tracer's escape-step convention
-	# (_add_escape_steps): `via` holds the travel direction, not a point.
+	# Steps to/from infinity (escape-step convention): `via` holds the travel
+	# direction, not a point.
 	if e.t_to == null:
 		# escape to infinity along a straight beam
 		var tg := FastSolver.tangent_at(bf, tf, 0.0)
-		var s := TraceStep.new(start, Vector2(INF, INF), fid, null, _ray(start, tg), frame, Vector2(tg[0], tg[1]), false)
+		var s := TraceStep.new(start, Vector2(INF, INF), fid, null, _ray(start, tg), Vector2(tg[0], tg[1]), false)
 		return [s]
 	var tt: float = e.t_to.to_float()
 	var end := Vector2(e.point.fx(), e.point.fy())
@@ -240,19 +235,19 @@ static func _steps_for(e: BeamSolver.Event, fid: int, frame: MobiusTransform, pr
 		# infinity instead: out along the exact start tangent, back in along the
 		# exact end tangent.
 		if VisualConverter.is_arc(start, via, end) or (start - via).dot(end - via) <= 0.0:
-			return [TraceStep.new(start, end, fid, null, null, frame, via, true)]
-		return _through_infinity(bf, tf, tt, start, end, fid, frame)
+			return [TraceStep.new(start, end, fid, null, null, via, true)]
+		return _through_infinity(bf, tf, tt, start, end, fid)
 	if tt > tf or (tt == tf):
-		return [TraceStep.new(start, end, fid, null, null, frame, via, false)]
-	return _through_infinity(bf, tf, tt, start, end, fid, frame)
+		return [TraceStep.new(start, end, fid, null, null, via, false)]
+	return _through_infinity(bf, tf, tt, start, end, fid)
 
 # start -> infinity along the start tangent, infinity -> end along the end
-# tangent (Tracer's escape-step convention: `via` holds the direction).
-static func _through_infinity(bf: PackedFloat64Array, tf: float, tt: float, start: Vector2, end: Vector2, fid: int, frame: MobiusTransform) -> Array:
+# tangent (escape-step convention: `via` holds the direction).
+static func _through_infinity(bf: PackedFloat64Array, tf: float, tt: float, start: Vector2, end: Vector2, fid: int) -> Array:
 	var tg0 := FastSolver.tangent_at(bf, tf, 0.0)
-	var out_step := TraceStep.new(start, Vector2(INF, INF), fid, null, _ray(start, tg0), frame, Vector2(tg0[0], tg0[1]), false)
+	var out_step := TraceStep.new(start, Vector2(INF, INF), fid, null, _ray(start, tg0), Vector2(tg0[0], tg0[1]), false)
 	var tg1 := FastSolver.tangent_at(bf, tt, 0.0)
-	var in_step := TraceStep.new(Vector2(INF, INF), end, fid, null, _ray(end, tg1), frame, -Vector2(tg1[0], tg1[1]), false)
+	var in_step := TraceStep.new(Vector2(INF, INF), end, fid, null, _ray(end, tg1), -Vector2(tg1[0], tg1[1]), false)
 	return [out_step, in_step]
 
 static func _ray(origin: Vector2, tg: PackedFloat64Array) -> Ray:

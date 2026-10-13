@@ -1,8 +1,7 @@
 class_name TracePath
 extends RefCounted
 
-# A traced path: steps plus trace-level results. Formerly TracePath
-# (still available under that name as an alias).
+# A traced path: steps plus trace-level results (BeamTracer.to_path).
 
 var steps: Array = []
 var targets_hit: Dictionary = {}

@@ -29,7 +29,6 @@ func _init() -> void:
 
 func _surfaces_of(path: String):
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 	var packed: PackedScene = load(path)
 	var scene: Node = packed.instantiate()
 	if not ("surfaces" in scene):

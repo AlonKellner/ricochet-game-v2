@@ -4,41 +4,41 @@ This is the single source of truth for the ricochet game: design, principles, ar
 
 Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. IDE: **VSCode**.
 
-> **At a glance:** A 2D puzzle game where the player plans ricochet shots through mirrors, portals, and lenses. The core loop: aim → plan a sequence of surface bounces → fire → watch the arrow follow (or diverge from) the plan. The engine uses Möbius geometry to unify lines and circles. The hardest implementation areas are: the planning algorithm (§13), the visibility system (§15), and the Möbius frame transform (§5–6). Start with Phase 0 (§28).
+> **At a glance:** A 2D puzzle game where the player plans ricochet shots through mirrors, portals, and lenses. The core loop: aim → plan a sequence of surface bounces → fire → watch the arrow follow (or diverge from) the plan. The engine uses Möbius geometry to unify lines and circles. The hardest implementation areas are: the planning algorithm (§13), the visibility system (§15), and the precision beam solver with its exactness rules (§6, §11–12, §31). Start with Phase 0 (§28).
 
 ### Implementation Status
 
 | Feature | Status |
 |---------|--------|
-| Math layer (generalized circles, segments, Möbius) | Done |
-| Physical tracing — stage-based hitpoint walk (§12) | Done |
+| Math layer (generalized circles, segments, effect maps) | Done |
+| Precision beam solver — `BeamSolver` rule walker, `FastSolver` float64 twin, `PrecisionLadder` dynamic precision, `ErrorEstimate` (§6, §11–12; TDD_09 Stages 80–83) | Done |
+| Exactness rules — exact predicates and provenance (known points, exact lines), no epsilons (§31.3) | Done |
+| Legacy frame-based solver (`Tracer`, `Planner`, `TransformCache`, `MobiusTransform`, normalized frames) | Removed (Stage 84) |
 | Reflection effect | Done |
 | Terminal (block) effect | Done |
 | Plan construction and removal | Done |
-| Planned trace with image chains | Done |
+| Planned trace — anchored image chain inside the beam solver (§13) | Done |
 | Step tree merge and divergence | Done |
-| Circle inversion effect — math, rendering, trace, planner | Done |
+| Circle inversion effect (full and partial arcs) | Done |
+| Rigid motion effect (portal pairs, Stage 82) | Done |
+| Projective effects — physical tracing (Stage 83) | Done |
+| Projective effects — planning through them (§13.3/13.4, Stage 87) | Planned — PLANNED mode currently consumes a projective plan entry without applying it |
 | Arrow flight with freeze/animation/skip | Done |
 | Camera tracking during arrow flight (§4.5) | Done |
 | Game systems: checkpoint, undo, reset (§3.3) | Done |
-| Epsilon removal — three-tier provenance endpoint detection (§31.3) | Done |
-| Effect.Kind enum + TransformativeEffect base class (v0.8.0) | Done |
-| Boundless tracer — beyond-infinity handling (v1.0.0) | Done |
-| Full segments / unbounded tracing (v1.0.0–v1.1.0) | Done |
-| Source-based cancellation / transform stack (v1.1.0) | Done |
-| Hermitian carrier transform (v1.2.0) | Done |
-| No surface filtering principle (v1.3.0) | Done |
-| Zero invariant violations (v1.4.0) | Done |
-| Multi-bounce validation (v1.5.0) | Done |
-| DRY refactor — Tracer, PathRenderer, Effects (v1.6.0) | Done |
-| Invariant sweep testing (24 checks, 10 scenes) | Done |
-| Rigid motion effect | Planned |
-| Projective effects | Planned |
+| Effect.Kind enum + TransformativeEffect base class | Done |
+| Full segments / unbounded tracing; wrap through infinity | Done |
+| Provenance (transform) stack with pop on re-hit | Done |
+| No surface filtering principle | Done |
+| Invariant sweep testing (event-based checks, all scenes) | Done |
 | Compound transformative effect | Planned |
 | Visibility polygon (§15) | Planned |
-| State-changing surfaces (CategoricalResolver) | Planned |
+| State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Planned |
+| Ghost mode & toggler surfaces (Stage 86) | Planned |
 | Level editor | Planned |
 | Menus, HUD, save system | Planned |
+
+*Historical:* versions v0.7.0–v1.6.0 of the legacy `Tracer` (three-tier endpoint detection, boundless tracer, Hermitian carrier transform, DRY refactor) were superseded by the beam solver and deleted in Stage 84. See `docs/TDD_09_PRECISION_INTEGRATION.md`.
 
 ---
 
@@ -53,9 +53,9 @@ A **trajectory preview** updates in real time as the player aims. That preview m
 **The player fantasy:** composing elaborate trick shots through a chain of mirrors, portals, and lenses. The satisfaction is the "aha" moment when the right sequence clicks, not dexterity.
 
 > **Reading note:** this document uses forward references — some terms appear before their formal definition. §32 (Terminology) provides a complete glossary. Sections 5–17 are dense mathematical framework. Here's a quick mapping to player-visible effects:
-> - **Möbius frame transform** → the engine's way of making the arrow curve through an inversion circle.
+> - **Beam** → the arrow's current path, a line or circle in screen space; an effect maps it to a new beam in closed form (this is how the arrow curves after an inversion).
 > - **Image chain** → how the preview computes where the arrow would go if the plan works.
-> - **Normalized frame** → an internal coordinate system where all arrow paths are straight lines, simplifying the math.
+> - **Provenance stack / frame id** → the record of which transformative effects are currently "applied"; two traces with the same frame id at a step have applied the same effects.
 > - **Generalized circle** → the unified representation for both straight-line and curved surfaces.
 
 ---
@@ -303,7 +303,7 @@ GeneralizedCircle:
 
 There is **no LineShape vs ArcShape distinction** in the math layer. The generalized circle handles both cases. Internal dispatch on `a == 0` vs `a != 0` is an implementation detail.
 
-`GeneralizedCircle` is a **derived** representation, not a primary one. Segments are defined by three points (start, end, via — see §8.4). The carrier is computed from the three points on first access and cached bidirectionally, so the original via can be exactly recovered from the carrier (§17).
+`GeneralizedCircle` is a **derived** representation, not a primary one. Segments are defined by three points (start, end, via — see §8.4). The carrier is computed from the three points on first access and memoized on the segment (`Segment.get_carrier()`). The three points remain stored, so the via never has to be recovered from the carrier (§17). The beam solver does not use these float coefficients for decisions: it works from the segment's defining points, using exact predicates (§11, §31.3).
 
 ### 5.2 Möbius transformations
 
@@ -313,26 +313,19 @@ A Möbius transformation is a map of the extended complex plane:
 z → (αz + β) / (γz + δ),    αδ − βγ ≠ 0
 ```
 
-Represented as a 2×2 matrix of complex numbers. In GDScript: 8 floats (real and imaginary parts of α, β, γ, δ).
+Mathematically it is a 2×2 complex matrix `[[α, β], [γ, δ]]` (up to scale), together with a flag saying whether the map conjugates its argument.
 
-```
-MobiusTransform:
-    a_re, a_im: float    # α
-    b_re, b_im: float    # β
-    c_re, c_im: float    # γ
-    d_re, d_im: float    # δ
-    conjugating: bool     # true for anti-conformal maps (reflection, inversion)
-```
+**Conformal vs anti-conformal:** Rigid motion is **conformal**: it maps `z → (αz + β) / (γz + δ)`. Reflection and circle inversion are **anti-conformal**: they map `z → (αz̄ + β) / (γz̄ + δ)`, where `z̄` is the complex conjugate.
 
-**Conformal vs anti-conformal:** Rigid motion is **conformal** (`conjugating = false`): it maps `z → (αz + β) / (γz + δ)`. Reflection and circle inversion are **anti-conformal** (`conjugating = true`): they map `z → (αz̄ + β) / (γz̄ + δ)`, where `z̄` is the complex conjugate. The `conjugating` flag must be tracked through all operations.
-
-| Operation | How |
+| Operation | Math |
 |-----------|-----|
-| **Apply to a point** | Let `z = x + iy`. If `conjugating`: use `z̄` (conjugate z). Compute `w = (α·z' + β) / (γ·z' + δ)` where `z' = z` if conformal, `z' = z̄` if conjugating. Result is `(Re(w), Im(w))`. |
-| **Compose** | Depends on the conjugating flags of both operands (see composition table below). |
-| **Invert** | `M⁻¹ = [[δ, -β], [-γ, α]] / (αδ - βγ)`. The `conjugating` flag is preserved (anti-conformal inverse is still anti-conformal). |
-| **Transform a carrier** | Hermitian matrix form: `M⁻ᴴ · H · M⁻¹`, adjusted for conjugation. Implemented in `GeneralizedCircle.transformed_by(mobius)`. For anti-conformal (conjugating) transforms, the conjugate transpose is adjusted so the result stays Hermitian. |
-| **Identity** | `[[1,0],[0,1]]`, `conjugating = false`. |
+| **Apply to a point** | `w = (α·z' + β) / (γ·z' + δ)` with `z' = z` (conformal) or `z' = z̄` (anti-conformal). |
+| **Compose** | Depends on whether each operand conjugates (see the composition table below). |
+| **Invert** | `M⁻¹ = [[δ, -β], [-γ, α]] / (αδ - βγ)`. An anti-conformal map has an anti-conformal inverse. |
+| **Map a generalized circle** | Generalized circles map to generalized circles (Hermitian form `M⁻ᴴ · H · M⁻¹`, adjusted for conjugation). |
+| **Identity** | `[[1,0],[0,1]]`, conformal. |
+
+**Implementation note (Stage 84):** the game has no Möbius matrix class, no frame composition and no carrier transformation. The legacy `MobiusTransform`, `TrackedTransform`, `GeneralizedCircle.transformed_by` and `Effect.get_mobius()` were deleted with the frame-based solver. Each effect is implemented in the beam solver as a **closed-form map of the beam state** `(p, τ, κ)` at the hit (§6, §10.8). Its point map is used only inside the solver for the anchored planned path (§13). The matrices and the composition rules below are the mathematical model those maps realise.
 
 **Composition table:** When composing `M₁ ∘ M₂` (apply M₂ first, then M₁):
 
@@ -347,9 +340,7 @@ Where `conj(M)` means conjugating each complex entry of the matrix: `[[ᾱ, β̄
 
 The rule is: when the outer transform is anti-conformal, it conjugates everything downstream — so the inner matrix's entries must be conjugated before multiplication.
 
-The three transformative effects — reflection, circle inversion, and rigid motion — are all Möbius transformations (conformal or anti-conformal). Composition follows the table above, making chaining correct for any combination of effects.
-
-**Code convention:** `frame.compose(T)` means `frame ∘ T` (mathematical convention: apply T first, then frame). This is the standard order for 'append a new transformation to the current frame.'
+The three transformative effects — reflection, circle inversion, and rigid motion — are all Möbius transformations (conformal or anti-conformal). Composition follows the table above, making chaining correct for any combination of effects. The beam solver never multiplies these matrices. A chain of effects is applied one map at a time to the beam (forward). For the planned aim, it is applied to points and poles, with the difference `P − Q` carried by exact difference formulas (§13.1).
 
 ### 5.3 Complex number operations in GDScript
 
@@ -374,55 +365,35 @@ static func cmod2(a: Vector2) -> float:
     return a.x*a.x + a.y*a.y
 ```
 
-These four operations, plus `Vector2` addition and scalar multiplication, are sufficient to implement all `MobiusTransform` operations (apply, compose, invert).
+These four operations, plus `Vector2` addition and scalar multiplication, cover the float32 helpers of the game and visual layers. The beam solver uses its own precision-generic complex type `CN` (`scripts/math/precision/cn.gd`) over a number context (`NumCtx`: float64 `F64Num`, tangent-linear `DualNum`, or arbitrary-precision `BigFloat`). Every tier runs the same formulas.
 
 ---
 
-## 6. The normalized coordinate system
+## 6. The beam model (formerly: the normalized coordinate system)
 
-### 6.1 Two frames
+> **Stage 84:** the legacy design computed everything in a per-step *normalized frame*, where rays were always lines and surfaces were mapped by the inverse of an accumulated Möbius frame `M`. That design was deleted together with `Tracer`, `MobiusTransform` and `TransformCache`. The sections below describe its replacement, the precision beam solver (`scripts/math/precision/`). Its specification is the mpmath oracle `docs/research/oracle/trace2.py`; see also `docs/TDD_09_PRECISION_INTEGRATION.md` ("Target architecture", "Exactness rules").
 
-All mathematical calculations happen in the **normalized frame** — the standard Euclidean plane where rays are always lines. The **visual frame** is what the player sees.
+### 6.1 One space: the visual plane
 
-| Frame | Rays | Surfaces | Visibility |
-|-------|------|----------|------------|
-| **Normalized** | Always **lines** | Generalized circles (lines or circles) | Simple polygons (straight edges) |
-| **Visual** | Lines **or arcs** | Line segments or circular arcs | Generalized polygons (edges may be arcs) |
+All computation happens in **visual (world) space**, the plane the player sees. There is no second frame. The arrow's current path is a **beam**: an oriented generalized circle (a line or a circle), stored as a point `p`, a unit tangent `τ` and a signed curvature `κ` (`HPBeam`):
 
-A **Möbius frame transform** `M` maps normalized → visual. It starts as the identity and is updated each time a transformative effect is applied.
+```
+z(t) = p + t·τ / (1 − iκt/2)
+```
 
-Convention: M always maps normalized → visual. After composing with effect T: M' = M ∘ T. M' still maps the *new* normalized frame → visual. The effect T maps old-normalized → new-normalized.
+`κ = 0` is a straight beam. Surfaces are intersected exactly where they are, in visual coordinates (§11). Every visual step is a piece of a beam, so it is drawn directly as a line or an arc (§7.3, §12.3).
 
 ### 6.2 Why this works
 
-Instead of allowing the ray to become an arc after a circle inversion (which would require arc-vs-arc intersection), we **compose the inversion into the frame transform** and keep the ray as a line. The surfaces, transformed into the normalized frame by `M⁻¹`, may be circles — but the ray is always a line. This reduces all intersection math to:
-
-- **Line vs line** (surface is a line in the normalized frame)
-- **Line vs circle** (surface is a circle in the normalized frame)
-
-No arc-ray parameterization, no arc-vs-arc systems.
+Every transformative effect maps a generalized circle to a generalized circle. Its action on the beam at the hit point `h` is therefore a **closed-form map of `(p, τ, κ)`** (table in §10.8). An inversion simply produces a curved beam, and beam–line and beam–circle intersections are both quadratic equations in `t`, so arcs need no special machinery. Nothing is mapped back to an origin frame. This avoids the numerical collapse that normalized coordinates suffer after deep inversion chains. When float64 is not enough, `PrecisionLadder` re-runs the same rules at higher precision (§30, §31.5).
 
 ### 6.3 Lines through infinity
 
-In the normalized frame, a line is a **closed loop** on the Riemann sphere, passing through the point at infinity. A ray starting at `O` going toward `T`:
+The beam parameter is **projective**. From `t = 0` (at `p`) the beam runs forward through `t → +∞`, wraps to `t → −∞`, and returns towards `p`. A straight beam passes through the point at infinity. On a circle beam, `t = ∞` is the antipode of `p`, an ordinary finite point (an exact value in every precision tier). Candidate hits are ordered **from the current parameter** in this cyclic order, so a hit "beyond infinity" is simply a later candidate (§11.3). In the visual plane, wrapping through ∞ on a straight beam means leaving the screen and returning from the opposite side (§12.5).
 
-1. Traverses the **forward** direction (`t > 0`).
-2. Reaches infinity (`t → +∞`).
-3. Continues from the **back side** of infinity (`t → −∞`), looping back toward the origin.
+### 6.4 Per-step frames → frame identity
 
-The **first hit** may be beyond infinity. Hit ordering:
-
-1. If any `t > 0` exists: earliest hit is `min(positive t values)`.
-2. If no `t > 0`: earliest hit is `min(negative t values)` (most negative = closest to infinity from the back). Geometrically: the most-negative t is the point that just passed through ∞ going the other way — the first point the ray would reach if it continued past the horizon.
-3. `t = 0` (origin on a surface) is excluded.
-
-In the visual frame, "beyond infinity" may correspond to passing through a finite point (the image of ∞ under the frame transform).
-
-### 6.4 Per-segment normalization
-
-Every segment in a traced path can be individually normalized to a straight line using its own Möbius frame transform. All segments normalize to the **same original ray line** (same `Direction`). The ray's `origin` advances to each hit point; the `direction` stays fixed.
-
-This does **not** mean a single transform can make all segments straight simultaneously. Each segment carries its own frame `M_i`.
+There are no per-step Möbius frames. Each step instead carries a **frame id** that identifies *which transformative effects are currently applied*. It is the id of `(epoch, provenance stack)` (§10.7, §14.8). Two steps with the same frame id are on beams produced by the same sequence of applied effects. Divergence detection compares frame ids (§14.2).
 
 ---
 
@@ -434,11 +405,12 @@ The math layer uses **uniform types** with no LineRay/ArcRay or LineSegment/ArcS
 
 | Primitive | Representation |
 |-----------|---------------|
-| Point | `Vector2` + provenance tag (§8.1) |
+| Point | `Point` wrapping a `Vector2` (§8.1). The provenance of exact points lives in the beam solver (§31.4). |
 | Direction | See §8.2 |
 | Ray | See §8.3 |
 | Segment | `{start: Vector2, end: Vector2, via: Vector2}` — three points fully define the segment including its carrier (see §8.4) |
-| Generalized circle | `{a, b, c, d: float}` — **derived** from a segment's three points, not stored. Cached bidirectionally (§17). |
+| Generalized circle | `{a, b, c, d: float}` — **derived** from a segment's three points, not stored. Memoized on the segment (§17). |
+| Beam (solver) | `HPBeam {p, τ, κ}` at the tier's precision (§6.1), or a raw float64 array in `FastSolver` |
 | Arc chain | `Array[Segment]` (open) |
 | Generalized polygon | `Array[Segment]` (closed) |
 
@@ -460,14 +432,14 @@ Note: `start_angle` and `end_angle` are needed at the Godot `draw_arc()` API bou
 
 ### 7.3 Conversion pipeline
 
-Conversion uses the Möbius frame transform `M` associated with each segment:
+There is no frame to apply: solver events are already in visual space.
 
-1. Transform `start`, `end`, and `via` through `M`.
-2. Derive the carrier from the transformed three points (cached).
-3. If the derived carrier is a line (`a == 0`): produce a `VisualLineSegment`.
-4. If the derived carrier is a circle (`a != 0`): produce a `VisualArcSegment`.
+1. `BeamTracer` turns each solver event (an arc of a beam from `t_from` to `t_to`) into one or more `TraceStep`s with visual `start`, `end` and a `via` on the beam between them (§12.3). A step that wraps through infinity on a straight beam is split into an outgoing and an incoming escape step.
+2. `VisualConverter` derives the carrier from the step's three points.
+3. If the carrier is a line, or a circle above `VisualConverter.MAX_ARC_RADIUS`, it produces a line. Otherwise it produces an arc.
+4. Escape steps (`end` or `start` = `Vector2(INF, INF)`, with `via` holding the travel direction) are drawn to or from the viewport edge.
 
-Every conversion is **cached** (§17) so round-tripping returns the exact original value.
+Conversion is one-way (math → visual). Nothing is converted back.
 
 ---
 
@@ -477,23 +449,21 @@ Every conversion is **cached** (§17) so round-tripping returns the exact origin
 
 ### 8.1 Point
 
-A 2D position with **transform provenance** — a record of how the point was derived from its original coordinates. *(See `DESIGN_PROVENANCE_PRIMITIVES.md` for full rationale.)*
+A 2D position in visual (world) coordinates.
 
 ```
 Point:
-    original:   Vector2                  # source coordinates (immutable after creation)
-    coords:     Vector2                  # current position after all transforms
-    transforms: Array[TrackedTransform]  # ordered sequence of transforms applied
-    frame:      MobiusTransform          # aggregated transform (product of sequence)
+    coords: Vector2
 ```
 
-**Invariant:** `frame.apply(original) == coords`. When inverse-pair simplification reduces the transform sequence to empty, `coords == original` exactly — no floating-point drift.
+**Construction:** `Point.at(position)`. **Comparison:** `same_position(other)` checks `coords == other.coords` (exact equality).
 
-**Construction:** `Point.at(position)` creates a point with `original = coords = position`, empty transforms, identity frame.
+**Provenance of exact points (Stage 84):** the legacy `Point` carried a transform history (`original`, `transforms: Array[TrackedTransform]`, `frame`) so that inverse pairs could cancel exactly. That machinery was removed with the frame-based solver (*historical:* `DESIGN_PROVENANCE_PRIMITIVES.md`). Exact round-trips are now guaranteed inside the beam solver:
+- **known points:** exact data points a beam passes through, kept with their parameter;
+- **exact lines:** straight beams kept in exact implicit form;
+- **the provenance stack:** a pop restores the earlier beam *object*, not a recomputed one.
 
-**Transformation:** `point.transformed(t)` returns a NEW point with the `TrackedTransform` appended. Adjacent inverse pairs cancel: if the last transform in the sequence is `t.inverse`, the pair is removed instead of appended. This guarantees exact round-trip: `p.transformed(t).transformed(t.inverse).coords == p.coords`.
-
-**Comparison:** `same_origin(other)` checks `original == other.original`; `same_position(other)` checks `coords == other.coords`. Both use exact equality.
+See §10.7 and §31.4.
 
 ### 8.2 Direction
 
@@ -501,24 +471,23 @@ An immutable two-point definition of a line's orientation.
 
 ```
 Direction:
-    start: Vector2
-    end:   Vector2
+    start: Point
+    end:   Point
     # Defines the line and its forward direction. Immutable once created.
-    # Shared across all ray propagation steps within a transformative sub-chain.
     # Two-point representation: no stored angle, no unit vector.
 ```
 
-In GDScript, Direction is a RefCounted (reference-counted, immutable) object. 'Shared' means multiple Ray instances hold a reference to the same Direction instance. Direction is never mutated after creation.
+In GDScript, Direction is a RefCounted (reference-counted, immutable) object. It is never mutated after creation.
 
 ### 8.3 Ray
 
 ```
 Ray:
-    origin:    Vector2     # where the ray currently is (advances to hit points)
-    direction: Direction   # which line the ray travels on (immutable within a sub-chain)
+    origin:    Point
+    direction: Direction
 ```
 
-The `origin` changes at each hit; the `direction` stays fixed through transformative effects. Only projective effects create a new `Direction`.
+`Ray` is a game-facing value. The **aim ray** (player → cursor) is shared by reference by every step of one trajectory (`TraceStep.ray`). Escape steps carry a ray along their exact tangent. The solver itself does not trace `Ray`s: after the first effect the arrow's path is a beam (§6.1), and the beam's tangent changes at every transformative or projective hit.
 
 **Degenerate case:** if the cursor is exactly at the player position, the Direction has zero length — the aim line is undefined. The system treats this as "no aim": no preview is drawn and fire is a no-op.
 
@@ -544,14 +513,9 @@ These three points **fully determine the segment**, including its carrier:
 | **Via = INF** | The unique **line** through `start` and `end`. | The segment from `start` → ∞ → `end` — the "long way around" on the Riemann sphere. In GDScript: `via = Vector2(INF, INF)`. The carrier derivation function checks for this sentinel. |
 | **Non-collinear** (three distinct non-collinear points) | The unique **circle** through all three. | The arc from `start` to `end` that passes through `via`. |
 
-No explicit `carrier` field is stored. The carrier is a **derived value**, computed from the three points on first access and **cached bidirectionally** through the computation cache (§17).
+No explicit `carrier` field is stored. The carrier is a **derived value**, computed from the three points on first access (`Segment.derive_carrier(start, end, via)`) and memoized on the segment (`get_carrier()`).
 
-**Carrier ↔ via caching:** This derivation is reversible. Given a carrier and two endpoints, the via can be recovered (it lies on the intended arc). Given three points, the carrier can be derived (unique line or circle). Both directions are cached:
-
-- **Forward (three points → carrier):** `derive_carrier(start, end, via) → GeneralizedCircle`. Stored in the cache.
-- **Reverse (carrier + endpoints → via):** `derive_via(start, end, carrier) → Vector2`. Returns the cached original `via` exactly, not a recomputed approximation.
-
-This guarantees that a segment constructed from three points, whose carrier is later derived, can reconstruct the **exact** original via from that carrier — no floating-point drift from the round-trip. *(Principle 5.)*
+**Carrier ↔ via:** the three points stay stored, so the exact original `via` is always available and never has to be recovered from the carrier. *(Principle 5.)* (*Historical:* the bidirectional `derive_via` cache entry of the earlier design (§17) is not implemented.) The beam solver does not use the float carrier coefficients. It builds its own carrier geometry from the defining points at the tier's precision (`BeamGeom`), and it decides incidences, endpoints and tangencies with exact predicates on the data (`Exact`, §31.3).
 
 The `via` point representation is more stable and continuous than a winding flag — it moves smoothly as the segment deforms, whereas a discrete flag can flip abruptly.
 
@@ -588,7 +552,7 @@ SideConfig:
 
 # player_solid affects ONLY CharacterBody2D collision. Arrow tracing and visibility always interact with all surfaces regardless.
 
-Surface segments are defined and stored in **visual (world) coordinates**. The trace loop transforms them into the current normalized frame for intersection computation (§12.1).
+Surface segments are defined and stored in **visual (world) coordinates**. The beam solver intersects beams with them where they are, in visual coordinates (§11, §12.1). Surfaces are never transformed. For the solver, `BeamScene.defs_from_surfaces` converts the surfaces into JSON-able scene defs, the same format the oracle traces.
 
 `interactive` is a **static** property — it does not change with game state. It is set once in the level editor and serialized. The ConfigResolver may change the effect, but the interactivity of a side is fixed.
 
@@ -610,11 +574,11 @@ Pass-through (null effect) sides must have `interactive = false`. A null-effect 
 
 This formula works uniformly for both line and arc carriers. For lines (`a = 0`), it reduces to the standard cross-product side test. For circles (`a ≠ 0`), `f(P) > 0` means P is outside the circle and `f(P) < 0` means inside — the winding direction then maps outside/inside to left/right.
 
-Which side a ray approaches from is computed once at the hit point (using a point slightly before the hit along the ray) and stored in the hit record. *(Principle 5.)*
+Which side the beam approaches from is computed once at the hit point and stored in the hit event. *(Principle 5.)* `BeamGeom` evaluates the same convention without probe points: approach = `−τ_h·∇f(h)`, winding = `−(E − S) × ∇f(V)`, and LEFT iff `(winding ≥ 0) == (approach > 0)`. The result does not depend on how the carrier function `f` is scaled.
 
 ### 9.3 Surface identity
 
-Each surface has a stable `id` assigned at creation, never reused. Tie-breaking at identical ray parameters uses surface ID, then provenance rank.
+Each surface has a stable `id` assigned at creation, never reused. Ties at identical beam parameters are broken cursor first, then by surface ID; the departure re-hit is always last (§11.3).
 
 ### 9.4 State-conditional behavior
 
@@ -666,13 +630,10 @@ All effects extend a common `Effect` base class. Dispatch uses `kind()` (returni
 Effect (extends RefCounted):
     enum Kind { PASS, TERMINAL, TRANSFORMATIVE, PROJECTIVE }
 
-    func kind() → Kind                         # default: PASS
-    func is_terminal() → bool                  # kind() == TERMINAL
-    func is_transformative() → bool            # kind() == TRANSFORMATIVE
-    func get_mobius() → MobiusTransform         # default: identity
-    func get_inverse_mobius() → MobiusTransform  # default: identity
-    func get_tracked_transform() → TrackedTransform
-    func normalized(carrier: GeneralizedCircle) → Effect  # default: self
+    func kind() → Kind                 # default: PASS
+    func is_terminal() → bool          # kind() == TERMINAL
+    func is_transformative() → bool    # kind() == TRANSFORMATIVE
+    func is_self_inverse() → bool      # default: false; an involution links its side to itself and pops on re-hit
     func get_display_name() → String
     func get_display_color() → Color
 
@@ -680,61 +641,68 @@ TerminalEffect (extends Effect):
     func kind() → TERMINAL
 
 TransformativeEffect (extends Effect):
-    _mobius:   MobiusTransform
-    _tracked:  TrackedTransform
-    _carrier:  GeneralizedCircle
-
+    _carrier: GeneralizedCircle
     func kind() → TRANSFORMATIVE
-    func get_mobius() → _mobius
-    func get_inverse_mobius() → _tracked.inverse.mobius
-    func get_tracked_transform() → _tracked
-    func _create_normalized() → TransformativeEffect   # subclass override
-    func normalized(carrier) → _create_normalized()
 
 ReflectionEffect (extends TransformativeEffect):
-    func _create_normalized() → ReflectionEffect.new(carrier)
+    func is_self_inverse() → true
 
 CircleInversionEffect (extends TransformativeEffect):
-    func _create_normalized() → CircleInversionEffect.new(carrier)
+    func is_self_inverse() → true
     # Requires circle carrier (a ≠ 0)
+
+RigidMotionEffect (extends TransformativeEffect):
+    _theta: float, _d: Vector2          # T(z) = e^{iθ}·z + d
+    func partner() → RigidMotionEffect  # the paired (inverse) portal side
+    static func create_portal_pair(source_seg, theta, d) → {source_effect, target_effect, target_segment}
+
+LineNormalProjection, CircleNormalProjection,
+LineDirectionalProjection, CircleDirectionalProjection (extend Effect):
+    func kind() → PROJECTIVE
+    _project_back: bool                 # "through" vs "back" (§10.4)
+    _normal: Vector2                    # directional projections only
 ```
 
-**Implemented effects:** `TerminalEffect`, `ReflectionEffect`, `CircleInversionEffect`. The `Kind.PROJECTIVE` enum value exists for forward compatibility but no projective effects are implemented yet.
+Effect objects are **descriptions**: kind, parameters, display name and colour. They hold no transform math. The beam solver reads them through `BeamScene.describe_config` (effect type string plus parameters) and applies the closed-form beam maps of §10.8 (`BeamEffects`). *(Removed in Stage 84: `get_mobius`, `get_inverse_mobius`, `get_tracked_transform`, `normalized`, and projections' `apply_forward`.)*
 
-**Planned effects:** `RigidMotionEffect` (§10.2), `ProjectiveEffect` and subtypes (§10.4), `CompoundTransformativeEffect` (§10.3).
+**Implemented effects:** `TerminalEffect`, `ReflectionEffect`, `CircleInversionEffect`, `RigidMotionEffect` (portals, Stage 82), and the four projective effects (physical tracing, Stage 83; planning through them is Stage 87).
+
+**Planned effects:** `CompoundTransformativeEffect` (§10.3).
 
 A surface side's effect is an `Effect` instance, or `null` (pass-through). A surface with `null` on both sides and `interactive = false` on both sides has no gameplay effect and is not clickable for plan construction. However, it still participates in ray tracing as a pass-through — the ray passes through it, producing a step. If `is_target = true`, the pass-through still registers a target hit.
 
 ### 10.2 Transformative effects
 
-All are Möbius transformations. Composition = matrix multiplication.
+All are Möbius transformations (§5.2). The beam solver applies each one as a closed-form map of the beam at the hit (§10.8). Their composition along a shot is a sequence of such maps, recorded on the provenance stack (§10.7).
 
-**Reflection:** Mirrors the ray across the surface's carrier line. Carrier must be a line (`a = 0`). Self-inverse.
+**Reflection:** Mirrors the beam across the surface's carrier line. Carrier must be a line (`a = 0`). Self-inverse. (The solver traces a reflection side on a circle carrier as inversion in that carrier. Some legacy test scenes use this; see §23.)
 
-**Circle inversion:** Inverts the ray through the surface's carrier circle. Carrier must be a circle (`a ≠ 0`). **The inversion circle is always the surface's own carrier** — no separate parameter. Self-inverse. Circle inversion is what makes arc paths appear in the visual frame.
+**Circle inversion:** Inverts the beam through the surface's carrier circle. Carrier must be a circle (`a ≠ 0`). **The inversion circle is always the surface's own carrier** — no separate parameter. Self-inverse. Full circles and partial arcs are both supported. Circle inversion is what makes arc paths appear.
 
-**Rigid motion:** *(Status: PLANNED)* Rotation by θ and translation by d. General Euclidean isometry excluding reflections. Möbius matrix: `[[e^{iθ}, d], [0, 1]]`. Not self-inverse; inverse is precomputed and cached. Enables teleport/portal mechanics.
+**Rigid motion (portal):** Rotation by θ and translation by d, `T(z) = e^{iθ}·z + d`. General Euclidean isometry excluding reflections. Not self-inverse. Portals come in **pairs**: `RigidMotionEffect.create_portal_pair(source_seg, θ, d)` builds the target segment directly as `T(source_seg)`, point by point, plus the two effects `A → B` (θ, d) and `B → A` (−θ, −e^{−iθ}·d). Each is the other's `partner()`. A hit on A maps the beam onto B and departs from B. A hit on B while A's application is on top of the stack pops it (§10.7). Enables teleport/portal mechanics.
 
 ### 10.3 Compound transformative effects
 
 > **Status: PLANNED** — `CompoundTransformativeEffect` is not yet implemented.
 
-A single surface may apply multiple transformative effects in sequence. The compound is their composition, precomputed as a single `MobiusTransform`. `CompoundTransformativeEffect` **is a subtype of** `TransformativeEffect` — it implements the same interface (`get_mobius()`, `get_inverse_mobius()`) and fits in the `SideConfig` type union without modification.
+A single surface may apply multiple transformative effects in sequence. The compound is their composition (§5.2). `CompoundTransformativeEffect` **is a subtype of** `TransformativeEffect`, so it fits in the `SideConfig` type union without modification. On the beam solver it would be applied as the sequence of its elementary beam maps at the hit, and pushed and popped as one stack entry. That design is not yet specified in TDD_09.
 
 ```
 CompoundTransformativeEffect extends TransformativeEffect:
-    elementary:       Array[TransformativeEffect]
-    combined_mobius:   MobiusTransform    # precomputed product (with correct conjugating flag)
-    combined_inverse:  MobiusTransform    # precomputed inverse product
+    elementary: Array[TransformativeEffect]
 ```
 
 Examples: reflect + translate = glide reflection. Reflect + rotate = rotated reflection.
 
 ### 10.4 Projective effects
 
-> **Status: PLANNED** — No projective effects are implemented. `Effect.Kind.PROJECTIVE` exists in the enum for forward compatibility.
+> **Status: physical tracing DONE (Stage 83); planning through projectives PLANNED (Stage 87).**
+> - **Implemented types:** `LineNormalProjection`, `CircleNormalProjection`, `LineDirectionalProjection` and `CircleDirectionalProjection`. Each has a `project_back` variant.
+> - **Exit rule:** at the hit `h` the beam leaves as a straight line from `h` along ±axis. The axis is the carrier normal (line normal), the radius `h − c` (circle normal), or the effect's fixed normal (directional). The sign is exact. *Through* exits to the far side: `sign(exit·∇f) = sign(dir·∇f)`. *Back* returns to the approach side. An axis tangent to the carrier exits along +axis (through) or −axis (back).
+> - **PLANNED mode** currently consumes a projective plan entry without applying it, and the planned aim skips it, until Stage 87 (§13.3).
+> - **Directional projections:** the implemented ones take an explicit normal direction plus through/back. They do not derive the direction from a semicircle's diameter and the approach side, as described below.
 
-All produce an outgoing **line ray** in the visual frame, determined solely by the hit point. Incoming direction is discarded. The Möbius frame **resets to identity** after a projective effect.
+All produce an outgoing **straight beam** in visual space, determined solely by the hit point (and the approach side). Incoming direction is discarded. After a projective effect the **provenance stack is cleared and a new epoch begins** (§10.7). Nothing applied before the projective can be popped afterwards.
 
 **Line normal projection:** Outgoing ray ⊥ to the surface line at the hit point. Back-propagation: `H` = orthogonal projection of target onto surface line.
 
@@ -744,7 +712,7 @@ All produce an outgoing **line ray** in the visual frame, determined solely by t
 
 ### 10.5 Terminal effect: block
 
-Stops the ray. No outgoing ray, no frame update. Also the **implicit effect after 32 hits** (§12.6).
+Stops the beam. No outgoing beam, no stack change. A trace cut by the **32-event limit** (§12.6) ends similarly. It ends with a "max" event at the next crossing, drawn up to that crossing with no effect.
 
 ### 10.6 State changes
 
@@ -766,20 +734,37 @@ Note the asymmetry: surfaces read from their resolver's configured key(s) via `C
 
 State changes are applied sequentially along the trace. If multiple hits write to the same key, the last writer wins. Deterministic because hit ordering is deterministic (§11.3).
 
-### 10.7 Frame behavior by effect type
+### 10.7 Provenance stack and frame identity by effect type
 
-| Effect type | Frame update | Direction change |
-|-------------|-------------|-----------------|
-| Transformative | `M' = M ∘ T` | No — `Direction` stays the same |
-| Projective | `M' = Identity` (reset) | Yes — new `Direction` from the projection |
-| Terminal | No update — path ends | N/A |
-| Pass-through | No update | No |
+*(Replaces the legacy "frame behaviour" `M' = M ∘ T` / `M' = I`. There is no frame matrix.)*
 
-Terminal effects do NOT reset the Möbius frame — they simply end the path. In the planner, post-terminal entries end the trace, so no sub-chain inherits a post-terminal frame.
+The solver keeps a **provenance (transform) stack**. Each entry holds the beam *before* an applied transformative effect, the surface it was applied on, its known points and exact-line data, and the id of the surface whose hit pops it (`BeamSolver.StackEntry`).
 
-### 10.8 Effect Möbius matrices
+| Effect type applied | Stack | Next beam |
+|---------------------|-------|-----------|
+| Transformative, surface **not** the top's pop id | **push** `(beam before, surface)` | the effect's beam map (§10.8), departing the surface at `h` (a portal departs the paired surface at `T(h)`) |
+| Transformative, surface **is** the top's pop id (re-hit of the same self-inverse surface, or a portal's pair) | **pop** | the earlier beam object, restored exactly, resumed at the shared point actually hit (`T⁻¹` of it for a portal) |
+| Projective | **clear**, start a new **epoch** | straight exit beam from `h` (§10.4) |
+| Terminal | unchanged — trace ends | none |
+| Pass-through (or not fired) | unchanged | same beam continues |
 
-Explicit formulas for each transformative effect's Möbius matrix. In all formulas, complex numbers are written as `x + iy` and the matrix is `[[α, β], [γ, δ]]`.
+**Frame identity:** a step's `frame_id` is the id of `(epoch, stack signature)`. `frame_id = 0` (`TraceStep.IDENTITY_FRAME`) is the empty stack in epoch 0. `BeamTracer` assigns ids from one dictionary shared by the planned and the physical path of a pair, so equal ids mean the same applied effects since the last projective. A projective starts a new epoch, so frames after it get new ids even when the stack signature repeats.
+
+### 10.8 Effect maps (beam maps and Möbius matrices)
+
+**Beam maps (what the solver implements, `BeamEffects` / `HPBeam` / `FastSolver`).** The beam `z(t) = p + tτ/(1 − iκt/2)` is hit at `h` with tangent `τ_h`:
+
+| Effect | Beam map at hit `h` |
+|---|---|
+| Reflection, line with unit direction `u` | `p' = h`, `τ' = u²·conj(τ_h)`, `κ' = −κ` |
+| Reflection, circle carrier | = inversion in the carrier |
+| Inversion in circle `(c, R)`, `ν = (h − c)/R` | `p' = h`, `τ' = −conj(τ_h)·ν²`, `κ' = −κ − 2·cross(τ_h, h − c)/R²` |
+| Rigid motion `T(z) = e^{iθ}z + d` (portal A → B) | `p' = T(h)`, `τ' = e^{iθ}·τ_h`, `κ' = κ` |
+| Projective | `p' = h`, `τ'` = exit direction (§10.4), `κ' = 0` |
+
+The point maps of the same effects (with `null` for the point at infinity) are used only for the anchored planned path (§13.1).
+
+**Möbius matrices (mathematical reference).** The same transformative effects written as Möbius matrices. No matrix objects exist in the code. In all formulas, complex numbers are written as `x + iy` and the matrix is `[[α, β], [γ, δ]]`.
 
 **Reflection** across line `bx + cy + d = 0` (general form, no normalization required):
 
@@ -787,7 +772,7 @@ Let `n = b + ic` (the complex normal, unnormalized). Let `norm² = b² + c²`. T
 ```
 α = -n̄         β = -2d · n̄ / norm²
 γ = 0           δ = n
-conjugating = true
+anti-conformal
 ```
 Anti-conformal: applies as `z → (α·z̄ + β) / (γ·z̄ + δ)`. Self-inverse.
 
@@ -799,7 +784,7 @@ Let `center = -b/(2a) - i·c/(2a)` (complex center) and `r² = (b² + c² - 4ad)
 ```
 α = center      β = r² - |center|²
 γ = 1           δ = -conj(center)
-conjugating = true
+anti-conformal
 ```
 Anti-conformal: applies as `z → center + r² / (conj(z) - conj(center))`, equivalently `z → center + r² · conj(z - center) / |z - center|²`. Self-inverse: `M² = r² · I` for any center. Verification: a point on the circle maps to itself (e.g., for center=1, r=1: z=2 → w = 1 + 1/(2-1) = 2).
 
@@ -807,9 +792,9 @@ Anti-conformal: applies as `z → center + r² / (conj(z) - conj(center))`, equi
 ```
 α = e^{iθ}      β = d
 γ = 0            δ = 1
-conjugating = false
+conformal
 ```
-Conformal: applies as `z → e^{iθ}·z + d`. Inverse: `α = e^{-iθ}, β = -e^{-iθ}·d, γ = 0, δ = 1, conjugating = false`.
+Conformal: applies as `z → e^{iθ}·z + d`. Inverse: `α = e^{-iθ}, β = -e^{-iθ}·d, γ = 0, δ = 1`, conformal. This inverse is the paired portal's `(−θ, −e^{−iθ}·d)` (§10.2). `create_portal_pair` computes the target segment by applying `T` to the source segment's three points directly. The beam solver uses `a = unit(cos θ, sin θ)` of the float64 values.
 
 ---
 
@@ -819,272 +804,187 @@ Conformal: applies as `z → e^{iθ}·z + d`. Inverse: `α = e^{-iθ}, β = -e^{
 
 ## 11. Intersection system
 
+> **Stage 84:** the legacy `intersection.gd` (ray in a normalized frame vs. transformed carriers, three-tier endpoint snapping, `skip_segment`) was deleted. Intersection is now part of the beam solver: `BeamGeom` holds the segment geometry and `HPBeam` the beam–circle roots; `FastSolver` is its float64 twin. Specification: `docs/research/oracle/trace2.py`, plus the "Exactness rules" in `docs/TDD_09_PRECISION_INTEGRATION.md`.
+
 ### 11.1 Single intersection primitive
 
 ```
-func intersect_line_with_gcircle(ray: Ray, segment: Segment) → Array[HitCandidate]
+BeamGeom.hits(beam, seg, depart_on) → Array[t]      # roots of the beam with seg's carrier
 ```
 
-The function derives the segment's carrier from its three points (cached — §17). Dispatches internally on `carrier.is_line()`:
+Surfaces are intersected in visual space (§6.1). For the beam `z(t) = p + tτ/(1 − iκt/2)`:
 
-| Carrier | Algorithm |
-|---------|-----------|
-| Line (`a = 0`) | 2×2 linear system. At most 1 candidate. |
-| Circle (`a ≠ 0`) | Substitute ray parametric form into circle equation. Quadratic → 0, 1, or 2 candidates. |
+| Carrier | Equation in `t` |
+|---------|-----------------|
+| Line, `f(z) = cross(E − S, z − S)` | `f(p)(1 + κ²t²/4) + (∇f·τ)·t + (κ/2)·cross(τ, ∇f)·t² = 0`. Up to 2 roots, or 1 for a straight beam. |
+| Circle (arc or full circle) | The analogous quadratic (`HPBeam.hits`). Up to 2 roots. |
 
-Candidates are filtered:
+A root may be `t = ∞`, the antipode of a circle beam, where degree-dropping roots lie. `t = ∞` is an exact value in every tier.
 
-1. **Segment bounds** (`is_on_segment`): the candidate P must lie on the arc/line from start S through via V to end E. This is determined by the **cross-ratio containment test**, which unifies line and arc containment under a single algebraic formula:
+The roots are **not** filtered by segment bounds: **every carrier crossing is an event** (§11.5). Each crossing is then classified:
 
-   The point P is on the segment iff `Re(cross_ratio(S, P; E, V)) >= 0`.
-
-   Computed in homogeneous coordinates to handle the point at infinity (line segments with `via = INF`):
+1. **On-segment** (`on_segment`): the point P is on the segment from start S through via V to end E iff `Re(cross_ratio(S, P; E, V)) >= 0`. The test is computed in homogeneous coordinates (V = the point at infinity for full lines), at the tier's precision:
    1. Compute homogeneous determinants: `hdet(S,V)`, `hdet(E,P)`, `hdet(S,P)`, `hdet(E,V)`, where `hdet(A,B) = zA·wB - zB·wA` treating each point as `(z, w)` with `w = 1` for finite points and `w = 0` for the point at infinity.
-   2. Compute `num = cmul(hdet(S,V), hdet(E,P))` and `den = cmul(hdet(S,P), hdet(E,V))` where `cmul` is complex multiplication (treating `Vector2` as `(real, imag)`).
-   3. Compute `product = cmul(num, conj(den))`.
-   4. The point is on the segment iff `product.x >= 0`.
+   2. Compute `num = hdet(S,V)·hdet(E,P)` and `den = hdet(S,P)·hdet(E,V)` (complex products).
+   3. The point is on the segment iff `Re(num · conj(den)) >= 0`.
 
-   This works correctly for arcs of any span (including major arcs > 180°), lines through infinity, and full circles. No center computation, no angle comparison, no epsilon threshold.
+   This works for arcs of any span (including major arcs > 180°), lines through infinity, and full circles (all carrier points are contained). No center computation, no angle comparison, no epsilon threshold.
+2. **Side** of approach (§9.2).
+3. **Endpoint blockage:** at an interior on-segment point both sides are blocked. At an exact endpoint, a side is blocked according to the sign of `τ_h × (tangent into the segment)`. Every other segment sharing that exact endpoint (a junction) adds its blocked sides. Blockage is accumulated **per hit point only**; it never leaks into later hits.
 
-For full-circle segments (where start equals end after traversing the full carrier), all points on the carrier are considered contained.
-
-2. **Side determination**: left or right of the segment's traversal direction.
+**Exact incidence:** when a surface's carrier contains a **known point** of the beam exactly (§31.4), its root nearest that point takes the known point's parameter and the exact point. The decision uses exact predicates on the data (`Exact`). No rounding decides an endpoint or an incidence.
 
 ### 11.2 Hit record
 
+The solver emits **events** (`BeamSolver.Event`):
+
 ```
-HitRecord:
-    t:             float       # ray parameter (t > 0 forward, t < 0 beyond-infinity)
-    point:         Point       # intersection point (provenance-aware, §8.1)
-    segment:       Segment     # the segment hit (Surface found via norm_to_surface mapping)
-    side:          Side        # LEFT or RIGHT
-    on_segment:    bool        # true if the hit point lies on the segment arc/line
-    at_endpoint:   int         # 0 = interior, 1 = at start, 2 = at end (§31.3.1)
-    blocked_left:  bool        # whether the LEFT side is blocked at this hitpoint
-    blocked_right: bool        # whether the RIGHT side is blocked at this hitpoint
+Event:
+    kind:        "hit" | "cursor" | "origin" | "escape" | "max"
+    surface_id:  int           # -1 for non-hit events
+    left:        bool          # side the beam comes from
+    applied:     bool          # the side's effect fired (terminal included)
+    terminal, popped, teleport, projective: bool
+    on_segment:  bool
+    rehit:       bool          # the departure point, re-hit after the full loop
+    epoch:       int           # projectives start a new epoch
+    point:       CN            # null for escape
+    beam, t_from, t_to         # the arc leading to this event (t_to null = infinity)
+    margin:      float         # px gap to the nearest competing decision (precision control)
 ```
 
-The `point` field is a `Point` (§8.1), not a raw `Vector2`. The HitRecord references the normalized `Segment`; the original `Surface` is found via a `norm_to_surface` mapping dictionary maintained by the tracer (§12.1).
-
-The `at_endpoint` field is set by the three-tier provenance endpoint detection system (§31.3.1). When `at_endpoint > 0`, the `point.coords` are the exact defining coordinates of the endpoint — snapped from provenance, not from the quadratic solver.
-
-`is_fully_blocked()` returns `blocked_left and blocked_right`. An effect fires only when the hitpoint is fully blocked (§12.1).
+`BeamTracer` converts events into `TraceStep`s (§14.7). It attaches a `TraceHit` (`t`, `point`, `segment`, `side`, `on_segment`) to the last step of each hit event. The `at_endpoint` / `blocked_left` / `blocked_right` fields of `TraceHit` are legacy and are not filled by the adapter, because blockage is decided inside the solver. `is_fully_blocked()` therefore has no meaning on adapter hits.
 
 ### 11.3 Earliest hit selection
 
-1. Partition hits into `forward` (t > 0) and `beyond` (t < 0).
-2. If `forward` non-empty: winner = `min(forward, key=t)`.
-3. Else if `beyond` non-empty: winner = `min(beyond, key=t)` (most negative t).
-4. Ties: surface ID (smaller wins), then provenance rank.
+Candidates are ordered **projectively from the current parameter `t0`** (§6.3): first the roots with `t > t0` in increasing order, then the wrapped roots (`t ≤ t0`) in increasing order.
 
-When multiple surfaces produce hits at the same `t`, only the tie-breaking winner is processed. Other surfaces at that `t` are ignored for that ray step. A subsequent ray cast (after the winner's effect) may hit one of the previously-losing surfaces.
+- **Ties:** at an identical parameter the cursor comes first, then surfaces by smaller ID.
+- **Departure re-hit:** the departure point is re-hit **last**, after the full loop.
+- **Cursor at the departure point:** a cursor exactly at the departure point is reached immediately, before everything else.
+
+The walker visits the candidates **in this order, one event each**, until an effect fires (§12.1). The losers at a tied parameter are not ignored: each is its own event, unless an earlier one changes the beam.
 
 ### 11.4 Degenerate cases
 
 | Case | Resolution |
 |------|-----------|
-| Ray origin on a surface | Exclude that surface from this cast. |
-| Ray parallel to line surface | No intersection. |
-| Ray tangent to circle surface | Single hit. |
-| Ray carrier coincides with surface carrier | No intersection — ray travels along the surface. |
-| Zero-length segment | Never produces a hit. |
-
-The tracer passes a `skip_segment` parameter — the segment from the most recent hit, excluded by **reference equality** (object identity), not by epsilon comparison on the `t` parameter. This is consistent with §31.3 (no epsilon decisions).
+| Beam departing a surface | After applying at `h` on `S`, the new beam departs `S` at `h`. The departure root is excluded as an ordinary candidate and re-hit last, as an ordinary hit. No `skip_segment` and no epsilon. |
+| Exact line exactly tangent to a circle carrier | Touches without crossing: no event. |
+| Concurrent line carriers | On an exact line, adjacent crossings of two line carriers that meet the line at one point (exact 3×3 determinant) share one parameter. The ID rule orders them. |
+| Inversion of a beam through the inversion center | Any beam through a known point that is exactly the center becomes an exactly straight beam. |
+| Player or cursor exactly at an inversion center (point at ∞ in the anchored construction) | Forward walk from the exact aim direction. If the aim image itself is at ∞, the walk goes straight at the cursor. |
+| Player = cursor | No aim: no trace (`BeamTracer.trace_pair` returns null). |
+| Zero-length segment | Rejected at load (§23). |
 
 ### 11.5 Unbounded carrier intersection
 
-```
-func intersect_line_with_carrier(ray: Ray, carrier: GeneralizedCircle) → Array[HitCandidate]
-```
-
-Same quadratic intersection as §11.1 but **without the segment-bounds filter**. Returns all intersection points on the unbounded carrier (the full line or full circle). Used internally and available for future PLANNED mode extensions.
+All roots on the unbounded carrier (full line or full circle) are events, whether on or off the segment. `on_segment` only matters for whether PHYSICAL can fire (§14.1). PLANNED mode fires the next plan entry on an ID and side match **even off-segment**: the planned path uses the carrier extension.
 
 ### 11.6 See-through parameter
 
 *(Not yet implemented — specified for the visibility system §15.)*
 
-`find_all_hits` will accept an optional `see_through: Set[Surface]` parameter. Surfaces in this set will be treated as transparent — rays pass through them without recording a hit. Used by the visibility system (§15) for truncating boundaries. Distinct from `skip_segment` (departure surface exclusion, §11.4).
+A `see_through: Set[Surface]` option will make the listed surfaces transparent, so the beam passes them without recording a hit. It is used by the visibility system (§15) for truncating boundaries. It is distinct from the departure rule (§11.4).
 
 ---
 
 ## 12. Ray tracing
 
+> **Stage 84:** the legacy `Tracer` (stage-based walk in a normalized frame, `TrackedTransform` stack, `frame.apply` per step) was deleted. The only solver is the precision beam solver in `scripts/math/precision/`. Its rules are those of the mpmath oracle `docs/research/oracle/trace2.py`, which is the specification. See `docs/TDD_09_PRECISION_INTEGRATION.md`, Stages 80–83.
+
 ### 12.1 The tracing loop
 
-The tracer uses a **stage-based hitpoint walk**: each stage intersects the shared ray with ALL surface segments at once, sorts the hitpoints in projective order, and walks them sequentially. A "stage" ends when a transformative effect fires — the frame changes, surfaces are re-normalized, and a new stage begins.
+**Entry point.** `BeamTracer.trace_pair(surfaces, player, cursor, plan)` builds the scene defs. It then runs `PrecisionLadder.solve`, which returns the **planned** and **physical** event lists, and converts both to `TracePath`s. The renderer, the firing code (arrow flight), the debug dump and the invariant checker all call it.
 
-The initial ray is constructed from the player and cursor positions:
+**Components.**
+- **`BeamSolver`** — the single rule walker (`walk_from`). It implements the trace rules for every precision tier, over a backend:
+  - `NumBackend`: `HPBeam` over any `NumCtx`;
+  - `FastSolver.Backend`: raw float64 with the tangent-linear derivative inline, bit-identical to `NumBackend` over `F64Num`.
+
+  Topology decisions (on-segment, side, endpoint blockage) always run the shared `BeamGeom` code.
+- **`BeamScene`** (the scene at one tier), **`BeamEffects`** (beam, point and pole maps), **`BeamGeom`** (segment geometry), **`HPBeam`** (the beam), and **`Exact`** (exact predicates).
+- **`ErrorEstimate`** (tangent-linear a-priori error envelope, plus decision margins) and **`PrecisionLadder`** (dynamic precision, §31.5).
+
+**Rule walker** (illustrative; the authoritative statement is the `beam_solver.gd` header and `trace2.py`):
+
 ```
-initial_direction = Direction(player_position, cursor_position)
-shared_ray = Ray(player_position, initial_direction)
-```
-
-The two modes (PHYSICAL and PLANNED, §14.1) differ ONLY in which effects are applied at each hitpoint.
-
-```
-enum TraceMode { PHYSICAL, PLANNED }
-
-func trace(shared_ray: Ray, surfaces: Array, mode: TraceMode,
-           plan_entries: Array = [], game_state: GameState,
-           bounds: Rect2, cursor_pos: Vector2) → TracedPath:
-    game_state = game_state.copy()
-    transform_stack = []           # Array[TrackedTransform]
-    frame = MobiusTransform.IDENTITY
-    ray = shared_ray               # working copy — origin advances, direction unchanged
-    steps = []
-    hit_count = 0
-    last_hit_segment = null        # skip_segment: excluded by reference equality (§11.4)
-    targets_hit = {}
-    plan_index = 0
-    frame_dirty = true
-    norm_surfaces = []
-    norm_to_surface = {}           # normalized Segment → original Surface mapping
-
-    while hit_count < 32:
-        # === Stage boundary: recompute frame and normalize surfaces ===
-        if frame_dirty:
-            frame = compose_all(transform_stack)       # product of TrackedTransforms
-            norm_surfaces = normalize_all(surfaces, frame.inverse())
-            norm_to_surface = build_mapping(norm_surfaces, surfaces)
-            frame_dirty = false
-
-        # === Collect ALL hits in this stage ===
-        carrier_hits = find_all_hits(ray, norm_segments, skip=last_hit_segment)
-
-        # Inject virtual hitpoints
-        origin_hp = HitRecord(t=0.0, point=ray.origin, segment=null)
-        hitpoints = carrier_hits + [origin_hp]
-
-        if cursor is reachable:
-            cursor_t = project_point_on_ray(ray, cursor_in_frame)
-            cursor_hp = HitRecord(t=cursor_t, point=cursor_in_frame, segment=null)
-            hitpoints.append(cursor_hp)
-
-        # === Projective sort ===
-        # Order: positive t ascending, then negative t ascending, then t=0 last.
-        # Ties broken by segment instance ID.
-        hitpoints = projective_sort(hitpoints)
-
-        # === Walk sorted hitpoints ===
-        step_left_blocked = false
-        step_right_blocked = false
-        stage_ended = false
-
-        for hp in hitpoints:
-            hit_count += 1
-            vis_start = frame.apply(step_origin)
-            vis_end = frame.apply(hp.point)
-
-            # Zero-length skip (§31.3 — exact equality, no epsilon)
-            if vis_start == vis_end:
-                ... (handle cursor injection or origin escape)
+walk(beam, depart, t0):
+    loop:
+        cands = roots of beam with EVERY surface carrier (§11.1)
+              + cursor, if the plan is complete and matched
+              + the departure point (re-hit last)
+        snap candidates to known points (exact incidence, §11.1)
+        sort projectively from t0 (§11.3)
+        for c in cands:
+            count += 1
+            if count > MAX_HITS: emit "max" at c (drawn up to it, no effect); stop
+            if c is the cursor:
+                emit "cursor"; mode = PHYSICAL      # post-cursor continuation
                 continue
-
-            # Generate visual step
-            steps.append(Step(vis_start, vis_end, frame, hp, shared_ray))
-
-            # Cursor check
-            if hp == cursor_hp:
-                path.cursor_index = len(steps)
-                break to next stage
-
-            # Target tracking
-            orig_surf = norm_to_surface[hp.segment]
-            if orig_surf.is_target and hp.on_segment:
-                targets_hit[orig_surf.id] = true
-
-            # === Blockage accumulation at endpoints ===
-            step_left_blocked |= hp.blocked_left
-            step_right_blocked |= hp.blocked_right
-
-            if hp.at_endpoint > 0 and not fully_blocked:
-                # Check ALL other segments sharing this endpoint
-                for other_seg in norm_segments:
-                    if other_seg == hp.segment: continue
-                    ep = at_which_endpoint(hp.point, other_seg)  # exact equality
-                    if ep > 0:
-                        sides = endpoint_blocked_sides(hp.point, other_seg, ray, ep)
-                        step_left_blocked |= sides[0]
-                        step_right_blocked |= sides[1]
-
-            fully_blocked = step_left_blocked and step_right_blocked
-
-            # === Effect application (mode-dependent) ===
+            classify c → point, on_segment, side, fully_blocked
             if mode == PHYSICAL:
-                if fully_blocked and effect.is_transformative():
-                    apply_effect = true
-            elif mode == PLANNED:
-                if plan_index < plan_entries.size() and surface matches:
-                    apply_effect = true
+                do = side's effect if fully_blocked else none
+                if do is transformative/projective: plan bookkeeping by surface ID
+            else:  # PLANNED
+                if the next plan entry matches surface ID AND side:
                     plan_index += 1
-
-            if fully_blocked:
-                step_left_blocked = false    # reset for next hitpoint
-                step_right_blocked = false
-
-            if apply_effect:
-                # Push transform, advance ray, start new stage
-                transform_stack.append(effect.get_tracked_transform())
-                ray = Ray(origin=inverse.apply(hp.point), direction=ray.direction)
-                last_hit_segment = null
-                frame_dirty = true
-                stage_ended = true
-                break   # → next iteration of outer while loop
-
-            # No effect — advance within this stage
-            last_hit_segment = hp.segment
-            step_origin = hp.point
-
-        if not stage_ended:
-            break   # no more stages to process
-
-    return TracedPath(steps, targets_hit)
+                    do = side's effect if transformative else none
+                    # terminal and projective entries are consumed without effect (projectives until Stage 87)
+                else: do = none                     # everything else passes, terminals included
+            emit "hit"
+            if do is terminal: stop
+            if do is transformative: push/pop the provenance stack (§10.7); beam = mapped or restored beam; restart loop
+            if do is projective:     clear stack, epoch += 1; beam = exit line (§10.4); restart loop
+        # no effect fired on any candidate
+        emit "escape" (straight beam) or "origin" (circle beam, back at its start); stop
 ```
+
+**Anchored planned path.** In PLANNED mode, and in PHYSICAL mode until its first divergence from the planned decisions, firing plan entry `j` does not map the current beam. Instead the walker swaps in the **anchored beam** `B_{j+1}` of the plan (§13.1). Each anchored beam is built independently from exact data, so errors do not accumulate along the plan. After the divergence (or after the cursor) the trace is a forward continuation from the current beam. That part is the numerically sensitive one: it is seeded for `ErrorEstimate` and solved on the `PrecisionLadder`.
 
 **Key design decisions:**
-- **All hits precomputed per stage**, not one-at-a-time. This enables projective sort and the cursor to compete naturally with carrier hits.
-- **`skip_segment`** (single segment, reference equality) replaces the `excluded_surfaces` set. Only the most recently hit segment is excluded — the next stage clears it.
-- **Blockage accumulation** at endpoints: `blocked_left` and `blocked_right` accumulate across all segments sharing the endpoint. An effect fires only when both sides are blocked (`is_fully_blocked()`). This handles Y-junctions and T-junctions correctly.
-- **Transform stack** stores `TrackedTransform` objects (forward + inverse pair). The frame is recomposed from the stack on each stage boundary, enabling inverse-pair cancellation (§8.1).
-- **Source-based cancellation:** When a new transform is the inverse of the top of the stack AND originates from the same surface (same source), the pair is popped instead of pushed. This prevents infinite loops with self-inverse effects (reflection, circle inversion) when the ray re-hits the same surface.
-- **No surface filtering:** All surfaces always participate in hit detection. The tracer never filters surfaces by position, proximity, or any other spatial criterion. This is a conscious architectural decision — simpler, more correct, and avoids edge cases from culling.
-- The origin hitpoint (t=0) is always injected and sorted last by `projective_sort`. When reached, the ray escapes to bounds (forward and return segments).
+- **One walker for all tiers and both modes.** PLANNED and PHYSICAL differ only in which effects fire (§14.1).
+- **Every carrier crossing is an event** (on- or off-segment, pass-through or not). This lets the cursor compete with carrier hits by parameter and keeps both modes' events in correspondence until divergence.
+- **Blockage at endpoints** is accumulated per hit point, across all segments sharing the exact endpoint (Y- and T-junctions). PHYSICAL fires only on a fully blocked hit.
+- **Provenance stack:** re-applying the surface on top of the stack (or hitting a portal's pair) pops it and restores the earlier beam object exactly. This prevents infinite loops with self-inverse effects and makes reversal exact by construction (Principle 22).
+- **No surface filtering:** all surfaces always participate in hit detection. The solver never filters surfaces by position, proximity, or any other spatial criterion.
+- **No epsilons:** decisions use exact predicates and provenance (§31.3), and precision is raised until the trajectory is reliable (§31.5).
 
 ### 12.2 Step record
 
-See §14.7 for the full `Step` definition and §14.6 for the five step types. Each step carries its own Möbius frame `M`. In that frame, the step is a straight line. The visual representation (line or arc) is determined by applying `M`.
+See §14.7 for the `TraceStep` definition and §14.6 for the five step types. Steps are in visual coordinates. Each step carries a **frame id** (§10.7) instead of a frame, and its line/arc nature comes from the beam's curvature.
 
 ### 12.3 Converting to visual
 
-```
-func to_visual_path(traced: TracedPath) → VisualPath:
-    for step in traced.steps:
-        # Guard: escape steps have end=INF — render as line to viewport edge, not via normal conversion.
-        if step.end == Vector2(INF, INF):
-            visual_segments.append(VisualEscapeSegment(step.start, step.direction, step.frame))
-            continue
-        # In the normalized frame, all steps are lines, so via is
-        # any point between start and end (e.g., the arithmetic mean).
-        mid = (step.start + step.end) / 2
-        math_segment = Segment(step.start, step.end, mid)
-        visual_segments.append(to_visual(math_segment, step.frame))
-    return VisualPath(visual_segments)
-```
+`BeamTracer.to_path(events, …)` produces a `TracePath`:
+- **Steps per event:** each event is the arc of its beam from `t_from` to `t_to`. Its start is exactly the previous event's point.
+- **Arc vs line:** a step is an arc step iff the beam's `κ ≠ 0`. Curvature is exact, so reflections keep a straight beam exactly straight.
+- **Wrapping through infinity:** an arc that wraps through infinity on a straight beam is split into an outgoing and an incoming escape step (`end` or `start` = `Vector2(INF, INF)`, `via` = travel direction). A very large-radius arc that goes "the long way round" is drawn the same way.
+- **Zero-length steps** are not emitted; the event's effect still applies.
+- **Metadata:** the first step after a portal is flagged `after_portal` (an intended gap). Each step records `est_error` (px) and `precision_bits`.
+- **Trace-level fields:** `cursor_index` is the step index of the cursor event. `targets_hit` collects target surfaces hit on-segment. `hit_count` is the number of events.
 
-### 12.4 Frame updates
+### 12.4 Frame updates → beam updates
 
-**Transformative:** `M' = M ∘ T`. Direction stays the same. Origin advances to `T⁻¹(hit_point)`.
+There is no frame. After an applied effect the walker continues on a new beam:
+- **Transformative:** the beam map (§10.8), departing the surface at `h`, or the paired surface at `T(h)` for a portal; push. On a pop, the earlier beam is restored instead.
+- **Projective:** a straight exit beam from `h`; the stack is cleared and a new epoch starts.
 
-**Projective:** `M' = I` (reset). New Direction from the projection. This is the only place Direction changes.
+The frame id of subsequent steps follows the stack (§10.7).
 
 ### 12.5 Beyond-infinity in the visual frame
 
-- `M = I`: arrow travels to viewport edge, gap, returns from opposite edge.
-- `M` involves inversion: ∞ maps to the inversion center. Arrow converges to that point, passes through, diverges.
+- **Straight beam:** passing `t = ∞` means the arrow travels to the viewport edge, leaves, and returns from the opposite edge (two escape steps, §12.3). If no effect fires on the whole loop, the trace ends with an `escape` event.
+- **Circle beam** (e.g. after an inversion): `t = ∞` is the antipode of `p`, a finite point that the arrow simply passes. If no effect fires on the whole circle, the trace ends back at the beam's start with an `origin` event.
 
 ### 12.6 Effect limit
 
-Maximum **32 total hits** per arrow path (including pass-throughs). After 32, the path terminates. This prevents infinite loops from any source — including overlapping pass-through surfaces.
+Maximum **32 events** per trace (`BeamSolver.MAX_HITS = 32`). **Every event counts:**
+- every carrier crossing (pass-throughs and off-segment crossings included);
+- the cursor;
+- the final `origin`/`escape` event.
+
+A trace cut by the limit ends with a `max` event at the next crossing, drawn up to it with no effect. This prevents infinite loops from any source, including overlapping pass-through surfaces.
 
 When the limit is reached, the preview shows a truncation marker (small stop icon) at the final hit point. During arrow flight, the arrow stops with a distinct visual cue (flash/fade).
 
@@ -1094,61 +994,41 @@ When the limit is reached, the preview shows a truncation marker (small stop ico
 
 ### 13.1 Image chain method (from first principles)
 
-The core planning trick: a path that bounces off a surface via a transformative effect can be "unfolded" by applying the **inverse transformation** to the target, producing an **image point**. In the normalized frame, the unfolded path to the image is a **straight line** — the bounce is eliminated. For several transformative surfaces in a fixed order, chain those inverse transformations so every leg of the ideal plan is a **straight segment** in the normalized frame — no step-by-step "what did the ray hit first?" search.
+The core planning trick: a path that bounces off a surface via a transformative effect can be "unfolded" by applying the **inverse transformation** to the target, producing an **image point**. For several transformative surfaces in a fixed order, chain those inverse transformations. The aim is then the line from the player to the **fully unfolded image** of the cursor, so there is no step-by-step "what did the ray hit first?" search.
 
 **Forward images:** transform the origin through planned surfaces' effects in order.
 **Backward images:** inverse-transform the cursor through planned surfaces' effects in reverse order.
 
-The planned path connects corresponding images with straight segments **in the normalized frame**. In the visual frame, these legs may be straight lines or circular arcs, depending on the accumulated Möbius frame transform. Each segment ends where the ray meets the relevant planned surface carrier (in the normalized frame, this is always a line-vs-generalized-circle intersection). The bounce order is **fixed by the plan**.
+The bounce order is **fixed by the plan**. Each leg is a piece of a generalized circle (a line, or an arc after an inversion), and it ends where it meets the next planned surface's carrier.
 
-This is deterministic: the plan fixes the order, so you're not searching "which surface comes next?" — only "where does this known line cross this known surface?" The Möbius frame ensures this works uniformly for reflections, inversions, and rigid motions.
+**As implemented (anchored planned path, inside `BeamSolver`).** There is no separate planner. Let `F_j` be the composition of the transformative effects of plan entries `1..j`, taken on the provenance stack: a re-hit of the top's surface or of a portal's pair cancels it. The planned beam after entry `j` is the oriented generalized circle
+
+```
+B_j = circle through  P_j = F_j(player),  X_j = F_j(F_K⁻¹(cursor)),  Q_j = F_j(∞),   oriented P → X → Q
+```
+
+`K` is the plan length. `B_0` is the aim from the player through the fully unfolded image `X_0 = F_K⁻¹(cursor)`.
+- **Poles:** the poles `P_j` and `Q_j` are mapped forward through the point maps of the effects (`BeamEffects.map_pole`). The difference `P − Q` is carried by **exact Möbius difference formulas**, so it does not cancel catastrophically.
+- **Image chain:** `X_j` is mapped backward from the cursor (`BeamEffects.map_point`) and memoized per stack frame, so a pop returns exactly the earlier image.
+- **Points at infinity** are allowed. If the construction degenerates (player or cursor exactly at an inversion center), see §11.4.
+
+Each `B_j` is built **independently** (`BeamSolver.AnchorChain`). It is swapped in when plan entry `j` fires on the anchored path (§12.1), so planned-path errors never accumulate along the plan. A mirror-only plan (line reflections and translation-only portals) has an exact rational aim image. `B_0` is then an **exact line** (§31.4).
 
 ### 13.2 Transformative sub-chains
 
-For a contiguous sub-sequence of transformative surfaces:
+For a contiguous sub-sequence of transformative entries, the anchored construction of §13.1 *is* the sub-chain solution. No bounce points are computed in advance. The walker reaches each planned surface's carrier as an ordinary event on the anchored beam, and fires the entry on an ID and side match (even off-segment, §11.5).
 
-```
-func plan_transformative_subchain(sub_origin, sub_target, entries, initial_frame):
-    # entries is Array[{surface, side}] — side is known per entry.
-    image = sub_target
-    frame = initial_frame
-    for i in reverse(entries):
-        effect = entries[i].surface.active_side_config(entries[i].side, game_state).effect
-        image = cache.apply(image, effect.get_inverse_mobius())
-        frame = frame.compose(effect.get_inverse_mobius())
-
-    # Compute bounce points: walk forward, intersecting the aim line
-    # with each entry's surface carrier.
-    aim_ray = make_ray(sub_origin, image)
-    # make_ray creates a ray toward image regardless of direction.
-    # image may be 'behind' the origin if the image chain reflects past the player.
-    bounce_points = []
-    current_image = image
-    for i in forward(entries):
-        carrier = derive_carrier(entries[i].surface.segment)
-        hit = intersect_line_with_carrier(aim_ray, carrier)
-        # If multiple candidates, select the one with smallest positive t (or most negative t if no positive). Same rule as §11.3.
-        bounce_points.append(hit)
-        effect = entries[i].surface.active_side_config(entries[i].side, game_state).effect
-        current_image = cache.apply(current_image, effect.get_mobius())
-        aim_ray = make_ray(hit, current_image)
-
-    return PlannedSubpath(sub_origin, bounce_points, sub_target)
-```
-
-# The aim_ray and image are in the 'fully unfolded' frame (after all inverse transforms). Surface carriers are in visual coords. This works because each sub-chain starts with identity frame (§13.4 Pass 2), so unfolded = visual.
-
-Each leg is a straight line in the normalized frame. In the visual frame, legs may be arcs.
+*Historical:* the legacy `Planner` computed the image chain with `MobiusTransform`s in the normalized frame, through a `TransformCache` (`plan_transformative_subchain`). It intersected the aim line with each carrier to precompute bounce points, and then traced the plan as a separate PLANNED pass in normalized coordinates. It was deleted in Stage 84.
 
 ### 13.3 Projective break points
 
-> **Status: PLANNED** — Projective break points and mixed chain planning depend on projective effects (§10.4), which are not yet implemented. The planner currently handles only transformative sub-chains (§13.2).
+> **Status: PLANNED (Stage 87).** Projective effects are traced physically (Stage 83), but planning through them is not implemented. In PLANNED mode, a projective plan entry is currently **consumed without being applied**, and the anchored aim skips it, because projectives do not change the anchored frame. The design below is the target for Stage 87. It will be built on the beam solver (`docs/TDD_09_PRECISION_INTEGRATION.md`, Stage 87).
 
 Projective surfaces are **break points** that partition the plan into transformative sub-chains. At each break point:
 
-1. Back-propagate: find the hit point from which the projected ray reaches the current target.
+1. Back-propagate: find the hit point from which the projected beam reaches the current target.
 2. That hit point becomes the new target for the preceding sub-chain.
-3. Frame resets to identity.
+3. The provenance stack clears and a new epoch begins (§10.7).
 
 Back-propagation per effect:
 
@@ -1160,9 +1040,11 @@ Back-propagation per effect:
 
 The hit point returned by `back_propagate()` must lie within the surface's segment bounds (checked using the same arc containment test as §11.1). If the carrier-level intersection exists but falls outside the segment, `back_propagate()` returns null.
 
-Back-propagation targets are always in the **visual frame** (identity frame after a projective reset, or the current accumulated frame for terminal surfaces). Since projective effects reset the frame to identity, and back-propagation is called immediately after encountering a projective surface, the target `T` is in the visual frame.
+Back-propagation targets are in **visual space**, like everything in the beam model (§6.1).
 
 ### 13.4 Mixed chain algorithm
+
+> **Status: PLANNED (Stage 87).** The pseudocode below is the original design sketch, written for the deleted legacy planner. Stage 87 will realise it as anchored sub-chains (§13.1), one per epoch, in the beam solver. Read `plan_transformative_subchain` as "the anchored construction of §13.1 from `current_origin` to `sc.target`".
 
 ```
 func plan_mixed(origin, cursor, plan, game_state):
@@ -1184,9 +1066,8 @@ func plan_mixed(origin, cursor, plan, game_state):
         elif side_config.effect != null and side_config.effect.is_terminal():
             # Terminal: the arrow stops here. Clear post-terminal entries.
             transform_buffer = []
-            terminal_ray = Ray(real_target, Direction(real_target, segment_center(entry.surface.segment)))
-            terminal_hit = intersect_line_with_gcircle(terminal_ray, entry.surface.segment)
-            terminal_point = terminal_hit.point if terminal_hit else entry.surface.segment.start
+            # closest point of the terminal segment toward real_target (design sketch)
+            terminal_point = closest_point_on_segment(entry.surface.segment, real_target)
             real_target = terminal_point
             sub_chains.insert(0, {entries: [], target: terminal_point, is_terminal: true})
         
@@ -1203,8 +1084,8 @@ func plan_mixed(origin, cursor, plan, game_state):
     all_steps = []
     
     for sc in sub_chains:
-        subpath = plan_transformative_subchain(
-            current_origin, sc.target, sc.entries, MobiusTransform.IDENTITY)
+        subpath = plan_transformative_subchain(      # anchored construction, §13.1
+            current_origin, sc.target, sc.entries)
         all_steps.extend(subpath.steps)
         current_origin = sc.target
     
@@ -1221,21 +1102,23 @@ An empty plan is valid — it means 'fire straight in the aim direction.' A plan
 
 ### 13.6 Side in planning
 
-Each plan entry is `{surface, side}` — the side is selected by the player at plan-construction time (§4.2) and is **fixed** for that entry. This eliminates a potential circular dependency: the effect (and its Möbius transform) depends on the side, and the image-chain geometry depends on the effect. Because the side is known before the planner runs, the effect is unambiguous at every step.
+Each plan entry is `{surface, side}` — the side is selected by the player at plan-construction time (§4.2) and is **fixed** for that entry. This eliminates a potential circular dependency: the effect (and its map) depends on the side, and the image-chain geometry depends on the effect. Because the side is known before the trace runs, the effect is unambiguous at every step.
 
-The planner never guesses or resolves the side — it reads `entry.side` and looks up the corresponding `SideConfig`. If the side's effect is null (pass-through), the entry is skipped (no frame change, but a step is still recorded).
+The solver never guesses or resolves the side. It reads `entry.side` (`BeamSolver.PlanItem.left`) and looks up that side's effect. In PLANNED mode an entry fires only on a surface ID **and** side match. If the side's effect is not transformative (pass-through, terminal, or projective until Stage 87), the entry is consumed with no beam change and no stack change, and the anchored aim skips it. PHYSICAL mode does its plan bookkeeping by surface ID only (§14.1).
 
 ### 13.7 State simulation during planning
 
-Before computing the backward image chain, the planner walks the plan **forward** and applies state changes to a **temporary copy** of the game state. This ensures that later plan entries see the post-effect state of earlier entries. For example, if plan entry 1 breaks a surface (state change), and plan entry 2 relies on that surface being broken (conditional effect), the planner correctly sees the broken state when evaluating entry 2.
+> **Status: PLANNED (Stage 85)** — state changes (§10.6) are not applied during tracing yet.
+
+Before computing the backward image chain, the planned trace walks the plan **forward** and applies state changes to a **temporary copy** of the game state. This ensures that later plan entries see the post-effect state of earlier entries. For example, if plan entry 1 breaks a surface (state change), and plan entry 2 relies on that surface being broken (conditional effect), it correctly sees the broken state when evaluating entry 2.
 
 The temporary state is discarded after planning — it does not affect the actual game state until the shot is fired and the physical trace runs.
 
 ### 13.8 Planned trace as Steps
 
-The planned trace uses the same `trace()` function as the physical trace (§12.1), with `mode = PLANNED`. It produces **Steps** with the same structure — same hitpoints, same `start`/`end` coordinates. The only difference is which effects are applied (plan-queue-based rather than `is_on_segment`-based), which affects the `frame` field.
+The planned trace is the same rule walker as the physical trace (§12.1), with `mode = PLANNED` up to the cursor. After the cursor it is a PHYSICAL continuation. Both are converted to `TraceStep`s by the same `BeamTracer.to_path`. Every carrier crossing is an event in both modes, so the two event lists correspond 1:1, with the same points, **up to the first step where they apply different effects**. The step tree merge (§14.5) compares frame ids at each index.
 
-Both traces are `Array[Step]` with 1:1 index correspondence by construction. The step tree merge (§14.5) compares frames at each index.
+When the two traces make identical decisions through the cursor, `BeamTracer` shares one trajectory: the planned path *is* the physical path, with the same steps.
 
 ---
 
@@ -1243,35 +1126,35 @@ Both traces are `Array[Step]` with 1:1 index correspondence by construction. The
 
 ### 14.1 Two trace modes — unified hitpoints
 
-Hit-point computation uses a **unified hitpoint model**: both modes intersect the shared ray with ALL surface carriers (ignoring `is_on_segment`), producing the **same hitpoints** (same step boundaries). The modes differ ONLY in which effects are applied at each hitpoint.
+Hit-point computation uses a **unified hitpoint model**: both modes intersect the current beam with ALL surface carriers (on- or off-segment), and every crossing is an event (§11.5). The modes differ ONLY in which effects are applied at each hitpoint (`TraceMode` / `BeamSolver.Mode`):
 
 | Mode | Effect application rule | When it runs |
 |------|------------------------|-------------|
-| **PHYSICAL** | Effect applied ONLY if the hitpoint `is_on_segment`. Off-segment carrier intersections are pass-throughs (no effect, no frame change). | Always runs from origin to escape/block. |
-| **PLANNED** | Effect applied ONLY if the surface is the NEXT entry in the plan queue, regardless of `is_on_segment`. | Always runs from origin to escape/block. |
+| **PHYSICAL** | An effect fires ONLY on a **fully blocked** hit: an on-segment interior point, or an exact endpoint whose blocked sides (including other segments sharing that endpoint) cover both sides. A terminal ends the trace. Everything else is a pass-through (no effect, no stack change). Plan bookkeeping is by surface ID only: an applied transformative or projective effect advances the plan if it is the next entry's surface, and otherwise marks the plan unmatched. | Origin to terminal/escape/limit. |
+| **PLANNED** | The next plan entry fires when surface ID **and** side match, even off-segment. Only transformative entries change the beam. Terminal and projective entries are consumed without effect (projectives until Stage 87). Everything else passes, terminals included. After the cursor, the trace continues with PHYSICAL rules. | Origin to terminal/escape/limit. |
 
-Both modes run the full trace from origin to escape/block — neither stops at the cursor. The cursor is a **virtual hitpoint** (§12.1) that competes with carrier intersections via t-sorting. `cursor_index` is the step index where the cursor falls.
+Neither mode stops at the cursor. The cursor is a **virtual hitpoint** (§12.1) that competes with carrier intersections in projective order. It is a candidate only once the plan is complete and matched. `cursor_index` is the step index where the cursor falls.
 
-Because both modes produce the same hitpoints, their step arrays have **1:1 index correspondence by construction**. Step `i` in the planned trace and step `i` in the physical trace have the same `start` and `end` in visual coords — they differ only in `frame` when different effects were applied.
+Up to the first index where the two modes apply different effects, both traces walk the same beam (the anchored planned path, §13.1) and produce the same events. Their step arrays therefore correspond **1:1 by index** with identical `start`/`end` there. After that index they continue independently.
 
-Both modes use the same intersection pipeline, the same carriers, and the same scene state. **Caching is shared** between modes — any intersection, transform, or carrier derivation computed by one mode is available to the other.
+Both modes use the same solver, the same scene defs and the same scene state. `PrecisionLadder` lets planned share physical's precision climb when they agree through the cursor, and `BeamTracer` caches the float64 scene across frames and the last pair (§14.8).
 
 ### 14.2 Divergence: exact definition
 
-Divergence is defined by comparing the PLANNED and PHYSICAL traces step by step. Since both modes produce the **same hitpoints** (§14.1), steps at the same index always have the same `start` and `end` coordinates. The ONLY field that can differ is the **frame** (the accumulated Möbius transform).
+Divergence is defined by comparing the PLANNED and PHYSICAL traces step by step. Before divergence both modes produce the **same hitpoints** (§14.1), so steps at the same index have the same `start` and `end`. The field compared is the **frame id**: the id of `(epoch, provenance stack)`, §10.7.
 
 **Aligned** — step `i` is aligned if the planned and physical traces have the same **frame ID** at that step. This means both modes applied the same effects up to and including step `i`.
 
 **Diverged** — step `i` is diverged if the frame IDs differ. This means a surface effect was applied in one mode but not the other (e.g., physical hit was on-segment but planned didn't have it in the queue, or vice versa).
 
-Once divergence occurs, the traces never re-converge — divergence is permanent for the remainder of the shot. *(Principle 12.)* Different frames cause different normalized surfaces, so subsequent carrier intersections will differ — but the hitpoints are still computed identically within each mode's frame.
+Once divergence occurs, the traces never re-converge — divergence is permanent for the remainder of the shot. *(Principle 12.)* After divergence the two traces are on different beams, so their subsequent hitpoints differ. Each is still computed by the same rules within its own mode.
 
 ### 14.3 Divergence examples (non-exhaustive)
 
 The following are common scenarios that trigger divergence, but they are all instances of the two cases above:
 
 - Physical ray hits a different surface before the planned one (case 1: different hit point).
-- Physical ray hits the planned surface on a different side, triggering a different effect (case 2: different frame after the hit).
+- Physical ray hits the planned surface on a different side, triggering a different effect (case 2: different frame id after the hit).
 - A projective effect's back-propagation was valid in planning, but the physical ray arrives at a different point on the surface.
 - Circle inversion curves the physical ray into missing a later planned surface.
 - The planned path uses the infinite carrier extension of a surface, but the physical ray hits the segment's finite edge first.
@@ -1290,39 +1173,36 @@ StepTree:
 
 ### 14.5 Step tree merge algorithm
 
-The merge walks both traces **by index**. Since both modes produce the same hitpoints (§14.1), steps at the same index have identical `start` and `end`. The merge compares only the **frame ID** at each step.
+The merge (`StepTreeMerge.merge`) walks both traces **by index**, up to the longer of the two. Before divergence, steps at the same index have identical `start` and `end` (§14.1). The merge compares only the **frame ID** at each step. A missing step on either side counts as divergence.
 
 ```
 func merge(planned_steps, physical_steps, cursor_index) → Array[MergedStep]:
     merged = []
     diverged = false
     
-    # Both arrays have the same length (same hitpoints).
-    for idx in range(len(planned_steps)):
-        p = planned_steps[idx]
-        r = physical_steps[idx]
+    # The arrays may differ in length after divergence; a missing step is null.
+    for idx in range(max(len(planned_steps), len(physical_steps))):
+        p = planned_steps[idx] if idx < len(planned_steps) else null
+        r = physical_steps[idx] if idx < len(physical_steps) else null
         past_cursor = (idx >= cursor_index)
         
-        if not diverged:
-            if p.frame.id == r.frame.id:
-                # Aligned — same effect was applied (or both passed through).
-                merged.append(MergedStep(p, ALIGNED if not past_cursor else ALIGNED_POST_PLANNED))
-            else:
-                # Diverged — different effects applied at this hitpoint.
-                diverged = true
-                merged.append(MergedStep(p, DIVERGED_PLANNED if not past_cursor else DIVERGED_POST_PLANNED))
-                merged.append(MergedStep(r, DIVERGED_PHYSICAL))
+        if not diverged and p != null and r != null and p.frame_id == r.frame_id:
+            # Aligned — same effects applied (or both passed through).
+            merged.append(MergedStep(p, ALIGNED if not past_cursor else ALIGNED_POST_PLANNED))
         else:
-            # Already diverged — all subsequent steps are diverged.
-            merged.append(MergedStep(p, DIVERGED_PLANNED if not past_cursor else DIVERGED_POST_PLANNED))
-            merged.append(MergedStep(r, DIVERGED_PHYSICAL))
+            # Diverged here or earlier — all subsequent steps are diverged.
+            diverged = true
+            if p != null:
+                merged.append(MergedStep(p, DIVERGED_PLANNED if not past_cursor else DIVERGED_POST_PLANNED))
+            if r != null:
+                merged.append(MergedStep(r, DIVERGED_PHYSICAL))
     
     return merged
 ```
 
-The merge is trivial because hitpoints are mode-independent. No partial alignment or sub-segmentation is needed — steps always have the same geometry. *(Principle 22, §14.8.)*
+The merge is trivial because hitpoints are mode-independent up to divergence. No partial alignment or sub-segmentation is needed. *(§14.8.)*
 
-After divergence, the planned and physical traces are in different frames, so their subsequent hitpoints will differ (different normalized surfaces produce different carrier intersections). Both traces continue independently; the merge emits both as diverged steps.
+After divergence, the planned and physical traces are on different beams, so their subsequent hitpoints differ. Both traces continue independently, and the merge emits both as diverged steps.
 
 ### 14.6 Five step types
 
@@ -1342,46 +1222,52 @@ After divergence, the planned and physical traces are in different frames, so th
 ### 14.7 Step record
 
 ```
-Step:
-    start:   Vector2           # in visual coords (frame.apply(normalized_start))
-    end:     Vector2           # in visual coords (frame.apply(normalized_end))
-    ray:     Ray               # the originating ray in the normalized frame (provenance)
-    frame:   MobiusTransform   # the frame active during this step (maps normalized → visual)
-    hit:     HitRecord?        # null if ray escaped
-    type:    StepType          # ALIGNED, ALIGNED_POST_PLANNED, DIVERGED_PHYSICAL,
-                               # DIVERGED_PLANNED, DIVERGED_POST_PLANNED
+TraceStep:
+    start, end:     Vector2      # visual coords (INF, INF for the far end of an escape step)
+    via:            Vector2      # a point on the beam between start and end (escape steps: travel direction)
+    is_arc_step:    bool         # the beam's curvature κ ≠ 0
+    frame_id:       int          # id of (epoch, provenance stack), §10.7; 0 = IDENTITY_FRAME
+    ray:            Ray          # the trajectory's aim ray (player → cursor), shared by reference
+    hit:            TraceHit?    # set on the last step of a hit event (§11.2); null otherwise
+    surface_id, hit_side, hit_on_segment     # the hit's metadata (-1 / unset when no hit)
+    after_portal:   bool         # first step after a portal (intended gap)
+    est_error:      float        # estimated px error of `end` (-1 = unknown)
+    precision_bits: int          # arithmetic precision the step was computed at
+    type:           StepType     # ALIGNED, ALIGNED_POST_PLANNED, DIVERGED_PHYSICAL,
+                                 # DIVERGED_PLANNED, DIVERGED_POST_PLANNED
 ```
 
-**Shared ray:** Every step stores the `shared_ray` — the original ray from the player in the aim direction. Both PHYSICAL and PLANNED modes use the same shared ray, guaranteeing all steps share the same Ray object by reference identity. This provides:
-1. The original ray is always available for re-computation (numerical stability — avoids accumulating floating-point drift).
-2. Any system that needs to re-intersect a step's ray with surfaces should use `step.ray`, not construct a new ray from endpoints.
+**Shared aim ray:** every step of one `trace_pair` references the same aim `Ray` object (player → cursor). It is provenance for consumers: nothing re-intersects it, because the solver's events are final. Escape steps instead carry a ray along their exact tangent. *(Removed in Stage 84: `TraceStep.frame`, the per-step Möbius frame.)*
 
 ```
-TracedPath:
-    steps:       Array[Step]
-    targets_hit: Set[int]     # surface IDs of targets hit during this trace
-    final_state: GameState    # the game state copy after all trace state changes
+TracePath:
+    steps:        Array[TraceStep]
+    targets_hit:  Dictionary[int, bool]   # target surfaces hit on-segment during this trace
+    cursor_index: int                     # step index of the cursor (-1 if not reached)
+    hit_count:    int                     # number of solver events
+    # final_state: GameState — PLANNED (Stage 85, state flags)
 ```
 
-`PlannedPath = Array[Step]`
-
-`VisualPath = Array[VisualLineSegment | VisualArcSegment]`
-
-`VisualEscapeSegment = {start: Vector2, direction: Direction, frame: MobiusTransform}`
+`VisualPath = Array[VisualLineSegment | VisualArcSegment]`, plus escape segments drawn from `start` along a direction to the viewport edge.
 
 The step tree is the **single source of truth** for what happens on a shot. *(Principles 2, 15.)*
 
 ### 14.8 Mode interaction and caching
 
-The PLANNED and PHYSICAL traces share the computation cache. When one trace computes an intersection or transform, the result is cached. The other trace retrieves cached results for identical computations.
+The PLANNED and PHYSICAL traces are solved together (`PrecisionLadder.solve`) and converted together (`BeamTracer.trace_pair`):
+- **Frame ids** come from one `(epoch, stack) → id` dictionary shared by both conversions. The same applied effects since the last projective therefore give the same id in both traces, and aligned steps have identical frame ids by construction.
+- **One trajectory:** when the two event lists agree (kind, surface, side, applied) through the cursor, the planned path reuses the physical one.
+- **Caches:** `BeamTracer` caches the float64 `FastSolver.Scene` across frames (keyed by the scene defs) and the last `(player, cursor, plan, scene)` → pair. `PrecisionLadder` lets planned share physical's precision climb when they agree through the cursor.
 
-Frame comparison for alignment is by **Möbius transform ID** (§17.3). Since both traces share the cache, identical compositions through the same effects produce the same cached transform IDs. Aligned steps (same effects applied) have identical frame IDs by construction.
+**Precondition:** both traces start in frame 0 (empty stack, epoch 0) from the same player and aim.
 
-**Precondition:** both traces must start with the global identity transform (ID 0) and use the same shared ray.
+*(Historical: the legacy design aligned frames by `MobiusTransform` IDs from a shared `TransformCache`, §17.)*
 
 ### 14.9 Empty-plan step tree
 
-With an empty plan, the PLANNED trace has no plan queue entries, so no effects are ever applied — every hitpoint is a pass-through. The PHYSICAL trace applies effects normally. Since both produce the same hitpoints, the merge compares frames: in the empty-plan case, every frame matches (both are identity), so all steps are **ALIGNED** (before cursor) or **ALIGNED_POST_PLANNED** (after cursor).
+With an empty plan the plan is complete from the start, so the cursor is a candidate immediately. The PLANNED trace applies no effects before the cursor: it is the straight aim line from the player to the cursor, and it continues with PHYSICAL rules after the cursor. The PHYSICAL trace (no anchored chain: a forward walk from the aim) applies effects normally.
+- If the physical arrow reaches the cursor without an applied effect, the two traces coincide and every step is **ALIGNED** (before the cursor) or **ALIGNED_POST_PLANNED** (after it).
+- If the physical arrow applies an effect (or is blocked) before the cursor, its frame id or event list departs from the planned one there. The merge marks that index as the divergence: the red solid planned line continues straight to the cursor (UX11, "empty plan = fire straight").
 
 ### 14.10 Post-cursor computation
 
@@ -1391,7 +1277,7 @@ There is no separate post-cursor computation. Both traces run the full path from
 
 ## 15. Visibility
 
-> **Status: PLANNED** — The visibility system is not yet implemented. The design below is the intended specification for future development. The infrastructure it depends on (same intersection pipeline, same effects) is in place.
+> **Status: PLANNED** — The visibility system is not yet implemented. The design below is the intended specification for future development. It was written against the deleted frame-based solver, so its pseudocode still uses that vocabulary: `current_frame`, `MobiusTransform`, `cache.apply`, `get_mobius`, `find_all_hits` in a transformed frame. Those must be re-expressed on the beam solver: casts are beams in visual space, effects are beam/point maps (§10.8), and the provenance stack replaces frames (§10.7). The game-design requirements stay as written: same scene, same state, same rules as trajectory, and Principle 14.
 
 ### 15.1 Purpose
 
@@ -1572,7 +1458,7 @@ func build_regions_from_casts(cast_results, origin):
 
 **`intersect_regions_with_surface(regions, surface):`** For each region, find which portion of the surface lies inside the region. Cast rays from origin through the surface's start, end, and via points. For each ray, if the earliest hit IS the surface (not a closer obstruction), that point is illuminated. The illuminated sub-segment is the continuous portion of the surface between illuminated points.
 
-**`see_through` parameter in `find_all_hits`:** *(Not yet implemented — specified for the visibility system §15.)* Surfaces in the `see_through` set will be treated as transparent — rays pass through them without recording a hit. This is distinct from `skip_segment` (which prevents re-hitting the departure surface, §11.4). Both can be active simultaneously.
+**`see_through` parameter in `find_all_hits`:** *(Not yet implemented — specified for the visibility system §15.)* Surfaces in the `see_through` set will be treated as transparent — rays pass through them without recording a hit. This is distinct from the departure rule (the departure point is re-hit last, §11.4). Both can be active simultaneously.
 
 ### 15.4 Multiple regions
 
@@ -1597,7 +1483,7 @@ This radial ordering is the **single source of truth** for all angular sorting i
 
 ### 15.6 Consistency
 
-Visibility uses the **same intersection pipeline**, **same effects**, and **same scene state** as trajectory. *(Principle 14.)* The same `intersect_line_with_gcircle`, the same Möbius transforms, the same game state. If a surface is broken in the game state, it is broken for visibility too.
+Visibility uses the **same intersection pipeline**, **same effects**, and **same scene state** as trajectory. *(Principle 14.)* That means the same beam-solver geometry (`BeamGeom`, §11), the same effect maps (§10.8), and the same game state. If a surface is broken in the game state, it is broken for visibility too.
 
 ---
 
@@ -1658,7 +1544,7 @@ Plan:      [{C, left}]
 2. Aim: player (50, 200) → image (250, 200). This is the horizontal line y=200.
 3. Bounce: line y=200 intersects carrier circle at (300, 200) → bounce₁ = (300, 200).
 
-**Frame transform after hit:** M = circle inversion Möbius matrix. In the normalized frame, the ray continues as a line from the new-frame bounce point toward the cursor. In the visual frame, this second leg renders as a **circular arc** (the image of a straight line under inversion).
+**Beam after hit:** the inversion beam map (§10.8) at the bounce point gives the new beam, which departs the carrier there; inversion C is pushed on the provenance stack. In the anchored construction (§13.1), B₁ is the generalized circle through P₁ = F₁(player) ≈ (133.3, 200), X₁ = cursor (400, 200) and Q₁ = F₁(∞) = center (200, 200). These are collinear because the aim passes through the inversion center, so this second leg is straight, on y = 200. In general (an aim not through the center) the second leg renders as a **circular arc**, the image of a straight line under inversion.
 
 ### 16.3 Divergence
 
@@ -1712,7 +1598,9 @@ Plan:       [{M1, left}, {P, left}, {M2, right}]
 4. M1 is transformative: reflect H across x=100 → image = (-50, 200).
 5. Aim: player (50, 300) → image (-50, 200).
 
-**Result:** two transformative sub-chains ({M1} and {M2}) separated by projective break point P. The frame resets to identity at P.
+**Result:** two transformative sub-chains ({M1} and {M2}) separated by projective break point P. The provenance stack clears and a new epoch begins at P.
+
+*(Status: this planning example is the Stage 87 target. Today PLANNED mode consumes the projective entry for P without applying it (§13.3), so the planned preview of this plan does not yet follow the path above; the physical trace does apply P.)*
 
 ### 16.5 State change (multi-shot)
 
@@ -1748,7 +1636,7 @@ End-to-end walkthrough for a single shot:
 1. **Player presses Fire.** Checkpoint saved (player position, game state, plan, targets_hit).
 2. **Game time freezes** (`get_tree().paused = true`).
 3. **Physical trace computed** on a copy of game state. `targets_hit` updated during trace.
-4. **Planned trace computed** (image chains + back-propagation). Produces planned Steps.
+4. **Planned trace computed** (anchored image chain in the beam solver, §13.1; back-propagation through projectives from Stage 87). Produces planned Steps. (Steps 3–4 are one `BeamTracer.trace_pair` call.)
 5. **Step tree merged** from planned and physical traces (§14.5).
 6. **Arrow flight animated** step-by-step. Surfaces visually update at state-change hit points.
 7. **Animation completes** (or player skips). Arrow disappears.
@@ -1762,58 +1650,34 @@ End-to-end walkthrough for a single shot:
 
 ## 17. Computation cache
 
+> **Stage 84:** the legacy `TransformCache` was deleted together with the frame-based solver. It was a provenance-keyed bidirectional store of point/carrier transforms with `MobiusTransform` IDs. Exact reversal (Principles 5, 22) is now guaranteed **by construction inside the beam solver**, not by a cache. See `docs/TDD_09_PRECISION_INTEGRATION.md` ("Exactness rules") and `docs/research/oracle/trace2.py`.
+
 ### 17.1 Reversibility guarantee
 
-**All reversible computations are stored on first calculation.** Reversal returns the cached value — never recomputed. *(Principle 5.)*
-
-This guarantees `f(f⁻¹(x)) == x` exactly, eliminating floating-point round-trip bugs.
+Reversal never recomputes. When a beam re-hits the surface on top of the provenance stack (or a portal's pair), the stack **pops and restores the earlier beam object**, together with its known points and exact-line data, resumed at the shared point actually hit (§10.7). The anchored planned path memoizes its image chain per stack frame, so a pop in the plan returns exactly the earlier image and beam (§13.1). This guarantees `f(f⁻¹(x)) == x` exactly where the game relies on it.
 
 ### 17.2 What gets cached
 
-| Computation | Forward → Reverse (from cache) |
-|-------------|-------------------------------|
-| **Carrier derivation** | `derive_carrier(start, end, via) → GeneralizedCircle` / `derive_via(start, end, carrier) → via` (returns the exact original via, not a recomputed approximation) |
-| Frame conversion | `to_visual(P, M) → P'` / `to_math(P', M) → P` |
-| Point reflection | `reflect(P, line) → P'` / `reflect(P', line) → P` |
-| Point inversion | `invert(P, circle) → P'` / `invert(P', circle) → P` |
-| Rigid motion | `rigid(P, R, d) → P'` / `rigid_inverse(P') → P` |
-| Carrier transform | `M(C) → C'` / `M⁻¹(C') → C` |
+| Computation | Where |
+|-------------|-------|
+| Carrier derivation | `Segment.get_carrier()` memoizes `derive_carrier(start, end, via)` on the segment. The three points stay stored, so no reverse derivation is needed. |
+| Earlier beams on cancellation | Provenance stack entries (`BeamSolver.StackEntry`) |
+| Anchored beams / image chain per plan frame | `BeamSolver.AnchorChain` (memo by stack signature) |
+| Exact incidence of known points on carriers | Per-walk dictionary (`Walk.incidence`) |
+| Float64 solver scene | `BeamTracer` (keyed by the scene defs, reused across frames) |
+| Last planned/physical pair | `BeamTracer` (keyed by player, cursor, plan and scene) |
 
 ### 17.3 Cache architecture
 
-Keyed by **provenance** (point identity), not coordinates. Avoids float-equality comparisons.
-
-**Transform IDs:** each `MobiusTransform` receives a unique ID at construction time via a global counter. The identity transform has a fixed ID (0). Composed transforms receive new IDs. Mathematically identical transforms constructed separately get **different** IDs — identity is by construction, not by value comparison.
-
-**Multi-key entries:** the `(point_id, transform_id) → point_id` pattern shown above is the common case. The cache also stores carrier derivations keyed by `(start_id, end_id, via_id) → carrier`. The cache is a general-purpose provenance-keyed store, not restricted to two-key entries.
-
-```
-TransformCache:
-    entries: Dictionary[(point_id, transform_id), point_id]
-
-    func apply(point, transform) → Point:
-        key = (point.id, transform.id)
-        if key in entries:
-            return points[entries[key]]
-        result = _compute(point, transform)
-        entries[(point.id, transform.id)] = result.id
-        entries[(result.id, transform.inverse_id)] = point.id
-        return result
-```
+There is no global cache and no transform IDs. Identity of *frames* is the `frame_id` of `(epoch, provenance stack)` assigned per `trace_pair` (§10.7, §14.8). Identity of *exact points* is provenance: the known points of the current beam (§31.4).
 
 ### 17.4 Manual overrides
 
-The cache supports **manual override entries** from level data. These enforce exact algebraic identities that floating-point cannot guarantee.
-
-Example: four mirrors in a `+` shape. Reflecting clockwise through all four should produce identity (`M = I`), but composing four Möbius matrices accumulates rounding error. The level declares the cycle identity as an override; the cache returns `I` exactly.
-
-Override sources:
-- **Level data**: declares cycle identities.
-- **Validation**: at load time, computed composition is checked against the override. Large discrepancy flags a level design error.
+*(Not implemented; the design intent is unchanged.)* Principle 23 (designer intent over arithmetic) called for level-declared cycle identities enforced by the cache, e.g. four mirrors in a `+` shape whose clockwise cycle is the identity. With the beam solver, only a re-hit of the surface on top of the stack (or a portal's pair) cancels exactly. A cycle through *different* surfaces, such as the `+` shape, is not recognised as the identity; its accuracy is controlled by dynamic precision (§31.5). If overrides are added, they will need a beam-solver design.
 
 ### 17.5 Cache lifetime
 
-Persists for the duration of a **shot**. Cleared between shots (scene state may have changed). Manual overrides persist across shots (level data).
+`BeamTracer`'s scene and pair caches persist across frames until the scene defs or the inputs change (`BeamTracer.clear_cache()` resets them). All per-walk state (stack, anchored chain, known points, incidence memo) lives for one trace.
 
 ---
 
@@ -1886,7 +1750,7 @@ CollisionBodyData:
 CycleOverride:
     surface_ids:     Array[int]          # surfaces in cycle order
     sides:           Array[Side]         # which side at each surface
-    expected_result: MobiusTransform     # the declared composition result (typically identity)
+    expected_result: Variant             # the declared composition result (typically identity); representation TBD — no Möbius matrix class exists since Stage 84 (§17.4)
     test_positions:  Array[Vector2]          # custom off-grid test positions for invariant testing
 ```
 
@@ -1940,73 +1804,89 @@ The format must be human-readable for debugging.
 
 | Layer | Responsibility | Godot types used |
 |-------|---------------|------------------|
-| **Math** | Intersection, effects, planning, visibility, cache, Möbius transforms | **None.** Pure GDScript with `Vector2` and `float`. |
+| **Math** | Geometry primitives, effect descriptions, the precision beam solver (intersection, effect maps, anchored planning, exact predicates, dynamic precision), step types and merge, (future) visibility | **None.** Pure GDScript with `Vector2`, `float` and packed arrays. |
 | **Visual** | Math→visual conversion, drawing, input | `Node2D`, `_draw()`, `draw_line()`, `draw_arc()`, `Color`. |
 | **Game** | Scene management, state, shot lifecycle, player | `CharacterBody2D`, autoload singletons, scene tree. |
 
 The math layer has **zero Godot engine dependencies** beyond `Vector2`. Testable in isolation.
 
-**GDScript performance note:** GDScript is significantly slower than C++ for tight numerical loops. For the intersection kernel (32 steps × N surfaces per frame), avoid object allocation in hot loops — reuse arrays, use `PackedFloat64Array` for batch math where possible. If profiling shows the intersection kernel is the bottleneck, consider moving it to a GDExtension (C++) module. The math layer's zero-dependency design makes this migration straightforward.
+**GDScript performance note:** GDScript is significantly slower than C++ for tight numerical loops. For the intersection kernel (32 events × N surfaces per frame), avoid object allocation in hot loops. This is why `FastSolver` exists: a raw-float64 `PackedFloat64Array` backend, roughly 50× faster than the precision-generic code and bit-identical to it at float64. If profiling shows the intersection kernel is the bottleneck, consider moving it to a GDExtension (C++) module. The math layer's zero-dependency design makes this migration straightforward.
 
 **Resource mapping:** `LevelData`, `SurfaceData`, and effect configurations extend Godot `Resource`. Each has `@export` properties for serialization to `.tres`. Surfaces in the scene tree are `Node2D` instances that reference their `SurfaceData` resource.
 
 ### 20.2 Project structure
 
+Current layout (Stage 84). Files marked *(planned)* do not exist yet.
+
 ```
 ricochet-game-v2/
 ├── project.godot
-├── GAME_SPEC.md
+├── GAME_SPEC.md, CHANGELOG.md
 ├── scripts/
 │   ├── math/
-│   │   ├── generalized_circle.gd
-│   │   ├── segment.gd
-│   │   ├── mobius_transform.gd
-│   │   ├── intersection.gd
-│   │   ├── transform_cache.gd
+│   │   ├── point.gd, direction.gd, ray.gd, segment.gd, generalized_circle.gd, side.gd
+│   │   ├── trace_step.gd, trace_hit.gd, trace_path.gd, trace_mode.gd   # neutral trace types
+│   │   ├── step_types.gd, step_tree_merge.gd
+│   │   ├── chevron_overlay.gd, chevron_overlay_builder.gd
 │   │   ├── effects/
-│   │   │   ├── transformative.gd
-│   │   │   ├── projective.gd
-│   │   │   └── terminal.gd
-│   │   ├── tracer.gd
-│   │   ├── planner.gd
-│   │   └── visibility.gd
+│   │   │   ├── effect.gd, transformative_effect.gd, terminal.gd
+│   │   │   ├── reflection_effect.gd, circle_inversion.gd, rigid_motion_effect.gd
+│   │   │   └── line_normal_projection.gd, circle_normal_projection.gd,
+│   │   │       line_directional_projection.gd, circle_directional_projection.gd
+│   │   ├── precision/                     # the beam solver (§6, §11–13, §31)
+│   │   │   ├── beam_solver.gd             # BeamSolver: rule walker, anchored chain, provenance stack
+│   │   │   ├── fast_solver.gd             # FastSolver: raw float64 twin (bit-identical) + tangent-linear
+│   │   │   ├── precision_ladder.gd        # dynamic precision driver
+│   │   │   ├── error_estimate.gd          # a-priori error envelope, decision reliability
+│   │   │   ├── beam_tracer.gd             # adapter: events → TracePath / TraceStep
+│   │   │   ├── beam_scene.gd, beam_effects.gd, beam_geom.gd, hp_beam.gd, exact.gd
+│   │   │   └── num_ctx.gd, f64_num.gd, dual_num.gd, big_float.gd, cn.gd
+│   │   └── visibility.gd                  # (planned)
 │   ├── visual/
 │   │   ├── visual_converter.gd
 │   │   ├── path_renderer.gd
-│   │   └── visibility_renderer.gd
-│   └── game/
-│       ├── game_manager.gd
-│       ├── player.gd
-│       ├── surface_node.gd
-│       ├── level_loader.gd
-│       └── arrow_animator.gd
+│   │   └── visibility_renderer.gd         # (planned)
+│   ├── game/
+│   │   ├── game_manager.gd, player.gd, cursor.gd, arrow_animator.gd
+│   │   ├── surface.gd, surface_node.gd, side_config.gd, side_link.gd, room_builder.gd
+│   │   ├── plan_manager.gd, plan_hud.gd, click_detector.gd
+│   │   ├── game_state.gd, checkpoint.gd, checkpoint_stack.gd, level_settings.gd
+│   │   └── debug_dumper.gd
+│   └── testing/                           # invariant checker, sweeps, TestTrace, precision bench
+├── tests/                                 # GUT tests (test_stage{N}_*.gd and others)
+├── docs/                                  # TDDs; docs/research/oracle/ (mpmath oracle, trace2.py = trace spec)
+├── bench/                                 # oracle fixtures and scene corpora
 ├── scenes/
-│   ├── main.tscn
-│   ├── levels/
-│   ├── ui/
-│   └── editor/
+│   ├── main.tscn, player.tscn, violation_viewer.tscn, …
+│   ├── test_levels/, playground/
+│   ├── ui/, editor/                       # (empty; planned)
 └── resources/
-    └── levels/
+    └── levels/                            # (empty; planned)
 ```
+
+*Removed in Stage 84:* `scripts/math/{tracer, planner, transform_cache, tracked_transform, mobius_transform, intersection}.gd`.
 
 ### 20.3 Data flow per frame
 
 ```
 player_position + cursor_position + plan
         │
-        ├──→ planned_trace (image chains / back-prop, PLANNED mode)
-        │       ▼
-        │    planned steps
+        ▼
+  BeamTracer.trace_pair (scene defs; cached float64 scene and last pair)
         │
-        ├──→ physical_trace (ray casting, PHYSICAL mode)
-        │         │
-        │    shared cache ←──┘
+        ▼
+  PrecisionLadder.solve ── float64 FastSolver pass + ErrorEstimate;
+        │                  BigFloat climb when needed (§31.5)
+        ├──→ planned events  (BeamSolver, PLANNED; anchored image chain, §13.1)
+        ├──→ physical events (BeamSolver, PHYSICAL; anchored until divergence)
+        ▼
+  BeamTracer.to_path ──→ planned / physical TracePath (visual steps, frame ids)
         │
         ▼
   merge ──→ step_tree (5 step types, divergence index)
         │
         ▼
-  visual_convert (per-step frame transform M → line or arc)
+  visual_convert (three points per step → line or arc; escape steps to the edge)
         │
         ▼
   draw_calls (_draw: draw_line / draw_arc per segment)
@@ -2027,7 +1907,7 @@ player_position + cursor_position + plan
 
 Explicit z_index values: surfaces=0, visibility=10, step tree preview=20, arrow=30, player=40.
 
-Surfaces are drawn in the visual frame using their defining geometry (start, via, end → derive carrier → draw_line or draw_arc) (for rendering). The math layer (§15) transforms surfaces into the normalized frame for computation — this is a separate context. No frame transform is needed for rendering — surfaces are always in visual coords.
+Surfaces are drawn in visual coordinates using their defining geometry (start, via, end → derive carrier → draw_line or draw_arc). The beam solver also works on surfaces in visual coordinates (§6.1). No transform is needed anywhere.
 
 Within the step tree preview, draw order (back to front): DIVERGED_PLANNED → DIVERGED_POST_PLANNED → ALIGNED → ALIGNED_POST_PLANNED → DIVERGED_PHYSICAL. The physical path (green/yellow) always draws on top of the planned path (red).
 
@@ -2045,7 +1925,7 @@ When the player fires, **game time freezes**. All physics, surface movement, and
 
 ### 21.2 Animation
 
-The arrow is animated step-by-step along the computed `TracedPath`:
+The arrow is animated step-by-step along the computed physical `TracePath` (from `BeamTracer.trace_pair`):
 
 1. For each step, the arrow tip moves from `start` to `end`:
    - Line steps (visual): linear interpolation.
@@ -2141,10 +2021,10 @@ Default `draw_arc()` point_count: **64 per full circle**, scaled by arc span (e.
 
 | Constraint | Value | Rationale |
 |------------|-------|-----------|
-| Max total hits per arrow path | **32** | All hits count (including pass-through). Prevents infinite loops. |
+| Max events per trace | **32** (`BeamSolver.MAX_HITS`) | Every event counts (crossings incl. pass-through and off-segment, cursor, final origin/escape). Prevents infinite loops. |
 | Inversion circle = carrier | Always | No separate inversion-circle parameter. |
 | Min segment length | > 0 | Zero-length segments never hit. Validated at load. |
-| Frame determinant | ≠ 0 | Möbius matrix must be invertible. Validated on composition. |
+| Effect invertibility | Always | Every transformative effect is invertible by definition (§10.8); no matrices are composed since Stage 84, so the former "frame determinant ≠ 0" check no longer applies. Portal rotation `a = unit(cos θ, sin θ)`. |
 | Side labels | LEFT / RIGHT only | Uniform for all segment types. |
 | Direction representation | Two points | No stored angles or unit vectors. |
 | Ordering method | Cross-product sign | No `atan2`. |
@@ -2164,7 +2044,7 @@ The default target type is a **surface** the arrow must contact during the physi
 
 ### 24.2 Hit detection
 
-A target is hit if the physical trace produces a `HitRecord` whose `surface.is_target == true`. The target hit is registered at the moment of contact (when the HitRecord is created), **regardless of the surface's effect**:
+A target is hit if the physical trace produces an **on-segment** hit event on a surface with `is_target == true` (off-segment carrier crossings are events too, §11.5, but do not count). The target hit is registered at the moment of contact (when the hit event is produced), **regardless of the surface's effect**:
 
 - **Pass-through target**: arrow passes through, hit registered.
 - **Reflective target**: arrow bounces, hit registered.
@@ -2279,26 +2159,28 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 ## 28. Implementation phases
 
-> **Implementation status:** Phases 0–5 are complete. Phase 6 onward is planned. The TDD documents map phases to numbered stages — see TDD_01 through TDD_08 for details. Stages 44–51 were repurposed during development; see TDD_05 for the reconciliation table.
+> **Implementation status:** Phases 0–5 are complete. Phase 6 is partially done (rigid motion and physical projectives). The TDD documents map phases to numbered stages: see TDD_01 through TDD_09 for details. Stages 44–51 were repurposed during development; see TDD_05 for the reconciliation table.
+>
+> Stages 80–84 (TDD_09) replaced the frame-based solver of Phases 0–5 with the precision beam solver. Phase items below that name `MobiusTransform`, `TransformCache`, `Planner`, `trace()`, `intersect_line_with_gcircle()` or frame tracking are **historical**: they were built, then deleted in Stage 84. Their roles are now filled by `BeamSolver`, `PrecisionLadder` and `BeamTracer` (§12). Stages 85–87 (state flags, ghost mode, plannable projectives) are planned.
 
 ### Phase 0: Core abstractions *(Done)*
 - `Direction`, `Ray`, `Segment` data classes (§8).
 - `GeneralizedCircle` class with fields `(a, b, c, d)` — method implementations (`is_line()`, `center()`, `radius()`, `contains_point()`) are added in Phase 1.
-- `MobiusTransform` struct with `conjugating` flag, complex number helpers (§5.2, §5.3).
+- `MobiusTransform` struct with `conjugating` flag *(historical — deleted in Stage 84)*, complex number helpers (§5.2, §5.3).
 - `Surface`, `SideConfig` (§9). *(ConfigResolver deferred to Phase 8.)*
 - `Effect` base with `Kind` enum, `TransformativeEffect`, `TerminalEffect` (§10.1). *(ProjectiveEffect deferred to Phase 6.)*
-- `HitRecord`, `Step`, `StepTree` data structures (§11.2, §14).
+- `HitRecord`, `Step`, `StepTree` data structures (§11.2, §14). *(Now `TraceHit`, `TraceStep`, `TracePath`.)*
 - `GameState`, `CheckpointData` data structures (§18). *(LevelData deferred to Phase 8.)*
-- `TransformCache` with provenance-keyed lookup (§17).
+- `TransformCache` with provenance-keyed lookup (§17). *(Historical — deleted in Stage 84.)*
 
 **Deliverable:** all core types compile, have correct field definitions, and can be instantiated. No algorithms — just the type system skeleton that subsequent phases build on.
 
 ### Phase 1: Math foundations *(Done)*
 - `GeneralizedCircle` class with `is_line()`, `center()`, `radius()`, `contains_point()`.
-- `MobiusTransform` class with apply, compose, invert, transform_carrier.
+- `MobiusTransform` class with apply, compose, invert, transform_carrier. *(Historical — deleted in Stage 84.)*
 - `Segment` class with start, end, via (carrier derived via cache), side determination.
 - `Direction` and `Ray` classes.
-- `intersect_line_with_gcircle()` — the single intersection primitive.
+- `intersect_line_with_gcircle()` — the single intersection primitive. *(Historical — replaced by `BeamGeom.hits`, §11.1.)*
 - Unit tests for all math classes.
 
 **Deliverable:** math layer passes unit tests for intersection, transform composition, and carrier transformation.
@@ -2306,9 +2188,9 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 ### Phase 2: Basic effects and ray tracing *(Done)*
 - `TransformativeEffect` (reflection only), `TerminalEffect` (block).
 - `Surface` and `SideConfig` classes.
-- `trace()` function — the physical ray tracing loop.
-- `Step` and `TracedPath` classes.
-- Frame tracking (identity only — no inversions yet).
+- `trace()` function — the physical ray tracing loop. *(Historical — replaced by `BeamSolver`, §12.)*
+- `Step` and `TracedPath` classes (now `TraceStep`, `TracePath`).
+- Frame tracking (identity only — no inversions yet). *(Historical.)*
 - Unit tests: trace through a scene with reflecting and blocking surfaces.
 
 **Deliverable:** ray tracing works with reflection and block effects. Traced paths are correct.
@@ -2323,7 +2205,7 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 **Deliverable:** player can move, aim, and see a real-time trajectory preview with reflections.
 
 ### Phase 4: Planning algorithm *(Done)*
-- `Planner` — image chain method for transformative sub-chains.
+- `Planner` — image chain method for transformative sub-chains. *(Historical — replaced by the anchored planned path in `BeamSolver`, §13.1.)*
 - Plan construction input: click to add, right-click to remove.
 - Step tree: planned vs physical paths, divergence detection.
 - Preview shows aligned/diverged colors.
@@ -2332,18 +2214,18 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 ### Phase 5: Circle inversion and arc visualization *(Done)*
 - `CircleInversionEffect` (transformative).
-- Frame transform composition (non-identity frames).
+- Frame transform composition (non-identity frames). *(Historical — replaced by the inversion beam map, §10.8.)*
 - `VisualConverter` extended: math→visual now produces arc segments.
 - `PathRenderer` extended: draws arcs via `draw_arc()`.
 - Beyond-infinity hit handling.
 
 **Deliverable:** circle inversion works. Arrow paths curve in the visual frame. Arcs render correctly.
 
-### Phase 6: Projective effects and mixed planning *(Planned)*
-- `LineNormalProjection`, `CircleNormalProjection`, `SemicircleDirectionalProjection`.
+### Phase 6: Projective effects and mixed planning *(Partially done — rigid motion: Stage 82; physical projectives: Stage 83; projective planning: Stage 87, planned; compound: planned)*
+- `LineNormalProjection`, `CircleNormalProjection`, `LineDirectionalProjection`, `CircleDirectionalProjection` (implemented in place of the originally planned `SemicircleDirectionalProjection`).
 - Back-propagation for each projective effect.
 - Mixed chain planning algorithm.
-- Frame reset on projective effects.
+- Stack clear / new epoch on projective effects.
 - `RigidMotionEffect` (rotation + translation).
 - `CompoundTransformativeEffect`.
 
@@ -2387,8 +2269,8 @@ Minimal sound events for Phase 8: `fire`, `bounce`, `break`, `target_hit`, `leve
 ### Phase 10: Polish and testing *(Partially done — invariant sweep operational)*
 - Invariant-based testing (§29.3).
 - Performance profiling and optimization.
-- Computation cache implementation and validation.
-- Manual override testing.
+- Computation cache implementation and validation. *(Superseded: the legacy `TransformCache` was deleted in Stage 84; see §17.)*
+- Manual override testing. *(No beam-solver design yet; §17.4.)*
 - Edge case fixes.
 
 **Deliverable:** all invariant tests pass. Performance meets frame budget.
@@ -2404,8 +2286,9 @@ Minimal sound events for Phase 8: `fire`, `bounce`, `break`, `target_hit`, `leve
 ### 29.1 Math layer unit tests
 
 - Intersection: all carrier types (line-line, line-circle), boundary cases, degenerate cases.
-- Möbius transforms: composition, inversion, apply-to-point, transform-carrier.
-- Cache: round-trip exactness, manual overrides, provenance-keyed lookup.
+- Beam solver: effect beam maps against closed forms; exact predicates; FastSolver ↔ generic bit-identical equivalence; traces against the mpmath oracle (`docs/research/oracle/`, fixtures in `bench/`).
+- Provenance: cancelling re-hits restore the earlier beam exactly; known-point incidence; exact lines.
+- *(Historical: Möbius-matrix and `TransformCache` round-trip tests were retired with the legacy solver in Stage 84; see `docs/stage84_test_migration.md`.)*
 
 ### 29.2 Integration tests
 
@@ -2448,25 +2331,25 @@ Invariants are split into two tiers: **user experience invariants** (observable 
 
 #### Tier 2: Systemic internal invariants
 
-**S1. Cache: carrier ↔ via round-trip.** `derive_via(start, end, derive_carrier(start, end, via))` returns the exact original `via` (same Point ID). *(§17.2, Principle 22.)*
+**S1. Carrier ↔ via.** *(Retired as a cache check: no `derive_via` exists; segments keep their three points, §8.4.)* The carrier derived from start/end/via contains all three points (see S11).
 
-**S2. Cache: transform round-trip.** For every point P transformed by effect E: applying E's inverse returns a Point with the same ID as P. *(§17.)* **Tested as:** `BACK_TRANSFORM_ALIGNMENT`.
+**S2. Exact reversal.** A cancelling re-hit restores the earlier beam exactly (provenance stack, §10.7, §17.1). *(The legacy `BACK_TRANSFORM_ALIGNMENT` check over `TransformCache` Point IDs was retired in Stage 83/84.)* **Tested as:** `EFFECT_LAW` / `BEAM_ORDER` (sweep) and Stage 81–82 unit tests.
 
-**S3. Determinism.** Same inputs → identical step trees (same count, types, Point IDs, frame IDs). *(Principle 17.)*
+**S3. Determinism.** Same inputs → identical step trees (same count, types, coordinates, frame IDs). *(Principle 17.)*
 
 **S4. Divergence is monotonic.** Once divergence occurs at index `i`, all steps at `≥ i` are diverged types. No re-convergence. *(§14.2.)* **Tested as:** `SINGLE_DIVERGENCE`.
 
-**S5. Aligned steps share provenance.** For ALIGNED/ALIGNED_POST_PLANNED steps, planned and physical have identical `start.id` and `frame_id`. *(§14.8.)*
+**S5. Aligned steps share provenance.** For ALIGNED/ALIGNED_POST_PLANNED steps, planned and physical have identical `start` and `frame_id`. *(§14.8.)*
 
 **S6. Aligned steps match.** Before divergence: same hit surface ID, side, and frame ID. Checked by provenance, not coordinates. *(§14.8.)* **Tested as:** `PLAN_EFFECTS_APPLIED`.
 
-**S7. Per-entry state matches.** *(PLANNED — depends on state changes §10.6.)* For aligned steps: planner's `state_at[i]` equals the physical trace's game state at step `i`.
+**S7. Per-entry state matches.** *(PLANNED — depends on state changes §10.6.)* For aligned steps: the planned trace's `state_at[i]` equals the physical trace's game state at step `i`.
 
-**S8. Forward-first hit ordering.** Selected hit has smallest `t > 0`. If no `t > 0`: most negative `t < 0`. *(§11.3.)* **Tested as:** `PARAMETER_MONOTONICITY`, `PHYSICS_COMPLIANCE`.
+**S8. Projective hit ordering.** Events on one beam follow the projective order from the departure parameter (§11.3); each arc starts where the previous one ended. **Tested as:** `BEAM_ORDER`, `PHYSICS_COMPLIANCE`. *(`PARAMETER_MONOTONICITY` on legacy ray parameters was retired.)*
 
-**S9. Exclusion respected.** The `skip_segment` segment is excluded from the hit result. *(§11.4, §12.1.)* **Tested as:** `ORIGIN_NOT_REHIT`.
+**S9. Departure respected.** The departure point is not re-hit as an ordinary candidate before the full loop, and no zero-length step is emitted (§11.4). **Tested as:** `ORIGIN_NOT_REHIT`.
 
-**S10. Projective resets frame.** *(PLANNED — depends on projective effects §10.4.)* After every projective hit, `frame_id == IDENTITY_ID`.
+**S10. Projective clears the stack.** After every applied projective hit the provenance stack is empty and a new epoch begins, so the next steps get a fresh frame id (§10.7). (Replaces the legacy "frame resets to identity"; the frame id is *not* `IDENTITY_FRAME` after a projective.)
 
 **S11. Three points on carrier.** Start/end/via evaluate to ≈0 under the carrier equation. *(Derivation validation.)* **Tested as:** `HITPOINT_ON_CARRIER`.
 
@@ -2480,9 +2363,9 @@ Invariants are split into two tiers: **user experience invariants** (observable 
 
 **S16. No NaN/Inf in output.** No NaN/Inf in any coordinate field (except the `Vector2(INF, INF)` escape sentinel). *(§31.)* **Tested as:** `S16`.
 
-**S17. Provenance IDs unique.** Every Point has a unique ID. *(§8.1.)*
+**S17. Provenance IDs unique.** *(Retired: `Point` has no ID since Stage 84; exact-point provenance is the solver's known points, §31.4.)*
 
-**S18. Frame determinant non-zero.** Every MobiusTransform has `|αδ - βγ|² > 0`. *(§23.)* **Tested as:** `S18_FRAME_DETERMINANT`.
+**S18. Frame determinant non-zero.** *(Retired in Stage 83/84: there are no frame matrices.)*
 
 **S19. Trace preserves real state.** *(PLANNED — depends on state changes §10.6.)* After a preview trace, `GameState.flags` is unchanged.
 
@@ -2494,13 +2377,15 @@ The following invariants are tested by the sweep but not in the original specifi
 |------------|-------------|
 | `PREVIEW_NOGAPS` | No gaps between consecutive step endpoints in the preview path |
 | `PHYSICAL_CONTINUITY` | Step endpoints connect seamlessly (end of step N = start of step N+1) |
-| `SHARED_RAY` | All steps within a stage reference the same Ray object |
-| `RAY_ALIGNMENT` | Ray direction is preserved across steps within a transformative sub-chain |
-| `ARC_MIDPOINT_ALIGNMENT` | Arc step midpoints lie on the arc's carrier circle |
-| `POST_INVERSION_ARC` | Steps after circle inversion correctly produce arcs (not lines) |
 | `VIA_ON_ARC` | Step via points lie on the step's arc carrier |
 | `VISUAL_ON_PHYSICAL_CARRIER` | Visual segment points lie on the physical carrier |
-| `DIRECTION_ONLY` | Only the direction (not position) changes after a plan bounce |
+| `DIRECTION_ONLY` | The physical trace depends only on the aim direction: the planned shot's physical hits equal those of a converged shot without plan aimed at the cursor's image (bounded by tangent-linear sensitivity to that image's float64 rounding; projective plans skipped until Stage 87) |
+| `NO_POST_CURSOR_DIVERGENCE` | A path fully aligned up to the cursor does not diverge after it |
+| `EFFECT_LAW` | Every applied effect maps its beam by its exact law (§10.8) |
+| `EVENT_ON_BEAM` | Every event point lies on its beam, and every hit on its surface's carrier |
+| `BEAM_ORDER` | Consecutive events on one beam chain their parameters in walk order |
+
+*Retired with the legacy frames (Stage 83):* `SHARED_RAY`, `RAY_ALIGNMENT`, `ARC_MIDPOINT_ALIGNMENT`, `POST_INVERSION_ARC`, `PARAMETER_MONOTONICITY`, `BACK_TRANSFORM_ALIGNMENT`, `S18_FRAME_DETERMINANT`.
 
 ### 29.4 Test level data
 
@@ -2531,7 +2416,7 @@ Preview must update **every frame at 60fps** (~16.6ms per frame). Target: previe
 
 - **Incremental recomputation**: if only the cursor moved (not the plan or player), recompute from the last unchanged step.
 - **Spatial indexing**: broad-phase rejection of distant surfaces.
-- **Frame transform caching**: avoid recomputing `M⁻¹` for unchanged frames.
+- **Precision on demand** *(implemented)*: the float64 `FastSolver` pass is accepted when its `ErrorEstimate` is ≤ 0.01 px and every decision margin exceeds its error. Only otherwise does `PrecisionLadder` climb BigFloat tiers (§31.5). The float64 scene and the last trace pair are cached (§17.2). *(Replaces the legacy "frame transform caching" of `M⁻¹`, which no longer exists.)*
 
 ---
 
@@ -2539,14 +2424,14 @@ Preview must update **every frame at 60fps** (~16.6ms per frame). Target: previe
 
 ### 31.1 Direction representation
 
-Rays use two-point `Direction` — no stored angles, no unit vectors. The `Direction` is immutable and shared across all steps of a transformative sub-chain. Generalized circle coefficients are derived from points only when needed.
+The aim is a two-point `Direction` (player → cursor), with no stored angle. It is immutable and shared by every step of a trajectory (§8.3). Inside the solver, a beam's direction is its tangent `τ`, a unit complex number at the tier's precision, carried exactly through the closed-form effect maps (§10.8). Exact straight beams are additionally kept as exact implicit lines (§31.4). Generalized circle coefficients are derived from points only when needed.
 
 ### 31.2 Ordering
 
 - Cross-product sign against a fixed reference direction. Never `atan2`.
-- Earliest hit by smallest ray parameter `t`. Never by distance from an unrelated point.
-- Collinear points ordered by precomputed provenance, not recomputed from coordinates.
-- Ties broken by surface ID, then provenance rank. *(Deterministic, total order.)*
+- Hits in projective order of the beam parameter `t` from the current parameter (§11.3). Never by distance from an unrelated point.
+- Points known by provenance (known points) keep their exact parameter. Concurrent crossings on an exact line share one parameter (§11.4).
+- Ties: cursor first, then surface ID; the departure re-hit is last. *(Deterministic, total order.)*
 
 **Cross-products over angles:** all internal geometric decisions (arc containment, winding direction, radial ordering, sweep direction) use cross-product sign tests, never atan2. Angles appear only at the Godot API boundary (`draw_arc()` parameters) and are computed from points at the last possible moment during visual conversion (§7.3).
 
@@ -2556,57 +2441,70 @@ Do not use `|x| < ε` for decisions that change topology (which hit wins, on-seg
 
 **Collinearity in particular:** whether a segment is a line or arc is determined by **construction provenance**, not by coordinate comparison. A segment is a line if its three defining points were placed collinearly by the level editor (stored as a construction fact in the serialized cache) or if the via is `Vector2(INF, INF)`. At runtime, no floating-point collinearity test is performed — the carrier type (line vs circle) is a stored decision, loaded from the serialized cache.
 
-**Specific replacements (v0.7.0):** All six epsilon usages in the core math layer have been replaced:
+**How the beam solver avoids epsilons** (oracle `trace2` = solver; `docs/TDD_09_PRECISION_INTEGRATION.md`, "Exactness rules"):
+- **Exact predicates** (`Exact`) decide incidence (a known point exactly on a carrier), endpoint identity, tangency of an exact line to a circle, and concurrency of line carriers. A float64 evaluation with a certified error bound handles the cheap case, and exact BigFloat arithmetic handles the rest. The bound only selects the path; it never decides a result.
+- **Provenance** (known points, exact lines, the stack, §31.4) replaces coordinate comparisons. For example, a hit at a segment endpoint lying on an exact line *is* the endpoint.
+- **Rounding never decides an endpoint, an incidence, a tangency, or a root at the antipode** (`t = ∞` is exact).
+- The remaining tier-precision decisions (on-segment cross-ratio, side, root order) have their **margins** checked against the estimated error. `PrecisionLadder` raises the precision until the trajectory is reliable (§31.5).
+- Zero-length steps are dropped by exact equality of endpoints (`start == end`) in `BeamTracer`.
 
-| Location | Was | Now |
-|----------|-----|-----|
-| `projective_sort` | `absf(t) < 1e-12` | `t == 0.0` (origin is constructed with exactly 0.0) |
-| `at_which_endpoint` | `distance_to < 0.01` | `point == segment.start.coords` (exact equality) |
-| `endpoint_blocked_sides` | `absf(cross) < 1e-9` | `cross == 0.0` (exact sign test) |
-| `maps_lines_to_arcs` | `cmod2(c) > 1e-20` | `c != Vector2.ZERO` (exact zero check) |
-| Tracer zero-length step | `distance_to < 0.01` | `vis_start == vis_end` (exact equality) |
-| `VisualConverter.is_arc` | `distance_squared_to < 1e-10` | `start == end_v` (exact equality) |
+*Historical:* the v0.7.0 table of epsilon replacements (`projective_sort`, `at_which_endpoint`, `endpoint_blocked_sides`, `maps_lines_to_arcs`, Tracer zero-length step) referred to the legacy solver, deleted in Stage 84.
 
-Testing-layer tolerances (e.g., in `invariant_checker.gd`) are unaffected — they measure rendered pixel positions, not topology-changing decisions.
+Testing-layer tolerances (e.g., in `invariant_checker.gd`, and the 0.01 px trace tolerance) are unaffected. They measure rendered pixel positions, not topology-changing decisions.
 
 #### 31.3.1 Three-tier endpoint detection
 
-When intersecting a ray with a segment, the intersection system uses a three-tier provenance chain to detect whether a hit occurs at a segment endpoint. This replaces the former distance-based `at_which_endpoint` check.
+*Historical (legacy `Tracer`/`intersection.gd`, deleted in Stage 84):* endpoints were detected by (1) exact match with the ray's defining points, (2) exact cross product `== 0`, and (3) quadratic roots snapped to the endpoint.
 
-**Tier 1 — Exact coordinate match (provenance):** Compare each segment endpoint coordinate against the ray's defining points (`ray.origin.coords`, `ray.direction.start.coords`, `ray.direction.end.coords`). If `endpoint_coords == ray_defining_point`, the endpoint is detected. This catches structural coincidences where the ray was constructed from the same defining points as the segment — the most common case (player at a vertex, reflection point at an adjacent segment's endpoint).
-
-**Tier 2 — Structural collinearity:** Compute `cross(endpoint - ray.origin, ray.direction)`. If the cross product is exactly `0.0`, the endpoint is collinear with the ray and is detected. This catches cases where the endpoint is structurally on the ray line but was not a defining point of the ray. The `== 0.0` test is deterministic — not an epsilon band.
-
-**Tier 3 — Quadratic solver:** The general ray-carrier intersection via the quadratic formula (§11.1). This produces approximate floating-point hit coordinates. Hits from this tier get `at_endpoint = 0` (interior hit).
-
-**Provenance snapping:** When Tier 1 or 2 detects an endpoint, the nearest quadratic hit (if one was found) is snapped to the exact endpoint coordinates and the exact `t`-value from projecting the endpoint onto the ray. The `at_endpoint` field is set to 1 (start) or 2 (end). This eliminates floating-point drift at structurally significant points.
-
-**Unmatched endpoint hits:** If a Tier 1/2 detected endpoint has no nearby quadratic hit (e.g., ray lies on the carrier — the quadratic has no isolated intersection), it is emitted as an additional HitRecord. This handles ray-on-carrier edge cases where the quadratic solver returns empty.
-
-**Blockage at endpoints:** When a hit occurs at an endpoint (`at_endpoint > 0`), the tracer examines the tangent direction into the segment relative to the ray direction to determine `blocked_left` and `blocked_right`. At non-endpoint interior hits, both sides are blocked. At endpoints, only the side where the segment extends is blocked. Multiple segments sharing an endpoint accumulate their blocked sides independently (§12.1).
+**Beam solver equivalent:**
+- **Known points:** every segment endpoint and via lying exactly on an exact line is a **known point** of the beam. The player, the cursor and exact departure points are known points too (§31.4).
+- **Incidence:** a surface whose carrier contains a known point exactly takes that point's parameter and exact coordinates for its nearest root (§11.1). Endpoint identity is therefore decided by provenance or exact sign, never by distance.
+- **Endpoint blockage:** at an exact endpoint, a side is blocked according to the sign of the beam tangent × the tangent into the segment. Blocked sides accumulate over all segments sharing that exact endpoint, **for that hit point only**. An effect fires in PHYSICAL mode only when both sides are blocked (§14.1).
 
 ### 31.4 Provenance
 
 When the system classifies a point (on-segment, which side, intersection index), that classification is stored and reused. Recomputation from coordinates can contradict the original decision.
 
-### 31.5 Frame composition stability
+In the beam solver, provenance takes three forms (`beam_solver.gd` header, `trace2.py`):
+- **Known points:** exact data points a beam passes through, each with its parameter. These are:
+  - the player (initial beam, `t = 0`);
+  - the cursor, whenever it is a candidate;
+  - the departure point of a beam born at an exact hit point;
+  - every known point of the previous beam lying on the carrier of the surface applied (an effect fixes its carrier pointwise);
+  - every segment endpoint and via on an exact line.
 
-Mitigations:
-- 32-effect limit bounds chain length.
-- Cache stores intermediate results (no recomputation through full chain).
-- Projective effects reset the frame, breaking long chains.
-- Manual overrides enforce exact cycle identities.
+  Pops restore the earlier beam's known points.
+- **Exact lines:** a straight beam defined by exact data is kept in implicit form `a x + b y = c` with exact coefficients. Sources:
+  - the initial beam of a trace without a plan, or of a mirror-only plan (exact rational aim image);
+  - the reflection of an exact line in a line mirror (an exact map of the coefficients);
+  - an exact line inverted in a circle whose center it contains;
+  - an exact projective exit.
+- **The provenance stack:** re-applying the surface on top of the stack (or hitting a portal's pair) pops it and restores the earlier beam *object*. A projective clears the stack and starts a new epoch. `frame_id` identifies `(epoch, stack)`.
+
+### 31.5 Precision and stability (formerly: frame composition stability)
+
+There is no frame composition. Numerical stability of long effect chains (inversion chains amplify errors exponentially) is handled as follows:
+- **Anchored planned path:** each planned beam `B_j` is built independently from exact data, with exact Möbius difference formulas for `P − Q` (§13.1), so planned errors do not accumulate along the plan.
+- **Dynamic precision** (`PrecisionLadder`):
+  1. A float64 pass (`FastSolver`, with tangent-linear derivatives) yields the trace and its a-priori error envelope (`ErrorEstimate`: `est_i = C·eps·max_{j≤i} G_j`).
+  2. The pass is accepted if the estimate is ≤ 0.01 px and every decision margin exceeds its error.
+  3. Otherwise BigFloat tiers (from at least 112 bits, up to 1792) are climbed until two consecutive tiers agree within tolerance with identical event structure.
+- **Provenance stack:** cancelling re-hits restore earlier beams exactly instead of recomputing through the chain.
+- **32-event limit** bounds chain length.
+- **Projectives** clear the stack and start from an exact line when the hit and axis are exact.
+
+*(Manual overrides, §17.4, are not implemented.)*
 
 ### 31.6 Degenerate cases
 
 | Case | Resolution |
 |------|-----------|
-| Inversion of a point at the center | Maps to ∞. Step escapes. Beyond-infinity ordering applies. |
-| Inversion of a line through the center | Result is a line. Carrier stays a line in normalized frame. |
+| Inversion of a point at the center | Maps to ∞ (an exact `null` point in the anchored chain). Player or cursor exactly at an inversion center: forward walk from the exact aim direction (§11.4). |
+| Inversion of a beam through the center | Result is exactly straight when the center is a known point of the beam (exact line). |
 | Zero rotation and displacement | Identity — valid no-op. |
-| Frame determinant → 0 | Cannot occur with valid effects. Validated on composition. |
-| Parallel ray and line surface | No intersection. |
-| Origin on a surface | Exclude surface from current cast. |
+| Parallel straight beam and line surface | No crossing (the linear equation has no finite root). |
+| Exact line tangent to a circle carrier | No event (§11.4). |
+| Beam departing a surface | Departure root excluded as an ordinary candidate; re-hit last (§11.4). |
 
 ### 31.7 Consistency
 
@@ -2617,7 +2515,7 @@ Mitigations:
 
 ### 31.8 Error handling policy
 
-In **debug/development** builds: crash with a descriptive message on violated invariants (invalid frame determinant, carrier-type mismatch, NaN in output). Early failure surfaces bugs before they compound.
+In **debug/development** builds: crash with a descriptive message on violated invariants (carrier-type mismatch, NaN in output). `BeamTracer.trace_pair` returns null, so nothing is drawn or fired, for degenerate input (player = cursor) and for traces with non-finite event points. Early failure surfaces bugs before they compound.
 
 In **release** builds: log the error and recover gracefully — skip the problematic step, continue the trace, and display a visual indicator that something went wrong. The game should never hard-crash during gameplay.
 
@@ -2627,10 +2525,12 @@ In **release** builds: log the error and recover gracefully — skip the problem
 
 | Term | Definition |
 |------|-----------|
-| **Point** | 2D position with provenance (reason for creation). |
-| **Provenance** | The stored reason a point was created — reused, not recomputed. |
-| **Direction** | Immutable two-point line orientation. Shared across transformative sub-chain steps. |
-| **Ray** | Origin + Direction. Always a line in the normalized frame. |
+| **Point** | 2D position (`Point.coords`). Exact-point provenance lives in the solver (known points). |
+| **Provenance** | The stored reason a point or beam exists (known points, exact lines, the provenance stack) — reused, not recomputed (§31.4). |
+| **Direction** | Immutable two-point line orientation. Used for the aim (player → cursor). |
+| **Ray** | Origin + Direction. The aim ray shared by a trajectory's steps; escape steps carry tangent rays. |
+| **Beam** | The arrow's current path in visual space: an oriented generalized circle `z(t) = p + tτ/(1 − iκt/2)` (`HPBeam`). Effects map it in closed form. |
+| **Event** | One solver record along a trace: a carrier crossing (`hit`), the `cursor`, `origin`/`escape`, or `max`. Every event counts toward the 32 limit. |
 | **Generalized circle** | A line or circle, unified by the equation `a(x²+y²) + bx + cy + d = 0`. A derived value — computed from a segment's three points and cached bidirectionally. |
 | **Carrier** | The unbounded generalized circle a segment lives on. Derived from the segment's three points, not stored. |
 | **Segment** | Three points — start, end, via — that fully define a bounded path and its carrier. |
@@ -2639,31 +2539,34 @@ In **release** builds: log the error and recover gracefully — skip the problem
 | **Surface** | Segment + per-side effect configuration + stable ID. |
 | **Side** | LEFT or RIGHT, determined by traversal direction (start → via/end). Uniform for all segments. |
 | **Plan** | Ordered list of `{surface, side}` entries the player intends the arrow to hit. Each entry specifies which surface and which side. |
-| **Hit** | Where a ray meets a surface. Stored as a HitRecord with parameter, point, surface, side, provenance. |
-| **Step** | One leg of a path: start → end, with frame and hit info. |
+| **Hit** | Where a beam crosses a surface's carrier. A `hit` event with parameter, point, surface, side, on-segment flag (adapter: `TraceHit`). |
+| **Step** | One leg of a path: start → end (visual), with frame id and hit info (`TraceStep`). |
 | **Step chain** | Ordered list of steps forming a continuous path. |
 | **Step tree** | All paths for one shot sharing a prefix, with explicit branch points at divergence. |
 | **Divergence** | Where planned and physical paths split. A first-class event, not a rendering trick. |
-| **Normalized frame** | Standard Euclidean plane where all math happens. Rays are always lines. |
-| **Visual frame** | The coordinate system the player sees. Rays may be arcs. |
-| **Frame transform** | Möbius transformation mapping normalized → visual. Per-step, updated on transformative effects, reset on projective. |
-| **Transformative effect** | Fully invertible Möbius transformation. Supports image-chain planning. |
+| **Normalized frame** | *Historical (removed in Stage 84):* the legacy per-step coordinate system where rays were always lines. All computation is now in visual space (§6). |
+| **Visual frame** | The coordinate system the player sees, and the only one the solver uses. Beams may be lines or arcs. |
+| **Frame transform** | *Historical (removed in Stage 84):* the legacy per-step Möbius map normalized → visual. Replaced by the provenance stack and frame id. |
+| **Provenance stack** | The solver's stack of applied transformative effects (each with the beam before it). Push on apply; pop on re-hit of the top's surface or a portal's pair; cleared by a projective (new epoch). |
+| **Frame id** | Id of `(epoch, provenance stack)` carried by every step; equal ids = same applied effects. Compared by the step tree merge. |
+| **Anchored planned path** | The planned beams `B_j` built independently from the image chain (`AnchorChain`), §13.1. |
+| **Transformative effect** | Fully invertible Möbius transformation (reflection, inversion, rigid motion), applied as a closed-form beam map. Supports image-chain planning. |
 | **Projective effect** | One-way effect where outgoing ray depends only on hit point. Supports back-propagation planning. |
 | **Terminal effect** | Block — stops the ray. |
-| **Compound effect** | Multiple transformative effects composed into one Möbius matrix. |
+| **Compound effect** | Multiple transformative effects composed into one effect (planned). |
 | **Rigid motion** | Rotation + translation (Euclidean isometry excluding reflections). |
 | **Transformative sub-chain** | A contiguous sequence of plan entries with transformative effects, bounded by projective break points (or the start/end of the plan). Solved as a unit using image chains. |
-| **Break point** | A projective surface that resets the frame and partitions the plan into transformative sub-chains. |
+| **Break point** | A projective surface that clears the provenance stack (new epoch) and partitions the plan into transformative sub-chains (planning: Stage 87). |
 | **Image** | Virtual point from reflecting/inverting a real point through surfaces — used to "unfold" bounces into straight lines. |
 | **Back-propagation** | Finding the hit point on a projective surface given a target on the outgoing side. |
-| **Beyond-infinity hit** | A hit on the back side of a ray's great circle, reached by passing through ∞. |
+| **Beyond-infinity hit** | A hit reached after the beam parameter wraps through `t = ∞` (projective order, §6.3). |
 | **Pass-through** | A surface side with no effect. The ray continues as if the surface is absent on that side. |
 | **Arc chain** | Open sequence of connected segments. Used for paths. |
 | **Generalized polygon** | Closed chain of segments with line and/or arc edges. |
 | **Visibility region set** | Zero or more polygons representing valid aim regions. May be disconnected. |
 | **Scene state** | Scene geometry + current game state. What the simulation sees. |
-| **Computation cache** | Provenance-keyed bidirectional store ensuring exact round-trip reversal. |
-| **Manual override** | Cache entry set by the level designer to enforce exact algebraic identities. |
+| **Computation cache** | *Historical:* the legacy `TransformCache` (removed in Stage 84). Exact reversal is now by the provenance stack (§17). |
+| **Manual override** | Level-declared exact algebraic identity (Principle 23). Not implemented (§17.4). |
 
 ---
 
@@ -2691,4 +2594,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.4.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.5.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

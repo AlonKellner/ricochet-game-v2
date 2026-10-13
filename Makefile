@@ -17,7 +17,7 @@ test-stage:
 
 # Precision benchmark: GDScript strategies vs the mpmath oracle corpus
 bench:
-	$(GODOT) --headless --path . -s res://scripts/testing/run_precision_bench.gd -- --strategies=s0_tracer,beam_f64,beam_big112,ladder,ladder_verify --tag=main
+	$(GODOT) --headless --path . -s res://scripts/testing/run_precision_bench.gd -- --strategies=beam_f64,beam_big112,ladder,ladder_verify --tag=main
 
 bench-stress:
-	$(GODOT) --headless --path . -s res://scripts/testing/run_precision_bench.gd -- --dir=stress --strategies=s0_tracer,beam_f64,ladder,ladder_verify --tag=stress
+	$(GODOT) --headless --path . -s res://scripts/testing/run_precision_bench.gd -- --dir=stress --strategies=beam_f64,ladder,ladder_verify --tag=stress

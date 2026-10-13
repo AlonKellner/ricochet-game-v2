@@ -172,7 +172,7 @@ func test_no_zero_length_after_prepare_start_inf_end_on_bounds() -> void:
 	var step := TraceStep.new(
 		Vector2(INF, INF),
 		Vector2(0.002144, 1080.0),
-		0, hit, ray, null,
+		0, hit, ray,
 		Vector2(INF, INF), false)
 	var path := TracePath.new()
 	path.steps.append(step)
@@ -190,7 +190,7 @@ func test_no_zero_length_after_prepare_end_inf_start_on_bounds() -> void:
 	var step := TraceStep.new(
 		Vector2(0.0, 0.0),
 		Vector2(INF, INF),
-		0, hit, ray, null,
+		0, hit, ray,
 		Vector2(INF, INF), false)
 	var path := TracePath.new()
 	path.steps.append(step)

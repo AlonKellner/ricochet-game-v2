@@ -1,26 +1,10 @@
 class_name TransformativeEffect
 extends Effect
 
-func kind() -> int:
-	return Kind.TRANSFORMATIVE
+# A conformal or anti-conformal map of the plane (reflection, inversion, rigid
+# motion). The beam solver applies it in closed form (BeamEffects).
 
-var _mobius: MobiusTransform
-var _tracked: TrackedTransform
 var _carrier: GeneralizedCircle
 
-func get_mobius() -> MobiusTransform:
-	return _mobius
-
-func get_inverse_mobius() -> MobiusTransform:
-	return _mobius
-
-func get_tracked_transform() -> TrackedTransform:
-	return _tracked
-
-func _create_normalized(_carrier_arg: GeneralizedCircle) -> Effect:
-	return null
-
-func normalized(carrier: GeneralizedCircle) -> Effect:
-	if carrier == _carrier:
-		return self
-	return _create_normalized(carrier)
+func kind() -> int:
+	return Kind.TRANSFORMATIVE

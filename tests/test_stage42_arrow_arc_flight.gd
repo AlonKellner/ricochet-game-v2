@@ -8,12 +8,12 @@ func before_each() -> void:
 
 func _make_arc_step(start: Vector2, end_v: Vector2, via: Vector2) -> TraceStep:
 	var ray := Ray.from_coords(start, Direction.from_coords(start, end_v))
-	return TraceStep.new(start, end_v, TraceStep.IDENTITY_FRAME, null, ray, null, via, true)
+	return TraceStep.new(start, end_v, TraceStep.IDENTITY_FRAME, null, ray, via, true)
 
 func _make_line_step(start: Vector2, end_v: Vector2) -> TraceStep:
 	var ray := Ray.from_coords(start, Direction.from_coords(start, end_v))
 	var via := (start + end_v) / 2.0
-	return TraceStep.new(start, end_v, TraceStep.IDENTITY_FRAME, null, ray, null, via, false)
+	return TraceStep.new(start, end_v, TraceStep.IDENTITY_FRAME, null, ray, via, false)
 
 # --- CCW semicircle: start=(2,0), end=(-2,0), via=(0,2) ---
 # Center=(0,0), radius=2, span=PI, arc_length=2*PI

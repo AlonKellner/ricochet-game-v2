@@ -73,7 +73,6 @@ func _show_violation(index: int) -> void:
 		await get_tree().process_frame
 
 		Surface.reset_id_counter()
-		MobiusTransform.reset_id_counter()
 		_current_scene = load(scene_path).instantiate()
 		_current_scene.gravity = Vector2.ZERO
 		if combo.size() > 0:

@@ -1,8 +1,7 @@
 class_name TraceHit
 extends RefCounted
 
-# A hit of a beam on a surface's segment. Formerly TraceHit
-# (still available under that name as an alias).
+# A hit of a beam on a surface's segment (the hit step's record).
 
 var t: float
 var point: Point

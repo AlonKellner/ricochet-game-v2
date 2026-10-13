@@ -1,42 +1,27 @@
 class_name RigidMotionEffect
 extends TransformativeEffect
 
+# Portal: the rigid motion T(z) = e^{iθ} z + d. Portals come in pairs (A -> B
+# and its inverse B -> A, built by create_portal_pair); `partner()` is the
+# paired effect (held weakly: the two reference each other).
+
 var _theta: float
 var _d: Vector2
+var _partner: WeakRef = null
 
-func _init(theta: float, d: Vector2, carrier: GeneralizedCircle = null, p_tracked: TrackedTransform = null) -> void:
+func _init(theta: float, d: Vector2, carrier: GeneralizedCircle = null) -> void:
 	_theta = theta
 	_d = d
 	_carrier = carrier
 
-	var e_itheta := Vector2(cos(theta), sin(theta))
-	var alpha := e_itheta
-	var beta := d
-	var gamma := Vector2.ZERO
-	var delta := Vector2(1.0, 0.0)
-	_mobius = MobiusTransform.new(alpha, beta, gamma, delta, false)
-
-	if p_tracked != null:
-		_tracked = p_tracked
-	else:
-		var e_neg_itheta := Vector2(cos(theta), -sin(theta))
-		var inv_beta := Vector2(
-			-(e_neg_itheta.x * _d.x - e_neg_itheta.y * _d.y),
-			-(e_neg_itheta.x * _d.y + e_neg_itheta.y * _d.x))
-		var inv_mobius := MobiusTransform.new(e_neg_itheta, inv_beta, Vector2.ZERO, Vector2(1.0, 0.0), false)
-		_tracked = TrackedTransform.from_pair(_mobius, inv_mobius)
-		if carrier != null:
-			_tracked.carrier = carrier
-
-# Stage 84 stub
 func partner() -> RigidMotionEffect:
-	return null
+	return null if _partner == null else _partner.get_ref()
 
-func get_inverse_mobius() -> MobiusTransform:
-	return _tracked.inverse.mobius
-
-func _create_normalized(carrier: GeneralizedCircle) -> Effect:
-	return RigidMotionEffect.new(_theta, _d, carrier, _tracked)
+# T(z) = e^{iθ} z + d
+static func apply_motion(z: Vector2, theta: float, d: Vector2) -> Vector2:
+	var c := cos(theta)
+	var s := sin(theta)
+	return Vector2(c * z.x - s * z.y + d.x, s * z.x + c * z.y + d.y)
 
 func get_display_name() -> String:
 	return "portal"
@@ -44,39 +29,16 @@ func get_display_name() -> String:
 func get_display_color() -> Color:
 	return Color.CYAN
 
+# The pair A -> B (theta, d) and B -> A (-theta, -e^{-iθ} d); B's segment is
+# T(A's segment), point by point.
 static func create_portal_pair(source_seg: Segment, theta: float, d: Vector2) -> Dictionary:
-	var e_itheta := Vector2(cos(theta), sin(theta))
-	var fwd_alpha := e_itheta
-	var fwd_beta := d
-	var fwd_mobius := MobiusTransform.new(fwd_alpha, fwd_beta, Vector2.ZERO, Vector2(1.0, 0.0), false)
-
-	var e_neg_itheta := Vector2(cos(theta), -sin(theta))
-	var inv_beta := Vector2(
-		-(e_neg_itheta.x * d.x - e_neg_itheta.y * d.y),
-		-(e_neg_itheta.x * d.y + e_neg_itheta.y * d.x))
-	var inv_mobius := MobiusTransform.new(e_neg_itheta, inv_beta, Vector2.ZERO, Vector2(1.0, 0.0), false)
-
-	var tracked_ab := TrackedTransform.from_pair(fwd_mobius, inv_mobius)
-	var tracked_ba := tracked_ab.inverse
-
-	var target_start := source_seg.start.transformed(tracked_ab)
-	var target_end := source_seg.end.transformed(tracked_ab)
-	var target_via := source_seg.via.transformed(tracked_ab)
-	var target_seg := Segment.new(target_start, target_end, target_via)
-
-	var carrier_a := source_seg.get_carrier()
-	tracked_ab.carrier = carrier_a
-
-	var carrier_b := target_seg.get_carrier()
-	tracked_ba.carrier = carrier_b
-
-	var eff_a := RigidMotionEffect.new(theta, d, carrier_a, tracked_ab)
-	var inv_theta := -theta
-	var inv_d := Vector2(
-		-(e_neg_itheta.x * d.x - e_neg_itheta.y * d.y),
-		-(e_neg_itheta.x * d.y + e_neg_itheta.y * d.x))
-	var eff_b := RigidMotionEffect.new(inv_theta, inv_d, carrier_b, tracked_ba)
-
+	var target_seg := Segment.from_coords(apply_motion(source_seg.start.coords, theta, d),
+		apply_motion(source_seg.end.coords, theta, d), apply_motion(source_seg.via.coords, theta, d))
+	target_seg.full = source_seg.full
+	var eff_a := RigidMotionEffect.new(theta, d, source_seg.get_carrier())
+	var eff_b := RigidMotionEffect.new(-theta, -apply_motion(d, -theta, Vector2.ZERO), target_seg.get_carrier())
+	eff_a._partner = weakref(eff_b)
+	eff_b._partner = weakref(eff_a)
 	return {
 		source_effect = eff_a,
 		target_effect = eff_b,

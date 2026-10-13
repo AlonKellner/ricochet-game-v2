@@ -11,7 +11,8 @@
 Three-layer architecture with strict dependency direction: Math -> Visual -> Game.
 
 - `scripts/math/` — Geometric primitives and algorithms. **Zero Godot dependencies beyond Vector2.** Classes must extend `RefCounted`, `Object`, or have no `extends`. Never `Node`, `Node2D`, `Control`, or any scene-tree type.
-- `scripts/math/effects/` — Effect implementations (reflection, inversion, rigid motion, projective).
+- `scripts/math/effects/` — Effect definitions (reflection, inversion, rigid motion, projective): kind, self-inverse, display. The beam maps are in `precision/beam_effects.gd`.
+- `scripts/math/precision/` — The trajectory solver, the only solver. `BeamSolver` is the rule walker (spec: `docs/research/oracle/trace2.py`). `FastSolver` is its bit-identical f64 twin. `PrecisionLadder` adds dynamic precision and `ErrorEstimate` the error envelopes. `BeamTracer` turns events into `TracePath`/`TraceStep`. `Exact` and `BigFloat` provide the exact predicates and arithmetic. Decisions use provenance and exact predicates, never epsilons.
 - `scripts/visual/` — Rendering via `_draw()` and `queue_redraw()`.
 - `scripts/game/` — Scene-dependent game logic (player, surfaces, game manager).
 - `scripts/editor/` — Level editor scripts.
@@ -32,6 +33,7 @@ make test-stage STAGE=3
 - Test files: `tests/test_stage{N}_{topic}.gd`
 - All tests extend `GutTest`
 - Test methods: `func test_{description}():`
+- `TestTrace` (`scripts/testing/test_trace.gd`) runs the beam solver behind the old `Tracer.trace` signature, for behavioural tests.
 - **Regression policy**: After Stage N, ALL tests from Stages 1 through N must pass before proceeding.
 
 ## Stage Workflow

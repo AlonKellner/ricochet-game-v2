@@ -3,8 +3,7 @@ extends GutTest
 # Stage 80: neutral trace types (independent of the legacy Tracer) and
 # step-metadata preservation through VisualConverter.
 
-# "frame" (the legacy Mobius frame, always null on the beam) is deliberately
-# not listed: TraceStep.frame is being removed in Stage 84.
+# TraceStep has no "frame" (the legacy Mobius frame; removed in Stage 84).
 const STEP_FIELDS := ["start", "end", "via", "frame_id", "hit", "ray", "is_arc_step", "type",
 	"surface_id", "hit_side", "hit_on_segment", "after_portal", "est_error", "precision_bits"]
 const PATH_FIELDS := ["steps", "targets_hit", "cursor_index", "hit_count"]
@@ -31,7 +30,7 @@ func test_trace_step_fields_and_aliases():
 func _meta_step() -> TraceStep:
 	var seg := Segment.from_coords(Vector2(1500, 400), Vector2(1500, 600), Vector2(1500, 500))
 	var hit := TraceHit.new(-1.0, Vector2(1500, 500), seg, Side.Value.LEFT, true)
-	var step := TraceStep.new(Vector2(100, 500), Vector2(1500, 500), 0, hit, null, null, Vector2(INF, INF), false)
+	var step := TraceStep.new(Vector2(100, 500), Vector2(1500, 500), 0, hit, null, Vector2(INF, INF), false)
 	step.surface_id = 5
 	step.hit_side = Side.Value.LEFT
 	step.hit_on_segment = true

@@ -17,7 +17,6 @@ var _traced_path: TracePath = null
 var _planned_path: TracePath = null
 var _merged_steps: Array = []
 var _physical_hits: Dictionary = {}
-var use_beam_tracer := true
 var last_solver := ""
 var last_beam_result: PrecisionLadder.Result = null
 
@@ -54,36 +53,19 @@ func _compute_trace() -> void:
 		plan_entries = plan.entries
 
 	var bounds := VisualConverter.DEFAULT_BOUNDS
-	# Precision-converging beam solver (every scene since Stage 83). The legacy
-	# frame-based Tracer runs only when pinned (use_beam_tracer = false, legacy
-	# diagnostics) or as a debug fallback (BeamTracer.LEGACY_FALLBACK).
-	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, plan_entries) if use_beam_tracer else null
-	if pair == null and use_beam_tracer and not BeamTracer.LEGACY_FALLBACK:
-		last_solver = "beam"
+	# The precision-converging beam solver; null only for player = cursor (no
+	# line, UX7).
+	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, plan_entries)
+	last_solver = "beam"
+	if pair == null:
 		last_beam_result = null
 		_traced_path = null
 		_planned_path = null
 		_merged_steps = []
 		return
-	last_solver = "beam" if pair != null else "tracer"
-	if pair != null:
-		last_beam_result = pair.result
-		_traced_path = VisualConverter.prepare_for_display(pair.physical, bounds, surfaces)
-		_planned_path = VisualConverter.prepare_for_display(pair.planned, bounds, surfaces)
-	else:
-		last_beam_result = null
-		var cache := TransformCache.new()
-		var aim_dir: Direction = Planner.compute_aim_direction(
-			player_pos, cursor_pos, plan_entries, surfaces, GameState.new(), cache)
-		var aim_ray := Ray.from_coords(player_pos, aim_dir)
-		_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
-			aim_ray, -1.0,
-			TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
-		_traced_path = VisualConverter.prepare_for_display(_traced_path, bounds, surfaces)
-		_planned_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
-			aim_ray, -1.0,
-			TraceMode.PLANNED, TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
-		_planned_path = VisualConverter.prepare_for_display(_planned_path, bounds, surfaces)
+	last_beam_result = pair.result
+	_traced_path = VisualConverter.prepare_for_display(pair.physical, bounds, surfaces)
+	_planned_path = VisualConverter.prepare_for_display(pair.planned, bounds, surfaces)
 
 	var ci: int = _planned_path.cursor_index
 	if ci < 0:

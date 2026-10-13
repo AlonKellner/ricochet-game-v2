@@ -3,15 +3,9 @@ extends TransformativeEffect
 
 func _init(carrier: GeneralizedCircle) -> void:
 	_carrier = carrier
-	var alpha := Vector2(-carrier.b, -carrier.c)
-	var beta := Vector2(-2.0 * carrier.d, 0.0)
-	var gamma := Vector2(2.0 * carrier.a, 0.0)
-	var delta := Vector2(carrier.b, -carrier.c)
-	_mobius = MobiusTransform.new(alpha, beta, gamma, delta, true)
-	_tracked = TrackedTransform.from_self_inverse(_mobius, carrier)
 
-func _create_normalized(carrier: GeneralizedCircle) -> Effect:
-	return ReflectionEffect.new(carrier)
+func is_self_inverse() -> bool:
+	return true
 
 func get_display_name() -> String:
 	return "reflect"

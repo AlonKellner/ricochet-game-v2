@@ -250,6 +250,7 @@ Bugs found by manual testing and the sweep, now covered by tests:
   ambiguities, which is what the dump shows.
 
 ## 8. Scope and limits
+- **Stage 84: the legacy solver is deleted.** `Tracer`, `Planner`, `TransformCache`, `TrackedTransform`, `MobiusTransform` and the legacy intersection module no longer exist. `BeamTracer` is the only solver, with no fallback. The `s0_tracer` strategy has been removed from the bench; the S0 rows in §§1–7 are historical. Rows that mention a fallback to `Tracer` describe the solver before Stage 83.
 - **Updated in Stage 81 (`docs/TDD_09_PRECISION_INTEGRATION.md`).** `BeamTracer` now handles every scene made of mirrors (lines and arcs), inversions (full circles and partial or one-sided arcs), terminals and pass-throughs. Portal and projective scenes fall back to `Tracer` until Stages 82 and 83.
 - **The rules are oracle v2 (`docs/research/oracle/trace2.py`):**
   - walls are events;
