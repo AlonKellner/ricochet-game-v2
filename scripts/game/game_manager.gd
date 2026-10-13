@@ -69,7 +69,7 @@ func _update_hover() -> void:
 	if not result.is_empty():
 		var surf: Surface = result.surface
 		var side: Side.Value = result.side
-		var overlays := ChevronOverlayBuilder.build_hover_overlays(surf, side)
+		var overlays := ChevronOverlayBuilder.build_hover_overlays(surf, side, game_state)
 		for child in _level_settings.get_children():
 			if child.has_method("set_hover_overlays") and "surface" in child:
 				var child_overlays: Array = overlays.get(child.surface.id, [])
@@ -272,7 +272,7 @@ func _update_surface_overlays() -> void:
 			if s.id == id:
 				return s
 		return null
-	var overlays := ChevronOverlayBuilder.build_plan_overlays(plan, physical_hits, lookup)
+	var overlays := ChevronOverlayBuilder.build_plan_overlays(plan, physical_hits, lookup, game_state)
 	for child in _level_settings.get_children():
 		if child.has_method("set_plan_overlays") and "surface" in child:
 			var plan_indices: Array[int] = []

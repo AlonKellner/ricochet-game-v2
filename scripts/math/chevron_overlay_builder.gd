@@ -5,8 +5,8 @@ const HOVER_COLOR := Color(1.0, 1.0, 1.0, 0.3)
 const PLAN_VALID_COLOR := Color(1.0, 1.0, 1.0, 0.15)
 const PLAN_INVALID_COLOR := Color(1.0, 0.0, 0.0, 0.15)
 
-static func build_hover_overlays(surface: Surface, side: int) -> Dictionary:
-	var link := surface.get_side_link(side)
+static func build_hover_overlays(surface: Surface, side: int, game_state: GameState = null) -> Dictionary:
+	var link := surface.overlay_link(side, game_state)
 	if link == null:
 		return {}
 	var result := {}
@@ -24,14 +24,14 @@ static func build_hover_overlays(surface: Surface, side: int) -> Dictionary:
 	return result
 
 static func build_plan_overlays(plan: PlanManager, physical_hits: Dictionary,
-		get_surface: Callable) -> Dictionary:
+		get_surface: Callable, game_state: GameState = null) -> Dictionary:
 	var result := {}
 	for i in plan.entries.size():
 		var entry: PlanManager.PlanEntry = plan.entries[i]
 		var surface: Surface = get_surface.call(entry.surface_id)
 		if surface == null:
 			continue
-		var link := surface.get_side_link(entry.side)
+		var link := surface.overlay_link(entry.side, game_state)
 		if link == null:
 			continue
 		var incoming_valid := _check_incoming(entry, physical_hits)

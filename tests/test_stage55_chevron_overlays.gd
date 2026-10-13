@@ -208,7 +208,12 @@ func test_hover_terminal_incoming_only() -> void:
 	var right_cfg := SideConfig.new(terminal, true)
 	var surf := Surface.new(seg, left_cfg, right_cfg)
 	var overlays := ChevronOverlayBuilder.build_hover_overlays(surf, Side.Value.LEFT)
-	assert_true(overlays.is_empty(), "Terminal has no SideLink, so no overlay")
+	# every interactive side is highlighted; a block has no way out
+	var list: Array = overlays.get(surf.id, [])
+	assert_eq(list.size(), 1, "an interactive terminal side is highlighted")
+	if list.size() == 1:
+		assert_true(list[0].has_incoming)
+		assert_false(list[0].has_outgoing, "the arrow stops: no outgoing chevrons")
 
 func test_hover_portal_entry_incoming_only() -> void:
 	var seg_a := Segment.from_coords(Vector2(200, 200), Vector2(200, 400), Vector2(200, 300))
@@ -326,7 +331,10 @@ func test_plan_terminal_no_overlay() -> void:
 	var plan := PlanManager.new()
 	plan.add_entry(surf.id, Side.Value.LEFT)
 	var overlays := ChevronOverlayBuilder.build_plan_overlays(plan, {}, _surface_lookup([surf]))
-	assert_true(overlays.is_empty(), "Terminal has no SideLink, so no overlay")
+	var list: Array = overlays.get(surf.id, [])
+	assert_eq(list.size(), 1, "a planned terminal side is marked")
+	if list.size() == 1:
+		assert_false(list[0].has_outgoing, "incoming only")
 
 # ============================================================
 # Phase 6: Chevron geometry
@@ -393,3 +401,61 @@ func test_clear_hover_empties_overlays() -> void:
 	node.set_hover_overlays([ov])
 	node.clear_hover()
 	assert_eq(node._hover_overlays.size(), 0, "Overlay cleared")
+
+
+# ============================================================
+# Every interactive side is highlighted (hover) and marked (plan)
+# ============================================================
+
+func _outgoing_sides(overlays: Dictionary, sid: int) -> Array:
+	var out: Array = []
+	for o: ChevronOverlay in overlays.get(sid, []):
+		if o.has_outgoing:
+			out.append(o.outgoing_side)
+	return out
+
+func test_hover_projective_through_exits_opposite_side() -> void:
+	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
+	var cfg := SideConfig.new(LineNormalProjection.new(false), true)
+	var surf := Surface.new(seg, cfg, cfg)
+	var ov := ChevronOverlayBuilder.build_hover_overlays(surf, Side.Value.LEFT)
+	assert_false(ov.is_empty(), "a projective side is highlighted")
+	assert_eq(_outgoing_sides(ov, surf.id), [Side.Value.RIGHT], "through: it leaves on the far side")
+
+func test_hover_projective_back_exits_same_side() -> void:
+	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
+	var cfg := SideConfig.new(CircleNormalProjection.new(true), true)
+	var surf := Surface.new(seg, cfg, cfg)
+	var ov := ChevronOverlayBuilder.build_hover_overlays(surf, Side.Value.RIGHT)
+	assert_eq(_outgoing_sides(ov, surf.id), [Side.Value.RIGHT], "back: it leaves on the same side")
+
+func test_hover_toggler_passes_through() -> void:
+	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
+	var cfg := SideConfig.new(null, true, StateChange.new("ghost", StateChange.Op.TOGGLE))
+	var surf := Surface.new(seg, cfg, cfg)
+	var ov := ChevronOverlayBuilder.build_hover_overlays(surf, Side.Value.LEFT)
+	assert_eq(_outgoing_sides(ov, surf.id), [Side.Value.RIGHT], "a toggler is passed through")
+
+func test_hover_flag_mirror_follows_state() -> void:
+	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
+	var refl := SideConfig.new(ReflectionEffect.new(seg.get_carrier()), true)
+	var off := SideConfig.new(null, false)
+	var surf := Surface.with_resolver(seg, CategoricalResolver.new("open", {"true": [refl, refl], "DEFAULT": [off, off]}))
+	assert_true(ChevronOverlayBuilder.build_hover_overlays(surf, Side.Value.LEFT, GameState.new({})).is_empty(),
+		"closed: not interactive, no highlight")
+	var ov := ChevronOverlayBuilder.build_hover_overlays(surf, Side.Value.LEFT, GameState.new({"open": true}))
+	assert_eq(_outgoing_sides(ov, surf.id), [Side.Value.LEFT], "open: a mirror, same side")
+
+func test_plan_projective_marked() -> void:
+	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
+	var cfg := SideConfig.new(LineDirectionalProjection.new(Vector2(1, 0)), true)
+	var surf := Surface.new(seg, cfg, cfg)
+	var plan := PlanManager.new()
+	plan.add_entry(surf.id, Side.Value.LEFT)
+	var ov := ChevronOverlayBuilder.build_plan_overlays(plan, {}, _surface_lookup([surf]))
+	assert_false(ov.is_empty(), "a planned projective side is marked")
+
+func test_non_interactive_side_not_highlighted() -> void:
+	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
+	var surf := Surface.new(seg, SideConfig.new(null, false), SideConfig.new(null, false))
+	assert_true(ChevronOverlayBuilder.build_hover_overlays(surf, Side.Value.LEFT).is_empty())
