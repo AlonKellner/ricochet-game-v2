@@ -202,6 +202,8 @@ class NumBackend extends RefCounted:
 # degenerate (a pole or image at infinity, or player = cursor image).
 class AnchorChain extends RefCounted:
 	var beams: Array = []
+	var hits := {}               # projective plan entry index -> its back-propagated hit point H
+	var exit_lines := {}         # projective plan entry index -> exact exit line (Exact.Line), when exact data
 
 	static func _key(st: Array) -> String:
 		return ",".join(st.map(func(x): return str(x)))
@@ -211,12 +213,79 @@ class AnchorChain extends RefCounted:
 		var s: BeamScene.Surf = scene.by_id.get(sid)
 		return s.pair if s != null and s.portal else sid
 
+	# Projective entries split the plan into sub-chains (GAME_SPEC 13.3/13.4):
+	# backward, each projective's hit point H is back-propagated from the
+	# target behind it (the cursor pulled back through the entries after it);
+	# each sub-chain is anchored from its origin (the player, or the previous
+	# H) to its target (the next H, or the cursor). Beams are flat: beams[j] is
+	# the beam after j consumed entries.
 	static func build(scene: BeamScene, player: CN, cursor: CN, plan: Array, flags: Dictionary = {}) -> AnchorChain:
+		var effs := BeamSolver.plan_effects(scene, plan, flags)
+		var proj: Array = []
+		for j in plan.size():
+			if effs[j] in PROJECTIVE:
+				proj.append(j)
+		if proj.is_empty():
+			return _build_simple(scene, player, cursor, plan, effs)
+		# backward: targets of the sub-chains
+		var H := {}
+		var X = cursor
+		var on_sid := -2         # the surface whose carrier X lies on (provenance)
+		for j in range(plan.size() - 1, -1, -1):
+			var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+			if effs[j] in PROJECTIVE:
+				var on: bool = on_sid == surf.id or (on_sid == -2 and BeamSolver._on_carrier(surf, X))
+				X = BeamEffects.back_propagate(surf, plan[j].left, X, on)
+				if X == null:
+					return null
+				H[j] = X
+				on_sid = surf.id
+			elif effs[j] in TRANSFORMATIVE:
+				on_sid = -1
+				X = BeamEffects.map_point(X, surf, true)
+				if X == null:
+					return null
+		var chain := AnchorChain.new()
+		var a := 0
+		var origin: CN = player
+		var exit_dir = null      # the exit at origin of the previous projective
+		for b in proj + [plan.size()]:
+			var target: CN = H[b] if b < plan.size() else cursor
+			var sub := _build_simple(scene, origin, target, plan.slice(a, b), effs.slice(a, b))
+			if sub == null:
+				return null
+			var beams: Array = sub.beams
+			if exit_dir != null:
+				# after a projective the beam leaves along its exit; when that
+				# points away from the target, the target is reached through
+				# infinity: the sub-chain's beams run the other way round
+				var b0: HPBeam = beams[0]
+				var rev: bool = CN.dot(exit_dir, b0.tau).is_negative()
+				# the exit beam itself is exactly straight (a projective exit is a
+				# line by definition, not a circle through rounded points); a
+				# frame popped back to it is the same object
+				var straight := HPBeam.make(origin, exit_dir.unit(), b0.kappa.sub(b0.kappa))
+				beams = beams.map(func(bm):
+					if is_same(bm, b0):
+						return straight
+					return HPBeam.make(bm.p, bm.tau.neg(), bm.kappa.neg()) if rev else bm)
+			chain.beams.append_array(beams)
+			if b < plan.size():
+				chain.hits[b] = H[b]
+				if b == proj.back():
+					var L = BeamSolver._exit_line(scene, cursor, plan, flags, b)
+					if L != null:
+						chain.exit_lines[b] = L
+				origin = H[b]
+				exit_dir = BeamEffects.projective_exit(scene.by_id[plan[b].surface_id], plan[b].left, H[b])
+			a = b + 1
+		return chain
+
+	static func _build_simple(scene: BeamScene, player: CN, cursor: CN, plan: Array, effs: Array) -> AnchorChain:
 		var K := plan.size()
 		var stacks: Array = [[]]
 		var st: Array = []
 		var changes: Array = []      # plan entry j changes the frame
-		var effs := BeamSolver.plan_effects(scene, plan, flags)
 		for ji in plan.size():
 			var item = plan[ji]
 			var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
@@ -387,6 +456,16 @@ static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode:
 	walk_from(w, b0, -1, null)
 	return w
 
+# Exact: the point k (float data, e.g. the cursor) lies on surf's carrier.
+static func _on_carrier(surf: BeamScene.Surf, k: CN) -> bool:
+	if BeamGeom.endpoint_at(surf.seg, k) != 0:
+		return true
+	if surf.line:
+		return Exact.orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, k.fx(), k.fy())
+	if surf.full:
+		return Exact.on_circle_zero(surf.cx, surf.cy, surf.r, k.fx(), k.fy())
+	return Exact.incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, k.fx(), k.fy())
+
 # Exact: every frame change of the plan fixes the cursor (it lies on the
 # carrier of each planned reflection / inversion -- an effect fixes its
 # carrier pointwise; a translation portal fixes nothing).
@@ -394,6 +473,8 @@ static func fixes_cursor(scene: BeamScene, cursor: CN, plan: Array, flags: Dicti
 	var kx := cursor.fx()
 	var ky := cursor.fy()
 	var effs := plan_effects(scene, plan, flags)
+	if effs.any(func(e): return e in PROJECTIVE):
+		return false
 	for ji in plan.size():
 		var item = plan[ji]
 		var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
@@ -464,6 +545,8 @@ static func _exact_image_cached(scene: BeamScene, cursor: CN, plan: Array, flags
 static func exact_image_approx(scene: BeamScene, cursor: CN, plan: Array, flags: Dictionary = {}):
 	var X: Array = [[cursor.fx(), 0.0], [cursor.fy(), 0.0], [1.0, 0.0]]
 	var effs := plan_effects(scene, plan, flags)
+	if effs.any(func(e): return e in PROJECTIVE):
+		return null      # a back-propagated hit point is not exact data
 	for j in range(plan.size() - 1, -1, -1):
 		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
 		if surf == null or not (effs[j] in TRANSFORMATIVE):
@@ -519,10 +602,13 @@ static func _reflect_approx(X: Array, sx: float, sy: float, ex: float, ey: float
 # every frame change of the plan is a rational map of exact data (a line
 # reflection, an inversion in an exact circle, a translation portal); null for
 # a rotation portal or an image at infinity.
-static func exact_image_h(scene: BeamScene, cursor: CN, plan: Array, max_limbs: int = 0, flags: Dictionary = {}):
+static func exact_image_h(scene: BeamScene, cursor: CN, plan: Array, max_limbs: int = 0, flags: Dictionary = {},
+		from_index: int = 0):
 	var X: Array = [Exact.of(cursor.fx()), Exact.of(cursor.fy()), Exact.of(1.0)]
 	var effs := plan_effects(scene, plan, flags)
-	for j in range(plan.size() - 1, -1, -1):
+	if effs.slice(from_index).any(func(e): return e in PROJECTIVE):
+		return null
+	for j in range(plan.size() - 1, from_index - 1, -1):
 		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
 		if surf == null or not (effs[j] in TRANSFORMATIVE):
 			continue
@@ -552,8 +638,19 @@ static func _run_degenerate(bk, scene: BeamScene, player: CN, cursor: CN, plan: 
 		flags: Dictionary = {}) -> Walk:
 	var effs := plan_effects(scene, plan, flags)
 	var X = cursor
+	var on_sid := -2
 	for j in range(plan.size() - 1, -1, -1):
 		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+		if surf != null and effs[j] in PROJECTIVE and X != null:
+			# an entry without a back-propagated point is skipped (oracle aim)
+			var on: bool = on_sid == surf.id or (on_sid == -2 and _on_carrier(surf, X))
+			var H = BeamEffects.back_propagate(surf, plan[j].left, X, on)
+			if H != null:
+				X = H
+				on_sid = surf.id
+			continue
+		if surf != null and effs[j] in TRANSFORMATIVE:
+			on_sid = -1
 		if surf == null or not (effs[j] in TRANSFORMATIVE):
 			continue
 		X = BeamEffects.map_point(X, surf, true)
@@ -946,7 +1043,7 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 			var change = surf.state_change(left, w.flags)
 			var plan_match: bool = w.plan_index < w.plan.size() and w.plan[w.plan_index].surface_id == surf.id \
 				and w.plan[w.plan_index].left == left
-			var plan_do: String = (eff if eff in TRANSFORMATIVE else "") if plan_match else ""
+			var plan_do: String = (eff if (eff in TRANSFORMATIVE or eff in PROJECTIVE) else "") if plan_match else ""
 			var phys_do: String = eff if full_block else ""
 			var plan_state: bool = plan_match and change != null
 			var phys_state: bool = full_block and change != null
@@ -1010,7 +1107,7 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 				var pt_exact2: bool = (cand[3] != null or (rehit and fresh)) and _known_index(w.known, pt) >= 0
 				next = _project(w, beam, t, surf, left, pt, pt_exact2)
 				e.projective = true
-				if not w.seeded:
+				if not w.anchored and not w.seeded:
 					w.seeded = true
 					next[0] = bk.seed(next[0])
 				break
@@ -1148,10 +1245,81 @@ static func _is_center(k: CN, surf: BeamScene.Surf) -> bool:
 # Projective effect at pt: a fresh straight beam departing surf; the stack
 # clears and a new epoch begins (the anchored path ends: projectives are not
 # planned until Stage 87). [beam, depart, t0, fresh].
+# The exact line the last projective entry j of a plan leaves along: through
+# the cursor pulled back through the entries after j (when that is exact
+# data), along the exact axis -- the carrier normal, the directional normal,
+# or the line from the circle's exact center (oracle projective_hits).
+static func _exit_line(scene: BeamScene, cursor: CN, plan: Array, flags: Dictionary, j: int):
+	var X = exact_image_h(scene, cursor, plan, EXACT_IMAGE_LIMBS, flags, j + 1)
+	if X == null:
+		return null
+	var surf: BeamScene.Surf = scene.by_id[plan[j].surface_id]
+	var etype := surf.effect(plan[j].left)
+	var L: Array
+	if etype == "circle_normal_projection":
+		# the line through the center C and X (homogeneous cross product)
+		var C: Array = surf.exact_circle()[0]
+		var a := Exact.sub(Exact.mul(C[1], X[2]), Exact.mul(X[1], C[2]))
+		var b := Exact.sub(Exact.mul(X[0], C[2]), Exact.mul(C[0], X[2]))
+		var c := Exact.sub(Exact.mul(X[0], C[1]), Exact.mul(C[0], X[1]))
+		if a.is_zero() and b.is_zero():
+			return null
+		# L = C x X: a x + b y + c' w = 0 with c' = Cx Xy - Cy Xx = -c, i.e.
+		# a x + b y = c (Exact.Line form)
+		L = [a, b, c]
+	else:
+		var ax: float
+		var ay: float
+		if etype == "line_normal_projection":
+			ax = -(surf.ey - surf.sy)
+			ay = surf.ex - surf.sx
+		else:
+			var pr: Array = surf.left_proj if plan[j].left else surf.right_proj
+			ax = pr[1]
+			ay = pr[2]
+		# through X = (x/w, y/w) along (ax, ay): -ay w x + ax w y = ax y - ay x
+		var w: BigFloat = X[2]
+		L = [Exact.mul(Exact.of(-ay), w), Exact.mul(Exact.of(ax), w),
+			Exact.sub(Exact.mul(Exact.of(ax), X[1]), Exact.mul(Exact.of(ay), X[0]))]
+	return Exact.Line.from_exact(L)
+
+# The projective fired at its back-propagated hit point H: of the beam's
+# crossings of surf, the one at pt is the one nearest H (the same position
+# rule that matches a known point to its root). A plan side matched at an
+# earlier crossing is not H: the anchored path ends there.
+static func _at_planned_hit(w: Walk, beam, surf: BeamScene.Surf, pt: CN, H) -> bool:
+	if H == null:
+		return false
+	var d_pt: float = pt.sub(H).abs2().to_float()
+	for r in w.bk.roots(beam, surf, false):
+		if w.bk.point(beam, r).sub(H).abs2().to_float() < d_pt:
+			return false
+	return true
+
 static func _project(w: Walk, beam, t, surf: BeamScene.Surf, left: bool, pt: CN, pt_exact: bool) -> Array:
-	var nb = w.bk.project(beam, t, surf, left, pt)
 	w.stack.clear()
 	w.epoch += 1
+	if w.anchored and w.chain != null and w.plan_index < w.chain.beams.size() \
+			and _at_planned_hit(w, beam, surf, pt, w.chain.hits.get(w.plan_index - 1)):
+		# planned through the projective (Stage 87): the next sub-chain's
+		# anchored beam, from the back-propagated hit point; it departs the
+		# surface at its root nearest the hit
+		var ab = w.bk.from_hp(w.chain.beams[w.plan_index])
+		var best = null
+		var best_d := INF
+		for r in w.bk.roots(ab, surf, false):
+			var d: float = w.bk.point(ab, r).sub(pt).abs2().to_float()
+			if d < best_d:
+				best_d = d
+				best = r
+		if best == null:
+			best = w.bk.param_of(ab, pt)
+		w.known = [[pt, best, surf.id]] if pt_exact else []
+		w.line = w.chain.exit_lines.get(w.plan_index - 1)
+		if w.line != null:
+			_add_line_endpoints(w, ab)
+		return [ab, surf.id, best, false]
+	var nb = w.bk.project(beam, t, surf, left, pt)
 	w.anchored = false
 	w.known = [[pt, w.bk.zero(), surf.id]] if pt_exact else []
 	w.line = null

@@ -283,8 +283,9 @@ func check_SOLID_PATH_TO_CURSOR(player_pos: Vector2, cursor_pos: Vector2) -> Arr
 	for i in range(1, solid_steps.size()):
 		var prev: TraceStep = solid_steps[i - 1]
 		var curr: TraceStep = solid_steps[i]
-		if prev.end.distance_to(curr.start) > 0.05:
+		if prev.end.distance_to(curr.start) > 0.05 and not curr.after_portal:
 			# Skip gaps at escape/return boundaries (ray wraps through infinity)
+			# and portal teleports (intended gaps)
 			var at_bounds := (prev.end.x <= bounds.position.x + 1.0 or prev.end.x >= bounds.end.x - 1.0 or
 				prev.end.y <= bounds.position.y + 1.0 or prev.end.y >= bounds.end.y - 1.0)
 			if not at_bounds:
@@ -308,7 +309,7 @@ func check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos: Vector2, cursor_pos: Vect
 			continue
 		var last: TraceStep = path.steps[path.steps.size() - 1]
 		var end_pos: Vector2 = last.end
-		var valid := false
+		var valid := _cut_by_max_hits(trace_name)
 		if end_pos.distance_to(player_pos) < 2.0:
 			valid = true
 		if end_pos.x <= bounds.position.x + 2.0 or end_pos.x >= bounds.end.x - 2.0:
@@ -335,6 +336,15 @@ func check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos: Vector2, cursor_pos: Vect
 		if not valid:
 			violations.append("TRACE-ENDS: %s trace ends mid-air at %s" % [trace_name, end_pos])
 	return violations
+
+# The solver cut this trace at MAX_HITS: it ends where the cut is drawn (the
+# next crossing, or the cursor), which need not be on a surface.
+func _cut_by_max_hits(trace_name: String) -> bool:
+	var r = _beam_result()
+	if r == null:
+		return false
+	var ev: Array = r.planned if trace_name.to_lower().contains("plan") else r.physical
+	return not ev.is_empty() and ev.back().kind == "max"
 
 func check_PLAN_EFFECTS_APPLIED(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array) -> Array[String]:
 	var r = _beam_result()

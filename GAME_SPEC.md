@@ -22,7 +22,7 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Circle inversion effect (full and partial arcs) | Done |
 | Rigid motion effect (portal pairs, Stage 82) | Done |
 | Projective effects — physical tracing (Stage 83) | Done |
-| Projective effects — planning through them (§13.3/13.4, Stage 87) | Planned — PLANNED mode currently consumes a projective plan entry without applying it |
+| Projective effects — planning through them (§13.3/13.4, Stage 87) | Done |
 | Arrow flight with freeze/animation/skip | Done |
 | Camera tracking during arrow flight (§4.5) | Done |
 | Game systems: checkpoint, undo, reset (§3.3) | Done |
@@ -669,7 +669,7 @@ LineDirectionalProjection, CircleDirectionalProjection (extend Effect):
 
 Effect objects are **descriptions**: kind, parameters, display name and colour. They hold no transform math. The beam solver reads them through `BeamScene.describe_config` (effect type string plus parameters) and applies the closed-form beam maps of §10.8 (`BeamEffects`). *(Removed in Stage 84: `get_mobius`, `get_inverse_mobius`, `get_tracked_transform`, `normalized`, and projections' `apply_forward`.)*
 
-**Implemented effects:** `TerminalEffect`, `ReflectionEffect`, `CircleInversionEffect`, `RigidMotionEffect` (portals, Stage 82), and the four projective effects (physical tracing, Stage 83; planning through them is Stage 87).
+**Implemented effects:** `TerminalEffect`, `ReflectionEffect`, `CircleInversionEffect`, `RigidMotionEffect` (portals, Stage 82), and the four projective effects (physical tracing, Stage 83; planning through them, Stage 87).
 
 **Planned effects:** `CompoundTransformativeEffect` (§10.3).
 
@@ -700,10 +700,10 @@ Examples: reflect + translate = glide reflection. Reflect + rotate = rotated ref
 
 ### 10.4 Projective effects
 
-> **Status: physical tracing DONE (Stage 83); planning through projectives PLANNED (Stage 87).**
+> **Status: physical tracing DONE (Stage 83); planning through projectives DONE (Stage 87).**
 > - **Implemented types:** `LineNormalProjection`, `CircleNormalProjection`, `LineDirectionalProjection` and `CircleDirectionalProjection`. Each has a `project_back` variant.
 > - **Exit rule:** at the hit `h` the beam leaves as a straight line from `h` along ±axis. The axis is the carrier normal (line normal), the radius `h − c` (circle normal), or the effect's fixed normal (directional). The sign is exact. *Through* exits to the far side: `sign(exit·∇f) = sign(dir·∇f)`. *Back* returns to the approach side. An axis tangent to the carrier exits along +axis (through) or −axis (back).
-> - **PLANNED mode** currently consumes a projective plan entry without applying it, and the planned aim skips it, until Stage 87 (§13.3).
+> - **PLANNED mode** applies a projective plan entry like any other (Stage 87). The aim back-propagates its hit point (§13.3).
 > - **Directional projections:** the implemented ones take an explicit normal direction plus through/back. They do not derive the direction from a semicircle's diameter and the approach side, as described below.
 
 All produce an outgoing **straight beam** in visual space, determined solely by the hit point (and the approach side). Incoming direction is discarded. After a projective effect the **provenance stack is cleared and a new epoch begins** (§10.7). Nothing applied before the projective can be popped afterwards.
@@ -947,7 +947,7 @@ walk(beam, depart, t0):
                 if the next plan entry matches surface ID AND side:
                     plan_index += 1
                     do = side's effect if transformative else none
-                    # terminal and projective entries are consumed without effect (projectives until Stage 87)
+                    # terminal entries are consumed without effect; projectives are applied (Stage 87)
                 else: do = none                     # everything else passes, terminals included
             emit "hit"
             if do is terminal: stop
@@ -1039,7 +1039,20 @@ For a contiguous sub-sequence of transformative entries, the anchored constructi
 
 ### 13.3 Projective break points
 
-> **Status: PLANNED (Stage 87).** Projective effects are traced physically (Stage 83), but planning through them is not implemented. In PLANNED mode, a projective plan entry is currently **consumed without being applied**, and the anchored aim skips it, because projectives do not change the anchored frame. The design below is the target for Stage 87. It will be built on the beam solver (`docs/TDD_09_PRECISION_INTEGRATION.md`, Stage 87).
+> **Status: implemented (Stage 87).** In PLANNED mode a projective plan entry is applied, even off-segment.
+>
+> **Back-propagation** happens on the carrier.
+> - A line normal has one candidate H; so does a directional on a line.
+> - A circle normal has two candidates, c ± R·u; so can a directional on a circle.
+> - Between two candidates, the one whose exit ray (from the plan side, by the exact exit rule) reaches the target directly is preferred, then the nearer one.
+> - When the target itself lies on the carrier (provenance: a later projective entry on the same surface, or the cursor exactly on it), the candidate at the target is excluded.
+> - An entry with no candidate is skipped by the aim.
+>
+> **Firing:** the planned trace fires at the first crossing that matches id and side. If that crossing is not H, the anchored path ends there and the trace continues by the physical exit rule. That plan then does not reach the cursor.
+>
+> **Exit direction:** the sub-chain after a projective runs along that projective's exit. When the exit points away from the target, the target is reached through infinity.
+>
+> **Oracle:** `docs/research/oracle/trace2.py` (`back_propagate`).
 
 Projective surfaces are **break points** that partition the plan into transformative sub-chains. At each break point:
 
@@ -1061,7 +1074,11 @@ Back-propagation targets are in **visual space**, like everything in the beam mo
 
 ### 13.4 Mixed chain algorithm
 
-> **Status: PLANNED (Stage 87).** The pseudocode below is the original design sketch, written for the deleted legacy planner. Stage 87 will realise it as anchored sub-chains (§13.1), one per epoch, in the beam solver. Read `plan_transformative_subchain` as "the anchored construction of §13.1 from `current_origin` to `sc.target`".
+> **Status: implemented (Stage 87)** as anchored sub-chains (§13.1), one per epoch, in `BeamSolver.AnchorChain.build`:
+> - **Backward pass:** it back-propagates each projective's hit point H from the target behind it.
+> - **Sub-chains:** each is anchored from its origin (the player or the previous H) to its target (the next H or the cursor).
+>
+> The pseudocode below is the original design sketch; read `plan_transformative_subchain` as that anchored construction.
 
 ```
 func plan_mixed(origin, cursor, plan, game_state):
@@ -1150,7 +1167,7 @@ Hit-point computation uses a **unified hitpoint model**: both modes intersect th
 | Mode | Effect application rule | When it runs |
 |------|------------------------|-------------|
 | **PHYSICAL** | An effect fires ONLY on a **fully blocked** hit: an on-segment interior point, or an exact endpoint whose blocked sides (including other segments sharing that endpoint) cover both sides. A terminal ends the trace. Everything else is a pass-through (no effect, no stack change). Plan bookkeeping is by surface ID only: an applied transformative or projective effect advances the plan if it is the next entry's surface, and otherwise marks the plan unmatched. | Origin to terminal/escape/limit. |
-| **PLANNED** | The next plan entry fires when surface ID **and** side match, even off-segment. Only transformative entries change the beam. Terminal and projective entries are consumed without effect (projectives until Stage 87). Everything else passes, terminals included. After the cursor, the trace continues with PHYSICAL rules. | Origin to terminal/escape/limit. |
+| **PLANNED** | The next plan entry fires when surface ID **and** side match, even off-segment. Only transformative entries change the beam. Projective entries are applied too (Stage 87). Terminal entries are consumed without effect. Everything else passes, terminals included. After the cursor, the trace continues with PHYSICAL rules. | Origin to terminal/escape/limit. |
 
 Neither mode stops at the cursor. The cursor is a **virtual hitpoint** (§12.1) that competes with carrier intersections in projective order. It is a candidate only once the plan is complete and matched. `cursor_index` is the step index where the cursor falls.
 
@@ -1619,7 +1636,7 @@ Plan:       [{M1, left}, {P, left}, {M2, right}]
 
 **Result:** two transformative sub-chains ({M1} and {M2}) separated by projective break point P. The provenance stack clears and a new epoch begins at P.
 
-*(Status: this planning example is the Stage 87 target. Today PLANNED mode consumes the projective entry for P without applying it (§13.3), so the planned preview of this plan does not yet follow the path above; the physical trace does apply P.)*
+*(Status: implemented in Stage 87: the planned preview follows this path, §13.3.)*
 
 ### 16.5 State change (multi-shot)
 
@@ -2240,7 +2257,7 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 **Deliverable:** circle inversion works. Arrow paths curve in the visual frame. Arcs render correctly.
 
-### Phase 6: Projective effects and mixed planning *(Partially done — rigid motion: Stage 82; physical projectives: Stage 83; projective planning: Stage 87, planned; compound: planned)*
+### Phase 6: Projective effects and mixed planning *(Partially done — rigid motion: Stage 82; physical projectives: Stage 83; projective planning: Stage 87; compound: planned)*
 - `LineNormalProjection`, `CircleNormalProjection`, `LineDirectionalProjection`, `CircleDirectionalProjection` (implemented in place of the originally planned `SemicircleDirectionalProjection`).
 - Back-propagation for each projective effect.
 - Mixed chain planning algorithm.
@@ -2613,4 +2630,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.7.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.8.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -18,7 +18,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 | 84 | Delete the legacy solver | Done (user sign-off) |
 | 85 | State flags (ConfigResolver + StateChange) | Done (user sign-off) |
 | 86 | Ghost mode & toggler surfaces | Done (user sign-off) |
-| 87 | Plannable projectives (mixed chains) | Planned |
+| 87 | Plannable projectives (mixed chains) | In progress (green; awaiting user sign-off) |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests. The full
 suite must pass before proceeding to Stage N+1. No exceptions.
@@ -704,19 +704,84 @@ Scene: `scenes/test_levels/ghost_room.tscn`.
 
 ## Stage 87: Plannable projectives (§13.3/13.4 mixed chains)
 
+### Overview
+In PLANNED mode a projective plan entry is applied, even off-segment, like a transformative entry.
+
+**Back-propagation** (`BeamEffects.back_propagate`, oracle `back_propagate`) finds the hit point H from which the projected beam passes through the target behind it. The target is the cursor, pulled back through the later entries. H is found on the carrier:
+
+| Projective | Candidates for H |
+|------------|------------------|
+| Line normal | the foot of the target |
+| Circle normal | c ± R·u, with u the unit vector from c to the target |
+| Directional | the carrier crossings of the line through the target along the normal |
+
+**Choosing between two candidates:**
+1. Prefer the one whose exit ray reaches the target directly. The exit is fixed by the plan side and the exact Stage 83 rule.
+2. Otherwise take the nearer one.
+3. **Provenance exclusion:** when the target is known to lie on the carrier, the candidate at the target is excluded. That is the case when the target is a later projective entry's H on the same surface with nothing transformative between, or the cursor exactly on the carrier. Without this rule, the zero exit-dot was decided by rounding noise.
+
+**Anchored sub-chains:** `AnchorChain.build` runs backward through the plan and then builds one sub-chain per epoch, from origin to target, with flat beam indices.
+- **Exit beam:** the beam leaving a projective is built exactly straight, along its exit. Built as a circle through rounded points, it kept residual curvature.
+- **Orientation:** when the exit points away from the target, the target is reached through infinity and the sub-chain's beams run the other way round.
+- **Firing at H only:** the anchored path continues through a projective only if it fired at H. "At H" means the crossing nearest H, the same position rule used for known points. Planned mode fires at the first crossing that matches id and side; if that is not H, the trace continues by the physical exit rule, exactly as the oracle's forward walk does.
+
+**Exact data:** a back-propagated H is not exact data. With a projective in the plan there is no exact aim line and no fixed-point cursor.
+
+**Exact exit line:** this is provenance (oracle `projective_hits`, solver `_exit_line`). The last projective's exit passes through the cursor pulled back through the entries after it. When that point is exact data, the exit is an exact line: through that point, along the exact axis (the carrier normal, the directional normal, or the line from the circle's exact center). It applies only while the trace is still on the planned path:
+- the solver tracks this as "anchored";
+- the oracle tracks it as `on_plan`, with the same divergence rule.
+
+The sweep found the motivating case. An exit along a diagonal normal ran exactly through a room corner, and without the exact line that concurrency was decided by rounding, with a climb to the top precision tier.
+
+**Projective scenes in the corpus:** expectations were regenerated for 44 scenarios. Planned traces now reach the cursor in 16 of 46 projective-scene plans, up from 2, and none lost it. The rest name sides a straight beam cannot approach from, as for transformative entries.
+
+**The sweep** found two checker gaps and one solver issue, all fixed:
+- the solver issue was the exactly straight exit beam above;
+- a trace cut by MAX_HITS ends at its cut;
+- a portal teleport is an intended gap on the solid path.
+
+**Oracle data:** `bench/fixtures/stage87_projective_plans.json` (`gen_fixtures_stage87.py`). `stage83_projective.json` and the projective corpus were regenerated.
+
 ### Unit Tests Added (written first)
-- `test_back_propagation_per_type`
-- `test_back_propagation_off_segment_invalid`
-- `test_mixed_chain_reaches_cursor`
-- `test_projective_last_entry_injects_cursor`
-- `test_planned_applies_projective`
-- `test_physical_matches_planned_when_realizable`
+- `test_stage87_mixed_planning.gd`:
+  - `test_back_propagation_per_type`
+  - `test_line_normal_plans`
+  - `test_circle_normal_plans`
+  - `test_directional_plans`
+  - `test_mixed_chain_reaches_cursor`
+  - `test_projective_last_entry_injects_cursor`
+  - `test_physical_matches_planned_when_realizable`
+  - `test_fast_twin_projective_plans`
+  - `test_planned_exit_beam_exactly_straight` (added after the sweep: an exactly straight exit, and the corner concurrency decided at f64)
+- `test_stage83_projective.gd`: `test_planned_passes_projectives_until_87` is inverted as `test_planned_applies_projective`.
+- `test_invariant_sweep.gd`: `test_sweep_projective_plans` covers the five projective playgrounds, with one-entry plans on each side and a two-entry plan.
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
-- [ ] Plans through projective surfaces reach the cursor.
-- [ ] Invalid placements are refused.
+Scenes: `scenes/playground/projective.tscn`, `projective_lines`, `projective_arcs`, `directional_lines`, `directional_arcs`.
+- [ ] Clicking a projective surface's side into the plan aims the preview so that the projected beam reaches the cursor. Check line normal, circle normal, and both directional kinds.
+- [ ] A mixed plan (mirror → projective → mirror) reaches the cursor.
+- [ ] Firing follows the preview when the planned hit is on the segment. When it is not, the preview shows the physical divergence there.
+- [ ] A plan side that can't be approached directly is shown honestly: the planned path fires at the first matching crossing and does not reach the cursor.
 
----
+### Validation Summary
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Red tests fail for the right reason | [x] | 8 failed on assertions with a stub (commit `8dd7cb4`) |
+| All unit tests pass | [x] | Full suite: 628 tests, plus every sweep shard |
+| Oracle fixtures, corpus, fast twin | [x] | All fixtures at f64 and 4 limbs; 348 corpus scenarios; FastSolver bit-identical |
+| Sweeps, including projective plans | [x] | Zero violations. The first run found 36: the exit beam was not exactly straight, max-cut ends and portal gaps were flagged by the checker, and a corner concurrency had no exact exit line. All are fixed and the sweep is clean |
+| Stage complete | [ ] | Awaiting user sign-off |
+
+### Files Modified/Created
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `scripts/math/precision/beam_effects.gd` | Modify | `projective_exit`, `back_propagate` |
+| `scripts/math/precision/beam_solver.gd` | Modify | Projectives fire in PLANNED; segmented anchor chain with an exact straight exit beam and exit orientation; anchored only at H; projective-aware exact image, fixed point and degenerate aim |
+| `scripts/testing/invariant_checker.gd` | Modify | Max-cut trace ends; portal gaps |
+| `docs/research/oracle/{trace2,gen_fixtures_stage87}.py`, `bench/fixtures/*`, `bench/scenes_corpus/expected/*` | Modify/Create | Spec, fixtures, regenerated expectations |
+| `tests/test_stage87_mixed_planning.gd`, `tests/test_stage83_projective.gd`, `tests/test_invariant_sweep.gd` | Create/Modify | Specification and sweep |
 
 ## Legacy quirks: explicit resolution
 

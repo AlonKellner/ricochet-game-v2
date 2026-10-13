@@ -388,6 +388,8 @@ class Walk:
     done: bool = False
     flags: dict = field(default_factory=dict)
     flags_before: dict = field(default_factory=dict)   # flags the current event resolved under
+    proj_hits: dict = field(default_factory=dict)      # projective entry index -> (H, exact exit line or None)
+    on_plan: bool = True                               # still on the planned path (no divergence yet)
 
 
 # ---------------------------------------------------------------- exact data
@@ -594,6 +596,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 walk.events.append(Event("cursor", point=beam.at(t), t=t, beam=beam))
                 walk.cursor_done = True
                 walk.mode = walk.post_mode
+                walk.on_plan = False
                 continue
             surf = by_id[sid]
             known_pt = beam.p if (rehit and fresh) else (None if rehit else snapped.get((sid, t)))
@@ -604,6 +607,17 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             do = None
             change = surf.state_change(side, walk.flags)
             fires_state = False
+            if walk.mode == PHYSICAL and walk.on_plan:
+                # the first decision that differs from the planned one ends the
+                # planned path (as the solver's anchored path)
+                pm = walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side)
+                eff0 = surf.effect(side, walk.flags)
+                plan_do = eff0 if pm and (eff0 in TRANSFORMATIVE or eff0 in PROJECTIVE) else None
+                phys_do = eff0 if full_block else None
+                plan_st = pm and change is not None
+                phys_st = full_block and change is not None
+                if not (plan_do == phys_do and plan_st == phys_st and (phys_do is not None or phys_st or not pm)):
+                    walk.on_plan = False
             if walk.mode == PHYSICAL:
                 do = physical_decision(walk, surf, side, full_block)
                 fires_state = change is not None and full_block
@@ -629,7 +643,20 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 applied = True
                 break
             if do in PROJECTIVE:
+                # on the planned path at its back-propagated hit point (the
+                # crossing nearest H): the exit is exact data when the target
+                # behind it is (projective_hits)
+                planned_exit = None
+                if walk.on_plan:
+                    hj = walk.proj_hits.get(walk.plan_index - 1)
+                    if hj is None or abs(pt - hj[0]) > min(abs(beam.at(r) - hj[0]) for r in roots(beam, surf, False)):
+                        walk.on_plan = False
+                    else:
+                        planned_exit = hj[1]
                 beam = _project(walk, beam, t, surf, side, pt, pt_exact)
+                if planned_exit is not None:
+                    walk.line = planned_exit
+                    _add_line_endpoints(walk, beam)
                 depart, t0, fresh = sid, mp.mpf(0), True
                 applied = True
                 break
@@ -904,13 +931,16 @@ def projective_exit(surf, side, cfg, H, axis):
     return axis * sgn
 
 
-def back_propagate(surf, side, X, flags=None):
+def back_propagate(surf, side, X, flags=None, x_on_carrier=False):
     """The hit point H on a projective side from which the projected beam
     passes through X (GAME_SPEC 13.3), on the carrier: line normal -> the
     foot of X; circle normal -> c +- R u (u = unit(X - c)); directional ->
     the carrier crossings of the line through X along the normal. Of two
     candidates: the one whose exit ray reaches X directly ((X - H) . exit >
-    0), then the one nearer X. None if there is no candidate."""
+    0), then the one nearer X. None if there is no candidate. x_on_carrier
+    (provenance: X is the hit point of a later projective entry on this
+    surface, or the cursor exactly on its carrier): X is itself a candidate
+    and is excluded -- the beam must reach X from the other one."""
     cfg = surf.cfg(side, flags)
     etype = cfg["type"]
     seg = surf.seg
@@ -951,6 +981,9 @@ def back_propagate(surf, side, X, flags=None):
             return H - seg.c
         return P(cfg["normal"])
 
+    if x_on_carrier and len(cands) == 2:
+        cands = [max(cands, key=lambda H: abs(X - H))]
+
     def key(H):
         e = projective_exit(surf, side, cfg, H, axis_at(H))
         return (0 if dot(X - H, e) > 0 else 1, abs(X - H))
@@ -981,12 +1014,13 @@ def trace_physical_direction(surfaces, player, direction, plan=(), cursor=None, 
 
 
 def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="direction", flags=None,
-                         extra_known=()):
+                         extra_known=(), proj_hits=None):
     """line: the initial beam's exact implicit line; "direction": `direction`
     is exact data; None: not exact."""
     walk = Walk(surfaces, list(plan), cursor, mode, PHYSICAL)
     walk.flags = dict(flags or {})
     walk.flags_before = walk.flags
+    walk.proj_hits = proj_hits or {}
     p0 = P(player)
     b0 = Beam(p0, direction / abs(direction), mp.mpf(0))
     walk.known = [(p0, mp.mpf(0), None)]
@@ -1002,21 +1036,65 @@ def aim_image(surfaces, plan, cursor, flags=None):
     """The aim point: the cursor pulled back through the plan -- transformative
     entries by their inverse maps, projectives by back-propagation (13.3;
     an entry without a back-propagated point is skipped)."""
+    return _backward(surfaces, plan, cursor, flags)[0]
+
+
+def projective_hits(surfaces, plan, cursor, flags=None):
+    """Plan entry index -> (H, exact exit line or None) of each projective
+    entry: the back-propagated hit point, and -- for the last projective, when
+    the cursor pulled back through the entries after it is exact data -- the
+    exact line it leaves along (through that point, along the exact axis)."""
+    hits = _backward(surfaces, plan, cursor, flags)[1]
+    if not hits:
+        return {}
     by_id = {s.id: s for s in surfaces}
+    j = max(hits)
+    X = exact_image(surfaces, cursor, plan, flags, start=j + 1)
+    line = None
+    if X is not None:
+        sid, side = plan[j]
+        surf = by_id[sid]
+        etype = surf.effect(side, plan_resolved(surfaces, plan, flags)[j][1])
+        if etype == "line_normal_projection":
+            D = _sub(FC(surf.seg.E), FC(surf.seg.S))
+            ax = (-D[1], D[0])
+        elif etype == "circle_normal_projection":
+            nx, ny, w, _rr = _center_h(surf.seg)
+            ax = (X[0] - nx / w, X[1] - ny / w)
+        else:
+            ax = FC(P(surf.cfg(side)["normal"]))
+        if ax != (0, 0):
+            a, b = -ax[1], ax[0]
+            line = (a, b, a * X[0] + b * X[1])
+    return {k: (hits[k], line if k == j else None) for k in hits}
+
+
+def _backward(surfaces, plan, cursor, flags=None):
+    """(aim point or None, {projective entry index: H}): the backward pass."""
+    by_id = {s.id: s for s in surfaces}
+    hits = {}
+    plan = list(plan)
     res = plan_resolved(surfaces, plan, flags)
     z = P(cursor)
-    for (sid, side), (eff, f) in reversed(list(zip(plan, res))):
+    on_sid = None        # the surface whose carrier z lies on (provenance)
+    for j in range(len(plan) - 1, -1, -1):
+        sid, side = plan[j]
+        eff, f = res[j]
         if eff in PROJECTIVE:
-            H = back_propagate(by_id[sid], side, z, f)
+            on = on_sid == sid or (on_sid is None and incident(z, by_id[sid]))
+            H = back_propagate(by_id[sid], side, z, f, on)
             if H is not None:
                 z = H
+                on_sid = sid
+                hits[j] = H
             continue
         if eff not in TRANSFORMATIVE:
             continue
+        on_sid = -1
         z = map_point(z, by_id[sid], inverse=True)
         if z is None:
-            return None
-    return z
+            return None, hits
+    return z, hits
 
 
 def exact_direction(surfaces, plan, player, cursor, flags=None):
@@ -1027,13 +1105,14 @@ def exact_direction(surfaces, plan, player, cursor, flags=None):
     return None if d == 0 else d
 
 
-def exact_image(surfaces, cursor, plan, flags=None):
+def exact_image(surfaces, cursor, plan, flags=None, start=0):
     """The aim image F_K^-1(cursor) as exact rationals, when every frame
     change of the plan is a rational map of exact data -- a line reflection,
     an inversion in a circle (exact circumcenter and radius²) or a
     translation portal. None for a rotation portal, or an image at infinity."""
     by_id = {s.id: s for s in surfaces}
-    effs = plan_effects(surfaces, plan, flags)
+    effs = plan_effects(surfaces, plan, flags)[start:]
+    plan = list(plan)[start:]
     if any(e in PROJECTIVE for e in effs):
         return None      # a back-propagated hit point is not exact data
     X = FC(P(cursor))
@@ -1110,10 +1189,10 @@ def planned(surfaces, player, cursor, plan, flags=None):
     """Planned trace = forward PLANNED-mode walk of the exact aim direction."""
     d, line, known = _aim(surfaces, player, cursor, plan, flags)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
-                                extra_known=known)
+                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags))
 
 
 def physical(surfaces, player, cursor, plan, flags=None):
     d, line, known = _aim(surfaces, player, cursor, plan, flags)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PHYSICAL, line=line, flags=flags,
-                                extra_known=known)
+                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags))

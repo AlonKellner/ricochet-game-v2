@@ -144,3 +144,26 @@ func test_fast_twin_projective_plans():
 			assert_eq([a.kind, a.surface_id, a.left, a.applied], [b.kind, b.surface_id, b.left, b.applied], "%s event %d" % [name, i])
 			if a.point != null and b.point != null:
 				assert_eq([a.point.fx(), a.point.fy()], [b.point.fx(), b.point.fy()], "%s event %d: bit-identical" % [name, i])
+
+# Found by the projective plan sweep: the beam leaving a planned projective is
+# exactly straight (a projective exit is a line by definition). Built as a
+# circle through rounded points it kept a residual curvature: a horizontal exit
+# then "met" the horizontal walls at infinity, the ladder climbed to its top
+# tier and the pair was rejected (no line drawn).
+func test_planned_exit_beam_exactly_straight():
+	Surface.reset_id_counter()
+	BeamTracer.clear_cache()
+	var scene: Node = load("res://scenes/playground/projective.tscn").instantiate()
+	scene.gravity = Vector2.ZERO
+	add_child_autofree(scene)
+	await get_tree().process_frame
+	var plan := [PlanManager.PlanEntry.new(6, Side.Value.LEFT), PlanManager.PlanEntry.new(7, Side.Value.LEFT)]
+	var pair := BeamTracer.trace_pair(scene.surfaces, Vector2(1243.33337402344, 390.0), Vector2(1810.0, 90.0), plan)
+	assert_not_null(pair, "a trace pair (finite events)")
+	if pair == null:
+		return
+	assert_eq(pair.result.planned_tier, 0, "decided at float64, no climb")
+	var ev: Array = pair.result.planned
+	for i in range(1, ev.size()):
+		if ev[i - 1].kind == "hit" and ev[i - 1].applied and ev[i - 1].projective:
+			assert_true(ev[i].beam.kappa.is_zero(), "the exit beam is exactly straight")

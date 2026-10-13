@@ -52,9 +52,88 @@ static func project(beam: HPBeam, t, surf: BeamScene.Surf, left: bool, h_exact: 
 	var ex := axis.neg() if flip else axis
 	return HPBeam.make(h, ex.unit(), beam.kappa.sub(beam.kappa))
 
-# Stage 87 stub.
-static func back_propagate(_surf: BeamScene.Surf, _left: bool, _X: CN):
-	return null
+# The exit direction at h of a projective side entered from `left` (the
+# exact rule of `project`, with the approach side given instead of a beam).
+static func projective_exit(surf: BeamScene.Surf, left: bool, h: CN) -> CN:
+	var etype := surf.effect(left)
+	var pr: Array = surf.left_proj if left else surf.right_proj
+	var g := BeamGeom._grad(surf.seg, h)
+	var axis := _projective_axis(surf, etype, pr, h, g)
+	var ag = CN.dot(axis, g)
+	var flip := false
+	if not ag.is_zero():
+		# sign(dir . grad): approach = -dir . grad > 0 iff LEFT == (winding >= 0)
+		var wind_nonneg: bool = not BeamGeom.winding(surf.seg).is_negative()
+		var dg_negative: bool = left == wind_nonneg
+		flip = ag.is_negative() != dg_negative
+	if pr[0]:
+		flip = not flip
+	return axis.neg() if flip else axis
+
+static func _projective_axis(surf: BeamScene.Surf, etype: String, pr: Array, h: CN, g: CN) -> CN:
+	if etype == "line_normal_projection":
+		return g
+	if etype == "circle_normal_projection":
+		return h.sub(surf.seg.circ.c)
+	return CN.make(h.re.sub(h.re).add(_num_like(h.re, pr[1])), h.re.sub(h.re).add(_num_like(h.re, pr[2])))
+
+# The hit point H on a projective side from which the projected beam passes
+# through X (GAME_SPEC 13.3; oracle trace2.back_propagate), on the carrier:
+# line normal -> the foot of X; circle normal -> c +- R u; directional -> the
+# carrier crossings of the line through X along the normal. Of two
+# candidates: the one whose exit ray reaches X directly, then the one nearer
+# X. null if there is none. x_on_carrier (provenance: X is the hit point of a
+# later projective entry on this surface, or the cursor exactly on its
+# carrier): X itself is a candidate and is excluded.
+static func back_propagate(surf: BeamScene.Surf, left: bool, X: CN, x_on_carrier: bool = false):
+	var etype := surf.effect(left)
+	var pr: Array = surf.left_proj if left else surf.right_proj
+	var seg: BeamGeom.Seg = surf.seg
+	var zero = X.re.sub(X.re)
+	var cands: Array = []
+	if etype == "line_normal_projection":
+		var D := seg.e.sub(seg.s)
+		cands = [seg.s.add(D.scale(CN.dot(X.sub(seg.s), D).div(D.abs2())))]
+	elif etype == "circle_normal_projection":
+		var u := X.sub(seg.circ.c)
+		if u.is_zero():
+			return null
+		cands = [seg.circ.c.add(u.unit().scale(seg.circ.r)), seg.circ.c.sub(u.unit().scale(seg.circ.r))]
+	else:
+		var n := CN.make(zero.add(_num_like(X.re, pr[1])), zero.add(_num_like(X.re, pr[2])))
+		if seg.kind == BeamGeom.Kind.LINE:
+			var D := seg.e.sub(seg.s)
+			var den = CN.cross(D, n)
+			if den.is_zero():
+				return null
+			cands = [X.sub(n.scale(CN.cross(D, X.sub(seg.s)).div(den)))]
+		else:
+			# |X - s n - c|^2 = R^2
+			var dc := X.sub(seg.circ.c)
+			var a = CN.dot(n, n)
+			var b = CN.dot(n, dc).mul_pow2(1).neg()
+			var c0 = CN.dot(dc, dc).sub(seg.circ.r.mul(seg.circ.r))
+			var disc = b.mul(b).sub(a.mul(c0).mul_pow2(2))
+			if disc.is_negative():
+				return null
+			var sq = disc.sqrt_val()
+			var two_a = a.mul_pow2(1)
+			cands = [X.sub(n.scale(b.neg().add(sq).div(two_a))), X.sub(n.scale(b.neg().sub(sq).div(two_a)))]
+	if x_on_carrier and cands.size() == 2:
+		# provenance: X is itself a candidate -- the beam reaches it from the other
+		var d0: float = X.sub(cands[0]).abs2().to_float()
+		var d1: float = X.sub(cands[1]).abs2().to_float()
+		cands = [cands[0] if d0 > d1 else cands[1]]
+	var best = null
+	var best_key := [2, INF]
+	for H in cands:
+		var ex := projective_exit(surf, left, H)
+		var direct: int = 0 if (CN.dot(X.sub(H), ex).is_negative() == false and not CN.dot(X.sub(H), ex).is_zero()) else 1
+		var dist: float = X.sub(H).abs2().to_float()
+		if direct < best_key[0] or (direct == best_key[0] and dist < best_key[1]):
+			best_key = [direct, dist]
+			best = H
+	return best
 
 static func _num_like(x, f: float):
 	if x is F64Num:

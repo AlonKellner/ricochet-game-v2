@@ -255,3 +255,58 @@ func _discover_scenes() -> Array[String]:
 	dir.list_dir_end()
 	scenes.sort()
 	return scenes
+
+# Stage 87: plans through projective surfaces, on the projective playgrounds
+# (each projective side as a one-entry plan, and the first two projectives
+# as a two-entry plan).
+func test_sweep_projective_plans() -> void:
+	var scenes := ["projective", "projective_lines", "projective_arcs", "directional_lines", "directional_arcs"]
+	var total_failures: Array[Dictionary] = []
+	var total_combos := 0
+	for name in scenes:
+		var scene_path := "res://scenes/playground/%s.tscn" % name
+		Surface.reset_id_counter()
+		BeamTracer.clear_cache()
+		var scene: Node = load(scene_path).instantiate()
+		scene.gravity = Vector2.ZERO
+		add_child_autofree(scene)
+		await get_tree().process_frame
+		var projs: Array = []
+		for s: Surface in scene.surfaces:
+			var c: SideConfig = s.active_side_config(Side.Value.LEFT, GameState.new())
+			if c != null and c.effect != null and c.effect.kind() == Effect.Kind.PROJECTIVE:
+				projs.append(s)
+		assert_gt(projs.size(), 0, "%s has projective surfaces" % name)
+		var plans: Array = []
+		for s: Surface in projs:
+			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.LEFT)])
+			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.RIGHT)])
+		if projs.size() >= 2:
+			plans.append([PlanManager.PlanEntry.new(projs[0].id, Side.Value.LEFT), PlanManager.PlanEntry.new(projs[1].id, Side.Value.LEFT)])
+		var checker := InvariantChecker.new()
+		checker.setup(scene)
+		var runner := SweepRunner.new().configure(4, 6, 87)
+		if "room_rect" in scene:
+			var rect: Rect2 = scene.room_rect
+			runner.set_bounds(rect.position + Vector2(10, 10), rect.position + rect.size - Vector2(10, 10))
+		var positions := runner.build_positions()
+		for plan in plans:
+			for pi in positions.size():
+				if not SweepRunner.in_shard(pi):
+					continue
+				var player_pos: Vector2 = positions[pi]
+				for cursor_pos in positions:
+					if player_pos == cursor_pos:
+						continue
+					total_combos += 1
+					for v: String in checker.check_all(player_pos, cursor_pos, plan):
+						total_failures.append({"scene": scene_path, "player_pos": player_pos, "cursor_pos": cursor_pos,
+							"plan": _plan_to_data(plan), "violation": v})
+	_save_violations(total_failures)
+	if total_failures.size() > 0:
+		var report := "Projective plan sweep violations (%d):\n" % total_failures.size()
+		for f in total_failures.slice(0, 10):
+			report += "  [%s] plan=%s player=%s cursor=%s: %s\n" % [f.scene, _plan_to_str_from_data(f.plan), f.player_pos, f.cursor_pos, f.violation]
+		fail_test(report)
+	else:
+		pass_test("Projective plan sweep passed: %d combos" % total_combos)
