@@ -15,7 +15,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 | 81 | Reflections, partial/one-sided inversions, terminals, passes | Done (user sign-off) |
 | 82 | Portals (rigid motion) | Done (user sign-off) |
 | 83 | Projective effects (physical) + full switch-over | Done (user sign-off) |
-| 84 | Delete the legacy solver | In progress (green; awaiting user sign-off) |
+| 84 | Delete the legacy solver | Done (user sign-off) |
 | 85 | State flags (ConfigResolver + StateChange) | Planned |
 | 86 | Ghost mode & toggler surfaces | Planned |
 | 87 | Plannable projectives (mixed chains) | Planned |
@@ -508,13 +508,13 @@ The beam solver is the only solver. The legacy frame-based machinery is deleted:
 - Ported behavioural tests (TestTrace), with the migration table.
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
-- [ ] Smoke test every scene (`scenes/`, `scenes/test_levels/`, `scenes/playground/`):
+- [x] Smoke test every scene (`scenes/`, `scenes/test_levels/`, `scenes/playground/`):
   - the preview draws;
   - plans work;
   - firing works;
   - the F12 dump works (it now prints the beam aim, not the Planner aim).
-- [ ] Portal scenes: chevrons and plan links unchanged; paths through portals unchanged.
-- [ ] Mirror and inversion surfaces still self-link in the plan UI.
+- [x] Portal scenes: chevrons and plan links unchanged; paths through portals unchanged.
+- [x] Mirror and inversion surfaces still self-link in the plan UI.
 
 ### Validation Summary
 
@@ -524,7 +524,7 @@ The beam solver is the only solver. The legacy frame-based machinery is deleted:
 | Ported tests pass before deletion | [x] | Full suite, legacy code still present |
 | All unit tests pass | [x] | Full suite 598/598 after deletion (893 before: 298 deleted, 3 added) |
 | Scene corpus vs oracle, ladder, sweeps | [x] | Part of the suite: `test_stage81_trace_rules`, `test_precision_*`, `test_invariant_*` (zero violations) |
-| Stage complete | [ ] | Awaiting user sign-off |
+| Stage complete | [x] | User signed off (expectation changes accepted). |
 
 ### Files Modified/Created/Deleted
 
