@@ -34,7 +34,7 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Compound transformative effect | Planned |
 | Visibility polygon (§15) | Planned |
 | State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Done |
-| Ghost mode & toggler surfaces (Stage 86) | Planned |
+| Ghost mode & toggler surfaces (Stage 86) | Done |
 | Level editor | Planned |
 | Menus, HUD, save system | Planned |
 
@@ -741,6 +741,15 @@ State changes can write to **any** key in the game state dictionary, not just th
 Note the asymmetry: surfaces read from their resolver's configured key(s) via `ConfigResolver`, but `StateChange` can write to any key. A surface can affect surfaces it has no read-relationship with.
 
 State changes are applied sequentially along the trace. If multiple hits write to the same key, the last writer wins. Deterministic because hit ordering is deterministic (§11.3).
+
+#### Ghost mode (Stage 86)
+
+`ghost` is a reserved flag that lasts **one shot**: every trace starts with it false, and the game never keeps it.
+
+- **Togglers:** a ghost toggler is a side whose state change toggles `ghost`. Its effect is a pass, it is plannable, and the level export is `ghost_toggler_lines`.
+- **While ghosted, everything else passes.** Every other side resolves to a pass, together with its state change: mirrors, inversions, portals, projectives, terminals and room walls. A ghost arrow therefore crosses everything, can leave through a wall, and wraps through infinity, since a straight beam is a projective line.
+- **Materializing:** the arrow materializes at the next toggler hit, or at the same toggler one loop later. A loop around the beam that changed the state is walked again; a loop that changed nothing ends the trace as usual. MAX_HITS bounds both.
+- **Drawing:** ghost steps (`TraceStep.ghost`) are drawn paler and translucent, and ghost togglers have their own colour.
 
 ### 10.7 Provenance stack and frame identity by effect type
 
@@ -2171,7 +2180,7 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 > **Implementation status:** Phases 0–5 are complete. Phase 6 is partially done (rigid motion and physical projectives). The TDD documents map phases to numbered stages: see TDD_01 through TDD_09 for details. Stages 44–51 were repurposed during development; see TDD_05 for the reconciliation table.
 >
-> Stages 80–84 (TDD_09) replaced the frame-based solver of Phases 0–5 with the precision beam solver. Phase items below that name `MobiusTransform`, `TransformCache`, `Planner`, `trace()`, `intersect_line_with_gcircle()` or frame tracking are **historical**: they were built, then deleted in Stage 84. Their roles are now filled by `BeamSolver`, `PrecisionLadder` and `BeamTracer` (§12). Stages 85–87 (state flags, ghost mode, plannable projectives) are planned.
+> Stages 80–84 (TDD_09) replaced the frame-based solver of Phases 0–5 with the precision beam solver. Phase items below that name `MobiusTransform`, `TransformCache`, `Planner`, `trace()`, `intersect_line_with_gcircle()` or frame tracking are **historical**: they were built, then deleted in Stage 84. Their roles are now filled by `BeamSolver`, `PrecisionLadder` and `BeamTracer` (§12). Stages 85 and 86 (state flags, ghost mode) are done; Stage 87 (plannable projectives) is planned.
 
 ### Phase 0: Core abstractions *(Done)*
 - `Direction`, `Ray`, `Segment` data classes (§8).
@@ -2604,4 +2613,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.6.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.7.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

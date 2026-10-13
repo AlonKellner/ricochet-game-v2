@@ -15,7 +15,7 @@ var surface_id: int = -1
 var hit_side: int = -1
 var hit_on_segment: bool = false
 var after_portal: bool = false
-var ghost: bool = false         # Stage 86 stub
+var ghost: bool = false         # traversed in ghost mode (drawn distinctly)
 var est_error: float = -1.0     # estimated px error of this step's end (BeamTracer), -1 = unknown
 var precision_bits: int = 0     # arithmetic precision the step was computed at (0 = unknown)
 
@@ -45,3 +45,4 @@ func copy_meta_from(o: TraceStep) -> void:
 	after_portal = o.after_portal
 	est_error = o.est_error
 	precision_bits = o.precision_bits
+	ghost = o.ghost

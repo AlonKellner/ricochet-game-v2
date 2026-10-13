@@ -41,6 +41,10 @@ static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_e
 		return null
 	if player == cursor:
 		return null
+	# ghost is per shot: every trace starts solid
+	if flags.has(BeamScene.GHOST):
+		flags = flags.duplicate()
+		flags.erase(BeamScene.GHOST)
 	var skey := str(defs)
 	var key := "%s|%s|%s|%s|%s" % [var_to_str(player), var_to_str(cursor),
 		str(plan_entries.map(func(e): return [e.surface_id, e.side])), var_to_str(flags), skey]
@@ -133,6 +137,7 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 	# not aligned, even on identical geometry)
 	var init_flags := _flags_key(flags)
 	var cur_flags := init_flags
+	var ghost: bool = flags.get(BeamScene.GHOST) == true
 	for i in events.size():
 		var e: BeamSolver.Event = events[i]
 		var fid := _frame_id(stack, frames, e.epoch, cur_flags, init_flags)
@@ -159,6 +164,7 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 			if not is_inf(s.start.x) and not is_inf(s.end.x):
 				s.is_arc_step = not e.beam.kappa.is_zero()
 			s.ray = aim
+			s.ghost = ghost
 			s.est_error = errs[i] if i < errs.size() else -1.0
 			s.precision_bits = bits
 			path.steps.append(s)
@@ -182,6 +188,7 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 				path.targets_hit[surf.id] = true
 		if e.kind == "hit":
 			cur_flags = _flags_key(e.flags)
+			ghost = e.flags.get(BeamScene.GHOST) == true
 		if e.kind == "cursor":
 			path.cursor_index = path.steps.size()
 		if e.kind == "max":

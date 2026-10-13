@@ -7,11 +7,18 @@ const BLOCK_COLOR := Color.RED
 const REFLECTION_COLOR := Color.BLUE
 const INVERSION_COLOR := Color.PURPLE
 const PASSTHROUGH_COLOR := Color.GRAY
-const GHOST_TOGGLER_COLOR := Color.GRAY   # Stage 86 stub
-const FLAG_TOGGLER_COLOR := Color.GRAY
+const GHOST_TOGGLER_COLOR := Color(0.75, 0.95, 1.0)
+const FLAG_TOGGLER_COLOR := Color(1.0, 0.85, 0.2)
 
-static func config_color(_config: SideConfig) -> Color:
-	return PASSTHROUGH_COLOR
+# A side's colour: its effect's, or a toggler's (a pass with a state change).
+static func config_color(config: SideConfig) -> Color:
+	if config == null:
+		return PASSTHROUGH_COLOR
+	if config.effect == null:
+		if config.state_change != null:
+			return GHOST_TOGGLER_COLOR if config.state_change.key == BeamScene.GHOST else FLAG_TOGGLER_COLOR
+		return PASSTHROUGH_COLOR
+	return config.effect.get_display_color()
 
 const HOVER_COLOR := Color(1.0, 1.0, 1.0, 0.3)
 const HOVER_WIDTH := ClickDetector.CLICK_TOLERANCE
@@ -268,9 +275,7 @@ static func arc_sample(center: Vector2, radius: float, start_angle: float, span:
 	return {"position": pos, "outward": outward}
 
 func _effect_color(config: SideConfig) -> Color:
-	if config == null or config.effect == null:
-		return PASSTHROUGH_COLOR
-	return config.effect.get_display_color()
+	return config_color(config)
 
 func _add_arc_collision_shape() -> void:
 	var ctr: Vector2

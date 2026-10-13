@@ -74,16 +74,31 @@ class Surf extends RefCounted:
 		return table.values()[0]
 
 	func effect(left: bool, flags: Dictionary = {}) -> String:
+		if _ghosted(left, flags):
+			return ""
 		var e = _entry(flags)
 		if e != null:
 			return e[0] if left else e[1]
 		return left_type if left else right_type
 
 	func state_change(left: bool, flags: Dictionary = {}):
+		if _ghosted(left, flags):
+			return null
+		return _base_state(left, flags)
+
+	func _base_state(left: bool, flags: Dictionary):
 		var e = _entry(flags)
 		if e != null:
 			return e[2] if left else e[3]
 		return left_state if left else right_state
+
+	# Ghost mode (GAME_SPEC 10.6, Stage 86): while the "ghost" flag is true
+	# every side but a ghost toggler (its state change writes "ghost") is a pass.
+	func _ghosted(left: bool, flags: Dictionary) -> bool:
+		if flags.get(GHOST) != true:
+			return false
+		var ch = _base_state(left, flags)
+		return ch == null or String(ch.get("key", "")) != GHOST
 
 	# Exact circle data (cached): homogeneous center [x, y, w], radius² times
 	# w² (BigFloat), and their float64 roundings (for certified filters).
@@ -108,6 +123,8 @@ var surfaces: Array = []
 var by_id: Dictionary = {}
 
 const CATEGORICAL_TYPES := ["", "terminal", "reflection", "inversion"]
+# The reserved per-shot flag of ghost mode.
+const GHOST := "ghost"
 
 static func _state_of(cfg):
 	return null if cfg == null else cfg.get("state")

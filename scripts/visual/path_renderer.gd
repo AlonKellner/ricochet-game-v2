@@ -117,9 +117,11 @@ func cycle_display_mode() -> void:
 	print("[PathRenderer] Display mode: %s" % DISPLAY_MODE_NAMES[display_mode])
 	queue_redraw()
 
-# Stage 86 stub.
+# Ghost steps: paler and translucent.
 static func ghost_color(col: Color) -> Color:
-	return col
+	var c := col.lerp(Color.WHITE, 0.6)
+	c.a = col.a * 0.45
+	return c
 
 func _draw() -> void:
 	if display_mode == DisplayMode.MERGED:
@@ -136,7 +138,8 @@ func _draw_merged() -> void:
 		var ms: TraceStep = _merged_steps[i]
 		if ms.start == ms.end:
 			continue
-		_draw_step(ms, StepTypes.color(ms.type), not StepTypes.is_solid(ms.type))
+		var col := StepTypes.color(ms.type)
+		_draw_step(ms, ghost_color(col) if ms.ghost else col, not StepTypes.is_solid(ms.type))
 
 	_draw_endpoint_circles(_merged_steps, func(s: TraceStep) -> Color: return StepTypes.color(s.type))
 
@@ -151,6 +154,8 @@ func _draw_raw_trace(path: TracePath, base_color: Color, label_prefix: String) -
 		var col := base_color
 		if i >= cursor_idx:
 			col = Color(base_color, 0.35)
+		if step.ghost:
+			col = ghost_color(col)
 		_draw_step(step, col, step.hit == null)
 
 	_draw_endpoint_circles(path.steps, func(_s: TraceStep) -> Color: return base_color)

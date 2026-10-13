@@ -893,6 +893,7 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 	var t0 = bk.zero() if fresh else t_start
 	var skip := 0          # candidates already processed (in-place reseed)
 	var t_prev = t0
+	var fired_state := false   # a state change in the current loop (kept across in-place restarts)
 	while not w.done:
 		var cands := _candidates(w, beam, depart, fresh, t0)
 		var gaps := _gaps(w, beam, cands)
@@ -967,6 +968,7 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 				fires_state = plan_state
 			if fires_state:
 				w.flags = apply_state(w.flags, change)
+				fired_state = true
 			var e := _event(w, "hit", beam, t_prev, t, gaps[ci])
 			e.surface_id = surf.id
 			e.left = left
@@ -1030,6 +1032,11 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 			ci += 1
 		if restart:
 			continue
+		if next == null and fired_state:
+			# no effect, but the loop changed the state: the next loop on the
+			# same beam differs (e.g. a ghost toggler re-hit) -- walk it again
+			fired_state = false
+			continue
 		if next == null:
 			w.count += 1
 			if w.count <= w.max_events:
@@ -1039,6 +1046,7 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 					oe.point = bk.origin(beam)
 			w.done = true
 			return
+		fired_state = false
 		beam = next[0]
 		depart = next[1]
 		t0 = next[2]

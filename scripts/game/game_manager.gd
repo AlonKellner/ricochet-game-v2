@@ -207,7 +207,9 @@ func _on_flight_completed() -> void:
 	# trace's final flags become the game state (the checkpoint pushed at
 	# fire time keeps the previous one for undo)
 	if _pending_flags != null:
-		game_state = GameState.new(_pending_flags.duplicate(true))
+		var kept: Dictionary = _pending_flags.duplicate(true)
+		kept.erase(BeamScene.GHOST)   # ghost is per shot
+		game_state = GameState.new(kept)
 		_pending_flags = null
 		_on_state_changed()
 	if _path_renderer:

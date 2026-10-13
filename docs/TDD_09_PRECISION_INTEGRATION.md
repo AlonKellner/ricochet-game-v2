@@ -17,7 +17,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 | 83 | Projective effects (physical) + full switch-over | Done (user sign-off) |
 | 84 | Delete the legacy solver | Done (user sign-off) |
 | 85 | State flags (ConfigResolver + StateChange) | In progress (green; awaiting user sign-off) |
-| 86 | Ghost mode & toggler surfaces | Planned |
+| 86 | Ghost mode & toggler surfaces | In progress (green; awaiting user sign-off) |
 | 87 | Plannable projectives (mixed chains) | Planned |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests. The full
@@ -636,22 +636,69 @@ Scene: `scenes/test_levels/flag_switches.tscn`.
 
 ## Stage 86: Ghost mode & toggler surfaces
 
+### Overview
+**Ghost** is a reserved flag that lasts one shot.
+- `BeamTracer.trace_pair` drops it from the starting flags, and the game drops it before promoting a shot's flags. A ghost shot never leaves the game ghosted.
+- **Togglers:** a ghost toggler is a pass side with a `ghost` toggle.
+- **While ghosted, everything else passes,** together with its state change: mirrors, inversions, portals, projectives, terminals and room walls. Togglers still fire.
+- **Loops:** a loop around the beam that changed the state is walked again (oracle and solver). A ghost arrow leaving through a wall therefore wraps through infinity, re-enters through the opposite wall, and materializes at the next toggler, or at the same one a loop later. A loop that changed nothing ends the trace as before, and MAX_HITS bounds everything.
+- **Rendering:** ghost steps are drawn paler and translucent. Ghost togglers are pale cyan and flag togglers yellow.
+- **Levels:** the export is `ghost_toggler_lines`. The demo scene is `scenes/test_levels/ghost_room.tscn`.
+
+This follows your clarifications, which replace the original Stage 86 plan where they differ:
+- ghost is per shot;
+- a level has several togglers;
+- walls react;
+- ghost arrows loop through infinity.
+
+**Plan entries inside a ghost stretch** resolve to a pass under forward simulation and are consumed without a frame change. Refusing them in the plan UI, as the original plan proposed, is not implemented.
+
+**Oracle data:** `bench/fixtures/stage86_ghost.json` (`gen_fixtures_stage86.py`, 7 scenarios).
+
 ### Unit Tests Added (written first)
 - `test_ghost_toggler_toggles_flag`
 - `test_ghost_passes_everything`
 - `test_ghost_ends_at_next_toggler`
-- `test_ghost_without_second_toggler_terminates`
-- `test_ghost_steps_flagged`
-- `test_plan_entry_inside_ghost_stretch_invalid`
+- `test_ghost_loops_through_infinity`
 - `test_planned_and_physical_agree_through_ghost`
+- `test_plan_entry_inside_ghost_stretch_is_a_pass`
+- `test_fast_twin_ghost`
+- `test_ghost_steps_flagged`
 - `test_ghost_toggler_rendering`
+- `test_ghost_room_demo`
+- `test_ghost_is_per_shot`
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
-- [ ] After entering ghost mode the path goes through mirrors and walls, and
-  returns to normal at the next toggler.
-- [ ] Ghosted segments look distinct.
-- [ ] The plan refuses surfaces inside a ghost stretch.
-- [ ] The arrow flies the ghost path.
+Scene: `scenes/test_levels/ghost_room.tscn`.
+- **Layout:**
+  - the player is at (900, 540);
+  - the ghost togglers are the pale vertical lines at x = 1000 (A) and x = 650 (B);
+  - a block stands at x = 1100;
+  - the blue diagonal mirror is near x = 750.
+- [ ] **Shooting right through A:** the path turns pale, crosses the block and the right room wall, and leaves the screen. It comes back from the left edge, crosses the left room wall, and turns solid again at B. The mirror then reflects it down to the bottom wall.
+- [ ] **The arrow** flies the same path (out of the screen and back).
+- [ ] **Ghost is per shot:** the next shot starts solid, and after any shot the game is not ghosted.
+- [ ] **Planning:** clicking A and B into the plan keeps the preview aligned through the ghost stretch.
+
+### Validation Summary
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Red tests fail for the right reason | [x] | 9 failed on assertions with stubs (commit `dd343a2`) |
+| All unit tests pass | [x] | Full suite: 619 tests, plus every sweep shard |
+| Oracle fixtures (both tiers) and fast twin | [x] | 7 scenarios at f64 and 4 limbs; FastSolver bit-identical; earlier oracle data unchanged |
+| Sweeps, including ghost_room | [x] | Zero violations |
+| Stage complete | [ ] | Awaiting user sign-off |
+
+### Files Modified/Created
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `scripts/math/precision/{beam_scene,beam_solver,beam_tracer}.gd` | Modify | Ghost resolution; loop again after a state change; ghost steps; per-shot start |
+| `scripts/math/trace_step.gd` | Modify | `ghost` |
+| `scripts/game/{level_settings,game_manager,surface_node}.gd`, `scripts/visual/path_renderer.gd` | Modify | Export; per-shot promotion; toggler colours; ghost drawing |
+| `docs/research/oracle/{trace2,gen_fixtures_stage86}.py`, `bench/fixtures/stage86_ghost.json` | Modify/Create | Spec and fixtures |
+| `scenes/test_levels/ghost_room.tscn`, `tests/test_stage86_ghost.gd` | Create | Demo and specification |
 
 ---
 
