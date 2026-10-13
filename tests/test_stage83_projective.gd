@@ -87,8 +87,13 @@ func test_projective_straight_beam_exact():
 			if ev[i - 1].kind == "hit" and ev[i - 1].applied and ev[i - 1].projective:
 				assert_true(ev[i].beam.kappa.is_zero(), "%s: the beam after a projective is exactly straight" % name)
 
-func test_planned_passes_projectives_until_87():
+# Stage 87 inverted this (it was test_planned_passes_projectives_until_87):
+# a projective plan entry is applied in PLANNED mode (fixture regenerated).
+func test_planned_applies_projective():
 	_check_fixture("planned_passes_projective")
+	var ev := _walk("planned_passes_projective", NumCtx.f64())
+	assert_true(ev.any(func(e): return e.kind == "hit" and e.surface_id == 5 and e.applied and e.projective),
+		"the planned projective entry is applied")
 
 func test_degenerate_inputs_native():
 	for name in ["player_at_inversion_center", "player_at_inversion_center_planned",

@@ -52,6 +52,10 @@ static func project(beam: HPBeam, t, surf: BeamScene.Surf, left: bool, h_exact: 
 	var ex := axis.neg() if flip else axis
 	return HPBeam.make(h, ex.unit(), beam.kappa.sub(beam.kappa))
 
+# Stage 87 stub.
+static func back_propagate(_surf: BeamScene.Surf, _left: bool, _X: CN):
+	return null
+
 static func _num_like(x, f: float):
 	if x is F64Num:
 		return F64Num.of(f)

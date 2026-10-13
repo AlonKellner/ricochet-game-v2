@@ -13,8 +13,9 @@ fixed normal (directional). The sign is exact: "through" exits to the far side
 (sign(exit . grad) = sign(dir . grad)), "back" (project_back) returns to the
 approach side; an axis tangent to the carrier (axis . grad = 0) exits along
 +axis (through) / -axis (back). The transform stack clears; the new beam
-departs the surface (departure re-hit as usual). PLANNED mode consumes a
-projective plan entry without applying it (until Stage 87).
+departs the surface (departure re-hit as usual). PLANNED mode applies a
+projective plan entry like any other (Stage 87), even off-segment; the aim is
+found by back-propagation (back_propagate: 13.3).
 
 Portals (Stage 82): surface S with rigid motion T(z) = a z + d, a = unit(cos
 theta, sin theta) of the float64 values, paired with S' = T(S) (which carries
@@ -115,7 +116,7 @@ import mpmath as mp
 
 from beam import Beam, Circle, circle_hits, cross, dot, invert_beam, invert_point
 from geometry import (LEFT, RIGHT, P, Seg, endpoint_blocked_sides, line_hits, on_segment,
-                      side_at)
+                      side_at, winding)
 
 MAX_HITS = 32
 PHYSICAL = 0
@@ -611,7 +612,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             elif walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side):
                 walk.plan_index += 1
                 eff = surf.effect(side, walk.flags)
-                do = eff if eff in TRANSFORMATIVE else None
+                do = eff if (eff in TRANSFORMATIVE or eff in PROJECTIVE) else None
                 fires_state = change is not None
             walk.flags_before = walk.flags
             if fires_state:
@@ -871,6 +872,91 @@ def _line_through_center(line, seg):
 
 # ---------------------------------------------------------------- entry points
 
+def plan_resolved(surfaces, plan, flags=None):
+    """Forward state simulation: (effect, flags before the entry) per entry."""
+    by_id = {s.id: s for s in surfaces}
+    f = dict(flags or {})
+    out = []
+    for sid, side in plan:
+        surf = by_id.get(sid)
+        if surf is None:
+            out.append((None, f))
+            continue
+        out.append((surf.effect(side, f), f))
+        ch = surf.state_change(side, f)
+        if ch is not None:
+            f = apply_state(f, ch)
+    return out
+
+
+def projective_exit(surf, side, cfg, H, axis):
+    """The exit direction at H of a projective side entered from `side`
+    (Stage 83 rule: through -> sign(exit . grad) = sign(dir . grad), back ->
+    the opposite; an axis tangent to the carrier exits along +-axis)."""
+    g = surf.seg.grad(H)
+    w = winding(surf.seg)
+    approach_pos = (side == LEFT) == (w >= 0)       # approach = -dir . grad > 0
+    dg = -1 if approach_pos else 1                   # sign(dir . grad)
+    a_g = dot(axis, g)
+    sgn = 1 if a_g == 0 else (1 if a_g > 0 else -1) * dg
+    if cfg.get("back"):
+        sgn = -sgn
+    return axis * sgn
+
+
+def back_propagate(surf, side, X, flags=None):
+    """The hit point H on a projective side from which the projected beam
+    passes through X (GAME_SPEC 13.3), on the carrier: line normal -> the
+    foot of X; circle normal -> c +- R u (u = unit(X - c)); directional ->
+    the carrier crossings of the line through X along the normal. Of two
+    candidates: the one whose exit ray reaches X directly ((X - H) . exit >
+    0), then the one nearer X. None if there is no candidate."""
+    cfg = surf.cfg(side, flags)
+    etype = cfg["type"]
+    seg = surf.seg
+    cands = []
+    if etype == "line_normal_projection":
+        D = seg.E - seg.S
+        cands = [seg.S + (dot(X - seg.S, D) / dot(D, D)) * D]
+    elif etype == "circle_normal_projection":
+        u = X - seg.c
+        if u == 0:
+            return None
+        u = u / abs(u)
+        R = mp.sqrt(seg.R2)
+        cands = [seg.c + R * u, seg.c - R * u]
+    else:
+        n = P(cfg["normal"])
+        if seg.kind == "line":
+            D = seg.E - seg.S
+            den = cross(D, n)
+            if den == 0:
+                return None
+            cands = [X - (cross(D, X - seg.S) / den) * n]
+        else:
+            # |X - s n - c|^2 = R^2
+            a = dot(n, n)
+            b = -2 * dot(n, X - seg.c)
+            c0 = dot(X - seg.c, X - seg.c) - seg.R2
+            disc = b * b - 4 * a * c0
+            if disc < 0:
+                return None
+            sq = mp.sqrt(disc)
+            cands = [X - ((-b + sq) / (2 * a)) * n, X - ((-b - sq) / (2 * a)) * n]
+
+    def axis_at(H):
+        if etype == "line_normal_projection":
+            return seg.grad(H)
+        if etype == "circle_normal_projection":
+            return H - seg.c
+        return P(cfg["normal"])
+
+    def key(H):
+        e = projective_exit(surf, side, cfg, H, axis_at(H))
+        return (0 if dot(X - H, e) > 0 else 1, abs(X - H))
+    return min(cands, key=key)
+
+
 def plan_effects(surfaces, plan, flags=None):
     """Forward state simulation (13.7): the effect each plan entry resolves
     to, under the flags left by the entries before it."""
@@ -913,10 +999,18 @@ def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="
 
 
 def aim_image(surfaces, plan, cursor, flags=None):
+    """The aim point: the cursor pulled back through the plan -- transformative
+    entries by their inverse maps, projectives by back-propagation (13.3;
+    an entry without a back-propagated point is skipped)."""
     by_id = {s.id: s for s in surfaces}
-    effs = plan_effects(surfaces, plan, flags)
+    res = plan_resolved(surfaces, plan, flags)
     z = P(cursor)
-    for (sid, side), eff in reversed(list(zip(plan, effs))):
+    for (sid, side), (eff, f) in reversed(list(zip(plan, res))):
+        if eff in PROJECTIVE:
+            H = back_propagate(by_id[sid], side, z, f)
+            if H is not None:
+                z = H
+            continue
         if eff not in TRANSFORMATIVE:
             continue
         z = map_point(z, by_id[sid], inverse=True)
@@ -940,6 +1034,8 @@ def exact_image(surfaces, cursor, plan, flags=None):
     translation portal. None for a rotation portal, or an image at infinity."""
     by_id = {s.id: s for s in surfaces}
     effs = plan_effects(surfaces, plan, flags)
+    if any(e in PROJECTIVE for e in effs):
+        return None      # a back-propagated hit point is not exact data
     X = FC(P(cursor))
     for (sid, side), eff in reversed(list(zip(plan, effs))):
         surf = by_id.get(sid)
@@ -988,6 +1084,8 @@ def fixes_cursor(surfaces, cursor, plan, flags=None):
     by_id = {s.id: s for s in surfaces}
     k = P(cursor)
     for (sid, side), eff in zip(plan, plan_effects(surfaces, plan, flags)):
+        if eff in PROJECTIVE:
+            return False
         if eff not in TRANSFORMATIVE:
             continue
         surf = by_id[sid]
