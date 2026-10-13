@@ -14,7 +14,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 | 80 | Neutral trace types, generalized beam geometry, oracle v2 | Done (awaiting doc confirmation) |
 | 81 | Reflections, partial/one-sided inversions, terminals, passes | Done (user sign-off) |
 | 82 | Portals (rigid motion) | Done (user sign-off) |
-| 83 | Projective effects (physical) + full switch-over | In progress (red tests committed) |
+| 83 | Projective effects (physical) + full switch-over | Done (user sign-off) |
 | 84 | Delete the legacy solver | Planned |
 | 85 | State flags (ConfigResolver + StateChange) | Planned |
 | 86 | Ghost mode & toggler surfaces | Planned |
@@ -415,12 +415,12 @@ This replaces legacy's `determine_side(hit + axis)` probe. That probe had an eff
   beam-solved runs.
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
-- [ ] Every playground scene behaves as before or better.
-- [ ] Projective scenes:
+- [x] Every playground scene behaves as before or better.
+- [x] Projective scenes:
   - `projective`, `projective_lines`, `projective_arcs`, `directional_lines`, `directional_arcs`;
   - through and back variants exit to the right side.
-- [ ] Standing at circle centers or aiming there causes no glitches. The path is native, with no fallback.
-- [ ] Rule changes are acceptable:
+- [x] Standing at circle centers or aiming there causes no glitches. The path is native, with no fallback.
+- [x] Rule changes are acceptable:
   - a plan containing a projective aims through its other entries (legacy ignored the whole plan);
   - circle-directional exits use the exact side rule.
 
@@ -444,7 +444,7 @@ This replaces legacy's `determine_side(hit + axis)` probe. That probe had an eff
 | Benchmarks | [x] | Ladder 161/161 and stress 40/40 |
 | Estimator calibration | [x] | Planned 98.2%, physical 99.2%, 0 missed escalations |
 | Per-frame cost (median / p90) | [x] | inversion_grid 6.5/7.9 ms; projective 2.9/7.6; projective_lines 1.5/1.8; directional_arcs 1.8/2.1; main 1.7/2.3; portals 2.3/10.4 |
-| Stage complete | [ ] | Awaiting user sign-off. |
+| Stage complete | [x] | User signed off. |
 
 **Invariant checker:**
 - **New:** `EFFECT_LAW`, `EVENT_ON_BEAM`, `BEAM_ORDER` (pure checks over solver events).
