@@ -24,7 +24,9 @@ the earlier beam is restored, resumed at T^-1 of the point hit (on S).
 
 Rules (TDD_09 "Target architecture" + "Legacy quirks"):
 - Every carrier crossing is an event (counts toward MAX_HITS = 32, as do the
-  cursor and the final origin/escape event). A trace cut by MAX_HITS ends with
+  cursor and the final origin/escape event). A full loop around the beam
+  without an effect ends the trace (escape / origin) -- unless it changed the
+  state: then the next loop differs and is walked too. A trace cut by MAX_HITS ends with
   a "max" event at the next crossing (drawn up to it, no effect).
 - PHYSICAL: an effect fires only on a fully blocked hit: on-segment interior,
   or at an endpoint where blocked sides (incl. other segments sharing the
@@ -93,6 +95,14 @@ State flags (Stage 85, GAME_SPEC 9.4 / 10.6 / 13.7):
 - Pops restore beams, not flags: re-applying the surface on top of the stack
   pops it only when the same effect fires again (an involution undone);
   flags are never restored by a pop.
+
+Ghost mode (Stage 86): the reserved flag "ghost". While it is true every side
+resolves to a pass -- mirrors, inversions, portals, projectives, terminals and
+room walls alike, their state changes included -- except ghost togglers (a
+side whose state change writes "ghost"), which still fire: a ghost arrow
+crosses everything, can leave through a wall, wrap through infinity and
+materialize at the next toggler (or at the same one, one loop later). Ghost is
+per shot: every trace starts with it false (the game never keeps it).
 """
 
 from __future__ import annotations
@@ -116,6 +126,14 @@ PROJECTIVE = ("line_normal_projection", "circle_normal_projection",
 
 
 # ---------------------------------------------------------------- scene
+
+GHOST = "ghost"
+
+
+def is_ghost_toggler(cfg):
+    """A side config whose state change writes the ghost flag."""
+    return cfg is not None and (cfg.get("state") or {}).get("key") == GHOST
+
 
 def flag_key(v):
     """Canonical table key of a flag value (JSON spelling)."""
@@ -148,7 +166,14 @@ class Surface:
     resolver: dict | None = None
 
     def cfg(self, side, flags=None):
-        """The side config under the flags."""
+        """The side config under the flags (ghost: everything but a ghost
+        toggler is a pass)."""
+        c = self._base_cfg(side, flags)
+        if (flags or {}).get(GHOST) is True and not is_ghost_toggler(c):
+            return None
+        return c
+
+    def _base_cfg(self, side, flags=None):
         if self.resolver is None:
             return self.left if side == LEFT else self.right
         table = self.resolver["table"]
@@ -552,6 +577,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
         if depart is not None:
             cands.append(((2, 0), 2, depart, t0, True))      # departure re-hit, last
         applied = False
+        fired_state = False
         ci = 0
         while ci < len(cands):
             key, _, sid, t, rehit = cands[ci]
@@ -590,6 +616,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             walk.flags_before = walk.flags
             if fires_state:
                 walk.flags = apply_state(walk.flags, change)
+                fired_state = True
             ev = Event("hit", sid, side, do is not None, do == "terminal", on_seg, pt, t, beam, rehit,
                        fires_state, walk.flags)
             walk.events.append(ev)
@@ -619,6 +646,10 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     cands.insert(j, (kc, 0, -1, tc, False))
                     if not any(k[0] == walk.cursor for k in walk.known):
                         walk.known.append((walk.cursor, tc, None))
+        if not applied and fired_state:
+            # no effect, but the loop changed the state: the next loop on the
+            # same beam differs (e.g. a ghost toggler re-hit) -- walk it again
+            continue
         if not applied:
             # nothing fired on the full loop: a line escapes through infinity;
             # a circle closes at its departure point (beam.at(t0)) and repeats

@@ -117,6 +117,10 @@ func cycle_display_mode() -> void:
 	print("[PathRenderer] Display mode: %s" % DISPLAY_MODE_NAMES[display_mode])
 	queue_redraw()
 
+# Stage 86 stub.
+static func ghost_color(col: Color) -> Color:
+	return col
+
 func _draw() -> void:
 	if display_mode == DisplayMode.MERGED:
 		_draw_merged()

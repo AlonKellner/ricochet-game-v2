@@ -32,6 +32,8 @@ extends Node2D
 @export var toggle_lines: Array[Vector4] = []
 @export var gate_lines: Array[Vector4] = []
 @export var flag_mirror_lines: Array[Vector4] = []
+# Ghost togglers (Stage 86 stub).
+@export var ghost_toggler_lines: Array[Vector4] = []
 
 var surfaces: Array[Surface] = []
 

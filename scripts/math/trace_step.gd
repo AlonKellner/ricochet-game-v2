@@ -15,6 +15,7 @@ var surface_id: int = -1
 var hit_side: int = -1
 var hit_on_segment: bool = false
 var after_portal: bool = false
+var ghost: bool = false         # Stage 86 stub
 var est_error: float = -1.0     # estimated px error of this step's end (BeamTracer), -1 = unknown
 var precision_bits: int = 0     # arithmetic precision the step was computed at (0 = unknown)
 

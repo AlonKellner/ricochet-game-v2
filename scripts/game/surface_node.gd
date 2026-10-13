@@ -7,6 +7,11 @@ const BLOCK_COLOR := Color.RED
 const REFLECTION_COLOR := Color.BLUE
 const INVERSION_COLOR := Color.PURPLE
 const PASSTHROUGH_COLOR := Color.GRAY
+const GHOST_TOGGLER_COLOR := Color.GRAY   # Stage 86 stub
+const FLAG_TOGGLER_COLOR := Color.GRAY
+
+static func config_color(_config: SideConfig) -> Color:
+	return PASSTHROUGH_COLOR
 
 const HOVER_COLOR := Color(1.0, 1.0, 1.0, 0.3)
 const HOVER_WIDTH := ClickDetector.CLICK_TOLERANCE
