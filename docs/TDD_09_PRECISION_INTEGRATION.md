@@ -16,8 +16,8 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 | 82 | Portals (rigid motion) | Done (user sign-off) |
 | 83 | Projective effects (physical) + full switch-over | Done (user sign-off) |
 | 84 | Delete the legacy solver | Done (user sign-off) |
-| 85 | State flags (ConfigResolver + StateChange) | In progress (green; awaiting user sign-off) |
-| 86 | Ghost mode & toggler surfaces | In progress (green; awaiting user sign-off) |
+| 85 | State flags (ConfigResolver + StateChange) | Done (user sign-off) |
+| 86 | Ghost mode & toggler surfaces | Done (user sign-off) |
 | 87 | Plannable projectives (mixed chains) | Planned |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests. The full
@@ -603,13 +603,13 @@ Surfaces whose behaviour depends on game-state flags, and sides that write flags
 Scene: `scenes/test_levels/flag_switches.tscn`.
 - **Toggler and gate:** the toggler is the vertical line at x = 800; the gate is at x = 1100.
   - Initially closed, the gate is drawn as a block.
-  - [ ] A shot through the toggler opens the gate within the same preview: the beam passes it.
-  - [ ] After firing, the gate is drawn open.
-  - [ ] The next preview through the toggler closes it again and blocks.
+  - [x] A shot through the toggler opens the gate within the same preview: the beam passes it.
+  - [x] After firing, the gate is drawn open.
+  - [x] The next preview through the toggler closes it again and blocks.
 - **Flag mirror:** the diagonal line near the top.
-  - [ ] It reflects only while the flag is true, and it is plannable only then.
-- [ ] A plan through the toggler (click it) reaches the cursor.
-- [ ] Undo restores the previous flags and the drawing.
+  - [x] It reflects only while the flag is true, and it is plannable only then.
+- [x] A plan through the toggler (click it) reaches the cursor.
+- [x] Undo restores the previous flags and the drawing.
 
 ### Validation Summary
 
@@ -619,7 +619,7 @@ Scene: `scenes/test_levels/flag_switches.tscn`.
 | All unit tests pass | [x] | Full suite: 608 tests, plus every sweep shard (`run_tests_parallel.sh`, 5 min) |
 | Oracle fixtures (both tiers) and fast twin | [x] | 11 scenarios at f64 and 4 limbs; FastSolver bit-identical, flags included |
 | Sweeps, including flag_switches | [x] | Zero violations. The first run found post-cursor divergence on `flag_switches`, fixed by frames that include the state |
-| Stage complete | [ ] | Awaiting user sign-off |
+| Stage complete | [x] | User signed off |
 
 ### Files Modified/Created
 
@@ -675,10 +675,10 @@ Scene: `scenes/test_levels/ghost_room.tscn`.
   - the ghost togglers are the pale vertical lines at x = 1000 (A) and x = 650 (B);
   - a block stands at x = 1100;
   - the blue diagonal mirror is near x = 750.
-- [ ] **Shooting right through A:** the path turns pale, crosses the block and the right room wall, and leaves the screen. It comes back from the left edge, crosses the left room wall, and turns solid again at B. The mirror then reflects it down to the bottom wall.
-- [ ] **The arrow** flies the same path (out of the screen and back).
-- [ ] **Ghost is per shot:** the next shot starts solid, and after any shot the game is not ghosted.
-- [ ] **Planning:** clicking A and B into the plan keeps the preview aligned through the ghost stretch.
+- [x] **Shooting right through A:** the path turns pale, crosses the block and the right room wall, and leaves the screen. It comes back from the left edge, crosses the left room wall, and turns solid again at B. The mirror then reflects it down to the bottom wall.
+- [x] **The arrow** flies the same path (out of the screen and back).
+- [x] **Ghost is per shot:** the next shot starts solid, and after any shot the game is not ghosted.
+- [x] **Planning:** clicking A and B into the plan keeps the preview aligned through the ghost stretch.
 
 ### Validation Summary
 
@@ -688,7 +688,7 @@ Scene: `scenes/test_levels/ghost_room.tscn`.
 | All unit tests pass | [x] | Full suite: 619 tests, plus every sweep shard |
 | Oracle fixtures (both tiers) and fast twin | [x] | 7 scenarios at f64 and 4 limbs; FastSolver bit-identical; earlier oracle data unchanged |
 | Sweeps, including ghost_room | [x] | Zero violations |
-| Stage complete | [ ] | Awaiting user sign-off |
+| Stage complete | [x] | User signed off |
 
 ### Files Modified/Created
 
