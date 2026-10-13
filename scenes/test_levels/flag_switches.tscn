@@ -14,7 +14,7 @@ build_room = true
 state_key = "open"
 toggle_lines = [Vector4(800, 300, 800, 780)]
 gate_lines = [Vector4(1100, 300, 1100, 780)]
-flag_mirror_lines = [Vector4(950, 260, 1250, 380)]
+flag_mirror_lines = [Vector4(830, 270, 1070, 290)]
 
 [node name="Background" type="ColorRect" parent="."]
 offset_right = 1920.0

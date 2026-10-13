@@ -25,7 +25,7 @@ func _surface_name(surface_id: int, surfaces: Array) -> String:
 	for surf in surfaces:
 		if surf.id == surface_id:
 			var config: SideConfig = surf.active_side_config(Side.Value.LEFT, GameState.new())
-			if config.effect != null:
+			if config != null and config.effect != null:
 				var dn: String = config.effect.get_display_name()
 				if dn == "reflect":
 					return "Mirror %d" % surface_id

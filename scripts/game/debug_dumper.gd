@@ -23,8 +23,9 @@ static func dump(gm) -> void:
 
 	var surfaces: Array = gm._get_surfaces()
 	lines.append("Surfaces: %d" % surfaces.size())
+	lines.append("Game state flags: %s" % str(gm.game_state.flags))
 	for surf in surfaces:
-		var state := GameState.new()
+		var state: GameState = gm.game_state
 		var left: SideConfig = surf.active_side_config(Side.Value.LEFT, state)
 		var right: SideConfig = surf.active_side_config(Side.Value.RIGHT, state)
 		var left_type := _effect_name(left.effect if left else null)
@@ -63,7 +64,7 @@ static func dump(gm) -> void:
 		var p: PlanManager = path_renderer._get_plan()
 		if p and not p.is_empty():
 			plan_entries = p.entries
-		var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, plan_entries)
+		var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, plan_entries, path_renderer.get_flags())
 		if pair != null and not pair.result.planned.is_empty():
 			# the shot's aim: the exact initial tangent of the planned beam
 			var b0: HPBeam = pair.result.planned[0].beam

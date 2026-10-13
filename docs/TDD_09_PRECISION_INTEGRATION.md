@@ -16,7 +16,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 | 82 | Portals (rigid motion) | Done (user sign-off) |
 | 83 | Projective effects (physical) + full switch-over | Done (user sign-off) |
 | 84 | Delete the legacy solver | Done (user sign-off) |
-| 85 | State flags (ConfigResolver + StateChange) | Planned |
+| 85 | State flags (ConfigResolver + StateChange) | In progress (green; awaiting user sign-off) |
 | 86 | Ghost mode & toggler surfaces | Planned |
 | 87 | Plannable projectives (mixed chains) | Planned |
 
@@ -544,24 +544,93 @@ The beam solver is the only solver. The legacy frame-based machinery is deleted:
 
 ## Stage 85: State flags (§9.4 ConfigResolver + §10.6 StateChange)
 
+### Overview
+Surfaces whose behaviour depends on game-state flags, and sides that write flags.
+
+**Resolvers:**
+- `FixedResolver` gives one config per side.
+- `CategoricalResolver` maps a flag's value to the configs of both sides, keyed by the value's JSON spelling (`StateChange.flag_key`, so `2` and `2.0` are the same key). A missing key or value falls back to `DEFAULT`, then to the first entry, with a warning.
+- Categorical sides are pass, terminal, reflection or inversion. Portals and projectives are fixed.
+
+**State changes:**
+- `StateChange` has two ops: `SET` a value, or `TOGGLE` the flag's truth value (a missing key counts as false). Any key may be written.
+- A change fires when its side fires, the same rule as effects:
+  - PHYSICAL: a fully blocked hit.
+  - PLANNED: the consumed plan entry.
+- The side's config is resolved before its own change is applied. Along a trace, the last writer wins.
+- PHYSICAL plan bookkeeping counts a hit that fires only a state change.
+
+**Planning:** forward state simulation (§13.7). Each plan entry resolves under the flags left by the entries before it. The anchor chain, the exact aim image and the fixed-point rule all use it. An entry that resolves to a pass is consumed without a frame change.
+
+**Divergence:** the physical trace stays on the anchored path only while it fires the same effects *and* the same state changes as the plan.
+
+**Pops** restore beams, not flags. A pop also needs the same map: an involution undone.
+
+**Frames include the state:** a frame is identified by (epoch, transform stack, flags), so a state change starts a new frame. A toggler fired only by the physical trace (not planned) therefore shows as a divergence where it happens, not after the cursor. When the toggler is in the plan, both traces toggle and stay aligned.
+
+**Cursor after a frame-less completion:** a plan completed without a frame change makes the cursor a candidate on the same beam when it lies ahead. Without this, a plan ending at a toggler, or at a door that resolves to a pass, never reaches the cursor. The same rule now also covers an unapplied projective entry (legacy quirk 3: the cursor part; applying projectives remains Stage 87).
+
+**Game:**
+- The preview starts from the game state's flags.
+- Firing keeps the physical trace's final flags; they become the game state when the arrow lands.
+- The checkpoint taken at fire time restores them on undo.
+- Surfaces redraw and click detection resolve under the current state.
+- The F12 dump prints the flags, and each event's state change.
+
+**Level exports:** `state_key`, `toggle_lines` (pass and toggle, plannable), `gate_lines` (block unless the flag is true) and `flag_mirror_lines` (mirror only while the flag is true). The test scene is `scenes/test_levels/flag_switches.tscn`, which the sweeps pick up.
+
+**Oracle data:** `bench/fixtures/stage85_flags.json` (`gen_fixtures_stage85.py`, 11 scenarios).
+
 ### Unit Tests Added (written first)
-- `test_fixed_resolver_default`
-- `test_categorical_resolver_lookup_and_DEFAULT_fallback`
-- `test_active_side_config_delegates`
-- `test_set_and_toggle_ops`
-- `test_state_change_fires_only_when_side_fires`
-- `test_last_writer_wins_along_trace`
-- `test_effect_and_state_change_coexist`
-- `test_categorical_mirror_switches_mid_trace`
-- `test_planned_applies_state_on_consumed_entry`
-- `test_planner_forward_state_simulation`
-- `test_state_promoted_after_shot_and_undo_restores`
-- `test_pops_restore_beams_not_flags`
+- `test_stage85_resolvers.gd`:
+  - `test_fixed_resolver_default`
+  - `test_categorical_resolver_lookup_and_DEFAULT_fallback`
+  - `test_active_side_config_delegates`
+- `test_stage85_state_changes.gd`:
+  - `test_set_and_toggle_ops`
+  - `test_state_change_fires_only_when_side_fires`
+  - `test_last_writer_wins_along_trace`
+  - `test_effect_and_state_change_coexist`
+  - `test_categorical_mirror_switches_mid_trace`
+  - `test_planned_applies_state_on_consumed_entry`
+  - `test_planner_forward_state_simulation`
+  - `test_pops_restore_beams_not_flags`
+  - `test_fast_twin_flags`
+  - `test_state_promoted_after_shot_and_undo_restores`
+  - `test_state_change_starts_new_frame` (added after the sweep found post-cursor divergence on `flag_switches`)
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
-- [ ] Hitting a toggler visibly changes a later surface's behaviour in the
-  preview, and the plan respects it.
-- [ ] State persists after firing; undo restores it.
+Scene: `scenes/test_levels/flag_switches.tscn`.
+- **Toggler and gate:** the toggler is the vertical line at x = 800; the gate is at x = 1100.
+  - Initially closed, the gate is drawn as a block.
+  - [ ] A shot through the toggler opens the gate within the same preview: the beam passes it.
+  - [ ] After firing, the gate is drawn open.
+  - [ ] The next preview through the toggler closes it again and blocks.
+- **Flag mirror:** the diagonal line near the top.
+  - [ ] It reflects only while the flag is true, and it is plannable only then.
+- [ ] A plan through the toggler (click it) reaches the cursor.
+- [ ] Undo restores the previous flags and the drawing.
+
+### Validation Summary
+
+| Check | Status | Notes |
+|-------|--------|-------|
+| Red tests fail for the right reason | [x] | 12 failed on assertions with stubs (commit `b59474f`) |
+| All unit tests pass | [x] | Full suite: 608 tests, plus every sweep shard (`run_tests_parallel.sh`, 5 min) |
+| Oracle fixtures (both tiers) and fast twin | [x] | 11 scenarios at f64 and 4 limbs; FastSolver bit-identical, flags included |
+| Sweeps, including flag_switches | [x] | Zero violations. The first run found post-cursor divergence on `flag_switches`, fixed by frames that include the state |
+| Stage complete | [ ] | Awaiting user sign-off |
+
+### Files Modified/Created
+
+| File | Action | Purpose |
+|------|--------|---------|
+| `scripts/game/{state_change,config_resolver,fixed_resolver,categorical_resolver}.gd` | Create | StateChange and the resolvers |
+| `scripts/game/{surface,level_settings,game_manager,surface_node,click_detector,plan_hud,debug_dumper}.gd` | Modify | Resolver on Surface; exports; promotion and undo; state-aware drawing and clicking; dump |
+| `scripts/math/precision/{beam_scene,beam_solver,fast_solver,error_estimate,precision_ladder,beam_tracer}.gd` | Modify | Categorical tables and state changes in scene defs; flags in the walk; forward simulation; divergence and pop rules; flags through every entry point; `Pair.final_flags` |
+| `scripts/visual/path_renderer.gd`, `scripts/testing/invariant_checker.gd` | Modify | Traces from the game state's flags |
+| `docs/research/oracle/{trace2,gen_fixtures_stage85}.py`, `bench/fixtures/stage85_flags.json` | Modify/Create | Spec and fixtures |
+| `scenes/test_levels/flag_switches.tscn`, `tests/test_stage85_*.gd` | Create | Test level and specification |
 
 ---
 

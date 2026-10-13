@@ -16,6 +16,7 @@ var click_detector := ClickDetector.new()
 var game_state := GameState.new()
 var targets_hit: Dictionary = {}
 var _checkpoints := CheckpointStack.new()
+var _pending_flags = null   # the fired shot's final flags, promoted when it lands
 var _hovered_node: Node2D = null
 var _hover_partner_node: Node2D = null
 
@@ -61,7 +62,7 @@ func _update_hover() -> void:
 		return
 
 	var surfaces := _get_surfaces()
-	var result := click_detector.detect_click(_cursor.global_position, surfaces)
+	var result := click_detector.detect_click(_cursor.global_position, surfaces, game_state)
 
 	_clear_all_hover()
 
@@ -145,7 +146,7 @@ func _handle_plan_click(is_right_click: bool) -> void:
 	if not _cursor:
 		return
 	var surfaces := _get_surfaces()
-	var result := click_detector.detect_click(_cursor.global_position, surfaces)
+	var result := click_detector.detect_click(_cursor.global_position, surfaces, game_state)
 
 	if result.is_empty():
 		if not is_right_click:
@@ -177,11 +178,12 @@ func _try_fire() -> void:
 	var surfaces := _get_surfaces()
 	var entries: Array = plan.entries if not plan.is_empty() else []
 	var path: TracePath
-	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, entries)
+	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, entries, game_state.flags)
 	if pair == null:
 		_checkpoints.pop()
 		return
 	path = pair.physical
+	_pending_flags = pair.final_flags
 
 	if _path_renderer:
 		_path_renderer.modulate.a = 0.25
@@ -197,6 +199,13 @@ func _try_fire() -> void:
 
 func _on_flight_completed() -> void:
 	get_tree().paused = false
+	# the shot's state changes take effect (GAME_SPEC 10.6): the physical
+	# trace's final flags become the game state (the checkpoint pushed at
+	# fire time keeps the previous one for undo)
+	if _pending_flags != null:
+		game_state = GameState.new(_pending_flags.duplicate(true))
+		_pending_flags = null
+		_on_state_changed()
 	if _path_renderer:
 		_path_renderer.modulate.a = 1.0
 
@@ -222,9 +231,14 @@ func _restore_checkpoint(data: CheckpointData) -> void:
 		_player.global_position = data.player_position
 		_player.velocity = data.player_velocity
 	game_state = data.game_state.copy()
+	_on_state_changed()
 	plan.restore_from(data.plan_entries)
 	targets_hit = data.targets_hit.duplicate()
 	_refresh_ui()
+
+func _on_state_changed() -> void:
+	if is_inside_tree():
+		get_tree().call_group("surface_nodes", "queue_redraw")
 
 func _get_surfaces() -> Array:
 	if _level_settings and "surfaces" in _level_settings:

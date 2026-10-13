@@ -78,7 +78,8 @@ State flags (Stage 85, GAME_SPEC 9.4 / 10.6 / 13.7):
 - A surface's side config is resolved under the current flags: fixed
   (left / right), or categorical ("resolver": {key, table}): the table entry
   of flag_key(flags[key]); a missing key or value falls back to the "DEFAULT"
-  entry, then to the first entry. Portals are fixed (never in a table).
+  entry, then to the first entry. Categorical sides are pass, terminal,
+  reflection or inversion (portals and projectives are fixed).
 - A side config may carry a state change {"key", "op": "set" | "toggle",
   "value"}; toggle stores the negation of the current truth value (missing
   key = false).
@@ -204,7 +205,8 @@ def surface_from_json(d):
         assert res["table"], "a categorical resolver needs a table"
         for entry in res["table"].values():
             for cfg in (entry.get("left"), entry.get("right")):
-                assert cfg is None or cfg.get("type") != "portal", "portals are fixed (not categorical)"
+                assert cfg is None or cfg.get("type", "pass") in ("pass", "terminal", "reflection", "inversion"), \
+                    "categorical sides: pass / terminal / reflection / inversion (portals, projectives are fixed)"
     return Surface(sid, seg, d.get("left"), d.get("right"), bool(d.get("is_target")), res)
 
 

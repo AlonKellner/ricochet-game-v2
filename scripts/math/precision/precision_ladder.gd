@@ -43,14 +43,16 @@ class Climb extends RefCounted:
 # round them to float32). max_planned / max_physical: event limits (MAX_HITS).
 # Degenerate inputs (no anchored construction) return an empty Result.
 # fsc: the float64 scene of defs (FastSolver.Scene.from_defs), if cached.
+# flags: the trace's initial state flags (the game state's).
 static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
-		max_planned: int, max_physical: int, tol: float, verify: bool = false, fsc: FastSolver.Scene = null) -> Result:
+		max_planned: int, max_physical: int, tol: float, verify: bool = false, fsc: FastSolver.Scene = null,
+		flags: Dictionary = {}) -> Result:
 	var t0 := Time.get_ticks_usec()
 	var r := Result.new()
 	if fsc == null:
 		fsc = FastSolver.Scene.from_defs(defs)
 	# ---- planned (float64 pass)
-	var sq := ErrorEstimate.planned_sensitivity(defs, player, cursor, plan, max_planned, fsc)
+	var sq := ErrorEstimate.planned_sensitivity(defs, player, cursor, plan, max_planned, fsc, flags)
 	if sq.events.is_empty():
 		return r
 	var est_q := ErrorEstimate.estimate(sq, NumCtx.f64().eps())
@@ -59,7 +61,7 @@ static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
 		est_q[i] = maxf(est_q[i], res_q[i])
 	# ---- physical
 	var t1 := Time.get_ticks_usec()
-	var cp := _solve_physical(r, defs, player, cursor, plan, max_physical, tol, verify, fsc)
+	var cp := _solve_physical(r, defs, player, cursor, plan, max_physical, tol, verify, fsc, flags)
 	var t2 := Time.get_ticks_usec()
 	r.usec_physical = t2 - t1
 	# ---- planned
@@ -78,7 +80,7 @@ static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
 		var planned_fn := func(limbs: int) -> Array:
 			var ctx := NumCtx.with_limbs(limbs)
 			return BeamSolver.planned(ctx, BeamScene.from_defs(ctx, defs),
-				ctx.cn(player[0], player[1]), ctx.cn(cursor[0], cursor[1]), plan, max_planned)
+				ctx.cn(player[0], player[1]), ctx.cn(cursor[0], cursor[1]), plan, max_planned, flags)
 		var cq := _decide(sq, est_q, tol, verify, planned_fn, defs, fsc)
 		r.planned = cq.events
 		r.planned_err = cq.err
@@ -90,22 +92,22 @@ static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
 # The physical trace alone (no planned pass): physical, physical_err,
 # physical_tier, converged, tiers_tried and physical_sens of the Result.
 static func solve_physical(defs: Array, player: Array, cursor: Array, plan: Array,
-		max_physical: int, tol: float, fsc: FastSolver.Scene = null) -> Result:
+		max_physical: int, tol: float, fsc: FastSolver.Scene = null, flags: Dictionary = {}) -> Result:
 	var t0 := Time.get_ticks_usec()
 	var r := Result.new()
 	if fsc == null:
 		fsc = FastSolver.Scene.from_defs(defs)
-	_solve_physical(r, defs, player, cursor, plan, max_physical, tol, false, fsc)
+	_solve_physical(r, defs, player, cursor, plan, max_physical, tol, false, fsc, flags)
 	r.usec_physical = Time.get_ticks_usec() - t0
 	r.usec = r.usec_physical
 	return r
 
 static func _solve_physical(r: Result, defs: Array, player: Array, cursor: Array, plan: Array,
-		max_physical: int, tol: float, verify: bool, fsc: FastSolver.Scene) -> Climb:
-	var sp := ErrorEstimate.physical_sensitivity(defs, player, cursor, plan, max_physical, fsc)
+		max_physical: int, tol: float, verify: bool, fsc: FastSolver.Scene, flags: Dictionary = {}) -> Climb:
+	var sp := ErrorEstimate.physical_sensitivity(defs, player, cursor, plan, max_physical, fsc, flags)
 	var est_p := ErrorEstimate.estimate(sp, NumCtx.f64().eps())
 	var physical_fn := func(limbs: int) -> Array:
-		return _physical_at(limbs, defs, player, cursor, plan, max_physical)
+		return _physical_at(limbs, defs, player, cursor, plan, max_physical, flags)
 	var cp := _decide(sp, est_p, tol, verify, physical_fn, defs, fsc)
 	r.physical = cp.events
 	r.physical_err = cp.err
@@ -128,7 +130,7 @@ static func _same_structure(a: Array, b: Array, n: int) -> bool:
 	for i in n:
 		var x: BeamSolver.Event = a[i]
 		var y: BeamSolver.Event = b[i]
-		if x.kind != y.kind or x.surface_id != y.surface_id or x.left != y.left or x.applied != y.applied:
+		if x.kind != y.kind or x.surface_id != y.surface_id or x.left != y.left or x.applied != y.applied or x.state != y.state:
 			return false
 	return true
 
@@ -207,10 +209,11 @@ static func climb(limbs: int, first_events: Array, tol: float, compute: Callable
 		ti += 1
 	return c
 
-static func _physical_at(limbs: int, defs: Array, player: Array, cursor: Array, plan: Array, max_physical: int) -> Array:
+static func _physical_at(limbs: int, defs: Array, player: Array, cursor: Array, plan: Array, max_physical: int,
+		flags: Dictionary = {}) -> Array:
 	var ctx := NumCtx.with_limbs(limbs)
 	return BeamSolver.physical(ctx, BeamScene.from_defs(ctx, defs),
-		ctx.cn(player[0], player[1]), ctx.cn(cursor[0], cursor[1]), plan, max_physical)
+		ctx.cn(player[0], player[1]), ctx.cn(cursor[0], cursor[1]), plan, max_physical, flags)
 
 static func _worst(a: Array) -> float:
 	var w := 0.0

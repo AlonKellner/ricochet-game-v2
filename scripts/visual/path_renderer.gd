@@ -57,7 +57,7 @@ func _compute_trace() -> void:
 	var bounds := VisualConverter.DEFAULT_BOUNDS
 	# The precision-converging beam solver; null only for player = cursor (no
 	# line, UX7).
-	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, plan_entries)
+	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, plan_entries, get_flags())
 	last_solver = "beam"
 	if pair == null:
 		last_beam_result = null
@@ -89,6 +89,14 @@ static func build_physical_hits(path: TracePath) -> Dictionary:
 		var has_continuation := i < path.steps.size() - 1
 		result[s.surface_id].append({"side": s.hit_side, "on_segment": s.hit_on_segment, "has_continuation": has_continuation})
 	return result
+
+# The game state's flags (the traces start from them); none without a
+# GameManager.
+func get_flags() -> Dictionary:
+	var game_mgr := get_node_or_null("../GameManager")
+	if game_mgr and "game_state" in game_mgr:
+		return game_mgr.game_state.flags
+	return {}
 
 func _get_plan() -> PlanManager:
 	if plan_override != null:

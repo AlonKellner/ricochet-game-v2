@@ -53,8 +53,37 @@ class Surf extends RefCounted:
 	var vy: float
 	var full: bool = false
 
-	func effect(left: bool) -> String:
+	# state changes per side ({key, op, value} or null), and the categorical
+	# table (flag_key -> [left_type, right_type, left_state, right_state])
+	var left_state = null
+	var right_state = null
+	var state_key: String = ""
+	var table: Dictionary = {}
+
+	# the table entry under the flags (StateChange.flag_key; "DEFAULT", then the
+	# first entry), null for a fixed surface
+	func _entry(flags: Dictionary):
+		if state_key == "":
+			return null
+		if flags.has(state_key):
+			var k := StateChange.flag_key(flags[state_key])
+			if table.has(k):
+				return table[k]
+		if table.has("DEFAULT"):
+			return table["DEFAULT"]
+		return table.values()[0]
+
+	func effect(left: bool, flags: Dictionary = {}) -> String:
+		var e = _entry(flags)
+		if e != null:
+			return e[0] if left else e[1]
 		return left_type if left else right_type
+
+	func state_change(left: bool, flags: Dictionary = {}):
+		var e = _entry(flags)
+		if e != null:
+			return e[2] if left else e[3]
+		return left_state if left else right_state
 
 	# Exact circle data (cached): homogeneous center [x, y, w], radius² times
 	# w² (BigFloat), and their float64 roundings (for certified filters).
@@ -77,6 +106,11 @@ class Surf extends RefCounted:
 
 var surfaces: Array = []
 var by_id: Dictionary = {}
+
+const CATEGORICAL_TYPES := ["", "terminal", "reflection", "inversion"]
+
+static func _state_of(cfg):
+	return null if cfg == null else cfg.get("state")
 
 static func _type_of(cfg) -> String:
 	if cfg == null:
@@ -119,6 +153,16 @@ static func from_defs(ctx: NumCtx, defs: Array) -> BeamScene:
 			s.r2 = s.r * s.r
 		s.left_type = _type_of(d.get("left"))
 		s.right_type = _type_of(d.get("right"))
+		s.left_state = _state_of(d.get("left"))
+		s.right_state = _state_of(d.get("right"))
+		var res = d.get("resolver")
+		if res != null:
+			s.state_key = String(res["key"])
+			for k in res["table"]:
+				var en: Dictionary = res["table"][k]
+				for c in [en.get("left"), en.get("right")]:
+					assert(_type_of(c) in CATEGORICAL_TYPES, "categorical sides: pass / terminal / reflection / inversion")
+				s.table[String(k)] = [_type_of(en.get("left")), _type_of(en.get("right")), _state_of(en.get("left")), _state_of(en.get("right"))]
 		for key in ["left", "right"]:
 			var pc = d.get(key)
 			if pc != null and String(pc.get("type", "")) in PROJECTIVE:
@@ -151,6 +195,12 @@ static func from_defs(ctx: NumCtx, defs: Array) -> BeamScene:
 # True if every side config is one the beam solver implements.
 static func supported(defs: Array) -> bool:
 	for d in defs:
+		var res = d.get("resolver")
+		if res != null:
+			for k in res["table"]:
+				for c in [res["table"][k].get("left"), res["table"][k].get("right")]:
+					if not (_type_of(c) in CATEGORICAL_TYPES):
+						return false
 		for key in ["left", "right"]:
 			var cfg = d.get(key)
 			if cfg != null and not (String(cfg.get("type", "")) in SUPPORTED_TYPES):
@@ -193,7 +243,7 @@ static func describe_surface(s: Surface) -> Dictionary:
 	if s.segment.full and not carrier.is_line():
 		# exact carrier of a full circle (float64): center and radius
 		circle = {"center": [-carrier.b / (2.0 * carrier.a), -carrier.c / (2.0 * carrier.a)], "radius": carrier.radius()}
-	return {
+	var out := {
 		"circle": circle,
 		"id": s.id,
 		"start": _v(s.segment.start.coords),
@@ -201,11 +251,24 @@ static func describe_surface(s: Surface) -> Dictionary:
 		"via": _v(s.segment.via.coords),
 		"full": s.segment.full,
 		"line": carrier.is_line(),
-		"left": describe_config(s.active_side_config(Side.Value.LEFT, state)),
-		"right": describe_config(s.active_side_config(Side.Value.RIGHT, state)),
+		"left": null if s.resolver is CategoricalResolver else describe_config(s.active_side_config(Side.Value.LEFT, state)),
+		"right": null if s.resolver is CategoricalResolver else describe_config(s.active_side_config(Side.Value.RIGHT, state)),
 		"is_target": s.is_target,
 		"player_solid": s.player_solid,
 	}
+	if s.resolver is CategoricalResolver:
+		out["resolver"] = describe_resolver(s.resolver)
+	return out
+
+# A categorical resolver as scene defs: {key, table: {flag_key: {left, right}}}
+# (null for a fixed surface).
+static func describe_resolver(r: ConfigResolver):
+	if not (r is CategoricalResolver):
+		return null
+	var table := {}
+	for k in r.table:
+		table[k] = {"left": describe_config(r.table[k][0]), "right": describe_config(r.table[k][1])}
+	return {"key": r.state_key, "table": table}
 
 static func describe_config(cfg: SideConfig):
 	if cfg == null:
@@ -240,4 +303,6 @@ static func describe_config(cfg: SideConfig):
 		d["normal"] = [e._normal.x, e._normal.y]
 	else:
 		d["type"] = "unknown:" + str(e.get_script().get_global_name())
+	if cfg.state_change != null:
+		d["state"] = cfg.state_change.to_def()
 	return d

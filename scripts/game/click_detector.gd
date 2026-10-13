@@ -6,7 +6,9 @@ const CLICK_TOLERANCE := 24.0
 var _last_cycle_position := Vector2.ZERO
 var _last_cycle_index := -1
 
-func detect_click(cursor_pos: Vector2, surfaces: Array) -> Dictionary:
+# game_state: the configs of categorical surfaces depend on it.
+func detect_click(cursor_pos: Vector2, surfaces: Array, game_state: GameState = null) -> Dictionary:
+	var state := game_state if game_state != null else GameState.new()
 	var best_surface: Surface = null
 	var best_side: Side.Value = Side.Value.LEFT
 	var best_dist := INF
@@ -17,8 +19,8 @@ func detect_click(cursor_pos: Vector2, surfaces: Array) -> Dictionary:
 			continue
 
 		var side: Side.Value = surf.segment.determine_side(cursor_pos)
-		var config: SideConfig = surf.active_side_config(side, GameState.new())
-		if not config.interactive:
+		var config: SideConfig = surf.active_side_config(side, state)
+		if config == null or not config.interactive:
 			continue
 
 		if dist < best_dist:

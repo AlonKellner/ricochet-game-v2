@@ -21,6 +21,7 @@ var _plan_overlays: Array = []
 
 func setup(p_surface: Surface) -> void:
 	surface = p_surface
+	add_to_group("surface_nodes")   # redrawn when the game state changes
 	_cached_left_outer = _is_left_outer()
 	if surface.player_solid:
 		if surface.segment.is_line():
@@ -47,7 +48,9 @@ func set_plan_overlays(overlays: Array, indices: Array[int]) -> void:
 func _draw() -> void:
 	if not surface:
 		return
-	var state := GameState.new()
+	# the configs under the current game state (categorical surfaces)
+	var gm := get_node_or_null("../GameManager")
+	var state: GameState = gm.game_state if gm != null and "game_state" in gm else GameState.new()
 	var left_config := surface.active_side_config(Side.Value.LEFT, state)
 	var right_config := surface.active_side_config(Side.Value.RIGHT, state)
 	var left_color := _effect_color(left_config)

@@ -25,8 +25,9 @@ extends Node2D
 @export var directional_projection_back_lines: PackedFloat64Array = PackedFloat64Array()
 @export var portal_lines: PackedFloat64Array = PackedFloat64Array()
 @export var portal_arcs: PackedFloat64Array = PackedFloat64Array()
-# State flags (Stage 85): togglers toggle `state_key`; gates block unless it
-# is true; flag mirrors reflect only while it is true. Stage 85 stub.
+# State flags (Stage 85): togglers toggle `state_key` (both sides, when hit
+# on-segment; plannable); gates block unless it is true; flag mirrors reflect
+# (both sides) only while it is true.
 @export var state_key := "open"
 @export var toggle_lines: Array[Vector4] = []
 @export var gate_lines: Array[Vector4] = []
@@ -189,6 +190,20 @@ func _ready() -> void:
 		var config := SideConfig.new(null, false)
 		var surf := Surface.new(_seg_from_v4(line_def), config, config, false, false)
 		surfaces.append(surf)
+	for line_def in toggle_lines:
+		var tog := SideConfig.new(null, true, StateChange.new(state_key, StateChange.Op.TOGGLE))
+		_add_surface(Surface.new(_seg_from_v4(line_def), tog, tog, false, false), "Toggle")
+	for line_def in gate_lines:
+		var block := SideConfig.new(TerminalEffect.new(), false)
+		var open := SideConfig.new(null, false)
+		var gate := CategoricalResolver.new(state_key, {"true": [open, open], "DEFAULT": [block, block]})
+		_add_surface(Surface.with_resolver(_seg_from_v4(line_def), gate, false, false), "Gate")
+	for line_def in flag_mirror_lines:
+		var seg := _seg_from_v4(line_def)
+		var refl := SideConfig.new(ReflectionEffect.new(seg.get_carrier()), true)
+		var off := SideConfig.new(null, false)
+		var fm := CategoricalResolver.new(state_key, {"true": [refl, refl], "DEFAULT": [off, off]})
+		_add_surface(Surface.with_resolver(seg, fm, false, false), "FlagMirror")
 	for line_def in passthrough_lines:
 		var config := SideConfig.new(null, false)
 		var surf := Surface.new(_seg_from_v4(line_def), config, config, false, false)

@@ -36,15 +36,15 @@ class Sensitivity extends RefCounted:
 # defs: scene defs (BeamScene).
 # fsc: the float64 scene of defs, when the caller already has it.
 static func physical_sensitivity(defs: Array, player: Array, cursor: Array, plan: Array, max_events: int,
-		fsc: FastSolver.Scene = null) -> Sensitivity:
+		fsc: FastSolver.Scene = null, flags: Dictionary = {}) -> Sensitivity:
 	var sc := fsc if fsc != null else FastSolver.Scene.from_defs(defs)
-	var out := FastSolver.physical(sc, PackedFloat64Array(player), PackedFloat64Array(cursor), plan, max_events)
+	var out := FastSolver.physical(sc, PackedFloat64Array(player), PackedFloat64Array(cursor), plan, max_events, flags)
 	return _collect(out.events, out.gain)
 
 static func planned_sensitivity(defs: Array, player: Array, cursor: Array, plan: Array, max_events: int,
-		fsc: FastSolver.Scene = null) -> Sensitivity:
+		fsc: FastSolver.Scene = null, flags: Dictionary = {}) -> Sensitivity:
 	var sc := fsc if fsc != null else FastSolver.Scene.from_defs(defs)
-	var out := FastSolver.planned(sc, PackedFloat64Array(player), PackedFloat64Array(cursor), plan, max_events)
+	var out := FastSolver.planned(sc, PackedFloat64Array(player), PackedFloat64Array(cursor), plan, max_events, flags)
 	return _collect(out.events, out.gain)
 
 static func _collect(ev: Array, gains: Array) -> Sensitivity:

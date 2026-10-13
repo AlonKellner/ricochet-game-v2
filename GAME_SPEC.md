@@ -33,7 +33,7 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Invariant sweep testing (event-based checks, all scenes) | Done |
 | Compound transformative effect | Planned |
 | Visibility polygon (§15) | Planned |
-| State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Planned |
+| State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Done |
 | Ghost mode & toggler surfaces (Stage 86) | Planned |
 | Level editor | Planned |
 | Menus, HUD, save system | Planned |
@@ -582,7 +582,11 @@ Each surface has a stable `id` assigned at creation, never reused. Ties at ident
 
 ### 9.4 State-conditional behavior
 
-> **Status: PLANNED** — The `ConfigResolver` abstraction (including `FixedResolver` and `CategoricalResolver`) is not yet implemented. Surfaces currently hold fixed `SideConfig` per side directly, without a resolver layer. The `SideConfig.state_change` field exists structurally but is not applied during tracing.
+> **Status: implemented (Stage 85).**
+> - **Resolvers:** `FixedResolver` and `CategoricalResolver` in `scripts/game/`; `Surface.resolver`.
+> - **Table keys:** the flag value's JSON spelling (`StateChange.flag_key`).
+> - **Categorical sides:** pass, terminal, reflection or inversion. Portals and projectives are fixed.
+> - **Level exports:** `toggle_lines`, `gate_lines` and `flag_mirror_lines`, keyed by `state_key`.
 
 A surface's active configuration is determined by a **ConfigResolver** — an abstraction with two built-in implementations:
 
@@ -716,7 +720,11 @@ Stops the beam. No outgoing beam, no stack change. A trace cut by the **32-event
 
 ### 10.6 State changes
 
-> **Status: PLANNED** — The `SideConfig.state_change` field exists structurally but state changes are not applied during tracing. `GameState.flags` exists but is not mutated by surface hits.
+> **Status: implemented (Stage 85).** `StateChange` has two ops, `SET` and `TOGGLE`; a toggle of a missing key counts the key as false.
+> - **Firing:** a change fires when its side fires. In PHYSICAL that is a fully blocked hit; in PLANNED it is the consumed plan entry.
+> - **Order:** the side's config is resolved before its own change is applied.
+> - **Promotion:** the physical trace's final flags become the game state when the arrow lands. Undo restores the checkpoint's flags.
+> - **Pops** restore beams, never flags.
 
 Orthogonal to the three effect categories. Any surface side may carry an optional state change.
 
@@ -1108,7 +1116,9 @@ The solver never guesses or resolves the side. It reads `entry.side` (`BeamSolve
 
 ### 13.7 State simulation during planning
 
-> **Status: PLANNED (Stage 85)** — state changes (§10.6) are not applied during tracing yet.
+> **Status: implemented (Stage 85).** The anchored construction resolves every plan entry under the flags left by the entries before it.
+> - An entry that resolves to a pass is consumed without a frame change, and the cursor becomes reachable on the same beam.
+> - The physical trace stays on the anchored path only while it fires the same effects and state changes as the plan.
 
 Before computing the backward image chain, the planned trace walks the plan **forward** and applies state changes to a **temporary copy** of the game state. This ensures that later plan entries see the post-effect state of earlier entries. For example, if plan entry 1 breaks a surface (state change), and plan entry 2 relies on that surface being broken (conditional effect), it correctly sees the broken state when evaluating entry 2.
 
@@ -1245,7 +1255,7 @@ TracePath:
     targets_hit:  Dictionary[int, bool]   # target surfaces hit on-segment during this trace
     cursor_index: int                     # step index of the cursor (-1 if not reached)
     hit_count:    int                     # number of solver events
-    # final_state: GameState — PLANNED (Stage 85, state flags)
+    # final_state: the physical trace's final flags (BeamTracer.Pair.final_flags; Stage 85)
 ```
 
 `VisualPath = Array[VisualLineSegment | VisualArcSegment]`, plus escape segments drawn from `start` along a direction to the viewport edge.
@@ -2594,4 +2604,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.5.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.6.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

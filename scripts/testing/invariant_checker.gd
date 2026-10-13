@@ -347,9 +347,12 @@ func check_PLAN_EFFECTS_APPLIED(player_pos: Vector2, cursor_pos: Vector2, plan_e
 	if not reached:
 		return [] as Array[String]
 	var sc := _beam_scene()
-	var items: Array = BeamTracer.plan_items(plan_entries).filter(func(it):
-		var su: BeamScene.Surf = sc.by_id.get(it.surface_id)
-		return su != null and su.effect(it.left) in BeamScene.TRANSFORMATIVE)
+	var all_items: Array = BeamTracer.plan_items(plan_entries)
+	var effs: Array = BeamSolver.plan_effects(sc, all_items, _flags())
+	var items: Array = []
+	for j in all_items.size():
+		if effs[j] in BeamScene.TRANSFORMATIVE:
+			items.append(all_items[j])
 	return check_plan_effects_applied_events(r.planned, items, true)
 
 func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
@@ -382,8 +385,8 @@ func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array
 			continue
 		for surf in surfaces:
 			var s: Surface = surf
-			var config_l := s.active_side_config(Side.Value.LEFT, GameState.new())
-			var config_r := s.active_side_config(Side.Value.RIGHT, GameState.new())
+			var config_l := s.active_side_config(Side.Value.LEFT, GameState.new(_flags()))
+			var config_r := s.active_side_config(Side.Value.RIGHT, GameState.new(_flags()))
 			var has_effect := false
 			if config_l != null and config_l.effect != null and config_l.effect.is_transformative():
 				has_effect = true
@@ -521,9 +524,11 @@ func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries
 	var X = ctx.cn(cursor_pos.x, cursor_pos.y)
 	# largest magnitude along the image chain: the scale of its rounding
 	var scale := maxf(1.0, cursor_pos.length())
+	var flags := _flags()
+	var effs: Array = BeamSolver.plan_effects(sc, BeamTracer.plan_items(plan_entries), flags)
 	for j in range(plan_entries.size() - 1, -1, -1):
 		var surf: BeamScene.Surf = sc.by_id.get(plan_entries[j].surface_id)
-		var etype := "" if surf == null else surf.effect(plan_entries[j].side == Side.Value.LEFT)
+		var etype: String = effs[j]
 		if etype in BeamScene.PROJECTIVE:
 			return out
 		if not (etype in BeamScene.TRANSFORMATIVE):
@@ -534,14 +539,14 @@ func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries
 		scale = maxf(scale, Vector2(X.fx(), X.fy()).length())
 	# every frame change fixes the cursor (it lies on each planned carrier):
 	# the image is the cursor exactly, and the reference aims at it
-	if BeamSolver.fixes_cursor(sc, ctx.cn(cursor_pos.x, cursor_pos.y), BeamTracer.plan_items(plan_entries)):
+	if BeamSolver.fixes_cursor(sc, ctx.cn(cursor_pos.x, cursor_pos.y), BeamTracer.plan_items(plan_entries), flags):
 		X = ctx.cn(cursor_pos.x, cursor_pos.y)
 	var img := Vector2(X.fx(), X.fy())
 	if not (is_finite(img.x) and is_finite(img.y)) or img == player_pos:
 		return out
 	var defs := _defs()
 	var ref := PrecisionLadder.solve_physical(defs, [player_pos.x, player_pos.y], [X.fx(), X.fy()], [],
-		BeamSolver.MAX_HITS, BeamTracer.TOL, _fsc_cache)
+		BeamSolver.MAX_HITS, BeamTracer.TOL, _fsc_cache, flags)
 	# the reference aims at the float64 rounding of the image: compare only
 	# while the rounding of the aim angle (bound delta) cannot move an event
 	# by more than 0.005 px (tangent-linear gains of the reference trace)
@@ -699,6 +704,10 @@ static func check_S12(segment: Segment, test_points: Array[Vector2]) -> Array[St
 	return violations
 
 # ---------------------------------------------------------------- beam events
+
+# The flags the renderer's traces started from (the game state's).
+func _flags() -> Dictionary:
+	return _renderer.get_flags() if _renderer and _renderer.has_method("get_flags") else {}
 
 func _beam_result():
 	return _renderer.last_beam_result if _renderer and "last_beam_result" in _renderer else null

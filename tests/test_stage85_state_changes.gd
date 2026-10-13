@@ -162,3 +162,41 @@ func test_state_promoted_after_shot_and_undo_restores():
 	gm._try_undo()
 	assert_eq(gm.game_state.flags, {}, "undo restores the flags")
 	get_tree().paused = false
+
+# The world state is part of a frame: a state change starts a new frame. A
+# toggler that only the physical trace fires (not planned) is a divergence --
+# visible where it happens, not after the cursor; with the toggler planned,
+# both traces toggle and stay aligned.
+func test_state_change_starts_new_frame():
+	Surface.reset_id_counter()
+	BeamTracer.clear_cache()
+	var scene: Node = load("res://scenes/test_levels/flag_switches.tscn").instantiate()
+	scene.gravity = Vector2.ZERO
+	add_child_autofree(scene)
+	await get_tree().process_frame
+	var tog: Surface = null
+	for s: Surface in scene.surfaces:
+		var c: SideConfig = s.active_side_config(Side.Value.LEFT, GameState.new())
+		if c != null and c.state_change != null:
+			tog = s
+	assert_not_null(tog)
+	var player := Vector2(700, 520)
+	var cursor := Vector2(1000, 530)
+	var pair := BeamTracer.trace_pair(scene.surfaces, player, cursor, [])
+	var phys_frames: Array = pair.physical.steps.map(func(s): return s.frame_id)
+	var plan_frames: Array = pair.planned.steps.map(func(s): return s.frame_id)
+	assert_eq(phys_frames[0], TraceStep.IDENTITY_FRAME)
+	assert_ne(phys_frames[1], TraceStep.IDENTITY_FRAME, "the toggle starts a new physical frame")
+	assert_eq(plan_frames[1], TraceStep.IDENTITY_FRAME, "the planned trace passes the unplanned toggler")
+	var ci: int = pair.planned.cursor_index if pair.planned.cursor_index >= 0 else pair.planned.steps.size()
+	var merged := StepTreeMerge.merge(pair.planned.steps, pair.physical.steps, ci)
+	assert_ne(merged[1].type, StepTypes.Type.ALIGNED, "diverged at the toggler")
+	# planned toggler: both toggle, aligned through the cursor
+	BeamTracer.clear_cache()
+	var side := Side.Value.LEFT if pair.physical.steps[0].hit_side == Side.Value.LEFT else Side.Value.RIGHT
+	var pair2 := BeamTracer.trace_pair(scene.surfaces, player, cursor, [PlanManager.PlanEntry.new(tog.id, side)])
+	assert_ne(pair2.planned.cursor_index, -1, "the plan reaches the cursor")
+	var ci2: int = pair2.planned.cursor_index
+	var merged2 := StepTreeMerge.merge(pair2.planned.steps, pair2.physical.steps, ci2)
+	for i in ci2:
+		assert_eq(merged2[i].type, StepTypes.Type.ALIGNED, "step %d aligned" % i)

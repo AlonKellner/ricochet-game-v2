@@ -15,7 +15,7 @@ class Pair extends RefCounted:
 	var planned: TracePath
 	var physical: TracePath
 	var result: PrecisionLadder.Result
-	var final_flags: Dictionary = {}   # Stage 85 stub
+	var final_flags: Dictionary = {}   # the physical trace's flags at its end (promoted after a shot)
 
 static var _cache_key: String = ""
 static var _cache_pair: Pair = null
@@ -34,22 +34,23 @@ static func plan_items(plan_entries: Array) -> Array:
 
 # Planned + physical traces, or null if the scene is not supported or the
 # input is degenerate (player = cursor, a pole / image at infinity).
-static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_entries: Array, _flags: Dictionary = {}) -> Pair:
+# flags: the game state's flags (the traces start from them).
+static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_entries: Array, flags: Dictionary = {}) -> Pair:
 	var defs := BeamScene.defs_from_surfaces(surfaces)
 	if not BeamScene.supported(defs):
 		return null
 	if player == cursor:
 		return null
 	var skey := str(defs)
-	var key := "%s|%s|%s|%s" % [var_to_str(player), var_to_str(cursor),
-		str(plan_entries.map(func(e): return [e.surface_id, e.side])), skey]
+	var key := "%s|%s|%s|%s|%s" % [var_to_str(player), var_to_str(cursor),
+		str(plan_entries.map(func(e): return [e.surface_id, e.side])), var_to_str(flags), skey]
 	if key == _cache_key and _cache_pair != null:
 		return _cache_pair
 	if skey != _scene_key or _scene == null:
 		_scene = FastSolver.Scene.from_defs(defs)
 		_scene_key = skey
 	var res := PrecisionLadder.solve(defs, [player.x, player.y], [cursor.x, cursor.y],
-		plan_items(plan_entries), BeamSolver.MAX_HITS, BeamSolver.MAX_HITS, TOL, false, _scene)
+		plan_items(plan_entries), BeamSolver.MAX_HITS, BeamSolver.MAX_HITS, TOL, false, _scene, flags)
 	if res.planned.is_empty() or res.physical.is_empty() or not _finite(res.planned) or not _finite(res.physical):
 		return null
 	# Identical up to and including the cursor -> one trajectory: share it, so
@@ -66,9 +67,13 @@ static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_e
 	var frames := {}
 	var pair := Pair.new()
 	pair.result = res
+	pair.final_flags = flags
+	for e in res.physical:
+		if e.kind == "hit":
+			pair.final_flags = e.flags
 	# one trajectory from one aim: every step references the same aim ray
 	var aim := Ray.from_coords(player, Direction.from_coords(player, cursor))
-	pair.physical = to_path(res.physical, res.physical_err, res.physical_tier, by_id, frames, aim)
+	pair.physical = to_path(res.physical, res.physical_err, res.physical_tier, by_id, frames, aim, flags)
 	if is_same(res.planned, res.physical):
 		# one trajectory: the same steps
 		pair.planned = TracePath.new()
@@ -77,7 +82,7 @@ static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_e
 		pair.planned.cursor_index = pair.physical.cursor_index
 		pair.planned.hit_count = pair.physical.hit_count
 	else:
-		pair.planned = to_path(res.planned, res.planned_err, res.planned_tier, by_id, frames, aim)
+		pair.planned = to_path(res.planned, res.planned_err, res.planned_tier, by_id, frames, aim, flags)
 	_cache_key = key
 	_cache_pair = pair
 	return pair
@@ -103,7 +108,7 @@ static func _same_prefix(a: Array, b: Array, n: int) -> bool:
 	for i in n:
 		var x: BeamSolver.Event = a[i]
 		var y: BeamSolver.Event = b[i]
-		if x.kind != y.kind or x.surface_id != y.surface_id or x.left != y.left or x.applied != y.applied:
+		if x.kind != y.kind or x.surface_id != y.surface_id or x.left != y.left or x.applied != y.applied or x.state != y.state:
 			return false
 	return true
 
@@ -117,15 +122,20 @@ static func clear_cache() -> void:
 
 # Steps are in visual space; frame_id identifies the (epoch, transform stack)
 # (merge alignment).
-static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, frames: Dictionary, aim: Ray = null) -> TracePath:
+static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, frames: Dictionary, aim: Ray = null, flags: Dictionary = {}) -> TracePath:
 	var path := TracePath.new()
 	var stack: Array = []
 	var bits: int = NumCtx.with_limbs(limbs).bits()
 	var prev_pt = null
 	var gap := false           # the previous event teleported (portal)
+	# the world state is part of a frame: a state change starts a new frame
+	# (so planned / physical traces that fire different state changes are
+	# not aligned, even on identical geometry)
+	var init_flags := _flags_key(flags)
+	var cur_flags := init_flags
 	for i in events.size():
 		var e: BeamSolver.Event = events[i]
-		var fid := _frame_id(stack, frames, e.epoch)
+		var fid := _frame_id(stack, frames, e.epoch, cur_flags, init_flags)
 		# after a portal the arc starts at the exit point (its own t_from)
 		var steps := _steps_for(e, fid, null if gap else prev_pt)
 		var gap_pending := gap
@@ -170,6 +180,8 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 			last.hit_on_segment = e.on_segment
 			if surf and surf.is_target and e.on_segment:
 				path.targets_hit[surf.id] = true
+		if e.kind == "hit":
+			cur_flags = _flags_key(e.flags)
 		if e.kind == "cursor":
 			path.cursor_index = path.steps.size()
 		if e.kind == "max":
@@ -177,12 +189,12 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 	path.hit_count = events.size()
 	return path
 
-# frame id per (epoch, transform stack): a projective starts a new epoch, so
-# frames after it are new even when the stack signature repeats
-static func _frame_id(stack: Array, frames: Dictionary, epoch: int = 0) -> int:
-	if stack.is_empty() and epoch == 0:
+# frame id per (epoch, transform stack, flags): a projective starts a new
+# epoch, and a state change a new frame
+static func _frame_id(stack: Array, frames: Dictionary, epoch: int = 0, flags_key: String = "", init_key: String = "") -> int:
+	if stack.is_empty() and epoch == 0 and flags_key == init_key:
 		return TraceStep.IDENTITY_FRAME
-	var key := "%d|%s" % [epoch, ",".join(stack.map(func(x): return str(x)))]
+	var key := "%d|%s|%s" % [epoch, ",".join(stack.map(func(x): return str(x))), flags_key]
 	if not frames.has(key):
 		frames[key] = {"id": frames.size() + 1}
 	return frames[key]["id"]
@@ -192,6 +204,12 @@ static func _frame_id(stack: Array, frames: Dictionary, epoch: int = 0) -> int:
 # prev_pt: the previous event's point -- the arc's start, exactly (never
 # re-evaluated from t_from, which can sit at the parametrization's singular
 # point, t -> infinity, after a provenance resume).
+# Canonical key of a flags dictionary (sorted keys, JSON spelling of values).
+static func _flags_key(flags: Dictionary) -> String:
+	var keys := flags.keys()
+	keys.sort()
+	return ",".join(keys.map(func(k): return "%s=%s" % [str(k), StateChange.flag_key(flags[k])]))
+
 static func _steps_for(e: BeamSolver.Event, fid: int, prev_pt = null) -> Array:
 	var b: HPBeam = e.beam
 	var bf := FastSolver.beam(b.p.fx(), b.p.fy(), b.tau.fx(), b.tau.fy(), b.kappa.to_float())

@@ -23,6 +23,9 @@ Three-layer architecture with strict dependency direction: Math -> Visual -> Gam
 # Run all tests headlessly
 ./run_tests.sh
 
+# Same suite, sweeps sharded over parallel processes (about 5 min instead of 27)
+./run_tests_parallel.sh
+
 # Or directly
 godot --headless -s addons/gut/gut_cmdln.gd
 

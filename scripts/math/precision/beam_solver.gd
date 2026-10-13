@@ -84,13 +84,13 @@ class Event extends RefCounted:
 	                          # endpoint of the decision that produced this event
 	var seeded: bool = false  # lies on the sensitive forward continuation
 	var raw = null            # FastSolver: raw float beam of `beam` (provenance)
-	var state: bool = false   # Stage 85 stub
-	var flags: Dictionary = {}
+	var state: bool = false   # the side's state change fired
+	var flags: Dictionary = {} # the trace's flags after this event (hits)
 
 	func describe() -> String:
 		var p := "" if point == null else " (%.6f, %.6f)" % [point.fx(), point.fy()]
-		return "%s s=%d %s%s%s%s" % [kind, surface_id, "L" if left else "R", " applied" if applied else "",
-			"" if on_segment else " off", p]
+		return "%s s=%d %s%s%s%s%s" % [kind, surface_id, "L" if left else "R", " applied" if applied else "",
+			"" if on_segment else " off", p, (" state->%s" % str(flags)) if state else ""]
 
 class PlanItem extends RefCounted:
 	var surface_id: int
@@ -112,7 +112,8 @@ class StackEntry extends RefCounted:
 	var known: Array = []     # the beam's known points (Walk.known)
 	var line = null           # the beam's exact line data (Walk.line)
 	var pop_id: int = -1      # the surface whose hit pops this entry (sid; a portal's pair)
-	static func make(p_beam, p_sid: int, p_t_hit, p_other, p_known: Array = [], p_line = null, p_pop_id: int = -1) -> StackEntry:
+	var etype: String = ""    # the map pushed (a pop needs the same map: an involution undone)
+	static func make(p_beam, p_sid: int, p_t_hit, p_other, p_known: Array = [], p_line = null, p_pop_id: int = -1, p_etype: String = "") -> StackEntry:
 		var o := StackEntry.new()
 		o.beam = p_beam
 		o.sid = p_sid
@@ -121,6 +122,7 @@ class StackEntry extends RefCounted:
 		o.known = p_known
 		o.line = p_line
 		o.pop_id = p_sid if p_pop_id < 0 else p_pop_id
+		o.etype = p_etype
 		return o
 
 # ---------------------------------------------------------------- backend
@@ -209,14 +211,16 @@ class AnchorChain extends RefCounted:
 		var s: BeamScene.Surf = scene.by_id.get(sid)
 		return s.pair if s != null and s.portal else sid
 
-	static func build(scene: BeamScene, player: CN, cursor: CN, plan: Array) -> AnchorChain:
+	static func build(scene: BeamScene, player: CN, cursor: CN, plan: Array, flags: Dictionary = {}) -> AnchorChain:
 		var K := plan.size()
 		var stacks: Array = [[]]
 		var st: Array = []
 		var changes: Array = []      # plan entry j changes the frame
-		for item in plan:
+		var effs := BeamSolver.plan_effects(scene, plan, flags)
+		for ji in plan.size():
+			var item = plan[ji]
 			var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
-			var t: bool = surf != null and surf.effect(item.left) in TRANSFORMATIVE
+			var t: bool = surf != null and effs[ji] in TRANSFORMATIVE
 			changes.append(t)
 			if t:
 				if not st.is_empty() and _pop_id(scene, st.back()) == item.surface_id:
@@ -291,6 +295,7 @@ class Walk extends RefCounted:
 	var incidence := {}       # cache: [x, y, surface id] -> exact incidence
 	var tangent_line = null   # the line `tangent` was computed for
 	var tangent := {}         # surface id -> exact tangency of tangent_line
+	var flags: Dictionary = {} # trace state flags (GAME_SPEC 9.4 / 10.6)
 	var hp_src = null         # beam whose HPBeam view is hp_view (events share it)
 	var hp_view: HPBeam = null
 
@@ -298,12 +303,12 @@ class Walk extends RefCounted:
 
 # Walk an explicit direction from the player (forward shooting).
 static func trace_direction(ctx: NumCtx, scene: BeamScene, player: CN, dir: CN, plan: Array, cursor, mode: int,
-		max_events: int = MAX_HITS, _flags: Dictionary = {}) -> Array:
-	return run_direction(NumBackend.make(ctx), scene, player, dir, plan, cursor, mode, max_events).events
+		max_events: int = MAX_HITS, flags: Dictionary = {}) -> Array:
+	return run_direction(NumBackend.make(ctx), scene, player, dir, plan, cursor, mode, max_events, flags).events
 
 static func run_direction(bk, scene: BeamScene, player: CN, dir: CN, plan: Array, cursor, mode: int,
-		max_events: int = MAX_HITS) -> Walk:
-	var w := _new_walk(bk, scene, plan, cursor, mode, max_events)
+		max_events: int = MAX_HITS, flags: Dictionary = {}) -> Walk:
+	var w := _new_walk(bk, scene, plan, cursor, mode, max_events, flags)
 	var b0 = bk.from_hp(HPBeam.make(player, dir.unit(), player.re.sub(player.re)))
 	if mode == Mode.PHYSICAL:
 		b0 = bk.seed(b0)
@@ -346,22 +351,23 @@ static func _incident(w: Walk, k: CN, surf: BeamScene.Surf) -> bool:
 	return r
 
 # Planned trace (anchored), then its post-cursor physical continuation.
-static func planned(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS, _flags: Dictionary = {}) -> Array:
-	var w := run(NumBackend.make(ctx), scene, player, cursor, plan, Mode.PLANNED, max_events)
+static func planned(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS, flags: Dictionary = {}) -> Array:
+	var w := run(NumBackend.make(ctx), scene, player, cursor, plan, Mode.PLANNED, max_events, flags)
 	return [] if w == null else w.events
 
 # Physical trace: on the anchored planned path until the first divergence.
-static func physical(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS, _flags: Dictionary = {}) -> Array:
-	var w := run(NumBackend.make(ctx), scene, player, cursor, plan, Mode.PHYSICAL, max_events)
+static func physical(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS, flags: Dictionary = {}) -> Array:
+	var w := run(NumBackend.make(ctx), scene, player, cursor, plan, Mode.PHYSICAL, max_events, flags)
 	return [] if w == null else w.events
 
 # null if the anchored construction is degenerate (player = cursor, or a pole
 # / image at infinity: Stage 83).
-static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int = MAX_HITS) -> Walk:
-	var chain := AnchorChain.build(scene, player, cursor, plan)
+static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int = MAX_HITS,
+		flags: Dictionary = {}) -> Walk:
+	var chain := AnchorChain.build(scene, player, cursor, plan, flags)
 	if chain == null:
-		return _run_degenerate(bk, scene, player, cursor, plan, mode, max_events)
-	var w := _new_walk(bk, scene, plan, cursor, mode, max_events)
+		return _run_degenerate(bk, scene, player, cursor, plan, mode, max_events, flags)
+	var w := _new_walk(bk, scene, plan, cursor, mode, max_events, flags)
 	w.chain = chain
 	w.anchored = true
 	var b0 = bk.from_hp(chain.beams[0])
@@ -371,11 +377,11 @@ static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode:
 		w.seeded = true
 		w.anchored = false
 	w.known = [[player, bk.zero(), -1]]
-	w.line = _initial_line(scene, player, cursor, plan)
+	w.line = _initial_line(scene, player, cursor, plan, flags)
 	if w.line != null:
 		# every frame change fixes the cursor: the aim image is the cursor
 		# itself, exact data B_0 passes through
-		if not plan.is_empty() and fixes_cursor(scene, cursor, plan) and _known_index(w.known, cursor) < 0:
+		if not plan.is_empty() and fixes_cursor(scene, cursor, plan, flags) and _known_index(w.known, cursor) < 0:
 			w.known.append([cursor, bk.param_of(b0, cursor), -1])
 		_add_line_endpoints(w, b0)
 	walk_from(w, b0, -1, null)
@@ -384,12 +390,14 @@ static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode:
 # Exact: every frame change of the plan fixes the cursor (it lies on the
 # carrier of each planned reflection / inversion -- an effect fixes its
 # carrier pointwise; a translation portal fixes nothing).
-static func fixes_cursor(scene: BeamScene, cursor: CN, plan: Array) -> bool:
+static func fixes_cursor(scene: BeamScene, cursor: CN, plan: Array, flags: Dictionary = {}) -> bool:
 	var kx := cursor.fx()
 	var ky := cursor.fy()
-	for item in plan:
+	var effs := plan_effects(scene, plan, flags)
+	for ji in plan.size():
+		var item = plan[ji]
 		var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
-		if surf == null or not (surf.effect(item.left) in TRANSFORMATIVE):
+		if surf == null or not (effs[ji] in TRANSFORMATIVE):
 			continue
 		if surf.portal:
 			return false
@@ -410,8 +418,8 @@ static func fixes_cursor(scene: BeamScene, cursor: CN, plan: Array) -> bool:
 # the exact aim image. Lazy: float64 coefficients with rigorous bounds from
 # the image chain's running error analysis; the exact homogeneous image (whose
 # size grows with every inversion) only when a predicate needs it.
-static func _initial_line(scene: BeamScene, player: CN, cursor: CN, plan: Array):
-	var X = exact_image_approx(scene, cursor, plan)
+static func _initial_line(scene: BeamScene, player: CN, cursor: CN, plan: Array, flags: Dictionary = {}):
+	var X = exact_image_approx(scene, cursor, plan, flags)
 	if X == null:
 		return null
 	var px := player.fx()
@@ -421,7 +429,7 @@ static func _initial_line(scene: BeamScene, player: CN, cursor: CN, plan: Array)
 	var b := Exact._esub(X[0], Exact._emul([px, 0.0], X[2]))
 	var c := Exact._eadd(Exact._emul(a, [px, 0.0]), Exact._emul(b, [py, 0.0]))
 	return Exact.Line.from_approx(a, b, c, func():
-		var Xh = _exact_image_cached(scene, cursor, plan)
+		var Xh = _exact_image_cached(scene, cursor, plan, flags)
 		return null if Xh == null else Exact.line_through_h(px, py, Xh))
 
 # Budget of the exact aim image (limbs of its homogeneous weight). The exact
@@ -434,28 +442,31 @@ static var _image_cache := {}
 
 # The exact aim image within the budget (null beyond it), computed once per
 # (cursor, plan, plan surfaces' data).
-static func _exact_image_cached(scene: BeamScene, cursor: CN, plan: Array):
+static func _exact_image_cached(scene: BeamScene, cursor: CN, plan: Array, flags: Dictionary = {}):
 	var key := [cursor.fx(), cursor.fy()]
-	for item in plan:
+	var effs := plan_effects(scene, plan, flags)
+	for ji in plan.size():
+		var item = plan[ji]
 		var s: BeamScene.Surf = scene.by_id.get(item.surface_id)
-		key.append_array([item.surface_id, item.left] if s == null else [item.surface_id, item.left, s.effect(item.left),
+		key.append_array([item.surface_id, item.left] if s == null else [item.surface_id, item.left, effs[ji],
 			s.sx, s.sy, s.ex, s.ey, s.vx if s.has_v else 0.0, s.vy if s.has_v else 0.0, s.cx, s.cy, s.r, s.dx, s.dy, s.theta])
 	if _image_cache.has(key):
 		return _image_cache[key]
 	if _image_cache.size() > 256:
 		_image_cache.clear()
-	var X = exact_image_h(scene, cursor, plan, EXACT_IMAGE_LIMBS)
+	var X = exact_image_h(scene, cursor, plan, EXACT_IMAGE_LIMBS, flags)
 	_image_cache[key] = X
 	return X
 
 # The aim image as float64 homogeneous coordinates with rigorous bounds
 # ([[x, ex], [y, ey], [w, ew]]), along the same maps as exact_image_h; each
 # step rescales by a power of two (exact) so magnitudes stay in range.
-static func exact_image_approx(scene: BeamScene, cursor: CN, plan: Array):
+static func exact_image_approx(scene: BeamScene, cursor: CN, plan: Array, flags: Dictionary = {}):
 	var X: Array = [[cursor.fx(), 0.0], [cursor.fy(), 0.0], [1.0, 0.0]]
+	var effs := plan_effects(scene, plan, flags)
 	for j in range(plan.size() - 1, -1, -1):
 		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
-		if surf == null or not (surf.effect(plan[j].left) in TRANSFORMATIVE):
+		if surf == null or not (effs[j] in TRANSFORMATIVE):
 			continue
 		if surf.portal:
 			if surf.theta != 0.0:
@@ -508,11 +519,12 @@ static func _reflect_approx(X: Array, sx: float, sy: float, ex: float, ey: float
 # every frame change of the plan is a rational map of exact data (a line
 # reflection, an inversion in an exact circle, a translation portal); null for
 # a rotation portal or an image at infinity.
-static func exact_image_h(scene: BeamScene, cursor: CN, plan: Array, max_limbs: int = 0):
+static func exact_image_h(scene: BeamScene, cursor: CN, plan: Array, max_limbs: int = 0, flags: Dictionary = {}):
 	var X: Array = [Exact.of(cursor.fx()), Exact.of(cursor.fy()), Exact.of(1.0)]
+	var effs := plan_effects(scene, plan, flags)
 	for j in range(plan.size() - 1, -1, -1):
 		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
-		if surf == null or not (surf.effect(plan[j].left) in TRANSFORMATIVE):
+		if surf == null or not (effs[j] in TRANSFORMATIVE):
 			continue
 		if surf.portal:
 			if surf.theta != 0.0:
@@ -536,11 +548,13 @@ static func exact_image_h(scene: BeamScene, cursor: CN, plan: Array, max_limbs: 
 # an inversion center): forward walk from the exact aim direction, or -- when
 # the aim image itself is at infinity (the aim is undetermined) -- straight at
 # the cursor (oracle trace2._aim). null only for player = cursor.
-static func _run_degenerate(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int) -> Walk:
+static func _run_degenerate(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int,
+		flags: Dictionary = {}) -> Walk:
+	var effs := plan_effects(scene, plan, flags)
 	var X = cursor
 	for j in range(plan.size() - 1, -1, -1):
 		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
-		if surf == null or not (surf.effect(plan[j].left) in TRANSFORMATIVE):
+		if surf == null or not (effs[j] in TRANSFORMATIVE):
 			continue
 		X = BeamEffects.map_point(X, surf, true)
 		if X == null:
@@ -554,8 +568,8 @@ static func _run_degenerate(bk, scene: BeamScene, player: CN, cursor: CN, plan: 
 		line = Exact.Line.from_exact(Exact.line_through(player.fx(), player.fy(), cursor.fx(), cursor.fy()))
 	else:
 		dir = X.sub(player)
-		line = _initial_line(scene, player, cursor, plan)
-	var w := _new_walk(bk, scene, plan, cursor, mode, max_events)
+		line = _initial_line(scene, player, cursor, plan, flags)
+	var w := _new_walk(bk, scene, plan, cursor, mode, max_events, flags)
 	var b0 = bk.from_hp(HPBeam.make(player, dir.unit(), player.re.sub(player.re)))
 	if mode == Mode.PHYSICAL:
 		b0 = bk.seed(b0)
@@ -563,12 +577,16 @@ static func _run_degenerate(bk, scene: BeamScene, player: CN, cursor: CN, plan: 
 	w.known = [[player, bk.zero(), -1]]
 	w.line = line
 	if w.line != null:
+		if X != null and not X.sub(player).is_zero() and not plan.is_empty() and fixes_cursor(scene, cursor, plan, flags) \
+				and _known_index(w.known, cursor) < 0:
+			w.known.append([cursor, bk.param_of(b0, cursor), -1])
 		_add_line_endpoints(w, b0)
 	walk_from(w, b0, -1, null)
 	return w
 
-static func _new_walk(bk, scene: BeamScene, plan: Array, cursor, mode: int, max_events: int) -> Walk:
+static func _new_walk(bk, scene: BeamScene, plan: Array, cursor, mode: int, max_events: int, flags: Dictionary = {}) -> Walk:
 	var w := Walk.new()
+	w.flags = flags
 	w.bk = bk
 	w.scene = scene
 	w.plan = plan
@@ -577,6 +595,40 @@ static func _new_walk(bk, scene: BeamScene, plan: Array, cursor, mode: int, max_
 	w.post_mode = Mode.PHYSICAL
 	w.max_events = max_events
 	return w
+
+# Forward state simulation (GAME_SPEC 13.7): the effect each plan entry
+# resolves to, under the flags left by the entries before it (each entry
+# applies its state change when consumed).
+static func plan_effects(scene: BeamScene, plan: Array, flags: Dictionary = {}) -> Array:
+	var f := flags
+	var out: Array = []
+	for item in plan:
+		var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
+		if surf == null:
+			out.append("")
+			continue
+		out.append(surf.effect(item.left, f))
+		var ch = surf.state_change(item.left, f)
+		if ch != null:
+			f = apply_state(f, ch)
+	return out
+
+# The flags after a state change {key, op: "set" | "toggle", value} (a new
+# dictionary): toggle stores the negation of the current truth value.
+static func apply_state(flags: Dictionary, change: Dictionary) -> Dictionary:
+	var out := flags.duplicate()
+	if String(change["op"]) == "toggle":
+		out[change["key"]] = not bool(flags.get(change["key"], false))
+	else:
+		out[change["key"]] = change["value"]
+	return out
+
+# The map an effect applies: reflection on a circle carrier is the inversion
+# in it.
+static func map_kind(surf: BeamScene.Surf, etype: String) -> String:
+	if etype == "reflection" and not surf.line:
+		return "inversion"
+	return etype
 
 # Ids of target surfaces hit on-segment.
 static func targets_of(scene: BeamScene, events: Array) -> Array:
@@ -887,26 +939,39 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 			var on_seg: bool = cl[1]
 			var left: bool = cl[2]
 			var full_block: bool = cl[3]
-			var eff := surf.effect(left)
+			# the side under the trace's flags; its state change fires when the
+			# side fires (PHYSICAL: a full block; PLANNED: the consumed entry)
+			var eff := surf.effect(left, w.flags)
+			var change = surf.state_change(left, w.flags)
 			var plan_match: bool = w.plan_index < w.plan.size() and w.plan[w.plan_index].surface_id == surf.id \
 				and w.plan[w.plan_index].left == left
 			var plan_do: String = (eff if eff in TRANSFORMATIVE else "") if plan_match else ""
 			var phys_do: String = eff if full_block else ""
+			var plan_state: bool = plan_match and change != null
+			var phys_state: bool = full_block and change != null
 			var do := ""
+			var fires_state := false
 			var diverged := false
 			if w.mode == Mode.PHYSICAL:
 				do = phys_do
-				if w.anchored and not (phys_do == plan_do and (phys_do != "" or not plan_match)):
+				fires_state = phys_state
+				if w.anchored and not (phys_do == plan_do and phys_state == plan_state \
+						and (phys_do != "" or phys_state or not plan_match)):
 					diverged = true
-				if do in TRANSFORMATIVE or do in PROJECTIVE:
+				if do in TRANSFORMATIVE or do in PROJECTIVE or fires_state:
 					_plan_bookkeeping(w, surf.id)
 			else:
 				if plan_match:
 					w.plan_index += 1
 				do = plan_do
+				fires_state = plan_state
+			if fires_state:
+				w.flags = apply_state(w.flags, change)
 			var e := _event(w, "hit", beam, t_prev, t, gaps[ci])
 			e.surface_id = surf.id
 			e.left = left
+			e.state = fires_state
+			e.flags = w.flags
 			e.applied = do != ""
 			e.terminal = do == "terminal"
 			e.on_segment = on_seg
@@ -984,7 +1049,7 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart: int, fresh: bool, t0, rehit: bool, pt: CN,
 		pt_exact: bool = false) -> Array:
 	var bk = w.bk
-	if not w.stack.is_empty() and w.stack.back().pop_id == surf.id:
+	if not w.stack.is_empty() and w.stack.back().pop_id == surf.id and w.stack.back().etype == map_kind(surf, etype):
 		var top: StackEntry = w.stack.pop_back()
 		var src: BeamScene.Surf = w.scene.by_id[top.sid]
 		# the point on the restored beam: T^-1(pt) for a portal, pt itself for
@@ -1005,7 +1070,7 @@ static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart
 		return [bk.reseed(top.beam) if w.seeded else top.beam, top.sid, t_res, false]
 	var other = _other_root(w, beam, surf, depart, t0, t, pt)
 	var pop_id: int = surf.pair if surf.portal else surf.id
-	w.stack.append(StackEntry.make(beam, surf.id, t, other, w.known, w.line, pop_id))
+	w.stack.append(StackEntry.make(beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype)))
 	var old_known := w.known
 	# the surface the new beam departs from, and the departure point
 	var dsurf: BeamScene.Surf = w.scene.by_id[surf.pair] if surf.portal else surf
