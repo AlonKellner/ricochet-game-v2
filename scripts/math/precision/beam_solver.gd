@@ -84,6 +84,8 @@ class Event extends RefCounted:
 	                          # endpoint of the decision that produced this event
 	var seeded: bool = false  # lies on the sensitive forward continuation
 	var raw = null            # FastSolver: raw float beam of `beam` (provenance)
+	var state: bool = false   # Stage 85 stub
+	var flags: Dictionary = {}
 
 	func describe() -> String:
 		var p := "" if point == null else " (%.6f, %.6f)" % [point.fx(), point.fy()]
@@ -296,7 +298,7 @@ class Walk extends RefCounted:
 
 # Walk an explicit direction from the player (forward shooting).
 static func trace_direction(ctx: NumCtx, scene: BeamScene, player: CN, dir: CN, plan: Array, cursor, mode: int,
-		max_events: int = MAX_HITS) -> Array:
+		max_events: int = MAX_HITS, _flags: Dictionary = {}) -> Array:
 	return run_direction(NumBackend.make(ctx), scene, player, dir, plan, cursor, mode, max_events).events
 
 static func run_direction(bk, scene: BeamScene, player: CN, dir: CN, plan: Array, cursor, mode: int,
@@ -344,12 +346,12 @@ static func _incident(w: Walk, k: CN, surf: BeamScene.Surf) -> bool:
 	return r
 
 # Planned trace (anchored), then its post-cursor physical continuation.
-static func planned(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS) -> Array:
+static func planned(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS, _flags: Dictionary = {}) -> Array:
 	var w := run(NumBackend.make(ctx), scene, player, cursor, plan, Mode.PLANNED, max_events)
 	return [] if w == null else w.events
 
 # Physical trace: on the anchored planned path until the first divergence.
-static func physical(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS) -> Array:
+static func physical(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS, _flags: Dictionary = {}) -> Array:
 	var w := run(NumBackend.make(ctx), scene, player, cursor, plan, Mode.PHYSICAL, max_events)
 	return [] if w == null else w.events
 

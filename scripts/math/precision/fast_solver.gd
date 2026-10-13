@@ -692,15 +692,15 @@ static func _cn(a) -> CN:
 	return _f64cn(float(a[0]), float(a[1]))
 
 static func trace_direction(sc: Scene, player: PackedFloat64Array, dir: PackedFloat64Array, plan: Array, cursor, mode: int,
-		max_events: int = BeamSolver.MAX_HITS) -> Out:
+		max_events: int = BeamSolver.MAX_HITS, _flags: Dictionary = {}) -> Out:
 	return _out(BeamSolver.run_direction(Backend.make(), sc.scene, _cn(player), _cn(dir), plan,
 		null if cursor == null else _cn(cursor), mode, max_events))
 
 # Planned trace (anchored chain built at float64, generic) with gains.
 static func planned(sc: Scene, player: PackedFloat64Array, cursor: PackedFloat64Array, plan: Array,
-		max_events: int = BeamSolver.MAX_HITS) -> Out:
+		max_events: int = BeamSolver.MAX_HITS, _flags: Dictionary = {}) -> Out:
 	return _out(BeamSolver.run(Backend.make(), sc.scene, _cn(player), _cn(cursor), plan, BeamSolver.Mode.PLANNED, max_events))
 
 static func physical(sc: Scene, player: PackedFloat64Array, cursor: PackedFloat64Array, plan: Array,
-		max_events: int = BeamSolver.MAX_HITS) -> Out:
+		max_events: int = BeamSolver.MAX_HITS, _flags: Dictionary = {}) -> Out:
 	return _out(BeamSolver.run(Backend.make(), sc.scene, _cn(player), _cn(cursor), plan, BeamSolver.Mode.PHYSICAL, max_events))

@@ -25,6 +25,12 @@ extends Node2D
 @export var directional_projection_back_lines: PackedFloat64Array = PackedFloat64Array()
 @export var portal_lines: PackedFloat64Array = PackedFloat64Array()
 @export var portal_arcs: PackedFloat64Array = PackedFloat64Array()
+# State flags (Stage 85): togglers toggle `state_key`; gates block unless it
+# is true; flag mirrors reflect only while it is true. Stage 85 stub.
+@export var state_key := "open"
+@export var toggle_lines: Array[Vector4] = []
+@export var gate_lines: Array[Vector4] = []
+@export var flag_mirror_lines: Array[Vector4] = []
 
 var surfaces: Array[Surface] = []
 

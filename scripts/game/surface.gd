@@ -11,6 +11,7 @@ var is_target: bool
 var player_solid: bool
 var _left_link: SideLink = null
 var _right_link: SideLink = null
+var resolver: ConfigResolver = null   # Stage 85 stub
 
 func _init(p_segment: Segment, p_left: SideConfig, p_right: SideConfig, p_is_target: bool = false, p_player_solid: bool = true) -> void:
 	id = _next_id
@@ -40,6 +41,10 @@ func _auto_link(side: Side.Value, config: SideConfig) -> void:
 		return
 	if config.effect != null and config.effect.is_self_inverse():
 		set_side_link(side, SideLink.from_self(self, side))
+
+# Stage 85 stub.
+static func with_resolver(p_segment: Segment, _p_resolver: ConfigResolver, p_is_target: bool = false, p_player_solid: bool = true) -> Surface:
+	return Surface.new(p_segment, null, null, p_is_target, p_player_solid)
 
 static func reset_id_counter() -> void:
 	_next_id = 1

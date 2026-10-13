@@ -15,6 +15,7 @@ class Pair extends RefCounted:
 	var planned: TracePath
 	var physical: TracePath
 	var result: PrecisionLadder.Result
+	var final_flags: Dictionary = {}   # Stage 85 stub
 
 static var _cache_key: String = ""
 static var _cache_pair: Pair = null
@@ -33,7 +34,7 @@ static func plan_items(plan_entries: Array) -> Array:
 
 # Planned + physical traces, or null if the scene is not supported or the
 # input is degenerate (player = cursor, a pole / image at infinity).
-static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_entries: Array) -> Pair:
+static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_entries: Array, _flags: Dictionary = {}) -> Pair:
 	var defs := BeamScene.defs_from_surfaces(surfaces)
 	if not BeamScene.supported(defs):
 		return null
