@@ -30,6 +30,7 @@ class Result extends RefCounted:
 	var usec: int = 0
 	var usec_planned: int = 0
 	var usec_physical: int = 0
+	var physical_sens: ErrorEstimate.Sensitivity = null   # float64 tangent-linear gains of the physical pass
 
 class Climb extends RefCounted:
 	var events: Array = []
@@ -58,16 +59,7 @@ static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
 		est_q[i] = maxf(est_q[i], res_q[i])
 	# ---- physical
 	var t1 := Time.get_ticks_usec()
-	var sp := ErrorEstimate.physical_sensitivity(defs, player, cursor, plan, max_physical, fsc)
-	var est_p := ErrorEstimate.estimate(sp, NumCtx.f64().eps())
-	var physical_fn := func(limbs: int) -> Array:
-		return _physical_at(limbs, defs, player, cursor, plan, max_physical)
-	var cp := _decide(sp, est_p, tol, verify, physical_fn, defs, fsc)
-	r.physical = cp.events
-	r.physical_err = cp.err
-	r.physical_tier = cp.limbs
-	r.converged = cp.converged
-	r.tiers_tried = cp.tried
+	var cp := _solve_physical(r, defs, player, cursor, plan, max_physical, tol, verify, fsc)
 	var t2 := Time.get_ticks_usec()
 	r.usec_physical = t2 - t1
 	# ---- planned
@@ -94,6 +86,34 @@ static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
 	r.usec_planned = (t1 - t0) + (Time.get_ticks_usec() - t2)
 	r.usec = Time.get_ticks_usec() - t0
 	return r
+
+# The physical trace alone (no planned pass): physical, physical_err,
+# physical_tier, converged, tiers_tried and physical_sens of the Result.
+static func solve_physical(defs: Array, player: Array, cursor: Array, plan: Array,
+		max_physical: int, tol: float, fsc: FastSolver.Scene = null) -> Result:
+	var t0 := Time.get_ticks_usec()
+	var r := Result.new()
+	if fsc == null:
+		fsc = FastSolver.Scene.from_defs(defs)
+	_solve_physical(r, defs, player, cursor, plan, max_physical, tol, false, fsc)
+	r.usec_physical = Time.get_ticks_usec() - t0
+	r.usec = r.usec_physical
+	return r
+
+static func _solve_physical(r: Result, defs: Array, player: Array, cursor: Array, plan: Array,
+		max_physical: int, tol: float, verify: bool, fsc: FastSolver.Scene) -> Climb:
+	var sp := ErrorEstimate.physical_sensitivity(defs, player, cursor, plan, max_physical, fsc)
+	var est_p := ErrorEstimate.estimate(sp, NumCtx.f64().eps())
+	var physical_fn := func(limbs: int) -> Array:
+		return _physical_at(limbs, defs, player, cursor, plan, max_physical)
+	var cp := _decide(sp, est_p, tol, verify, physical_fn, defs, fsc)
+	r.physical = cp.events
+	r.physical_err = cp.err
+	r.physical_tier = cp.limbs
+	r.converged = cp.converged
+	r.tiers_tried = cp.tried
+	r.physical_sens = sp
+	return cp
 
 static func _cursor_index(events: Array) -> int:
 	for i in events.size():

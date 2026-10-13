@@ -121,6 +121,23 @@ static func reflect_point_h(X: Array, sx: float, sy: float, ex: float, ey: float
 	var ry := add(mul(of(sy), swm), add(mul(m2r, cy), mul(m2i, cx)))
 	return [rx, ry, swm]
 
+# Homogeneous X inverted in the circle with homogeneous center C and radius²
+# times C_w² rw2: X' = c + r² (X - c) / |X - c|², over the common denominator
+# C_w |X w C_w - C w|² (made positive). null at the center (image at infinity).
+static func invert_point_h(X: Array, C: Array, rw2: BigFloat):
+	var w: BigFloat = X[2]
+	var cw: BigFloat = C[2]
+	var dx := sub(mul(X[0], cw), mul(C[0], w))
+	var dy := sub(mul(X[1], cw), mul(C[1], w))
+	var dd := add(mul(dx, dx), mul(dy, dy))
+	if dd.is_zero():
+		return null
+	var rw := mul(rw2, w)
+	var out := [add(mul(C[0], dd), mul(rw, dx)), add(mul(C[1], dd), mul(rw, dy)), mul(cw, dd)]
+	if out[2].is_negative():
+		out = [out[0].neg(), out[1].neg(), out[2].neg()]
+	return out
+
 # The line through (px, py) and the homogeneous point X.
 static func line_through_h(px: float, py: float, X: Array) -> Array:
 	var w: BigFloat = X[2]
@@ -219,6 +236,7 @@ class Line extends RefCounted:
 	var _exact = null  # [a, b, c] BigFloat, or null until needed
 	var parent: Line = null
 	var mirror: PackedFloat64Array
+	var source: Callable   # computes the exact coefficients on demand (from_approx)
 
 	static func from_exact(L: Array) -> Line:
 		var o := Line.new()
@@ -231,9 +249,33 @@ class Line extends RefCounted:
 		o.ec = 2.0 * U * absf(o.fc)
 		return o
 
-	func exact() -> Array:
+	# A line known by float64 coefficients with rigorous bounds ([value,
+	# bound] pairs); `source` computes the exact coefficients when a predicate
+	# cannot decide from the bounds.
+	static func from_approx(a: Array, b: Array, c: Array, p_source: Callable) -> Line:
+		var o := Line.new()
+		o.fa = a[0]
+		o.ea = a[1]
+		o.fb = b[0]
+		o.eb = b[1]
+		o.fc = c[0]
+		o.ec = c[1]
+		o.source = p_source
+		return o
+
+	# The exact coefficients; null when a lazy source could not afford them
+	# (the line then makes no exact claim: its predicates answer false).
+	var _source_done := false
+	func exact():
+		if _exact == null and source.is_valid():
+			if not _source_done:
+				_source_done = true
+				_exact = source.call()
+			return _exact
 		if _exact == null:
-			var L: Array = parent.exact()
+			var L = parent.exact()
+			if L == null:
+				return null
 			if mirror.size() == 2:
 				# translated by (dx, dy): c' = c + a dx + b dy
 				_exact = [L[0], L[1], Exact.add(L[2], Exact.add(Exact.mul(L[0], Exact.of(mirror[0])), Exact.mul(L[1], Exact.of(mirror[1]))))]
@@ -306,7 +348,9 @@ class Line extends RefCounted:
 			+ ea * m1m + eb * m2m + ec * m3m
 		if absf(det) > bound:
 			return false
-		var L := exact()
+		var L = exact()
+		if L == null:
+			return false
 		var A := Exact.line_through(px, py, qx, qy)
 		var B := Exact.line_through(rx, ry, sx, sy)
 		var e1 := Exact.sub(Exact.mul(A[1], B[2]), Exact.mul(B[1], A[2]))
@@ -321,7 +365,9 @@ class Line extends RefCounted:
 		var v := l + r - fc
 		if absf(v) > 4.0 * U * (absf(l) + absf(r) + absf(fc)) + ea * absf(x) + eb * absf(y) + ec:
 			return false
-		var L := exact()
+		var L = exact()
+		if L == null:
+			return false
 		return Exact.sub(Exact.add(Exact.mul(L[0], Exact.of(x)), Exact.mul(L[1], Exact.of(y))), L[2]).is_zero()
 
 	# Exact: the homogeneous exact point X (float roundings x, y with bounds
@@ -330,7 +376,8 @@ class Line extends RefCounted:
 		var v := Exact._eadd(Exact._esub(Exact._emul([fa, ea], [x, exy]), [fc, ec]), Exact._emul([fb, eb], [y, exy]))
 		if absf(v[0]) > v[1]:
 			return false
-		return Exact.on_line_h(exact(), X)
+		var L = exact()
+		return L != null and Exact.on_line_h(L, X)
 
 	# Exact: tangent to the circle with exact homogeneous center C and rw2
 	# (float roundings cx, cy, rr with bounds ecc, err).
@@ -340,7 +387,8 @@ class Line extends RefCounted:
 		var v := Exact._esub(Exact._emul(d, d), Exact._emul([rr, err], n2))
 		if absf(v[0]) > v[1]:
 			return false
-		return Exact.tangent_zero(exact(), C, rw2)
+		var L = exact()
+		return L != null and Exact.tangent_zero(L, C, rw2)
 
 # Running error analysis on [value, bound] pairs (standard model, u = 2^-53).
 static func _emul(x: Array, y: Array) -> Array:

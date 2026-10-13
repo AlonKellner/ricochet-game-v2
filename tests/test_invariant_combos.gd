@@ -3,7 +3,7 @@ extends GutTest
 const TEST_LEVELS_DIR := "res://scenes/test_levels/"
 const PLAYGROUND_DIR := "res://scenes/playground/"
 const COMBO_BASE := "res://scenes/test_levels/combo_base.tscn"
-const VIOLATIONS_PATH := "res://violations.json"
+var VIOLATIONS_PATH := SweepRunner.violations_path("combos")
 
 const LINE1 := Vector4(600, 300, 600, 700)
 const LINE2 := Vector4(1300, 300, 1300, 700)
@@ -323,7 +323,10 @@ func test_sweep_surface_combos() -> void:
 		var plans := _generate_combo_plans(scene, combo)
 
 		for plan in plans:
-			for player_pos in positions:
+			for pi in positions.size():
+				if not SweepRunner.in_shard(pi):
+					continue
+				var player_pos: Vector2 = positions[pi]
 				for cursor_pos in positions:
 					if player_pos == cursor_pos:
 						continue

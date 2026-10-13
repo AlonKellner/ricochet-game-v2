@@ -18,6 +18,8 @@ var _planned_path: TracePath = null
 var _merged_steps: Array = []
 var _physical_hits: Dictionary = {}
 var last_solver := ""
+# Plan source when the scene has no GameManager (invariant sweeps).
+var plan_override: PlanManager = null
 var last_beam_result: PrecisionLadder.Result = null
 
 func _ready() -> void:
@@ -89,6 +91,8 @@ static func build_physical_hits(path: TracePath) -> Dictionary:
 	return result
 
 func _get_plan() -> PlanManager:
+	if plan_override != null:
+		return plan_override
 	var game_mgr := get_node_or_null("../GameManager")
 	if game_mgr and "plan" in game_mgr:
 		return game_mgr.plan

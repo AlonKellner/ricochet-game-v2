@@ -43,3 +43,4 @@ violations.json
 
 # Precision benchmark outputs (regenerate with make bench)
 bench/results/
+violations.*.shard*.json

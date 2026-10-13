@@ -7,6 +7,28 @@ var _grid_size := 5
 var _fuzz_count := 10
 var _fuzz_seed := 42
 
+# Sharding for parallel test runs (run_tests_parallel.sh): SWEEP_SHARD="i/n"
+# makes a sweep check only the player positions with index % n == i. The n
+# shards together cover exactly the unsharded sweep. Unset: everything.
+static func shard() -> Vector2i:
+	var s := OS.get_environment("SWEEP_SHARD")
+	if s == "" or not s.contains("/"):
+		return Vector2i(0, 1)
+	var n := s.get_slice("/", 1).to_int()
+	var i := s.get_slice("/", 0).to_int()
+	assert(n >= 1 and i >= 0 and i < n, "SWEEP_SHARD must be i/n with 0 <= i < n")
+	return Vector2i(i, n)
+
+static func in_shard(index: int) -> bool:
+	var sh := shard()
+	return index % sh.y == sh.x
+
+# violations output of a sweep (tag) in this shard (shards are merged into
+# violations.json by run_tests_parallel.sh)
+static func violations_path(tag: String) -> String:
+	var sh := shard()
+	return "res://violations.json" if sh.y == 1 else "res://violations.%s.shard%d.json" % [tag, sh.x]
+
 func configure(grid_size: int = 5, fuzz_count: int = 10, fuzz_seed: int = 42) -> SweepRunner:
 	_grid_size = grid_size
 	_fuzz_count = fuzz_count
@@ -65,7 +87,10 @@ func sweep(scene: Node, custom_positions: Array[Vector2] = []) -> Dictionary:
 	var total := positions.size() * positions.size()
 	var failures: Array[Dictionary] = []
 
-	for player_pos in positions:
+	for pi in positions.size():
+		if not in_shard(pi):
+			continue
+		var player_pos: Vector2 = positions[pi]
 		for cursor_pos in positions:
 			var violations := checker.check_all(player_pos, cursor_pos)
 			if violations.size() > 0:

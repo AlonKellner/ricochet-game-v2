@@ -1,7 +1,7 @@
 extends GutTest
 
 const TEST_LEVELS_DIR := "res://scenes/test_levels/"
-const VIOLATIONS_PATH := "res://violations.json"
+var VIOLATIONS_PATH := SweepRunner.violations_path("sweep")
 const MAX_VIOLATIONS_PER_GROUP := 5
 const MAX_TOTAL_VIOLATIONS := 200
 
@@ -89,7 +89,10 @@ func test_sweep_with_plans() -> void:
 		var positions := runner.build_positions(poi)
 
 		for plan in plans:
-			for player_pos in positions:
+			for pi in positions.size():
+				if not SweepRunner.in_shard(pi):
+					continue
+				var player_pos: Vector2 = positions[pi]
 				for cursor_pos in positions:
 					if player_pos == cursor_pos:
 						continue

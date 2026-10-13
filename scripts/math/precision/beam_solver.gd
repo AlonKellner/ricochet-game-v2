@@ -371,15 +371,142 @@ static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode:
 	w.known = [[player, bk.zero(), -1]]
 	w.line = _initial_line(scene, player, cursor, plan)
 	if w.line != null:
+		# every frame change fixes the cursor: the aim image is the cursor
+		# itself, exact data B_0 passes through
+		if not plan.is_empty() and fixes_cursor(scene, cursor, plan) and _known_index(w.known, cursor) < 0:
+			w.known.append([cursor, bk.param_of(b0, cursor), -1])
 		_add_line_endpoints(w, b0)
 	walk_from(w, b0, -1, null)
 	return w
 
+# Exact: every frame change of the plan fixes the cursor (it lies on the
+# carrier of each planned reflection / inversion -- an effect fixes its
+# carrier pointwise; a translation portal fixes nothing).
+static func fixes_cursor(scene: BeamScene, cursor: CN, plan: Array) -> bool:
+	var kx := cursor.fx()
+	var ky := cursor.fy()
+	for item in plan:
+		var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
+		if surf == null or not (surf.effect(item.left) in TRANSFORMATIVE):
+			continue
+		if surf.portal:
+			return false
+		var on: bool
+		if BeamGeom.endpoint_at(surf.seg, cursor) != 0:
+			on = true
+		elif surf.line:
+			on = Exact.orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, kx, ky)
+		elif surf.full:
+			on = Exact.on_circle_zero(surf.cx, surf.cy, surf.r, kx, ky)
+		else:
+			on = Exact.incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, kx, ky)
+		if not on:
+			return false
+	return true
+
 # The exact implicit line of B_0, when it is exact data: the line player ->
-# F_K^-1(cursor) with every frame change of the plan a line reflection (the
-# image is then an exact rational point, carried homogeneously). null if the
-# plan has an inversion.
+# the exact aim image. Lazy: float64 coefficients with rigorous bounds from
+# the image chain's running error analysis; the exact homogeneous image (whose
+# size grows with every inversion) only when a predicate needs it.
 static func _initial_line(scene: BeamScene, player: CN, cursor: CN, plan: Array):
+	var X = exact_image_approx(scene, cursor, plan)
+	if X == null:
+		return null
+	var px := player.fx()
+	var py := player.fy()
+	# a = -(y - py w), b = x - px w, c = a px + b py
+	var a := Exact._esub(Exact._emul([py, 0.0], X[2]), X[1])
+	var b := Exact._esub(X[0], Exact._emul([px, 0.0], X[2]))
+	var c := Exact._eadd(Exact._emul(a, [px, 0.0]), Exact._emul(b, [py, 0.0]))
+	return Exact.Line.from_approx(a, b, c, func():
+		var Xh = _exact_image_cached(scene, cursor, plan)
+		return null if Xh == null else Exact.line_through_h(px, py, Xh))
+
+# Budget of the exact aim image (limbs of its homogeneous weight). The exact
+# image roughly doubles in size per inversion; 320 limbs is about four
+# inversions, ~5 ms (the frame budget). Beyond it the initial line makes no
+# exact claim -- its decisions go to the precision ladder, as they did before
+# inversion plans had exact lines; a fixed-point cursor is exact at any depth.
+const EXACT_IMAGE_LIMBS := 320
+static var _image_cache := {}
+
+# The exact aim image within the budget (null beyond it), computed once per
+# (cursor, plan, plan surfaces' data).
+static func _exact_image_cached(scene: BeamScene, cursor: CN, plan: Array):
+	var key := [cursor.fx(), cursor.fy()]
+	for item in plan:
+		var s: BeamScene.Surf = scene.by_id.get(item.surface_id)
+		key.append_array([item.surface_id, item.left] if s == null else [item.surface_id, item.left, s.effect(item.left),
+			s.sx, s.sy, s.ex, s.ey, s.vx if s.has_v else 0.0, s.vy if s.has_v else 0.0, s.cx, s.cy, s.r, s.dx, s.dy, s.theta])
+	if _image_cache.has(key):
+		return _image_cache[key]
+	if _image_cache.size() > 256:
+		_image_cache.clear()
+	var X = exact_image_h(scene, cursor, plan, EXACT_IMAGE_LIMBS)
+	_image_cache[key] = X
+	return X
+
+# The aim image as float64 homogeneous coordinates with rigorous bounds
+# ([[x, ex], [y, ey], [w, ew]]), along the same maps as exact_image_h; each
+# step rescales by a power of two (exact) so magnitudes stay in range.
+static func exact_image_approx(scene: BeamScene, cursor: CN, plan: Array):
+	var X: Array = [[cursor.fx(), 0.0], [cursor.fy(), 0.0], [1.0, 0.0]]
+	for j in range(plan.size() - 1, -1, -1):
+		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+		if surf == null or not (surf.effect(plan[j].left) in TRANSFORMATIVE):
+			continue
+		if surf.portal:
+			if surf.theta != 0.0:
+				return null
+			X = [Exact._esub(X[0], Exact._emul([surf.dx, 0.0], X[2])), Exact._esub(X[1], Exact._emul([surf.dy, 0.0], X[2])), X[2]]
+			continue
+		if surf.line:
+			X = _reflect_approx(X, surf.sx, surf.sy, surf.ex, surf.ey)
+		else:
+			var ec: Array = surf.exact_circle()
+			var C := [_approx(ec[0][0]), _approx(ec[0][1]), _approx(ec[0][2])]
+			var rw2 := _approx(ec[1])
+			var w: Array = X[2]
+			var cw: Array = C[2]
+			var dx := Exact._esub(Exact._emul(X[0], cw), Exact._emul(C[0], w))
+			var dy := Exact._esub(Exact._emul(X[1], cw), Exact._emul(C[1], w))
+			var dd := Exact._eadd(Exact._emul(dx, dx), Exact._emul(dy, dy))
+			var rw := Exact._emul(rw2, w)
+			X = [Exact._eadd(Exact._emul(C[0], dd), Exact._emul(rw, dx)),
+				Exact._eadd(Exact._emul(C[1], dd), Exact._emul(rw, dy)), Exact._emul(cw, dd)]
+		# rescale by a power of two near 1 / |w| (exact on values and bounds)
+		var m := absf(X[2][0])
+		if m == 0.0 or not is_finite(m):
+			return null
+		var k := pow(2.0, -floorf(log(m) / log(2.0)))
+		X = [[X[0][0] * k, X[0][1] * k], [X[1][0] * k, X[1][1] * k], [X[2][0] * k, X[2][1] * k]]
+	return X
+
+# A BigFloat as a [float64 value, bound] pair (to_float rounds to nearest).
+static func _approx(v: BigFloat) -> Array:
+	var f := v.to_float()
+	return [f, 2.0 * Exact.U * absf(f)]
+
+# reflect_point_h on [value, bound] pairs.
+static func _reflect_approx(X: Array, sx: float, sy: float, ex: float, ey: float) -> Array:
+	var mx := Exact._esub([ex, 0.0], [sx, 0.0])
+	var my := Exact._esub([ey, 0.0], [sy, 0.0])
+	var mm := Exact._eadd(Exact._emul(mx, mx), Exact._emul(my, my))
+	var m2r := Exact._esub(Exact._emul(mx, mx), Exact._emul(my, my))
+	var m2i := Exact._eadd(Exact._emul(mx, my), Exact._emul(my, mx))
+	var w: Array = X[2]
+	var cx := Exact._esub(X[0], Exact._emul([sx, 0.0], w))
+	var cy := Exact._esub(Exact._emul([sy, 0.0], w), X[1])
+	var swm := Exact._emul(w, mm)
+	var rx := Exact._eadd(Exact._emul([sx, 0.0], swm), Exact._esub(Exact._emul(m2r, cx), Exact._emul(m2i, cy)))
+	var ry := Exact._eadd(Exact._emul([sy, 0.0], swm), Exact._eadd(Exact._emul(m2r, cy), Exact._emul(m2i, cx)))
+	return [rx, ry, swm]
+
+# The aim image F_K^-1(cursor) as an exact homogeneous point [x, y, w], when
+# every frame change of the plan is a rational map of exact data (a line
+# reflection, an inversion in an exact circle, a translation portal); null for
+# a rotation portal or an image at infinity.
+static func exact_image_h(scene: BeamScene, cursor: CN, plan: Array, max_limbs: int = 0):
 	var X: Array = [Exact.of(cursor.fx()), Exact.of(cursor.fy()), Exact.of(1.0)]
 	for j in range(plan.size() - 1, -1, -1):
 		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
@@ -392,9 +519,16 @@ static func _initial_line(scene: BeamScene, player: CN, cursor: CN, plan: Array)
 			X = [Exact.sub(X[0], Exact.mul(Exact.of(surf.dx), X[2])), Exact.sub(X[1], Exact.mul(Exact.of(surf.dy), X[2])), X[2]]
 			continue
 		if not surf.line:
-			return null
+			# inversion in the exact circle: a rational map of exact data
+			var ec: Array = surf.exact_circle()
+			X = Exact.invert_point_h(X, ec[0], ec[1])
+			if X == null:
+				return null
+			if max_limbs > 0 and X[2].precision_limbs() > max_limbs:
+				return null
+			continue
 		X = Exact.reflect_point_h(X, surf.sx, surf.sy, surf.ex, surf.ey)
-	return Exact.Line.from_exact(Exact.line_through_h(player.fx(), player.fy(), X))
+	return X
 
 # A point at infinity in the anchored construction (player / cursor exactly at
 # an inversion center): forward walk from the exact aim direction, or -- when
@@ -677,13 +811,24 @@ static func _event(w: Walk, kind: String, beam, t_from, t_to, margin: float) -> 
 	return e
 
 # The other intersection of `beam` with surf, given the one applied at t.
-static func _other_root(w: Walk, beam, surf: BeamScene.Surf, depart: int, t0, t):
+# The other root is the one that is not the hit's crossing (at pt): the one
+# farther from pt -- the same position rule that matches a known point to its
+# root (the hit's parameter may be a snapped known point's, not bit-equal to
+# the recomputed root).
+static func _other_root(w: Walk, beam, surf: BeamScene.Surf, depart: int, t0, t, pt: CN):
 	if surf.id == depart:
 		return t0
-	for r in w.bk.roots(beam, surf, false):
-		if r.cmp(t) != 0:
-			return r
-	return t   # tangent / straight beam: a single root
+	var rs: Array = w.bk.roots(beam, surf, false)
+	if rs.size() < 2:
+		return t   # tangent / straight beam: a single root
+	var far = rs[0]
+	var far_d := -1.0
+	for r in rs:
+		var d: float = w.bk.point(beam, r).sub(pt).abs2().to_float()
+		if d > far_d:
+			far_d = d
+			far = r
+	return far
 
 # Forward walk. depart: id of the surface the beam departs from (-1: none).
 # t_start null: fresh (the beam's own point p is the departure, t = 0);
@@ -800,6 +945,21 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 					w.seeded = true
 					next[0] = bk.seed(next[0])
 				break
+			# the plan completed here without a frame change (an entry that
+			# resolves to a pass / state change, or an unapplied projective):
+			# the cursor is on this same beam -- a candidate if it lies ahead
+			if not w.cursor_done and w.cursor != null and w.plan_index >= w.plan.size() and w.plan_matched \
+					and not cands.any(func(c): return c[1] == null):
+				var tc = bk.param_of(beam, w.cursor)
+				if not _before(tc, t, t0):
+					var j := ci + 1
+					# after everything strictly before it; ties: the cursor first
+					while j < cands.size() and not cands[j][2] and _before(cands[j][0], tc, t0):
+						j += 1
+					cands.insert(j, [tc, null, false, null])
+					gaps.insert(j, INF)
+					if _known_index(w.known, w.cursor) < 0:
+						w.known.append([w.cursor, tc, -1])
 			ci += 1
 		if restart:
 			continue
@@ -841,7 +1001,7 @@ static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart
 		w.known = top.known
 		w.line = top.line
 		return [bk.reseed(top.beam) if w.seeded else top.beam, top.sid, t_res, false]
-	var other = _other_root(w, beam, surf, depart, t0, t)
+	var other = _other_root(w, beam, surf, depart, t0, t, pt)
 	var pop_id: int = surf.pair if surf.portal else surf.id
 	w.stack.append(StackEntry.make(beam, surf.id, t, other, w.known, w.line, pop_id))
 	var old_known := w.known

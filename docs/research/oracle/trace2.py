@@ -46,7 +46,9 @@ Rules (TDD_09 "Target architecture" + "Legacy quirks"):
   t = inf is the antipode of a circle beam's point p (a root there is a real
   crossing, ordered at the wrap point).
 - Provenance (known) points: exact data points a beam passes through -- the
-  player (initial beam, t = 0), the cursor (whenever it is a candidate: plan
+  player (initial beam, t = 0), the cursor on the initial beam when every
+  frame change of the plan fixes it (it lies on each planned carrier: the aim
+  image is the cursor itself), the cursor (whenever it is a candidate: plan
   complete and matched, the beam is B_K), the departure point of a beam born
   at an exact hit point, every known point of the previous beam lying on the
   carrier of the surface applied (an effect fixes its carrier pointwise), and
@@ -54,8 +56,9 @@ Rules (TDD_09 "Target architecture" + "Legacy quirks"):
   beam's known points.
 - Exact lines: a straight beam defined by exact data, in implicit form
   a x + b y = c (Fractions) -- the initial beam of a direction trace or of a
-  trace without plan (player -> cursor), or of a mirror-only plan (the aim
-  image is exact), the reflection of an exact line in a line mirror (an exact
+  trace without plan (player -> cursor), or of a plan of line reflections,
+  inversions and translations (the aim image is an exact rational point),
+  the reflection of an exact line in a line mirror (an exact
   map of the coefficients), and an exact line inverted in a circle whose
   center it contains exactly (it maps onto itself: the new beam is exactly
   straight). Any beam through a known point that is exactly the inversion
@@ -69,6 +72,26 @@ Rules (TDD_09 "Target architecture" + "Legacy quirks"):
   carrier contains a known point exactly is hit exactly there: its root
   nearest the point takes the point's parameter and the exact point. No
   rounding decides an endpoint or an incidence.
+
+State flags (Stage 85, GAME_SPEC 9.4 / 10.6 / 13.7):
+- A trace carries flags (key -> value), starting from the game state's.
+- A surface's side config is resolved under the current flags: fixed
+  (left / right), or categorical ("resolver": {key, table}): the table entry
+  of flag_key(flags[key]); a missing key or value falls back to the "DEFAULT"
+  entry, then to the first entry. Portals are fixed (never in a table).
+- A side config may carry a state change {"key", "op": "set" | "toggle",
+  "value"}; toggle stores the negation of the current truth value (missing
+  key = false).
+- The state change fires when the side fires: PHYSICAL -- a fully blocked
+  hit (the same rule as effects); PLANNED -- the consumed plan entry. It is
+  applied after the event's own config was resolved (last writer wins along
+  the trace). PHYSICAL plan bookkeeping counts a hit that fires a state change.
+- Planning simulates the plan forward: entry j resolves under the flags left
+  by entries < j (each consumed entry applies its state change); an entry
+  resolving to a non-transformative effect is consumed without a frame change.
+- Pops restore beams, not flags: re-applying the surface on top of the stack
+  pops it only when the same effect fires again (an involution undone);
+  flags are never restored by a pop.
 """
 
 from __future__ import annotations
@@ -93,6 +116,27 @@ PROJECTIVE = ("line_normal_projection", "circle_normal_projection",
 
 # ---------------------------------------------------------------- scene
 
+def flag_key(v):
+    """Canonical table key of a flag value (JSON spelling)."""
+    if v is True:
+        return "true"
+    if v is False:
+        return "false"
+    if isinstance(v, float) and v == int(v):
+        return str(int(v))
+    return str(v)
+
+
+def apply_state(flags, change):
+    """flags after a state change (a new dict; the input is not modified)."""
+    out = dict(flags)
+    if change["op"] == "toggle":
+        out[change["key"]] = not bool(flags.get(change["key"], False))
+    else:
+        out[change["key"]] = change["value"]
+    return out
+
+
 @dataclass
 class Surface:
     id: int
@@ -100,12 +144,33 @@ class Surface:
     left: dict | None
     right: dict | None
     is_target: bool = False
+    resolver: dict | None = None
 
-    def effect(self, side):
-        cfg = self.left if side == LEFT else self.right
-        if cfg is None or cfg.get("type") == "pass":
+    def cfg(self, side, flags=None):
+        """The side config under the flags."""
+        if self.resolver is None:
+            return self.left if side == LEFT else self.right
+        table = self.resolver["table"]
+        k = self.resolver["key"]
+        flags = flags or {}
+        entry = None
+        if k in flags and flag_key(flags[k]) in table:
+            entry = table[flag_key(flags[k])]
+        elif "DEFAULT" in table:
+            entry = table["DEFAULT"]
+        else:
+            entry = next(iter(table.values()))
+        return entry.get("left") if side == LEFT else entry.get("right")
+
+    def effect(self, side, flags=None):
+        cfg = self.cfg(side, flags)
+        if cfg is None or cfg.get("type", "pass") == "pass":
             return None
         return cfg["type"]
+
+    def state_change(self, side, flags=None):
+        cfg = self.cfg(side, flags)
+        return None if cfg is None else cfg.get("state")
 
     def portal(self):
         """(a, d, pair id) of a portal surface, else None."""
@@ -134,7 +199,13 @@ def surface_from_json(d):
         seg.S, seg.E, seg.V = P(d["start"]), P(d["end"]), P(d["via"])
     else:
         seg = Seg.arc(sid, d["start"], d["end"], d["via"])
-    return Surface(sid, seg, d.get("left"), d.get("right"), bool(d.get("is_target")))
+    res = d.get("resolver")
+    if res is not None:
+        assert res["table"], "a categorical resolver needs a table"
+        for entry in res["table"].values():
+            for cfg in (entry.get("left"), entry.get("right")):
+                assert cfg is None or cfg.get("type") != "portal", "portals are fixed (not categorical)"
+    return Surface(sid, seg, d.get("left"), d.get("right"), bool(d.get("is_target")), res)
 
 
 def scene_from_json(surfaces):
@@ -168,6 +239,14 @@ def apply_effect(beam: Beam, t, surf: Surface, etype, h=None) -> Beam:
     nu = u / circ.R
     tau2 = -mp.conj(tau_h) * nu * nu
     return Beam(h, tau2 / abs(tau2), -beam.kappa - 2 * cross(tau_h, u) / (circ.R ** 2))
+
+
+def map_kind(surf: Surface, etype):
+    """The map an effect applies: reflection on a circle carrier is the
+    inversion in it."""
+    if etype == "reflection" and surf.seg.kind != "line":
+        return "inversion"
+    return etype
 
 
 def map_point(z, surf: Surface, inverse=False):
@@ -245,6 +324,8 @@ class Event:
     t: object = None
     beam: object = None
     rehit: bool = False
+    state: bool = False         # the side's state change fired
+    flags: dict = None          # flags after the event
 
 
 @dataclass
@@ -256,6 +337,7 @@ class StackEntry:
     known: list = field(default_factory=list)
     line: object = None
     pop_id: int = None          # the surface whose hit pops this entry (sid, or a portal's pair)
+    etype: str = None           # the effect pushed (a pop needs the same effect)
 
 
 @dataclass
@@ -276,6 +358,8 @@ class Walk:
     stack: list = field(default_factory=list)
     targets: set = field(default_factory=set)
     done: bool = False
+    flags: dict = field(default_factory=dict)
+    flags_before: dict = field(default_factory=dict)   # flags the current event resolved under
 
 
 # ---------------------------------------------------------------- exact data
@@ -414,7 +498,7 @@ def physical_decision(walk: Walk, surf: Surface, side, full_block):
     """None (pass) | 'terminal' | effect type."""
     if not full_block:
         return None
-    return surf.effect(side)
+    return surf.effect(side, walk.flags)
 
 
 def walk_from(walk: Walk, beam: Beam, depart, t0=None):
@@ -466,7 +550,10 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
         if depart is not None:
             cands.append(((2, 0), 2, depart, t0, True))      # departure re-hit, last
         applied = False
-        for _, _, sid, t, rehit in cands:
+        ci = 0
+        while ci < len(cands):
+            key, _, sid, t, rehit = cands[ci]
+            ci += 1
             walk.count += 1
             if walk.count > MAX_HITS:
                 # the trace is cut at the next crossing (drawn up to it, no effect)
@@ -486,15 +573,23 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             if surf.is_target and on_seg:
                 walk.targets.add(sid)
             do = None
+            change = surf.state_change(side, walk.flags)
+            fires_state = False
             if walk.mode == PHYSICAL:
                 do = physical_decision(walk, surf, side, full_block)
-                if do in TRANSFORMATIVE or do in PROJECTIVE:
+                fires_state = change is not None and full_block
+                if do in TRANSFORMATIVE or do in PROJECTIVE or fires_state:
                     _plan_bookkeeping(walk, sid)
             elif walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side):
                 walk.plan_index += 1
-                eff = surf.effect(side)
+                eff = surf.effect(side, walk.flags)
                 do = eff if eff in TRANSFORMATIVE else None
-            ev = Event("hit", sid, side, do is not None, do == "terminal", on_seg, pt, t, beam, rehit)
+                fires_state = change is not None
+            walk.flags_before = walk.flags
+            if fires_state:
+                walk.flags = apply_state(walk.flags, change)
+            ev = Event("hit", sid, side, do is not None, do == "terminal", on_seg, pt, t, beam, rehit,
+                       fires_state, walk.flags)
             walk.events.append(ev)
             if do == "terminal":
                 walk.done = True
@@ -508,6 +603,20 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 depart, t0, fresh = sid, mp.mpf(0), True
                 applied = True
                 break
+            # the plan completed here without a frame change (an entry that
+            # resolves to a pass / state change, or an unapplied projective):
+            # the cursor is on this same beam -- a candidate if it lies ahead
+            if not walk.cursor_done and walk.cursor is not None and walk.plan_index >= len(walk.plan) \
+                    and walk.plan_matched and not any(c[1] == 0 for c in cands):
+                tc = beam.param_of(walk.cursor)
+                kc = sort_key(tc, t0)
+                if kc >= key:
+                    j = ci
+                    while j < len(cands) and (cands[j][0], cands[j][1]) <= (kc, 0):
+                        j += 1
+                    cands.insert(j, (kc, 0, -1, tc, False))
+                    if not any(k[0] == walk.cursor for k in walk.known):
+                        walk.known.append((walk.cursor, tc, None))
         if not applied:
             # nothing fired on the full loop: a line escapes through infinity;
             # a circle closes at its departure point (beam.at(t0)) and repeats
@@ -521,13 +630,9 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             return
 
 
-def _cfg_of(surf: Surface, side):
-    return surf.left if side == LEFT else surf.right
-
-
 def _project(walk: Walk, beam, t, surf: Surface, side, pt, pt_exact):
     """Projective effect at pt: a straight beam along +-axis; clears the stack."""
-    cfg = _cfg_of(surf, side)
+    cfg = surf.cfg(side, walk.flags_before)
     etype = cfg["type"]
     seg = surf.seg
     g = seg.grad(pt)
@@ -579,17 +684,21 @@ def _plan_bookkeeping(walk: Walk, sid):
         walk.plan_matched = False
 
 
-def _other_root(beam, surf: Surface, t, fresh, depart, t0):
+def _other_root(beam, surf: Surface, t, fresh, depart, t0, pt):
+    """The beam's other crossing of surf: the root that is not the hit's
+    crossing (at pt) -- the one farther from pt, the same position rule that
+    matches a known point to its root (the hit's parameter may be a snapped
+    known point's, not bit-equal to the recomputed root)."""
     if surf.id == depart:
         return t0
-    for r in roots(beam, surf, False):
-        if r != t:
-            return r
-    return t
+    rs = roots(beam, surf, False)
+    if len(rs) < 2:
+        return t
+    return max(rs, key=lambda r: abs(beam.at(r) - pt))
 
 
 def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, pt, pt_exact):
-    if walk.stack and walk.stack[-1].pop_id == surf.id:
+    if walk.stack and walk.stack[-1].pop_id == surf.id and walk.stack[-1].etype == map_kind(surf, etype):
         top = walk.stack.pop()
         src = {s.id: s for s in walk.surfaces}[top.sid]
         # the point on the restored beam: T^-1(pt) for a portal, pt otherwise
@@ -605,10 +714,10 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
         walk.known = top.known
         walk.line = top.line
         return top.beam, top.sid, t_res, False
-    other = _other_root(beam, surf, t, fresh, depart, t0)
+    other = _other_root(beam, surf, t, fresh, depart, t0, pt)
     portal = surf.portal()
     pop_id = portal[2] if portal is not None else surf.id
-    walk.stack.append(StackEntry(beam, surf.id, t, other, walk.known, walk.line, pop_id))
+    walk.stack.append(StackEntry(beam, surf.id, t, other, walk.known, walk.line, pop_id, map_kind(surf, etype)))
     nb = apply_effect(beam, t, surf, etype, pt)
     old_known = walk.known
     if portal is not None:
@@ -729,18 +838,40 @@ def _line_through_center(line, seg):
 
 # ---------------------------------------------------------------- entry points
 
-def trace_physical_direction(surfaces, player, direction, plan=(), cursor=None):
+def plan_effects(surfaces, plan, flags=None):
+    """Forward state simulation (13.7): the effect each plan entry resolves
+    to, under the flags left by the entries before it."""
+    by_id = {s.id: s for s in surfaces}
+    f = dict(flags or {})
+    out = []
+    for sid, side in plan:
+        surf = by_id.get(sid)
+        if surf is None:
+            out.append(None)
+            continue
+        out.append(surf.effect(side, f))
+        ch = surf.state_change(side, f)
+        if ch is not None:
+            f = apply_state(f, ch)
+    return out
+
+
+def trace_physical_direction(surfaces, player, direction, plan=(), cursor=None, flags=None):
     """Physical trace of an explicit direction (forward shooting reference)."""
-    return trace_mode_direction(surfaces, player, direction, plan, cursor, PHYSICAL)
+    return trace_mode_direction(surfaces, player, direction, plan, cursor, PHYSICAL, flags=flags)
 
 
-def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="direction"):
+def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="direction", flags=None,
+                         extra_known=()):
     """line: the initial beam's exact implicit line; "direction": `direction`
     is exact data; None: not exact."""
     walk = Walk(surfaces, list(plan), cursor, mode, PHYSICAL)
+    walk.flags = dict(flags or {})
+    walk.flags_before = walk.flags
     p0 = P(player)
     b0 = Beam(p0, direction / abs(direction), mp.mpf(0))
     walk.known = [(p0, mp.mpf(0), None)]
+    walk.known += [(k, b0.param_of(k), None) for k in extra_known if k != p0]
     walk.line = line_from_dir(p0, direction) if line == "direction" else line
     if walk.line is not None:
         _add_line_endpoints(walk, b0)
@@ -748,11 +879,12 @@ def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="
     return walk
 
 
-def aim_image(surfaces, plan, cursor):
+def aim_image(surfaces, plan, cursor, flags=None):
     by_id = {s.id: s for s in surfaces}
+    effs = plan_effects(surfaces, plan, flags)
     z = P(cursor)
-    for sid, side in reversed(plan):
-        if by_id[sid].effect(side) not in TRANSFORMATIVE:
+    for (sid, side), eff in reversed(list(zip(plan, effs))):
+        if eff not in TRANSFORMATIVE:
             continue
         z = map_point(z, by_id[sid], inverse=True)
         if z is None:
@@ -760,23 +892,25 @@ def aim_image(surfaces, plan, cursor):
     return z
 
 
-def exact_direction(surfaces, plan, player, cursor):
-    img = aim_image(surfaces, plan, cursor)
+def exact_direction(surfaces, plan, player, cursor, flags=None):
+    img = aim_image(surfaces, plan, cursor, flags)
     if img is None:
         return None
     d = img - P(player)
     return None if d == 0 else d
 
 
-def initial_line(surfaces, player, cursor, plan):
-    """Exact implicit line of the initial beam: player -> F_K^-1(cursor) when
-    every frame change of the plan is a line reflection (the image is then an
-    exact rational point); None if the plan has an inversion."""
+def exact_image(surfaces, cursor, plan, flags=None):
+    """The aim image F_K^-1(cursor) as exact rationals, when every frame
+    change of the plan is a rational map of exact data -- a line reflection,
+    an inversion in a circle (exact circumcenter and radius²) or a
+    translation portal. None for a rotation portal, or an image at infinity."""
     by_id = {s.id: s for s in surfaces}
+    effs = plan_effects(surfaces, plan, flags)
     X = FC(P(cursor))
-    for sid, side in reversed(list(plan)):
+    for (sid, side), eff in reversed(list(zip(plan, effs))):
         surf = by_id.get(sid)
-        if surf is None or surf.effect(side) not in TRANSFORMATIVE:
+        if surf is None or eff not in TRANSFORMATIVE:
             continue
         if surf.portal() is not None:
             cfg = surf.left if surf.left and surf.left.get("type") == "portal" else surf.right
@@ -785,33 +919,70 @@ def initial_line(surfaces, player, cursor, plan):
             X = (X[0] - F(cfg["d"][0]), X[1] - F(cfg["d"][1]))
             continue
         if surf.seg.kind != "line":
-            return None
+            # inversion: X' = c + r² (X - c) / |X - c|² (exact rationals)
+            nx, ny, w, rr = _center_h(surf.seg)
+            cx, cy = nx / w, ny / w
+            dx, dy = X[0] - cx, X[1] - cy
+            dd = dx * dx + dy * dy
+            if dd == 0:
+                return None
+            X = (cx + rr * dx / dd, cy + rr * dy / dd)
+            continue
         S, E = FC(surf.seg.S), FC(surf.seg.E)
         M = _sub(E, S)
         mm = M[0] * M[0] + M[1] * M[1]
         m2r, m2i = M[0] * M[0] - M[1] * M[1], 2 * M[0] * M[1]
         wx, wy = X[0] - S[0], -(X[1] - S[1])
         X = (S[0] + (m2r * wx - m2i * wy) / mm, S[1] + (m2r * wy + m2i * wx) / mm)
+    return X
+
+
+def initial_line(surfaces, player, cursor, plan, flags=None):
+    """Exact implicit line of the initial beam: player -> the exact aim image."""
+    X = exact_image(surfaces, cursor, plan, flags)
+    if X is None:
+        return None
     Pp = FC(P(player))
     a, b = -(X[1] - Pp[1]), X[0] - Pp[0]
     return (a, b, a * Pp[0] + b * Pp[1])
 
 
-def _aim(surfaces, player, cursor, plan):
-    """(direction, exact line or None): the exact aim image's direction, or --
-    when the image is at infinity (aim undetermined) -- straight at the cursor."""
-    d = exact_direction(surfaces, plan, player, cursor)
+def fixes_cursor(surfaces, cursor, plan, flags=None):
+    """Exact: every frame change of the plan fixes the cursor (it lies on the
+    carrier of each planned reflection / inversion: an effect fixes its carrier
+    pointwise; a translation portal fixes nothing), so the aim image is the
+    cursor itself."""
+    by_id = {s.id: s for s in surfaces}
+    k = P(cursor)
+    for (sid, side), eff in zip(plan, plan_effects(surfaces, plan, flags)):
+        if eff not in TRANSFORMATIVE:
+            continue
+        surf = by_id[sid]
+        if surf.portal() is not None or not incident(k, surf):
+            return False
+    return True
+
+
+def _aim(surfaces, player, cursor, plan, flags=None):
+    """(direction, exact line or None, known points): the exact aim image's
+    direction, or -- when the image is at infinity (aim undetermined) --
+    straight at the cursor. When every frame change fixes the cursor, the aim
+    image is the cursor: exact data the initial beam passes through (known)."""
+    d = exact_direction(surfaces, plan, player, cursor, flags)
     if d is None:
-        return P(cursor) - P(player), "direction"
-    return d, initial_line(surfaces, player, cursor, plan)
+        return P(cursor) - P(player), "direction", []
+    known = [P(cursor)] if plan and fixes_cursor(surfaces, cursor, plan, flags) else []
+    return d, initial_line(surfaces, player, cursor, plan, flags), known
 
 
-def planned(surfaces, player, cursor, plan):
+def planned(surfaces, player, cursor, plan, flags=None):
     """Planned trace = forward PLANNED-mode walk of the exact aim direction."""
-    d, line = _aim(surfaces, player, cursor, plan)
-    return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line)
+    d, line, known = _aim(surfaces, player, cursor, plan, flags)
+    return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
+                                extra_known=known)
 
 
-def physical(surfaces, player, cursor, plan):
-    d, line = _aim(surfaces, player, cursor, plan)
-    return trace_mode_direction(surfaces, player, d, plan, P(cursor), PHYSICAL, line=line)
+def physical(surfaces, player, cursor, plan, flags=None):
+    d, line, known = _aim(surfaces, player, cursor, plan, flags)
+    return trace_mode_direction(surfaces, player, d, plan, P(cursor), PHYSICAL, line=line, flags=flags,
+                                extra_known=known)

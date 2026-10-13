@@ -119,7 +119,10 @@ func _sweep(plans: Array, positions: Array) -> Dictionary:
 	var runs := 0
 	for ids in plans:
 		var plan: Array = ids.map(func(i): return PlanManager.PlanEntry.new(i, Side.Value.LEFT))
-		for p in positions:
+		for pi in positions.size():
+			if not SweepRunner.in_shard(pi):
+				continue
+			var p: Vector2 = positions[pi]
 			for c in positions:
 				if p == c:
 					continue

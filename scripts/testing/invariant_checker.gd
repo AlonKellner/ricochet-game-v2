@@ -6,6 +6,7 @@ var _player: CharacterBody2D
 var _cursor: Node2D
 var _renderer: Node2D
 var _game_mgr: Node
+var _plan: PlanManager = null
 
 func setup(scene: Node) -> void:
 	_scene = scene
@@ -13,15 +14,24 @@ func setup(scene: Node) -> void:
 	_cursor = scene.get_node_or_null("Cursor")
 	_renderer = scene.get_node_or_null("PathRenderer")
 	_game_mgr = scene.get_node_or_null("GameManager")
+	# the plan the renderer reads: the GameManager's, or the checker's own
+	# (scenes without a GameManager)
+	if _game_mgr and "plan" in _game_mgr:
+		_plan = _game_mgr.plan
+	elif _renderer and "plan_override" in _renderer:
+		_plan = PlanManager.new()
+		_renderer.plan_override = _plan
+	_defs_cache = []
+	_scene_cache = null
 
 func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = []) -> Array[String]:
 	var violations: Array[String] = []
 	_position_nodes(player_pos, cursor_pos)
 	var plan_applied := false
-	if _game_mgr and "plan" in _game_mgr:
-		_game_mgr.plan.clear()
+	if _plan != null:
+		_plan.clear()
 		for entry in plan_entries:
-			_game_mgr.plan.add_entry(entry.surface_id, entry.side)
+			_plan.add_entry(entry.surface_id, entry.side)
 		plan_applied = plan_entries.size() > 0
 	if _renderer:
 		_renderer._compute_trace()
@@ -64,7 +74,7 @@ func check_UX7(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 			if _renderer.get_line_from() != player_pos:
 				violations.append("UX7: Line start %s != player %s" % [_renderer.get_line_from(), player_pos])
 			# Direction check only valid for empty plan — with a plan, aim is back-propagated
-			var has_plan: bool = _game_mgr != null and "plan" in _game_mgr and not _game_mgr.plan.is_empty()
+			var has_plan: bool = _plan != null and not _plan.is_empty()
 			if not has_plan:
 				var expected_dir := (cursor_pos - player_pos).normalized()
 				var actual_dir: Vector2 = _renderer.get_line_direction()
@@ -509,6 +519,8 @@ func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries
 	var sc := _beam_scene()
 	var ctx := NumCtx.f64()
 	var X = ctx.cn(cursor_pos.x, cursor_pos.y)
+	# largest magnitude along the image chain: the scale of its rounding
+	var scale := maxf(1.0, cursor_pos.length())
 	for j in range(plan_entries.size() - 1, -1, -1):
 		var surf: BeamScene.Surf = sc.by_id.get(plan_entries[j].surface_id)
 		var etype := "" if surf == null else surf.effect(plan_entries[j].side == Side.Value.LEFT)
@@ -519,16 +531,22 @@ func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries
 		X = BeamEffects.map_point(X, surf, true)
 		if X == null:
 			return out
+		scale = maxf(scale, Vector2(X.fx(), X.fy()).length())
+	# every frame change fixes the cursor (it lies on each planned carrier):
+	# the image is the cursor exactly, and the reference aims at it
+	if BeamSolver.fixes_cursor(sc, ctx.cn(cursor_pos.x, cursor_pos.y), BeamTracer.plan_items(plan_entries)):
+		X = ctx.cn(cursor_pos.x, cursor_pos.y)
 	var img := Vector2(X.fx(), X.fy())
 	if not (is_finite(img.x) and is_finite(img.y)) or img == player_pos:
 		return out
-	var ref := PrecisionLadder.solve(_defs(), [player_pos.x, player_pos.y], [X.fx(), X.fy()], [],
-		BeamSolver.MAX_HITS, BeamSolver.MAX_HITS, BeamTracer.TOL)
+	var defs := _defs()
+	var ref := PrecisionLadder.solve_physical(defs, [player_pos.x, player_pos.y], [X.fx(), X.fy()], [],
+		BeamSolver.MAX_HITS, BeamTracer.TOL, _fsc_cache)
 	# the reference aims at the float64 rounding of the image: compare only
 	# while the rounding of the aim angle (bound delta) cannot move an event
 	# by more than 0.005 px (tangent-linear gains of the reference trace)
-	var sens := ErrorEstimate.physical_sensitivity(_defs(), [player_pos.x, player_pos.y], [X.fx(), X.fy()], [], BeamSolver.MAX_HITS)
-	var delta: float = 64.0 * Exact.U * maxf(1.0, img.length()) / maxf(img.distance_to(player_pos), 1e-300)
+	var sens: ErrorEstimate.Sensitivity = ref.physical_sens
+	var delta: float = 64.0 * Exact.U * scale / maxf(img.distance_to(player_pos), 1e-300)
 	var a: Array = r.physical.filter(func(e): return e.kind == "hit")
 	var b: Array = ref.physical.filter(func(e): return e.kind == "hit")
 	var hit_gain: Array = []
@@ -537,7 +555,13 @@ func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries
 			hit_gain.append(sens.gain[k])
 	var n := mini(a.size(), b.size()) - 1     # the event budget differs by the cursor
 	for i in maxi(n, 0):
-		if i < hit_gain.size() and hit_gain[i] * delta > 0.005:
+		var move: float = hit_gain[i] * delta if i < hit_gain.size() else INF
+		if move > 0.005:
+			break
+		# a decision the aim rounding can reach (a candidate or endpoint within
+		# reach; an exact tie in the planned trace has a zero gap in the
+		# reference) is decided by that rounding: stop comparing
+		if b[i].margin <= move:
 			break
 		if a[i].surface_id != b[i].surface_id or a[i].left != b[i].left:
 			out.append("DIRECTION-ONLY: hit %d s=%d vs s=%d without plan" % [i, a[i].surface_id, b[i].surface_id])
@@ -681,14 +705,22 @@ func _beam_result():
 
 var _defs_cache: Array = []
 var _scene_cache: BeamScene = null
+var _defs_src: Array = []
+var _defs_n := -1
+var _fsc_cache: FastSolver.Scene = null
 
+# Scene defs of the checked scene, built once per surface set (the same
+# surfaces array with the same surfaces: sweeps never edit surfaces).
 func _defs() -> Array:
 	var parent := _renderer.get_parent()
 	var surfaces: Array = parent.surfaces if parent and "surfaces" in parent else []
-	var d := BeamScene.defs_from_surfaces(surfaces)
-	if _scene_cache == null or str(d) != str(_defs_cache):
-		_defs_cache = d
-		_scene_cache = BeamScene.from_defs(NumCtx.f64(), d)
+	if _scene_cache != null and is_same(surfaces, _defs_src) and surfaces.size() == _defs_n:
+		return _defs_cache
+	_defs_src = surfaces
+	_defs_n = surfaces.size()
+	_defs_cache = BeamScene.defs_from_surfaces(surfaces)
+	_scene_cache = BeamScene.from_defs(NumCtx.f64(), _defs_cache)
+	_fsc_cache = FastSolver.Scene.from_defs(_defs_cache)
 	return _defs_cache
 
 func _beam_scene() -> BeamScene:
