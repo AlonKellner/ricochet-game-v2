@@ -11,7 +11,7 @@ func _reflective_arc() -> Surface:
 	var config := SideConfig.new(refl, true)
 	return Surface.new(seg, config, config, false, false)
 
-func _step(path: Tracer.TracedPath, idx: int) -> Tracer.Step:
+func _step(path: TracePath, idx: int) -> TraceStep:
 	return path.steps[idx]
 
 # ============================================================
@@ -24,10 +24,10 @@ func test_bug1_reproduce_origin_termination() -> void:
 	var cursor := Vector2(383.4, 566.0)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, [arc], GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], null, cursor)
+	var path := TestTrace.trace(player, aim, [arc], GameState.new(), ray, -1.0,
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, [], null, cursor)
 
-	var reflect_step: Tracer.Step = null
+	var reflect_step: TraceStep = null
 	for step in path.steps:
 		if step.hit and step.hit.on_segment and step.surface_id == arc.id:
 			reflect_step = step
@@ -51,10 +51,10 @@ func test_bug1_origin_is_on_segment() -> void:
 	var cursor := Vector2(383.4, 566.0)
 	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, [arc], GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], null, cursor)
+	var path := TestTrace.trace(player, aim, [arc], GameState.new(), ray, -1.0,
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, [], null, cursor)
 
-	var on_seg_reflect: Tracer.Step = null
+	var on_seg_reflect: TraceStep = null
 	for step in path.steps:
 		if step.hit and step.hit.on_segment and step.surface_id == arc.id:
 			on_seg_reflect = step
@@ -85,16 +85,15 @@ func test_bug2_reproduce_false_divergence() -> void:
 	var player := Vector2(500, 450)
 	var cursor := Vector2(392.4, 660.2)
 	var plan_entries: Array = [PlanManager.PlanEntry.new(arc.id, Side.Value.LEFT)]
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, [arc], GameState.new(), cache)
+	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
 
-	var phys := Tracer.trace(player, aim, [arc], GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
-	var planned := Tracer.trace(player, aim, [arc], GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
+	var phys := TestTrace.trace(player, aim, [arc], GameState.new(), ray, -1.0,
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, null, cursor)
+	var planned := TestTrace.trace(player, aim, [arc], GameState.new(), ray, -1.0,
+		TraceMode.PLANNED, TraceMode.PHYSICAL, plan_entries, null, cursor)
 
-	var phys_first_hit: Tracer.Step = null
+	var phys_first_hit: TraceStep = null
 	for step in phys.steps:
 		if step.surface_id == arc.id:
 			phys_first_hit = step
@@ -103,14 +102,14 @@ func test_bug2_reproduce_false_divergence() -> void:
 	assert_false(phys_first_hit.hit_on_segment,
 		"Physical first hit should be off-segment (carrier extension)")
 
-	var phys_on_seg: Tracer.Step = null
+	var phys_on_seg: TraceStep = null
 	for step in phys.steps:
 		if step.surface_id == arc.id and step.hit_on_segment:
 			phys_on_seg = step
 			break
 	assert_not_null(phys_on_seg, "Physical trace should have an on-segment hit")
 
-	var planned_first_hit: Tracer.Step = null
+	var planned_first_hit: TraceStep = null
 	for step in planned.steps:
 		if step.surface_id == arc.id:
 			planned_first_hit = step
@@ -142,12 +141,11 @@ func test_bug2_physical_off_seg_then_on_seg() -> void:
 	var player := Vector2(500, 450)
 	var cursor := Vector2(392.4, 660.2)
 	var plan_entries: Array = [PlanManager.PlanEntry.new(arc.id, Side.Value.LEFT)]
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, [arc], GameState.new(), cache)
+	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
 
-	var phys := Tracer.trace(player, aim, [arc], GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
+	var phys := TestTrace.trace(player, aim, [arc], GameState.new(), ray, -1.0,
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, null, cursor)
 
 	var arc_hits: Array = []
 	for step in phys.steps:
@@ -166,12 +164,11 @@ func test_bug2_circle_hit_sides() -> void:
 	var player := Vector2(500, 450)
 	var cursor := Vector2(392.4, 660.2)
 	var plan_entries: Array = [PlanManager.PlanEntry.new(arc.id, Side.Value.LEFT)]
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, [arc], GameState.new(), cache)
+	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
 
-	var phys := Tracer.trace(player, aim, [arc], GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
+	var phys := TestTrace.trace(player, aim, [arc], GameState.new(), ray, -1.0,
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, null, cursor)
 
 	var arc_hits: Array = []
 	for step in phys.steps:
@@ -198,13 +195,13 @@ func test_bug2_line_carrier_hit_side() -> void:
 	var player := Vector2(930.0002, 827.9246)
 	var cursor := Vector2(717.7476, 825.5289)
 	var plan_entries: Array = [PlanManager.PlanEntry.new(m1.id, Side.Value.LEFT)]
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
+	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
 
-	var phys := Tracer.trace(player, aim, surfaces, GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
+	var phys := TestTrace.trace(player, aim, surfaces, GameState.new(), ray, -1.0,
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, null, cursor)
 
-	var m1_hit: Tracer.Step = null
+	var m1_hit: TraceStep = null
 	for step in phys.steps:
 		if step.surface_id == m1.id:
 			m1_hit = step
@@ -218,16 +215,15 @@ func test_bug2_working_case_player_inside_carrier() -> void:
 	var player := Vector2(463.3, 500.0)
 	var cursor := Vector2(392.4, 660.2)
 	var plan_entries: Array = [PlanManager.PlanEntry.new(arc.id, Side.Value.LEFT)]
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, [arc], GameState.new(), cache)
+	var aim := Direction.from_coords(player, cursor)
 	var ray := Ray.from_coords(player, aim)
 
-	var phys := Tracer.trace(player, aim, [arc], GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
-	var planned := Tracer.trace(player, aim, [arc], GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
+	var phys := TestTrace.trace(player, aim, [arc], GameState.new(), ray, -1.0,
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, null, cursor)
+	var planned := TestTrace.trace(player, aim, [arc], GameState.new(), ray, -1.0,
+		TraceMode.PLANNED, TraceMode.PHYSICAL, plan_entries, null, cursor)
 
-	var phys_first_hit: Tracer.Step = null
+	var phys_first_hit: TraceStep = null
 	for step in phys.steps:
 		if step.surface_id == arc.id:
 			phys_first_hit = step
@@ -236,7 +232,7 @@ func test_bug2_working_case_player_inside_carrier() -> void:
 	assert_true(phys_first_hit.hit_on_segment,
 		"Player inside carrier: first hit should be on-segment")
 
-	var planned_first_hit: Tracer.Step = null
+	var planned_first_hit: TraceStep = null
 	for step in planned.steps:
 		if step.surface_id == arc.id:
 			planned_first_hit = step

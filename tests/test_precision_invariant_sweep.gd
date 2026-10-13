@@ -1,12 +1,8 @@
 extends GutTest
 
-# Invariant sweep of the inversion grid through PathRenderer with BeamTracer
-# active. The generic sweep (test_invariant_sweep.gd) only covers
-# scenes/test_levels/, whose scenes all fall back to Tracer, so the beam
-# solver's displayed paths were never checked there.
-# Inputs the beam model does not define (player/cursor exactly at an
-# inversion center, player == cursor) fall back to Tracer; those runs are
-# counted but not asserted here (they are Tracer's own behaviour).
+# Invariant sweep of the inversion grid through PathRenderer (beam solver).
+# Runs where the renderer reports a solver other than "beam" (no trace pair,
+# e.g. degenerate inputs) are counted but not asserted here.
 
 const SCENE := "res://scenes/playground/inversion_grid.tscn"
 
@@ -15,7 +11,6 @@ var _scene: Node
 func before_each():
 	BeamTracer.clear_cache()
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 	_scene = load(SCENE).instantiate()
 	_scene.gravity = Vector2.ZERO
 	add_child_autofree(_scene)
@@ -69,7 +64,7 @@ func test_cancelling_rehit_restores_straight_beam():
 		var d := (cursor + Vector2(0, dy) - player).normalized()
 		for path in [renderer.get_traced_path(), renderer.get_planned_path()]:
 			for s in path.steps:
-				if s.frame_id != MobiusTransform.IDENTITY_ID or is_inf(s.start.x) or is_inf(s.end.x):
+				if s.frame_id != TraceStep.IDENTITY_FRAME or is_inf(s.start.x) or is_inf(s.end.x):
 					continue
 				if s.start == s.end:
 					continue
@@ -79,7 +74,7 @@ func test_cancelling_rehit_restores_straight_beam():
 # A step the renderer draws as a straight chord (arc too large to draw) must be
 # the path's own arc, i.e. run between its endpoints: via strictly inside the
 # chord's arc <=> the inscribed angle at via is not acute.
-func _chord_violations(path: Tracer.TracedPath) -> Array:
+func _chord_violations(path: TracePath) -> Array:
 	var bad: Array = []
 	for s in path.steps:
 		if not s.is_arc_step or is_inf(s.start.x) or is_inf(s.end.x) or is_inf(s.via.x):
@@ -109,9 +104,9 @@ func test_huge_long_way_arc_not_drawn_as_chord():
 			assert_eq(_chord_violations(path), [], "cursor %s" % cur)
 			# the step leaving the circle-1 hit heads up and out of screen
 			for i in path.steps.size():
-				var st: Tracer.Step = path.steps[i]
+				var st: TraceStep = path.steps[i]
 				if st.surface_id == 1 and i + 1 < path.steps.size():
-					var nxt: Tracer.Step = path.steps[i + 1]
+					var nxt: TraceStep = path.steps[i + 1]
 					assert_lt(nxt.end.y, nxt.start.y, "cursor %s: leaves circle 1 upwards (%s -> %s)" % [cur, nxt.start, nxt.end])
 					break
 
@@ -145,7 +140,7 @@ func test_sweep_no_plan():
 	var runner := SweepRunner.new().configure(5, 10, 42)
 	var positions := runner.build_positions(runner._extract_points_of_interest(_scene))
 	var r := _sweep([[]], positions)
-	gut.p("inversion_grid no plan: %d runs, %d fell back to Tracer (degenerate inputs)" % [r.runs, r.fallbacks])
+	gut.p("inversion_grid no plan: %d runs, %d without a beam pair (degenerate inputs)" % [r.runs, r.fallbacks])
 	_report(r.failures, "inversion_grid no plan")
 
 func test_sweep_with_plans():
@@ -163,5 +158,5 @@ func test_sweep_with_plans():
 		if not inside:
 			positions.append(p)
 	var r := _sweep(plans, positions)
-	gut.p("inversion_grid with plans: %d runs, %d fell back to Tracer" % [r.runs, r.fallbacks])
+	gut.p("inversion_grid with plans: %d runs, %d without a beam pair" % [r.runs, r.fallbacks])
 	_report(r.failures, "inversion_grid with plans")

@@ -12,6 +12,10 @@ func is_terminal() -> bool:
 func is_transformative() -> bool:
 	return kind() == Kind.TRANSFORMATIVE
 
+# Stage 84 stub
+func is_self_inverse() -> bool:
+	return false
+
 func get_mobius() -> MobiusTransform:
 	return MobiusTransform.identity()
 

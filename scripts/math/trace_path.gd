@@ -1,7 +1,7 @@
 class_name TracePath
 extends RefCounted
 
-# A traced path: steps plus trace-level results. Formerly Tracer.TracedPath
+# A traced path: steps plus trace-level results. Formerly TracePath
 # (still available under that name as an alias).
 
 var steps: Array = []

@@ -42,11 +42,11 @@ static func _geometric_carrier_dist(point: Vector2, carrier: GeneralizedCircle) 
 		return absf(point.distance_to(ctr) - r)
 
 ## Check ALL visual hitpoints in a trace against physical surface carriers.
-func _check_all_visual_hitpoints(path: Tracer.TracedPath, surfaces: Array, tolerance: float = 5.0) -> Array:
+func _check_all_visual_hitpoints(path: TracePath, surfaces: Array, tolerance: float = 5.0) -> Array:
 	var violations := []
 	var bounds := VisualConverter.DEFAULT_BOUNDS
 	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		if step.hit == null or step.hit.segment == null:
 			continue
 		var end_pos := step.end
@@ -68,11 +68,11 @@ func _check_all_visual_hitpoints(path: Tracer.TracedPath, surfaces: Array, toler
 	return violations
 
 ## Check that the trace's terminal endpoint is on a terminal-effect carrier.
-func _check_terminal_on_terminal_carrier(path: Tracer.TracedPath, surfaces: Array, tolerance: float = 5.0) -> Array:
+func _check_terminal_on_terminal_carrier(path: TracePath, surfaces: Array, tolerance: float = 5.0) -> Array:
 	var violations := []
 	if path.steps.is_empty():
 		return violations
-	var last: Tracer.Step = path.steps[path.steps.size() - 1]
+	var last: TraceStep = path.steps[path.steps.size() - 1]
 	if last.hit == null or last.hit.segment == null:
 		return violations
 	var end_pos := last.end
@@ -108,7 +108,7 @@ func test_all_visual_hitpoints_on_physical_carrier() -> void:
 	var surfaces := _build_main_scene_surfaces()
 	var player := Vector2(791.3528, 725.1172)
 	var aim := Direction.from_coords(player, Vector2(847.8832, 768.4231))
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
 	var violations := _check_all_visual_hitpoints(path, surfaces)
 	for v in violations:
@@ -122,7 +122,7 @@ func test_terminal_endpoint_on_terminal_carrier() -> void:
 	var surfaces := _build_main_scene_surfaces()
 	var player := Vector2(791.3528, 725.1172)
 	var aim := Direction.from_coords(player, Vector2(847.8832, 768.4231))
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
 	var violations := _check_terminal_on_terminal_carrier(path, surfaces)
 	for v in violations:
@@ -136,13 +136,13 @@ func test_diagnose_per_step_carrier_distances() -> void:
 	var surfaces := _build_main_scene_surfaces()
 	var player := Vector2(791.3528, 725.1172)
 	var aim := Direction.from_coords(player, Vector2(847.8832, 768.4231))
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
 	var surface_names := ["top wall", "right wall", "bottom wall", "left wall",
 		"mirror x=500", "mirror x=1400", "mirror y=800", "mirror x=960(R)", "inversion arc"]
 
 	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		var end_pos := step.end
 		var hit_info := "no-hit"
 		if step.hit != null:
@@ -178,11 +178,11 @@ func test_sweep_all_visual_hitpoints() -> void:
 				var target := player + Vector2(cos(angle), sin(angle)) * 100.0
 				var aim := Direction.from_coords(player, target)
 				H.reset_counters()
-				var path := Tracer.trace(player, aim, surfaces, GameState.new())
+				var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
 				var violations := _check_all_visual_hitpoints(path, surfaces)
 				for step_i in path.steps.size():
-					var step: Tracer.Step = path.steps[step_i]
+					var step: TraceStep = path.steps[step_i]
 					if step.hit != null and step.hit.segment != null:
 						total_steps += 1
 				violation_count += violations.size()

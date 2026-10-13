@@ -2,7 +2,6 @@ extends GutTest
 
 func before_each() -> void:
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 
 func _build_portals_scene() -> Array:
 	var surfs: Array = []
@@ -50,10 +49,10 @@ func _build_portals_scene() -> Array:
 		surfs.append(Surface.new(sb_seg, SideConfig.new(null, false), SideConfig.new(null, false), false, false))
 	return surfs
 
-func _count_zero_length_steps(path: Tracer.TracedPath) -> int:
+func _count_zero_length_steps(path: TracePath) -> int:
 	var count := 0
 	for s in path.steps:
-		var step: Tracer.Step = s
+		var step: TraceStep = s
 		if step.start.distance_to(step.end) < 0.01:
 			count += 1
 	return count
@@ -64,11 +63,8 @@ func test_step1_physical_no_oscillation() -> void:
 	var surfs := _build_portals_scene()
 	var player := Vector2(970, 703)
 	var cursor := Vector2(1027, 675)
-	var aim := Direction.from_coords(player, cursor)
-	var ray := Ray.from_coords(player, aim)
-	var cache := TransformCache.new()
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cache, cursor)
+	var path: TracePath = TestTrace.pair_of(player, cursor, surfs).physical
+	assert_gt(path.steps.size(), 0, "Physical trace has steps")
 	var zero_count := _count_zero_length_steps(path)
 	assert_eq(zero_count, 0, "Physical trace should have no zero-length steps")
 
@@ -76,60 +72,8 @@ func test_step1_planned_oscillation() -> void:
 	var surfs := _build_portals_scene()
 	var player := Vector2(970, 703)
 	var cursor := Vector2(1027, 675)
-	var aim := Direction.from_coords(player, cursor)
-	var ray := Ray.from_coords(player, aim)
-	var cache := TransformCache.new()
-	var _physical := Tracer.trace(player, aim, surfs, GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cache, cursor)
-	var planned := Tracer.trace(player, aim, surfs, GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], cache, cursor)
+	var planned: TracePath = TestTrace.pair_of(player, cursor, surfs).planned
+	assert_gt(planned.steps.size(), 0, "Planned trace has steps")
 	var zero_count := _count_zero_length_steps(planned)
 	assert_eq(zero_count, 0,
 		"Planned trace should have no zero-length steps (got %d)" % zero_count)
-
-# === Step 2: Isolate cache vs mode ===
-
-func test_step2_planned_isolated_cache() -> void:
-	var surfs := _build_portals_scene()
-	var player := Vector2(970, 703)
-	var cursor := Vector2(1027, 675)
-	var aim := Direction.from_coords(player, cursor)
-	var ray := Ray.from_coords(player, aim)
-	var planned := Tracer.trace(player, aim, surfs, GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], TransformCache.new(), cursor)
-	var zero_count := _count_zero_length_steps(planned)
-	assert_eq(zero_count, 0,
-		"Planned trace with isolated cache should have no zero-length steps (got %d)" % zero_count)
-
-# === Step 3: Prove norm_cache mapping corruption ===
-
-func test_step3_norm_cache_mapping_corruption() -> void:
-	var surfs := _build_portals_scene()
-	var cache := TransformCache.new()
-	var player := Vector2(970, 703)
-	var cursor := Vector2(1027, 675)
-	var aim := Direction.from_coords(player, cursor)
-	var ray := Ray.from_coords(player, aim)
-	# Run physical trace — this will write identity-frame + reflection-frame norm caches
-	var _physical := Tracer.trace(player, aim, surfs, GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cache, cursor)
-	# After the physical trace, check the identity-frame cache
-	var identity_cached = cache.get_normalized(MobiusTransform.IDENTITY_ID)
-	assert_not_null(identity_cached, "Identity frame should be cached")
-	# The mapping should map original segments → original surfaces
-	var arc_surf_obj: Surface = surfs[8]  # reflective_arcs is the 9th surface (index 8)
-	var arc_seg: Segment = arc_surf_obj.segment
-	var mapped_surf: Surface = identity_cached.mapping.get(arc_seg)
-	gut.p("Arc segment in identity cache mapping: %s" % (mapped_surf != null))
-	gut.p("Identity cache mapping size: %d" % identity_cached.mapping.size())
-	if mapped_surf != null:
-		gut.p("Mapped surface id: %d" % mapped_surf.id)
-	else:
-		gut.p("CORRUPTION: arc segment not found in identity cache mapping!")
-		gut.p("Keys in mapping:")
-		for key in identity_cached.mapping:
-			var val = identity_cached.mapping[key]
-			gut.p("  seg(%s->%s) → surf id=%d" % [key.start.coords, key.end.coords, val.id])
-	assert_not_null(mapped_surf,
-		"Identity-frame cache mapping must contain the arc surface's segment")
-

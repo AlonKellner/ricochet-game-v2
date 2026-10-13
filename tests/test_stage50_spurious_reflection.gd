@@ -48,12 +48,12 @@ func test_multi_bounce_valid_hits() -> void:
 	var surfaces := _build_three_mirrors_surfaces()
 	var player := Vector2(1108.732, 827.924)
 	var aim := Direction.from_coords(player, Vector2(853.8895, 710.3155))
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
 	var bad_hits := 0
 	for i in range(1, path.steps.size()):
-		var step: Tracer.Step = path.steps[i]
-		var prev: Tracer.Step = path.steps[i - 1]
+		var step: TraceStep = path.steps[i]
+		var prev: TraceStep = path.steps[i - 1]
 		if step.frame_id == prev.frame_id:
 			continue
 		if prev.hit == null or not prev.hit.on_segment:
@@ -66,10 +66,10 @@ func test_repro_numerical_stability() -> void:
 	var surfaces := _build_three_mirrors_surfaces()
 	var player := Vector2(1108.732, 827.924)
 	var aim := Direction.from_coords(player, Vector2(853.8895, 710.3155))
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
 	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		if is_inf(step.start.x) or is_inf(step.start.y):
 			continue
 		if is_inf(step.end.x) or is_inf(step.end.y):
@@ -87,12 +87,12 @@ func test_multi_bounce_all_on_segment() -> void:
 	var surfaces := _build_three_mirrors_surfaces()
 	var player := Vector2(1108.732, 827.924)
 	var aim := Direction.from_coords(player, Vector2(853.8895, 710.3155))
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
 	var bad_hits := 0
 	for i in range(1, path.steps.size()):
-		var step: Tracer.Step = path.steps[i]
-		var prev: Tracer.Step = path.steps[i - 1]
+		var step: TraceStep = path.steps[i]
+		var prev: TraceStep = path.steps[i - 1]
 		if step.frame_id == prev.frame_id:
 			continue
 		if prev.hit == null or not prev.hit.on_segment:
@@ -119,11 +119,11 @@ func test_sweep_multi_bounce_validity() -> void:
 				var target := player + Vector2(cos(angle), sin(angle)) * 100.0
 				var aim := Direction.from_coords(player, target)
 				H.reset_counters()
-				var path := Tracer.trace(player, aim, surfaces, GameState.new())
+				var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 				total += 1
 
 				for step in path.steps:
-					var s: Tracer.Step = step
+					var s: TraceStep = step
 					if is_inf(s.end.x) or is_inf(s.end.y):
 						continue
 					if absf(s.end.x) > 1e6 or absf(s.end.y) > 1e6:

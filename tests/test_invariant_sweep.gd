@@ -14,7 +14,6 @@ func test_sweep_all_scenes() -> void:
 
 	for scene_path in scene_paths:
 		Surface.reset_id_counter()
-		MobiusTransform.reset_id_counter()
 		var scene: Node = load(scene_path).instantiate()
 		scene.gravity = Vector2.ZERO
 		add_child_autofree(scene)
@@ -66,7 +65,6 @@ func test_sweep_with_plans() -> void:
 		if not FileAccess.file_exists(scene_path):
 			continue
 		Surface.reset_id_counter()
-		MobiusTransform.reset_id_counter()
 		var scene: Node = load(scene_path).instantiate()
 		scene.gravity = Vector2.ZERO
 		add_child_autofree(scene)

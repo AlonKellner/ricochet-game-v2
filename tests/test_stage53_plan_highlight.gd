@@ -22,7 +22,7 @@ func _left_only_mirror(x: float) -> Surface:
 # ============================================================
 
 func test_step_defaults() -> void:
-	var step := Tracer.Step.new()
+	var step := TraceStep.new()
 	assert_eq(step.surface_id, -1, "Default surface_id should be -1")
 	assert_eq(step.hit_side, -1, "Default hit_side should be -1")
 	assert_eq(step.hit_on_segment, false, "Default hit_on_segment should be false")
@@ -31,8 +31,8 @@ func test_physical_trace_step_has_surface_id() -> void:
 	var m := _mirror(400)
 	var player := Vector2(200, 300)
 	var aim := Direction.from_coords(player, Vector2(600, 300))
-	var path := Tracer.trace(player, aim, [m], GameState.new())
-	var hit_step: Tracer.Step = null
+	var path := TestTrace.trace(player, aim, [m], GameState.new())
+	var hit_step: TraceStep = null
 	for step in path.steps:
 		if step.hit and step.surface_id >= 0:
 			hit_step = step
@@ -44,8 +44,8 @@ func test_physical_trace_step_has_hit_side() -> void:
 	var m := _mirror(400)
 	var player := Vector2(200, 300)
 	var aim := Direction.from_coords(player, Vector2(600, 300))
-	var path := Tracer.trace(player, aim, [m], GameState.new())
-	var hit_step: Tracer.Step = null
+	var path := TestTrace.trace(player, aim, [m], GameState.new())
+	var hit_step: TraceStep = null
 	for step in path.steps:
 		if step.surface_id == m.id:
 			hit_step = step
@@ -58,8 +58,8 @@ func test_physical_trace_step_has_on_segment() -> void:
 	var m := _mirror(400)
 	var player := Vector2(200, 300)
 	var aim := Direction.from_coords(player, Vector2(600, 300))
-	var path := Tracer.trace(player, aim, [m], GameState.new())
-	var hit_step: Tracer.Step = null
+	var path := TestTrace.trace(player, aim, [m], GameState.new())
+	var hit_step: TraceStep = null
 	for step in path.steps:
 		if step.surface_id == m.id:
 			hit_step = step
@@ -70,12 +70,12 @@ func test_physical_trace_step_has_on_segment() -> void:
 func test_escape_step_has_no_surface_id() -> void:
 	var player := Vector2(200, 300)
 	var aim := Direction.from_coords(player, Vector2(600, 300))
-	var path := Tracer.trace(player, aim, [], GameState.new())
+	var path := TestTrace.trace(player, aim, [], GameState.new())
 	for step in path.steps:
 		assert_eq(step.surface_id, -1, "Escape steps should have no surface_id")
 
 func test_with_type_preserves_surface_fields() -> void:
-	var step := Tracer.Step.new()
+	var step := TraceStep.new()
 	step.surface_id = 42
 	step.hit_side = Side.Value.RIGHT
 	step.hit_on_segment = true
@@ -89,8 +89,8 @@ func test_with_type_preserves_surface_fields() -> void:
 # ============================================================
 
 func test_physical_hits_contains_hit_surface() -> void:
-	var path := Tracer.TracedPath.new()
-	var step := Tracer.Step.new()
+	var path := TracePath.new()
+	var step := TraceStep.new()
 	step.surface_id = 5
 	step.hit_side = Side.Value.LEFT
 	step.hit_on_segment = true
@@ -99,8 +99,8 @@ func test_physical_hits_contains_hit_surface() -> void:
 	assert_true(hits.has(5), "Dict should contain surface_id 5")
 
 func test_physical_hits_records_side_and_on_segment() -> void:
-	var path := Tracer.TracedPath.new()
-	var step := Tracer.Step.new()
+	var path := TracePath.new()
+	var step := TraceStep.new()
 	step.surface_id = 5
 	step.hit_side = Side.Value.LEFT
 	step.hit_on_segment = true
@@ -112,16 +112,16 @@ func test_physical_hits_records_side_and_on_segment() -> void:
 	assert_eq(entries[0].on_segment, true, "Should record on_segment")
 
 func test_physical_hits_empty_for_no_hits() -> void:
-	var path := Tracer.TracedPath.new()
-	var step := Tracer.Step.new()
+	var path := TracePath.new()
+	var step := TraceStep.new()
 	path.steps.append(step)
 	var hits := PathRendererScript.build_physical_hits(path)
 	assert_eq(hits.size(), 0, "No enriched steps → empty dict")
 
 func test_physical_hits_skips_negative_surface_id() -> void:
-	var path := Tracer.TracedPath.new()
-	var s1 := Tracer.Step.new()
-	var s2 := Tracer.Step.new()
+	var path := TracePath.new()
+	var s1 := TraceStep.new()
+	var s2 := TraceStep.new()
 	s2.surface_id = 3
 	s2.hit_side = Side.Value.RIGHT
 	s2.hit_on_segment = true

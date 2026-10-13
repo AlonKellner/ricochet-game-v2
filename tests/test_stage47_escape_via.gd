@@ -12,38 +12,18 @@ func _full_circle_mirror(center: Vector2, r: float) -> Surface:
 	var config := SideConfig.new(refl, true)
 	return Surface.new(seg, config, config, false, false)
 
-# --- T3: Pole tests ---
-
-func test_pole_is_preimage_of_infinity() -> void:
-	for r in [50.0, 100.0, 200.0, 250.0, 500.0]:
-		var center := Vector2(960, 540)
-		var carrier := GeneralizedCircle.from_circle(center, r)
-		var refl := ReflectionEffect.new(carrier)
-		var frame := refl.get_mobius()
-		var pole := frame.pole()
-		var result := frame.apply(pole)
-		assert_true(is_inf(result.x) or is_inf(result.y),
-			"pole() must map to infinity for r=%d. pole=%s result=%s" % [r, pole, result])
-
-func test_pole_equals_circle_center() -> void:
-	for r in [50.0, 200.0, 250.0, 500.0]:
-		var center := Vector2(960, 540)
-		var carrier := GeneralizedCircle.from_circle(center, r)
-		var refl := ReflectionEffect.new(carrier)
-		var frame := refl.get_mobius()
-		var pole := frame.pole()
-		assert_almost_eq(pole, center, Vector2(0.01, 0.01),
-			"For circle inversion, pole should be at center. r=%d pole=%s" % [r, pole])
-
 func test_escape_via_finite_for_r250() -> void:
 	var center := Vector2(960, 540)
 	var r := 250.0
 	var surf := _full_circle_mirror(center, r)
 	var player := Vector2(center.x - r - 100, center.y)
 	var aim := Direction.from_coords(player, center)
-	var path := Tracer.trace(player, aim, [surf], GameState.new())
+	var path := TestTrace.trace(player, aim, [surf], GameState.new())
+	# the beam keeps the radial (through-center) beam exactly straight, so there
+	# may be no arc steps at all; assert the trace exists so the test is not vacuous
+	assert_gt(path.steps.size(), 0, "Trace should produce steps")
 	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		if step.is_arc_step:
 			assert_false(is_inf(step.via.x) and is_inf(step.via.y),
 				"Arc step %d via must be finite for r=250 collinear. via=%s" % [i, step.via])
@@ -57,8 +37,8 @@ func test_escape_via_finite_sweep() -> void:
 		var player := Vector2(center.x - r - 100, center.y)
 		var aim := Direction.from_coords(player, center)
 		H.reset_counters()
-		var path := Tracer.trace(player, aim, [surf], GameState.new())
-		for step: Tracer.Step in path.steps:
+		var path := TestTrace.trace(player, aim, [surf], GameState.new())
+		for step: TraceStep in path.steps:
 			if step.is_arc_step and (is_inf(step.via.x) and is_inf(step.via.y)):
 				inf_count += 1
 	assert_eq(inf_count, 0,
@@ -71,9 +51,9 @@ func test_escape_arc_side_correct() -> void:
 	var surf := _full_circle_mirror(center, r)
 	var player := Vector2(center.x - r - 100, center.y + 50)
 	var aim := Direction.from_coords(player, Vector2(center.x + r + 100, center.y - 50))
-	var path := Tracer.trace(player, aim, [surf], GameState.new())
+	var path := TestTrace.trace(player, aim, [surf], GameState.new())
 	var found_arc_escape := false
-	for step: Tracer.Step in path.steps:
+	for step: TraceStep in path.steps:
 		if step.is_arc_step and step.hit == null:
 			found_arc_escape = true
 			var eval_via := carrier.evaluate(step.via)
@@ -83,32 +63,15 @@ func test_escape_arc_side_correct() -> void:
 	if not found_arc_escape:
 		pass_test("No arc escape found — test is N/A for this configuration")
 
-# --- T1: Always-normalize tests ---
-
-func test_always_normalize_small_entries() -> void:
-	var center := Vector2(960, 540)
-	var r := 100.0
-	var carrier := GeneralizedCircle.from_circle(center, r)
-	var refl := ReflectionEffect.new(carrier)
-	var m := refl.get_mobius()
-	var composed := m.compose(m)
-	var max_mag := maxf(
-		maxf(sqrt(composed.a_re * composed.a_re + composed.a_im * composed.a_im),
-			 sqrt(composed.b_re * composed.b_re + composed.b_im * composed.b_im)),
-		maxf(sqrt(composed.c_re * composed.c_re + composed.c_im * composed.c_im),
-			 sqrt(composed.d_re * composed.d_re + composed.d_im * composed.d_im)))
-	assert_almost_eq(max_mag, 1.0, 0.01,
-		"After compose, max entry magnitude should be ~1.0 (always normalized). Got %.4f" % max_mag)
-
 # --- T2: FAR_DISTANCE removal tests ---
 
 func test_line_escape_endpoint_is_infinity() -> void:
 	var player := Vector2(500, 300)
 	var aim := Direction.from_coords(player, Vector2(800, 300))
-	var path := Tracer.trace(player, aim, [], GameState.new())
+	var path := TestTrace.trace(player, aim, [], GameState.new())
 	assert_true(path.steps.size() > 0, "Should have escape steps")
 	var has_inf_endpoint := false
-	for step: Tracer.Step in path.steps:
+	for step: TraceStep in path.steps:
 		if is_inf(step.end.x) or is_inf(step.end.y) or is_inf(step.start.x) or is_inf(step.start.y):
 			has_inf_endpoint = true
 	assert_true(has_inf_endpoint,
@@ -117,9 +80,9 @@ func test_line_escape_endpoint_is_infinity() -> void:
 func test_line_escape_via_stores_direction() -> void:
 	var player := Vector2(500, 300)
 	var aim := Direction.from_coords(player, Vector2(800, 300))
-	var path := Tracer.trace(player, aim, [], GameState.new())
+	var path := TestTrace.trace(player, aim, [], GameState.new())
 	var found_escape := false
-	for step: Tracer.Step in path.steps:
+	for step: TraceStep in path.steps:
 		if step.hit == null and not step.is_arc_step:
 			found_escape = true
 			assert_false(is_inf(step.via.x) and is_inf(step.via.y),
@@ -129,11 +92,11 @@ func test_line_escape_via_stores_direction() -> void:
 func test_line_escape_clips_correctly_after_display() -> void:
 	var player := Vector2(500, 300)
 	var aim := Direction.from_coords(player, Vector2(800, 300))
-	var path := Tracer.trace(player, aim, [], GameState.new())
+	var path := TestTrace.trace(player, aim, [], GameState.new())
 	var bounds := Rect2(0, 0, 1920, 1080)
 	var display_path := VisualConverter.prepare_for_display(path, bounds)
 	assert_true(display_path.steps.size() > 0, "Should have clipped steps")
-	for step: Tracer.Step in display_path.steps:
+	for step: TraceStep in display_path.steps:
 		assert_false(is_inf(step.start.x) or is_inf(step.start.y),
 			"After display, start should be finite. start=%s" % step.start)
 		assert_false(is_inf(step.end.x) or is_inf(step.end.y),

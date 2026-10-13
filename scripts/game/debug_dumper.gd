@@ -78,14 +78,14 @@ static func dump(gm) -> void:
 	lines.append("=== END DEBUG STATE ===")
 	print("\n".join(lines))
 
-static func _dump_trace(lines: PackedStringArray, trace_name: String, prefix: String, path: Tracer.TracedPath, surfaces: Array) -> void:
+static func _dump_trace(lines: PackedStringArray, trace_name: String, prefix: String, path: TracePath, surfaces: Array) -> void:
 	if path == null:
 		lines.append("%s trace: (null)" % trace_name)
 		return
 	lines.append("%s trace: %d steps, cursor_index=%d, targets_hit=%s" % [
 		trace_name, path.steps.size(), path.cursor_index, path.targets_hit])
 	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		var parts: PackedStringArray = []
 		parts.append("  %s%d: %s → %s" % [prefix, i, step.start, step.end])
 		var seg_len := step.start.distance_to(step.end)
@@ -98,7 +98,7 @@ static func _dump_trace(lines: PackedStringArray, trace_name: String, prefix: St
 		if step.hit == null:
 			parts.append("[virt]")
 		else:
-			var hit: Intersection.HitRecord = step.hit
+			var hit: TraceHit = step.hit
 			var side_name := "L" if hit.side == Side.Value.LEFT else "R"
 			var on_seg_str := "on" if hit.on_segment else "off"
 			var surf_id := str(step.surface_id) if step.surface_id >= 0 else _find_surface_id(hit.segment, surfaces)
@@ -125,7 +125,7 @@ static func _dump_merged(lines: PackedStringArray, path_renderer: Node2D) -> voi
 	}
 	lines.append("Merged: %d steps" % typed.size())
 	for i in typed.size():
-		var ms: Tracer.Step = typed[i]
+		var ms: TraceStep = typed[i]
 		var tname: String = type_names.get(ms.type, "?%d" % ms.type)
 		var solid_str := "solid" if StepTypes.is_solid(ms.type) else "dash"
 		lines.append("  M%d: %s → %s [%s %s] fid=%d" % [

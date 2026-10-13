@@ -87,12 +87,12 @@ func test_solid_green_to_cursor_dashed_after() -> void:
 	var typed: Array = renderer.get_typed_steps()
 	assert_gt(typed.size(), 0, "Should have typed steps")
 
-	var first: Tracer.Step = typed[0]
+	var first: TraceStep = typed[0]
 	assert_eq(first.type, StepTypes.Type.ALIGNED, "First step solid green (ALIGNED)")
 
 	var has_post := false
 	for i in typed.size():
-		var ms: Tracer.Step = typed[i]
+		var ms: TraceStep = typed[i]
 		if ms.type == StepTypes.Type.ALIGNED_POST_PLANNED:
 			has_post = true
 	assert_true(has_post, "Should have dashed green (ALIGNED_POST_PLANNED) after cursor")

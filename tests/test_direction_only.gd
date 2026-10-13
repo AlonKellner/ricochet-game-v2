@@ -8,7 +8,7 @@ func before_each() -> void:
 # --- Geometry extraction tests ---
 
 func test_extract_geometry_empty_path() -> void:
-	var path := Tracer.TracedPath.new()
+	var path := TracePath.new()
 	var geo := InvariantChecker._extract_trace_geometry(path)
 	assert_eq(geo.size(), 0, "Empty path should produce empty geometry")
 
@@ -17,18 +17,18 @@ func test_extract_geometry_null_path() -> void:
 	assert_eq(geo.size(), 0, "Null path should produce empty geometry")
 
 func test_extract_geometry_single_step() -> void:
-	var path := Tracer.TracedPath.new()
-	path.steps.append(Tracer.Step.new(Vector2(0, 0), Vector2(100, 0), 0))
+	var path := TracePath.new()
+	path.steps.append(TraceStep.new(Vector2(0, 0), Vector2(100, 0), 0))
 	var geo := InvariantChecker._extract_trace_geometry(path)
 	assert_eq(geo.size(), 1, "Single step should produce one segment")
 	assert_eq(geo[0].start, Vector2(0, 0))
 	assert_eq(geo[0].end, Vector2(100, 0))
 
 func test_extract_geometry_merges_same_frame_id() -> void:
-	var path := Tracer.TracedPath.new()
-	path.steps.append(Tracer.Step.new(Vector2(0, 0), Vector2(50, 0), 0))
-	path.steps.append(Tracer.Step.new(Vector2(50, 0), Vector2(100, 0), 0))
-	path.steps.append(Tracer.Step.new(Vector2(100, 0), Vector2(200, 100), 1))
+	var path := TracePath.new()
+	path.steps.append(TraceStep.new(Vector2(0, 0), Vector2(50, 0), 0))
+	path.steps.append(TraceStep.new(Vector2(50, 0), Vector2(100, 0), 0))
+	path.steps.append(TraceStep.new(Vector2(100, 0), Vector2(200, 100), 1))
 	var geo := InvariantChecker._extract_trace_geometry(path)
 	assert_eq(geo.size(), 2, "Two frame_ids should produce two segments")
 	assert_eq(geo[0].start, Vector2(0, 0))
@@ -37,10 +37,10 @@ func test_extract_geometry_merges_same_frame_id() -> void:
 	assert_eq(geo[1].end, Vector2(200, 100))
 
 func test_extract_geometry_no_merge_different_frame_ids() -> void:
-	var path := Tracer.TracedPath.new()
-	path.steps.append(Tracer.Step.new(Vector2(0, 0), Vector2(100, 0), 0))
-	path.steps.append(Tracer.Step.new(Vector2(100, 0), Vector2(200, 100), 1))
-	path.steps.append(Tracer.Step.new(Vector2(200, 100), Vector2(300, 0), 2))
+	var path := TracePath.new()
+	path.steps.append(TraceStep.new(Vector2(0, 0), Vector2(100, 0), 0))
+	path.steps.append(TraceStep.new(Vector2(100, 0), Vector2(200, 100), 1))
+	path.steps.append(TraceStep.new(Vector2(200, 100), Vector2(300, 0), 2))
 	var geo := InvariantChecker._extract_trace_geometry(path)
 	assert_eq(geo.size(), 3, "All different frame_ids should produce three segments")
 
@@ -64,18 +64,16 @@ func test_direction_only_single_mirror_direct() -> void:
 	var cursor := Vector2(600, 200)
 	var plan := [PlanManager.PlanEntry.new(mirror.id, Side.Value.LEFT)]
 
-	var aim_point = Planner._compute_image(cursor, plan, surfaces, GameState.new())
-	assert_not_null(aim_point, "Aim point should not be null")
+	# The planned aim point is the cursor's image in the mirror x=400
+	# (the legacy planner image helper is gone; the beam computes its own aim).
+	var aim_point := Vector2(2.0 * 400.0 - cursor.x, cursor.y)
 
-	var cache := TransformCache.new()
-	var aim_dir := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new(), cache)
-
-	var trace_with_plan := Tracer.trace(player, aim_dir, surfaces, GameState.new(),
-		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan, cache, cursor)
+	var trace_with_plan := TestTrace.trace(player, Direction.from_coords(player, cursor), surfaces,
+		GameState.new(), null, -1.0, TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan, null, cursor)
 
 	var ref_dir := Direction.from_coords(player, aim_point)
-	var trace_no_plan := Tracer.trace(player, ref_dir, surfaces, GameState.new(),
-		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], null, aim_point)
+	var trace_no_plan := TestTrace.trace(player, ref_dir, surfaces, GameState.new(),
+		null, -1.0, TraceMode.PHYSICAL, TraceMode.PHYSICAL, [], null, aim_point)
 
 	var geo_a := InvariantChecker._extract_trace_geometry(trace_with_plan)
 	var geo_b := InvariantChecker._extract_trace_geometry(trace_no_plan)
@@ -88,21 +86,10 @@ func test_direction_only_single_mirror_direct() -> void:
 		assert_almost_eq(geo_a[i].end, geo_b[i].end, Vector2(1, 1),
 			"Segment %d end should match" % i)
 
-func test_direction_only_degenerate_aim_point() -> void:
-	var mirror := _make_mirror_left(400)
-	var surfaces := [mirror]
-	var player := Vector2(200, 300)
-	var cursor := Vector2(200, 300)
-	var plan := [PlanManager.PlanEntry.new(999, Side.Value.LEFT)]
-
-	var aim_point = Planner._compute_image(cursor, plan, surfaces, GameState.new())
-	assert_null(aim_point, "Non-existent surface should produce null aim point")
-
 # --- Scene-based DIRECTION-ONLY tests ---
 
 func test_direction_only_scene_mirror() -> void:
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 	var scene_path := "res://scenes/test_levels/room_with_mirror.tscn"
 	if not FileAccess.file_exists(scene_path):
 		pass_test("Scene not found, skipping")
@@ -143,7 +130,6 @@ func test_direction_only_scene_mirror() -> void:
 
 func test_direction_only_scene_inversion() -> void:
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 	var scene_path := "res://scenes/test_levels/room_with_inversion.tscn"
 	if not FileAccess.file_exists(scene_path):
 		pass_test("Scene not found, skipping")

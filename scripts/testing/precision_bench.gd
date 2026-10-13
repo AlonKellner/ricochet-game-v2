@@ -96,14 +96,14 @@ static func run_s0(scn: Dictionary, n_planned: int, n_physical: int) -> Dictiona
 	var cache := TransformCache.new()
 	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, gs, cache)
 	var ray := Ray.from_coords(player, aim)
-	var phys := Tracer.trace(player, aim, surfaces, gs, ray, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan, cache, cursor)
-	var planned := Tracer.trace(player, aim, surfaces, gs, ray, -1.0, Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, cache, cursor)
+	var phys := Tracer.trace(player, aim, surfaces, gs, ray, -1.0, TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan, cache, cursor)
+	var planned := Tracer.trace(player, aim, surfaces, gs, ray, -1.0, TraceMode.PLANNED, TraceMode.PHYSICAL, plan, cache, cursor)
 	return {"planned": _tracer_events(planned), "physical": _tracer_events(phys)}
 
-static func _tracer_events(path: Tracer.TracedPath) -> Array:
+static func _tracer_events(path: TracePath) -> Array:
 	var out: Array = []
 	for i in path.steps.size():
-		var s: Tracer.Step = path.steps[i]
+		var s: TraceStep = path.steps[i]
 		if s.surface_id >= 0 and s.hit != null:
 			var e := Ev.new()
 			e.kind = "hit"

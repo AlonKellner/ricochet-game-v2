@@ -6,19 +6,13 @@ func before_each() -> void:
 	H.reset_counters()
 
 func _build_merged(player: Vector2, cursor: Vector2, surfaces: Array, plan_entries: Array = []) -> Array:
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
-	var aim_ray := Ray.from_coords(player, aim)
-	var cache := TransformCache.new()
-	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
-	var ci: int = planned.cursor_index
+	var pair := TestTrace.pair_of(player, cursor, surfaces, plan_entries)
+	if pair == null:
+		return []
+	var ci: int = pair.planned.cursor_index
 	if ci < 0:
-		ci = planned.steps.size()
-	return StepTreeMerge.merge(planned.steps, physical.steps, ci)
+		ci = pair.planned.steps.size()
+	return StepTreeMerge.merge(pair.planned.steps, pair.physical.steps, ci)
 
 # --- Empty plan, mirror AFTER cursor → all green ---
 
@@ -27,7 +21,7 @@ func test_empty_plan_mirror_after_cursor() -> void:
 	var w := H.wall(100)
 	var merged := _build_merged(Vector2(600, 300), Vector2(500, 300), [m, w])
 	for i in merged.size():
-		var ms: Tracer.Step = merged[i]
+		var ms: TraceStep = merged[i]
 		assert_true(
 			ms.type == StepTypes.Type.ALIGNED or ms.type == StepTypes.Type.ALIGNED_POST_PLANNED,
 			"Step %d should be green (type=%d)" % [i, ms.type])
@@ -40,7 +34,7 @@ func test_empty_plan_mirror_before_cursor() -> void:
 	var merged := _build_merged(Vector2(200, 300), Vector2(600, 300), [m, w])
 	var has_diverged := false
 	for i in merged.size():
-		var ms: Tracer.Step = merged[i]
+		var ms: TraceStep = merged[i]
 		if ms.type == StepTypes.Type.DIVERGED_PLANNED or ms.type == StepTypes.Type.DIVERGED_PHYSICAL:
 			has_diverged = true
 	assert_true(has_diverged, "Mirror before cursor should cause divergence")
@@ -52,7 +46,7 @@ func test_plan_matches_physics_first_step_aligned() -> void:
 	var w := H.wall(100)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
 	var merged := _build_merged(Vector2(600, 300), Vector2(200, 300), [m, w], plan)
-	var first: Tracer.Step = merged[0]
+	var first: TraceStep = merged[0]
 	assert_true(
 		first.type == StepTypes.Type.ALIGNED or first.type == StepTypes.Type.ALIGNED_POST_PLANNED,
 		"First step should be green when plan matches")
@@ -67,7 +61,7 @@ func test_plan_misses_physics() -> void:
 	var has_div_physical := false
 	var has_div_planned := false
 	for i in merged.size():
-		var ms: Tracer.Step = merged[i]
+		var ms: TraceStep = merged[i]
 		if ms.type == StepTypes.Type.DIVERGED_PHYSICAL:
 			has_div_physical = true
 		if ms.type == StepTypes.Type.DIVERGED_PLANNED:
@@ -83,7 +77,7 @@ func test_wall_blocks_physical_planned_continues() -> void:
 	var has_aligned := false
 	var has_div_planned := false
 	for i in merged.size():
-		var ms: Tracer.Step = merged[i]
+		var ms: TraceStep = merged[i]
 		if ms.type == StepTypes.Type.ALIGNED:
 			has_aligned = true
 		if ms.type == StepTypes.Type.DIVERGED_PLANNED:
@@ -101,13 +95,13 @@ func test_physical_diverges_before_cursor() -> void:
 	var w_left := H.wall(100)
 	var merged := _build_merged(Vector2(300, 300), Vector2(600, 300), [m, w_right, w_left])
 	# Should have ALIGNED up to mirror, then DIVERGED
-	var first: Tracer.Step = merged[0]
+	var first: TraceStep = merged[0]
 	assert_true(
 		first.type == StepTypes.Type.ALIGNED or first.type == StepTypes.Type.ALIGNED_POST_PLANNED,
 		"First step should be green")
 	var has_div := false
 	for i in merged.size():
-		var ms: Tracer.Step = merged[i]
+		var ms: TraceStep = merged[i]
 		if ms.type == StepTypes.Type.DIVERGED_PHYSICAL or ms.type == StepTypes.Type.DIVERGED_PLANNED:
 			has_div = true
 	assert_true(has_div, "Should have divergence")
@@ -135,7 +129,7 @@ func test_user_bug_two_mirrors_empty_plan() -> void:
 	var merged := _build_merged(Vector2(1040.0, 827.9904), Vector2(914.9531, 708.3118), surfaces)
 
 	for i in merged.size():
-		var ms: Tracer.Step = merged[i]
+		var ms: TraceStep = merged[i]
 		assert_true(
 			ms.type == StepTypes.Type.ALIGNED or ms.type == StepTypes.Type.ALIGNED_POST_PLANNED,
 			"Step %d should be aligned (type=%d) — empty plan, no obstacle before cursor" % [i, ms.type])
@@ -147,7 +141,7 @@ func test_first_step_green() -> void:
 	var w := H.wall(700)
 	var merged := _build_merged(Vector2(200, 300), Vector2(600, 300), [m, w])
 	assert_gt(merged.size(), 0, "Should have steps")
-	var first: Tracer.Step = merged[0]
+	var first: TraceStep = merged[0]
 	assert_true(
 		first.type == StepTypes.Type.ALIGNED or first.type == StepTypes.Type.ALIGNED_POST_PLANNED,
 		"First step should be green (type=%d)" % first.type)

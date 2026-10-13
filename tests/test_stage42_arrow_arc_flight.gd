@@ -6,16 +6,14 @@ const Arrow := preload("res://scripts/game/arrow_animator.gd")
 func before_each() -> void:
 	H.reset_counters()
 
-func _make_arc_step(start: Vector2, end_v: Vector2, via: Vector2) -> Tracer.Step:
-	var frame := MobiusTransform.identity()
+func _make_arc_step(start: Vector2, end_v: Vector2, via: Vector2) -> TraceStep:
 	var ray := Ray.from_coords(start, Direction.from_coords(start, end_v))
-	return Tracer.Step.new(start, end_v, frame.id, null, ray, frame, via, true)
+	return TraceStep.new(start, end_v, TraceStep.IDENTITY_FRAME, null, ray, null, via, true)
 
-func _make_line_step(start: Vector2, end_v: Vector2) -> Tracer.Step:
-	var frame := MobiusTransform.identity()
+func _make_line_step(start: Vector2, end_v: Vector2) -> TraceStep:
 	var ray := Ray.from_coords(start, Direction.from_coords(start, end_v))
 	var via := (start + end_v) / 2.0
-	return Tracer.Step.new(start, end_v, frame.id, null, ray, frame, via, false)
+	return TraceStep.new(start, end_v, TraceStep.IDENTITY_FRAME, null, ray, null, via, false)
 
 # --- CCW semicircle: start=(2,0), end=(-2,0), via=(0,2) ---
 # Center=(0,0), radius=2, span=PI, arc_length=2*PI

@@ -14,24 +14,5 @@ static func mirror(x: float, y_start: float = 0.0, y_end: float = 600.0) -> Surf
 	var config := SideConfig.new(refl, true)
 	return Surface.new(seg, config, config, false, false)
 
-static func find_nearest(ray: Ray, segments: Array) -> Intersection.HitRecord:
-	var hits := Intersection.find_all_hits(ray, segments)
-	if hits.is_empty():
-		return null
-	var forward: Array = []
-	var beyond: Array = []
-	for h in hits:
-		if h.t > 0.0:
-			forward.append(h)
-		else:
-			beyond.append(h)
-	var pool := forward if not forward.is_empty() else beyond
-	var best: Intersection.HitRecord = pool[0]
-	for i in range(1, pool.size()):
-		if pool[i].t < best.t or (pool[i].t == best.t and pool[i].segment.get_instance_id() < best.segment.get_instance_id()):
-			best = pool[i]
-	return best
-
 static func reset_counters() -> void:
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()

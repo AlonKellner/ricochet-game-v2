@@ -79,12 +79,12 @@ func check_PREVIEW_NOGAPS(player_pos: Vector2, cursor_pos: Vector2) -> Array[Str
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	var path: Tracer.TracedPath = _renderer.get_traced_path()
+	var path: TracePath = _renderer.get_traced_path()
 	if path == null:
 		return violations
 	for i in range(1, path.steps.size()):
-		var prev: Tracer.Step = path.steps[i - 1]
-		var curr: Tracer.Step = path.steps[i]
+		var prev: TraceStep = path.steps[i - 1]
+		var curr: TraceStep = path.steps[i]
 		if prev.hit == null or curr.hit == null:
 			continue
 		var gap := prev.end.distance_to(curr.start)
@@ -118,11 +118,11 @@ func check_S16(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]:
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	var path: Tracer.TracedPath = _renderer.get_traced_path()
+	var path: TracePath = _renderer.get_traced_path()
 	if path == null:
 		return violations
 	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		if is_nan(step.start.x) or is_nan(step.start.y):
 			violations.append("S16: NaN in step %d start" % i)
 		if is_nan(step.end.x) or is_nan(step.end.y):
@@ -136,7 +136,7 @@ func check_GREEN_FROM_PLAYER(player_pos: Vector2, cursor_pos: Vector2) -> Array[
 	var typed: Array = _renderer.get_typed_steps()
 	if typed.size() == 0:
 		return violations
-	var first: Tracer.Step = typed[0]
+	var first: TraceStep = typed[0]
 	if first.type != StepTypes.Type.ALIGNED and first.type != StepTypes.Type.ALIGNED_POST_PLANNED:
 		violations.append("GREEN-FROM-PLAYER: First step type=%d, expected green" % first.type)
 	return violations
@@ -145,11 +145,11 @@ func check_ORIGIN_NOT_REHIT(player_pos: Vector2, cursor_pos: Vector2) -> Array[S
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	var path: Tracer.TracedPath = _renderer.get_traced_path()
+	var path: TracePath = _renderer.get_traced_path()
 	if path == null:
 		return violations
 	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		if step.start == step.end:
 			if step.hit != null and step.hit.t > 0.0:
 				violations.append("ORIGIN-NOT-REHIT: Zero-length step %d at %s" % [i, step.start])
@@ -162,7 +162,7 @@ func check_SINGLE_DIVERGENCE(player_pos: Vector2, cursor_pos: Vector2) -> Array[
 	var typed: Array = _renderer.get_typed_steps()
 	var diverged := false
 	for i in typed.size():
-		var ms: Tracer.Step = typed[i]
+		var ms: TraceStep = typed[i]
 		var is_aligned := (ms.type == StepTypes.Type.ALIGNED or ms.type == StepTypes.Type.ALIGNED_POST_PLANNED)
 		var is_diverged := not is_aligned
 		if is_diverged:
@@ -181,7 +181,7 @@ func check_NO_POST_CURSOR_DIVERGENCE(player_pos: Vector2, cursor_pos: Vector2) -
 	var all_pre_cursor_aligned := true
 	var past_cursor := false
 	for i in typed.size():
-		var ms: Tracer.Step = typed[i]
+		var ms: TraceStep = typed[i]
 		if ms.type == StepTypes.Type.ALIGNED:
 			continue
 		if ms.type == StepTypes.Type.ALIGNED_POST_PLANNED:
@@ -203,13 +203,13 @@ func check_PHYSICAL_PREVIEW_MATCH(player_pos: Vector2, cursor_pos: Vector2) -> A
 	if typed.size() == 0:
 		return violations
 	# The physical trace from the renderer IS the arrow path (both use the same trace)
-	var physical: Tracer.TracedPath = _renderer.get_traced_path()
+	var physical: TracePath = _renderer.get_traced_path()
 	if physical == null:
 		return violations
 	# Extract non-red preview steps
 	var non_red: Array = []
 	for i in typed.size():
-		var ms: Tracer.Step = typed[i]
+		var ms: TraceStep = typed[i]
 		if ms.type == StepTypes.Type.ALIGNED or ms.type == StepTypes.Type.ALIGNED_POST_PLANNED or ms.type == StepTypes.Type.DIVERGED_PHYSICAL:
 			non_red.append(ms)
 	if non_red.size() != physical.steps.size():
@@ -217,8 +217,8 @@ func check_PHYSICAL_PREVIEW_MATCH(player_pos: Vector2, cursor_pos: Vector2) -> A
 		return violations
 	var portal_seen := false
 	for i in non_red.size():
-		var ms: Tracer.Step = non_red[i]
-		var ps: Tracer.Step = physical.steps[i]
+		var ms: TraceStep = non_red[i]
+		var ps: TraceStep = physical.steps[i]
 		if ps.after_portal or ms.after_portal:
 			portal_seen = true
 		if portal_seen:
@@ -233,12 +233,12 @@ func check_PHYSICAL_CONTINUITY(player_pos: Vector2, cursor_pos: Vector2) -> Arra
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	var physical: Tracer.TracedPath = _renderer.get_traced_path()
+	var physical: TracePath = _renderer.get_traced_path()
 	if physical == null or physical.steps.size() < 2:
 		return violations
 	for i in range(1, physical.steps.size()):
-		var prev: Tracer.Step = physical.steps[i - 1]
-		var curr: Tracer.Step = physical.steps[i]
+		var prev: TraceStep = physical.steps[i - 1]
+		var curr: TraceStep = physical.steps[i]
 		# steps without a hit (cursor / escape pieces) bound no contact
 		if prev.hit == null:
 			continue
@@ -261,18 +261,18 @@ func check_SOLID_PATH_TO_CURSOR(player_pos: Vector2, cursor_pos: Vector2) -> Arr
 		return violations
 	var solid_steps: Array = []
 	for i in typed.size():
-		var ms: Tracer.Step = typed[i]
+		var ms: TraceStep = typed[i]
 		if StepTypes.is_solid(ms.type):
 			solid_steps.append(ms)
 	if solid_steps.size() == 0:
 		return violations
-	var first: Tracer.Step = solid_steps[0]
+	var first: TraceStep = solid_steps[0]
 	if first.start != player_pos:
 		violations.append("SOLID-PATH-TO-CURSOR: first solid step starts at %s, not player %s" % [first.start, player_pos])
 	var bounds := VisualConverter.DEFAULT_BOUNDS
 	for i in range(1, solid_steps.size()):
-		var prev: Tracer.Step = solid_steps[i - 1]
-		var curr: Tracer.Step = solid_steps[i]
+		var prev: TraceStep = solid_steps[i - 1]
+		var curr: TraceStep = solid_steps[i]
 		if prev.end.distance_to(curr.start) > 0.05:
 			# Skip gaps at escape/return boundaries (ray wraps through infinity)
 			var at_bounds := (prev.end.x <= bounds.position.x + 1.0 or prev.end.x >= bounds.end.x - 1.0 or
@@ -293,10 +293,10 @@ func check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos: Vector2, cursor_pos: Vect
 
 	var _traces := _get_named_traces()
 	for trace_name in _traces:
-		var path: Tracer.TracedPath = _traces[trace_name]
+		var path: TracePath = _traces[trace_name]
 		if path.steps.size() == 0:
 			continue
-		var last: Tracer.Step = path.steps[path.steps.size() - 1]
+		var last: TraceStep = path.steps[path.steps.size() - 1]
 		var end_pos: Vector2 = last.end
 		var valid := false
 		if end_pos.distance_to(player_pos) < 2.0:
@@ -346,7 +346,7 @@ func check_BACK_TRANSFORM_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) ->
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	var path: Tracer.TracedPath = _renderer.get_traced_path()
+	var path: TracePath = _renderer.get_traced_path()
 	if path == null or path.steps.size() == 0:
 		return violations
 	var bounds := VisualConverter.DEFAULT_BOUNDS
@@ -354,7 +354,7 @@ func check_BACK_TRANSFORM_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) ->
 	check_limit = mini(check_limit, path.steps.size())
 	var portal_seen := false
 	for i in check_limit:
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		if step.after_portal:
 			portal_seen = true
 		if portal_seen:
@@ -386,7 +386,7 @@ func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	var path: Tracer.TracedPath = _renderer.get_traced_path()
+	var path: TracePath = _renderer.get_traced_path()
 	if path == null or path.steps.size() == 0:
 		return violations
 	var surfaces: Array = []
@@ -399,7 +399,7 @@ func check_PHYSICS_COMPLIANCE(player_pos: Vector2, cursor_pos: Vector2) -> Array
 	check_limit = mini(check_limit, path.steps.size())
 	var portal_seen := false
 	for i in check_limit:
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		if step.after_portal:
 			portal_seen = true
 		if portal_seen:
@@ -454,9 +454,9 @@ func check_S18_FRAME_DETERMINANT(player_pos: Vector2, cursor_pos: Vector2) -> Ar
 		return violations
 	var _traces := _get_named_traces()
 	for trace_name in _traces:
-		var path: Tracer.TracedPath = _traces[trace_name]
+		var path: TracePath = _traces[trace_name]
 		for i in path.steps.size():
-			var step: Tracer.Step = path.steps[i]
+			var step: TraceStep = path.steps[i]
 			if step.frame == null:
 				continue
 			var det_re: float = (step.frame.a_re * step.frame.d_re - step.frame.a_im * step.frame.d_im) - (step.frame.b_re * step.frame.c_re - step.frame.b_im * step.frame.c_im)
@@ -496,14 +496,14 @@ func check_SHARED_RAY(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]
 	# When projective effects are added, split at projective-effect hitpoints.
 	var _traces := _get_named_traces()
 	for trace_name in _traces:
-		var path: Tracer.TracedPath = _traces[trace_name]
+		var path: TracePath = _traces[trace_name]
 		if path.steps.size() == 0:
 			continue
 		var first_ray: Ray = path.steps[0].ray
 		if first_ray == null:
 			continue
 		for i in range(1, path.steps.size()):
-			var step: Tracer.Step = path.steps[i]
+			var step: TraceStep = path.steps[i]
 			if step.ray == null:
 				violations.append("SHARED-RAY: %s step %d has null ray" % [trace_name, i])
 				continue
@@ -521,17 +521,17 @@ func check_RAY_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> Array[Stri
 	# (identity and single reflections).
 	var _traces := _get_named_traces()
 	for trace_name in _traces:
-		var path: Tracer.TracedPath = _traces[trace_name]
+		var path: TracePath = _traces[trace_name]
 		if path.steps.size() == 0:
 			continue
-		var first_step: Tracer.Step = path.steps[0]
+		var first_step: TraceStep = path.steps[0]
 		if first_step.ray == null:
 			continue
 		var origin := first_step.ray.origin.coords
 		var aim_dir := first_step.ray.direction.to_vector().normalized()
 		var portal_seen := false
 		for i in path.steps.size():
-			var step: Tracer.Step = path.steps[i]
+			var step: TraceStep = path.steps[i]
 			if step.after_portal:
 				portal_seen = true
 			if portal_seen:
@@ -565,16 +565,16 @@ func check_ARC_MIDPOINT_ALIGNMENT(player_pos: Vector2, cursor_pos: Vector2) -> A
 	var bounds := VisualConverter.DEFAULT_BOUNDS
 	var _traces := _get_named_traces()
 	for trace_name in _traces:
-		var path: Tracer.TracedPath = _traces[trace_name]
+		var path: TracePath = _traces[trace_name]
 		if path.steps.size() == 0:
 			continue
-		var first_step: Tracer.Step = path.steps[0]
+		var first_step: TraceStep = path.steps[0]
 		if first_step.ray == null:
 			continue
 		var origin := first_step.ray.origin.coords
 		var aim_dir := first_step.ray.direction.to_vector().normalized()
 		for i in path.steps.size():
-			var step: Tracer.Step = path.steps[i]
+			var step: TraceStep = path.steps[i]
 			if not step.is_arc_step or step.frame == null or step.ray == null:
 				continue
 			if step.hit == null:
@@ -597,12 +597,12 @@ func check_PARAMETER_MONOTONICITY(player_pos: Vector2, cursor_pos: Vector2) -> A
 		return violations
 	var _traces := _get_named_traces()
 	for trace_name in _traces:
-		var path: Tracer.TracedPath = _traces[trace_name]
+		var path: TracePath = _traces[trace_name]
 		if path.steps.size() < 2:
 			continue
 		for i in range(1, path.steps.size()):
-			var prev: Tracer.Step = path.steps[i - 1]
-			var curr: Tracer.Step = path.steps[i]
+			var prev: TraceStep = path.steps[i - 1]
+			var curr: TraceStep = path.steps[i]
 			if prev.frame_id != curr.frame_id:
 				continue
 			if curr.after_portal:
@@ -639,9 +639,9 @@ func check_POST_INVERSION_ARC(player_pos: Vector2, cursor_pos: Vector2) -> Array
 		return violations
 	var _traces := _get_named_traces()
 	for trace_name in _traces:
-		var path: Tracer.TracedPath = _traces[trace_name]
+		var path: TracePath = _traces[trace_name]
 		for i in path.steps.size():
-			var step: Tracer.Step = path.steps[i]
+			var step: TraceStep = path.steps[i]
 			if step.frame != null and step.frame.maps_lines_to_arcs() and not step.is_arc_step and step.hit != null:
 				if step.ray != null and _is_ray_through_pole(step.ray, step.frame):
 					continue
@@ -654,9 +654,9 @@ func check_VIA_ON_ARC(player_pos: Vector2, cursor_pos: Vector2) -> Array[String]
 		return violations
 	var _traces := _get_named_traces()
 	for trace_name in _traces:
-		var path: Tracer.TracedPath = _traces[trace_name]
+		var path: TracePath = _traces[trace_name]
 		for i in path.steps.size():
-			var step: Tracer.Step = path.steps[i]
+			var step: TraceStep = path.steps[i]
 			if not step.is_arc_step:
 				continue
 			if not VisualConverter.is_arc(step.start, step.via, step.end):
@@ -690,9 +690,9 @@ func check_VISUAL_ON_PHYSICAL_CARRIER(player_pos: Vector2, cursor_pos: Vector2) 
 	var bounds := VisualConverter.DEFAULT_BOUNDS
 	var _traces := _get_named_traces()
 	for trace_name in _traces:
-		var path: Tracer.TracedPath = _traces[trace_name]
+		var path: TracePath = _traces[trace_name]
 		for i in path.steps.size():
-			var step: Tracer.Step = path.steps[i]
+			var step: TraceStep = path.steps[i]
 			if step.hit == null or step.hit.segment == null:
 				continue
 			var end_pos := step.end
@@ -767,7 +767,7 @@ func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries
 			return out
 	return out
 
-static func _extract_trace_geometry(path: Tracer.TracedPath) -> Array:
+static func _extract_trace_geometry(path: TracePath) -> Array:
 	var segments: Array = []
 	if path == null or path.steps.size() == 0:
 		return segments
@@ -775,7 +775,7 @@ static func _extract_trace_geometry(path: Tracer.TracedPath) -> Array:
 	var current_end: Vector2 = path.steps[0].end
 	var current_fid: int = path.steps[0].frame_id
 	for i in range(1, path.steps.size()):
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		if step.frame_id == current_fid:
 			current_end = step.end
 		else:

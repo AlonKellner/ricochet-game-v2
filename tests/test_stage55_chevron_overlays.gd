@@ -129,12 +129,12 @@ func test_portal_explicit_pair_linking() -> void:
 # ============================================================
 
 func test_physical_hits_has_continuation_mid_trace() -> void:
-	var path := Tracer.TracedPath.new()
-	var s1 := Tracer.Step.new()
+	var path := TracePath.new()
+	var s1 := TraceStep.new()
 	s1.surface_id = 1
 	s1.hit_side = Side.Value.LEFT
 	s1.hit_on_segment = true
-	var s2 := Tracer.Step.new()
+	var s2 := TraceStep.new()
 	s2.surface_id = 2
 	s2.hit_side = Side.Value.RIGHT
 	s2.hit_on_segment = true
@@ -144,12 +144,12 @@ func test_physical_hits_has_continuation_mid_trace() -> void:
 	assert_true(hits[1][0].has_continuation, "Mid-trace step should have continuation")
 
 func test_physical_hits_has_continuation_last_step() -> void:
-	var path := Tracer.TracedPath.new()
-	var s1 := Tracer.Step.new()
+	var path := TracePath.new()
+	var s1 := TraceStep.new()
 	s1.surface_id = 1
 	s1.hit_side = Side.Value.LEFT
 	s1.hit_on_segment = true
-	var s2 := Tracer.Step.new()
+	var s2 := TraceStep.new()
 	s2.surface_id = 2
 	s2.hit_side = Side.Value.RIGHT
 	s2.hit_on_segment = true
@@ -159,8 +159,8 @@ func test_physical_hits_has_continuation_last_step() -> void:
 	assert_false(hits[2][0].has_continuation, "Last step should not have continuation")
 
 func test_physical_hits_backward_compat() -> void:
-	var path := Tracer.TracedPath.new()
-	var step := Tracer.Step.new()
+	var path := TracePath.new()
+	var step := TraceStep.new()
 	step.surface_id = 5
 	step.hit_side = Side.Value.LEFT
 	step.hit_on_segment = true

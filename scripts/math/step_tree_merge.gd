@@ -1,13 +1,13 @@
 class_name StepTreeMerge
 extends RefCounted
 
-static func classify_physical(path: Tracer.TracedPath) -> Array:
+static func classify_physical(path: TracePath) -> Array:
 	var result: Array = []
 	var ci: int = path.cursor_index
 	if ci < 0:
 		ci = path.steps.size()
 	for idx in path.steps.size():
-		var s: Tracer.Step = path.steps[idx]
+		var s: TraceStep = path.steps[idx]
 		var step_type: int
 		if idx < ci:
 			step_type = StepTypes.Type.ALIGNED
@@ -22,8 +22,8 @@ static func merge(planned_steps: Array, physical_steps: Array, cursor_index: int
 	var max_len: int = maxi(planned_steps.size(), physical_steps.size())
 
 	for idx in max_len:
-		var p: Tracer.Step = planned_steps[idx] if idx < planned_steps.size() else null
-		var r: Tracer.Step = physical_steps[idx] if idx < physical_steps.size() else null
+		var p: TraceStep = planned_steps[idx] if idx < planned_steps.size() else null
+		var r: TraceStep = physical_steps[idx] if idx < physical_steps.size() else null
 		var past_cursor: bool = idx >= cursor_index
 
 		if not diverged and p != null and r != null and p.frame_id == r.frame_id:

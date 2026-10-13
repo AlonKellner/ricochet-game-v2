@@ -88,16 +88,34 @@ static func _carrier_intersect_points(c1: GeneralizedCircle, c2: GeneralizedCirc
 	else:
 		origin = Vector2(-line_carrier.d / line_carrier.b, 0)
 
-	var ray := Ray.from_coords(origin, Direction.from_coords(origin, origin + dir))
-	var hits := Intersection.intersect_line_with_carrier(ray, other_carrier)
-	for hit in hits:
-		results.append(hit.point)
+	# z = origin + t*dir substituted into a|z|^2 + b x + c y + d = 0
+	var a := other_carrier.a
+	var qa := a * dir.length_squared()
+	var qb := 2.0 * a * origin.dot(dir) + other_carrier.b * dir.x + other_carrier.c * dir.y
+	var qc := a * origin.length_squared() + other_carrier.b * origin.x + other_carrier.c * origin.y + other_carrier.d
+	var ts: Array[float] = []
+	if qa == 0.0:
+		if qb != 0.0:
+			ts.append(-qc / qb)
+	else:
+		var disc := qb * qb - 4.0 * qa * qc
+		if disc == 0.0:
+			ts.append(-qb / (2.0 * qa))
+		elif disc > 0.0:
+			ts.append((-qb - sqrt(disc)) / (2.0 * qa))
+			ts.append((-qb + sqrt(disc)) / (2.0 * qa))
+	for t in ts:
+		results.append(origin + t * dir)
 	return results
 
 static func _is_endpoint(point: Vector2, seg: Segment) -> bool:
 	if seg.full:
 		return false
 	return point.distance_to(seg.start.coords) < 1.0 or point.distance_to(seg.end.coords) < 1.0
+
+static func _on_segment(p: Vector2, seg: Segment) -> bool:
+	var ctx := NumCtx.f64()
+	return BeamGeom.on_segment(BeamGeom.seg_from_segment(ctx, seg, 0), ctx.cn(p.x, p.y))
 
 static func _segments_intersect(seg1: Segment, seg2: Segment) -> bool:
 	var c1 := seg1.get_carrier()
@@ -108,7 +126,7 @@ static func _segments_intersect(seg1: Segment, seg2: Segment) -> bool:
 	for p in points:
 		if _is_endpoint(p, seg1) or _is_endpoint(p, seg2):
 			continue
-		if Intersection.is_on_segment(p, seg1) and Intersection.is_on_segment(p, seg2):
+		if _on_segment(p, seg1) and _on_segment(p, seg2):
 			return true
 	return false
 
@@ -156,7 +174,6 @@ func test_no_intersecting_segments() -> void:
 
 	for scene_path in all_scenes:
 		Surface.reset_id_counter()
-		MobiusTransform.reset_id_counter()
 		var scene: Node = load(scene_path).instantiate()
 		scene.gravity = Vector2.ZERO
 		add_child_autofree(scene)
@@ -256,7 +273,6 @@ func _apply_circle_pair(scene: Node, pair_type: int) -> void:
 
 func _build_combo_scene(combo: Dictionary) -> Node:
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 	var scene: Node = load(COMBO_BASE).instantiate()
 	scene.gravity = Vector2.ZERO
 	_apply_line_pair(scene, combo.lines)

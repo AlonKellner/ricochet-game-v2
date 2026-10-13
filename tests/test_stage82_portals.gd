@@ -159,7 +159,6 @@ func test_plan_through_portal_reaches_cursor():
 func test_after_portal_gap_flag():
 	BeamTracer.clear_cache()
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 	var scene: Node = load("res://scenes/test_levels/portals.tscn").instantiate()
 	add_child_autofree(scene)
 	await get_tree().process_frame
@@ -168,10 +167,10 @@ func test_after_portal_gap_flag():
 	var renderer := scene.get_node("PathRenderer")
 	renderer._compute_trace()
 	assert_eq(renderer.last_solver, "beam", "portal scenes use the beam solver")
-	var path: Tracer.TracedPath = renderer.get_traced_path()
+	var path: TracePath = renderer.get_traced_path()
 	var found := false
 	for i in range(1, path.steps.size()):
-		var s: Tracer.Step = path.steps[i]
+		var s: TraceStep = path.steps[i]
 		if s.after_portal:
 			found = true
 			# the step starts on the paired surface (x = 1130), the previous

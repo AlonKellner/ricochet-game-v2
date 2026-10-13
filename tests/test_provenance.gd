@@ -5,193 +5,19 @@ const H := preload("res://tests/test_helpers.gd")
 func before_each() -> void:
 	H.reset_counters()
 
-# === Phase 1: TrackedTransform ===
+# === Point ===
 
-func test_self_inverse_inverse_is_self() -> void:
-	var m := MobiusTransform.new(Vector2(1, 0), Vector2(0, 0), Vector2(0, 0), Vector2(1, 0), true)
-	var t := TrackedTransform.from_self_inverse(m)
-	assert_eq(t.inverse, t, "Self-inverse transform's inverse should be itself")
-
-func test_pair_creates_linked_inverses() -> void:
-	var fwd := MobiusTransform.new(Vector2(1, 0), Vector2(2, 0), Vector2(0, 0), Vector2(1, 0), false)
-	var bwd := fwd.invert()
-	var f := TrackedTransform.from_pair(fwd, bwd)
-	assert_ne(f.inverse, f, "Pair forward and inverse should be different objects")
-	assert_eq(f.inverse.inverse, f, "Inverse of inverse should be the original")
-
-func test_identity_is_self_inverse() -> void:
-	var t := TrackedTransform.identity()
-	assert_eq(t.inverse, t, "Identity should be self-inverse")
-	assert_eq(t.mobius.id, MobiusTransform.IDENTITY_ID, "Identity mobius should have IDENTITY_ID")
-
-func test_different_self_inverse_are_distinct() -> void:
-	var m1 := MobiusTransform.new(Vector2(1, 0), Vector2(0, 0), Vector2(0, 0), Vector2(1, 0), true)
-	var m2 := MobiusTransform.new(Vector2(0, 1), Vector2(0, 0), Vector2(0, 0), Vector2(0, 1), true)
-	var t1 := TrackedTransform.from_self_inverse(m1)
-	var t2 := TrackedTransform.from_self_inverse(m2)
-	assert_ne(t1, t2, "Different self-inverse transforms should be distinct objects")
-
-func test_self_inverse_stores_carrier() -> void:
-	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var m := MobiusTransform.new(Vector2(1, 0), Vector2(0, 0), Vector2(0, 0), Vector2(1, 0), true)
-	var t := TrackedTransform.from_self_inverse(m, carrier)
-	assert_eq(t.carrier, carrier, "Should store carrier reference")
-
-func test_identity_has_null_carrier() -> void:
-	assert_null(TrackedTransform.identity().carrier)
-
-func test_pair_has_null_carrier() -> void:
-	var fwd := MobiusTransform.new(Vector2(1, 0), Vector2(2, 0), Vector2(0, 0), Vector2(1, 0), false)
-	assert_null(TrackedTransform.from_pair(fwd, fwd.invert()).carrier)
-
-# === Phase 2: Point ===
-
-func _make_reflection_tracked() -> TrackedTransform:
-	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var refl := ReflectionEffect.new(carrier)
-	return TrackedTransform.from_self_inverse(refl.get_mobius())
-
-func _make_inversion_tracked() -> TrackedTransform:
-	var carrier := GeneralizedCircle.from_circle(Vector2(300, 400), 100.0)
-	var inv := CircleInversionEffect.new(carrier)
-	return TrackedTransform.from_self_inverse(inv.get_mobius())
-
-# --- Construction ---
-
-func test_point_at_sets_original_and_coords() -> void:
+func test_point_at_sets_coords() -> void:
 	var p := Point.at(Vector2(42, 99))
-	assert_eq(p.original, Vector2(42, 99), "Original should match input")
 	assert_eq(p.coords, Vector2(42, 99), "Coords should match input")
 
-func test_point_at_has_empty_transforms() -> void:
-	var p := Point.at(Vector2(10, 20))
-	assert_eq(p.transforms.size(), 0, "New point should have no transforms")
-
-func test_point_at_frame_is_identity() -> void:
-	var p := Point.at(Vector2(10, 20))
-	assert_eq(p.frame.id, MobiusTransform.IDENTITY_ID, "New point frame should be identity")
-
-# --- Transformation ---
-
-func test_transformed_returns_new_point() -> void:
-	var p := Point.at(Vector2(100, 200))
-	var t := _make_reflection_tracked()
-	var q := p.transformed(t)
-	assert_ne(p, q, "Transformed should return a new Point")
-
-func test_transformed_preserves_original() -> void:
-	var p := Point.at(Vector2(100, 200))
-	var t := _make_reflection_tracked()
-	var q := p.transformed(t)
-	assert_eq(q.original, p.original, "Original should be preserved through transforms")
-
-func test_transformed_applies_mobius_to_coords() -> void:
-	var p := Point.at(Vector2(100, 200))
-	var t := _make_reflection_tracked()
-	var q := p.transformed(t)
-	var expected := t.mobius.apply(Vector2(100, 200))
-	assert_eq(q.coords, expected, "Coords should be mobius.apply(original)")
-
-func test_transformed_appends_to_sequence() -> void:
-	var p := Point.at(Vector2(100, 200))
-	var t := _make_reflection_tracked()
-	var t2 := _make_inversion_tracked()
-	var q := p.transformed(t).transformed(t2)
-	assert_eq(q.transforms.size(), 2, "Should have 2 transforms in sequence")
-
-# --- Sequence simplification ---
-
-func test_self_inverse_cancels_to_empty() -> void:
-	var p := Point.at(Vector2(100, 200))
-	var t := _make_reflection_tracked()
-	var q := p.transformed(t).transformed(t)
-	assert_eq(q.transforms.size(), 0, "Self-inverse should cancel: [R, R] -> []")
-	assert_eq(q.coords, q.original, "Coords should exactly equal original after cancellation")
-
-func test_pair_inverse_cancels() -> void:
-	var fwd_m := MobiusTransform.new(Vector2(1, 0), Vector2(2, 0), Vector2(0, 0), Vector2(1, 0), false)
-	var bwd_m := fwd_m.invert()
-	var t := TrackedTransform.from_pair(fwd_m, bwd_m)
-	var p := Point.at(Vector2(300, 400))
-	var q := p.transformed(t).transformed(t.inverse)
-	assert_eq(q.transforms.size(), 0, "Pair inverse should cancel: [A, a] -> []")
-	assert_eq(q.coords, q.original, "Exact roundtrip")
-
-func test_nested_cancellation() -> void:
-	var a := _make_reflection_tracked()
-	var b := _make_inversion_tracked()
-	var p := Point.at(Vector2(500, 600))
-	var q := p.transformed(a).transformed(b).transformed(b).transformed(a)
-	assert_eq(q.transforms.size(), 0, "[A, B, B, A] -> [] (nested cancellation)")
-	assert_eq(q.coords, q.original, "Exact roundtrip after nested cancellation")
-
-func test_no_false_cancellation() -> void:
-	var a := _make_reflection_tracked()
-	var b := _make_inversion_tracked()
-	var fwd_m := MobiusTransform.new(Vector2(1, 0), Vector2(3, 0), Vector2(0, 0), Vector2(1, 0), false)
-	var c := TrackedTransform.from_pair(fwd_m, fwd_m.invert())
-	var q := Point.at(Vector2(100, 100)).transformed(a).transformed(b).transformed(c.inverse)
-	assert_eq(q.transforms.size(), 3, "[A, B, c] stays [A, B, c] — no false cancellation")
-
-func test_partial_cancellation() -> void:
-	var a := _make_reflection_tracked()
-	var b := _make_inversion_tracked()
-	var fwd_m := MobiusTransform.new(Vector2(1, 0), Vector2(3, 0), Vector2(0, 0), Vector2(1, 0), false)
-	var c := TrackedTransform.from_pair(fwd_m, fwd_m.invert())
-	var d_m := MobiusTransform.new(Vector2(2, 0), Vector2(1, 0), Vector2(0, 0), Vector2(1, 0), false)
-	var d := TrackedTransform.from_pair(d_m, d_m.invert())
-	var q := Point.at(Vector2(100, 100)).transformed(a).transformed(b).transformed(c).transformed(c.inverse).transformed(b).transformed(d)
-	assert_eq(q.transforms.size(), 2, "[A, B, C, c, b, D] -> [A, D]")
-	assert_eq(q.transforms[0], a, "First remaining should be A")
-	assert_eq(q.transforms[1], d, "Second remaining should be D")
-
-func test_empty_sequence_exact_original() -> void:
-	var t := _make_inversion_tracked()
-	var original := Vector2(123.456, 789.012)
-	var p := Point.at(original)
-	var q := p.transformed(t).transformed(t)
-	assert_eq(q.coords.x, original.x, "X must be bit-for-bit exact after cancellation")
-	assert_eq(q.coords.y, original.y, "Y must be bit-for-bit exact after cancellation")
-
-# --- Aggregation ---
-
-func test_aggregate_single_equals_mobius() -> void:
-	var t := _make_reflection_tracked()
-	var p := Point.at(Vector2(100, 200)).transformed(t)
-	assert_eq(p.frame.a_re, t.mobius.a_re, "Single-transform frame a_re")
-	assert_eq(p.frame.a_im, t.mobius.a_im, "Single-transform frame a_im")
-	assert_eq(p.frame.b_re, t.mobius.b_re, "Single-transform frame b_re")
-	assert_eq(p.frame.b_im, t.mobius.b_im, "Single-transform frame b_im")
-	assert_eq(p.frame.c_re, t.mobius.c_re, "Single-transform frame c_re")
-	assert_eq(p.frame.c_im, t.mobius.c_im, "Single-transform frame c_im")
-	assert_eq(p.frame.d_re, t.mobius.d_re, "Single-transform frame d_re")
-	assert_eq(p.frame.d_im, t.mobius.d_im, "Single-transform frame d_im")
-
-func test_aggregate_two_equals_composition() -> void:
-	var t1 := _make_reflection_tracked()
-	var t2 := _make_inversion_tracked()
-	var p := Point.at(Vector2(100, 200)).transformed(t1).transformed(t2)
-	var expected := t1.mobius.compose(t2.mobius)
-	assert_eq(p.frame.a_re, expected.a_re, "Two-transform frame a_re should match compose")
-	assert_eq(p.frame.a_im, expected.a_im, "Two-transform frame a_im")
-	assert_eq(p.frame.b_re, expected.b_re, "Two-transform frame b_re")
-	assert_eq(p.frame.b_im, expected.b_im, "Two-transform frame b_im")
-
-# --- Equality ---
-
-func test_same_origin_after_transform() -> void:
-	var p := Point.at(Vector2(100, 200))
-	var t := _make_reflection_tracked()
-	var q := p.transformed(t)
-	assert_true(p.same_origin(q), "Transformed point should have same origin")
-
-func test_different_origin_different_points() -> void:
+func test_different_coords_not_same_position() -> void:
 	var p := Point.at(Vector2(100, 200))
 	var q := Point.at(Vector2(100, 201))
-	assert_false(p.same_origin(q), "Different originals should not be same origin")
+	assert_false(p.same_position(q), "Different coords should not be the same position")
+	assert_true(p.same_position(Point.at(Vector2(100, 200))), "Equal coords should be the same position")
 
-# === Phase 3: Segment with Point ===
-
+# === Segment with Point ===
 func test_segment_from_coords_fields_are_points() -> void:
 	var seg := Segment.from_coords(Vector2(0, 0), Vector2(10, 0), Vector2(5, 0))
 	assert_true(seg.start is Point, "start should be Point")
@@ -205,54 +31,7 @@ func test_segment_carrier_uses_coords() -> void:
 	var carrier := seg.get_carrier()
 	assert_true(carrier.is_line(), "Collinear points should produce a line carrier")
 
-func test_segment_transformed_applies_tracked() -> void:
-	var seg := Segment.from_coords(Vector2(100, 200), Vector2(300, 200), Vector2(200, 200))
-	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var refl := ReflectionEffect.new(carrier)
-	var t := TrackedTransform.from_self_inverse(refl.get_mobius())
-	var seg2 := seg.transformed(t)
-	assert_ne(seg2.start.coords, seg.start.coords, "Transformed start should differ")
-	assert_eq(seg2.start.original, seg.start.original, "Original should be preserved")
-
-func test_segment_transformed_inf_via_preserved() -> void:
-	var seg := Segment.from_coords(Vector2(0, 0), Vector2(10, 0), Vector2(INF, INF))
-	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var t := TrackedTransform.from_self_inverse(ReflectionEffect.new(carrier).get_mobius())
-	var seg2 := seg.transformed(t)
-	assert_true(is_inf(seg2.via.coords.x), "INF via should be preserved")
-
-func test_segment_double_self_inverse_exact_roundtrip() -> void:
-	var seg := Segment.from_coords(Vector2(100, 200), Vector2(300, 400), Vector2(200, 300))
-	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var t := TrackedTransform.from_self_inverse(ReflectionEffect.new(carrier).get_mobius())
-	var seg2 := seg.transformed(t).transformed(t)
-	assert_eq(seg2.start.coords, seg.start.coords, "Double self-inverse start exact")
-	assert_eq(seg2.end.coords, seg.end.coords, "Double self-inverse end exact")
-	assert_eq(seg2.via.coords, seg.via.coords, "Double self-inverse via exact")
-
-func test_segment_carrier_fixed_returns_self() -> void:
-	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
-	var carrier := seg.get_carrier()
-	var result := seg.transformed(ReflectionEffect.new(carrier).get_tracked_transform())
-	assert_eq(result, seg, "Self-inverse on own carrier -> return self")
-
-func test_segment_roundtrip_preserves_carrier_object() -> void:
-	var seg := Segment.from_coords(Vector2(100, 200), Vector2(300, 400), Vector2(200, 300))
-	var original_carrier := seg.get_carrier()
-	var other := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var t := ReflectionEffect.new(other).get_tracked_transform()
-	assert_eq(seg.transformed(t).transformed(t).get_carrier(), original_carrier,
-		"Roundtrip -> carrier same object")
-
-func test_segment_pair_roundtrip_preserves_carrier() -> void:
-	var seg := Segment.from_coords(Vector2(100, 200), Vector2(300, 400), Vector2(200, 300))
-	var original_carrier := seg.get_carrier()
-	var m := MobiusTransform.new(Vector2(1, 0), Vector2(3, 0), Vector2(0, 0), Vector2(1, 0), false)
-	var t := TrackedTransform.from_pair(m, m.invert())
-	assert_eq(seg.transformed(t).transformed(t.inverse).get_carrier(), original_carrier,
-		"Pair roundtrip -> carrier same object")
-
-# === Phase 4: Direction and Ray ===
+# === Direction and Ray ===
 
 func test_direction_from_coords_fields_are_points() -> void:
 	var d := Direction.from_coords(Vector2(10, 20), Vector2(30, 40))
@@ -277,112 +56,15 @@ func test_ray_from_coords_origin_is_point() -> void:
 	assert_true(r.origin is Point, "origin should be Point")
 	assert_eq(r.origin.coords, Vector2(100, 200))
 
-# === Phase 5: HitRecord ===
 
-func test_hit_record_point_is_point_type() -> void:
-	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
-	var ray := Ray.from_coords(Vector2(200, 300), Direction.from_coords(Vector2(200, 300), Vector2(600, 300)))
-	var hits := Intersection.find_all_hits(ray, [seg])
-	var hit: Intersection.HitRecord = hits[0] if not hits.is_empty() else null
-	assert_not_null(hit, "Should find a hit")
-	assert_true(hit.point is Point, "HitRecord.point should be Point")
-	assert_almost_eq(hit.point.coords.x, 400.0, 1.0, "Hit x should be near 400")
-
-# === Phase 6: Effects return TrackedTransform ===
-
-func test_reflection_tracked_is_self_inverse() -> void:
-	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var refl := ReflectionEffect.new(carrier)
-	var t := refl.get_tracked_transform()
-	assert_eq(t.inverse, t, "Reflection tracked should be self-inverse")
-	assert_eq(t.mobius, refl.get_mobius(), "Tracked mobius should match effect mobius")
-
-func test_circle_inversion_tracked_is_self_inverse() -> void:
-	var carrier := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
-	var inv := CircleInversionEffect.new(carrier)
-	var t := inv.get_tracked_transform()
-	assert_eq(t.inverse, t, "Inversion tracked should be self-inverse")
-	assert_eq(t.mobius, inv.get_mobius(), "Tracked mobius should match effect mobius")
-
-func test_reflection_tracked_has_carrier() -> void:
-	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var t := ReflectionEffect.new(carrier).get_tracked_transform()
-	assert_eq(t.carrier, carrier, "Reflection tracked should store its carrier")
-
-func test_inversion_tracked_has_carrier() -> void:
-	var carrier := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
-	var t := CircleInversionEffect.new(carrier).get_tracked_transform()
-	assert_eq(t.carrier, carrier, "Inversion tracked should store its carrier")
-
-func test_different_effects_produce_different_tracked() -> void:
-	var c1 := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var c2 := GeneralizedCircle.new(0.0, 0.0, 1.0, -300.0)
-	var t1 := ReflectionEffect.new(c1).get_tracked_transform()
-	var t2 := ReflectionEffect.new(c2).get_tracked_transform()
-	assert_ne(t1, t2, "Different effects should produce different tracked transforms")
-
-func test_reflection_normalized_same_carrier_returns_self() -> void:
-	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var refl := ReflectionEffect.new(carrier)
-	assert_eq(refl.normalized(carrier), refl, "Same carrier -> return self")
-
-func test_reflection_normalized_different_carrier_returns_new() -> void:
-	var c1 := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var c2 := GeneralizedCircle.new(0.0, 0.0, 1.0, -300.0)
-	var refl := ReflectionEffect.new(c1)
-	assert_ne(refl.normalized(c2), refl, "Different carrier -> return new")
-
-func test_normalized_self_preserves_tracked_identity() -> void:
-	var carrier := GeneralizedCircle.new(0.0, 1.0, 0.0, -500.0)
-	var refl := ReflectionEffect.new(carrier)
-	assert_eq(refl.normalized(carrier).get_tracked_transform(),
-		refl.get_tracked_transform(), "Same effect -> same TrackedTransform")
-
-func test_inversion_normalized_same_carrier_returns_self() -> void:
-	var carrier := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
-	var inv := CircleInversionEffect.new(carrier)
-	assert_eq(inv.normalized(carrier), inv, "Same carrier -> return self")
-
-func test_inversion_normalized_different_carrier_returns_new() -> void:
-	var c1 := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
-	var c2 := GeneralizedCircle.from_circle(Vector2(300, 300), 50.0)
-	assert_ne(CircleInversionEffect.new(c1).normalized(c2),
-		CircleInversionEffect.new(c1), "Different carrier -> return new")
-
-func test_normalized_effect_produces_different_tracked() -> void:
-	var carrier := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
-	var inv := CircleInversionEffect.new(carrier)
-	var carrier2 := GeneralizedCircle.from_circle(Vector2(300, 300), 50.0)
-	var norm := inv.normalized(carrier2) as CircleInversionEffect
-	var t1 := inv.get_tracked_transform()
-	var t2 := norm.get_tracked_transform()
-	assert_ne(t1, t2, "Normalized effect should produce different tracked transform")
-
-# === Phase 7: Tracer with provenance ===
-
-func test_build_normalized_preserves_effect_for_self_inverse() -> void:
-	var seg := Segment.from_coords(
-		Vector2(1160, 540.01), Vector2(1160, 539.99), Vector2(760, 540))
-	var carrier := seg.get_carrier()
-	var refl := ReflectionEffect.new(carrier)
-	var config := SideConfig.new(refl, true)
-	var surf := Surface.new(seg, config, config, false, false)
-	var T := refl.get_tracked_transform()
-	var out_mapping := {}
-	var norm := Tracer._build_normalized([surf], T.mobius, out_mapping, null, [T])
-	var norm_config: SideConfig = norm[0].active_side_config(
-		Side.Value.LEFT, GameState.new())
-	assert_eq(norm_config.effect, refl,
-		"Normalized effect should be same object (carrier preserved)")
-	assert_eq(norm_config.effect.get_tracked_transform(), T,
-		"Normalized TrackedTransform should be same object")
+# === Trace (beam solver) ===
 
 func test_tracer_reflection_terminates_and_aim_correct() -> void:
 	var m := H.mirror(400)
 	var player := Vector2(600, 300)
 	var cursor := Vector2(500, 300)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, [m], GameState.new())
+	var path := TestTrace.trace(player, aim, [m], GameState.new())
 	assert_true(path.steps.size() > 0, "Should have steps after reflection")
 	assert_true(path.steps.size() < 20, "Should terminate quickly with single mirror")
 
@@ -417,37 +99,23 @@ func test_aim_does_not_jump_back_after_unplanned_reflections() -> void:
 	var surfaces := _build_three_mirrors_surfaces()
 	var player := Vector2(960, 827.9623)
 	var cursor := Vector2(737.7685, 715.3248)
-	var plan: Array = []
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new(), cache)
-	var aim_ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan, cache)
+	var aim := Direction.from_coords(player, cursor)
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new(),
+		null, -1.0, TraceMode.PHYSICAL, TraceMode.PHYSICAL, [], null, cursor)
 	assert_true(path.steps.size() >= 2, "Should have multiple steps")
+	# The legacy frame back-transform check is gone (steps carry no frame); the
+	# first step must still lie on the aim ray, and the path must be continuous.
 	var aim_dir := aim.to_vector().normalized()
-	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
-		if step.start == step.end:
-			continue
-		if step.frame.maps_lines_to_arcs():
-			continue
-		if step.frame.id == MobiusTransform.IDENTITY_ID or i <= 1:
-			var frame_inv := step.frame.invert()
-			var bt_start := frame_inv.apply(step.start)
-			var bt_end := frame_inv.apply(step.end)
-			var cross_s := (bt_start - player).cross(aim_dir)
-			var cross_e := (bt_end - player).cross(aim_dir)
-			assert_almost_eq(cross_s, 0.0, 1.0,
-				"Step %d start back-transform should be on aim ray (cross=%f)" % [i, cross_s])
-			assert_almost_eq(cross_e, 0.0, 1.0,
-				"Step %d end back-transform should be on aim ray (cross=%f)" % [i, cross_e])
-		if i > 0:
-			var prev: Tracer.Step = path.steps[i - 1]
-			if prev.end != step.start and not step.after_portal:
-				var gap := prev.end.distance_to(step.start)
-				assert_almost_eq(gap, 0.0, 1.0,
-					"Step %d should be visually continuous with step %d (gap=%f)" % [i, i - 1, gap])
+	var first: TraceStep = path.steps[0]
+	assert_almost_eq((first.start - player).cross(aim_dir), 0.0, 1.0, "First step start on aim ray")
+	assert_almost_eq((first.end - player).cross(aim_dir), 0.0, 1.0, "First step end on aim ray")
+	for i in range(1, path.steps.size()):
+		var step: TraceStep = path.steps[i]
+		var prev: TraceStep = path.steps[i - 1]
+		if prev.end != step.start and not step.after_portal:
+			var gap := prev.end.distance_to(step.start)
+			assert_almost_eq(gap, 0.0, 1.0,
+				"Step %d should be visually continuous with step %d (gap=%f)" % [i, i - 1, gap])
 
 func test_no_zero_length_carrier_at_bounds_corner() -> void:
 	Surface.reset_id_counter()
@@ -456,15 +124,14 @@ func test_no_zero_length_carrier_at_bounds_corner() -> void:
 	var plan := [PlanManager.PlanEntry.new(m1.id, Side.Value.LEFT)]
 	var player := Vector2(1350, 250)
 	var cursor := Vector2(1920, 1080)
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new(), cache)
-	var aim_ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan, cache)
+	var aim := Direction.from_coords(player, cursor)
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new(),
+		null, -1.0, TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan, null, cursor)
+	assert_gt(path.steps.size(), 0, "Trace should have steps")
 	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
-		assert_false(step.start == step.end and step.hit != null and step.hit.t > 0.0,
+		var step: TraceStep = path.steps[i]
+		# hit.t > 0 was the legacy "forward hit" test; the beam emits no zero-length steps at all.
+		assert_false(step.start == step.end and step.hit != null,
 			"No zero-length carrier step at %s" % step.start)
 
 func test_planned_trace_aligns_with_physical_when_plan_matches() -> void:
@@ -473,15 +140,11 @@ func test_planned_trace_aligns_with_physical_when_plan_matches() -> void:
 	var player := Vector2(960, 827.9623)
 	var cursor := Vector2(861.8978, 703.3025)
 	var plan := [PlanManager.PlanEntry.new(4, Side.Value.LEFT)]
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new(), cache)
-	var aim_ray := Ray.from_coords(player, aim)
-	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan, cache, cursor)
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, cache, cursor)
+	var aim := Direction.from_coords(player, cursor)
+	var physical := TestTrace.trace(player, aim, surfaces, GameState.new(),
+		null, -1.0, TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan, null, cursor)
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
+		null, -1.0, TraceMode.PLANNED, TraceMode.PHYSICAL, plan, null, cursor)
 
 	assert_gt(planned.cursor_index, 0, "Planned trace should reach cursor")
 	assert_true(planned.cursor_index <= 3, "Planned trace should reach cursor in few steps, got %d" % planned.cursor_index)
@@ -489,9 +152,10 @@ func test_planned_trace_aligns_with_physical_when_plan_matches() -> void:
 
 	var min_ci := mini(physical.cursor_index, planned.cursor_index)
 	for i in min_ci:
-		var ps: Tracer.Step = physical.steps[i]
-		var ls: Tracer.Step = planned.steps[i]
+		var ps: TraceStep = physical.steps[i]
+		var ls: TraceStep = planned.steps[i]
 		assert_almost_eq(ps.start, ls.start, Vector2(1, 1),
 			"Step %d start should align: phys=%s plan=%s" % [i, ps.start, ls.start])
 		assert_almost_eq(ps.end, ls.end, Vector2(1, 1),
 			"Step %d end should align: phys=%s plan=%s" % [i, ps.end, ls.end])
+

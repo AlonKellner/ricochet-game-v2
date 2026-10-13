@@ -38,7 +38,7 @@ func test_stage42_inversion_surface_creation() -> void:
 
 # --- Step 4: Physical trace through inversion ---
 
-func _trace_outside_in(plan_entries: Array = []) -> Tracer.TracedPath:
+func _trace_outside_in(plan_entries: Array = []) -> TracePath:
 	# Player approaches the arc from outside (right side), hitting the LEFT (outer) side.
 	# Ray at y=250 (not y=200) to avoid passing through the inversion center,
 	# which would keep the post-inversion path as a straight line instead of an arc.
@@ -50,16 +50,16 @@ func _trace_outside_in(plan_entries: Array = []) -> Tracer.TracedPath:
 	var surfaces: Array = [inv_surf, w_left, w_right, w_top, w_bot]
 	var player := Vector2(450, 250)
 	var cursor := Vector2(50, 250)
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
-	return Tracer.trace(player, aim, surfaces, GameState.new(),
-		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
+	var aim := Direction.from_coords(player, cursor)
+	return TestTrace.trace(player, aim, surfaces, GameState.new(),
+		null, -1.0, TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, null, cursor)
 
 func test_stage42_trace_through_inversion() -> void:
 	var path := _trace_outside_in()
 	assert_gt(path.steps.size(), 1, "Trace should have multiple steps")
 	var found_hit := false
 	for step in path.steps:
-		var s: Tracer.Step = step
+		var s: TraceStep = step
 		if s.hit != null and s.hit.on_segment:
 			found_hit = true
 			break
@@ -73,23 +73,14 @@ func test_stage42_frame_after_inversion() -> void:
 	var player := Vector2(450, 200)
 	var cursor := Vector2(50, 200)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 	var found_non_identity := false
 	for step in path.steps:
-		var s: Tracer.Step = step
-		if s.frame_id != MobiusTransform.IDENTITY_ID:
+		var s: TraceStep = step
+		if s.frame_id != TraceStep.IDENTITY_FRAME:
 			found_non_identity = true
-			assert_true(s.frame.conjugating, "Post-inversion frame is anti-conformal")
 			break
 	assert_true(found_non_identity, "Should have a step with non-identity frame after inversion")
-
-func test_stage42_origin_advance_self_inverse() -> void:
-	var carrier := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
-	var inv := CircleInversionEffect.new(carrier)
-	var hit_point := Vector2(300, 200)
-	var advanced := inv.get_inverse_mobius().apply(hit_point)
-	assert_almost_eq(advanced, Vector2(300, 200), Vector2(0.01, 0.01),
-		"Point on circle maps to itself under self-inverse")
 
 func test_stage42_inversion_direction_unchanged() -> void:
 	var inv_surf := _inversion_surface()
@@ -98,21 +89,26 @@ func test_stage42_inversion_direction_unchanged() -> void:
 	var player := Vector2(50, 200)
 	var cursor := Vector2(400, 200)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
+	# Beam: every step carries the same aim ray player->cursor (a new Ray object,
+	# not the caller's Direction), so compare by identity with step 0 and by coords.
+	assert_gt(path.steps.size(), 0, "Trace has steps")
 	for step in path.steps:
-		var s: Tracer.Step = step
-		assert_eq(s.ray.direction, aim, "Direction reference stays the same (transformative)")
+		var s: TraceStep = step
+		assert_true(s.ray == path.steps[0].ray, "All steps share one aim ray (transformative)")
+		assert_eq(s.ray.origin.coords, player, "Aim ray starts at the player")
+		assert_eq(s.ray.direction.end.coords, cursor, "Aim ray points at the cursor")
 
 func test_stage42_S16_2_full_reproduction() -> void:
 	var path := _trace_outside_in()
 	assert_gt(path.steps.size(), 0, "Should produce steps")
-	var first: Tracer.Step = path.steps[0]
+	var first: TraceStep = path.steps[0]
 	assert_almost_eq(first.start, Vector2(450, 250), Vector2(1, 1), "First step starts at player")
 
 func test_stage42_S16_no_nan_in_trace() -> void:
 	var path := _trace_outside_in()
 	for step in path.steps:
-		var s: Tracer.Step = step
+		var s: TraceStep = step
 		assert_false(is_nan(s.start.x) or is_nan(s.start.y), "No NaN in start: %s" % s.start)
 		assert_false(is_nan(s.end.x) or is_nan(s.end.y), "No NaN in end: %s" % s.end)
 		assert_false(is_inf(s.start.x) or is_inf(s.start.y), "No Inf in start: %s" % s.start)
@@ -122,20 +118,8 @@ func test_stage42_visual_path_contains_arc() -> void:
 	var path := _trace_outside_in(plan)
 	var found_arc := false
 	for i in path.steps.size():
-		var s: Tracer.Step = path.steps[i]
-		gut.p("  step[%d] fid=%d is_arc=%s c=(%.4f,%.4f)" % [i, s.frame_id, s.is_arc_step, s.frame.c_re, s.frame.c_im])
+		var s: TraceStep = path.steps[i]
+		gut.p("  step[%d] fid=%d is_arc=%s" % [i, s.frame_id, s.is_arc_step])
 		if s.is_arc_step:
 			found_arc = true
 	assert_true(found_arc, "Post-inversion step should be marked as arc")
-
-func test_stage42_transform_all_line_becomes_circle() -> void:
-	var carrier := GeneralizedCircle.from_circle(Vector2(200, 200), 100.0)
-	var inv := CircleInversionEffect.new(carrier)
-	var line_seg := Segment.from_coords(Vector2(50, 100), Vector2(50, 300), Vector2(50, 200))
-	assert_true(line_seg.is_line(), "Original segment is a line")
-	var m_inv := inv.get_mobius().invert()
-	var s := m_inv.apply(line_seg.start.coords)
-	var e := m_inv.apply(line_seg.end.coords)
-	var v := m_inv.apply(line_seg.via.coords)
-	var transformed := Segment.from_coords(s, e, v)
-	assert_false(transformed.is_line(), "Line becomes circle under inversion")

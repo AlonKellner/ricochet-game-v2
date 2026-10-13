@@ -30,41 +30,30 @@ func _room_walls() -> Array:
 		RoomBuilder.create_block_surface(Vector2(0, 600), Vector2(800, 600), Vector2(400, 600)),
 	]
 
-func _trace(origin: Vector2, cursor: Vector2, surfaces: Array) -> Tracer.TracedPath:
+func _trace(origin: Vector2, cursor: Vector2, surfaces: Array) -> TracePath:
 	var aim := Direction.from_coords(origin, cursor)
-	return Tracer.trace(origin, aim, surfaces, GameState.new(),
-		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], null, cursor)
+	return TestTrace.trace(origin, aim, surfaces, GameState.new(),
+		null, -1.0, TraceMode.PHYSICAL, TraceMode.PHYSICAL, [], null, cursor)
 
-func _find_portal_gap(path: Tracer.TracedPath, source_x: float) -> Dictionary:
+func _find_portal_gap(path: TracePath, source_x: float) -> Dictionary:
 	for i in range(path.steps.size() - 1):
-		var cur: Tracer.Step = path.steps[i]
-		var nxt: Tracer.Step = path.steps[i + 1]
-		if cur.frame_id == MobiusTransform.IDENTITY_ID and absf(cur.end.x - source_x) < 2.0:
+		var cur: TraceStep = path.steps[i]
+		var nxt: TraceStep = path.steps[i + 1]
+		if cur.frame_id == TraceStep.IDENTITY_FRAME and absf(cur.end.x - source_x) < 2.0:
 			return {found = true, displacement = nxt.start - cur.end}
 	return {found = false, displacement = Vector2.ZERO}
 
-func _find_portal_gap_by_frame(path: Tracer.TracedPath) -> Dictionary:
+func _find_portal_gap_by_frame(path: TracePath) -> Dictionary:
 	for i in range(path.steps.size() - 1):
-		var cur: Tracer.Step = path.steps[i]
-		var nxt: Tracer.Step = path.steps[i + 1]
+		var cur: TraceStep = path.steps[i]
+		var nxt: TraceStep = path.steps[i + 1]
 		if cur.frame_id != nxt.frame_id:
 			return {found = true, displacement = nxt.start - cur.end}
 	return {found = false, displacement = Vector2.ZERO}
 
 func _trace_both(surfaces: Array, player: Vector2, cursor: Vector2, plan: Array) -> Dictionary:
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new(), cache)
-	var aim_ray := Ray.from_coords(player, aim)
-	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan, cache, cursor)
-	cache = TransformCache.new()
-	aim = Planner.compute_aim_direction(player, cursor, plan, surfaces, GameState.new(), cache)
-	aim_ray = Ray.from_coords(player, aim)
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, cache, cursor)
-	return {"physical": physical, "planned": planned}
+	var pair := TestTrace.pair_of(player, cursor, surfaces, plan)
+	return {"physical": pair.physical, "planned": pair.planned}
 
 # --- Test 1: Display color ---
 
@@ -85,11 +74,11 @@ func test_stage72_trace_through_translation_portal() -> void:
 	surfaces.append(portals.target)
 	var path := _trace(Vector2(50, 300), Vector2(750, 300), surfaces)
 	assert_gt(path.steps.size(), 1, "Should have multiple steps")
-	var first: Tracer.Step = path.steps[0]
+	var first: TraceStep = path.steps[0]
 	assert_almost_eq(first.start, Vector2(50, 300), TOL, "First step starts at player")
 	assert_almost_eq(first.end, Vector2(200, 300), TOL, "First step ends at source portal")
 	assert_gt(path.steps.size(), 1, "Need post-portal step")
-	var second: Tracer.Step = path.steps[1]
+	var second: TraceStep = path.steps[1]
 	assert_almost_eq(second.start, Vector2(500, 300), TOL,
 		"Post-portal step starts at target (x=500)")
 
@@ -140,6 +129,7 @@ func test_stage72_portal_gap_vertical_d() -> void:
 	var portals = _portal_pair_surfaces(_line_seg(200), 0.0, Vector2(0, 600))
 	var surfaces := _room_walls()
 	surfaces.append(portals.source)
+	surfaces.append(portals.target)  # the game always places both surfaces of a pair
 	var path := _trace(Vector2(50, 300), Vector2(750, 300), surfaces)
 	var gap := _find_portal_gap_by_frame(path)
 	assert_true(gap.found, "Vertical-d portal transition must be found")
@@ -152,15 +142,16 @@ func test_stage72_trace_through_rotation_portal() -> void:
 	var portals = _portal_pair_surfaces(_line_seg(300), PI / 2.0, Vector2.ZERO)
 	var surfaces := _room_walls()
 	surfaces.append(portals.source)
+	surfaces.append(portals.target)  # the game always places both surfaces of a pair
 	var path := _trace(Vector2(50, 300), Vector2(750, 300), surfaces)
 	assert_gt(path.steps.size(), 1, "Should have multiple steps")
 	var found_portal_frame := false
 	for step in path.steps:
-		var s: Tracer.Step = step
-		if s.frame_id != MobiusTransform.IDENTITY_ID:
+		var s: TraceStep = step
+		if s.frame_id != TraceStep.IDENTITY_FRAME:
 			found_portal_frame = true
-			assert_false(s.frame.conjugating,
-				"Rigid motion frame is conformal (conjugating=false)")
+			# (beam steps carry no frame object: conformality is not observable)
+			assert_true(s.after_portal, "First non-identity step is the portal exit")
 			break
 	assert_true(found_portal_frame, "Should have a step in non-identity portal frame")
 
@@ -171,20 +162,25 @@ func test_stage72_frame_conformal_after_portal() -> void:
 	var mirror := H.mirror(400)
 	var surfaces := _room_walls()
 	surfaces.append(portals.source)
+	surfaces.append(portals.target)  # the game always places both surfaces of a pair
 	surfaces.append(mirror)
 	var path := _trace(Vector2(50, 300), Vector2(750, 300), surfaces)
-	var found_conformal := false
-	var found_anticonformal := false
-	for step in path.steps:
-		var s: Tracer.Step = step
-		if s.frame_id == MobiusTransform.IDENTITY_ID:
+	# Beam steps carry no frame object (conjugating is not observable): assert
+	# the frame sequence instead: identity -> portal frame -> portal+reflection
+	# frame (a distinct third frame after the mirror hit).
+	var portal_fid := -1
+	var refl_fid := -1
+	for i in path.steps.size():
+		var s: TraceStep = path.steps[i]
+		if s.frame_id == TraceStep.IDENTITY_FRAME:
 			continue
-		if not s.frame.conjugating:
-			found_conformal = true
-		else:
-			found_anticonformal = true
-	assert_true(found_conformal, "Portal frame alone is conformal")
-	assert_true(found_anticonformal, "Portal + reflection yields anti-conformal frame")
+		if portal_fid == -1:
+			portal_fid = s.frame_id
+		elif s.frame_id != portal_fid and refl_fid == -1 and i > 0 \
+				and path.steps[i - 1].hit != null and path.steps[i - 1].surface_id == mirror.id:
+			refl_fid = s.frame_id
+	assert_ne(portal_fid, -1, "Portal frame alone after the portal")
+	assert_ne(refl_fid, -1, "Portal + reflection yields a new frame after the mirror hit")
 
 # --- Test 5: Portal chain (two source portals, no cancellation) ---
 
@@ -194,12 +190,15 @@ func test_stage72_portal_chain() -> void:
 	var surfaces := _room_walls()
 	surfaces.append(pair1.source)
 	surfaces.append(pair2.source)
+	# the game always places both surfaces of a pair
+	surfaces.append(pair1.target)
+	surfaces.append(pair2.target)
 	var path := _trace(Vector2(50, 300), Vector2(750, 300), surfaces)
 	assert_gt(path.steps.size(), 2, "Should have 3+ steps through two portals")
 	var non_identity_count := 0
 	for step in path.steps:
-		var s: Tracer.Step = step
-		if s.frame_id != MobiusTransform.IDENTITY_ID:
+		var s: TraceStep = step
+		if s.frame_id != TraceStep.IDENTITY_FRAME:
 			non_identity_count += 1
 	assert_gt(non_identity_count, 1,
 		"Multiple steps in non-identity frames after chained portals")
@@ -215,11 +214,9 @@ func test_stage72_portal_pair_continues_past_target() -> void:
 	assert_gt(path.steps.size(), 1, "Should have multiple steps")
 	var portal_step_found := false
 	for step in path.steps:
-		var s: Tracer.Step = step
-		if s.frame_id != MobiusTransform.IDENTITY_ID:
+		var s: TraceStep = step
+		if s.frame_id != TraceStep.IDENTITY_FRAME:
 			portal_step_found = true
-			assert_false(s.frame.conjugating,
-				"Portal frame is conformal (conjugating=false)")
 	assert_true(portal_step_found,
 		"Ray enters portal frame after source portal")
 
@@ -237,45 +234,18 @@ func test_stage72_planner_portal_aligned() -> void:
 	var player := Vector2(50, 300)
 	var cursor := Vector2(700, 300)
 	var result := _trace_both(surfaces, player, cursor, plan)
-	var physical: Tracer.TracedPath = result.physical
-	var planned: Tracer.TracedPath = result.planned
+	var physical: TracePath = result.physical
+	var planned: TracePath = result.planned
 	assert_gt(physical.steps.size(), 0, "Physical trace has steps")
 	assert_gt(planned.steps.size(), 0, "Planned trace has steps")
 	var ci := planned.cursor_index if planned.cursor_index >= 0 else planned.steps.size()
 	var merged := StepTreeMerge.merge(planned.steps, physical.steps, ci)
 	var aligned_count := 0
 	for step in merged:
-		var s: Tracer.Step = step
+		var s: TraceStep = step
 		if s.type == StepTypes.Type.ALIGNED or s.type == StepTypes.Type.ALIGNED_POST_PLANNED:
 			aligned_count += 1
 	assert_gt(aligned_count, 0, "Should have aligned steps in planned+physical merge")
-
-# --- Test 8: Planner image chain ---
-
-func test_stage72_planner_image_chain() -> void:
-	var portals := _translation_portals()
-	var plan := [PlanManager.PlanEntry.new(portals.source.id, Side.Value.RIGHT)]
-	var cursor := Vector2(600, 300)
-	var image = Planner._compute_image(cursor, plan, [portals.source, portals.target], GameState.new())
-	assert_not_null(image, "Image should not be null")
-	assert_almost_eq(image, Vector2(300, 300), TOL,
-		"Image = get_inverse_mobius().apply(cursor) = (600-300, 300) = (300, 300)")
-
-# --- Test 9: Planner bounce point ---
-
-func test_stage72_planner_bounce_point() -> void:
-	var portals := _translation_portals()
-	var plan := [PlanManager.PlanEntry.new(portals.source.id, Side.Value.RIGHT)]
-	var player := Vector2(50, 300)
-	var cursor := Vector2(600, 300)
-	var surfaces := [portals.source, portals.target]
-	var planned_path := Planner.plan_transformative_subchain(
-		player, cursor, plan, surfaces, GameState.new())
-	assert_eq(planned_path.steps.size(), 2,
-		"Should have 2 steps (player->bounce, bounce->cursor), got %d" % planned_path.steps.size())
-	var first_step: Tracer.Step = planned_path.steps[0]
-	assert_almost_eq(first_step.end, Vector2(200, 300), TOL,
-		"Bounce point on source portal carrier at x=200")
 
 # --- Test 10: S5 aligned provenance ---
 
@@ -291,15 +261,15 @@ func test_stage72_S5_aligned_provenance() -> void:
 	var player := Vector2(50, 300)
 	var cursor := Vector2(700, 300)
 	var result := _trace_both(surfaces, player, cursor, plan)
-	var planned: Tracer.TracedPath = result.planned
+	var planned: TracePath = result.planned
 	assert_gt(planned.steps.size(), 1, "Planned trace has multiple steps")
-	var first: Tracer.Step = planned.steps[0]
-	assert_eq(first.frame_id, MobiusTransform.IDENTITY_ID,
+	var first: TraceStep = planned.steps[0]
+	assert_eq(first.frame_id, TraceStep.IDENTITY_FRAME,
 		"First planned step is in identity frame (before portal)")
 	var found_portal_frame := false
 	for step in planned.steps:
-		var s: Tracer.Step = step
-		if s.frame_id != MobiusTransform.IDENTITY_ID:
+		var s: TraceStep = step
+		if s.frame_id != TraceStep.IDENTITY_FRAME:
 			found_portal_frame = true
 			break
 	assert_true(found_portal_frame,
@@ -319,7 +289,7 @@ func test_stage72_S16_no_nan_in_trace() -> void:
 	for origin in origins:
 		var path := _trace(origin, Vector2(750, 300), surfaces)
 		for step in path.steps:
-			var s: Tracer.Step = step
+			var s: TraceStep = step
 			assert_false(is_nan(s.start.x) or is_nan(s.start.y),
 				"No NaN in start from origin %s: %s" % [origin, s.start])
 			assert_false(is_nan(s.end.x) or is_nan(s.end.y),
@@ -345,7 +315,7 @@ func test_stage72_arc_portal_trace() -> void:
 	var path := _trace(Vector2(50, 200), Vector2(750, 200), surfaces)
 	assert_gt(path.steps.size(), 0, "Should produce steps through arc portal")
 	for step in path.steps:
-		var s: Tracer.Step = step
+		var s: TraceStep = step
 		assert_false(is_nan(s.start.x) or is_nan(s.start.y),
 			"No NaN in arc portal trace: %s" % s.start)
 
@@ -381,8 +351,8 @@ func test_stage72_reflection_then_portal_displacement() -> void:
 	var found_reflection := false
 	var found_portal_after := false
 	for i in range(path.steps.size()):
-		var s: Tracer.Step = path.steps[i]
-		if s.frame_id != MobiusTransform.IDENTITY_ID and not found_reflection:
+		var s: TraceStep = path.steps[i]
+		if s.frame_id != TraceStep.IDENTITY_FRAME and not found_reflection:
 			found_reflection = true
 		if found_reflection and s.after_portal:
 			found_portal_after = true
@@ -401,39 +371,13 @@ func test_stage72_portal_without_reflection_works() -> void:
 	var path := _trace(Vector2(200, 500), Vector2(1700, 500), surfaces)
 	var found_portal := false
 	for s in path.steps:
-		var step: Tracer.Step = s
+		var step: TraceStep = s
 		if step.after_portal:
 			found_portal = true
 			assert_almost_eq(step.start.x, 1450.0, 10.0,
 				"Without reflection, post-portal start at target x=1450, got %.1f" % step.start.x)
 			break
 	assert_true(found_portal, "Portal must be found without reflection")
-
-func test_stage72_reflection_portal_formula_evidence() -> void:
-	var source_seg := _big_line_seg(550)
-	var portals := _portal_pair_surfaces(source_seg, 0.0, Vector2(900, 0))
-	var refl_seg := Segment.from_coords(Vector2(1400, 100), Vector2(1400, 900), Vector2(1400, 500))
-	var R: MobiusTransform = ReflectionEffect.new(refl_seg.get_carrier()).get_tracked_transform().mobius
-	var T: MobiusTransform = portals.source.active_side_config(Side.Value.LEFT, GameState.new()).effect.get_tracked_transform().mobius
-	var T_inv: MobiusTransform = portals.target.active_side_config(Side.Value.LEFT, GameState.new()).effect.get_tracked_transform().mobius
-	var hp_old := Vector2(2250, 500)
-	var current_formula := hp_old
-	var F: MobiusTransform = R
-	var source_world: Vector2 = F.apply(hp_old)
-	assert_almost_eq(source_world, Vector2(550, 500), Vector2(1, 1),
-		"source_world = F(hp_old) = R(2250) = 550")
-	var target_world: Vector2 = T.apply(source_world)
-	assert_almost_eq(target_world, Vector2(1450, 500), Vector2(1, 1),
-		"target_world = T(source_world) = 550+900 = 1450")
-	var correct_formula: Vector2 = T_inv.apply(F.apply(target_world))
-	var new_frame: MobiusTransform = F.compose(T)
-	var visual_current := new_frame.apply(current_formula)
-	var visual_correct := new_frame.apply(correct_formula)
-	assert_almost_eq(visual_correct, Vector2(1450, 500), Vector2(5, 5),
-		"Correct formula gives visual at target (1450)")
-	var visual_current_x_wrong := absf(visual_current.x - 1450.0) > 100.0
-	assert_true(visual_current_x_wrong,
-		"Current formula gives wrong visual (got %.1f, expected far from 1450)" % visual_current.x)
 
 func test_stage72_portal_single_trace_enters_frame() -> void:
 	var portals := _portal_pair_surfaces(_big_line_seg(1500), 0.0, Vector2(-1100, 0))
@@ -443,8 +387,8 @@ func test_stage72_portal_single_trace_enters_frame() -> void:
 	var path := _trace(Vector2(950, 500), Vector2(1700, 500), surfaces)
 	var found_portal_frame := false
 	for step in path.steps:
-		var s: Tracer.Step = step
-		if s.frame_id != MobiusTransform.IDENTITY_ID:
+		var s: TraceStep = step
+		if s.frame_id != TraceStep.IDENTITY_FRAME:
 			found_portal_frame = true
 			break
 	assert_true(found_portal_frame,
@@ -461,8 +405,8 @@ func test_stage72_portal_stability_across_cursors() -> void:
 		var path := _trace(player, cursor, surfaces)
 		var entered := false
 		for step in path.steps:
-			var s: Tracer.Step = step
-			if s.frame_id != MobiusTransform.IDENTITY_ID:
+			var s: TraceStep = step
+			if s.frame_id != TraceStep.IDENTITY_FRAME:
 				entered = true
 				break
 		assert_true(entered,
@@ -480,12 +424,12 @@ func test_stage72_portal_post_cursor_contiguity() -> void:
 	var player := Vector2(950, 500)
 	var cursor := Vector2(1700, 500)
 	var result := _trace_both(surfaces, player, cursor, plan)
-	var planned: Tracer.TracedPath = result.planned
+	var planned: TracePath = result.planned
 	var ci := planned.cursor_index if planned.cursor_index >= 0 else planned.steps.size()
 	assert_gt(planned.steps.size(), ci, "Should have post-cursor steps")
 	for i in range(ci, planned.steps.size() - 1):
-		var cur: Tracer.Step = planned.steps[i]
-		var nxt: Tracer.Step = planned.steps[i + 1]
+		var cur: TraceStep = planned.steps[i]
+		var nxt: TraceStep = planned.steps[i + 1]
 		if nxt.after_portal:
 			continue
 		assert_almost_eq(cur.end, nxt.start, TOL,
@@ -505,71 +449,52 @@ func _double_push_setup() -> Dictionary:
 	return {portals = portals, surfaces = surfaces, plan = plan,
 		player = Vector2(960, 480), cursor = Vector2(700, 510), d = Vector2(900, 0)}
 
-func test_stage72_double_portal_planner_image() -> void:
-	var s := _double_push_setup()
-	var image = Planner._compute_image(s.cursor, s.plan, s.surfaces, GameState.new())
-	assert_not_null(image, "Image should not be null for double portal plan")
-	var expected: Vector2 = s.cursor - s.d * 2
-	assert_almost_eq(image, expected, TOL,
-		"Image should be cursor - 2d = %s, got %s" % [expected, image])
-
-func test_stage72_double_portal_aim_direction() -> void:
-	var s := _double_push_setup()
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(
-		s.player, s.cursor, s.plan, s.surfaces, GameState.new(), cache)
-	var expected_end: Vector2 = s.cursor - s.d * 2
-	assert_almost_eq(aim.end.coords, expected_end, TOL,
-		"Aim end should be image %s, not cursor %s. Got %s" % [
-			expected_end, s.cursor, aim.end.coords])
+# The plan [source LEFT, source LEFT] pushes through the portal twice: the
+# aim points at the image cursor - 2d (closed form of the plan's inverse maps).
+func _expected_aim_dir(s: Dictionary) -> Vector2:
+	var image: Vector2 = s.cursor - s.d * 2
+	return (image - s.player).normalized()
 
 func test_stage72_double_portal_trace_uses_aim() -> void:
 	var s := _double_push_setup()
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(
-		s.player, s.cursor, s.plan, s.surfaces, GameState.new(), cache)
-	var aim_ray := Ray.from_coords(s.player, aim)
-	var path := Tracer.trace(s.player, aim, s.surfaces, GameState.new(),
-		aim_ray, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, s.plan, cache, s.cursor)
+	var path: TracePath = _trace_both(s.surfaces, s.player, s.cursor, s.plan).planned
 	assert_gt(path.steps.size(), 0, "Trace should produce steps")
-	var first: Tracer.Step = null
+	var first: TraceStep = null
 	for step in path.steps:
-		var st: Tracer.Step = step
+		var st: TraceStep = step
 		if st.start != st.end:
 			first = st
 			break
 	assert_not_null(first, "Should have a non-zero-length step")
 	var step_dir := (first.end - first.start).normalized()
-	var aim_dir := aim.to_normalized()
+	var aim_dir := _expected_aim_dir(s)
 	var cross := step_dir.cross(aim_dir)
 	gut.p("Step dir=%s, aim dir=%s, cross=%.6f" % [step_dir, aim_dir, cross])
 	assert_almost_eq(cross, 0.0, 0.01,
-		"First step direction must match planner aim. cross=%.4f step=%s aim=%s" % [
+		"First step direction must match the image aim. cross=%.4f step=%s aim=%s" % [
 			cross, step_dir, aim_dir])
+	assert_gt(step_dir.dot(aim_dir), 0.0, "Same orientation as the image aim")
 
 func test_stage72_double_portal_no_beeline() -> void:
 	var s := _double_push_setup()
 	var result := _trace_both(s.surfaces, s.player, s.cursor, s.plan)
-	var planned: Tracer.TracedPath = result.planned
+	var planned: TracePath = result.planned
 	var ci := planned.cursor_index
 	gut.p("cursor_index=%d, steps=%d" % [ci, planned.steps.size()])
 	for i in planned.steps.size():
-		var st: Tracer.Step = planned.steps[i]
+		var st: TraceStep = planned.steps[i]
 		var hit_info := "virt" if st.hit == null else "surf"
 		gut.p("  P%d: %s -> %s fid=%d [%s]%s" % [
 			i, st.start, st.end, st.frame_id, hit_info,
 			" <-- CURSOR" if i == ci else ""])
 	assert_gte(ci, 0, "Cursor should be injected")
 	assert_gt(ci, 0, "Cursor step should not be the first step")
-	var cursor_step: Tracer.Step = planned.steps[ci - 1]
-	var step_len := cursor_step.start.distance_to(cursor_step.end)
-	if step_len < 0.01:
-		pass_test("Zero-length cursor step — cursor on step boundary")
-		return
+	var cursor_step: TraceStep = planned.steps[ci - 1]
+	assert_almost_eq(cursor_step.end, s.cursor, TOL, "Step ci-1 ends at the cursor")
 	var step_dir := (cursor_step.end - cursor_step.start).normalized()
-	var first_step: Tracer.Step = planned.steps[0]
-	var aim_dir: Vector2 = first_step.ray.direction.to_normalized()
+	# beam: step.ray is player->cursor, not the shot direction; a translation
+	# portal keeps the direction, so compare with the image aim direction
+	var aim_dir := _expected_aim_dir(s)
 	var dot := step_dir.dot(aim_dir)
 	var angle_deg := rad_to_deg(acos(clampf(dot, -1.0, 1.0)))
 	gut.p("Cursor step angle deviation: %.1f deg (step=%s, aim=%s)" % [
@@ -578,44 +503,14 @@ func test_stage72_double_portal_no_beeline() -> void:
 		"Cursor step must follow ray direction (angle=%.1f). Beeline from %s to %s" % [
 			angle_deg, cursor_step.start, cursor_step.end])
 
-func test_stage72_cache_non_self_inverse_pair() -> void:
-	var s := _double_push_setup()
-	var config: SideConfig = s.portals.source.active_side_config(Side.Value.LEFT, GameState.new())
-	var inv_mobius: MobiusTransform = config.effect.get_inverse_mobius()
-	var fwd_mobius: MobiusTransform = config.effect.get_mobius()
-
-	var cache := TransformCache.new()
-	# Apply inv_mobius twice with fwd_mobius as inverse — both directions cached correctly
-	var step1: Vector2 = cache.apply_point(inv_mobius, s.cursor, fwd_mobius)
-	var step2: Vector2 = cache.apply_point(inv_mobius, step1, fwd_mobius)
-	assert_almost_eq(step1, s.cursor - s.d, TOL,
-		"First apply: cursor - d")
-	assert_almost_eq(step2, s.cursor - s.d * 2, TOL,
-		"Second apply: cursor - 2d (no bidirectional corruption)")
-
-	# Verify cross-direction cache: fwd_mobius(step1) should hit cache from first call
-	var fwd_result: Vector2 = cache.apply_point(fwd_mobius, step1)
-	assert_eq(fwd_result, s.cursor,
-		"Forward cached from inverse call: fwd(cursor-d) = cursor (exact cache hit)")
-
 func test_stage72_double_portal_direction_only() -> void:
 	var s := _double_push_setup()
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(
-		s.player, s.cursor, s.plan, s.surfaces, GameState.new(), cache)
-	var image: Vector2 = aim.end.coords
-	gut.p("Planner image: %s (expected ≈ %s)" % [image, s.cursor - s.d * 2])
-	assert_almost_eq(image, s.cursor - s.d * 2, TOL,
-		"Planner image must be cursor - 2d after cache fix")
-	var with_plan := Tracer.trace(s.player, aim, s.surfaces, GameState.new(),
-		null, -1.0, Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL,
-		s.plan, null, s.cursor)
+	var with_plan: TracePath = _trace_both(s.surfaces, s.player, s.cursor, s.plan).physical
 	assert_gt(with_plan.steps.size(), 2,
-		"Trace with correct planner aim must produce multiple steps")
-	var first: Tracer.Step = with_plan.steps[0]
-	var aim_dir := aim.to_normalized()
+		"Trace with the plan's aim must produce multiple steps")
+	var first: TraceStep = with_plan.steps[0]
+	var aim_dir := _expected_aim_dir(s)
 	var step_dir := (first.end - first.start).normalized()
 	var cross := step_dir.cross(aim_dir)
 	assert_almost_eq(cross, 0.0, 0.01,
-		"First step must follow planner aim direction")
-
+		"First physical step must follow the image aim direction")

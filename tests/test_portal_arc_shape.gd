@@ -2,7 +2,6 @@ extends GutTest
 
 func before_each() -> void:
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 
 func _build_portals_scene() -> Array:
 	var surfs: Array = []
@@ -41,7 +40,7 @@ func _build_portals_scene() -> Array:
 		surfs.append(Surface.new(sb_seg, SideConfig.new(null, false), SideConfig.new(null, false), false, false))
 	return surfs
 
-func _arc_radius(step: Tracer.Step) -> float:
+func _arc_radius(step: TraceStep) -> float:
 	var seg := Segment.from_coords(step.start, step.end, step.via)
 	var carrier := seg.get_carrier()
 	return carrier.radius()
@@ -56,16 +55,14 @@ func test_step1_arc_radius_changes_after_portal() -> void:
 		PlanManager.PlanEntry.new(8, Side.Value.LEFT),
 		PlanManager.PlanEntry.new(10, Side.Value.LEFT),
 	]
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfs, GameState.new(), cache)
-	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
+	var aim := Direction.from_coords(player, cursor)
+	var path := TestTrace.trace(player, aim, surfs, GameState.new(), null, -1.0,
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, null, cursor)
 
 	# Dump all steps
 	gut.p("Trace: %d steps, cursor_index=%d" % [path.steps.size(), path.cursor_index])
 	for i in path.steps.size():
-		var s: Tracer.Step = path.steps[i]
+		var s: TraceStep = path.steps[i]
 		var hit_info := "virt"
 		if s.hit != null:
 			hit_info = "t=%.4f side=%d on_seg=%s" % [s.hit.t, s.hit.side, s.hit.on_segment]
@@ -73,12 +70,12 @@ func test_step1_arc_radius_changes_after_portal() -> void:
 			i, s.start, s.end, s.frame_id, s.is_arc_step, s.after_portal, hit_info])
 
 	# Find the FIRST portal crossing where the pre-step is an arc
-	var pre_portal: Tracer.Step = null
-	var post_portal: Tracer.Step = null
+	var pre_portal: TraceStep = null
+	var post_portal: TraceStep = null
 	for i in range(1, path.steps.size()):
-		var s: Tracer.Step = path.steps[i]
+		var s: TraceStep = path.steps[i]
 		if s.after_portal:
-			var prev: Tracer.Step = path.steps[i - 1]
+			var prev: TraceStep = path.steps[i - 1]
 			gut.p("Portal found at step %d: pre-arc=%s post-arc=%s" % [i, prev.is_arc_step, s.is_arc_step])
 			if prev.is_arc_step:
 				pre_portal = prev
@@ -103,173 +100,6 @@ func test_step1_arc_radius_changes_after_portal() -> void:
 		"Portal (rigid motion) must preserve arc radius. Pre=%.2f Post=%.2f ratio=%.4f" % [
 			r_pre, r_post, r_post / r_pre])
 
-# === Step 2: Prove frame composition order is the cause ===
-
-func test_step2_frame_composition_order() -> void:
-	# Run the actual trace to get the real normalized ray
-	var surfs := _build_portals_scene()
-	var player := Vector2(1280.003, 976.664)
-	var cursor := Vector2(1408.467, 861.5956)
-	var plan_entries: Array = [
-		PlanManager.PlanEntry.new(8, Side.Value.LEFT),
-		PlanManager.PlanEntry.new(10, Side.Value.LEFT),
-	]
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfs, GameState.new(), cache)
-	var ray := Ray.from_coords(player, aim)
-	cache = TransformCache.new()
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
-
-	# Find the pre-portal arc step and extract its frame
-	var pre_step: Tracer.Step = null
-	var post_step: Tracer.Step = null
-	for i in range(1, path.steps.size()):
-		var s: Tracer.Step = path.steps[i]
-		if s.after_portal and path.steps[i - 1].is_arc_step:
-			pre_step = path.steps[i - 1]
-			post_step = s
-			break
-	assert_not_null(pre_step, "Must find pre-portal arc step")
-
-	var I_mob: MobiusTransform = pre_step.frame
-
-	# Get the portal Möbius from the surfaces
-	var portal_src: Surface = surfs[9]  # portal_lines source (10th surface, index 9)
-	var T_mob: MobiusTransform = portal_src.active_side_config(Side.Value.LEFT, GameState.new()).effect.get_mobius()
-
-	# Compute the normalized ray (from visual coords using I^-1 = I for self-inverse)
-	var norm_start := I_mob.apply(pre_step.start)
-	var norm_end := I_mob.apply(pre_step.end)
-	var norm_mid := I_mob.apply(pre_step.via)
-
-	gut.p("Normalized ray: %s → %s via %s" % [norm_start, norm_end, norm_mid])
-
-	# Pre-portal visual: I(normalized line) — the arc we see before portal
-	var vis_pre := Segment.from_coords(pre_step.start, pre_step.end, pre_step.via)
-	var r_pre := vis_pre.get_carrier().radius()
-
-	# Current code: frame = I ∘ T → visual = I(T(normalized))
-	var IT := I_mob.compose(T_mob)
-	var vis_IT_s := IT.apply(norm_start)
-	var vis_IT_e := IT.apply(norm_end)
-	var vis_IT_m := IT.apply(norm_mid)
-	var seg_IT := Segment.from_coords(vis_IT_s, vis_IT_e, vis_IT_m)
-	var r_IT := seg_IT.get_carrier().radius()
-
-	# Correct: frame = T ∘ I → visual = T(I(normalized)) — translation preserves shape
-	var TI := T_mob.compose(I_mob)
-	var vis_TI_s := TI.apply(norm_start)
-	var vis_TI_e := TI.apply(norm_end)
-	var vis_TI_m := TI.apply(norm_mid)
-	var seg_TI := Segment.from_coords(vis_TI_s, vis_TI_e, vis_TI_m)
-	var r_TI := seg_TI.get_carrier().radius()
-
-	gut.p("Pre-portal (frame=I) radius: %.4f" % r_pre)
-	gut.p("Current code (frame=I∘T) radius: %.4f (ratio=%.4f)" % [r_IT, r_IT / r_pre])
-	gut.p("Correct order (frame=T∘I) radius: %.4f (ratio=%.4f)" % [r_TI, r_TI / r_pre])
-	gut.p("Actual post-portal radius: %.4f" % _arc_radius(post_step))
-
-	# T∘I should preserve the radius (translate the arc)
-	assert_almost_eq(r_TI, r_pre, r_pre * 0.001,
-		"T∘I composition must preserve radius (translate the arc)")
-
-	# I∘T should NOT preserve the radius — must differ significantly
-	var ratio := r_IT / r_pre
-	assert_true(absf(ratio - 1.0) > 0.01,
-		"I∘T composition changes radius (ratio=%.4f) — proves composition order is the cause" % ratio)
-
-# === Step 3: Verify reflection+portal is NOT affected ===
-
-func test_step3_line_reflection_portal_shape_preserved() -> void:
-	# Reflection across a LINE (a=0) + portal
-	var refl_seg := Segment.from_coords(Vector2(400, 200), Vector2(400, 700), Vector2(400, 450))
-	var R_mob: MobiusTransform = ReflectionEffect.new(refl_seg.get_carrier()).get_mobius()
-
-	var pl_seg := Segment.from_coords(Vector2(550, 600), Vector2(550, 900), Vector2(550, 750))
-	var pl_result := RigidMotionEffect.create_portal_pair(pl_seg, 0.0, Vector2(900, 0))
-	var T_mob: MobiusTransform = pl_result.source_effect.get_mobius()
-
-	# For line reflections: maps_lines_to_arcs() should be false
-	assert_false(R_mob.maps_lines_to_arcs(),
-		"Line reflection should not map lines to arcs")
-
-	# Compose both ways
-	var RT := R_mob.compose(T_mob)
-	var TR := T_mob.compose(R_mob)
-
-	# Both compositions should also not map lines to arcs
-	assert_false(RT.maps_lines_to_arcs(),
-		"R∘T (line reflection + portal) should not map lines to arcs")
-	assert_false(TR.maps_lines_to_arcs(),
-		"T∘R (portal + line reflection) should not map lines to arcs")
-
-	gut.p("R.maps_lines_to_arcs = %s" % R_mob.maps_lines_to_arcs())
-	gut.p("R∘T.maps_lines_to_arcs = %s" % RT.maps_lines_to_arcs())
-	gut.p("T∘R.maps_lines_to_arcs = %s" % TR.maps_lines_to_arcs())
-	gut.p("Line reflection + portal: both orders produce lines — shape always preserved")
-
-# === Step 4: Arc-reflection + portal ===
-
-func test_step4_arc_reflection_portal_same_bug() -> void:
-	# Reflection across a CIRCLE (a≠0) — same as surface 9 in portals scene
-	var arc_seg := Segment.from_coords(Vector2(1100, 700), Vector2(1300, 700), Vector2(1200, 580))
-	var R_arc: MobiusTransform = ReflectionEffect.new(arc_seg.get_carrier()).get_mobius()
-
-	var pl_seg := Segment.from_coords(Vector2(550, 600), Vector2(550, 900), Vector2(550, 750))
-	var pl_result := RigidMotionEffect.create_portal_pair(pl_seg, 0.0, Vector2(900, 0))
-	var T_mob: MobiusTransform = pl_result.source_effect.get_mobius()
-
-	# Arc reflection DOES map lines to arcs
-	assert_true(R_arc.maps_lines_to_arcs(),
-		"Arc reflection should map lines to arcs")
-
-	# Use a line near the arc center (asymmetric to the portal translation)
-	# Position chosen to amplify the composition order effect
-	var p1 := Vector2(1150, 650)
-	var p2 := Vector2(1250, 750)
-	var p_mid := Vector2(1200, 700)
-
-	# Pre-portal: frame = R_arc
-	var vis_pre_s := R_arc.apply(p1)
-	var vis_pre_e := R_arc.apply(p2)
-	var vis_pre_m := R_arc.apply(p_mid)
-	var seg_pre := Segment.from_coords(vis_pre_s, vis_pre_e, vis_pre_m)
-	var r_pre := seg_pre.get_carrier().radius()
-
-	# Current code: R_arc ∘ T
-	var RT := R_arc.compose(T_mob)
-	var vis_RT_s := RT.apply(p1)
-	var vis_RT_e := RT.apply(p2)
-	var vis_RT_m := RT.apply(p_mid)
-	var seg_RT := Segment.from_coords(vis_RT_s, vis_RT_e, vis_RT_m)
-	var r_RT := seg_RT.get_carrier().radius()
-
-	# Correct: T ∘ R_arc
-	var TR := T_mob.compose(R_arc)
-	var vis_TR_s := TR.apply(p1)
-	var vis_TR_e := TR.apply(p2)
-	var vis_TR_m := TR.apply(p_mid)
-	var seg_TR := Segment.from_coords(vis_TR_s, vis_TR_e, vis_TR_m)
-	var r_TR := seg_TR.get_carrier().radius()
-
-	gut.p("Arc reflection + portal:")
-	gut.p("  Pre-portal (frame=R_arc) radius: %.4f" % r_pre)
-	gut.p("  Current code (R_arc∘T) radius: %.4f (ratio=%.4f)" % [r_RT, r_RT / r_pre])
-	gut.p("  Correct (T∘R_arc) radius: %.4f (ratio=%.4f)" % [r_TR, r_TR / r_pre])
-
-	# T∘R_arc should preserve radius
-	assert_almost_eq(r_TR, r_pre, r_pre * 0.01,
-		"T∘R_arc must preserve radius")
-
-	# R_arc∘T should change radius (same class of bug as inversion)
-	# The effect depends on the line position relative to the arc center;
-	# any measurable difference proves the principle
-	var ratio := r_RT / r_pre
-	gut.p("  Radius difference: %.6f%%" % (absf(ratio - 1.0) * 100.0))
-	assert_true(absf(ratio - 1.0) > 0.0001,
-		"R_arc∘T changes radius (ratio=%.6f) — arc reflection has same composition order issue" % ratio)
-
 # === Step 5: Regression guard — portal push from identity frame ===
 
 func test_step5_portal_push_origin_identity_frame() -> void:
@@ -285,14 +115,12 @@ func test_step5_portal_push_origin_identity_frame() -> void:
 
 	var player := Vector2(400, 750)
 	var aim := Direction.from_coords(player, Vector2(550, 750))
-	var ray := Ray.from_coords(player, aim)
-	var cache := TransformCache.new()
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cache, Vector2(INF, INF))
+	var path := TestTrace.trace(player, aim, surfs, GameState.new(), null, -1.0,
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, [], null, Vector2(INF, INF))
 
-	var portal_step: Tracer.Step = null
+	var portal_step: TraceStep = null
 	for i in range(1, path.steps.size()):
-		var s: Tracer.Step = path.steps[i]
+		var s: TraceStep = path.steps[i]
 		if s.after_portal:
 			portal_step = s
 			break
@@ -312,16 +140,14 @@ func test_step6_portal_push_origin_nonidentity_frame() -> void:
 		PlanManager.PlanEntry.new(8, Side.Value.LEFT),
 		PlanManager.PlanEntry.new(10, Side.Value.LEFT),
 	]
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfs, GameState.new(), cache)
-	var ray := Ray.from_coords(player, aim)
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor)
+	var aim := Direction.from_coords(player, cursor)
+	var path := TestTrace.trace(player, aim, surfs, GameState.new(), null, -1.0,
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, null, cursor)
 
-	var pre_portal: Tracer.Step = null
-	var post_portal: Tracer.Step = null
+	var pre_portal: TraceStep = null
+	var post_portal: TraceStep = null
 	for i in range(1, path.steps.size()):
-		var s: Tracer.Step = path.steps[i]
+		var s: TraceStep = path.steps[i]
 		if s.after_portal and path.steps[i - 1].is_arc_step:
 			pre_portal = path.steps[i - 1]
 			post_portal = s
@@ -368,22 +194,20 @@ func test_step7_self_inverse_push_nonidentity_frame() -> void:
 	# Ray goes right through portal at x=300, exits at x=800, hits mirror at x=900, reflects
 	var player := Vector2(200, 500)
 	var aim := Direction.from_coords(player, Vector2(1000, 500))
-	var ray := Ray.from_coords(player, aim)
-	var cache := TransformCache.new()
-	var path := Tracer.trace(player, aim, surfs, GameState.new(), ray, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, [], cache, Vector2(INF, INF))
+	var path := TestTrace.trace(player, aim, surfs, GameState.new(), null, -1.0,
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, [], null, Vector2(INF, INF))
 
 	gut.p("Trace: %d steps" % path.steps.size())
 	for i in path.steps.size():
-		var s: Tracer.Step = path.steps[i]
+		var s: TraceStep = path.steps[i]
 		gut.p("  [%d] %s → %s fid=%d arc=%s portal=%s" % [
 			i, s.start, s.end, s.frame_id, s.is_arc_step, s.after_portal])
 
 	# Find the portal step and the mirror step
 	var found_portal := false
-	var mirror_step: Tracer.Step = null
+	var mirror_step: TraceStep = null
 	for i in path.steps.size():
-		var s: Tracer.Step = path.steps[i]
+		var s: TraceStep = path.steps[i]
 		if s.after_portal:
 			found_portal = true
 		elif found_portal and s.hit != null and not s.after_portal:

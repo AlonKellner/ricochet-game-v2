@@ -97,7 +97,6 @@ func test_degenerate_inputs_native():
 	# the game path is the beam solver, no fallback
 	BeamTracer.clear_cache()
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 	var scene: Node = load("res://scenes/playground/inversion_grid.tscn").instantiate()
 	add_child_autofree(scene)
 	await get_tree().process_frame
@@ -134,7 +133,6 @@ func test_every_scene_uses_beam():
 				continue
 			BeamTracer.clear_cache()
 			Surface.reset_id_counter()
-			MobiusTransform.reset_id_counter()
 			var scene: Node = load(dir_path + "/" + fn).instantiate()
 			add_child_autofree(scene)
 			await get_tree().process_frame

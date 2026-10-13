@@ -13,8 +13,8 @@ const DISPLAY_MODE_NAMES := ["MERGED", "PHYSICAL", "PLANNED"]
 var display_mode: int = DisplayMode.MERGED
 var _player: CharacterBody2D
 var _cursor: Node2D
-var _traced_path: Tracer.TracedPath = null
-var _planned_path: Tracer.TracedPath = null
+var _traced_path: TracePath = null
+var _planned_path: TracePath = null
 var _merged_steps: Array = []
 var _physical_hits: Dictionary = {}
 var use_beam_tracer := true
@@ -78,11 +78,11 @@ func _compute_trace() -> void:
 		var aim_ray := Ray.from_coords(player_pos, aim_dir)
 		_traced_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
 			aim_ray, -1.0,
-			Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
+			TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
 		_traced_path = VisualConverter.prepare_for_display(_traced_path, bounds, surfaces)
 		_planned_path = Tracer.trace(player_pos, aim_dir, surfaces, GameState.new(),
 			aim_ray, -1.0,
-			Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
+			TraceMode.PLANNED, TraceMode.PHYSICAL, plan_entries, cache, cursor_pos)
 		_planned_path = VisualConverter.prepare_for_display(_planned_path, bounds, surfaces)
 
 	var ci: int = _planned_path.cursor_index
@@ -94,10 +94,10 @@ func _compute_trace() -> void:
 func get_physical_hits() -> Dictionary:
 	return _physical_hits
 
-static func build_physical_hits(path: Tracer.TracedPath) -> Dictionary:
+static func build_physical_hits(path: TracePath) -> Dictionary:
 	var result := {}
 	for i in path.steps.size():
-		var s: Tracer.Step = path.steps[i]
+		var s: TraceStep = path.steps[i]
 		if s.surface_id < 0:
 			continue
 		if not result.has(s.surface_id):
@@ -135,19 +135,19 @@ func _draw_merged() -> void:
 	if _merged_steps.size() == 0:
 		return
 	for i in _merged_steps.size():
-		var ms: Tracer.Step = _merged_steps[i]
+		var ms: TraceStep = _merged_steps[i]
 		if ms.start == ms.end:
 			continue
 		_draw_step(ms, StepTypes.color(ms.type), not StepTypes.is_solid(ms.type))
 
-	_draw_endpoint_circles(_merged_steps, func(s: Tracer.Step) -> Color: return StepTypes.color(s.type))
+	_draw_endpoint_circles(_merged_steps, func(s: TraceStep) -> Color: return StepTypes.color(s.type))
 
-func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: String) -> void:
+func _draw_raw_trace(path: TracePath, base_color: Color, label_prefix: String) -> void:
 	if path == null or path.steps.size() == 0:
 		return
 	var cursor_idx := path.cursor_index if path.cursor_index >= 0 else path.steps.size()
 	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		if step.start == step.end:
 			continue
 		var col := base_color
@@ -155,9 +155,9 @@ func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: S
 			col = Color(base_color, 0.35)
 		_draw_step(step, col, step.hit == null)
 
-	_draw_endpoint_circles(path.steps, func(_s: Tracer.Step) -> Color: return base_color)
+	_draw_endpoint_circles(path.steps, func(_s: TraceStep) -> Color: return base_color)
 	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		var mid := ((step.start + step.end) / 2.0) - global_position + Vector2(0, -10)
 		if _draw_bounds.has_point(mid):
 			var col := Color(base_color, 0.4)
@@ -168,7 +168,7 @@ func _draw_raw_trace(path: Tracer.TracedPath, base_color: Color, label_prefix: S
 			draw_string(font, mid, lbl, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, col)
 
 func _draw_endpoint_circles(steps: Array, color_fn: Callable) -> void:
-	for step: Tracer.Step in steps:
+	for step: TraceStep in steps:
 		var col: Color = color_fn.call(step)
 		col.a = 0.4
 		var s_local := step.start - global_position
@@ -178,7 +178,7 @@ func _draw_endpoint_circles(steps: Array, color_fn: Callable) -> void:
 		if _draw_bounds.has_point(e_local):
 			draw_circle(e_local, 4.0, col)
 
-func _draw_step(step: Tracer.Step, col: Color, dashed: bool) -> void:
+func _draw_step(step: TraceStep, col: Color, dashed: bool) -> void:
 	if step.is_arc_step and VisualConverter.is_arc(step.start, step.via, step.end):
 		var p := VisualConverter.arc_params(step.start, step.via, step.end)
 		var arc_center: Vector2 = p["center"] - global_position
@@ -238,17 +238,17 @@ func has_line() -> bool:
 
 func get_line_from() -> Vector2:
 	if _merged_steps.size() > 0:
-		var ms: Tracer.Step = _merged_steps[0]
+		var ms: TraceStep = _merged_steps[0]
 		return ms.start
 	return Vector2.ZERO
 
 func get_line_direction() -> Vector2:
 	if _merged_steps.size() > 0:
-		var ms: Tracer.Step = _merged_steps[0]
+		var ms: TraceStep = _merged_steps[0]
 		return (ms.end - ms.start).normalized()
 	return Vector2.ZERO
 
-func get_traced_path() -> Tracer.TracedPath:
+func get_traced_path() -> TracePath:
 	return _traced_path
 
 func get_planned_path():

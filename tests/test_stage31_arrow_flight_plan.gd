@@ -14,11 +14,11 @@ func test_stage31_arrow_follows_physical_trace_with_plan() -> void:
 	var cursor := Vector2(300, 300)
 	var aim := Direction.from_coords(player, cursor)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
-	var path := Tracer.trace(player, aim, [m, w], GameState.new(),
+	var path := TestTrace.trace(player, aim, [m, w], GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan)
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan, null, cursor)
 	assert_gt(path.steps.size(), 0, "Path should have steps")
-	var first_step: Tracer.Step = path.steps[0]
+	var first_step: TraceStep = path.steps[0]
 	assert_true(first_step.start.distance_to(player) < 1.0, "First step starts at player")
 
 func test_stage31_aligned_plan_matches_physical() -> void:
@@ -29,18 +29,17 @@ func test_stage31_aligned_plan_matches_physical() -> void:
 	var cursor := Vector2(300, 300)
 	var aim := Direction.from_coords(player, cursor)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.RIGHT)]
-	var cache := TransformCache.new()
-	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var physical := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan, cache)
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan, null, cursor)
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan, cache)
+		TraceMode.PLANNED, TraceMode.PHYSICAL, plan, null, cursor)
 	var overlap := mini(physical.steps.size(), planned.steps.size())
 	assert_gt(overlap, 0, "Both traces should have steps")
 	for i in overlap:
-		var p: Tracer.Step = physical.steps[i]
-		var r: Tracer.Step = planned.steps[i]
+		var p: TraceStep = physical.steps[i]
+		var r: TraceStep = planned.steps[i]
 		assert_eq(p.frame_id, r.frame_id,
 			"Step %d frame_id should match (aligned)" % i)
 		assert_almost_eq(p.start, r.start, Vector2(0.01, 0.01),
@@ -55,16 +54,16 @@ func test_stage31_determinism_with_plan() -> void:
 	var cursor := Vector2(300, 300)
 	var aim := Direction.from_coords(player, cursor)
 	var plan: Array = [PlanManager.PlanEntry.new(m.id, Side.Value.LEFT)]
-	var path1 := Tracer.trace(player, aim, [m, w], GameState.new(),
+	var path1 := TestTrace.trace(player, aim, [m, w], GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan)
-	var path2 := Tracer.trace(player, aim, [m, w], GameState.new(),
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan, null, cursor)
+	var path2 := TestTrace.trace(player, aim, [m, w], GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan)
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan, null, cursor)
 	assert_eq(path1.steps.size(), path2.steps.size(), "Same step count")
 	for i in path1.steps.size():
-		var s1: Tracer.Step = path1.steps[i]
-		var s2: Tracer.Step = path2.steps[i]
+		var s1: TraceStep = path1.steps[i]
+		var s2: TraceStep = path2.steps[i]
 		assert_eq(s1.start, s2.start, "Step %d start identical" % i)
 		assert_eq(s1.end, s2.end, "Step %d end identical" % i)
 
@@ -128,7 +127,7 @@ func test_stage31_preview_hidden_during_flight() -> void:
 
 func test_stage31_camera_bounds_arc_flight() -> void:
 	var Arrow := preload("res://scripts/game/arrow_animator.gd")
-	var step := Tracer.Step.new(
+	var step := TraceStep.new(
 		Vector2(2, 0), Vector2(-2, 0), 0, null, null, null, Vector2(0, 2), true)
 	var arc_len := 2.0 * PI
 	var r := Arrow.advance([step], 0, 0.0, step.start, arc_len * 0.5,

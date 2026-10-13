@@ -2,7 +2,7 @@ class_name BeamTracer
 extends RefCounted
 
 # Game-facing adapter: runs PrecisionLadder (BeamSolver + dynamic precision)
-# and converts its events into Tracer.TracedPath / Tracer.Step, so the
+# and converts its events into TracePath / TraceStep, so the
 # renderer, merge, invariant checker, debug dump and arrow flight work
 # unchanged.
 #
@@ -12,8 +12,8 @@ extends RefCounted
 const TOL := 0.01            # px, PHYSICAL-PREVIEW-MATCH tolerance
 
 class Pair extends RefCounted:
-	var planned: Tracer.TracedPath
-	var physical: Tracer.TracedPath
+	var planned: TracePath
+	var physical: TracePath
 	var result: PrecisionLadder.Result
 
 # Debug toggle: fall back to the legacy Tracer when trace_pair returns null
@@ -74,7 +74,7 @@ static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_e
 	pair.physical = to_path(res.physical, res.physical_err, res.physical_tier, by_id, frames, aim)
 	if is_same(res.planned, res.physical):
 		# one trajectory: the same steps
-		pair.planned = Tracer.TracedPath.new()
+		pair.planned = TracePath.new()
 		pair.planned.steps = pair.physical.steps.duplicate()
 		pair.planned.targets_hit = pair.physical.targets_hit.duplicate()
 		pair.planned.cursor_index = pair.physical.cursor_index
@@ -121,8 +121,8 @@ static func clear_cache() -> void:
 # Steps carry no normalized frame (frame = null): the beam model never maps
 # back to Tracer's normalized coordinates, which collapse numerically for deep
 # inversion chains. frame_id identifies the transform stack (merge alignment).
-static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, frames: Dictionary, aim: Ray = null) -> Tracer.TracedPath:
-	var path := Tracer.TracedPath.new()
+static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, frames: Dictionary, aim: Ray = null) -> TracePath:
+	var path := TracePath.new()
 	var stack: Array = []
 	var bits: int = NumCtx.with_limbs(limbs).bits()
 	var prev_pt = null
@@ -157,7 +157,7 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 			s.precision_bits = bits
 			path.steps.append(s)
 			appended = true
-		var last: Tracer.Step = path.steps.back() if appended else null
+		var last: TraceStep = path.steps.back() if appended else null
 		if e.kind == "hit" and e.applied and not e.terminal:
 			if e.projective:
 				stack.clear()
@@ -168,7 +168,7 @@ static func to_path(events: Array, errs: Array, limbs: int, by_id: Dictionary, f
 			gap = e.teleport
 		if e.kind == "hit" and last != null:
 			var side := Side.Value.LEFT if e.left else Side.Value.RIGHT
-			last.hit = Intersection.HitRecord.new(e.t_to.to_float(), last.end, surf.segment if surf else null, side, e.on_segment)
+			last.hit = TraceHit.new(e.t_to.to_float(), last.end, surf.segment if surf else null, side, e.on_segment)
 			last.surface_id = e.surface_id
 			last.hit_side = side
 			last.hit_on_segment = e.on_segment
@@ -212,7 +212,7 @@ static func _steps_for(e: BeamSolver.Event, fid: int, frame: MobiusTransform, pr
 	if e.t_to == null:
 		# escape to infinity along a straight beam
 		var tg := FastSolver.tangent_at(bf, tf, 0.0)
-		var s := Tracer.Step.new(start, Vector2(INF, INF), fid, null, _ray(start, tg), frame, Vector2(tg[0], tg[1]), false)
+		var s := TraceStep.new(start, Vector2(INF, INF), fid, null, _ray(start, tg), frame, Vector2(tg[0], tg[1]), false)
 		return [s]
 	var tt: float = e.t_to.to_float()
 	var end := Vector2(e.point.fx(), e.point.fy())
@@ -240,19 +240,19 @@ static func _steps_for(e: BeamSolver.Event, fid: int, frame: MobiusTransform, pr
 		# infinity instead: out along the exact start tangent, back in along the
 		# exact end tangent.
 		if VisualConverter.is_arc(start, via, end) or (start - via).dot(end - via) <= 0.0:
-			return [Tracer.Step.new(start, end, fid, null, null, frame, via, true)]
+			return [TraceStep.new(start, end, fid, null, null, frame, via, true)]
 		return _through_infinity(bf, tf, tt, start, end, fid, frame)
 	if tt > tf or (tt == tf):
-		return [Tracer.Step.new(start, end, fid, null, null, frame, via, false)]
+		return [TraceStep.new(start, end, fid, null, null, frame, via, false)]
 	return _through_infinity(bf, tf, tt, start, end, fid, frame)
 
 # start -> infinity along the start tangent, infinity -> end along the end
 # tangent (Tracer's escape-step convention: `via` holds the direction).
 static func _through_infinity(bf: PackedFloat64Array, tf: float, tt: float, start: Vector2, end: Vector2, fid: int, frame: MobiusTransform) -> Array:
 	var tg0 := FastSolver.tangent_at(bf, tf, 0.0)
-	var out_step := Tracer.Step.new(start, Vector2(INF, INF), fid, null, _ray(start, tg0), frame, Vector2(tg0[0], tg0[1]), false)
+	var out_step := TraceStep.new(start, Vector2(INF, INF), fid, null, _ray(start, tg0), frame, Vector2(tg0[0], tg0[1]), false)
 	var tg1 := FastSolver.tangent_at(bf, tt, 0.0)
-	var in_step := Tracer.Step.new(Vector2(INF, INF), end, fid, null, _ray(end, tg1), frame, -Vector2(tg1[0], tg1[1]), false)
+	var in_step := TraceStep.new(Vector2(INF, INF), end, fid, null, _ray(end, tg1), frame, -Vector2(tg1[0], tg1[1]), false)
 	return [out_step, in_step]
 
 static func _ray(origin: Vector2, tg: PackedFloat64Array) -> Ray:

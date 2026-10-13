@@ -38,7 +38,6 @@ const BEAM_SCENES := [
 func _solver_for(path: String) -> String:
 	BeamTracer.clear_cache()
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 	var scene: Node = load(path).instantiate()
 	add_child_autofree(scene)
 	await get_tree().process_frame
@@ -54,3 +53,17 @@ func test_mirror_scenes_use_beam():
 	for path in BEAM_SCENES:
 		assert_eq(await _solver_for(path), "beam/supported", path)
 
+
+# (moved from test_solver_parity.gd, deleted in Stage 84) the game-side
+# conversion the solver uses equals the dumped scene data the oracle traced
+func test_scene_defs_match_dump():
+	for fn in DirAccess.open("res://bench/scenes").get_files():
+		var dump: Dictionary = JSON.parse_string(FileAccess.open("res://bench/scenes/" + fn, FileAccess.READ).get_as_text())
+		Surface.reset_id_counter()
+		var scene: Node = load(dump["scene"]).instantiate()
+		add_child_autofree(scene)
+		await get_tree().process_frame
+		if not ("surfaces" in scene):
+			continue
+		var defs: Array = BeamScene.defs_from_surfaces(scene.surfaces)
+		assert_true(JSON.parse_string(JSON.stringify(defs, "", false, true)) == dump["surfaces"], fn)

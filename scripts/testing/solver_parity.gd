@@ -15,17 +15,17 @@ static func legacy_events(surfaces: Array, player: Vector2, cursor: Vector2, pla
 	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new(), cache)
 	var ray := Ray.from_coords(player, aim)
 	var res := {}
-	for mode in [Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL]:
-		var path := Tracer.trace(player, aim, surfaces, GameState.new(), ray, -1.0, mode, Tracer.TraceMode.PHYSICAL,
+	for mode in [TraceMode.PLANNED, TraceMode.PHYSICAL]:
+		var path := Tracer.trace(player, aim, surfaces, GameState.new(), ray, -1.0, mode, TraceMode.PHYSICAL,
 			plan_entries, cache, cursor)
 		var evs: Array = []
 		for i in path.steps.size():
-			var s: Tracer.Step = path.steps[i]
+			var s: TraceStep = path.steps[i]
 			if s.surface_id >= 0 and s.hit != null:
 				evs.append({"kind": "hit", "surface_id": s.surface_id, "left": s.hit_side == Side.Value.LEFT, "x": s.end.x, "y": s.end.y})
 			if path.cursor_index == i + 1:
 				evs.append({"kind": "cursor", "surface_id": -1, "left": false, "x": s.end.x, "y": s.end.y})
-		res["planned" if mode == Tracer.TraceMode.PLANNED else "physical"] = evs
+		res["planned" if mode == TraceMode.PLANNED else "physical"] = evs
 	return res
 
 # BeamSolver events -> the same shape (hits and cursor only).

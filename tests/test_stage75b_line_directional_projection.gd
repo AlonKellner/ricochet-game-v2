@@ -12,58 +12,74 @@ func before_each() -> void:
 func _standard_line() -> Segment:
 	return Segment.from_coords(Vector2(300, 100), Vector2(300, 500), Vector2(300, 300))
 
+func _room_walls() -> Array:
+	return [
+		H.wall(0),
+		H.wall(800),
+		RoomBuilder.create_block_surface(Vector2(0, 0), Vector2(800, 0), Vector2(400, 0)),
+		RoomBuilder.create_block_surface(Vector2(0, 600), Vector2(800, 600), Vector2(400, 600)),
+	]
+
+# Direction of the step after the first hit on the projective line (beam
+# trace; the effects' closed-form apply_forward was removed with the legacy
+# solver). Approach from x < 300 hits the side seg.determine_side((200, 300)).
+func _exit_dir(effect: Effect, player: Vector2, cursor: Vector2) -> Vector2:
+	var surfaces := _room_walls()
+	var cfg := SideConfig.new(effect, true)
+	var proj_surf := Surface.new(_standard_line(), cfg, cfg, false, false)
+	surfaces.append(proj_surf)
+	var path := TestTrace.trace(player, Direction.from_coords(player, cursor), surfaces, GameState.new(),
+		null, -1.0, TraceMode.PHYSICAL, TraceMode.PHYSICAL, [], null, cursor)
+	for i in range(path.steps.size() - 1):
+		var step: TraceStep = path.steps[i]
+		if step.hit != null and step.surface_id == proj_surf.id:
+			var post: TraceStep = path.steps[i + 1]
+			assert_false(is_nan(post.start.x) or is_nan(post.end.x) or is_nan(post.start.y) or is_nan(post.end.y),
+				"no NaN after the projective")
+			return (post.end - post.start).normalized()
+	fail_test("no step after the projective hit (player %s, cursor %s)" % [player, cursor])
+	return Vector2.ZERO
+
+const FROM_RIGHT_P := Vector2(200, 300)   # x < 300: seg.determine_side((200,300))
+const FROM_RIGHT_C := Vector2(400, 300)
+const FROM_LEFT_P := Vector2(400, 300)
+const FROM_LEFT_C := Vector2(200, 300)
+
 # --- Test 1: exit direction from RIGHT side ---
 
 func test_stage75b_exit_direction_from_right() -> void:
-	var seg := _standard_line()
-	var effect := LineDirectionalProjection.new(Vector2(1, 0))
-	var hit := Vector2(300, 300)
-	var right_side := seg.determine_side(Vector2(200, 300))
-	var result := effect.apply_forward(hit, seg, right_side)
-	assert_not_null(result, "apply_forward should return a Ray")
-	var dir := result.direction.to_normalized()
+	var dir := _exit_dir(LineDirectionalProjection.new(Vector2(1, 0)), FROM_RIGHT_P, FROM_RIGHT_C)
 	assert_almost_eq(absf(dir.x), 1.0, 0.01, "Exit should be along normal (horizontal)")
 	assert_almost_eq(dir.y, 0.0, 0.01, "Exit y should be 0")
 
 # --- Test 2: exit direction from LEFT side ---
 
 func test_stage75b_exit_direction_from_left() -> void:
-	var seg := _standard_line()
 	var effect := LineDirectionalProjection.new(Vector2(1, 0))
-	var hit := Vector2(300, 300)
-	var left_side := seg.determine_side(Vector2(400, 300))
-	var result := effect.apply_forward(hit, seg, left_side)
-	assert_not_null(result, "apply_forward should return a Ray")
-	var dir := result.direction.to_normalized()
+	var dir := _exit_dir(effect, FROM_LEFT_P, FROM_LEFT_C)
 	assert_almost_eq(absf(dir.x), 1.0, 0.01, "Exit should be along normal (horizontal)")
 	assert_almost_eq(dir.y, 0.0, 0.01, "Exit y should be 0")
 	# Opposite side should produce opposite direction
-	var right_side := seg.determine_side(Vector2(200, 300))
-	var other := effect.apply_forward(hit, seg, right_side).direction.to_normalized()
+	var other := _exit_dir(effect, FROM_RIGHT_P, FROM_RIGHT_C)
 	assert_almost_eq(dir.x + other.x, 0.0, 0.01,
 		"Opposite sides should produce opposite directions")
 
 # --- Test 3: hit position independent ---
 
 func test_stage75b_hit_position_independent() -> void:
-	var seg := _standard_line()
 	var effect := LineDirectionalProjection.new(Vector2(1, 0))
-	var side := seg.determine_side(Vector2(200, 300))
-	var hits := [Vector2(300, 150), Vector2(300, 300), Vector2(300, 450)]
-	var first_dir := effect.apply_forward(hits[0], seg, side).direction.to_normalized()
-	for i in range(1, hits.size()):
-		var dir := effect.apply_forward(hits[i], seg, side).direction.to_normalized()
+	# hits at (300, 150), (300, 300), (300, 450), all from x < 300
+	var cursors := [Vector2(400, 0), Vector2(400, 300), Vector2(400, 600)]
+	var first_dir := _exit_dir(effect, FROM_RIGHT_P, cursors[0])
+	for i in range(1, cursors.size()):
+		var dir := _exit_dir(effect, FROM_RIGHT_P, cursors[i])
 		assert_almost_eq(dir, first_dir, Vector2(0.01, 0.01),
 			"Hit at position %d should produce same direction as position 0" % i)
 
 # --- Test 4: diagonal normal ---
 
 func test_stage75b_diagonal_normal() -> void:
-	var seg := _standard_line()
-	var effect := LineDirectionalProjection.new(Vector2(1, 1))
-	var side := seg.determine_side(Vector2(200, 300))
-	var result := effect.apply_forward(Vector2(300, 300), seg, side)
-	var dir := result.direction.to_normalized()
+	var dir := _exit_dir(LineDirectionalProjection.new(Vector2(1, 1)), FROM_RIGHT_P, FROM_RIGHT_C)
 	var expected := Vector2(1, 1).normalized()
 	assert_almost_eq(absf(dir.x), absf(expected.x), 0.01,
 		"Diagonal normal: |x| should be ~0.707")
@@ -73,17 +89,10 @@ func test_stage75b_diagonal_normal() -> void:
 # --- Test 8: S16 - no NaN/Inf ---
 
 func test_stage75b_S16_no_nan_inf() -> void:
-	var seg := _standard_line()
-	var effect := LineDirectionalProjection.new(Vector2(1, 0))
-	var side := seg.determine_side(Vector2(200, 300))
-	var ray := effect.apply_forward(Vector2(300, 300), seg, side)
-	assert_false(is_nan(ray.origin.coords.x), "origin.x not NaN")
-	assert_false(is_nan(ray.origin.coords.y), "origin.y not NaN")
-	assert_false(is_inf(ray.origin.coords.x), "origin.x not Inf")
-	assert_false(is_inf(ray.origin.coords.y), "origin.y not Inf")
-	var dir := ray.direction.to_normalized()
+	var dir := _exit_dir(LineDirectionalProjection.new(Vector2(1, 0)), FROM_RIGHT_P, FROM_RIGHT_C)
 	assert_false(is_nan(dir.x), "direction.x not NaN")
 	assert_false(is_nan(dir.y), "direction.y not NaN")
+	assert_false(is_inf(dir.x) or is_inf(dir.y), "direction finite")
 
 # --- Test 9: kind is projective ---
 
@@ -94,13 +103,8 @@ func test_stage75b_kind_is_projective() -> void:
 # --- Test 10: project_back exits opposite ---
 
 func test_stage75b_project_back_exits_opposite() -> void:
-	var seg := _standard_line()
-	var through := LineDirectionalProjection.new(Vector2(1, 0), false)
-	var back := LineDirectionalProjection.new(Vector2(1, 0), true)
-	var hit := Vector2(300, 300)
-	var side := seg.determine_side(Vector2(200, 300))
-	var through_dir := through.apply_forward(hit, seg, side).direction.to_normalized()
-	var back_dir := back.apply_forward(hit, seg, side).direction.to_normalized()
+	var through_dir := _exit_dir(LineDirectionalProjection.new(Vector2(1, 0), false), FROM_RIGHT_P, FROM_RIGHT_C)
+	var back_dir := _exit_dir(LineDirectionalProjection.new(Vector2(1, 0), true), FROM_RIGHT_P, FROM_RIGHT_C)
 	assert_almost_eq(through_dir.x + back_dir.x, 0.0, 0.01,
 		"Through and back should have opposite directions")
 
@@ -127,10 +131,8 @@ func test_stage75b_default_is_through() -> void:
 		"Default should be through (yellow-orange)")
 	assert_eq(effect.get_display_name(), "line_directional",
 		"Default display name")
-	var seg := _standard_line()
-	var side := seg.determine_side(Vector2(200, 300))
 	var explicit := LineDirectionalProjection.new(normal, false)
-	var dir_default := effect.apply_forward(Vector2(300, 300), seg, side).direction.to_normalized()
-	var dir_explicit := explicit.apply_forward(Vector2(300, 300), seg, side).direction.to_normalized()
+	var dir_default := _exit_dir(effect, FROM_RIGHT_P, FROM_RIGHT_C)
+	var dir_explicit := _exit_dir(explicit, FROM_RIGHT_P, FROM_RIGHT_C)
 	assert_almost_eq(dir_default, dir_explicit, Vector2(0.01, 0.01),
 		"Default and explicit false should produce same direction")

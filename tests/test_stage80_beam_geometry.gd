@@ -113,36 +113,55 @@ func test_on_segment_exact_at_endpoints():
 			assert_eq(recs[0]["point"].fx(), 10.0)
 			assert_eq(recs[0]["point"].fy(), 0.0)
 
+# Legacy parity, frozen: the legacy float32 functions (Intersection.is_on_segment,
+# _determine_side, endpoint_blocked_sides) were removed in Stage 84; their
+# results on these seeded random cases were recorded before deletion. One char
+# per case: "-" = skipped (near the decision boundary / near-tangent), else the
+# legacy answer ("1"/"0"; blocked sides: 2*left + right).
+const LEGACY_ON_SEGMENT := (
+	"0101000011010101000101011100010000010101110101010001010000100000010110010100010001010101010111110011" +
+	"0101100100010100000101010111011101010001010101110111010101010111000111000101010000010101010110001111" +
+	"0101010101001111010011001101010100010111010101001101010111110101010001010100000100011100111011010101" +
+	"0000110101010111110101011000010110000111010100010101100100110101010101011101011101000101001100011101" +
+	"0101010101111101000101010101010101001011100001110110111000010100110001000101001001110011010100010111" +
+	"1100010100110111011011000111010010000100010100001101001101010000010101010100100000010001110100110101" +
+	"0100000100011101011100111000000101011101000111010100010111011100010101000101011101010011011001010110" +
+	"0100010010110101001101010001011001010101110101110100010101000100010010110101010100000100011110010101" +
+	"0101000101000101011101010001000111010111101001010101000100010101011100010101000100010100101101011000" +
+	"0110010101011001010010010101000101001100100111000101010111100000010100100000010101001101010101011111")
+const LEGACY_SIDE_LEFT := (
+	"0100101000100010101110110110100100000010001000010100110000111100100011010100011111010110110011011001" +
+	"1110110011011110101010111111000001111000011000001010011110110001111100001011001111100110001011011110" +
+	"1111010100111111010000011010111110110010101101110111001001011111010010110100101001110011010001011011" +
+	"11000001111111000000100101101100110111101011111001001001110110011101111101011-1110001001001111011001")
+const LEGACY_BLOCKED := (
+	"2221112211211112112112122112222121212212111221121222112122222112212211121212121122121121221211122122" +
+	"2222122222121211221211121121112112111221111121211211112112222121111222122121221112222121111211121112" +
+	"1212212211122211211211211122222222122112221111221221212222111221221212211222211112211222212212111121" +
+	"2221212111121212221111121122112212221212121222212212222211221111121112121222112222111212211212221212")
+
 func test_on_segment_generic_matches_legacy():
+	assert_eq(LEGACY_ON_SEGMENT.length(), 1000)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 801
-	var hp := NumCtx.with_limbs(8)
 	var compared := 0
 	for i in 1000:
 		var s := Vector2(rng.randi_range(100, 1800), rng.randi_range(100, 1000))
 		var e := Vector2(rng.randi_range(100, 1800), rng.randi_range(100, 1000))
 		var arc := i % 2 == 1
 		var v := (s + e) / 2.0 if not arc else Vector2(rng.randi_range(100, 1800), rng.randi_range(100, 1000))
-		var legacy_seg := Segment.from_coords(s, e, v)
 		var d := {"kind": "arc" if arc else "line", "id": 1, "start": [s.x, s.y], "end": [e.x, e.y], "via": [v.x, v.y]}
 		var p := Vector2(rng.randi_range(0, 1920), rng.randi_range(0, 1080))
-		var val_hp = BeamGeom.on_segment_value(BeamGeom.seg_from_dict(hp, d), hp.cn(p.x, p.y))
-		if val_hp == null:
-			assert_true(false, "on_segment_value implemented")
-			return
-		# skip points within 1e-6 (relative) of the decision boundary: the
-		# legacy test runs in float32 Vector2 arithmetic
-		var mag: float = absf(val_hp.to_float())
-		var scale: float = pow(maxf(s.length(), e.length()) + p.length(), 4)
-		if mag < 1e-6 * scale:
+		if LEGACY_ON_SEGMENT[i] == "-":
 			continue
 		var gen := BeamGeom.on_segment(BeamGeom.seg_from_dict(NumCtx.f64(), d), NumCtx.f64().cn(p.x, p.y))
-		assert_eq(gen, Intersection.is_on_segment(p, legacy_seg), "case %d" % i)
+		assert_eq(gen, LEGACY_ON_SEGMENT[i] == "1", "case %d" % i)
 		compared += 1
 	assert_gt(compared, 900)
 
 func test_side_visual_space():
 	# legacy side in the identity frame (no conjugation flip) on clean cases
+	assert_eq(LEGACY_SIDE_LEFT.length(), 400)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 802
 	var ctx := NumCtx.f64()
@@ -152,24 +171,19 @@ func test_side_visual_space():
 		var e := Vector2(rng.randi_range(100, 1800), rng.randi_range(100, 1000))
 		var arc := i % 2 == 1
 		var v := (s + e) / 2.0 if not arc else Vector2(rng.randi_range(100, 1800), rng.randi_range(100, 1000))
-		var legacy_seg := Segment.from_coords(s, e, v)
 		var d := {"kind": "arc" if arc else "line", "id": 1, "start": [s.x, s.y], "end": [e.x, e.y], "via": [v.x, v.y]}
-		var p := s.lerp(e, 0.37) if not arc else legacy_seg.start.coords
+		var p := s.lerp(e, 0.37) if not arc else s
 		var ang := rng.randf_range(0, TAU)
 		var dir := Vector2(cos(ang), sin(ang))
-		var g: Vector2
-		var carrier := legacy_seg.get_carrier()
-		g = Vector2(2.0 * carrier.a * p.x + carrier.b, 2.0 * carrier.a * p.y + carrier.c)
-		if absf(dir.dot(g)) < 1e-3 * g.length():
-			continue   # near-tangent approach: skip (legacy is float32)
-		var ray := Ray.from_coords(p - dir, Direction.from_coords(p - dir, p))
-		var legacy_left: bool = Intersection._determine_side(ray, p, legacy_seg) == Side.Value.LEFT
+		if LEGACY_SIDE_LEFT[i] == "-":
+			continue   # near-tangent approach (legacy was float32)
 		var gen_left := BeamGeom.side_left(BeamGeom.seg_from_dict(ctx, d), ctx.cn(p.x, p.y), ctx.cn(dir.x, dir.y))
-		assert_eq(gen_left, legacy_left, "case %d (%s)" % [i, "arc" if arc else "line"])
+		assert_eq(gen_left, LEGACY_SIDE_LEFT[i] == "1", "case %d (%s)" % [i, "arc" if arc else "line"])
 		compared += 1
 	assert_gt(compared, 300)
 
 func test_endpoint_blocked_sides_ported():
+	assert_eq(LEGACY_BLOCKED.length(), 400)
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 803
 	var ctx := NumCtx.f64()
@@ -179,19 +193,15 @@ func test_endpoint_blocked_sides_ported():
 		var e := Vector2(rng.randi_range(100, 1800), rng.randi_range(100, 1000))
 		var arc := i % 2 == 1
 		var v := (s + e) / 2.0 if not arc else Vector2(rng.randi_range(100, 1800), rng.randi_range(100, 1000))
-		var legacy_seg := Segment.from_coords(s, e, v)
 		var d := {"kind": "arc" if arc else "line", "id": 1, "start": [s.x, s.y], "end": [e.x, e.y], "via": [v.x, v.y]}
 		var which := 1 + (i % 2)
-		var ep := s if which == 1 else e
 		var ang := rng.randf_range(0, TAU)
 		var dir := Vector2(cos(ang), sin(ang))
-		var tangent := Intersection.tangent_into_segment(legacy_seg, which)
-		if absf(dir.cross(tangent)) < 1e-3:
-			continue
-		var ray := Ray.from_coords(ep - dir, Direction.from_coords(ep - dir, ep))
-		var legacy: Array = Intersection.endpoint_blocked_sides(ep, legacy_seg, ray, which)
+		if LEGACY_BLOCKED[i] == "-":
+			continue   # near-tangent approach (legacy was float32)
+		var code := int(LEGACY_BLOCKED[i])
 		var gen := BeamGeom.blocked_sides(BeamGeom.seg_from_dict(ctx, d), which, ctx.cn(dir.x, dir.y))
-		assert_eq(gen, legacy, "case %d" % i)
+		assert_eq(gen, [code >= 2, code % 2 == 1], "case %d" % i)
 		compared += 1
 	# exact cases (closed form): grazing perpendicular at the start of (0,0)-(10,0)
 	var sg := _line(ctx, Vector2(0, 0), Vector2(10, 0))

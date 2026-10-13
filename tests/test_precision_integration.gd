@@ -13,7 +13,6 @@ var _scene: Node
 func before_each():
 	BeamTracer.clear_cache()
 	Surface.reset_id_counter()
-	MobiusTransform.reset_id_counter()
 	_scene = load(SCENE).instantiate()
 	add_child_autofree(_scene)
 	await get_tree().process_frame
@@ -34,10 +33,10 @@ func _drive(name: String) -> Dictionary:
 
 # Hit/cursor steps of a displayed path vs the oracle event list (up to the
 # first origin/escape). Returns the max point error, or INF on a mismatch.
-func _cmp_events(path: Tracer.TracedPath, expected: Array, label: String) -> float:
+func _cmp_events(path: TracePath, expected: Array, label: String) -> float:
 	var events: Array = []
 	for i in path.steps.size():
-		var s: Tracer.Step = path.steps[i]
+		var s: TraceStep = path.steps[i]
 		if s.surface_id >= 0 and s.hit != null:
 			events.append({"kind": "hit", "id": s.surface_id, "left": s.hit_side == Side.Value.LEFT, "p": s.end})
 		if path.cursor_index == i + 1:
@@ -72,7 +71,7 @@ func test_user_dump_7_4_1_3_6_6_6_planned_and_physical():
 
 func test_planned_path_reaches_cursor_exactly():
 	var r := _drive("dump_7_4_1_3_6_6_6_f32")
-	var path: Tracer.TracedPath = r["renderer"].get_planned_path()
+	var path: TracePath = r["renderer"].get_planned_path()
 	assert_gt(path.cursor_index, 0, "cursor reached")
 	var end: Vector2 = path.steps[path.cursor_index - 1].end
 	var cursor := Vector2(r["scn"]["cursor"][0], r["scn"]["cursor"][1])
@@ -88,7 +87,7 @@ func test_deep_plans_match_oracle():
 
 func test_steps_carry_error_estimates():
 	var r := _drive("grid60_chain_d15_014")
-	var path: Tracer.TracedPath = r["renderer"].get_traced_path()
+	var path: TracePath = r["renderer"].get_traced_path()
 	for s in path.steps:
 		if s.hit != null:
 			assert_true(s.precision_bits >= 53, "precision recorded")

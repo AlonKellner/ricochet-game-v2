@@ -28,6 +28,10 @@ func _init(theta: float, d: Vector2, carrier: GeneralizedCircle = null, p_tracke
 		if carrier != null:
 			_tracked.carrier = carrier
 
+# Stage 84 stub
+func partner() -> RigidMotionEffect:
+	return null
+
 func get_inverse_mobius() -> MobiusTransform:
 	return _tracked.inverse.mobius
 

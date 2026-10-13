@@ -16,68 +16,68 @@ func _vert_segment() -> Segment:
 func _arc_segment() -> Segment:
 	return Segment.from_coords(Vector2(300, 200), Vector2(200, 100), Vector2(270, 130))
 
+# Beam geometry (BeamGeom, f64 tier) for the endpoint rules.
+func _bg(seg: Segment) -> BeamGeom.Seg:
+	return BeamGeom.seg_from_segment(NumCtx.f64(), seg, 1)
+
+func _cn(p: Vector2) -> CN:
+	return NumCtx.f64().cn(p.x, p.y)
+
+func _vec(c: CN) -> Vector2:
+	return Vector2(c.fx(), c.fy())
+
 # =================================================================
 # Stage 1: Endpoint detection
 # =================================================================
 
 func test_at_which_endpoint_at_start() -> void:
-	var seg := _horiz_segment()
-	var result := Intersection.at_which_endpoint(Vector2(100, 200), seg)
+	var result := BeamGeom.endpoint_at(_bg(_horiz_segment()), _cn(Vector2(100, 200)))
 	assert_eq(result, 1, "Point at segment start should return 1")
 
 func test_at_which_endpoint_at_end() -> void:
-	var seg := _horiz_segment()
-	var result := Intersection.at_which_endpoint(Vector2(300, 200), seg)
+	var result := BeamGeom.endpoint_at(_bg(_horiz_segment()), _cn(Vector2(300, 200)))
 	assert_eq(result, 2, "Point at segment end should return 2")
 
 func test_at_which_endpoint_interior() -> void:
-	var seg := _horiz_segment()
-	var result := Intersection.at_which_endpoint(Vector2(200, 200), seg)
+	var result := BeamGeom.endpoint_at(_bg(_horiz_segment()), _cn(Vector2(200, 200)))
 	assert_eq(result, 0, "Point at segment interior should return 0")
 
 func test_at_which_endpoint_off_segment() -> void:
-	var seg := _horiz_segment()
-	var result := Intersection.at_which_endpoint(Vector2(500, 500), seg)
+	var result := BeamGeom.endpoint_at(_bg(_horiz_segment()), _cn(Vector2(500, 500)))
 	assert_eq(result, 0, "Point off segment should return 0")
 
 func test_at_which_endpoint_near_start() -> void:
-	var seg := _horiz_segment()
-	var result := Intersection.at_which_endpoint(Vector2(100.005, 200.003), seg)
+	var result := BeamGeom.endpoint_at(_bg(_horiz_segment()), _cn(Vector2(100.005, 200.003)))
 	assert_eq(result, 0, "Point near but not exactly at start should return 0 (exact equality)")
 
 func test_at_which_endpoint_arc() -> void:
-	var seg := _arc_segment()
-	var result_start := Intersection.at_which_endpoint(Vector2(300, 200), seg)
-	var result_end := Intersection.at_which_endpoint(Vector2(200, 100), seg)
-	assert_eq(result_start, 1, "Point at arc start should return 1")
-	assert_eq(result_end, 2, "Point at arc end should return 2")
+	var sg := _bg(_arc_segment())
+	assert_eq(BeamGeom.endpoint_at(sg, _cn(Vector2(300, 200))), 1, "Point at arc start should return 1")
+	assert_eq(BeamGeom.endpoint_at(sg, _cn(Vector2(200, 100))), 2, "Point at arc end should return 2")
 
 # =================================================================
 # Stage 1: Tangent computation
 # =================================================================
 
+# BeamGeom.tangent_into is not normalized: compare directions.
 func test_tangent_into_line_at_start() -> void:
-	var seg := _horiz_segment()
-	var tangent := Intersection.tangent_into_segment(seg, 1)
+	var tangent := _vec(BeamGeom.tangent_into(_bg(_horiz_segment()), 1)).normalized()
 	assert_almost_eq(tangent, Vector2(1, 0), Vector2(0.01, 0.01),
 		"Tangent at start of horizontal line should point right (toward end)")
 
 func test_tangent_into_line_at_end() -> void:
-	var seg := _horiz_segment()
-	var tangent := Intersection.tangent_into_segment(seg, 2)
+	var tangent := _vec(BeamGeom.tangent_into(_bg(_horiz_segment()), 2)).normalized()
 	assert_almost_eq(tangent, Vector2(-1, 0), Vector2(0.01, 0.01),
 		"Tangent at end of horizontal line should point left (toward start)")
 
 func test_tangent_into_vert_line_at_start() -> void:
-	var seg := _vert_segment()
-	var tangent := Intersection.tangent_into_segment(seg, 1)
+	var tangent := _vec(BeamGeom.tangent_into(_bg(_vert_segment()), 1)).normalized()
 	assert_almost_eq(tangent, Vector2(0, 1), Vector2(0.01, 0.01),
 		"Tangent at start of vertical line should point down (toward end)")
 
 func test_tangent_into_arc_at_start() -> void:
 	var seg := _arc_segment()
-	var tangent := Intersection.tangent_into_segment(seg, 1)
-	assert_almost_eq(tangent.length(), 1.0, 0.01, "Tangent should be unit vector")
+	var tangent := _vec(BeamGeom.tangent_into(_bg(seg), 1)).normalized()
 	var to_via := (seg.via.coords - seg.start.coords).normalized()
 	assert_gt(tangent.dot(to_via), 0.5, "Tangent should point roughly toward via")
 
@@ -85,81 +85,35 @@ func test_tangent_into_arc_at_start() -> void:
 # Stage 1: Blocked sides computation
 # =================================================================
 
-func test_blocked_sides_interior() -> void:
-	var seg := _horiz_segment()
-	var ray := Ray.from_coords(Vector2(200, 100), Direction.from_coords(Vector2(200, 100), Vector2(200, 300)))
-	var sides := Intersection.endpoint_blocked_sides(Vector2(200, 200), seg, ray, 0)
-	assert_true(sides[0] and sides[1], "Interior hit should block both sides")
-
 func test_blocked_sides_off_segment() -> void:
 	var seg := _horiz_segment()
-	var record := Intersection.HitRecord.new(1.0, Vector2(500, 200), seg, Side.Value.LEFT, false)
+	var record := TraceHit.new(1.0, Vector2(500, 200), seg, Side.Value.LEFT, false)
 	assert_false(record.on_segment, "Off-segment hit should not be on segment")
 	assert_false(record.is_fully_blocked(), "Off-segment hit should not be fully blocked")
 
 func test_blocked_sides_start_endpoint() -> void:
-	var seg := _horiz_segment()
-	var ray := Ray.from_coords(Vector2(100, 100), Direction.from_coords(Vector2(100, 100), Vector2(100, 300)))
-	var sides := Intersection.endpoint_blocked_sides(Vector2(100, 200), seg, ray, 1)
+	var sides := BeamGeom.blocked_sides(_bg(_horiz_segment()), 1, _cn(Vector2(0, 1)))
 	var left: bool = sides[0]
 	var right: bool = sides[1]
 	assert_true(left != right, "Start endpoint should block exactly one side")
 
 func test_blocked_sides_end_endpoint() -> void:
-	var seg := _horiz_segment()
-	var ray := Ray.from_coords(Vector2(300, 100), Direction.from_coords(Vector2(300, 100), Vector2(300, 300)))
-	var sides := Intersection.endpoint_blocked_sides(Vector2(300, 200), seg, ray, 2)
+	var sides := BeamGeom.blocked_sides(_bg(_horiz_segment()), 2, _cn(Vector2(0, 1)))
 	var left: bool = sides[0]
 	var right: bool = sides[1]
 	assert_true(left != right, "End endpoint should block exactly one side")
 
 func test_blocked_sides_endpoint_direction() -> void:
-	# Horizontal segment (100,200)→(300,200). Ray going straight down at x=100.
+	# Horizontal segment (100,200)->(300,200). Ray going straight down at x=100.
 	# At start endpoint (100,200): tangent into segment = (1,0) (pointing right).
 	# Ray dir = (0,1) (pointing down in Y-down).
-	# cross = ray_dir.cross(tangent) = 0*0 - 1*1 = -1 → LEFT blocked.
-	var seg := _horiz_segment()
-	var ray := Ray.from_coords(Vector2(100, 100), Direction.from_coords(Vector2(100, 100), Vector2(100, 300)))
-	var sides := Intersection.endpoint_blocked_sides(Vector2(100, 200), seg, ray, 1)
-	# The segment extends to the RIGHT of the ray → should block RIGHT side
-	# (exact convention established by this test — may need to swap if implementation differs)
+	# cross = ray_dir.cross(tangent) = 0*0 - 1*1 = -1 -> LEFT blocked.
+	var sides := BeamGeom.blocked_sides(_bg(_horiz_segment()), 1, _cn(Vector2(0, 1)))
 	assert_true(sides[0] or sides[1], "Should block at least one side")
+	assert_eq(sides, [true, false], "cross < 0 -> LEFT blocked")
 
 # =================================================================
-# Stage 1: HitRecord new fields
-# =================================================================
-
-func test_hitrecord_interior_fully_blocked() -> void:
-	var seg := _horiz_segment()
-	var ray := Ray.from_coords(Vector2(200, 100), Direction.from_coords(Vector2(200, 100), Vector2(200, 300)))
-	var segments: Array = [seg]
-	var hit := H.find_nearest(ray, segments)
-	assert_not_null(hit, "Should find a hit")
-	assert_true(hit.on_segment, "Interior hit should be on segment")
-	assert_true(hit.is_fully_blocked(), "Interior hit should be fully blocked")
-
-func test_hitrecord_endpoint_partial_blocked() -> void:
-	var seg := _horiz_segment()
-	# Ray going down at x=100, will hit the carrier at the start endpoint
-	var ray := Ray.from_coords(Vector2(100, 100), Direction.from_coords(Vector2(100, 100), Vector2(100, 300)))
-	var segments: Array = [seg]
-	var hit := H.find_nearest(ray, segments)
-	assert_not_null(hit, "Should find a hit")
-	assert_true(hit.on_segment, "Endpoint hit is geometrically on segment")
-	assert_false(hit.is_fully_blocked(), "Endpoint hit should NOT be fully blocked")
-
-func test_hitrecord_off_segment_not_blocked() -> void:
-	var seg := _horiz_segment()
-	# Ray going down at x=500, will hit the carrier off-segment
-	var ray := Ray.from_coords(Vector2(500, 100), Direction.from_coords(Vector2(500, 100), Vector2(500, 300)))
-	var segments: Array = [seg]
-	var hit := H.find_nearest(ray, segments)
-	assert_not_null(hit, "Should find a carrier hit")
-	assert_false(hit.on_segment, "Should be off-segment")
-	assert_false(hit.is_fully_blocked(), "Off-segment should not be fully blocked")
-
-# =================================================================
-# Stage 3: Tracer integration — interior hits unchanged
+# Stage 3: Trace integration — interior hits unchanged
 # =================================================================
 
 func test_trace_interior_hit_blocks() -> void:
@@ -169,14 +123,14 @@ func test_trace_interior_hit_blocks() -> void:
 	var player := Vector2(200, 100)
 	var cursor := Vector2(200, 400)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 	assert_gt(path.steps.size(), 0, "Should have steps")
-	var last: Tracer.Step = path.steps[path.steps.size() - 1]
+	var last: TraceStep = path.steps[path.steps.size() - 1]
 	assert_almost_eq(last.end, Vector2(200, 200), Vector2(1, 1),
 		"Trace should end at wall interior hit")
 
 # =================================================================
-# Stage 3: Tracer — endpoint open → ray continues
+# Stage 3: Trace — endpoint open → ray continues
 # =================================================================
 
 func test_trace_endpoint_open_continues() -> void:
@@ -188,14 +142,14 @@ func test_trace_endpoint_open_continues() -> void:
 	var player := Vector2(300, 100)
 	var cursor := Vector2(300, 500)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
-	var last: Tracer.Step = path.steps[path.steps.size() - 1]
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
+	var last: TraceStep = path.steps[path.steps.size() - 1]
 	# The trace should NOT stop at y=200 (the endpoint). It should continue to y=400 (bottom wall).
 	assert_almost_eq(last.end.y, 400.0, 1.0,
 		"Trace should pass through open endpoint and reach bottom wall at y=400, got y=%s" % last.end.y)
 
 # =================================================================
-# Stage 3: Tracer — corner (two walls meeting) → blocks
+# Stage 3: Trace — corner (two walls meeting) → blocks
 # =================================================================
 
 func test_trace_corner_two_walls_blocks() -> void:
@@ -207,16 +161,16 @@ func test_trace_corner_two_walls_blocks() -> void:
 	var player := Vector2(200, 100)
 	var cursor := Vector2(400, 300)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 	# The first carrier step should end at or near the corner (300, 200)
-	var first: Tracer.Step = path.steps[0]
+	var first: TraceStep = path.steps[0]
 	assert_almost_eq(first.end.x, 300.0, 1.0,
 		"First step should hit corner x. Got: %s" % first.end)
 	assert_almost_eq(first.end.y, 200.0, 1.0,
 		"First step should hit corner y. Got: %s" % first.end)
 
 # =================================================================
-# Stage 3: Tracer — endpoint hit doesn't cause mid-air ending
+# Stage 3: Trace — endpoint hit doesn't cause mid-air ending
 # =================================================================
 
 func test_trace_endpoint_does_not_end_midair() -> void:
@@ -228,8 +182,8 @@ func test_trace_endpoint_does_not_end_midair() -> void:
 	var cursor := Vector2(300, 500)
 	var aim := Direction.from_coords(player, cursor)
 	var bounds := Rect2(0, 0, 400, 500)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
-	var last: Tracer.Step = path.steps[path.steps.size() - 1]
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
+	var last: TraceStep = path.steps[path.steps.size() - 1]
 	# The trace should reach the bounds, not stop at the wall endpoint
 	var at_bounds := (last.end.y >= bounds.end.y - 2.0 or last.end.y <= bounds.position.y + 2.0
 		or last.end.x >= bounds.end.x - 2.0 or last.end.x <= bounds.position.x + 2.0)
@@ -253,11 +207,11 @@ func test_reflection_at_interior_still_works() -> void:
 	var player := Vector2(200, 100)
 	var cursor := Vector2(200, 400)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 	var found_frame_change := false
 	for i in range(1, path.steps.size()):
-		var prev: Tracer.Step = path.steps[i - 1]
-		var curr: Tracer.Step = path.steps[i]
+		var prev: TraceStep = path.steps[i - 1]
+		var curr: TraceStep = path.steps[i]
 		if prev.frame_id != curr.frame_id:
 			found_frame_change = true
 			break
@@ -275,11 +229,11 @@ func test_endpoint_reflection_skipped() -> void:
 	var player := Vector2(100, 100)
 	var cursor := Vector2(100, 400)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 	var found_frame_change := false
 	for i in range(1, path.steps.size()):
-		var prev: Tracer.Step = path.steps[i - 1]
-		var curr: Tracer.Step = path.steps[i]
+		var prev: TraceStep = path.steps[i - 1]
+		var curr: TraceStep = path.steps[i]
 		if prev.frame_id != curr.frame_id:
 			found_frame_change = true
 			break
@@ -291,16 +245,20 @@ func test_trace_ends_violation_1() -> void:
 	var surfaces := _mirror_and_wall_surfaces()
 	var player := Vector2(1350, 250)
 	var cursor := Vector2(560, 840)
-	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var aim := Direction.from_coords(player, cursor)
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
+		TraceMode.PLANNED, TraceMode.PHYSICAL, [], null, cursor)
 	assert_gt(planned.steps.size(), 0, "Planned trace should have steps")
 	assert_lt(planned.steps.size(), 50,
 		"Trace should not loop — got %d steps" % planned.steps.size())
-	var last: Tracer.Step = planned.steps[planned.steps.size() - 1]
-	assert_almost_eq(last.end, player, Vector2(2, 2),
-		"Trace should end at player, got %s" % last.end)
+	var last: TraceStep = planned.steps[planned.steps.size() - 1]
+	# Beam semantics: the cursor lies on the wall corner (560,840), approached from
+	# inside the room; post-cursor (physical) the corner blocks, so the trace ends
+	# at the cursor (legacy passed the corner and ended at the player).
+	assert_ne(planned.cursor_index, -1, "Cursor should be reached")
+	assert_almost_eq(last.end, cursor, Vector2(2, 2),
+		"Trace should end at the cursor on the wall corner, got %s" % last.end)
 
 # =================================================================
 # Player block through infinity
@@ -351,15 +309,17 @@ func test_player_blocks_ray_looping_through_infinity() -> void:
 	var surfaces := _mirror_and_wall_surfaces()
 	var player := Vector2(1350, 250)
 	var cursor := Vector2(560, 840)
-	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var aim := Direction.from_coords(player, cursor)
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
-	var last: Tracer.Step = planned.steps[planned.steps.size() - 1]
+		TraceMode.PLANNED, TraceMode.PHYSICAL, [], null, cursor)
+	var last: TraceStep = planned.steps[planned.steps.size() - 1]
 	assert_lt(planned.steps.size(), 50,
 		"Trace should terminate, not loop %d times" % planned.steps.size())
-	assert_almost_eq(last.end, player, Vector2(2, 2),
-		"Trace through infinity should end at player position, got %s" % last.end)
+	# Beam semantics: the cursor is on the wall corner, which blocks post-cursor;
+	# the trace ends there (legacy ended at the player via its player block).
+	assert_almost_eq(last.end, cursor, Vector2(2, 2),
+		"Trace should end at the cursor on the wall corner, got %s" % last.end)
 
 func test_physical_trace_player_blocks_with_unsatisfied_plan() -> void:
 	# Physical trace with planner direction and unsatisfied plan.
@@ -370,15 +330,24 @@ func test_physical_trace_player_blocks_with_unsatisfied_plan() -> void:
 	var player := Vector2(560, 840)
 	var cursor := Vector2(1920, 0)
 	var plan_entries: Array = [PlanManager.PlanEntry.new(m1_id, Side.Value.LEFT)]
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
-	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var aim := Direction.from_coords(player, cursor)
+	var physical := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
-	var last: Tracer.Step = physical.steps[physical.steps.size() - 1]
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, null, cursor)
 	assert_lt(physical.steps.size(), 50,
-		"Physical trace should terminate at player, not loop %d times" % physical.steps.size())
-	assert_almost_eq(last.end, player, Vector2(2, 2),
-		"Physical trace should end at player position, got %s" % last.end)
+		"Physical trace should terminate, not loop %d times" % physical.steps.size())
+	# Beam semantics: no player block. The beam runs one full loop of its line
+	# (through infinity) and ends; it must come back through the player once and
+	# never re-hit a surface after that return.
+	var back := -1
+	for i in range(1, physical.steps.size()):
+		if physical.steps[i].end.distance_to(player) < 2.0:
+			back = i
+			break
+	assert_ne(back, -1, "Trace should loop through infinity back to the player")
+	for i in range(back + 1, physical.steps.size()):
+		assert_null(physical.steps[i].hit,
+			"Step %d after the return to the player should not hit anything" % i)
 
 func test_normal_aim_cursor_still_injected() -> void:
 	# Normal planned trace: aim and cursor should still be injected when cursor is reachable.
@@ -387,9 +356,9 @@ func test_normal_aim_cursor_still_injected() -> void:
 	var player := Vector2(400, 100)
 	var cursor := Vector2(400, 300)
 	var aim := Direction.from_coords(player, cursor)
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
+		TraceMode.PLANNED, TraceMode.PHYSICAL, [], null, cursor)
 	assert_ne(planned.cursor_index, -1,
 		"Cursor should be injected in normal planned trace (got cursor_index=%d)" % planned.cursor_index)
 
@@ -399,10 +368,10 @@ func test_aim_wins_tie_with_carrier() -> void:
 	var surfaces := _mirror_and_wall_surfaces()
 	var player := Vector2(1360, 840)
 	var cursor := Vector2(800, 540)
-	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var aim := Direction.from_coords(player, cursor)
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
+		TraceMode.PLANNED, TraceMode.PHYSICAL, [], null, cursor)
 	assert_ne(planned.cursor_index, -1,
 		"Cursor should be injected when aim ties with carrier (cursor_index=%d, steps=%d)" % [
 			planned.cursor_index, planned.steps.size()])
@@ -416,10 +385,10 @@ func test_player_block_wins_tie_with_carrier() -> void:
 	var surfaces := _mirror_and_wall_surfaces()
 	var player := Vector2(1360, 840)
 	var cursor := Vector2(800, 540)
-	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var aim := Direction.from_coords(player, cursor)
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
+		TraceMode.PLANNED, TraceMode.PHYSICAL, [], null, cursor)
 	assert_lt(planned.steps.size(), 50,
 		"Trace should terminate cleanly, got %d steps" % planned.steps.size())
 	assert_ne(planned.cursor_index, -1,
@@ -432,10 +401,10 @@ func test_three_mirrors_planned_trace_injects_cursor() -> void:
 	var player := Vector2(560, 840)
 	var cursor := Vector2(1920, 0)
 	var plan_entries: Array = [PlanManager.PlanEntry.new(m1_id, Side.Value.LEFT)]
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var aim := Direction.from_coords(player, cursor)
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
+		TraceMode.PLANNED, TraceMode.PHYSICAL, plan_entries, null, cursor)
 	assert_ne(planned.cursor_index, -1,
 		"Planned trace should inject cursor (got cursor_index=%d)" % planned.cursor_index)
 
@@ -448,10 +417,10 @@ func test_planned_trace_terminates_post_cursor() -> void:
 	var player := Vector2(560, 840)
 	var cursor := Vector2(1920, 0)
 	var plan_entries: Array = [PlanManager.PlanEntry.new(m1_id, Side.Value.LEFT)]
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var aim := Direction.from_coords(player, cursor)
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
+		TraceMode.PLANNED, TraceMode.PHYSICAL, plan_entries, null, cursor)
 	assert_ne(planned.cursor_index, -1,
 		"Cursor should be injected (got cursor_index=%d)" % planned.cursor_index)
 	assert_lt(planned.steps.size(), 50,
@@ -463,10 +432,10 @@ func test_trace_ends_violation_2() -> void:
 	var surfaces := _mirror_and_wall_surfaces()
 	var player := Vector2(1360, 840)
 	var cursor := Vector2(800, 540)
-	var aim := Planner.compute_aim_direction(player, cursor, [], surfaces, GameState.new())
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var aim := Direction.from_coords(player, cursor)
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, [], null, cursor)
+		TraceMode.PLANNED, TraceMode.PHYSICAL, [], null, cursor)
 	assert_ne(planned.cursor_index, -1,
 		"Cursor should be injected (cursor_index=%d)" % planned.cursor_index)
 	assert_lt(planned.steps.size(), 50,
@@ -485,41 +454,32 @@ func test_repro_player_block_at_screen_corner_case1() -> void:
 	var cursor := Vector2(1360, 840)
 	var plan_entries: Array = [PlanManager.PlanEntry.new(mirror_id, Side.Value.LEFT)]
 
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new(), cache)
+	var aim := Direction.from_coords(player, cursor)
 	print("  aim direction: start=%s end=%s" % [aim.start.coords, aim.end.coords])
 	print("  aim vector: %s" % aim.to_vector().normalized())
 
 	# Physical trace
-	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var physical := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, null, cursor)
 	print("  PHYSICAL: %d steps, cursor_index=%d" % [physical.steps.size(), physical.cursor_index])
 	_print_steps(physical, "P", 10)
 
 	# Planned trace
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
+		TraceMode.PLANNED, TraceMode.PHYSICAL, plan_entries, null, cursor)
 	print("  PLANNED: %d steps, cursor_index=%d" % [planned.steps.size(), planned.cursor_index])
 	_print_steps(planned, "L", 10)
 
-	# Check player_t for identity-frame steps
-	for i in planned.steps.size():
-		var step: Tracer.Step = planned.steps[i]
-		if step.frame_id == MobiusTransform.IDENTITY_ID:
-			var ray_at_step := Ray.from_coords(step.start, aim)
-			var pt := Intersection.project_point_on_ray(ray_at_step, player)
-			print("  IDENTITY step %d: start=%s player_t=%.4f" % [i, step.start, pt])
-
-	var last_phys: Tracer.Step = physical.steps[physical.steps.size() - 1]
-	var last_plan: Tracer.Step = planned.steps[planned.steps.size() - 1]
+	var last_phys: TraceStep = physical.steps[physical.steps.size() - 1]
+	var last_plan: TraceStep = planned.steps[planned.steps.size() - 1]
 	print("  Physical ends at: %s" % last_phys.end)
 	print("  Planned ends at: %s" % last_plan.end)
 
-	assert_lt(physical.steps.size(), Tracer.MAX_HITS,
+	assert_lt(physical.steps.size(), BeamSolver.MAX_HITS,
 		"Physical trace should not hit MAX_HITS (got %d)" % physical.steps.size())
-	assert_lt(planned.steps.size(), Tracer.MAX_HITS,
+	assert_lt(planned.steps.size(), BeamSolver.MAX_HITS,
 		"Planned trace should not hit MAX_HITS (got %d)" % planned.steps.size())
 
 func test_repro_player_block_at_screen_corner_case2() -> void:
@@ -534,69 +494,36 @@ func test_repro_player_block_at_screen_corner_case2() -> void:
 		PlanManager.PlanEntry.new(mirror_id, Side.Value.LEFT),
 	]
 
-	var cache := TransformCache.new()
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new(), cache)
+	var aim := Direction.from_coords(player, cursor)
 	print("  aim direction: start=%s end=%s" % [aim.start.coords, aim.end.coords])
 	print("  aim vector: %s" % aim.to_vector().normalized())
 
-	var physical := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var physical := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PHYSICAL, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
+		TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan_entries, null, cursor)
 	print("  PHYSICAL: %d steps, cursor_index=%d" % [physical.steps.size(), physical.cursor_index])
 	_print_steps(physical, "P", 10)
 
-	var planned := Tracer.trace(player, aim, surfaces, GameState.new(),
+	var planned := TestTrace.trace(player, aim, surfaces, GameState.new(),
 		null, -1.0,
-		Tracer.TraceMode.PLANNED, Tracer.TraceMode.PHYSICAL, plan_entries, null, cursor)
+		TraceMode.PLANNED, TraceMode.PHYSICAL, plan_entries, null, cursor)
 	print("  PLANNED: %d steps, cursor_index=%d" % [planned.steps.size(), planned.cursor_index])
 	_print_steps(planned, "L", 10)
 
-	var last_phys: Tracer.Step = physical.steps[physical.steps.size() - 1]
-	var last_plan: Tracer.Step = planned.steps[planned.steps.size() - 1]
+	var last_phys: TraceStep = physical.steps[physical.steps.size() - 1]
+	var last_plan: TraceStep = planned.steps[planned.steps.size() - 1]
 	print("  Physical ends at: %s" % last_phys.end)
 	print("  Planned ends at: %s" % last_plan.end)
 
-	assert_lt(physical.steps.size(), Tracer.MAX_HITS,
+	assert_lt(physical.steps.size(), BeamSolver.MAX_HITS,
 		"Physical trace should not hit MAX_HITS (got %d)" % physical.steps.size())
-	assert_lt(planned.steps.size(), Tracer.MAX_HITS,
+	assert_lt(planned.steps.size(), BeamSolver.MAX_HITS,
 		"Planned trace should not hit MAX_HITS (got %d)" % planned.steps.size())
 
-func test_repro_first_hit_from_origin() -> void:
-	# Diagnostic: what does the nearest hit look like for a ray starting at (0,0)?
-	var surfaces := _mirror_and_wall_surfaces()
-	var player := Vector2(0, 0)
-	var cursor := Vector2(1360, 840)
-	var mirror_id: int = surfaces[4].id
-	var plan_entries: Array = [PlanManager.PlanEntry.new(mirror_id, Side.Value.LEFT)]
-
-	var aim := Planner.compute_aim_direction(player, cursor, plan_entries, surfaces, GameState.new())
-	var ray := Ray.from_coords(player, aim)
-	print("  Ray: origin=%s dir=%s" % [ray.origin.coords, ray.direction.to_vector().normalized()])
-
-	var segments: Array = []
-	for s in surfaces:
-		segments.append(s.segment)
-		print("  Surface id=%d: (%s)->(%s) solid=%s" % [s.id, s.segment.start.coords, s.segment.end.coords, s.player_solid])
-
-	var hit := H.find_nearest(ray, segments)
-	if hit:
-		print("  First hit: t=%.4f point=%s on_seg=%s ep=%d bl=%s br=%s seg=(%s)->(%s)" % [
-			hit.t, hit.point.coords, hit.on_segment, hit.at_endpoint,
-			hit.blocked_left, hit.blocked_right,
-			hit.segment.start.coords, hit.segment.end.coords])
-		# Which surface does this segment belong to?
-		for s in surfaces:
-			if s.segment == hit.segment:
-				print("  Hit surface id=%d solid=%s" % [s.id, s.player_solid])
-	else:
-		print("  No hit found!")
-
-	assert_not_null(hit, "Should find a hit from (0,0)")
-
-func _print_steps(path: Tracer.TracedPath, prefix: String, max_steps: int) -> void:
+func _print_steps(path: TracePath, prefix: String, max_steps: int) -> void:
 	var count := mini(path.steps.size(), max_steps)
 	for i in count:
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		var hit_info := "null"
 		if step.hit:
 			hit_info = "t=%.2f seg=(%s)->(%s) on=%s" % [
@@ -604,7 +531,7 @@ func _print_steps(path: Tracer.TracedPath, prefix: String, max_steps: int) -> vo
 		print("  %s[%d] frame=%d start=%s end=%s hit=%s" % [
 			prefix, i, step.frame_id, step.start, step.end, hit_info])
 	if path.steps.size() > max_steps:
-		var last: Tracer.Step = path.steps[path.steps.size() - 1]
+		var last: TraceStep = path.steps[path.steps.size() - 1]
 		print("  %s[...%d more...] last end=%s" % [prefix, path.steps.size() - max_steps, last.end])
 
 func test_two_mirrors_at_corner_reflects() -> void:
@@ -626,7 +553,7 @@ func test_two_mirrors_at_corner_reflects() -> void:
 	var player := Vector2(150, 100)
 	var cursor := Vector2(150, 400)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 	# The first carrier hit at ~(150, 200) is an interior hit on h_mirror → should reflect
-	var first_hit: Tracer.Step = path.steps[0]
+	var first_hit: TraceStep = path.steps[0]
 	assert_almost_eq(first_hit.end.y, 200.0, 1.0, "Should hit h_mirror interior at y=200")

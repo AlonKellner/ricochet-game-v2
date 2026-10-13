@@ -176,7 +176,7 @@ func _try_fire() -> void:
 
 	var surfaces := _get_surfaces()
 	var entries: Array = plan.entries if not plan.is_empty() else []
-	var path: Tracer.TracedPath
+	var path: TracePath
 	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, entries)
 	if pair != null:
 		path = pair.physical

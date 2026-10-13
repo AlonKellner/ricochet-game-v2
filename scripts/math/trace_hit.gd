@@ -1,7 +1,7 @@
 class_name TraceHit
 extends RefCounted
 
-# A hit of a beam on a surface's segment. Formerly Intersection.HitRecord
+# A hit of a beam on a surface's segment. Formerly TraceHit
 # (still available under that name as an alias).
 
 var t: float

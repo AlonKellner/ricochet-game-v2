@@ -14,7 +14,7 @@ class AdvanceResult extends RefCounted:
 	var direction: Vector2
 	var finished: bool
 
-var _path: Tracer.TracedPath = null
+var _path: TracePath = null
 var _current_step_index := 0
 var _progress_along_step := 0.0
 var _flying := false
@@ -27,7 +27,7 @@ func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
 	visible = false
 
-func start_flight(path: Tracer.TracedPath, bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS) -> void:
+func start_flight(path: TracePath, bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS) -> void:
 	_path = path
 	_current_step_index = 0
 	_progress_along_step = 0.0
@@ -36,7 +36,7 @@ func start_flight(path: Tracer.TracedPath, bounds: Rect2 = VisualConverter.DEFAU
 	_bounds = bounds
 	visible = true
 	if _path.steps.size() > 0:
-		var step: Tracer.Step = _path.steps[0]
+		var step: TraceStep = _path.steps[0]
 		_arrow_position = step.start
 		if _is_arc(step):
 			_arrow_direction = _arc_interpolate(step, 0.0).direction
@@ -68,14 +68,14 @@ func _process(delta: float) -> void:
 	if r.finished:
 		_finish_flight()
 
-static func _is_arc(step: Tracer.Step) -> bool:
+static func _is_arc(step: TraceStep) -> bool:
 	return step.is_arc_step and VisualConverter.is_arc(step.start, step.via, step.end)
 
-static func _arc_length(step: Tracer.Step) -> float:
+static func _arc_length(step: TraceStep) -> float:
 	var p := VisualConverter.arc_params(step.start, step.via, step.end)
 	return p.radius * p.span
 
-static func _arc_interpolate(step: Tracer.Step, t: float) -> Dictionary:
+static func _arc_interpolate(step: TraceStep, t: float) -> Dictionary:
 	var p := VisualConverter.arc_params(step.start, step.via, step.end)
 	var ctr: Vector2 = p.center
 	var radius: float = p.radius
@@ -101,7 +101,7 @@ static func advance(steps: Array, step_index: int, progress: float,
 	r.direction = Vector2.RIGHT
 
 	while distance > 0.0 and r.step_index < steps.size():
-		var step: Tracer.Step = steps[r.step_index]
+		var step: TraceStep = steps[r.step_index]
 		var arc := _is_arc(step)
 		var step_length := _arc_length(step) if arc else step.start.distance_to(step.end)
 		var remaining := step_length - r.progress
@@ -128,7 +128,7 @@ static func advance(steps: Array, step_index: int, progress: float,
 			# step (e.g. a large arc out of screen and back to a hit): resume
 			# where it re-enters the bounds. Otherwise complete the step.
 			if r.progress > 0.0 and r.step_index < steps.size():
-				var cur: Tracer.Step = steps[r.step_index]
+				var cur: TraceStep = steps[r.step_index]
 				var resumed := false
 				if _is_arc(cur):
 					var arc_len := _arc_length(cur)
@@ -158,7 +158,7 @@ static func advance(steps: Array, step_index: int, progress: float,
 
 # Smallest arc parameter t in (t_now, 1] at which the arc crosses the edge of
 # `rect` (the next crossing after leaving it is where it re-enters), or -1.
-static func _arc_reentry(step: Tracer.Step, t_now: float, rect: Rect2) -> float:
+static func _arc_reentry(step: TraceStep, t_now: float, rect: Rect2) -> float:
 	var p := VisualConverter.arc_params(step.start, step.via, step.end)
 	var ctr: Vector2 = p.center
 	var radius: float = p.radius
@@ -190,7 +190,7 @@ static func _arc_reentry(step: Tracer.Step, t_now: float, rect: Rect2) -> float:
 
 static func _update_direction(r: AdvanceResult, steps: Array) -> void:
 	if r.step_index < steps.size():
-		var s: Tracer.Step = steps[r.step_index]
+		var s: TraceStep = steps[r.step_index]
 		if _is_arc(s):
 			var arc_len := _arc_length(s)
 			var t := r.progress / arc_len if arc_len > 0.0 else 0.0

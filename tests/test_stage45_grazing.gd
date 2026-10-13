@@ -23,9 +23,9 @@ func test_grazing_arc_radius_equals_half_surface_radius() -> void:
 	var player := Vector2(200, 341)
 	var cursor := Vector2(1700, 341)
 	var aim := Direction.from_coords(player, cursor)
-	var path := Tracer.trace(player, aim, surfaces, GameState.new())
+	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
-	var arc_step: Tracer.Step = null
+	var arc_step: TraceStep = null
 	for step in path.steps:
 		if step.frame_id != 0 and step.is_arc_step:
 			arc_step = step
@@ -64,7 +64,7 @@ func test_grazing_arc_radius_multiple_angles() -> void:
 		var player := Vector2(200, 340 + y_offset)
 		var cursor := Vector2(1700, 340 + y_offset)
 		var aim := Direction.from_coords(player, cursor)
-		var path := Tracer.trace(player, aim, surfaces, GameState.new())
+		var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
 		var d: float = r - y_offset
 		var expected_radius: float = r * r / (2.0 * d)

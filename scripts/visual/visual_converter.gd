@@ -5,27 +5,42 @@ const POINTS_PER_FULL_CIRCLE := 256
 const MAX_ARC_RADIUS := 100000.0
 const DEFAULT_BOUNDS := Rect2(0, 0, 1920, 1080)
 
-static func compute_display_end(step: Tracer.Step, surfaces: Array = []) -> Vector2:
+static func compute_display_end(step: TraceStep, surfaces: Array = []) -> Vector2:
 	if step.surface_id < 0:
 		return step.end
 	for surf in surfaces:
 		var s: Surface = surf
 		if s.id == step.surface_id:
 			var carrier: GeneralizedCircle = s.segment.get_carrier()
-			var projected := Intersection.project_onto_carrier(step.end, carrier)
+			var projected := project_onto_carrier(step.end, carrier)
 			if step.end.distance_to(projected) > 5.0:
 				return step.end
 			return projected
 	return step.end
 
-static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2, surfaces: Array = []) -> Tracer.TracedPath:
+# Closest point of the carrier to `point` (foot of the perpendicular on a
+# line, radial projection on a circle). At the exact center every carrier
+# point is closest: the one at angle 0 is returned.
+static func project_onto_carrier(point: Vector2, carrier: GeneralizedCircle) -> Vector2:
+	if carrier.is_line():
+		var denom := carrier.b * carrier.b + carrier.c * carrier.c
+		var f := carrier.evaluate(point)
+		return Vector2(point.x - f * carrier.b / denom, point.y - f * carrier.c / denom)
+	var center := carrier.center()
+	var r := carrier.radius()
+	var diff := point - center
+	if diff == Vector2.ZERO:
+		return center + Vector2(r, 0)
+	return center + r * diff / diff.length()
+
+static func prepare_for_display(path: TracePath, bounds: Rect2, surfaces: Array = []) -> TracePath:
 	var grown := bounds.grow(1.0)
-	var result := Tracer.TracedPath.new()
+	var result := TracePath.new()
 	result.targets_hit = path.targets_hit
 	result.cursor_index = path.cursor_index
 	var cursor_shift := 0
 	for i in path.steps.size():
-		var step: Tracer.Step = path.steps[i]
+		var step: TraceStep = path.steps[i]
 		var end_inf := is_inf(step.end.x) or is_inf(step.end.y)
 		var start_inf := is_inf(step.start.x) or is_inf(step.start.y)
 		var step_via := step.via
@@ -94,8 +109,8 @@ static func prepare_for_display(path: Tracer.TracedPath, bounds: Rect2, surfaces
 # A display piece of `step`: geometry from the arguments, metadata from the
 # step. The piece carrying the hit gets the hit's surface/side data; only the
 # first piece of a split keeps after_portal (it starts the step).
-static func _piece(step: Tracer.Step, p_start: Vector2, p_end: Vector2, hit, via: Vector2, first: bool) -> Tracer.Step:
-	var piece := Tracer.Step.new(p_start, p_end, step.frame_id, hit, step.ray, step.frame, via, false)
+static func _piece(step: TraceStep, p_start: Vector2, p_end: Vector2, hit, via: Vector2, first: bool) -> TraceStep:
+	var piece := TraceStep.new(p_start, p_end, step.frame_id, hit, step.ray, step.frame, via, false)
 	piece.type = step.type
 	piece.est_error = step.est_error
 	piece.precision_bits = step.precision_bits
@@ -106,11 +121,11 @@ static func _piece(step: Tracer.Step, p_start: Vector2, p_end: Vector2, hit, via
 		piece.hit_on_segment = step.hit_on_segment
 	return piece
 
-static func _snap_step(step: Tracer.Step, surfaces: Array = []) -> Tracer.Step:
+static func _snap_step(step: TraceStep, surfaces: Array = []) -> TraceStep:
 	var display_end := compute_display_end(step, surfaces)
 	if display_end == step.end or display_end == step.start:
 		return step
-	var result := Tracer.Step.new(step.start, display_end, step.frame_id, step.hit, step.ray, step.frame, step.via, step.is_arc_step)
+	var result := TraceStep.new(step.start, display_end, step.frame_id, step.hit, step.ray, step.frame, step.via, step.is_arc_step)
 	result.type = step.type
 	result.copy_meta_from(step)
 	return result
