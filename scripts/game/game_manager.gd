@@ -196,6 +196,10 @@ func _try_fire() -> void:
 			bounds = _level_settings.level_bounds
 		path = VisualConverter.prepare_for_display(path, bounds, surfaces)
 		_arrow_animator.start_flight(path, bounds)
+	else:
+		# no arrow to animate (test levels): the shot lands at once instead of
+		# leaving the game paused
+		_on_flight_completed()
 
 func _on_flight_completed() -> void:
 	get_tree().paused = false
