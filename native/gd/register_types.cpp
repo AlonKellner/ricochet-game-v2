@@ -6,6 +6,7 @@
 #include "gd_solver.hpp"
 #include "gd_ladder.hpp"
 #include "gd_tracer.hpp"
+#include "gd_geom.hpp"
 #include "rc/error.hpp"
 
 #include <gdextension_interface.h>
@@ -35,6 +36,12 @@ void initialize_ricochet_module(godot::ModuleInitializationLevel p_level) {
     // Stage 93: scene
     GDREGISTER_CLASS(NBeamSceneSurf);
     GDREGISTER_CLASS(NBeamScene);
+    // Stage 91-92: exact arithmetic, segments, effect maps
+    GDREGISTER_CLASS(NExact);
+    GDREGISTER_CLASS(NHPBeamCircle);
+    GDREGISTER_CLASS(NBeamGeomSeg);
+    GDREGISTER_CLASS(NBeamGeom);
+    GDREGISTER_CLASS(NBeamEffects);
     // Stage 92-94: beams and the solver
     GDREGISTER_CLASS(NHPBeam);
     GDREGISTER_CLASS(NBeamSolverPlanItem);

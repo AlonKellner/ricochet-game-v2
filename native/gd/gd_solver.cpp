@@ -1,5 +1,8 @@
 #include "gd_solver.hpp"
 
+#include "rc/beam_effects.hpp"
+#include "rc/beam_geom.hpp"
+
 #include "rc/error.hpp"
 
 #include <godot_cpp/core/class_db.hpp>
@@ -118,6 +121,11 @@ void NHPBeam::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("at_infinity"), &NHPBeam::at_infinity);
 	ClassDB::bind_method(D_METHOD("tangent_at", "t"), &NHPBeam::tangent_at);
 	ClassDB::bind_method(D_METHOD("param_of", "z"), &NHPBeam::param_of);
+	ClassDB::bind_static_method("NHPBeam", D_METHOD("inf_like", "x"), &NHPBeam::inf_like);
+	ClassDB::bind_static_method("NHPBeam", D_METHOD("through", "P", "X", "delta"), &NHPBeam::through);
+	ClassDB::bind_static_method("NHPBeam", D_METHOD("invert_point", "z", "circ"), &NHPBeam::invert_point);
+	ClassDB::bind_method(D_METHOD("hits", "circ", "depart_on"), &NHPBeam::hits);
+	ClassDB::bind_method(D_METHOD("invert_at", "t", "circ", "h_exact"), &NHPBeam::invert_at, DEFVAL(Variant()));
 }
 
 Ref<NHPBeam> NHPBeam::wrap(BeamV b) {
@@ -621,6 +629,20 @@ void NFastSolver::_bind_methods() {
 	ClassDB::bind_static_method("NFastSolver", D_METHOD("at_view", "b", "t"), &NFastSolver::at_view);
 	ClassDB::bind_static_method("NFastSolver", D_METHOD("tangent_at", "b", "t", "dt"), &NFastSolver::tangent_at);
 	ClassDB::bind_static_method("NFastSolver", D_METHOD("param_of", "b", "zx", "zy"), &NFastSolver::param_of);
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("circle_hits", "b", "cx", "cy", "r2", "depart_on"), &NFastSolver::circle_hits);
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("line_hits", "b", "sx", "sy", "ex", "ey", "depart_on"), &NFastSolver::line_hits);
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("surf_hits", "b", "s", "depart_on"), &NFastSolver::surf_hits);
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("invert_circle", "b", "t", "dt", "cx", "cy", "r", "r2", "has_h", "hx", "hy"), &NFastSolver::invert_circle,
+			DEFVAL(false), DEFVAL(0.0), DEFVAL(0.0));
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("reflect_line", "b", "t", "dt", "sx", "sy", "ex", "ey", "has_h", "hx", "hy"), &NFastSolver::reflect_line,
+			DEFVAL(false), DEFVAL(0.0), DEFVAL(0.0));
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("portal", "b", "t", "dt", "s", "has_h", "hx", "hy"), &NFastSolver::portal, DEFVAL(false), DEFVAL(0.0), DEFVAL(0.0));
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("project", "b", "t", "dt", "s", "left", "has_h", "hx", "hy"), &NFastSolver::project, DEFVAL(false), DEFVAL(0.0), DEFVAL(0.0));
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("apply_surf", "b", "t", "dt", "s", "has_h", "hx", "hy"), &NFastSolver::apply_surf, DEFVAL(false), DEFVAL(0.0), DEFVAL(0.0));
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("on_segment", "s", "px", "py"), &NFastSolver::on_segment);
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("side_left", "s", "px", "py", "dx", "dy"), &NFastSolver::side_left);
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("endpoint_at", "s", "px", "py"), &NFastSolver::endpoint_at);
+	ClassDB::bind_static_method("NFastSolver", D_METHOD("blocked_sides", "s", "which", "dx", "dy"), &NFastSolver::blocked_sides);
 	BIND_CONSTANT(PX);
 	BIND_CONSTANT(PY);
 	BIND_CONSTANT(TX);
@@ -739,4 +761,167 @@ double NFastSolver::param_of(const PackedFloat64Array &b, double zx, double zy) 
 		return 0.0;
 	}
 	return beam_of(b).param_of(rc::CN<rc::Dual>{rc::Dual{zx, 0.0}, rc::Dual{zy, 0.0}}).v;
+}
+
+// ---------------------------------------------------------------- NFastSolver: roots, maps and decisions on raw beams
+
+namespace {
+
+PackedFloat64Array packed_of(const rc::Beam<rc::Dual> &b) {
+	PackedFloat64Array o;
+	for (double v : {b.p.re.v, b.p.im.v, b.tau.re.v, b.tau.im.v, b.kappa.v, b.p.re.d, b.p.im.d, b.tau.re.d, b.tau.im.d, b.kappa.d}) {
+		o.push_back(v);
+	}
+	return o;
+}
+
+PackedFloat64Array roots_of(const std::vector<rc::Dual> &rs) {
+	PackedFloat64Array o;
+	for (const rc::Dual &r : rs) {
+		o.push_back(r.v);
+		o.push_back(r.d);
+	}
+	return o;
+}
+
+const rc::Surf<rc::Dual> *dual_surf(const Ref<NBeamSceneSurf> &s, const char *where) {
+	if (s.is_null()) {
+		rc::report_error((std::string(where) + ": null surface").c_str());
+		return nullptr;
+	}
+	const auto *sc = std::get_if<std::shared_ptr<rc::Scene<rc::Dual>>>(&s->scene);
+	if (sc == nullptr || *sc == nullptr) {
+		rc::report_error((std::string(where) + ": the surface must belong to a float64 (NFastSolverScene) scene").c_str());
+		return nullptr;
+	}
+	return (*sc)->find(s->surface_id);
+}
+
+// FastSolver's has_h: the hit point's values are given, its derivative is the beam's own at t.
+std::optional<rc::CN<rc::Dual>> h_of(const rc::Beam<rc::Dual> &b, rc::Dual t, bool has_h, double hx, double hy) {
+	if (!has_h) {
+		return std::nullopt;
+	}
+	rc::CN<rc::Dual> h = b.at(t);
+	h.re.v = hx;
+	h.im.v = hy;
+	return h;
+}
+
+} // namespace
+
+PackedFloat64Array NFastSolver::circle_hits(const PackedFloat64Array &b, double cx, double cy, double r2, bool depart_on) {
+	if (!raw_ok(b)) {
+		return PackedFloat64Array();
+	}
+	const rc::Circle<rc::Dual> circ{0, {rc::Dual{cx, 0.0}, rc::Dual{cy, 0.0}}, rc::Dual{0.0, 0.0}, rc::Dual{r2, 0.0}};
+	return roots_of(beam_of(b).hits(circ, depart_on));
+}
+
+PackedFloat64Array NFastSolver::line_hits(const PackedFloat64Array &b, double sx, double sy, double ex, double ey, bool depart_on) {
+	if (!raw_ok(b)) {
+		return PackedFloat64Array();
+	}
+	rc::Seg<rc::Dual> sg;
+	sg.kind = rc::SegKind::Line;
+	sg.s = {rc::Dual{sx, 0.0}, rc::Dual{sy, 0.0}};
+	sg.e = {rc::Dual{ex, 0.0}, rc::Dual{ey, 0.0}};
+	return roots_of(rc::geom::hits(beam_of(b), sg, depart_on));
+}
+
+PackedFloat64Array NFastSolver::surf_hits(const PackedFloat64Array &b, const Ref<NBeamSceneSurf> &s, bool depart_on) {
+	const rc::Surf<rc::Dual> *surf = dual_surf(s, "NFastSolver.surf_hits");
+	if (surf == nullptr || !raw_ok(b)) {
+		return PackedFloat64Array();
+	}
+	return roots_of(rc::geom::hits(beam_of(b), surf->seg, depart_on));
+}
+
+PackedFloat64Array NFastSolver::invert_circle(const PackedFloat64Array &b, double t, double dt, double cx, double cy, double r, double r2,
+		bool has_h, double hx, double hy) {
+	if (!raw_ok(b)) {
+		return PackedFloat64Array();
+	}
+	const rc::Beam<rc::Dual> bm = beam_of(b);
+	const rc::Dual tt{t, dt};
+	const rc::Circle<rc::Dual> circ{0, {rc::Dual{cx, 0.0}, rc::Dual{cy, 0.0}}, rc::Dual{r, 0.0}, rc::Dual{r2, 0.0}};
+	const auto h = h_of(bm, tt, has_h, hx, hy);
+	return packed_of(bm.invert_at(tt, circ, h ? &*h : nullptr));
+}
+
+PackedFloat64Array NFastSolver::reflect_line(const PackedFloat64Array &b, double t, double dt, double sx, double sy, double ex, double ey,
+		bool has_h, double hx, double hy) {
+	if (!raw_ok(b)) {
+		return PackedFloat64Array();
+	}
+	const rc::Beam<rc::Dual> bm = beam_of(b);
+	const rc::Dual tt{t, dt};
+	rc::Seg<rc::Dual> sg;
+	sg.kind = rc::SegKind::Line;
+	sg.s = {rc::Dual{sx, 0.0}, rc::Dual{sy, 0.0}};
+	sg.e = {rc::Dual{ex, 0.0}, rc::Dual{ey, 0.0}};
+	const auto h = h_of(bm, tt, has_h, hx, hy);
+	return packed_of(rc::effects::reflect_line(bm, tt, sg, h ? &*h : nullptr));
+}
+
+PackedFloat64Array NFastSolver::portal(const PackedFloat64Array &b, double t, double dt, const Ref<NBeamSceneSurf> &s, bool has_h, double hx, double hy) {
+	const rc::Surf<rc::Dual> *surf = dual_surf(s, "NFastSolver.portal");
+	if (surf == nullptr || !raw_ok(b)) {
+		return PackedFloat64Array();
+	}
+	const rc::Beam<rc::Dual> bm = beam_of(b);
+	const rc::Dual tt{t, dt};
+	const auto h = h_of(bm, tt, has_h, hx, hy);
+	return packed_of(rc::effects::portal(bm, tt, *surf, h ? &*h : nullptr));
+}
+
+PackedFloat64Array NFastSolver::project(const PackedFloat64Array &b, double t, double dt, const Ref<NBeamSceneSurf> &s, bool left, bool has_h, double hx,
+		double hy) {
+	const rc::Surf<rc::Dual> *surf = dual_surf(s, "NFastSolver.project");
+	if (surf == nullptr || !raw_ok(b)) {
+		return PackedFloat64Array();
+	}
+	const rc::Beam<rc::Dual> bm = beam_of(b);
+	const rc::Dual tt{t, dt};
+	const auto h = h_of(bm, tt, has_h, hx, hy);
+	return packed_of(rc::effects::project(bm, tt, *surf, left, h ? &*h : nullptr));
+}
+
+PackedFloat64Array NFastSolver::apply_surf(const PackedFloat64Array &b, double t, double dt, const Ref<NBeamSceneSurf> &s, bool has_h, double hx, double hy) {
+	const rc::Surf<rc::Dual> *surf = dual_surf(s, "NFastSolver.apply_surf");
+	if (surf == nullptr || !raw_ok(b)) {
+		return PackedFloat64Array();
+	}
+	const rc::Beam<rc::Dual> bm = beam_of(b);
+	const rc::Dual tt{t, dt};
+	const auto h = h_of(bm, tt, has_h, hx, hy);
+	return packed_of(rc::effects::apply(bm, tt, *surf, h ? &*h : nullptr));
+}
+
+bool NFastSolver::on_segment(const Ref<NBeamSceneSurf> &s, double px, double py) {
+	const rc::Surf<rc::Dual> *surf = dual_surf(s, "NFastSolver.on_segment");
+	return surf != nullptr && rc::geom::on_segment(surf->seg, rc::CN<rc::Dual>{rc::Dual{px, 0.0}, rc::Dual{py, 0.0}});
+}
+
+bool NFastSolver::side_left(const Ref<NBeamSceneSurf> &s, double px, double py, double dx, double dy) {
+	const rc::Surf<rc::Dual> *surf = dual_surf(s, "NFastSolver.side_left");
+	return surf != nullptr &&
+		rc::geom::side_left(surf->seg, rc::CN<rc::Dual>{rc::Dual{px, 0.0}, rc::Dual{py, 0.0}}, rc::CN<rc::Dual>{rc::Dual{dx, 0.0}, rc::Dual{dy, 0.0}});
+}
+
+int NFastSolver::endpoint_at(const Ref<NBeamSceneSurf> &s, double px, double py) {
+	const rc::Surf<rc::Dual> *surf = dual_surf(s, "NFastSolver.endpoint_at");
+	return surf == nullptr ? 0 : rc::geom::endpoint_at(surf->seg, rc::CN<rc::Dual>{rc::Dual{px, 0.0}, rc::Dual{py, 0.0}});
+}
+
+Array NFastSolver::blocked_sides(const Ref<NBeamSceneSurf> &s, int which, double dx, double dy) {
+	const rc::Surf<rc::Dual> *surf = dual_surf(s, "NFastSolver.blocked_sides");
+	Array a;
+	if (surf == nullptr) {
+		return a;
+	}
+	const rc::geom::Blocked bl = rc::geom::blocked_sides(surf->seg, which, rc::CN<rc::Dual>{rc::Dual{dx, 0.0}, rc::Dual{dy, 0.0}});
+	a.push_back(bl.left);
+	a.push_back(bl.right);
+	return a;
 }

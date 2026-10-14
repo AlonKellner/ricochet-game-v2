@@ -393,6 +393,37 @@ sweep goldens are identical. Whether a NaN gain should rather count as
 "unknown, climb one tier" is B-list material (B2 neighbourhood); the shipped
 behaviour is reproduced.
 
-Pending for these stages: the `NExact` / `NBeamGeom` / `NBeamEffects`
-bindings, shadow mode, and the per-class flips (`GdX` rename + registration
-rename + inner-class edit).
+### Stages 91-92 bindings: `NExact`, `NHPBeamCircle`, `NBeamGeomSeg`, `NBeamGeom`, `NBeamEffects`
+
+`tests/native/test_diff_beam_geom.gd` compares segments, roots, hit records,
+topology decisions, beam constructions (`through`, `invert_point`,
+`invert_at`), the raw float64 kernels of `FastSolver` (`NFastSolver` now
+carries every raw static), every effect map on the solver fixtures' surfaces
+(`apply`, `portal`, `project`, `projective_exit`, back-propagation, `map_point`,
+`map_pole`, `portal_point`) and the exact kernels, at F64 and 4 limbs. Two
+findings:
+
+- **Signed zeros in derivatives.** FastSolver's hand-written derivatives keep
+  a `-0.0` where dual arithmetic adds a `+0.0` term (`dtx * 1.0` versus
+  `dtx + tx * 0.0`), e.g. a seeded beam with `ty = 0`. Values are bit-identical;
+  derivatives only reach the gains as norms, so the sign is unobservable. The
+  raw-kernel comparisons treat `±0` derivative components as equal.
+- **B12: `Exact.U` is not 2^-53.** `exact.gd` writes `1.1102230246251565e-16`,
+  which Godot parses to `0x3c9ffffffffffffe` (two ulps below 2^-53; Python and
+  C++ parse the same literal to exactly 2^-53). Every running error bound and
+  filter threshold (`emul`, `Line.from_exact`, the concurrency filter) is
+  relatively 2e-16 too small. The native core reproduces the shipped bit
+  pattern; the fix (`pow(2, -53)` on both sides, or the hex literal) is a
+  behaviour change for approval. The only long decimal literal in the ported
+  GDScript.
+
+Pending for these stages: shadow mode and the per-class flips (`GdX` rename +
+registration rename + inner-class edit).
+
+## B-list: behaviour changes awaiting approval (found during the port)
+
+| # | Change | Where | Evidence |
+|---|---|---|---|
+| B1 | `BigFloat.mul` int64 column overflow above ~128 limbs per factor (reproduced natively) | `big_float.gd:251-256` | doctest with `__int128` reference |
+| B12 | `Exact.U` parsed two ulps below 2^-53 by Godot | `exact.gd:11` | `test_diff_beam_geom.gd` (`Exact.U` bits), `tools/dump_goldens.gd` hex inputs; native `exact.hpp` comment |
+| B13 | A NaN replay gain poisons the envelope through `maxf` and jumps the ladder to the last tier | `error_estimate.gd:111`, `precision_ladder.gd` | sweep goldens `precision/no_plan` combos 4883, 4919 (`tiers_tried`) |

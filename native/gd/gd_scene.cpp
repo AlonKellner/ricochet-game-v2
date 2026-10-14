@@ -1,4 +1,5 @@
 #include "gd_scene.hpp"
+#include "gd_geom.hpp"
 
 #include <godot_cpp/core/class_db.hpp>
 
@@ -127,6 +128,8 @@ void NBeamSceneSurf::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_dvec"), &NBeamSceneSurf::get_dvec);
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "alpha", godot::PROPERTY_HINT_RESOURCE_TYPE, "NCN"), "", "get_alpha");
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "dvec", godot::PROPERTY_HINT_RESOURCE_TYPE, "NCN"), "", "get_dvec");
+	ClassDB::bind_method(D_METHOD("get_seg"), &NBeamSceneSurf::get_seg);
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "seg", godot::PROPERTY_HINT_RESOURCE_TYPE, "NBeamGeomSeg"), "", "get_seg");
 	ClassDB::bind_method(D_METHOD("effect", "left", "flags"), &NBeamSceneSurf::effect, DEFVAL(godot::Dictionary()));
 	ClassDB::bind_method(D_METHOD("state_change", "left", "flags"), &NBeamSceneSurf::state_change, DEFVAL(godot::Dictionary()));
 	ClassDB::bind_method(D_METHOD("ghosted", "left", "flags"), &NBeamSceneSurf::ghosted);

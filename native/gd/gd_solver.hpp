@@ -28,6 +28,12 @@ public:
 	godot::Variant at_infinity() const;
 	godot::Ref<NCN> tangent_at(const godot::Ref<NNum> &t) const;
 	godot::Ref<NNum> param_of(const godot::Ref<NCN> &z) const;
+	// HPBeam.inf_like / through / invert_point (statics) and hits / invert_at (gd_geom.cpp)
+	static godot::Ref<NNum> inf_like(const godot::Ref<NNum> &x);
+	static godot::Ref<NHPBeam> through(const godot::Ref<NCN> &P, const godot::Ref<NCN> &X, const godot::Variant &delta);
+	static godot::Ref<NCN> invert_point(const godot::Ref<NCN> &z, const godot::Variant &circ);
+	godot::Array hits(const godot::Variant &circ, bool depart_on) const;
+	godot::Ref<NHPBeam> invert_at(const godot::Ref<NNum> &t, const godot::Variant &circ, const godot::Ref<NCN> &h_exact = godot::Ref<NCN>()) const;
 };
 
 class NBeamSolverPlanItem : public godot::RefCounted {
@@ -171,4 +177,22 @@ public:
 	static godot::PackedFloat64Array at_view(const godot::PackedFloat64Array &b, double t);
 	static godot::PackedFloat64Array tangent_at(const godot::PackedFloat64Array &b, double t, double dt);
 	static double param_of(const godot::PackedFloat64Array &b, double zx, double zy);
+	// roots and maps on raw beams (FastSolver twins over the Dual kernel)
+	static godot::PackedFloat64Array circle_hits(const godot::PackedFloat64Array &b, double cx, double cy, double r2, bool depart_on);
+	static godot::PackedFloat64Array line_hits(const godot::PackedFloat64Array &b, double sx, double sy, double ex, double ey, bool depart_on);
+	static godot::PackedFloat64Array surf_hits(const godot::PackedFloat64Array &b, const godot::Ref<NBeamSceneSurf> &s, bool depart_on);
+	static godot::PackedFloat64Array invert_circle(const godot::PackedFloat64Array &b, double t, double dt, double cx, double cy, double r, double r2,
+			bool has_h = false, double hx = 0.0, double hy = 0.0);
+	static godot::PackedFloat64Array reflect_line(const godot::PackedFloat64Array &b, double t, double dt, double sx, double sy, double ex, double ey,
+			bool has_h = false, double hx = 0.0, double hy = 0.0);
+	static godot::PackedFloat64Array portal(const godot::PackedFloat64Array &b, double t, double dt, const godot::Ref<NBeamSceneSurf> &s,
+			bool has_h = false, double hx = 0.0, double hy = 0.0);
+	static godot::PackedFloat64Array project(const godot::PackedFloat64Array &b, double t, double dt, const godot::Ref<NBeamSceneSurf> &s, bool left,
+			bool has_h = false, double hx = 0.0, double hy = 0.0);
+	static godot::PackedFloat64Array apply_surf(const godot::PackedFloat64Array &b, double t, double dt, const godot::Ref<NBeamSceneSurf> &s,
+			bool has_h = false, double hx = 0.0, double hy = 0.0);
+	static bool on_segment(const godot::Ref<NBeamSceneSurf> &s, double px, double py);
+	static bool side_left(const godot::Ref<NBeamSceneSurf> &s, double px, double py, double dx, double dy);
+	static int endpoint_at(const godot::Ref<NBeamSceneSurf> &s, double px, double py);
+	static godot::Array blocked_sides(const godot::Ref<NBeamSceneSurf> &s, int which, double dx, double dy);
 };

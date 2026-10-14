@@ -6,6 +6,9 @@
 // exponents). The bound only selects the cheap path, it never decides.
 #pragma once
 
+#include <bit>
+#include <cstdint>
+
 #include "rc/bigfloat.hpp"
 
 #include <array>
@@ -17,7 +20,13 @@
 namespace rc {
 namespace exact {
 
-constexpr double U = 1.1102230246251565e-16; // 2^-53, unit roundoff
+// The unit roundoff as the shipped GDScript has it: exact.gd writes
+// 1.1102230246251565e-16 (2^-53) but Godot's decimal parser is not correctly
+// rounded and yields 0x3c9ffffffffffffe, two ulps below 2^-53. The filters'
+// error bounds are therefore relatively 2e-16 too small; the native core
+// reproduces the bit pattern (bit-identity contract), and writing pow(2, -53)
+// on both sides is B-list item B12 (TDD_10).
+constexpr double U = std::bit_cast<double>(std::uint64_t{0x3c9ffffffffffffeULL}); // Godot's value, see above
 
 // A line a x + b y = c with exact coefficients (any nonzero scale), and a
 // homogeneous exact point [x, y, w] (the point (x/w, y/w), w > 0).

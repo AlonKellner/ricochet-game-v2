@@ -6,6 +6,8 @@
 #include "gd_common.hpp"
 #include "gd_num.hpp"
 
+class NBeamGeomSeg;
+
 class NBeamSceneSurf : public godot::RefCounted {
 	GDCLASS(NBeamSceneSurf, godot::RefCounted)
 
@@ -50,6 +52,7 @@ public:
 	godot::Array get_right_proj() const;
 	godot::Ref<NCN> get_alpha() const;
 	godot::Ref<NCN> get_dvec() const;
+	godot::Ref<NBeamGeomSeg> get_seg() const; // gd_geom.cpp
 	godot::String effect(bool left, const godot::Dictionary &flags = godot::Dictionary()) const;
 	godot::Variant state_change(bool left, const godot::Dictionary &flags = godot::Dictionary()) const;
 	bool ghosted(bool left, const godot::Dictionary &flags) const;
