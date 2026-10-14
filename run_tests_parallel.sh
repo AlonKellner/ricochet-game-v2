@@ -80,8 +80,21 @@ for log in "$LOGDIR"/*.log; do
 	f=$(grep -E "^Failing Tests" <<< "$clean" | awk '{print $3}')
 	pass=$((pass + ${p:-0}))
 	fail=$((fail + ${f:-0}))
+	# a script that does not parse is skipped by GUT ("Ignoring script"):
+	# its tests never run, so it fails the suite
+	skipped=""
+	for r in $(grep -oE "Ignoring script res://[^ ]+" <<< "$clean" | sed 's/Ignoring script res:\/\///' | sort -u); do
+		grep -q "^extends GutTest" "$r" && skipped="${skipped:+$skipped
+}res://$r"
+	done
+	if [ -n "$skipped" ]; then
+		echo "!! $label: scripts not loaded (parse errors), their tests did not run:"
+		echo "$skipped" | sed 's/^/   /'
+		grep -E "Parse Error" <<< "$clean" | sort -u | head -10 | sed 's/^/   /'
+		status=1
+	fi
 	if [ "${f:-0}" != "0" ] || grep -q "SCRIPT ERROR" <<< "$clean"; then
-		echo "!! $label: ${f:-0} failing"
+		echo "!! $label: ${f:-0} failing, script errors in the log"
 		sed -n '/Run Summary/,$p' <<< "$clean" | grep -E "^res://|^- |\[Failed\]" | head -40
 		status=1
 	fi

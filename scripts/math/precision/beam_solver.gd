@@ -86,6 +86,7 @@ class Event extends RefCounted:
 	var raw = null            # FastSolver: raw float beam of `beam` (provenance)
 	var state: bool = false   # the side's state change fired
 	var flags: Dictionary = {} # the trace's flags after this event (hits)
+	var anchored: bool = false # cursor: reached on the anchored path
 
 	func describe() -> String:
 		var p := "" if point == null else " (%.6f, %.6f)" % [point.fx(), point.fy()]
@@ -471,9 +472,24 @@ static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode:
 	return _walk_chain(bk, scene, player, cursor, plan, mode, max_events, flags, chain)
 
 # The anchored chain of a plan (forks settled by the clicks: no search).
-static func _select_chain(_bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, _max_events: int,
+# The float64 passes (physical, planned) of one solve build the same chain:
+# the last one is kept, keyed by the scene object and the exact inputs.
+static var _chain_scene: BeamScene = null
+static var _chain_key: Array = []
+static var _chain: AnchorChain = null
+
+static func _select_chain(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, _max_events: int,
 		flags: Dictionary) -> AnchorChain:
-	return AnchorChain.build(scene, player, cursor, plan, flags)
+	if not (bk is FastSolver.Backend):
+		return AnchorChain.build(scene, player, cursor, plan, flags)
+	var key: Array = [player.fx(), player.fy(), cursor.fx(), cursor.fy(), flags,
+		plan.map(func(p): return [p.surface_id, p.left, p.hint])]
+	if is_same(scene, _chain_scene) and key == _chain_key:
+		return _chain
+	_chain = AnchorChain.build(scene, player, cursor, plan, flags)
+	_chain_scene = scene
+	_chain_key = key
+	return _chain
 
 static func _walk_chain(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int,
 		flags: Dictionary, chain: AnchorChain) -> Walk:
@@ -1073,7 +1089,9 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 				w.done = true
 				return
 			if surf == null:
-				_event(w, "cursor", beam, t_prev, t, gaps[ci])
+				var ce := _event(w, "cursor", beam, t_prev, t, gaps[ci])
+				# no divergence before it: the planned trace is this same one
+				ce.anchored = w.anchored
 				t_prev = t
 				w.cursor_done = true
 				w.mode = w.post_mode

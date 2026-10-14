@@ -31,6 +31,7 @@ class Result extends RefCounted:
 	var usec_planned: int = 0
 	var usec_physical: int = 0
 	var physical_sens: ErrorEstimate.Sensitivity = null   # float64 tangent-linear gains of the physical pass
+	var planned_from_physical: bool = false
 
 class Climb extends RefCounted:
 	var events: Array = []
@@ -51,28 +52,41 @@ static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
 	var r := Result.new()
 	if fsc == null:
 		fsc = FastSolver.Scene.from_defs(defs)
-	# ---- planned (float64 pass)
+	# ---- physical
+	var cp := _solve_physical(r, defs, player, cursor, plan, max_physical, tol, verify, fsc, flags)
+	var t1 := Time.get_ticks_usec()
+	r.usec_physical = t1 - t0
+	if cp.events.is_empty():
+		r.physical = []
+		return r
+	# ---- planned
+	# Physical follows the anchored planned path until its first divergence;
+	# if that is after the cursor, both continue identically from it (same
+	# beam, same stack, both PHYSICAL after the cursor): one trajectory.
+	# The physical walk knows it: its cursor event was reached anchored --
+	# every event before it decided as the planned walk decides. Then no
+	# planned pass is needed.
+	var ci := _cursor_index(cp.events)
+	if not verify and not plan.is_empty() and ci >= 0 and cp.events[ci].anchored and max_planned == max_physical:
+		r.planned = cp.events
+		r.planned_err = cp.err
+		r.planned_tier = cp.limbs
+		r.planned_from_physical = true
+		r.usec = Time.get_ticks_usec() - t0
+		return r
 	var sq := ErrorEstimate.planned_sensitivity(defs, player, cursor, plan, max_planned, fsc, flags)
 	if sq.events.is_empty():
+		r.physical = []
 		return r
 	var est_q := ErrorEstimate.estimate(sq, NumCtx.f64().eps())
 	var res_q := planned_residuals(sq.events, fsc.scene)
 	for i in est_q.size():
 		est_q[i] = maxf(est_q[i], res_q[i])
-	# ---- physical
-	var t1 := Time.get_ticks_usec()
-	var cp := _solve_physical(r, defs, player, cursor, plan, max_physical, tol, verify, fsc, flags)
-	var t2 := Time.get_ticks_usec()
-	r.usec_physical = t2 - t1
-	# ---- planned
-	# Physical follows the anchored planned path until its first divergence;
-	# if that is after the cursor, both continue identically from it (same
-	# beam, same stack, both PHYSICAL after the cursor): one trajectory. The
-	# planned prefix must be reliable in float64 and the accepted physical
-	# trace must still agree with it through the cursor.
-	var ci := _cursor_index(sq.events)
-	if not verify and ci >= 0 and (sq.unreliable_from < 0 or sq.unreliable_from > ci) \
-			and _same_structure(sq.events, cp.events, ci + 1):
+	# Otherwise the planned prefix must be reliable in float64 and the
+	# accepted physical trace must still agree with it through the cursor.
+	var cq_i := _cursor_index(sq.events)
+	if not verify and cq_i >= 0 and (sq.unreliable_from < 0 or sq.unreliable_from > cq_i) \
+			and _same_structure(sq.events, cp.events, cq_i + 1):
 		r.planned = cp.events
 		r.planned_err = cp.err
 		r.planned_tier = cp.limbs
@@ -85,7 +99,7 @@ static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
 		r.planned = cq.events
 		r.planned_err = cq.err
 		r.planned_tier = cq.limbs
-	r.usec_planned = (t1 - t0) + (Time.get_ticks_usec() - t2)
+	r.usec_planned = Time.get_ticks_usec() - t1
 	r.usec = Time.get_ticks_usec() - t0
 	return r
 

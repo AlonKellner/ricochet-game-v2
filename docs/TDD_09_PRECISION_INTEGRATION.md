@@ -758,6 +758,14 @@ The sweep found the motivating case. An exit along a diagonal normal ran exactly
 - a trace cut by MAX_HITS ends at its cut;
 - a portal teleport is an intended gap on the solid path.
 
+**Performance follow-up (after sign-off).** Two algorithmic savings, neither of which changes any result:
+- **Shared planned pass.** The physical walk marks a cursor reached on the anchored path (`Event.anchored`): no divergence before it, so the planned trace is the same trajectory. `PrecisionLadder.solve` runs the physical pass first and, in that case, takes the planned trace from it without a planned pass (`Result.planned_from_physical`).
+- **Anchor chain built once.** The float64 passes of one solve share the anchor chain (a one-entry memo in `_select_chain`).
+
+On your capture (the 7-entry plan on `projective.tscn`), a frame with the cursor moving went from about 10 ms to 4.1 ms. Further gains are left for a possible C++ port.
+
+**Runner fix.** The duplicate variable in `test_stage87_mixed_planning.gd` had made GUT skip that whole file in two suite runs. The runner flagged it only as "others: 0 failing". It now names every GutTest script that did not load and fails the suite.
+
 **Oracle data:** `bench/fixtures/stage87_projective_plans.json` (`gen_fixtures_stage87.py`). `stage83_projective.json` and the projective corpus were regenerated.
 
 ### Unit Tests Added (written first)
@@ -773,6 +781,7 @@ The sweep found the motivating case. An exit along a diagonal normal ran exactly
   - `test_planned_exit_beam_exactly_straight` (added after the sweep: an exactly straight exit, and the corner concurrency decided at f64)
   - `test_click_settles_fork` (your capture: the click on the arc reaches the cursor exactly; a click on the other half takes the other candidate)
 - `test_stage87_click_forks.gd`: 14 tests on click-settled forks (see above).
+- `test_planned_pass_shared_when_physical_reaches_cursor_anchored` (performance follow-up, below)
 - `test_stage83_projective.gd`: `test_planned_passes_projectives_until_87` is inverted as `test_planned_applies_projective`.
 - `test_invariant_sweep.gd`: `test_sweep_projective_plans` covers the five projective playgrounds, with one-entry plans on each side and a two-entry plan.
 

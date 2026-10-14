@@ -81,8 +81,8 @@ func test_back_propagation_per_type():
 	var Hb = BeamEffects.back_propagate(s1, lft, X, false, Vector2(630, 150))
 	assert_almost_eq(Vector2(Hb.fx(), Hb.fy()), Vector2(620.0, 160.0), Vector2(1e-9, 1e-9), "circle normal: the other click, the other candidate")
 	# no click: the segment's midpoint (via (400, 173.2)) stands in
-	var Hd = BeamEffects.back_propagate(s1, lft, X)
-	assert_almost_eq(Vector2(Hd.fx(), Hd.fy()), Vector2(620.0, 160.0), Vector2(1e-9, 1e-9), "default: nearest the midpoint")
+	var Hm = BeamEffects.back_propagate(s1, lft, X)
+	assert_almost_eq(Vector2(Hm.fx(), Hm.fy()), Vector2(620.0, 160.0), Vector2(1e-9, 1e-9), "default: nearest the midpoint")
 	# directional on a line: the line through X along the normal
 	var ld := BeamScene.from_defs(ctx, [{"id": 1, "line": true, "start": [300.0, -400.0], "end": [300.0, 400.0], "via": [300.0, 0.0],
 		"full": false, "left": mk.call("line_directional_projection", false, [1.0, 1.0]), "right": mk.call("line_directional_projection", false, [1.0, 1.0])}])
@@ -210,3 +210,38 @@ func test_click_settles_fork():
 	if chain != null:
 		assert_almost_eq(Vector2(chain.hits[5].fx(), chain.hits[5].fy()), hit9.call(a), Vector2(1e-6, 1e-6),
 			"the default click (the arc's midpoint) picks the on-arc candidate")
+
+# Performance: when the physical walk reaches the cursor still anchored (no
+# divergence before it), the planned trace is the same trajectory -- the
+# ladder takes it from the physical pass without a planned pass. The result
+# is unchanged: equal to the planned trace computed on its own.
+func test_planned_pass_shared_when_physical_reaches_cursor_anchored():
+	var shared := 0
+	var separate := 0
+	for name in _fx:
+		var fx: Dictionary = _fx[name]
+		if fx["direction"] != null or fx["cursor"] == null:
+			continue
+		var plan := Rules.plan_of(fx["plan"])
+		var r := PrecisionLadder.solve(fx["surfaces"], fx["player"], fx["cursor"], plan, BeamSolver.MAX_HITS,
+			BeamSolver.MAX_HITS, 0.01, false, null, fx["flags"] if fx["flags"] != null else {})
+		var ci := r.physical.find_custom(func(e): return e.kind == "cursor")
+		if r.planned_from_physical:
+			shared += 1
+			assert_true(ci >= 0 and r.physical[ci].anchored, "%s: shared only when the cursor is reached anchored" % name)
+		else:
+			separate += 1
+		if r.planned_tier != 0:
+			continue
+		var ctx := NumCtx.f64()
+		var own := BeamSolver.planned(ctx, BeamScene.from_defs(ctx, fx["surfaces"]), ctx.cn(fx["player"][0], fx["player"][1]),
+			ctx.cn(fx["cursor"][0], fx["cursor"][1]), plan, BeamSolver.MAX_HITS, fx["flags"] if fx["flags"] != null else {})
+		assert_eq(r.planned.size(), own.size(), "%s: planned event count" % name)
+		for i in mini(r.planned.size(), own.size()):
+			var a: BeamSolver.Event = r.planned[i]
+			var b: BeamSolver.Event = own[i]
+			assert_eq([a.kind, a.surface_id, a.left, a.applied, a.state], [b.kind, b.surface_id, b.left, b.applied, b.state], "%s event %d" % [name, i])
+			if a.point != null and b.point != null:
+				assert_eq(Vector2(a.point.fx(), a.point.fy()), Vector2(b.point.fx(), b.point.fy()), "%s event %d point" % [name, i])
+	assert_gt(shared, 0, "realizable plans share the pass")
+	assert_gt(separate, 0, "diverging plans compute it")
