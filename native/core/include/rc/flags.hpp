@@ -24,6 +24,7 @@ struct StateChangeDef {
 	std::string key;
 	bool toggle = false; // op: "toggle" | "set"
 	FlagValue value = true;
+	bool operator==(const StateChangeDef &) const = default;
 };
 
 class Flags {

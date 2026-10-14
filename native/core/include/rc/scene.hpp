@@ -52,12 +52,14 @@ struct SideDef {
 	double theta = 0.0, dx = 0.0, dy = 0.0; // portal
 	int pair = -1;                          // portal: the paired surface id (-1: none)
 	std::optional<StateChangeDef> state;
+	bool operator==(const SideDef &) const = default;
 };
 
 // A categorical resolver: {key, table: flag_key -> {left, right}} in table order.
 struct ResolverDef {
 	std::string key;
 	std::vector<std::pair<std::string, std::pair<std::optional<SideDef>, std::optional<SideDef>>>> table;
+	bool operator==(const ResolverDef &) const = default;
 };
 
 // {id, line, start, end, via, full, circle: {center, radius} | null, left, right, is_target, resolver}
@@ -74,6 +76,7 @@ struct SurfaceDef {
 	std::optional<SideDef> right;
 	bool is_target = false;
 	std::optional<ResolverDef> resolver;
+	bool operator==(const SurfaceDef &) const = default;
 };
 
 // The reserved per-shot flag of ghost mode.
