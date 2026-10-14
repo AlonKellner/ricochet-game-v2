@@ -45,7 +45,59 @@ struct V2 {
 	}
 	float distance_squared_to(const V2 &o) const { return (x - o.x) * (x - o.x) + (y - o.y) * (y - o.y); }
 	float distance_to(const V2 &o) const { return std::sqrt((x - o.x) * (x - o.x) + (y - o.y) * (y - o.y)); }
+	// Godot: atan2(y, x) in float
+	float angle() const { return std::atan2(y, x); }
+	// Godot: from + (to - from) * weight, per component, in float
+	V2 lerp(const V2 &to, float w) const { return V2{x + (to.x - x) * w, y + (to.y - y) * w}; }
+	// Godot: sine = sin(by), cosine = cos(by) in float
+	V2 rotated(float by) const {
+		const float sine = std::sin(by);
+		const float cosine = std::cos(by);
+		return V2{x * cosine - y * sine, x * sine + y * cosine};
+	}
 };
+inline V2 operator*(float s, const V2 &v) { return v * s; }
+
+// Godot Rect2 (float32): position + size; grow and has_point as the engine computes them.
+struct Rect2f {
+	V2 position;
+	V2 size;
+	static Rect2f of(double x, double y, double w, double h) { return Rect2f{V2::of(x, y), V2::of(w, h)}; }
+	V2 end() const { return position + size; }
+	Rect2f grow(float by) const {
+		Rect2f g = *this;
+		g.position.x -= by;
+		g.position.y -= by;
+		g.size.x += by * 2;
+		g.size.y += by * 2;
+		return g;
+	}
+	bool has_point(const V2 &p) const {
+		if (p.x < position.x) {
+			return false;
+		}
+		if (p.y < position.y) {
+			return false;
+		}
+		if (p.x >= (position.x + size.x)) {
+			return false;
+		}
+		if (p.y >= (position.y + size.y)) {
+			return false;
+		}
+		return true;
+	}
+};
+
+// GDScript fposmod on floats (doubles).
+inline double fposmod(double x, double y) {
+	double value = std::fmod(x, y);
+	if ((value < 0 && y > 0) || (value > 0 && y < 0)) {
+		value += y;
+	}
+	value += 0.0;
+	return value;
+}
 
 // A ray from an origin through a second point (the aim: player -> cursor).
 struct Ray {
