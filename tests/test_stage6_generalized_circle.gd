@@ -1,24 +1,24 @@
 extends GutTest
 
 func test_stage6_line_construction() -> void:
-	var gc := GeneralizedCircle.new(0, 1, 0, -5)
+	var gc := GeneralizedCircle.make(0, 1, 0, -5)
 	assert_true(gc.is_line(), "a=0 should be a line")
 
 func test_stage6_circle_construction() -> void:
-	var gc := GeneralizedCircle.new(1, -4, -6, 12)
+	var gc := GeneralizedCircle.make(1, -4, -6, 12)
 	assert_false(gc.is_line(), "a!=0 should be a circle")
 	assert_almost_eq(gc.center().x, 2.0, 0.001, "Center x should be 2")
 	assert_almost_eq(gc.center().y, 3.0, 0.001, "Center y should be 3")
 	assert_almost_eq(gc.radius(), 1.0, 0.001, "Radius should be 1")
 
 func test_stage6_center_from_coefficients() -> void:
-	var gc := GeneralizedCircle.new(1, -200, -400, 40000)
+	var gc := GeneralizedCircle.make(1, -200, -400, 40000)
 	assert_almost_eq(gc.center().x, 100.0, 0.001, "Center x should be 100")
 	assert_almost_eq(gc.center().y, 200.0, 0.001, "Center y should be 200")
 	assert_almost_eq(gc.radius(), 100.0, 0.001, "Radius should be 100")
 
 func test_stage6_evaluate_on_line() -> void:
-	var gc := GeneralizedCircle.new(0, 1, 0, -5)
+	var gc := GeneralizedCircle.make(0, 1, 0, -5)
 	assert_almost_eq(gc.evaluate(Vector2(5, 3)), 0.0, 0.001, "Point on line should evaluate to 0")
 	assert_almost_eq(gc.evaluate(Vector2(3, 3)), -2.0, 0.001, "Point off line should evaluate to -2")
 

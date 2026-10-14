@@ -316,6 +316,27 @@ void TracePath::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "targets_hit"), "set_targets_hit", "get_targets_hit");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "cursor_index"), "set_cursor_index", "get_cursor_index");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "hit_count"), "set_hit_count", "get_hit_count");
+	ClassDB::bind_method(D_METHOD("physical_hits"), &TracePath::physical_hits);
+}
+
+Dictionary TracePath::physical_hits() const {
+	Dictionary result;
+	for (int64_t i = 0; i < steps.size(); i++) {
+		const Ref<TraceStep> s = steps[i];
+		if (s.is_null() || s->surface_id < 0) {
+			continue;
+		}
+		if (!result.has(s->surface_id)) {
+			result[s->surface_id] = Array();
+		}
+		Dictionary h;
+		h["side"] = s->hit_side;
+		h["on_segment"] = s->hit_on_segment;
+		h["has_continuation"] = i < steps.size() - 1;
+		Array list = result[s->surface_id];
+		list.push_back(h);
+	}
+	return result;
 }
 
 Ref<TracePath> TracePath::wrap(const rc::TracePath &p, const Dictionary &segments, RayCache &rays) {

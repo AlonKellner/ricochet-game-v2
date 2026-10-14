@@ -257,22 +257,13 @@ func _line_side_offset(side: Side.Value, dist: float) -> Vector2:
 	return normal * dist * sign_val
 
 static func chevron_vertices(tip: Vector2, direction: Vector2, size: float) -> PackedVector2Array:
-	var dir := direction.normalized()
-	var base_left := tip - dir.rotated(0.5) * size
-	var base_right := tip - dir.rotated(-0.5) * size
-	return PackedVector2Array([tip, base_left, base_right])
+	return SurfaceGeom.chevron_vertices(tip, direction, size)
 
 static func line_sample(start: Vector2, end: Vector2, t: float) -> Dictionary:
-	var pos := start.lerp(end, t)
-	var seg_dir := (end - start).normalized()
-	var normal := Vector2(-seg_dir.y, seg_dir.x)
-	return {"position": pos, "normal": normal}
+	return SurfaceGeom.line_sample(start, end, t)
 
 static func arc_sample(center: Vector2, radius: float, start_angle: float, span: float, clockwise: bool, t: float) -> Dictionary:
-	var angle := start_angle + t * span * (-1.0 if clockwise else 1.0)
-	var pos := center + Vector2(cos(angle), sin(angle)) * radius
-	var outward := (pos - center).normalized()
-	return {"position": pos, "outward": outward}
+	return SurfaceGeom.arc_sample(center, radius, start_angle, span, clockwise, t)
 
 func _effect_color(config: SideConfig) -> Color:
 	return config_color(config)

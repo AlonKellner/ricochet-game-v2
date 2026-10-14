@@ -1,4 +1,4 @@
-class_name VisualConverter
+class_name GdVisualConverter
 extends RefCounted
 
 const POINTS_PER_FULL_CIRCLE := 256
@@ -11,7 +11,7 @@ static func compute_display_end(step: TraceStep, surfaces: Array = []) -> Vector
 	for surf in surfaces:
 		var s: Surface = surf
 		if s.id == step.surface_id:
-			var carrier: GeneralizedCircle = s.segment.get_carrier()
+			var carrier = s.segment.get_carrier()
 			var projected := project_onto_carrier(step.end, carrier)
 			if step.end.distance_to(projected) > 5.0:
 				return step.end
@@ -21,14 +21,14 @@ static func compute_display_end(step: TraceStep, surfaces: Array = []) -> Vector
 # Closest point of the carrier to `point` (foot of the perpendicular on a
 # line, radial projection on a circle). At the exact center every carrier
 # point is closest: the one at angle 0 is returned.
-static func project_onto_carrier(point: Vector2, carrier: GeneralizedCircle) -> Vector2:
+static func project_onto_carrier(point: Vector2, carrier) -> Vector2:
 	if carrier.is_line():
-		var denom := carrier.b * carrier.b + carrier.c * carrier.c
-		var f := carrier.evaluate(point)
+		var denom: float = carrier.b * carrier.b + carrier.c * carrier.c
+		var f: float = carrier.evaluate(point)
 		return Vector2(point.x - f * carrier.b / denom, point.y - f * carrier.c / denom)
-	var center := carrier.center()
-	var r := carrier.radius()
-	var diff := point - center
+	var center: Vector2 = carrier.center()
+	var r: float = carrier.radius()
+	var diff: Vector2 = point - center
 	if diff == Vector2.ZERO:
 		return center + Vector2(r, 0)
 	return center + r * diff / diff.length()
@@ -151,19 +151,19 @@ static func is_arc(start: Vector2, via: Vector2, end_v: Vector2) -> bool:
 		return false
 	if start == end_v:
 		return false
-	var seg := Segment.from_coords(start, end_v, via)
-	var carrier := seg.get_carrier()
+	var seg := GdSegment.from_coords(start, end_v, via)
+	var carrier = seg.get_carrier()
 	if carrier.is_line():
 		return false
 	return carrier.radius() < MAX_ARC_RADIUS
 
 static func arc_params(start: Vector2, via: Vector2, end_v: Vector2) -> Dictionary:
-	var seg := Segment.from_coords(start, end_v, via)
-	var carrier := seg.get_carrier()
+	var seg := GdSegment.from_coords(start, end_v, via)
+	var carrier = seg.get_carrier()
 	if carrier.is_line():
 		return {"center": Vector2.ZERO, "radius": 0.0, "start_angle": 0.0, "end_angle": 0.0, "clockwise": false, "point_count": 2, "span": 0.0}
 	var ctr := carrier.center()
-	var r := carrier.radius()
+	var r: float = carrier.radius()
 
 	var sa := (start - ctr).angle()
 	var ea := (end_v - ctr).angle()

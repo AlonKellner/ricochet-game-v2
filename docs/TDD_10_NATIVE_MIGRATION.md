@@ -21,7 +21,7 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 94 | `Solver<N>`: the walker, anchored chains, exact aim images, caches on an instance | Done: `BeamSolver` (+ `Event`, `PlanItem`, `AnchorChain` flat) flipped; identical on every fixture at 3 tiers |
 | 95 | `ErrorEstimate` + `PrecisionLadder` | Done: flipped; identical on the corpus |
 | 96 | `TraceStep`/`TracePath` (float32), `Tracer` (`trace_pair`, `plan_refuses`, `to_path`) | Done: `BeamTracer` is an instance per owner; `Point`/`Direction`/`Ray`/`TraceHit`/`TraceStep`/`TracePath` native; 284,096 sweep combos identical; full suite green |
-| 97 | Visual/testing kernels: arc geometry, `VisualConverter`, `StepTreeMerge`, click geometry, arrow advance | Planned |
+| 97 | Visual/testing kernels: arc geometry, `VisualConverter`, `StepTreeMerge`, click geometry, arrow advance | Done: `GeneralizedCircle`, `Segment`, `VisualConverter`, `StepTreeMerge`, `ArrowAdvance`, `SurfaceGeom` native (float32 Vector2 semantics mirrored); `test_diff_visual.gd` identical on the sweep scenes and random inputs |
 | 98 | `InvariantChecker` kernel + native sweeps (shard by combo) | Planned |
 | 99 | Delete the GDScript implementations, final names, source-scan tests rewritten | Planned |
 | 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Planned |
@@ -487,6 +487,45 @@ natively through `PathRenderer`). `make test-fast`: 696 passing in 90 s
 full-stride differential run: `DIFF_STRIDE=1` on
 `tests/native/test_diff_beam_tracer.gd` compares `GdBeamTracer` with
 `BeamTracer` on every sweep combo through the bindings and the live scenes.
+
+## Stage 97: visual and testing kernels
+
+`rc/visual.hpp` ports the display-side geometry: `GeneralizedCircle` /
+`Segment` (carrier derivation, `determine_side`, winding, `full_from_carrier`,
+the click distance that was `ClickDetector._distance_to_segment`),
+`VisualConverter` (`compute_display_end`, `project_onto_carrier`,
+`prepare_for_display` as a plan of pieces the binding materializes with the
+source steps' hit and ray objects, `clip_to_bounds`, `is_arc`, `arc_params`),
+`ArrowAnimator.advance` (with `_arc_reentry`) and `SurfaceNode`'s sampling
+statics. The rule of the port: a `Vector2` operation is float32 exactly as the
+engine computes it (`V2`: `angle` = `atan2f`, `lerp`, `rotated` with `sinf` /
+`cosf`, `normalized` with the `l != 0` guard; `Rect2f.grow` / `has_point`), a
+GDScript scalar is a double, and a component read enters scalar arithmetic as
+a double. Noted quirks reproduced: `prepare_for_display` leaves `hit_count` at
+0 and shares the source path's `targets_hit` Dictionary; `_piece` does not copy
+`ghost`; `_snap_step` returns the very same step object when nothing moves.
+
+Bindings and names: `GeneralizedCircle.make(a, b, c, d)` (was `.new`),
+`Segment.make(start, end, via)` / `from_coords` / `full_from_carrier` (the
+carrier object is kept, so `get_carrier() == carrier`), `Segment.distance_to`,
+`Segment.winding()`; `VisualConverter.DEFAULT_BOUNDS()` and `MAX_ARC_RADIUS()`
+are methods, `POINTS_PER_FULL_CIRCLE` a constant; `ArrowAdvance.advance(...)`
+returns an `ArrowAdvanceResult` and `ArrowAdvance.start_direction(step)` is
+the arrow's initial heading (`ArrowAnimator` keeps only the node glue);
+`SurfaceGeom.line_sample / arc_sample / chevron_vertices` (the `SurfaceNode`
+statics delegate); `TracePath.physical_hits()` (`PathRenderer.build_physical_hits`
+delegates). The GDScript originals are `GdSegment`, `GdGeneralizedCircle`,
+`GdVisualConverter`, `GdStepTreeMerge`, plus test-support copies under
+`scripts/testing/gd_kernels/` (`GdArrowAdvance`, `GdClickGeom`,
+`GdSurfaceGeom`, `GdPhysicalHits`), all deleted in Stage 99.
+
+`tests/native/test_diff_visual.gd` compares both stacks bit for bit: carriers,
+sides, winding and click distances on 400 random segments (lines, full lines,
+arcs, full circles); arc params, projections and clipping on 500 random
+triples and three bounds; surface samples on 300 random inputs; and on the
+sweep scenes' traces (every 37th combo, `DIFF_STRIDE`) the display paths at
+two bounds, display ends, arc params, start directions, arrow flights in
+random increments, physical hits, merged and classified steps.
 
 ## B-list: behaviour changes awaiting approval (found during the port)
 

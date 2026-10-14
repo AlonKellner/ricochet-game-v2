@@ -198,7 +198,7 @@ func _try_fire() -> void:
 	get_tree().paused = true
 
 	if _arrow_animator:
-		var bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS
+		var bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS()
 		if _level_settings and "level_bounds" in _level_settings:
 			bounds = _level_settings.level_bounds
 		path = VisualConverter.prepare_for_display(path, bounds, surfaces)

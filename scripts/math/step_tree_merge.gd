@@ -1,4 +1,4 @@
-class_name StepTreeMerge
+class_name GdStepTreeMerge
 extends RefCounted
 
 static func classify_physical(path: TracePath) -> Array:

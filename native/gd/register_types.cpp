@@ -7,6 +7,7 @@
 #include "gd_ladder.hpp"
 #include "gd_tracer.hpp"
 #include "gd_geom.hpp"
+#include "gd_visual.hpp"
 #include "rc/error.hpp"
 
 #include <gdextension_interface.h>
@@ -67,6 +68,14 @@ void initialize_ricochet_module(godot::ModuleInitializationLevel p_level) {
     GDREGISTER_CLASS(TracePath);
     GDREGISTER_CLASS(BeamTracerPair);
     GDREGISTER_CLASS(BeamTracer);
+    // Stage 97: visual / testing kernels
+    GDREGISTER_CLASS(GeneralizedCircle);
+    GDREGISTER_CLASS(Segment);
+    GDREGISTER_CLASS(VisualConverter);
+    GDREGISTER_CLASS(StepTreeMerge);
+    GDREGISTER_CLASS(ArrowAdvanceResult);
+    GDREGISTER_CLASS(ArrowAdvance);
+    GDREGISTER_CLASS(SurfaceGeom);
 }
 
 void uninitialize_ricochet_module(godot::ModuleInitializationLevel p_level) {

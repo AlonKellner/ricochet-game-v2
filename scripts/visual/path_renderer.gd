@@ -8,7 +8,7 @@ const LINE_WIDTH := 2.0
 const DASH_ON := 10.0
 const DASH_OFF := 5.0
 const MAX_DASH_LEN := 4000.0
-var _draw_bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS.grow(50.0)
+var _draw_bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS().grow(50.0)
 
 enum DisplayMode { MERGED, PHYSICAL, PLANNED }
 const DISPLAY_MODE_NAMES := ["MERGED", "PHYSICAL", "PLANNED"]
@@ -57,7 +57,7 @@ func _compute_trace() -> void:
 	if plan and not plan.is_empty():
 		plan_entries = plan.entries
 
-	var bounds := VisualConverter.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS()
 	# The precision-converging beam solver; null only for player = cursor (no
 	# line, UX7).
 	var pair: BeamTracerPair = _tracer.trace_pair(SceneDefs.defs_from_surfaces(surfaces), player_pos, cursor_pos, plan_entries, get_flags(), SceneDefs.segments_by_id(surfaces))
@@ -82,16 +82,7 @@ func get_physical_hits() -> Dictionary:
 	return _physical_hits
 
 static func build_physical_hits(path: TracePath) -> Dictionary:
-	var result := {}
-	for i in path.steps.size():
-		var s: TraceStep = path.steps[i]
-		if s.surface_id < 0:
-			continue
-		if not result.has(s.surface_id):
-			result[s.surface_id] = []
-		var has_continuation := i < path.steps.size() - 1
-		result[s.surface_id].append({"side": s.hit_side, "on_segment": s.hit_on_segment, "has_continuation": has_continuation})
-	return result
+	return path.physical_hits()
 
 # The game state's flags (the traces start from them); none without a
 # GameManager.

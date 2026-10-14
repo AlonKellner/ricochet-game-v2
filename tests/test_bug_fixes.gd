@@ -1,7 +1,6 @@
 extends GutTest
 
 const H := preload("res://tests/test_helpers.gd")
-const AA := preload("res://scripts/game/arrow_animator.gd")
 
 func before_each() -> void:
 	H.reset_counters()
@@ -315,7 +314,7 @@ func test_no_midair_end_after_reflections() -> void:
 	# Last step should end at a surface hit or bounds edge, not mid-air
 	var last := _step(path, path.steps.size() - 1)
 	# Check: last step end should be near a surface or bounds edge
-	var bounds := VisualConverter.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS()
 	var near_surface := false
 	for surf in surfaces:
 		var s: Surface = surf
@@ -433,7 +432,7 @@ func test_repro_infinity_animation_working_position():
 		null, -1.0, TraceMode.PHYSICAL, TraceMode.PHYSICAL, plan, null, cursor)
 	assert_gt(path.steps.size(), 0, "Should have steps")
 
-# --- AA.advance() unit tests ---
+# --- ArrowAdvance.advance() unit tests ---
 
 func _make_step(s: Vector2, e: Vector2) -> TraceStep:
 	return TraceStep.make(s, e)
@@ -445,7 +444,7 @@ func test_advance_basic_interpolation():
 		_make_step(Vector2(700, 100), Vector2(1000, 100)),
 	]
 	var bounds := Rect2(0, 0, 1920, 1080)
-	var r := AA.advance(steps, 0, 0.0, Vector2(100, 100), 150.0, bounds)
+	var r := ArrowAdvance.advance(steps, 0, 0.0, Vector2(100, 100), 150.0, bounds)
 	assert_almost_eq(r.position.x, 250.0, 1.0, "Arrow at midpoint of step 0")
 	assert_almost_eq(r.position.y, 100.0, 1.0)
 	assert_eq(r.step_index, 0, "Still on step 0")
@@ -458,7 +457,7 @@ func test_advance_completes_all_steps():
 		_make_step(Vector2(700, 100), Vector2(1000, 100)),
 	]
 	var bounds := Rect2(0, 0, 1920, 1080)
-	var r := AA.advance(steps, 0, 0.0, Vector2(100, 100), 99999.0, bounds)
+	var r := ArrowAdvance.advance(steps, 0, 0.0, Vector2(100, 100), 99999.0, bounds)
 	assert_almost_eq(r.position.x, 1000.0, 1.0, "Arrow at last step end")
 	assert_true(r.finished, "Animation complete")
 
@@ -470,7 +469,7 @@ func test_advance_offbounds_fast_forward():
 		_make_step(Vector2(100, 500), Vector2(400, 500)),
 	]
 	var bounds := Rect2(0, 0, 1920, 1080)
-	var r := AA.advance(steps, 0, 0.0, Vector2(100, 100), 99999.0, bounds)
+	var r := ArrowAdvance.advance(steps, 0, 0.0, Vector2(100, 100), 99999.0, bounds)
 	assert_almost_eq(r.position.x, 400.0, 1.0, "Arrow at last step end after fast-forward")
 	assert_almost_eq(r.position.y, 500.0, 1.0)
 	assert_true(r.finished, "Animation complete")
@@ -480,7 +479,7 @@ func test_advance_partial_step_goes_offbounds():
 		_make_step(Vector2(1800, 500), Vector2(2100, 500)),
 	]
 	var bounds := Rect2(0, 0, 1920, 1080)
-	var r := AA.advance(steps, 0, 0.0, Vector2(1800, 500), 200.0, bounds)
+	var r := ArrowAdvance.advance(steps, 0, 0.0, Vector2(1800, 500), 200.0, bounds)
 	assert_true(r.finished, "Single step that goes off-bounds should finish")
 
 func test_advance_boundary_floating_point():
@@ -490,7 +489,7 @@ func test_advance_boundary_floating_point():
 	]
 	var bounds := Rect2(0, 0, 1920, 1080)
 	var step0_len := Vector2(-806.0, 840.0).distance_to(Vector2(-0.000061, 642.46))
-	var r := AA.advance(steps, 0, 0.0, Vector2(-806.0, 840.0), step0_len + 100.0, bounds)
+	var r := ArrowAdvance.advance(steps, 0, 0.0, Vector2(-806.0, 840.0), step0_len + 100.0, bounds)
 	assert_eq(r.step_index, 1, "Arrow in step 1 (not skipped past it)")
 	assert_false(r.finished, "Not finished — still mid-step 1")
 	assert_gt(r.position.x, 0.0, "Arrow past the left edge")
@@ -506,7 +505,7 @@ func test_advance_wrap_through_infinity():
 		_make_step(Vector2(400, 600), Vector2(700, 500)),
 	]
 	var bounds := Rect2(0, 0, 1920, 1080)
-	var r := AA.advance(steps, 0, 0.0, Vector2(500, 200), 99999.0, bounds)
+	var r := ArrowAdvance.advance(steps, 0, 0.0, Vector2(500, 200), 99999.0, bounds)
 	assert_almost_eq(r.position.x, 700.0, 1.0, "Arrow at final step end")
 	assert_almost_eq(r.position.y, 500.0, 1.0)
 	assert_true(r.finished, "Animation complete after wrap")
@@ -520,7 +519,7 @@ func test_advance_preserves_distance_after_fast_forward():
 	]
 	var bounds := Rect2(0, 0, 1920, 1080)
 	# 400 (step 0) + 2000 (step 1) = 2400 consumed; 200 remaining for step 3
-	var r := AA.advance(steps, 0, 0.0, Vector2(100, 100), 2600.0, bounds)
+	var r := ArrowAdvance.advance(steps, 0, 0.0, Vector2(100, 100), 2600.0, bounds)
 	assert_almost_eq(r.position.x, 300.0, 1.0, "Distance preserved: 200px into 300px step")
 	assert_almost_eq(r.position.y, 500.0, 1.0)
 	assert_false(r.finished, "Not finished — still mid-step 3")

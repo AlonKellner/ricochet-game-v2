@@ -37,7 +37,7 @@ static func _carrier_intersect_points(c1: GeneralizedCircle, c2: GeneralizedCirc
 		line_carrier = c1 if c1.is_line() else c2
 		other_carrier = c2 if c1.is_line() else c1
 	else:
-		line_carrier = GeneralizedCircle.new(0,
+		line_carrier = GeneralizedCircle.make(0,
 			c1.b - c2.b, c1.c - c2.c, c1.d - c2.d)
 		other_carrier = c1
 

@@ -279,7 +279,7 @@ func check_SOLID_PATH_TO_CURSOR(player_pos: Vector2, cursor_pos: Vector2) -> Arr
 	var first: TraceStep = solid_steps[0]
 	if first.start != player_pos:
 		violations.append("SOLID-PATH-TO-CURSOR: first solid step starts at %s, not player %s" % [first.start, player_pos])
-	var bounds := VisualConverter.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS()
 	for i in range(1, solid_steps.size()):
 		var prev: TraceStep = solid_steps[i - 1]
 		var curr: TraceStep = solid_steps[i]
@@ -296,7 +296,7 @@ func check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(player_pos: Vector2, cursor_pos: Vect
 	var violations: Array[String] = []
 	if not _renderer or player_pos == cursor_pos:
 		return violations
-	var bounds := VisualConverter.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS()
 	var surfaces: Array = []
 	var parent := _renderer.get_parent()
 	if parent and "surfaces" in parent:
@@ -491,7 +491,7 @@ func check_VISUAL_ON_PHYSICAL_CARRIER(player_pos: Vector2, cursor_pos: Vector2) 
 		surfaces = parent.surfaces
 	if surfaces.size() == 0:
 		return violations
-	var bounds := VisualConverter.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS()
 	var _traces := _get_named_traces()
 	for trace_name in _traces:
 		var path: TracePath = _traces[trace_name]

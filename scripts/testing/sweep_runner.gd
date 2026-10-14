@@ -117,7 +117,7 @@ func _extract_points_of_interest(scene: Node) -> Array[Vector2]:
 		for corner in [r.position, Vector2(r.end.x, r.position.y), r.end, Vector2(r.position.x, r.end.y)]:
 			_add_unique(points, seen, corner)
 
-	var screen := VisualConverter.DEFAULT_BOUNDS
+	var screen := VisualConverter.DEFAULT_BOUNDS()
 	for corner in [screen.position, Vector2(screen.end.x, screen.position.y),
 			screen.end, Vector2(screen.position.x, screen.end.y)]:
 		_add_unique(points, seen, corner)

@@ -126,12 +126,11 @@ func test_stage31_preview_hidden_during_flight() -> void:
 	assert_almost_eq(path_renderer.modulate.a, 1.0, 0.01, "Full opacity after flight")
 
 func test_stage31_camera_bounds_arc_flight() -> void:
-	var Arrow := preload("res://scripts/game/arrow_animator.gd")
 	var step := TraceStep.make(
 		Vector2(2, 0), Vector2(-2, 0), 0, null, null, Vector2(0, 2), true)
 	var arc_len := 2.0 * PI
-	var r := Arrow.advance([step], 0, 0.0, step.start, arc_len * 0.5,
-		VisualConverter.DEFAULT_BOUNDS)
+	var r := ArrowAdvance.advance([step], 0, 0.0, step.start, arc_len * 0.5,
+		VisualConverter.DEFAULT_BOUNDS())
 	assert_almost_eq(r.position, Vector2(0, 2), Vector2(0.01, 0.01),
 		"Arc flight should follow curve, not chord")
 

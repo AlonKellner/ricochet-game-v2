@@ -186,6 +186,8 @@ public:
 	int hit_count = 0;
 
 	static godot::Ref<TracePath> wrap(const rc::TracePath &p, const godot::Dictionary &segments, RayCache &rays);
+	// PathRenderer.build_physical_hits: surface id -> [{side, on_segment, has_continuation}]
+	godot::Dictionary physical_hits() const;
 	godot::Array get_steps() const { return steps; }
 	void set_steps(const godot::Array &v) { steps = v; }
 	godot::Dictionary get_targets_hit() const { return targets_hit; }

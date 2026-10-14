@@ -1,4 +1,4 @@
-class_name Segment
+class_name GdSegment
 extends RefCounted
 
 var start: Point
@@ -6,18 +6,18 @@ var end: Point
 var via: Point
 var full: bool = false
 
-var _carrier: GeneralizedCircle = null
+var _carrier: GdGeneralizedCircle = null
 
 func _init(p_start: Point, p_end: Point, p_via: Point) -> void:
 	start = p_start
 	end = p_end
 	via = p_via
 
-static func from_coords(s: Vector2, e: Vector2, v: Vector2) -> Segment:
-	return Segment.new(Point.at(s), Point.at(e), Point.at(v))
+static func from_coords(s: Vector2, e: Vector2, v: Vector2) -> GdSegment:
+	return GdSegment.new(Point.at(s), Point.at(e), Point.at(v))
 
-static func full_from_carrier(carrier: GeneralizedCircle) -> Segment:
-	var seg: Segment
+static func full_from_carrier(carrier: GdGeneralizedCircle) -> GdSegment:
+	var seg: GdSegment
 	if carrier.is_line():
 		var p1: Vector2
 		var p2: Vector2
@@ -27,19 +27,19 @@ static func full_from_carrier(carrier: GeneralizedCircle) -> Segment:
 		else:
 			p1 = Vector2(-carrier.d / carrier.b, 0.0)
 			p2 = Vector2(-(carrier.d + carrier.c) / carrier.b, 1.0)
-		seg = Segment.new(Point.at(p1), Point.at(p2), Point.at(Vector2(INF, INF)))
+		seg = GdSegment.new(Point.at(p1), Point.at(p2), Point.at(Vector2(INF, INF)))
 	else:
 		var ctr := carrier.center()
 		var r := carrier.radius()
 		var p1 := ctr + Vector2(r, 0)
 		var p2 := ctr + Vector2(-0.5 * r, 0.866 * r)
 		var p3 := ctr + Vector2(-0.5 * r, -0.866 * r)
-		seg = Segment.new(Point.at(p1), Point.at(p3), Point.at(p2))
+		seg = GdSegment.new(Point.at(p1), Point.at(p3), Point.at(p2))
 	seg.full = true
 	seg._carrier = carrier
 	return seg
 
-func get_carrier() -> GeneralizedCircle:
+func get_carrier() -> GdGeneralizedCircle:
 	if _carrier == null:
 		_carrier = derive_carrier(start.coords, end.coords, via.coords)
 	return _carrier
@@ -69,7 +69,7 @@ static func _to_homogeneous_row(p: Vector2) -> Array[float]:
 		return [1.0, 0.0, 0.0, 0.0]
 	return [p.x * p.x + p.y * p.y, p.x, p.y, 1.0]
 
-static func derive_carrier(p_start: Vector2, p_end: Vector2, p_via: Vector2) -> GeneralizedCircle:
+static func derive_carrier(p_start: Vector2, p_end: Vector2, p_via: Vector2) -> GdGeneralizedCircle:
 	var r1 := _to_homogeneous_row(p_start)
 	var r2 := _to_homogeneous_row(p_via)
 	var r3 := _to_homogeneous_row(p_end)
@@ -79,7 +79,7 @@ static func derive_carrier(p_start: Vector2, p_end: Vector2, p_via: Vector2) -> 
 	var c := _det3x3(r1[0], r1[1], r1[3], r2[0], r2[1], r2[3], r3[0], r3[1], r3[3])
 	var d := -_det3x3(r1[0], r1[1], r1[2], r2[0], r2[1], r2[2], r3[0], r3[1], r3[2])
 
-	return GeneralizedCircle.new(a, b, c, d)
+	return GdGeneralizedCircle.new(a, b, c, d)
 
 static func _det3x3(
 	a11: float, a12: float, a13: float,

@@ -42,7 +42,7 @@ func _meta_step() -> TraceStep:
 func test_converter_keeps_meta_on_split():
 	var path := TracePath.new()
 	path.steps = [_meta_step()]
-	var out := VisualConverter.prepare_for_display(path, VisualConverter.DEFAULT_BOUNDS, [])
+	var out := VisualConverter.prepare_for_display(path, VisualConverter.DEFAULT_BOUNDS(), [])
 	var with_hit: Array = out.steps.filter(func(s): return s.hit != null)
 	assert_eq(with_hit.size(), 1, "exactly one display piece carries the hit")
 	if with_hit.is_empty():
@@ -59,6 +59,6 @@ func test_converter_keeps_meta_on_split():
 func test_physical_hits_survive_clipping():
 	var path := TracePath.new()
 	path.steps = [_meta_step()]
-	var out := VisualConverter.prepare_for_display(path, VisualConverter.DEFAULT_BOUNDS, [])
+	var out := VisualConverter.prepare_for_display(path, VisualConverter.DEFAULT_BOUNDS(), [])
 	var hits := PathRenderer.build_physical_hits(out)
 	assert_true(hits.has(5), "a surface hit on a clipped step is still listed")

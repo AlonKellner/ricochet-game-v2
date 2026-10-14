@@ -114,7 +114,7 @@ func test_circle_no_walls_no_nogaps_violations() -> void:
 		var cursor: Vector2 = case_data[1]
 		var aim := Direction.from_coords(player, cursor)
 		var raw := TestTrace.trace(player, aim, surfaces, GameState.new())
-		var display := VisualConverter.prepare_for_display(raw, VisualConverter.DEFAULT_BOUNDS)
+		var display := VisualConverter.prepare_for_display(raw, VisualConverter.DEFAULT_BOUNDS())
 		var violations := _count_nogaps_violations(display)
 		assert_eq(violations, 0,
 			"NOGAPS violations for %s->%s should be 0 (infinity gaps skipped)" % [player, cursor])
@@ -135,7 +135,7 @@ func test_circle_no_walls_no_continuity_violations() -> void:
 		var cursor: Vector2 = case_data[1]
 		var aim := Direction.from_coords(player, cursor)
 		var raw := TestTrace.trace(player, aim, surfaces, GameState.new())
-		var display := VisualConverter.prepare_for_display(raw, VisualConverter.DEFAULT_BOUNDS)
+		var display := VisualConverter.prepare_for_display(raw, VisualConverter.DEFAULT_BOUNDS())
 		var violations := _count_continuity_violations(display)
 		assert_eq(violations, 0,
 			"PHYSICAL-CONTINUITY violations for %s->%s should be 0 (infinity gaps skipped)" % [player, cursor])
@@ -176,7 +176,7 @@ func test_no_zero_length_after_prepare_start_inf_end_on_bounds() -> void:
 		Vector2(INF, INF), false)
 	var path := TracePath.new()
 	path.steps.append(step)
-	var display := VisualConverter.prepare_for_display(path, VisualConverter.DEFAULT_BOUNDS)
+	var display := VisualConverter.prepare_for_display(path, VisualConverter.DEFAULT_BOUNDS())
 	assert_false(_has_zero_length_hit(display),
 		"start_inf step with end on bounds should not produce zero-length hit step")
 
@@ -194,7 +194,7 @@ func test_no_zero_length_after_prepare_end_inf_start_on_bounds() -> void:
 		Vector2(INF, INF), false)
 	var path := TracePath.new()
 	path.steps.append(step)
-	var display := VisualConverter.prepare_for_display(path, VisualConverter.DEFAULT_BOUNDS)
+	var display := VisualConverter.prepare_for_display(path, VisualConverter.DEFAULT_BOUNDS())
 	assert_false(_has_zero_length_hit(display),
 		"end_inf step with start on bounds should not produce zero-length hit step")
 
@@ -210,6 +210,6 @@ func test_circle_no_walls_no_origin_not_rehit_violations() -> void:
 		var cursor: Vector2 = case_data[1]
 		var aim := Direction.from_coords(player, cursor)
 		var raw := TestTrace.trace(player, aim, surfaces, GameState.new())
-		var display := VisualConverter.prepare_for_display(raw, VisualConverter.DEFAULT_BOUNDS)
+		var display := VisualConverter.prepare_for_display(raw, VisualConverter.DEFAULT_BOUNDS())
 		assert_false(_has_zero_length_hit(display),
 			"ORIGIN-NOT-REHIT: %s->%s should have no zero-length hit steps" % [player, cursor])
