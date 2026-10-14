@@ -2,17 +2,6 @@ extends Node2D
 
 const VIOLATIONS_PATH := "res://violations.json"
 
-const _LINE1 := Vector4(600, 300, 600, 700)
-const _LINE2 := Vector4(1300, 300, 1300, 700)
-const _ARC1_START := Vector2(400, 250)
-const _ARC1_END := Vector2(300, 250)
-const _ARC1_VIA := Vector2(350, 200)
-const _ARC2_START := Vector2(1550, 750)
-const _ARC2_END := Vector2(1450, 750)
-const _ARC2_VIA := Vector2(1500, 700)
-
-enum _PairType { REFL_REFL, REFL_SEMI, REFL_PROJ, REFL_DIR, SEMI_SEMI, SEMI_PROJ, SEMI_DIR, PROJ_PROJ, PROJ_DIR, DIR_DIR, PORTAL }
-
 var _violations: Array = []
 var _current_index: int = 0
 var _current_scene: Node = null
@@ -76,7 +65,8 @@ func _show_violation(index: int) -> void:
 		_current_scene = load(scene_path).instantiate()
 		_current_scene.gravity = Vector2.ZERO
 		if combo.size() > 0:
-			_apply_combo(_current_scene, combo)
+			SweepPlans.apply_line_pair(_current_scene, int(combo.lines))
+			SweepPlans.apply_circle_pair(_current_scene, int(combo.circles))
 		add_child(_current_scene)
 		_current_scene_path = scene_path
 		_current_combo = combo
@@ -119,85 +109,6 @@ func _show_violation(index: int) -> void:
 		_path_renderer.queue_redraw()
 
 	_update_label(v)
-
-func _apply_combo(scene: Node, combo: Dictionary) -> void:
-	var lines: int = int(combo.lines)
-	match lines:
-		_PairType.REFL_REFL:
-			scene.mirror_both_lines = Array([_LINE1, _LINE2], TYPE_VECTOR4, &"", null)
-		_PairType.REFL_SEMI:
-			scene.mirror_both_lines = Array([_LINE1], TYPE_VECTOR4, &"", null)
-			scene.mirror_lines = Array([_LINE2], TYPE_VECTOR4, &"", null)
-		_PairType.REFL_PROJ:
-			scene.mirror_both_lines = Array([_LINE1], TYPE_VECTOR4, &"", null)
-			scene.normal_projection_lines = Array([_LINE2], TYPE_VECTOR4, &"", null)
-		_PairType.REFL_DIR:
-			scene.mirror_both_lines = Array([_LINE1], TYPE_VECTOR4, &"", null)
-			scene.directional_projection_lines = PackedFloat64Array([
-				_LINE2.x, _LINE2.y, _LINE2.z, _LINE2.w, 1, 0])
-		_PairType.SEMI_SEMI:
-			scene.mirror_lines = Array([_LINE1, _LINE2], TYPE_VECTOR4, &"", null)
-		_PairType.SEMI_PROJ:
-			scene.mirror_lines = Array([_LINE1], TYPE_VECTOR4, &"", null)
-			scene.normal_projection_lines = Array([_LINE2], TYPE_VECTOR4, &"", null)
-		_PairType.SEMI_DIR:
-			scene.mirror_lines = Array([_LINE1], TYPE_VECTOR4, &"", null)
-			scene.directional_projection_lines = PackedFloat64Array([
-				_LINE2.x, _LINE2.y, _LINE2.z, _LINE2.w, 1, 0])
-		_PairType.PROJ_PROJ:
-			scene.normal_projection_lines = Array([_LINE1, _LINE2], TYPE_VECTOR4, &"", null)
-		_PairType.PROJ_DIR:
-			scene.normal_projection_lines = Array([_LINE1], TYPE_VECTOR4, &"", null)
-			scene.directional_projection_lines = PackedFloat64Array([
-				_LINE2.x, _LINE2.y, _LINE2.z, _LINE2.w, 1, 0])
-		_PairType.DIR_DIR:
-			scene.directional_projection_lines = PackedFloat64Array([
-				_LINE1.x, _LINE1.y, _LINE1.z, _LINE1.w, 1, 0,
-				_LINE2.x, _LINE2.y, _LINE2.z, _LINE2.w, 1, 0])
-		_PairType.PORTAL:
-			scene.portal_lines = PackedFloat64Array([
-				_LINE1.x, _LINE1.y, _LINE1.z, _LINE1.w, 0, 1000, 0])
-
-	var arc1 := PackedFloat64Array([_ARC1_START.x, _ARC1_START.y, _ARC1_END.x, _ARC1_END.y, _ARC1_VIA.x, _ARC1_VIA.y])
-	var arc2 := PackedFloat64Array([_ARC2_START.x, _ARC2_START.y, _ARC2_END.x, _ARC2_END.y, _ARC2_VIA.x, _ARC2_VIA.y])
-	var both := PackedFloat64Array(arc1)
-	both.append_array(arc2)
-	var circles: int = int(combo.circles)
-	match circles:
-		_PairType.REFL_REFL:
-			scene.reflective_arcs = both
-		_PairType.REFL_SEMI:
-			scene.reflective_arcs = arc1
-			scene.semi_reflective_arcs = arc2
-		_PairType.REFL_PROJ:
-			scene.reflective_arcs = arc1
-			scene.normal_projection_arcs = arc2
-		_PairType.REFL_DIR:
-			scene.reflective_arcs = arc1
-			scene.circle_directional_arcs = PackedFloat64Array([
-				_ARC2_START.x, _ARC2_START.y, _ARC2_END.x, _ARC2_END.y, _ARC2_VIA.x, _ARC2_VIA.y, 1, 0])
-		_PairType.SEMI_SEMI:
-			scene.semi_reflective_arcs = both
-		_PairType.SEMI_PROJ:
-			scene.semi_reflective_arcs = arc1
-			scene.normal_projection_arcs = arc2
-		_PairType.SEMI_DIR:
-			scene.semi_reflective_arcs = arc1
-			scene.circle_directional_arcs = PackedFloat64Array([
-				_ARC2_START.x, _ARC2_START.y, _ARC2_END.x, _ARC2_END.y, _ARC2_VIA.x, _ARC2_VIA.y, 1, 0])
-		_PairType.PROJ_PROJ:
-			scene.normal_projection_arcs = both
-		_PairType.PROJ_DIR:
-			scene.normal_projection_arcs = arc1
-			scene.circle_directional_arcs = PackedFloat64Array([
-				_ARC2_START.x, _ARC2_START.y, _ARC2_END.x, _ARC2_END.y, _ARC2_VIA.x, _ARC2_VIA.y, 1, 0])
-		_PairType.DIR_DIR:
-			scene.circle_directional_arcs = PackedFloat64Array([
-				_ARC1_START.x, _ARC1_START.y, _ARC1_END.x, _ARC1_END.y, _ARC1_VIA.x, _ARC1_VIA.y, 1, 0,
-				_ARC2_START.x, _ARC2_START.y, _ARC2_END.x, _ARC2_END.y, _ARC2_VIA.x, _ARC2_VIA.y, 1, 0])
-		_PairType.PORTAL:
-			scene.portal_arcs = PackedFloat64Array([
-				_ARC1_START.x, _ARC1_START.y, _ARC1_END.x, _ARC1_END.y, _ARC1_VIA.x, _ARC1_VIA.y, 0, 500, 0])
 
 func _update_label(v: Dictionary) -> void:
 	var scene_name: String

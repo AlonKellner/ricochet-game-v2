@@ -147,19 +147,8 @@ func test_sweep_no_plan():
 	_report(r.failures, "inversion_grid no plan")
 
 func test_sweep_with_plans():
-	var plans := [[7], [4, 5], [7, 4, 1], [5, 5], [1, 2, 3, 6], [7, 4, 1, 3, 6, 6, 6]]
-	var rng := RandomNumberGenerator.new()
-	rng.seed = 7
-	var positions: Array[Vector2] = []
-	while positions.size() < 10:
-		var p := Vector2(rng.randf_range(40, 1880), rng.randf_range(40, 1040))
-		var inside := false
-		for cx in [760, 960, 1160]:
-			for cy in [380, 540, 700]:
-				if p.distance_to(Vector2(cx, cy)) < 62:
-					inside = true
-		if not inside:
-			positions.append(p)
+	var plans := SweepPlans.precision_plan_ids()
+	var positions := SweepPlans.precision_positions()
 	var r := _sweep(plans, positions)
 	gut.p("inversion_grid with plans: %d runs, %d without a beam pair" % [r.runs, r.fallbacks])
 	_report(r.failures, "inversion_grid with plans")
