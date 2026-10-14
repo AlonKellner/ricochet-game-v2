@@ -19,9 +19,16 @@ public:
 	rcgd::SceneV scene;
 	int surface_id = 0;
 
+	// The editor reads every property of a default instance when it documents
+	// the extension, so a wrapper without a scene answers for an empty surface.
 	template <class F>
 	auto visit(F &&f) const {
-		return std::visit([&](const auto &sc) { return f(*sc->find(surface_id)); }, scene);
+		return std::visit([&](const auto &sc) {
+			using SurfT = std::decay_t<decltype(*sc->find(0))>;
+			static const SurfT empty{};
+			const SurfT *s = sc ? sc->find(surface_id) : nullptr;
+			return f(s != nullptr ? *s : empty);
+		}, scene);
 	}
 
 	int get_id() const { return surface_id; }
