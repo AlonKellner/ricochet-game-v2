@@ -12,23 +12,22 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 
 | Stage | Topic | Status |
 |-------|-------|--------|
-| 88a | Migration plan, layer boundaries, bit-identity contract | Planned |
-| 89 | Toolchain: CMake, godot-cpp, doctest/ctest, `NativeProbe`, runners | In progress |
-| 90 | Core numeric types (`Vec2`, `Complex`, generalized circle) in `rc` | Planned |
-| 91 | Exact predicates and `BigFloat` port | Planned |
-| 92 | Effect maps (`beam_effects`) port, FastSolver twin tests | Planned |
-| 93 | `BeamSolver` rule walker port, oracle fixtures via nlohmann/json | Planned |
-| 94a | `PrecisionLadder` and `ErrorEstimate` port | Planned |
-| 94b | `BeamTracer`: events to `TracePath`/`TraceStep` | Planned |
-| 95 | GDExtension bindings for the solver API (flat classes) | Planned |
-| 96 | Shadow run: native vs GDScript on every trace, `shadow_mismatches.json` | Planned |
-| 97 | Switch-over: game layer calls the native solver | Planned |
-| 98 | Sweep and benchmark parity under the native solver | Planned |
-| 99 | Delete the GDScript solver duplicates, keep the spec tests | Planned |
-| 88b | Plan revision after shadow-run findings | Planned |
-| 88c | Plan revision after switch-over | Planned |
-| 88d | Plan revision after deletion | Planned |
-| 100 | Export templates: linux/windows builds, CI, release checklist | Planned |
+| 88a | Infinity specified: oracle `infinity` event + ∞ plan entry, `stage88_infinity.json`, GAME_SPEC 2.11.0 | Done (spec; implementation 88b–d) |
+| 89 | Toolchain (CMake, godot-cpp pinned, doctest/ctest, `NativeProbe`, runners) + goldens of the pure-GDScript stack + `SweepPlans` | Done (toolchain verified by its author; full-suite run after merge pending) |
+| 90 | `BigFloat`, `F64`, `Dual`, `CN<N>`, the `Num` concept | Core done, bit-identical (4578 golden checks); bindings + GUT diff pending |
+| 91 | `Exact` predicates, constructions, lazy `Line` | Core done, bit-identical (6800); bindings + GUT diff pending |
+| 92 | `Beam<N>`, segment geometry, effect maps: one template, FastSolver's f64 twin folded in | Core done, bit-identical (24261); bindings + GUT diff pending |
+| 93 | `Flags`, `SurfaceDef`/`Scene<N>` from Variant-free defs, categorical tables, ghost | Core done; bindings + GUT diff pending |
+| 94 | `Solver<N>`: the walker, anchored chains, exact aim images, caches on an instance | Core done, bit-identical on every fixture (345) and corpus chain (9154); bindings + GUT diff pending |
+| 95 | `ErrorEstimate` + `PrecisionLadder` | Core done, bit-identical on the corpus (7137 incl. tiers/estimates); bindings pending |
+| 96 | `TraceStep`/`TracePath` (float32), `Tracer` (`trace_pair`, `plan_refuses`, `to_path`) | Core written; verification against the sweep goldens pending (needs the goldens' per-group inputs: regeneration interrupted) |
+| 97 | Visual/testing kernels: arc geometry, `VisualConverter`, `StepTreeMerge`, click geometry, arrow advance | Planned |
+| 98 | `InvariantChecker` kernel + native sweeps (shard by combo) | Planned |
+| 99 | Delete the GDScript implementations, final names, source-scan tests rewritten | Planned |
+| 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Planned |
+| 88c | Native `infinity` event, ∞ plan item, reversed anchored orientation | Planned |
+| 88d | Edge click, hover band, plan chevrons, HUD, `level_bounds` | Planned |
+| 100 | Performance pass: dirty flags, no per-frame defs, cached arc params | Planned |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests (ctest and
 the full GUT suite). The full suite must pass before proceeding to Stage N+1.
@@ -267,3 +266,78 @@ make test-fast                                # ctest + all non-sweep GUT files
 - [ ] In the editor's Output, `print(NativeProbe.add(2, 3))` from a tool script prints 5.
 - [ ] Rebuild (`make native`) with the editor open: the extension hot-reloads without a crash.
 - [ ] `make native-asan` is green.
+
+
+---
+
+## Stage 88a: Infinity specified
+
+The oracle (`docs/research/oracle/trace2.py`) gained `INFINITY_ID = -3` and the
+`EMIT_INFINITY` switch: with it on, a straight beam passing `t = ∞` emits an
+`infinity` event between the crossings ahead and the wrapped ones, counted
+toward `MAX_HITS` (a cut there is a `max` with no point); the event is applied
+when the next plan entry is ∞ (both modes). `via_infinity` reverses the aim
+when the plan's first epoch holds an ∞ entry: every plan has two realizations
+(toward the aim image, or away from it and back through ∞). Ten oracle tests,
+`gen_fixtures_stage88.py` → `bench/fixtures/stage88_infinity.json` (26
+fixtures, planned + physical twins), `tests/test_stage88_infinity.gd` (schema
+pinned; the solver comparison pending until 88c). With the switch off every
+existing fixture regenerates byte-identically. GAME_SPEC §4.2, §6.3, §11.2,
+§12.5, §13.1; CHANGELOG 2.11.0.
+
+Design note for 88d: an ∞ entry inside a ghost stretch is **allowed** (a ghost
+arrow wraps); only sides are refused there (GAME_SPEC 10.6).
+
+## Stage 89 additions: goldens, SweepPlans, machine quirks
+
+- `tools/dump_goldens.gd` dumps the pure-GDScript stack's outputs as bit
+  patterns: `bench/goldens/{bigfloat,exact,beam,fixtures,corpus,chain,sweeps}.json`
+  (`--check` regenerates and compares; `--part=`; `--sweep-stride=`). Every
+  float input is recorded as hex (`inputs`) because **Godot 4.7 does not round
+  decimal-to-double conversion correctly**: `921.3028564453125` (a float32-exact
+  value) parses one ulp low as a GDScript literal, via `String.to_float` and via
+  `JSON.parse_string`. The game never parses (inputs are float32 `Vector2`), so
+  gameplay is unaffected, but native tests must start from the recorded bits.
+- `scripts/testing/sweep_plans.gd`: one definition of the swept scenes, the
+  mirror / inversion / projective plan generators and the 30 combo
+  configurations, shared by the sweep tests, the violation viewer and the dumper.
+- `override.cfg` + `tools/ca_bundle_override.pem`: Godot loads system CA
+  certificates from the macOS keychain at startup (`SecTrustCopyAnchorCertificates`);
+  on this machine that call stalls for minutes when `securityd` is blocked, which
+  hung every headless run. The bundle override skips the keychain (startup
+  >30 s → 1 s). Whether `--import` (editor mode) is covered is still to be
+  checked.
+- GDScript quirk (found by the toolchain work): within one function the
+  constant pool merges `0.0` and `-0.0`; build `+0.0` at runtime in tests.
+- Never run several Godot processes concurrently, and bound `cmake --build -j`
+  (an unbounded build of godot-cpp thrashed the machine for 25 minutes).
+
+## Stages 90–96: the core port (verified so far)
+
+One `Num` concept with three tiers: `F64`, `Dual` (the shipped float64 walk,
+GDScript `FastSolver`), `BigFloat`. Kernels are written once; the few rules
+where FastSolver's hand-written derivatives differ from mechanical dual
+arithmetic are explicit `Dual` branches (`Backend<N>`, `Beam::at_infinity`,
+`effects::project` for circle normals), and the shipped float64 walk's
+conventions are reproduced: parameters from `param_of` carry no derivative, an
+exact hit point takes the beam's own derivative, a decision margin uses the
+display-safe point, and an event's beam identity is a fresh view whenever the
+raw beam object changes (`Event::beam_view`).
+
+| Golden | Checks | Result |
+|---|---|---|
+| BigFloat ops, 6 tiers | 4578 | identical |
+| Exact predicates / constructions / lazy lines | 6800 | identical |
+| Beam / segment / effect kernels (F64 vs generic and FastSolver, Dual derivatives, 4 limbs) | 24261 | identical |
+| Every stage fixture (f64, float64 walk with gains, 4 limbs) | 345 traces | identical |
+| Corpus (549): float64 walks, ladder tiers/estimates/convergence, 4-limb walks | 7137 | identical |
+| Anchored / image / pole chains of the main corpus | 9154 | identical |
+
+`native/tests/test_goldens.cpp` runs all of it under ctest in 2.6 s (49739
+assertions); the same corpus pass takes 139 s in GDScript.
+
+Pending for these stages: the sweep-goldens comparison of `Tracer` (the
+goldens must be regenerated with per-group inputs: 19 minutes, one Godot
+process), the GDExtension bindings (`N*` classes, flat inner classes), the
+`tests/native/test_diff_*.gd` differential GUT tests, shadow mode, and the
+per-class flips.
