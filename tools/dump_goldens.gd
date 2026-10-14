@@ -11,7 +11,7 @@ extends SceneTree
 # of PackedFloat64Array / PackedFloat32Array), BigFloats are
 # "sign:exp:limb,limb,...", so "identical" means identical.
 
-const PARTS := ["bigfloat", "exact", "beam", "fixtures", "corpus", "sweeps"]
+const PARTS := ["bigfloat", "exact", "beam", "fixtures", "corpus", "chain", "sweeps"]
 const FIXTURE_FILES := ["stage81_rules", "stage82_portals", "stage83_projective", "stage85_flags",
 	"stage86_ghost", "stage87_projective_plans", "stage87_click_forks"]
 const CORPORA := ["", "stress", "scenes_corpus"]
@@ -43,6 +43,7 @@ func _init() -> void:
 			"beam": data = _beam()
 			"fixtures": data = _fixtures()
 			"corpus": data = _corpus()
+			"chain": data = _chain()
 			"sweeps": data = await _sweeps()
 			_:
 				push_error("unknown part " + part)
@@ -198,6 +199,45 @@ static func pair_canon(pair: BeamTracer.Pair) -> String:
 
 static func f32(x: float) -> float:
 	return Vector2(x, 0.0).x
+
+# The floats of scene defs / a fixture as Godot parsed them (hex), keyed like
+# the JSON: Godot's decimal parsing is not correctly rounded, so native tests
+# must start from these bit patterns, not from the decimals.
+static func inputs_of(defs: Array, extra: Dictionary) -> Dictionary:
+	var surfs := []
+	for d in defs:
+		var o := {"id": int(d["id"]), "start": [h64(float(d["start"][0])), h64(float(d["start"][1]))],
+			"end": [h64(float(d["end"][0])), h64(float(d["end"][1]))]}
+		if d.get("via") != null:
+			o["via"] = [h64(float(d["via"][0])), h64(float(d["via"][1]))]
+		if d.get("circle") != null:
+			o["circle"] = [h64(float(d["circle"]["center"][0])), h64(float(d["circle"]["center"][1])), h64(float(d["circle"]["radius"]))]
+		for key in ["left", "right"]:
+			var c = d.get(key)
+			if c == null:
+				continue
+			var sd := {}
+			if c.get("normal") != null:
+				sd["normal"] = [h64(float(c["normal"][0])), h64(float(c["normal"][1]))]
+			if c.has("theta"):
+				sd["theta"] = h64(float(c["theta"]))
+			if c.get("d") != null:
+				sd["d"] = [h64(float(c["d"][0])), h64(float(c["d"][1]))]
+			if c.get("state") != null and c["state"].get("value") is float:
+				sd["state_value"] = h64(c["state"]["value"])
+			if not sd.is_empty():
+				o[key] = sd
+		surfs.append(o)
+	var out := {"surfaces": surfs}
+	for k in extra:
+		var v = extra[k]
+		if v == null:
+			continue
+		if v is Array:
+			out[k] = v.map(func(x): return h64(float(x)))
+		else:
+			out[k] = h64(float(v))
+	return out
 
 # ---------------------------------------------------------------- bigfloat
 
@@ -477,7 +517,13 @@ func _fixtures() -> Dictionary:
 		for fx in d["fixtures"]:
 			var key := "%s/%s" % [fname, fx["name"]]
 			var fast := _walk_fast(fx)
-			out[key] = {"f64": events(_walk_generic(fx, NumCtx.f64())), "fast": events(fast.events, fast.gain),
+			var clicks := []
+			for e in fx["plan"]:
+				var c = e.get("click")
+				clicks.append(null if c == null else [h64(float(c[0])), h64(float(c[1]))])
+			var inputs := inputs_of(fx["surfaces"], {"player": fx["player"], "cursor": fx["cursor"], "direction": fx["direction"]})
+			inputs["clicks"] = clicks
+			out[key] = {"inputs": inputs, "f64": events(_walk_generic(fx, NumCtx.f64())), "fast": events(fast.events, fast.gain),
 				"big4": events(_walk_generic(fx, NumCtx.with_limbs(4)))}
 	return out
 
@@ -502,6 +548,7 @@ func _corpus() -> Dictionary:
 			var pb := big4.cn(player[0], player[1])
 			var cb := big4.cn(cursor[0], cursor[1])
 			out["%s/%s" % [sub if sub != "" else "main", name]] = {
+				"inputs": inputs_of(defs, {"player": [player[0], player[1]], "cursor": [cursor[0], cursor[1]]}),
 				"fast_planned": events(fp.events, fp.gain), "fast_physical": events(fh.events, fh.gain),
 				"ladder": {"planned": events(r.planned), "planned_err": num(r.planned_err), "planned_tier": r.planned_tier,
 					"physical": events(r.physical), "physical_err": num(r.physical_err), "physical_tier": r.physical_tier,
@@ -510,6 +557,60 @@ func _corpus() -> Dictionary:
 				"big4_physical": events(BeamSolver.physical(big4, scb, pb, cb, plan)),
 			}
 	PrecisionBench.use_corpus("")
+	return out
+
+# ---------------------------------------------------------------- anchored chains
+
+static func beam_str(b: HPBeam) -> String:
+	return "%s;%s;%s" % [cn(b.p), cn(b.tau), num(b.kappa)]
+
+# The anchored chain (B_0..B_K) of every main corpus scenario at f64 and 4
+# limbs, plus the backward image chain and pole chain of each plan prefix.
+func _chain() -> Dictionary:
+	var out := {}
+	PrecisionBench.use_corpus("")
+	for name in PrecisionBench.list_scenarios():
+		var scn: Dictionary = PrecisionBench.load_json("%s/%s.json" % [PrecisionBench.SCN_DIR, name])
+		var defs: Array = PrecisionBench.scene_defs(scn)
+		var plan := PrecisionBench.plan_items(scn)
+		var d := {"inputs": inputs_of(defs, {"player": [float(scn["player"][0]), float(scn["player"][1])],
+			"cursor": [float(scn["cursor"][0]), float(scn["cursor"][1])]})}
+		for ctx_name in ["f64", "big4"]:
+			var ctx: NumCtx = NumCtx.f64() if ctx_name == "f64" else NumCtx.with_limbs(4)
+			var scene := BeamScene.from_defs(ctx, defs)
+			var player := ctx.cn(float(scn["player"][0]), float(scn["player"][1]))
+			var cursor := ctx.cn(float(scn["cursor"][0]), float(scn["cursor"][1]))
+			var chain := BeamSolver.AnchorChain.build(scene, player, cursor, plan, {})
+			if chain == null:
+				d[ctx_name] = null
+				continue
+			var beams := []
+			var ids := {}
+			var idx := []
+			for b in chain.beams:
+				var k: int = b.get_instance_id()
+				if not ids.has(k):
+					ids[k] = beams.size()
+					beams.append(beam_str(b))
+				idx.append(ids[k])
+			# the image chain and the poles of the full plan, step by step
+			var X = cursor
+			var images := []
+			for j in range(plan.size() - 1, -1, -1):
+				X = BeamEffects.map_point(X, scene.by_id[plan[j].surface_id], true)
+				images.append("null" if X == null else cn(X))
+				if X == null:
+					break
+			var pole: Array = [player, null, null]
+			var poles := []
+			for j in plan.size():
+				pole = BeamEffects.map_pole(pole, scene.by_id[plan[j].surface_id])
+				poles.append("%s|%s|%s" % ["null" if pole[0] == null else cn(pole[0]), "null" if pole[1] == null else cn(pole[1]),
+					"null" if pole[2] == null else cn(pole[2])])
+				if pole[0] == null:
+					break
+			d[ctx_name] = {"beams": beams, "index": idx, "images": images, "poles": poles}
+		out[name] = d
 	return out
 
 # ---------------------------------------------------------------- sweeps
