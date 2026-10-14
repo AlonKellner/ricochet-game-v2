@@ -1,8 +1,8 @@
-class_name BeamGeom
+class_name GdBeamGeom
 extends RefCounted
 
 # Precision-generic segment geometry for the beam solver (any Num tier:
-# F64Num, DualNum, BigFloat). Every decision here (on-segment, side, endpoint
+# GdF64Num, GdDualNum, GdBigFloat). Every decision here (on-segment, side, endpoint
 # blockage) is computed at the tier's precision, following the definitions of
 # the game's original definitions (the legacy intersection module, segment.gd):
 #   - side: approach = -dir·∇f(P), winding = -(E - S) × ∇f(V);
@@ -14,7 +14,7 @@ extends RefCounted
 # Line carriers: f(z) = cross(E - S, z - S), ∇f = (-(E-S).y, (E-S).x).
 # Beam ∩ line, beam z(t) = p + tτ/(1 - iκt/2):
 #   f(p)(1 + κ²t²/4) + (∇f·τ) t + (κ/2) cross(τ, ∇f) t² = 0
-# Circle carriers reuse HPBeam.hits.
+# Circle carriers reuse GdHPBeam.hits.
 
 enum Kind { LINE, CIRCLE }
 
@@ -22,22 +22,22 @@ class Seg extends RefCounted:
 	var id: int
 	var kind: int = Kind.LINE
 	var full: bool = false
-	var s: CN
-	var e: CN
-	var v = null                        # CN, or null = the point at infinity
-	var circ: HPBeam.Circle = null      # circle carriers: center c, radius r, r²
+	var s: GdCN
+	var e: GdCN
+	var v = null                        # GdCN, or null = the point at infinity
+	var circ: GdHPBeam.Circle = null      # circle carriers: center c, radius r, r²
 	var _wind_nonneg = null             # cached sign of winding(seg) (constant)
 
-	func c() -> CN:
+	func c() -> GdCN:
 		return circ.c
 
 # ---------------------------------------------------------------- construction
 
-static func _cn(ctx: NumCtx, a) -> CN:
+static func _cn(ctx: GdNumCtx, a) -> GdCN:
 	return ctx.cn(float(a[0]), float(a[1]))
 
 # {kind: line|arc|full_circle, id, start, end, via, center, radius, full}
-static func seg_from_dict(ctx: NumCtx, d: Dictionary) -> Seg:
+static func seg_from_dict(ctx: GdNumCtx, d: Dictionary) -> Seg:
 	var sg := Seg.new()
 	sg.id = int(d.get("id", 0))
 	sg.s = _cn(ctx, d["start"])
@@ -50,17 +50,17 @@ static func seg_from_dict(ctx: NumCtx, d: Dictionary) -> Seg:
 		"arc":
 			sg.kind = Kind.CIRCLE
 			var c := circumcenter(sg.s, sg.v, sg.e)
-			sg.circ = HPBeam.Circle.make(sg.id, c, sg.s.sub(c).abs_val())
+			sg.circ = GdHPBeam.Circle.make(sg.id, c, sg.s.sub(c).abs_val())
 		"full_circle":
 			sg.kind = Kind.CIRCLE
 			sg.full = true
-			sg.circ = HPBeam.Circle.make(sg.id, _cn(ctx, d["center"]), ctx.num(float(d["radius"])))
+			sg.circ = GdHPBeam.Circle.make(sg.id, _cn(ctx, d["center"]), ctx.num(float(d["radius"])))
 	return sg
 
 # From a game Segment. Line vs circle by construction provenance (the
 # segment's carrier); full circles use the carrier's exact center/radius,
 # arcs the circle through their three exact points.
-static func seg_from_segment(ctx: NumCtx, segment: Segment, sid: int) -> Seg:
+static func seg_from_segment(ctx: GdNumCtx, segment: Segment, sid: int) -> Seg:
 	var carrier := segment.get_carrier()
 	var via = segment.via.coords
 	var d := {"id": sid, "start": [segment.start.coords.x, segment.start.coords.y],
@@ -77,31 +77,31 @@ static func seg_from_segment(ctx: NumCtx, segment: Segment, sid: int) -> Seg:
 	return seg_from_dict(ctx, d)
 
 # Center of the circle through A, B, C (at the tier's precision).
-static func circumcenter(A: CN, B: CN, C: CN) -> CN:
+static func circumcenter(A: GdCN, B: GdCN, C: GdCN) -> GdCN:
 	var ab := B.sub(A)
 	var ac := C.sub(A)
-	var d = CN.cross(ab, ac).mul_pow2(1)
+	var d = GdCN.cross(ab, ac).mul_pow2(1)
 	var ab2 = ab.abs2()
 	var ac2 = ac.abs2()
 	# A + (|ab|² J(ac) ... ) / d with J the +90° rotation: standard closed form
 	var ux = ac.im.mul(ab2).sub(ab.im.mul(ac2)).div(d)
 	var uy = ab.re.mul(ac2).sub(ac.re.mul(ab2)).div(d)
-	return A.add(CN.make(ux, uy))
+	return A.add(GdCN.make(ux, uy))
 
 # ---------------------------------------------------------------- hits
 
-static func _line_coeffs(beam: HPBeam, seg: Seg) -> Array:
+static func _line_coeffs(beam: GdHPBeam, seg: Seg) -> Array:
 	var D := seg.e.sub(seg.s)
-	var g := CN.make(D.im.neg(), D.re)
-	var fp = CN.cross(D, beam.p.sub(seg.s))
+	var g := GdCN.make(D.im.neg(), D.re)
+	var fp = GdCN.cross(D, beam.p.sub(seg.s))
 	var k = beam.kappa
-	var c1 = CN.dot(g, beam.tau)
-	var c2 = fp.mul(k.mul(k)).mul_pow2(-2).add(k.mul_pow2(-1).mul(CN.cross(beam.tau, g)))
+	var c1 = GdCN.dot(g, beam.tau)
+	var c2 = fp.mul(k.mul(k)).mul_pow2(-2).add(k.mul_pow2(-1).mul(GdCN.cross(beam.tau, g)))
 	return [fp, c1, c2]
 
 # Real roots t of beam ∩ seg's carrier. depart_on: beam.p lies exactly on it
 # (provenance), so the root t = 0 is the departure and is not returned.
-static func hits(beam: HPBeam, seg: Seg, depart_on: bool) -> Array:
+static func hits(beam: GdHPBeam, seg: Seg, depart_on: bool) -> Array:
 	if seg.kind == Kind.CIRCLE:
 		return beam.hits(seg.circ, depart_on)
 	var co := _line_coeffs(beam, seg)
@@ -109,7 +109,7 @@ static func hits(beam: HPBeam, seg: Seg, depart_on: bool) -> Array:
 	var c1 = co[1]
 	var c2 = co[2]
 	# degree drop (c2 = 0): a curved beam meets the line at its antipode, t = inf
-	var at_inf: Array = [] if beam.kappa.is_zero() else [HPBeam.inf_like(beam.kappa)]
+	var at_inf: Array = [] if beam.kappa.is_zero() else [GdHPBeam.inf_like(beam.kappa)]
 	if depart_on:
 		if c2.is_zero():
 			return at_inf
@@ -129,7 +129,7 @@ static func hits(beam: HPBeam, seg: Seg, depart_on: bool) -> Array:
 
 # ---------------------------------------------------------------- decisions
 
-static func _hdet(zA: CN, wA: int, zB: CN, wB: int) -> CN:
+static func _hdet(zA: GdCN, wA: int, zB: GdCN, wB: int) -> GdCN:
 	# zA·wB - zB·wA with integer homogeneous weights (0 or 1)
 	if wA == 1 and wB == 1:
 		return zA.sub(zB)
@@ -138,11 +138,11 @@ static func _hdet(zA: CN, wA: int, zB: CN, wB: int) -> CN:
 	return zB.neg()          # wB == 0, wA == 1
 
 # Re(cross ratio); on-segment iff >= 0.
-static func on_segment_value(seg: Seg, p: CN):
-	var zv: CN
+static func on_segment_value(seg: Seg, p: GdCN):
+	var zv: GdCN
 	var wv: int
 	if seg.v == null:
-		zv = CN.make(p.re.sub(p.re).add(_one(p.re)), p.re.sub(p.re))
+		zv = GdCN.make(p.re.sub(p.re).add(_one(p.re)), p.re.sub(p.re))
 		wv = 0
 	else:
 		zv = seg.v
@@ -155,16 +155,16 @@ static func on_segment_value(seg: Seg, p: CN):
 	var den := sp.mul(ev)
 	return num.re.mul(den.re).add(num.im.mul(den.im))
 
-static func on_segment(seg: Seg, p: CN) -> bool:
+static func on_segment(seg: Seg, p: GdCN) -> bool:
 	if seg.full:
 		return true
 	return not on_segment_value(seg, p).is_negative()
 
-static func _eq(a: CN, b: CN) -> bool:
+static func _eq(a: GdCN, b: GdCN) -> bool:
 	return a.re.cmp(b.re) == 0 and a.im.cmp(b.im) == 0
 
 # 1 / 2 if p is exactly the start / end endpoint (never for full segments).
-static func endpoint_at(seg: Seg, p: CN) -> int:
+static func endpoint_at(seg: Seg, p: GdCN) -> int:
 	if seg.full:
 		return 0
 	if _eq(p, seg.s):
@@ -173,23 +173,23 @@ static func endpoint_at(seg: Seg, p: CN) -> int:
 		return 2
 	return 0
 
-static func _grad(seg: Seg, p: CN) -> CN:
+static func _grad(seg: Seg, p: GdCN) -> GdCN:
 	if seg.kind == Kind.LINE:
 		var D := seg.e.sub(seg.s)
-		return CN.make(D.im.neg(), D.re)
+		return GdCN.make(D.im.neg(), D.re)
 	return p.sub(seg.circ.c).scale(_one(p.re).mul_pow2(1))
 
 static func winding(seg: Seg):
-	var g: CN
+	var g: GdCN
 	if seg.kind == Kind.LINE:
 		g = _grad(seg, seg.s)
 	else:
 		g = _grad(seg, seg.v)
-	return CN.cross(seg.e.sub(seg.s), g).neg()
+	return GdCN.cross(seg.e.sub(seg.s), g).neg()
 
 # Side the beam (travel direction dir at p) comes from: true = LEFT.
-static func side_left(seg: Seg, p: CN, dir: CN) -> bool:
-	var approach = CN.dot(dir, _grad(seg, p)).neg()
+static func side_left(seg: Seg, p: GdCN, dir: GdCN) -> bool:
+	var approach = GdCN.dot(dir, _grad(seg, p)).neg()
 	var approach_pos: bool = not approach.is_negative() and not approach.is_zero()
 	if seg._wind_nonneg == null:
 		seg._wind_nonneg = not winding(seg).is_negative()
@@ -197,19 +197,19 @@ static func side_left(seg: Seg, p: CN, dir: CN) -> bool:
 		return approach_pos
 	return not approach_pos
 
-static func tangent_into(seg: Seg, which: int) -> CN:
-	var ep: CN = seg.s if which == 1 else seg.e
+static func tangent_into(seg: Seg, which: int) -> GdCN:
+	var ep: GdCN = seg.s if which == 1 else seg.e
 	if seg.kind == Kind.LINE:
 		return seg.e.sub(seg.s) if which == 1 else seg.s.sub(seg.e)
 	var rad := ep.sub(seg.circ.c)
-	var ccw := CN.make(rad.im.neg(), rad.re)
-	var cw := CN.make(rad.im, rad.re.neg())
-	var ref: CN = seg.v.sub(ep)
-	return ccw if CN.dot(ccw, ref).cmp(CN.dot(cw, ref)) >= 0 else cw
+	var ccw := GdCN.make(rad.im.neg(), rad.re)
+	var cw := GdCN.make(rad.im, rad.re.neg())
+	var ref: GdCN = seg.v.sub(ep)
+	return ccw if GdCN.dot(ccw, ref).cmp(GdCN.dot(cw, ref)) >= 0 else cw
 
 # [blocked_left, blocked_right] for a beam through endpoint `which`.
-static func blocked_sides(seg: Seg, which: int, dir: CN) -> Array:
-	var c = CN.cross(dir, tangent_into(seg, which))
+static func blocked_sides(seg: Seg, which: int, dir: GdCN) -> Array:
+	var c = GdCN.cross(dir, tangent_into(seg, which))
 	if c.is_zero():
 		return [true, true]
 	if not c.is_negative():
@@ -218,12 +218,12 @@ static func blocked_sides(seg: Seg, which: int, dir: CN) -> Array:
 
 # ---------------------------------------------------------------- records
 
-# Hit records with provenance. `known` = [[point CN, t], ...]: exact points the
+# Hit records with provenance. `known` = [[point GdCN, t], ...]: exact points the
 # beam is constructed through (e.g. an anchor or the cursor). A known point
 # that is exactly an endpoint of `seg` lies on both the beam and the carrier,
 # so it IS one of the roots: that root (the nearer one) snaps to it exactly.
 # Record: {t, point, on_segment, at_endpoint}.
-static func hit_records(beam: HPBeam, seg: Seg, depart_on: bool, known: Array = []) -> Array:
+static func hit_records(beam: GdHPBeam, seg: Seg, depart_on: bool, known: Array = []) -> Array:
 	var recs: Array = []
 	for t in hits(beam, seg, depart_on):
 		var pt := beam.at(t)
@@ -247,8 +247,8 @@ static func hit_records(beam: HPBeam, seg: Seg, depart_on: bool, known: Array = 
 	return recs
 
 static func _one(x):
-	if x is F64Num:
-		return F64Num.of(1.0)
-	if x is DualNum:
-		return DualNum.of(1.0)
-	return BigFloat.from_int(1, x.limbs.size())
+	if x is GdF64Num:
+		return GdF64Num.of(1.0)
+	if x is GdDualNum:
+		return GdDualNum.of(1.0)
+	return GdBigFloat.from_int(1, x.limbs.size())

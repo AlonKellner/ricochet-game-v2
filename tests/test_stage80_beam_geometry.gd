@@ -15,13 +15,13 @@ func before_all():
 func _beam(ctx: NumCtx, bj: Dictionary) -> HPBeam:
 	return HPBeam.make(ctx.cn(bj["p"][0], bj["p"][1]), ctx.cn(bj["tau"][0], bj["tau"][1]), ctx.num(bj["kappa"]))
 
-func _seg(ctx: NumCtx, sid: int) -> BeamGeom.Seg:
+func _seg(ctx: NumCtx, sid: int) -> BeamGeomSeg:
 	for sj in _fx["segments"]:
 		if int(sj["id"]) == sid:
 			return BeamGeom.seg_from_dict(ctx, sj)
 	return null
 
-func _line(ctx: NumCtx, a: Vector2, b: Vector2) -> BeamGeom.Seg:
+func _line(ctx: NumCtx, a: Vector2, b: Vector2) -> BeamGeomSeg:
 	return BeamGeom.seg_from_dict(ctx, {"kind": "line", "id": 1, "start": [a.x, a.y], "end": [b.x, b.y],
 		"via": [(a.x + b.x) / 2.0, (a.y + b.y) / 2.0]})
 

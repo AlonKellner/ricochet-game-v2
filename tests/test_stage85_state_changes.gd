@@ -20,13 +20,13 @@ func _walk(name: String, ctx: NumCtx) -> Array:
 	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
 	var player := ctx.cn(fx["player"][0], fx["player"][1])
 	var cursor = null if fx["cursor"] == null else ctx.cn(fx["cursor"][0], fx["cursor"][1])
-	var mode: int = BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED
+	var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
 	var plan := Rules.plan_of(fx["plan"])
 	var flags: Dictionary = fx["flags"]
 	if fx["direction"] != null:
 		return BeamSolver.trace_direction(ctx, scene, player, ctx.cn(fx["direction"][0], fx["direction"][1]), plan, cursor, mode,
 			BeamSolver.MAX_HITS, flags)
-	if mode == BeamSolver.Mode.PLANNED:
+	if mode == BeamSolver.PLANNED:
 		return BeamSolver.planned(ctx, scene, player, cursor, plan, BeamSolver.MAX_HITS, flags)
 	return BeamSolver.physical(ctx, scene, player, cursor, plan, BeamSolver.MAX_HITS, flags)
 
@@ -36,7 +36,7 @@ func _check(events: Array, expected: Array, label: String) -> bool:
 			", ".join(events.map(func(e): return e.describe()))])
 		return false
 	for i in expected.size():
-		var e: BeamSolver.Event = events[i]
+		var e: BeamSolverEvent = events[i]
 		var x: Dictionary = expected[i]
 		var got := [e.kind, e.surface_id, ("LEFT" if e.left else "RIGHT") if e.kind == "hit" else "",
 			e.applied, e.terminal, e.on_segment, e.rehit, e.state]
@@ -115,21 +115,21 @@ func test_fast_twin_flags():
 	for name in _fx:
 		var fx: Dictionary = _fx[name]
 		var gen := _walk(name, ctx)
-		var sc := FastSolver.Scene.from_defs(fx["surfaces"])
-		var mode: int = BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED
+		var sc := FastSolverScene.from_defs(fx["surfaces"])
+		var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
 		var plan := Rules.plan_of(fx["plan"])
 		var out
 		if fx["direction"] != null:
 			out = FastSolver.trace_direction(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["direction"]), plan,
 				null if fx["cursor"] == null else PackedFloat64Array(fx["cursor"]), mode, BeamSolver.MAX_HITS, fx["flags"])
-		elif mode == BeamSolver.Mode.PLANNED:
+		elif mode == BeamSolver.PLANNED:
 			out = FastSolver.planned(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan, BeamSolver.MAX_HITS, fx["flags"])
 		else:
 			out = FastSolver.physical(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan, BeamSolver.MAX_HITS, fx["flags"])
 		assert_eq(out.events.size(), gen.size(), "%s: event count" % name)
 		for i in mini(out.events.size(), gen.size()):
-			var a: BeamSolver.Event = out.events[i]
-			var b: BeamSolver.Event = gen[i]
+			var a: BeamSolverEvent = out.events[i]
+			var b: BeamSolverEvent = gen[i]
 			assert_eq([a.kind, a.surface_id, a.left, a.applied, a.state, a.flags], [b.kind, b.surface_id, b.left, b.applied, b.state, b.flags],
 				"%s event %d" % [name, i])
 
@@ -137,7 +137,6 @@ func test_fast_twin_flags():
 # physical trace's final flags into the game state; undo restores them.
 func test_state_promoted_after_shot_and_undo_restores():
 	Surface.reset_id_counter()
-	BeamTracer.clear_cache()
 	var scene: Node = load("res://scenes/test_levels/flag_switches.tscn").instantiate()
 	scene.gravity = Vector2.ZERO
 	add_child_autofree(scene)
@@ -147,7 +146,7 @@ func test_state_promoted_after_shot_and_undo_restores():
 	# aim through the toggler, then the door
 	scene.get_node("Player").global_position = Vector2(700, 520)
 	scene.get_node("Cursor").global_position = Vector2(1300, 540)
-	var pair := BeamTracer.trace_pair(scene.surfaces, Vector2(700, 520), Vector2(1300, 540), [], gm.game_state.flags)
+	var pair := TestTrace.trace_pair(scene.surfaces, Vector2(700, 520), Vector2(1300, 540), [], gm.game_state.flags)
 	assert_not_null(pair)
 	if pair == null:
 		return
@@ -156,7 +155,7 @@ func test_state_promoted_after_shot_and_undo_restores():
 	gm._on_flight_completed()
 	assert_eq(gm.game_state.flags.get("open"), true, "promoted after the shot")
 	# the preview now resolves the door under the new state
-	var pair2 := BeamTracer.trace_pair(scene.surfaces, Vector2(700, 520), Vector2(1300, 540), [], gm.game_state.flags)
+	var pair2 := TestTrace.trace_pair(scene.surfaces, Vector2(700, 520), Vector2(1300, 540), [], gm.game_state.flags)
 	assert_ne(str(pair2.physical.steps.map(func(s): return s.end)), str(pair.physical.steps.map(func(s): return s.end)),
 		"the preview depends on the flags")
 	gm._try_undo()
@@ -169,7 +168,6 @@ func test_state_promoted_after_shot_and_undo_restores():
 # both traces toggle and stay aligned.
 func test_state_change_starts_new_frame():
 	Surface.reset_id_counter()
-	BeamTracer.clear_cache()
 	var scene: Node = load("res://scenes/test_levels/flag_switches.tscn").instantiate()
 	scene.gravity = Vector2.ZERO
 	add_child_autofree(scene)
@@ -182,7 +180,7 @@ func test_state_change_starts_new_frame():
 	assert_not_null(tog)
 	var player := Vector2(700, 520)
 	var cursor := Vector2(1000, 530)
-	var pair := BeamTracer.trace_pair(scene.surfaces, player, cursor, [])
+	var pair := TestTrace.trace_pair(scene.surfaces, player, cursor, [])
 	var phys_frames: Array = pair.physical.steps.map(func(s): return s.frame_id)
 	var plan_frames: Array = pair.planned.steps.map(func(s): return s.frame_id)
 	assert_eq(phys_frames[0], TraceStep.IDENTITY_FRAME)
@@ -192,9 +190,8 @@ func test_state_change_starts_new_frame():
 	var merged := StepTreeMerge.merge(pair.planned.steps, pair.physical.steps, ci)
 	assert_ne(merged[1].type, StepTypes.Type.ALIGNED, "diverged at the toggler")
 	# planned toggler: both toggle, aligned through the cursor
-	BeamTracer.clear_cache()
 	var side := Side.Value.LEFT if pair.physical.steps[0].hit_side == Side.Value.LEFT else Side.Value.RIGHT
-	var pair2 := BeamTracer.trace_pair(scene.surfaces, player, cursor, [PlanManager.PlanEntry.new(tog.id, side)])
+	var pair2 := TestTrace.trace_pair(scene.surfaces, player, cursor, [PlanManager.PlanEntry.new(tog.id, side)])
 	assert_ne(pair2.planned.cursor_index, -1, "the plan reaches the cursor")
 	var ci2: int = pair2.planned.cursor_index
 	var merged2 := StepTreeMerge.merge(pair2.planned.steps, pair2.physical.steps, ci2)

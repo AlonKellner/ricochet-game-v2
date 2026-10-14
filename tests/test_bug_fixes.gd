@@ -436,7 +436,7 @@ func test_repro_infinity_animation_working_position():
 # --- AA.advance() unit tests ---
 
 func _make_step(s: Vector2, e: Vector2) -> TraceStep:
-	return TraceStep.new(s, e)
+	return TraceStep.make(s, e)
 
 func test_advance_basic_interpolation():
 	var steps: Array = [

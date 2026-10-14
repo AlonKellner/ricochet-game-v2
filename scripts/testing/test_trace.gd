@@ -21,6 +21,13 @@ static func trace(origin: Vector2, direction: Direction, surfaces: Array, _game_
 static func trace_ray(ray: Ray, surfaces: Array, game_state: GameState = null) -> TracePath:
 	return trace(ray.origin.coords, ray.direction, surfaces, game_state)
 
-static func pair_of(player: Vector2, cursor: Vector2, surfaces: Array, plan_entries: Array = []) -> BeamTracer.Pair:
-	BeamTracer.clear_cache()
-	return BeamTracer.trace_pair(surfaces, player, cursor, plan_entries)
+static func pair_of(player: Vector2, cursor: Vector2, surfaces: Array, plan_entries: Array = []) -> BeamTracerPair:
+	return trace_pair(surfaces, player, cursor, plan_entries)
+
+# BeamTracer.trace_pair on game surfaces: a fresh tracer per call (tests need no caches).
+static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_entries: Array = [], flags: Dictionary = {}) -> BeamTracerPair:
+	return BeamTracer.new().trace_pair(SceneDefs.defs_from_surfaces(surfaces), player, cursor, plan_entries, flags,
+		SceneDefs.segments_by_id(surfaces))
+
+static func plan_refuses(surfaces: Array, plan_entries: Array, surface_id: int, left: bool, flags: Dictionary = {}) -> bool:
+	return BeamTracer.new().plan_refuses(SceneDefs.defs_from_surfaces(surfaces), plan_entries, surface_id, left, flags)

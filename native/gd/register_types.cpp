@@ -29,40 +29,44 @@ void initialize_ricochet_module(godot::ModuleInitializationLevel p_level) {
     GDREGISTER_CLASS(NativeProbeChild);
     GDREGISTER_CLASS(NativeProbe);
     // Stage 90: scalar tiers
-    GDREGISTER_CLASS(NNumCtx);
-    GDREGISTER_CLASS(NNum);
-    GDREGISTER_CLASS(NCN);
-    GDREGISTER_CLASS(NBigFloat);
+    GDREGISTER_CLASS(NumCtx);
+    GDREGISTER_CLASS(Num);
+    GDREGISTER_CLASS(CN);
+    GDREGISTER_CLASS(BigFloat);
+    GDREGISTER_CLASS(F64Num);
+    GDREGISTER_CLASS(DualNum);
     // Stage 93: scene
-    GDREGISTER_CLASS(NBeamSceneSurf);
-    GDREGISTER_CLASS(NBeamScene);
+    GDREGISTER_CLASS(BeamSceneSurf);
+    GDREGISTER_CLASS(BeamScene);
     // Stage 91-92: exact arithmetic, segments, effect maps
-    GDREGISTER_CLASS(NExact);
-    GDREGISTER_CLASS(NHPBeamCircle);
-    GDREGISTER_CLASS(NBeamGeomSeg);
-    GDREGISTER_CLASS(NBeamGeom);
-    GDREGISTER_CLASS(NBeamEffects);
+    GDREGISTER_CLASS(Exact);
+    GDREGISTER_CLASS(HPBeamCircle);
+    GDREGISTER_CLASS(BeamGeomSeg);
+    GDREGISTER_CLASS(BeamGeom);
+    GDREGISTER_CLASS(BeamEffects);
     // Stage 92-94: beams and the solver
-    GDREGISTER_CLASS(NHPBeam);
-    GDREGISTER_CLASS(NBeamSolverPlanItem);
-    GDREGISTER_CLASS(NBeamSolverEvent);
-    GDREGISTER_CLASS(NBeamSolver);
-    GDREGISTER_CLASS(NFastSolverScene);
-    GDREGISTER_CLASS(NFastSolverOut);
-    GDREGISTER_CLASS(NFastSolver);
+    GDREGISTER_CLASS(HPBeam);
+    GDREGISTER_CLASS(BeamSolverPlanItem);
+    GDREGISTER_CLASS(BeamSolverEvent);
+    GDREGISTER_CLASS(BeamSolverAnchorChain);
+    GDREGISTER_CLASS(BeamSolver);
+    GDREGISTER_CLASS(FastSolverScene);
+    GDREGISTER_CLASS(FastSolverOut);
+    GDREGISTER_CLASS(FastSolver);
     // Stage 95: the ladder
-    GDREGISTER_CLASS(NErrorEstimateSensitivity);
-    GDREGISTER_CLASS(NErrorEstimate);
-    GDREGISTER_CLASS(NPrecisionLadderResult);
-    GDREGISTER_CLASS(NPrecisionLadder);
+    GDREGISTER_CLASS(ErrorEstimateSensitivity);
+    GDREGISTER_CLASS(ErrorEstimate);
+    GDREGISTER_CLASS(PrecisionLadderResult);
+    GDREGISTER_CLASS(PrecisionLadder);
     // Stage 96: the tracer and its data types
-    GDREGISTER_CLASS(NDirection);
-    GDREGISTER_CLASS(NRay);
-    GDREGISTER_CLASS(NTraceHit);
-    GDREGISTER_CLASS(NTraceStep);
-    GDREGISTER_CLASS(NTracePath);
-    GDREGISTER_CLASS(NBeamTracerPair);
-    GDREGISTER_CLASS(NBeamTracer);
+    GDREGISTER_CLASS(Point);
+    GDREGISTER_CLASS(Direction);
+    GDREGISTER_CLASS(Ray);
+    GDREGISTER_CLASS(TraceHit);
+    GDREGISTER_CLASS(TraceStep);
+    GDREGISTER_CLASS(TracePath);
+    GDREGISTER_CLASS(BeamTracerPair);
+    GDREGISTER_CLASS(BeamTracer);
 }
 
 void uninitialize_ricochet_module(godot::ModuleInitializationLevel p_level) {

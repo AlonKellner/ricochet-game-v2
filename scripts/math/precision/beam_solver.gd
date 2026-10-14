@@ -1,8 +1,8 @@
-class_name BeamSolver
+class_name GdBeamSolver
 extends RefCounted
 
 # Precision-generic trajectory solver for scenes of line / arc / full-circle
-# surfaces with reflection, inversion, terminal and pass sides (BeamScene).
+# surfaces with reflection, inversion, terminal and pass sides (GdBeamScene).
 # The trace rules are those of the mpmath oracle (docs/research/oracle/
 # trace2.py), which is the specification:
 #   - every carrier crossing is an event; MAX_HITS = 32 counts every event
@@ -33,16 +33,16 @@ extends RefCounted
 #     direction trace or of a trace without plan (player -> cursor), and the
 #     reflection of an exact line in a line mirror (an exact polynomial map of
 #     the coefficients, whatever the hit point's rounding);
-#   - incidence (Exact predicates on the data): a surface whose carrier
+#   - incidence (GdExact predicates on the data): a surface whose carrier
 #     contains a known point exactly is hit exactly there (its nearest root
 #     takes the point's parameter and the exact point). No rounding decides
 #     an endpoint or an incidence;
 #
 # One walker implements the rules for every tier. A backend supplies the beam
-# math: NumBackend (HPBeam over any NumCtx) or FastSolver.Backend (raw float64
+# math: NumBackend (GdHPBeam over any GdNumCtx) or GdFastSolver.Backend (raw float64
 # with the tangent-linear derivative inline, bit-identical to NumBackend over
-# F64Num). Topology decisions (on-segment, side, endpoint blockage) always run
-# the shared precision-generic BeamGeom code.
+# GdF64Num). Topology decisions (on-segment, side, endpoint blockage) always run
+# the shared precision-generic GdBeamGeom code.
 #
 # Anchored planned path: beam B_j (after plan entry j) is the circle through
 # P_j = F_j(player), X_j = F_j(F_K^-1(cursor)) and Q_j = F_j(inf), oriented
@@ -51,13 +51,13 @@ extends RefCounted
 # B_{j+1} in whenever plan entry j fires on the anchored path (PLANNED mode,
 # or PHYSICAL mode before its first divergence from the planned decisions).
 # After the divergence (or the cursor) the trace is a forward continuation,
-# seeded for ErrorEstimate and solved on PrecisionLadder.
+# seeded for GdErrorEstimate and solved on GdPrecisionLadder.
 
 enum Mode { PHYSICAL = 0, PLANNED = 1 }
 
 const MAX_HITS := 32
 # Anchored-prefix gains are scaled to their own calibration constant
-# (C_prefix = ErrorEstimate.C * PREFIX_GAIN_SCALE): their errors do not
+# (C_prefix = GdErrorEstimate.C * PREFIX_GAIN_SCALE): their errors do not
 # compound like the forward continuation's (calibrated on the bench corpus).
 const PREFIX_GAIN_SCALE := 64.0 / 4096.0
 const TRANSFORMATIVE := ["reflection", "inversion", "portal"]
@@ -76,14 +76,14 @@ class Event extends RefCounted:
 	var teleport: bool = false # the applied effect was a portal (the next arc starts elsewhere)
 	var projective: bool = false # the applied effect was a projective
 	var epoch: int = 0        # projectives start a new epoch (the stack is cleared)
-	var point: CN = null      # null for escape
-	var beam: HPBeam          # beam the arc leading to this event lies on
+	var point: GdCN = null      # null for escape
+	var beam: GdHPBeam          # beam the arc leading to this event lies on
 	var t_from                # arc start parameter on `beam`
 	var t_to                  # arc end parameter on `beam` (null = infinity)
 	var margin: float = INF   # px gap to the nearest competing candidate or
 	                          # endpoint of the decision that produced this event
 	var seeded: bool = false  # lies on the sensitive forward continuation
-	var raw = null            # FastSolver: raw float beam of `beam` (provenance)
+	var raw = null            # GdFastSolver: raw float beam of `beam` (provenance)
 	var state: bool = false   # the side's state change fired
 	var flags: Dictionary = {} # the trace's flags after this event (hits)
 	var anchored: bool = false # cursor: reached on the anchored path
@@ -130,70 +130,70 @@ class StackEntry extends RefCounted:
 
 # ---------------------------------------------------------------- backend
 
-# HPBeam over a NumCtx (any tier).
+# GdHPBeam over a GdNumCtx (any tier).
 class NumBackend extends RefCounted:
-	var ctx: NumCtx
+	var ctx: GdNumCtx
 
-	static func make(p_ctx: NumCtx) -> NumBackend:
+	static func make(p_ctx: GdNumCtx) -> NumBackend:
 		var b := NumBackend.new()
 		b.ctx = p_ctx
 		return b
 
-	func roots(beam: HPBeam, surf: BeamScene.Surf, depart_on: bool) -> Array:
-		return BeamGeom.hits(beam, surf.seg, depart_on)
-	func point(beam: HPBeam, t) -> CN:
+	func roots(beam: GdHPBeam, surf: GdBeamScene.Surf, depart_on: bool) -> Array:
+		return GdBeamGeom.hits(beam, surf.seg, depart_on)
+	func point(beam: GdHPBeam, t) -> GdCN:
 		return beam.at(t)
-	func tangent(beam: HPBeam, t) -> CN:
+	func tangent(beam: GdHPBeam, t) -> GdCN:
 		return beam.tangent_at(t)
-	func origin(beam: HPBeam) -> CN:
+	func origin(beam: GdHPBeam) -> GdCN:
 		return beam.p
-	func param_of(beam: HPBeam, z: CN):
+	func param_of(beam: GdHPBeam, z: GdCN):
 		return beam.param_of(z)
-	func apply(beam: HPBeam, t, surf: BeamScene.Surf, etype: String, h: CN = null) -> HPBeam:
-		return BeamEffects.apply(beam, t, surf, etype, h)
-	func project(beam: HPBeam, t, surf: BeamScene.Surf, left: bool, h: CN = null) -> HPBeam:
-		return BeamEffects.project(beam, t, surf, left, h)
-	func straight(beam: HPBeam) -> bool:
+	func apply(beam: GdHPBeam, t, surf: GdBeamScene.Surf, etype: String, h: GdCN = null) -> GdHPBeam:
+		return GdBeamEffects.apply(beam, t, surf, etype, h)
+	func project(beam: GdHPBeam, t, surf: GdBeamScene.Surf, left: bool, h: GdCN = null) -> GdHPBeam:
+		return GdBeamEffects.project(beam, t, surf, left, h)
+	func straight(beam: GdHPBeam) -> bool:
 		return beam.kappa.is_zero()
 	# the same beam with curvature exactly zero (provenance: it is a line)
-	func straightened(beam: HPBeam) -> HPBeam:
-		if beam.kappa is DualNum:
-			return HPBeam.make(beam.p, beam.tau, DualNum.of(0.0, beam.kappa.d))
-		return HPBeam.make(beam.p, beam.tau, beam.kappa.sub(beam.kappa))
+	func straightened(beam: GdHPBeam) -> GdHPBeam:
+		if beam.kappa is GdDualNum:
+			return GdHPBeam.make(beam.p, beam.tau, GdDualNum.of(0.0, beam.kappa.d))
+		return GdHPBeam.make(beam.p, beam.tau, beam.kappa.sub(beam.kappa))
 	func zero():
 		return ctx.zero()
-	func seed(beam: HPBeam) -> HPBeam:
-		return BeamSolver._seed(beam)
-	func reseed(beam: HPBeam) -> HPBeam:
-		return BeamSolver._reseed_if_unseeded(beam)
-	func from_hp(b: HPBeam) -> HPBeam:
+	func seed(beam: GdHPBeam) -> GdHPBeam:
+		return GdBeamSolver._seed(beam)
+	func reseed(beam: GdHPBeam) -> GdHPBeam:
+		return GdBeamSolver._reseed_if_unseeded(beam)
+	func from_hp(b: GdHPBeam) -> GdHPBeam:
 		return b
-	func hp(beam: HPBeam) -> HPBeam:
+	func hp(beam: GdHPBeam) -> GdHPBeam:
 		return beam
-	func raw(_beam: HPBeam):
+	func raw(_beam: GdHPBeam):
 		return null
 	func ev_t(t):
 		return t
-	func gain(beam: HPBeam, t) -> float:
-		if not (beam.kappa is DualNum):
+	func gain(beam: GdHPBeam, t) -> float:
+		if not (beam.kappa is GdDualNum):
 			return 0.0
 		var h := beam.at(t)
 		return sqrt(h.re.d * h.re.d + h.im.d * h.im.d)
 	# [point, on_segment, side LEFT, fully blocked] of the hit at t on surf
 	# (at_origin: the hit is the beam's own point p; known_pt: the exact point,
 	# both by provenance).
-	func classify(scene: BeamScene, beam: HPBeam, t, surf: BeamScene.Surf, at_origin: bool, known_pt = null) -> Array:
-		var pt: CN = known_pt if known_pt != null else (beam.p if at_origin else beam.at(t))
+	func classify(scene: GdBeamScene, beam: GdHPBeam, t, surf: GdBeamScene.Surf, at_origin: bool, known_pt = null) -> Array:
+		var pt: GdCN = known_pt if known_pt != null else (beam.p if at_origin else beam.at(t))
 		var tang := beam.tangent_at(t)
-		var on_seg := BeamGeom.on_segment(surf.seg, pt)
-		return [pt, on_seg, BeamGeom.side_left(surf.seg, pt, tang), BeamSolver._full_block(scene, surf, pt, tang, on_seg)]
-	func prefix_gain(_beam: HPBeam, _t) -> float:
+		var on_seg := GdBeamGeom.on_segment(surf.seg, pt)
+		return [pt, on_seg, GdBeamGeom.side_left(surf.seg, pt, tang), GdBeamSolver._full_block(scene, surf, pt, tang, on_seg)]
+	func prefix_gain(_beam: GdHPBeam, _t) -> float:
 		return 0.0
 	# float64 view of a point (decision margins only)
-	func f64_point(beam: HPBeam, t) -> PackedFloat64Array:
-		if beam.kappa is BigFloat:
-			var bf := FastSolver.beam(beam.p.fx(), beam.p.fy(), beam.tau.fx(), beam.tau.fy(), beam.kappa.to_float())
-			var h := FastSolver.at_view(bf, t.to_float())
+	func f64_point(beam: GdHPBeam, t) -> PackedFloat64Array:
+		if beam.kappa is GdBigFloat:
+			var bf := GdFastSolver.beam(beam.p.fx(), beam.p.fy(), beam.tau.fx(), beam.tau.fy(), beam.kappa.to_float())
+			var h := GdFastSolver.at_view(bf, t.to_float())
 			return PackedFloat64Array([h[0], h[1]])
 		var z := beam.at(t)
 		return PackedFloat64Array([z.fx(), z.fy()])
@@ -206,14 +206,14 @@ class NumBackend extends RefCounted:
 class AnchorChain extends RefCounted:
 	var beams: Array = []
 	var hits := {}               # projective plan entry index -> its back-propagated hit point H
-	var exit_lines := {}         # projective plan entry index -> exact exit line (Exact.Line), when exact data
+	var exit_lines := {}         # projective plan entry index -> exact exit line (GdExact.Line), when exact data
 
 	static func _key(st: Array) -> String:
 		return ",".join(st.map(func(x): return str(x)))
 
 	# The surface whose application pops an entry pushed by sid.
-	static func _pop_id(scene: BeamScene, sid: int) -> int:
-		var s: BeamScene.Surf = scene.by_id.get(sid)
+	static func _pop_id(scene: GdBeamScene, sid: int) -> int:
+		var s: GdBeamScene.Surf = scene.by_id.get(sid)
 		return s.pair if s != null and s.portal else sid
 
 	# Projective entries split the plan into sub-chains (GAME_SPEC 13.3/13.4):
@@ -222,8 +222,8 @@ class AnchorChain extends RefCounted:
 	# each sub-chain is anchored from its origin (the player, or the previous
 	# H) to its target (the next H, or the cursor). Beams are flat: beams[j] is
 	# the beam after j consumed entries.
-	static func build(scene: BeamScene, player: CN, cursor: CN, plan: Array, flags: Dictionary = {}) -> AnchorChain:
-		var effs := BeamSolver.plan_effects(scene, plan, flags)
+	static func build(scene: GdBeamScene, player: GdCN, cursor: GdCN, plan: Array, flags: Dictionary = {}) -> AnchorChain:
+		var effs := GdBeamSolver.plan_effects(scene, plan, flags)
 		var proj: Array = []
 		for j in plan.size():
 			if effs[j] in PROJECTIVE:
@@ -243,20 +243,20 @@ class AnchorChain extends RefCounted:
 	# or null when an image is at infinity. A circle projective whose target
 	# lies inside the circle has two candidate hit points; the fork is settled
 	# at planning time: the candidate nearer the point the player clicked
-	# (PlanItem.hint), by default the segment's midpoint (BeamEffects.
+	# (PlanItem.hint), by default the segment's midpoint (GdBeamEffects.
 	# back_propagate). An entry without a candidate is left out (skipped by
 	# the aim).
-	static func backward_hits(scene: BeamScene, plan: Array, effs: Array, cursor: CN):
+	static func backward_hits(scene: GdBeamScene, plan: Array, effs: Array, cursor: GdCN):
 		var hits := {}
 		var X = cursor
 		var on_sid := -2         # the surface whose carrier X lies on (provenance)
 		for j in range(plan.size() - 1, -1, -1):
-			var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+			var surf: GdBeamScene.Surf = scene.by_id.get(plan[j].surface_id)
 			if surf == null:
 				continue
 			if effs[j] in PROJECTIVE:
-				var on: bool = on_sid == surf.id or (on_sid == -2 and BeamSolver._on_carrier(surf, X))
-				var Hc = BeamEffects.back_propagate(surf, plan[j].left, X, on, plan[j].hint)
+				var on: bool = on_sid == surf.id or (on_sid == -2 and GdBeamSolver._on_carrier(surf, X))
+				var Hc = GdBeamEffects.back_propagate(surf, plan[j].left, X, on, plan[j].hint)
 				if Hc == null:
 					continue
 				X = Hc
@@ -264,13 +264,13 @@ class AnchorChain extends RefCounted:
 				on_sid = surf.id
 			elif effs[j] in TRANSFORMATIVE:
 				on_sid = -1
-				X = BeamEffects.map_point(X, surf, true)
+				X = GdBeamEffects.map_point(X, surf, true)
 				if X == null:
 					return null
 		return hits
 
 	# The chain of sub-chains through the given projective hit points.
-	static func from_hits(scene: BeamScene, player: CN, cursor: CN, plan: Array, flags: Dictionary, effs: Array,
+	static func from_hits(scene: GdBeamScene, player: GdCN, cursor: GdCN, plan: Array, flags: Dictionary, effs: Array,
 			H: Dictionary) -> AnchorChain:
 		var proj: Array = []
 		for j in plan.size():
@@ -278,10 +278,10 @@ class AnchorChain extends RefCounted:
 				proj.append(j)
 		var chain := AnchorChain.new()
 		var a := 0
-		var origin: CN = player
+		var origin: GdCN = player
 		var exit_dir = null      # the exit at origin of the previous projective
 		for b in proj + [plan.size()]:
-			var target: CN = H[b] if b < plan.size() else cursor
+			var target: GdCN = H[b] if b < plan.size() else cursor
 			var sub := _build_simple(scene, origin, target, plan.slice(a, b), effs.slice(a, b))
 			if sub == null:
 				return null
@@ -290,36 +290,36 @@ class AnchorChain extends RefCounted:
 				# after a projective the beam leaves along its exit; when that
 				# points away from the target, the target is reached through
 				# infinity: the sub-chain's beams run the other way round
-				var b0: HPBeam = beams[0]
-				var rev: bool = CN.dot(exit_dir, b0.tau).is_negative()
+				var b0: GdHPBeam = beams[0]
+				var rev: bool = GdCN.dot(exit_dir, b0.tau).is_negative()
 				# the exit beam itself is exactly straight (a projective exit is a
 				# line by definition, not a circle through rounded points); a
 				# frame popped back to it is the same object
-				var straight := HPBeam.make(origin, exit_dir.unit(), b0.kappa.sub(b0.kappa))
+				var straight := GdHPBeam.make(origin, exit_dir.unit(), b0.kappa.sub(b0.kappa))
 				beams = beams.map(func(bm):
 					if is_same(bm, b0):
 						return straight
-					return HPBeam.make(bm.p, bm.tau.neg(), bm.kappa.neg()) if rev else bm)
+					return GdHPBeam.make(bm.p, bm.tau.neg(), bm.kappa.neg()) if rev else bm)
 			chain.beams.append_array(beams)
 			if b < plan.size():
 				chain.hits[b] = H[b]
 				if b == proj.back():
-					var L = BeamSolver._exit_line(scene, cursor, plan, flags, b)
+					var L = GdBeamSolver._exit_line(scene, cursor, plan, flags, b)
 					if L != null:
 						chain.exit_lines[b] = L
 				origin = H[b]
-				exit_dir = BeamEffects.projective_exit(scene.by_id[plan[b].surface_id], plan[b].left, H[b])
+				exit_dir = GdBeamEffects.projective_exit(scene.by_id[plan[b].surface_id], plan[b].left, H[b])
 			a = b + 1
 		return chain
 
-	static func _build_simple(scene: BeamScene, player: CN, cursor: CN, plan: Array, effs: Array) -> AnchorChain:
+	static func _build_simple(scene: GdBeamScene, player: GdCN, cursor: GdCN, plan: Array, effs: Array) -> AnchorChain:
 		var K := plan.size()
 		var stacks: Array = [[]]
 		var st: Array = []
 		var changes: Array = []      # plan entry j changes the frame
 		for ji in plan.size():
 			var item = plan[ji]
-			var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
+			var surf: GdBeamScene.Surf = scene.by_id.get(item.surface_id)
 			var t: bool = surf != null and effs[ji] in TRANSFORMATIVE
 			changes.append(t)
 			if t:
@@ -338,7 +338,7 @@ class AnchorChain extends RefCounted:
 				var parent: Array = memo[_key(s.slice(0, n - 1))]
 				if parent[0] == null:
 					return null
-				memo[key] = BeamEffects.map_pole(parent, scene.by_id[s[n - 1]])
+				memo[key] = GdBeamEffects.map_pole(parent, scene.by_id[s[n - 1]])
 		# image chain X_j, memoized by frame (exact provenance across pops)
 		var X: Array = []
 		X.resize(K + 1)
@@ -354,7 +354,7 @@ class AnchorChain extends RefCounted:
 			else:
 				if X[j + 1] == null:
 					return null
-				X[j] = BeamEffects.map_point(X[j + 1], scene.by_id[plan[j].surface_id], true)
+				X[j] = GdBeamEffects.map_point(X[j + 1], scene.by_id[plan[j].surface_id], true)
 			seen[key] = X[j]
 		var chain := AnchorChain.new()
 		var beam_of := {}
@@ -364,7 +364,7 @@ class AnchorChain extends RefCounted:
 				var pc: Array = memo[key]
 				if pc[0] == null or X[j] == null or X[j].sub(pc[0]).is_zero():
 					return null
-				beam_of[key] = HPBeam.through(pc[0], X[j], pc[2])
+				beam_of[key] = GdHPBeam.through(pc[0], X[j], pc[2])
 			chain.beams.append(beam_of[key])
 		return chain
 
@@ -372,9 +372,9 @@ class AnchorChain extends RefCounted:
 
 class Walk extends RefCounted:
 	var bk
-	var scene: BeamScene
+	var scene: GdBeamScene
 	var plan: Array = []
-	var cursor = null         # CN or null
+	var cursor = null         # GdCN or null
 	var mode: int = Mode.PHYSICAL
 	var post_mode: int = Mode.PHYSICAL
 	var plan_index: int = 0
@@ -390,33 +390,33 @@ class Walk extends RefCounted:
 	var chain: AnchorChain = null
 	var anchored: bool = false
 	var epoch: int = 0
-	var known: Array = []     # known points on the current beam: [CN, t, skip surface id]
-	var line = null           # exact implicit line of the current beam (Exact.Line), or null
+	var known: Array = []     # known points on the current beam: [GdCN, t, skip surface id]
+	var line = null           # exact implicit line of the current beam (GdExact.Line), or null
 	var incidence := {}       # cache: [x, y, surface id] -> exact incidence
 	var tangent_line = null   # the line `tangent` was computed for
 	var tangent := {}         # surface id -> exact tangency of tangent_line
 	var flags: Dictionary = {} # trace state flags (GAME_SPEC 9.4 / 10.6)
 	var on_plan: bool = true   # on the planned beams: every projective fired at its H (oracle Walk.on_plan);
 	                           # a transformative entry maps the whole plane: any crossing gives the planned beam
-	var hp_src = null         # beam whose HPBeam view is hp_view (events share it)
-	var hp_view: HPBeam = null
+	var hp_src = null         # beam whose GdHPBeam view is hp_view (events share it)
+	var hp_view: GdHPBeam = null
 
 # ---------------------------------------------------------------- entry points
 
 # Walk an explicit direction from the player (forward shooting).
-static func trace_direction(ctx: NumCtx, scene: BeamScene, player: CN, dir: CN, plan: Array, cursor, mode: int,
+static func trace_direction(ctx: GdNumCtx, scene: GdBeamScene, player: GdCN, dir: GdCN, plan: Array, cursor, mode: int,
 		max_events: int = MAX_HITS, flags: Dictionary = {}) -> Array:
 	return run_direction(NumBackend.make(ctx), scene, player, dir, plan, cursor, mode, max_events, flags).events
 
-static func run_direction(bk, scene: BeamScene, player: CN, dir: CN, plan: Array, cursor, mode: int,
+static func run_direction(bk, scene: GdBeamScene, player: GdCN, dir: GdCN, plan: Array, cursor, mode: int,
 		max_events: int = MAX_HITS, flags: Dictionary = {}) -> Walk:
 	var w := _new_walk(bk, scene, plan, cursor, mode, max_events, flags)
-	var b0 = bk.from_hp(HPBeam.make(player, dir.unit(), player.re.sub(player.re)))
+	var b0 = bk.from_hp(GdHPBeam.make(player, dir.unit(), player.re.sub(player.re)))
 	if mode == Mode.PHYSICAL:
 		b0 = bk.seed(b0)
 		w.seeded = true
 	w.known = [[player, bk.zero(), -1]]
-	w.line = Exact.Line.from_exact(Exact.line_from_dir(player.fx(), player.fy(), dir.fx(), dir.fy()))
+	w.line = GdExact.Line.from_exact(GdExact.line_from_dir(player.fx(), player.fy(), dir.fx(), dir.fy()))
 	_add_line_endpoints(w, b0)
 	walk_from(w, b0, -1, null)
 	return w
@@ -433,9 +433,9 @@ static func _add_line_endpoints(w: Walk, b) -> void:
 			if _known_index(w.known, ep) < 0 and w.line.contains(ep.fx(), ep.fy()):
 				w.known.append([ep, w.bk.param_of(b, ep), -1])
 
-# Exact: the known point k lies on surf's carrier (cached per walk).
-static func _incident(w: Walk, k: CN, surf: BeamScene.Surf) -> bool:
-	if BeamGeom.endpoint_at(surf.seg, k) != 0:
+# GdExact: the known point k lies on surf's carrier (cached per walk).
+static func _incident(w: Walk, k: GdCN, surf: GdBeamScene.Surf) -> bool:
+	if GdBeamGeom.endpoint_at(surf.seg, k) != 0:
 		return true
 	var kx := k.fx()
 	var ky := k.fy()
@@ -444,27 +444,27 @@ static func _incident(w: Walk, k: CN, surf: BeamScene.Surf) -> bool:
 		return w.incidence[key]
 	var r: bool
 	if surf.line:
-		r = Exact.orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, kx, ky)
+		r = GdExact.orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, kx, ky)
 	elif surf.full:
-		r = Exact.on_circle_zero(surf.cx, surf.cy, surf.r, kx, ky)
+		r = GdExact.on_circle_zero(surf.cx, surf.cy, surf.r, kx, ky)
 	else:
-		r = Exact.incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, kx, ky)
+		r = GdExact.incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, kx, ky)
 	w.incidence[key] = r
 	return r
 
 # Planned trace (anchored), then its post-cursor physical continuation.
-static func planned(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS, flags: Dictionary = {}) -> Array:
+static func planned(ctx: GdNumCtx, scene: GdBeamScene, player: GdCN, cursor: GdCN, plan: Array, max_events: int = MAX_HITS, flags: Dictionary = {}) -> Array:
 	var w := run(NumBackend.make(ctx), scene, player, cursor, plan, Mode.PLANNED, max_events, flags)
 	return [] if w == null else w.events
 
 # Physical trace: on the anchored planned path until the first divergence.
-static func physical(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int = MAX_HITS, flags: Dictionary = {}) -> Array:
+static func physical(ctx: GdNumCtx, scene: GdBeamScene, player: GdCN, cursor: GdCN, plan: Array, max_events: int = MAX_HITS, flags: Dictionary = {}) -> Array:
 	var w := run(NumBackend.make(ctx), scene, player, cursor, plan, Mode.PHYSICAL, max_events, flags)
 	return [] if w == null else w.events
 
 # null if the anchored construction is degenerate (player = cursor, or a pole
 # / image at infinity: Stage 83).
-static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int = MAX_HITS,
+static func run(bk, scene: GdBeamScene, player: GdCN, cursor: GdCN, plan: Array, mode: int, max_events: int = MAX_HITS,
 		flags: Dictionary = {}) -> Walk:
 	var chain := _select_chain(bk, scene, player, cursor, plan, max_events, flags)
 	if chain == null:
@@ -474,13 +474,13 @@ static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode:
 # The anchored chain of a plan (forks settled by the clicks: no search).
 # The float64 passes (physical, planned) of one solve build the same chain:
 # the last one is kept, keyed by the scene object and the exact inputs.
-static var _chain_scene: BeamScene = null
+static var _chain_scene: GdBeamScene = null
 static var _chain_key: Array = []
 static var _chain: AnchorChain = null
 
-static func _select_chain(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, _max_events: int,
+static func _select_chain(bk, scene: GdBeamScene, player: GdCN, cursor: GdCN, plan: Array, _max_events: int,
 		flags: Dictionary) -> AnchorChain:
-	if not (bk is FastSolver.Backend):
+	if not (bk is GdFastSolver.Backend):
 		return AnchorChain.build(scene, player, cursor, plan, flags)
 	var key: Array = [player.fx(), player.fy(), cursor.fx(), cursor.fy(), flags,
 		plan.map(func(p): return [p.surface_id, p.left, p.hint])]
@@ -491,7 +491,7 @@ static func _select_chain(bk, scene: BeamScene, player: CN, cursor: CN, plan: Ar
 	_chain_key = key
 	return _chain
 
-static func _walk_chain(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int,
+static func _walk_chain(bk, scene: GdBeamScene, player: GdCN, cursor: GdCN, plan: Array, mode: int, max_events: int,
 		flags: Dictionary, chain: AnchorChain) -> Walk:
 	var w := _new_walk(bk, scene, plan, cursor, mode, max_events, flags)
 	w.chain = chain
@@ -513,20 +513,20 @@ static func _walk_chain(bk, scene: BeamScene, player: CN, cursor: CN, plan: Arra
 	walk_from(w, b0, -1, null)
 	return w
 
-# Exact: the point k (float data, e.g. the cursor) lies on surf's carrier.
-static func _on_carrier(surf: BeamScene.Surf, k: CN) -> bool:
-	if BeamGeom.endpoint_at(surf.seg, k) != 0:
+# GdExact: the point k (float data, e.g. the cursor) lies on surf's carrier.
+static func _on_carrier(surf: GdBeamScene.Surf, k: GdCN) -> bool:
+	if GdBeamGeom.endpoint_at(surf.seg, k) != 0:
 		return true
 	if surf.line:
-		return Exact.orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, k.fx(), k.fy())
+		return GdExact.orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, k.fx(), k.fy())
 	if surf.full:
-		return Exact.on_circle_zero(surf.cx, surf.cy, surf.r, k.fx(), k.fy())
-	return Exact.incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, k.fx(), k.fy())
+		return GdExact.on_circle_zero(surf.cx, surf.cy, surf.r, k.fx(), k.fy())
+	return GdExact.incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, k.fx(), k.fy())
 
-# Exact: every frame change of the plan fixes the cursor (it lies on the
+# GdExact: every frame change of the plan fixes the cursor (it lies on the
 # carrier of each planned reflection / inversion -- an effect fixes its
 # carrier pointwise; a translation portal fixes nothing).
-static func fixes_cursor(scene: BeamScene, cursor: CN, plan: Array, flags: Dictionary = {}) -> bool:
+static func fixes_cursor(scene: GdBeamScene, cursor: GdCN, plan: Array, flags: Dictionary = {}) -> bool:
 	var kx := cursor.fx()
 	var ky := cursor.fy()
 	var effs := plan_effects(scene, plan, flags)
@@ -534,20 +534,20 @@ static func fixes_cursor(scene: BeamScene, cursor: CN, plan: Array, flags: Dicti
 		return false
 	for ji in plan.size():
 		var item = plan[ji]
-		var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
+		var surf: GdBeamScene.Surf = scene.by_id.get(item.surface_id)
 		if surf == null or not (effs[ji] in TRANSFORMATIVE):
 			continue
 		if surf.portal:
 			return false
 		var on: bool
-		if BeamGeom.endpoint_at(surf.seg, cursor) != 0:
+		if GdBeamGeom.endpoint_at(surf.seg, cursor) != 0:
 			on = true
 		elif surf.line:
-			on = Exact.orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, kx, ky)
+			on = GdExact.orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, kx, ky)
 		elif surf.full:
-			on = Exact.on_circle_zero(surf.cx, surf.cy, surf.r, kx, ky)
+			on = GdExact.on_circle_zero(surf.cx, surf.cy, surf.r, kx, ky)
 		else:
-			on = Exact.incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, kx, ky)
+			on = GdExact.incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, kx, ky)
 		if not on:
 			return false
 	return true
@@ -556,19 +556,19 @@ static func fixes_cursor(scene: BeamScene, cursor: CN, plan: Array, flags: Dicti
 # the exact aim image. Lazy: float64 coefficients with rigorous bounds from
 # the image chain's running error analysis; the exact homogeneous image (whose
 # size grows with every inversion) only when a predicate needs it.
-static func _initial_line(scene: BeamScene, player: CN, cursor: CN, plan: Array, flags: Dictionary = {}):
+static func _initial_line(scene: GdBeamScene, player: GdCN, cursor: GdCN, plan: Array, flags: Dictionary = {}):
 	var X = exact_image_approx(scene, cursor, plan, flags)
 	if X == null:
 		return null
 	var px := player.fx()
 	var py := player.fy()
 	# a = -(y - py w), b = x - px w, c = a px + b py
-	var a := Exact._esub(Exact._emul([py, 0.0], X[2]), X[1])
-	var b := Exact._esub(X[0], Exact._emul([px, 0.0], X[2]))
-	var c := Exact._eadd(Exact._emul(a, [px, 0.0]), Exact._emul(b, [py, 0.0]))
-	return Exact.Line.from_approx(a, b, c, func():
+	var a := GdExact._esub(GdExact._emul([py, 0.0], X[2]), X[1])
+	var b := GdExact._esub(X[0], GdExact._emul([px, 0.0], X[2]))
+	var c := GdExact._eadd(GdExact._emul(a, [px, 0.0]), GdExact._emul(b, [py, 0.0]))
+	return GdExact.Line.from_approx(a, b, c, func():
 		var Xh = _exact_image_cached(scene, cursor, plan, flags)
-		return null if Xh == null else Exact.line_through_h(px, py, Xh))
+		return null if Xh == null else GdExact.line_through_h(px, py, Xh))
 
 # Budget of the exact aim image (limbs of its homogeneous weight). The exact
 # image roughly doubles in size per inversion; 320 limbs is about four
@@ -580,12 +580,12 @@ static var _image_cache := {}
 
 # The exact aim image within the budget (null beyond it), computed once per
 # (cursor, plan, plan surfaces' data).
-static func _exact_image_cached(scene: BeamScene, cursor: CN, plan: Array, flags: Dictionary = {}):
+static func _exact_image_cached(scene: GdBeamScene, cursor: GdCN, plan: Array, flags: Dictionary = {}):
 	var key := [cursor.fx(), cursor.fy()]
 	var effs := plan_effects(scene, plan, flags)
 	for ji in plan.size():
 		var item = plan[ji]
-		var s: BeamScene.Surf = scene.by_id.get(item.surface_id)
+		var s: GdBeamScene.Surf = scene.by_id.get(item.surface_id)
 		key.append_array([item.surface_id, item.left] if s == null else [item.surface_id, item.left, effs[ji],
 			s.sx, s.sy, s.ex, s.ey, s.vx if s.has_v else 0.0, s.vy if s.has_v else 0.0, s.cx, s.cy, s.r, s.dx, s.dy, s.theta])
 	if _image_cache.has(key):
@@ -599,19 +599,19 @@ static func _exact_image_cached(scene: BeamScene, cursor: CN, plan: Array, flags
 # The aim image as float64 homogeneous coordinates with rigorous bounds
 # ([[x, ex], [y, ey], [w, ew]]), along the same maps as exact_image_h; each
 # step rescales by a power of two (exact) so magnitudes stay in range.
-static func exact_image_approx(scene: BeamScene, cursor: CN, plan: Array, flags: Dictionary = {}):
+static func exact_image_approx(scene: GdBeamScene, cursor: GdCN, plan: Array, flags: Dictionary = {}):
 	var X: Array = [[cursor.fx(), 0.0], [cursor.fy(), 0.0], [1.0, 0.0]]
 	var effs := plan_effects(scene, plan, flags)
 	if effs.any(func(e): return e in PROJECTIVE):
 		return null      # a back-propagated hit point is not exact data
 	for j in range(plan.size() - 1, -1, -1):
-		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+		var surf: GdBeamScene.Surf = scene.by_id.get(plan[j].surface_id)
 		if surf == null or not (effs[j] in TRANSFORMATIVE):
 			continue
 		if surf.portal:
 			if surf.theta != 0.0:
 				return null
-			X = [Exact._esub(X[0], Exact._emul([surf.dx, 0.0], X[2])), Exact._esub(X[1], Exact._emul([surf.dy, 0.0], X[2])), X[2]]
+			X = [GdExact._esub(X[0], GdExact._emul([surf.dx, 0.0], X[2])), GdExact._esub(X[1], GdExact._emul([surf.dy, 0.0], X[2])), X[2]]
 			continue
 		if surf.line:
 			X = _reflect_approx(X, surf.sx, surf.sy, surf.ex, surf.ey)
@@ -621,12 +621,12 @@ static func exact_image_approx(scene: BeamScene, cursor: CN, plan: Array, flags:
 			var rw2 := _approx(ec[1])
 			var w: Array = X[2]
 			var cw: Array = C[2]
-			var dx := Exact._esub(Exact._emul(X[0], cw), Exact._emul(C[0], w))
-			var dy := Exact._esub(Exact._emul(X[1], cw), Exact._emul(C[1], w))
-			var dd := Exact._eadd(Exact._emul(dx, dx), Exact._emul(dy, dy))
-			var rw := Exact._emul(rw2, w)
-			X = [Exact._eadd(Exact._emul(C[0], dd), Exact._emul(rw, dx)),
-				Exact._eadd(Exact._emul(C[1], dd), Exact._emul(rw, dy)), Exact._emul(cw, dd)]
+			var dx := GdExact._esub(GdExact._emul(X[0], cw), GdExact._emul(C[0], w))
+			var dy := GdExact._esub(GdExact._emul(X[1], cw), GdExact._emul(C[1], w))
+			var dd := GdExact._eadd(GdExact._emul(dx, dx), GdExact._emul(dy, dy))
+			var rw := GdExact._emul(rw2, w)
+			X = [GdExact._eadd(GdExact._emul(C[0], dd), GdExact._emul(rw, dx)),
+				GdExact._eadd(GdExact._emul(C[1], dd), GdExact._emul(rw, dy)), GdExact._emul(cw, dd)]
 		# rescale by a power of two near 1 / |w| (exact on values and bounds)
 		var m := absf(X[2][0])
 		if m == 0.0 or not is_finite(m):
@@ -635,73 +635,73 @@ static func exact_image_approx(scene: BeamScene, cursor: CN, plan: Array, flags:
 		X = [[X[0][0] * k, X[0][1] * k], [X[1][0] * k, X[1][1] * k], [X[2][0] * k, X[2][1] * k]]
 	return X
 
-# A BigFloat as a [float64 value, bound] pair (to_float rounds to nearest).
-static func _approx(v: BigFloat) -> Array:
+# A GdBigFloat as a [float64 value, bound] pair (to_float rounds to nearest).
+static func _approx(v: GdBigFloat) -> Array:
 	var f := v.to_float()
-	return [f, 2.0 * Exact.U * absf(f)]
+	return [f, 2.0 * GdExact.U * absf(f)]
 
 # reflect_point_h on [value, bound] pairs.
 static func _reflect_approx(X: Array, sx: float, sy: float, ex: float, ey: float) -> Array:
-	var mx := Exact._esub([ex, 0.0], [sx, 0.0])
-	var my := Exact._esub([ey, 0.0], [sy, 0.0])
-	var mm := Exact._eadd(Exact._emul(mx, mx), Exact._emul(my, my))
-	var m2r := Exact._esub(Exact._emul(mx, mx), Exact._emul(my, my))
-	var m2i := Exact._eadd(Exact._emul(mx, my), Exact._emul(my, mx))
+	var mx := GdExact._esub([ex, 0.0], [sx, 0.0])
+	var my := GdExact._esub([ey, 0.0], [sy, 0.0])
+	var mm := GdExact._eadd(GdExact._emul(mx, mx), GdExact._emul(my, my))
+	var m2r := GdExact._esub(GdExact._emul(mx, mx), GdExact._emul(my, my))
+	var m2i := GdExact._eadd(GdExact._emul(mx, my), GdExact._emul(my, mx))
 	var w: Array = X[2]
-	var cx := Exact._esub(X[0], Exact._emul([sx, 0.0], w))
-	var cy := Exact._esub(Exact._emul([sy, 0.0], w), X[1])
-	var swm := Exact._emul(w, mm)
-	var rx := Exact._eadd(Exact._emul([sx, 0.0], swm), Exact._esub(Exact._emul(m2r, cx), Exact._emul(m2i, cy)))
-	var ry := Exact._eadd(Exact._emul([sy, 0.0], swm), Exact._eadd(Exact._emul(m2r, cy), Exact._emul(m2i, cx)))
+	var cx := GdExact._esub(X[0], GdExact._emul([sx, 0.0], w))
+	var cy := GdExact._esub(GdExact._emul([sy, 0.0], w), X[1])
+	var swm := GdExact._emul(w, mm)
+	var rx := GdExact._eadd(GdExact._emul([sx, 0.0], swm), GdExact._esub(GdExact._emul(m2r, cx), GdExact._emul(m2i, cy)))
+	var ry := GdExact._eadd(GdExact._emul([sy, 0.0], swm), GdExact._eadd(GdExact._emul(m2r, cy), GdExact._emul(m2i, cx)))
 	return [rx, ry, swm]
 
 # The aim image F_K^-1(cursor) as an exact homogeneous point [x, y, w], when
 # every frame change of the plan is a rational map of exact data (a line
 # reflection, an inversion in an exact circle, a translation portal); null for
 # a rotation portal or an image at infinity.
-static func exact_image_h(scene: BeamScene, cursor: CN, plan: Array, max_limbs: int = 0, flags: Dictionary = {},
+static func exact_image_h(scene: GdBeamScene, cursor: GdCN, plan: Array, max_limbs: int = 0, flags: Dictionary = {},
 		from_index: int = 0):
-	var X: Array = [Exact.of(cursor.fx()), Exact.of(cursor.fy()), Exact.of(1.0)]
+	var X: Array = [GdExact.of(cursor.fx()), GdExact.of(cursor.fy()), GdExact.of(1.0)]
 	var effs := plan_effects(scene, plan, flags)
 	if effs.slice(from_index).any(func(e): return e in PROJECTIVE):
 		return null
 	for j in range(plan.size() - 1, from_index - 1, -1):
-		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+		var surf: GdBeamScene.Surf = scene.by_id.get(plan[j].surface_id)
 		if surf == null or not (effs[j] in TRANSFORMATIVE):
 			continue
 		if surf.portal:
 			if surf.theta != 0.0:
 				return null
 			# T^-1(X) = X - d (homogeneous: X - d w)
-			X = [Exact.sub(X[0], Exact.mul(Exact.of(surf.dx), X[2])), Exact.sub(X[1], Exact.mul(Exact.of(surf.dy), X[2])), X[2]]
+			X = [GdExact.sub(X[0], GdExact.mul(GdExact.of(surf.dx), X[2])), GdExact.sub(X[1], GdExact.mul(GdExact.of(surf.dy), X[2])), X[2]]
 			continue
 		if not surf.line:
 			# inversion in the exact circle: a rational map of exact data
 			var ec: Array = surf.exact_circle()
-			X = Exact.invert_point_h(X, ec[0], ec[1])
+			X = GdExact.invert_point_h(X, ec[0], ec[1])
 			if X == null:
 				return null
 			if max_limbs > 0 and X[2].precision_limbs() > max_limbs:
 				return null
 			continue
-		X = Exact.reflect_point_h(X, surf.sx, surf.sy, surf.ex, surf.ey)
+		X = GdExact.reflect_point_h(X, surf.sx, surf.sy, surf.ex, surf.ey)
 	return X
 
 # A point at infinity in the anchored construction (player / cursor exactly at
 # an inversion center): forward walk from the exact aim direction, or -- when
 # the aim image itself is at infinity (the aim is undetermined) -- straight at
 # the cursor (oracle trace2._aim). null only for player = cursor.
-static func _run_degenerate(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int,
+static func _run_degenerate(bk, scene: GdBeamScene, player: GdCN, cursor: GdCN, plan: Array, mode: int, max_events: int,
 		flags: Dictionary = {}) -> Walk:
 	var effs := plan_effects(scene, plan, flags)
 	var X = cursor
 	var on_sid := -2
 	for j in range(plan.size() - 1, -1, -1):
-		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+		var surf: GdBeamScene.Surf = scene.by_id.get(plan[j].surface_id)
 		if surf != null and effs[j] in PROJECTIVE and X != null:
 			# an entry without a back-propagated point is skipped (oracle aim)
 			var on: bool = on_sid == surf.id or (on_sid == -2 and _on_carrier(surf, X))
-			var H = BeamEffects.back_propagate(surf, plan[j].left, X, on, plan[j].hint)
+			var H = GdBeamEffects.back_propagate(surf, plan[j].left, X, on, plan[j].hint)
 			if H != null:
 				X = H
 				on_sid = surf.id
@@ -710,21 +710,21 @@ static func _run_degenerate(bk, scene: BeamScene, player: CN, cursor: CN, plan: 
 			on_sid = -1
 		if surf == null or not (effs[j] in TRANSFORMATIVE):
 			continue
-		X = BeamEffects.map_point(X, surf, true)
+		X = GdBeamEffects.map_point(X, surf, true)
 		if X == null:
 			break
-	var dir: CN
+	var dir: GdCN
 	var line = null
 	if X == null or X.sub(player).is_zero():
 		dir = cursor.sub(player)
 		if dir.is_zero():
 			return null
-		line = Exact.Line.from_exact(Exact.line_through(player.fx(), player.fy(), cursor.fx(), cursor.fy()))
+		line = GdExact.Line.from_exact(GdExact.line_through(player.fx(), player.fy(), cursor.fx(), cursor.fy()))
 	else:
 		dir = X.sub(player)
 		line = _initial_line(scene, player, cursor, plan, flags)
 	var w := _new_walk(bk, scene, plan, cursor, mode, max_events, flags)
-	var b0 = bk.from_hp(HPBeam.make(player, dir.unit(), player.re.sub(player.re)))
+	var b0 = bk.from_hp(GdHPBeam.make(player, dir.unit(), player.re.sub(player.re)))
 	if mode == Mode.PHYSICAL:
 		b0 = bk.seed(b0)
 		w.seeded = true
@@ -738,7 +738,7 @@ static func _run_degenerate(bk, scene: BeamScene, player: CN, cursor: CN, plan: 
 	walk_from(w, b0, -1, null)
 	return w
 
-static func _new_walk(bk, scene: BeamScene, plan: Array, cursor, mode: int, max_events: int, flags: Dictionary = {}) -> Walk:
+static func _new_walk(bk, scene: GdBeamScene, plan: Array, cursor, mode: int, max_events: int, flags: Dictionary = {}) -> Walk:
 	var w := Walk.new()
 	w.flags = flags
 	w.bk = bk
@@ -753,11 +753,11 @@ static func _new_walk(bk, scene: BeamScene, plan: Array, cursor, mode: int, max_
 # Forward state simulation (GAME_SPEC 13.7): the effect each plan entry
 # resolves to, under the flags left by the entries before it (each entry
 # applies its state change when consumed).
-static func plan_effects(scene: BeamScene, plan: Array, flags: Dictionary = {}) -> Array:
+static func plan_effects(scene: GdBeamScene, plan: Array, flags: Dictionary = {}) -> Array:
 	var f := flags
 	var out: Array = []
 	for item in plan:
-		var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
+		var surf: GdBeamScene.Surf = scene.by_id.get(item.surface_id)
 		if surf == null:
 			out.append("")
 			continue
@@ -769,10 +769,10 @@ static func plan_effects(scene: BeamScene, plan: Array, flags: Dictionary = {}) 
 
 # The flags after the plan's entries, simulated forward from `flags` (the
 # state the planned trace reaches after its last entry).
-static func plan_flags(scene: BeamScene, plan: Array, flags: Dictionary = {}) -> Dictionary:
+static func plan_flags(scene: GdBeamScene, plan: Array, flags: Dictionary = {}) -> Dictionary:
 	var f := flags
 	for item in plan:
-		var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
+		var surf: GdBeamScene.Surf = scene.by_id.get(item.surface_id)
 		if surf == null:
 			continue
 		var ch = surf.state_change(item.left, f)
@@ -792,17 +792,17 @@ static func apply_state(flags: Dictionary, change: Dictionary) -> Dictionary:
 
 # The map an effect applies: reflection on a circle carrier is the inversion
 # in it.
-static func map_kind(surf: BeamScene.Surf, etype: String) -> String:
+static func map_kind(surf: GdBeamScene.Surf, etype: String) -> String:
 	if etype == "reflection" and not surf.line:
 		return "inversion"
 	return etype
 
 # Ids of target surfaces hit on-segment.
-static func targets_of(scene: BeamScene, events: Array) -> Array:
+static func targets_of(scene: GdBeamScene, events: Array) -> Array:
 	var ids := {}
 	for e in events:
 		if e.kind == "hit" and e.on_segment:
-			var s: BeamScene.Surf = scene.by_id.get(e.surface_id)
+			var s: GdBeamScene.Surf = scene.by_id.get(e.surface_id)
 			if s != null and s.is_target:
 				ids[e.surface_id] = true
 	var out: Array = ids.keys()
@@ -845,7 +845,7 @@ static func _candidates(w: Walk, beam, depart: int, fresh: bool, t0) -> Array:
 		var tc = bk.param_of(beam, w.cursor)
 		var ki := _known_index(w.known, w.cursor)
 		# the cursor exactly at the departure point is reached immediately
-		if (fresh and BeamGeom._eq(bk.origin(beam), w.cursor)) \
+		if (fresh and GdBeamGeom._eq(bk.origin(beam), w.cursor)) \
 				or (ki >= 0 and w.known[ki][2] == depart and depart >= 0 and w.known[ki][1].cmp(t0) == 0):
 			tc = t0
 			cursor_now = true
@@ -874,9 +874,9 @@ static func _candidates(w: Walk, beam, depart: int, fresh: bool, t0) -> Array:
 		cands.append([t0, w.scene.by_id[depart], true, dep_pt])
 	return cands
 
-static func _known_index(known: Array, z: CN) -> int:
+static func _known_index(known: Array, z: GdCN) -> int:
 	for i in known.size():
-		if BeamGeom._eq(known[i][0], z):
+		if GdBeamGeom._eq(known[i][0], z):
 			return i
 	return -1
 
@@ -889,12 +889,12 @@ static func _concurrent_ties(w: Walk, cands: Array) -> void:
 		var y: Array = cands[i + 1]
 		if x[1] == null or y[1] == null or x[2] or y[2] or not x[1].line or not y[1].line:
 			continue
-		var p: BeamScene.Surf = x[1]
-		var q: BeamScene.Surf = y[1]
+		var p: GdBeamScene.Surf = x[1]
+		var q: GdBeamScene.Surf = y[1]
 		if not w.line.concurrent(p.sx, p.sy, p.ex, p.ey, q.sx, q.sy, q.ex, q.ey):
 			continue
-		var lo: BeamScene.Surf = p if p.id < q.id else q
-		var hi: BeamScene.Surf = q if p.id < q.id else p
+		var lo: GdBeamScene.Surf = p if p.id < q.id else q
+		var hi: GdBeamScene.Surf = q if p.id < q.id else p
 		var t = x[0]
 		var pt = x[3] if x[3] != null else y[3]
 		cands[i] = [t, lo, false, pt, i]
@@ -904,7 +904,7 @@ static func _concurrent_ties(w: Walk, cands: Array) -> void:
 # hit exactly there: its root nearest kp becomes (kt, kp). skip: the
 # departure surface for the departure point (its departure root is excluded).
 static func _snap(w: Walk, beam, cands: Array, rec: Array) -> void:
-	var kp: CN = rec[0]
+	var kp: GdCN = rec[0]
 	var kt = rec[1]
 	var skip: int = rec[2]
 	if rec.size() < 4:
@@ -933,7 +933,7 @@ static func _snap(w: Walk, beam, cands: Array, rec: Array) -> void:
 
 # Per candidate: px distance to its neighbours in the walk order (and, for a
 # segment, to its endpoints): an ordering / on-segment decision is only as
-# reliable as this gap is large vs. the error. Used by ErrorEstimate to decide
+# reliable as this gap is large vs. the error. Used by GdErrorEstimate to decide
 # precision, never to decide topology.
 static func _gaps(w: Walk, beam, cands: Array) -> Array:
 	var pts: Array = []
@@ -981,18 +981,18 @@ static func _d64(a: PackedFloat64Array, x: float, y: float) -> float:
 	return sqrt(dx * dx + dy * dy)
 
 # Blocked sides at an exact endpoint, incl. other segments sharing it.
-static func _full_block(scene: BeamScene, surf: BeamScene.Surf, pt: CN, tang: CN, on_seg: bool) -> bool:
+static func _full_block(scene: GdBeamScene, surf: GdBeamScene.Surf, pt: GdCN, tang: GdCN, on_seg: bool) -> bool:
 	if not on_seg:
 		return false
-	if BeamGeom.endpoint_at(surf.seg, pt) == 0:
+	if GdBeamGeom.endpoint_at(surf.seg, pt) == 0:
 		return true
 	var bl := false
 	var br := false
 	for s in scene.surfaces:
-		var which := BeamGeom.endpoint_at(s.seg, pt)
+		var which := GdBeamGeom.endpoint_at(s.seg, pt)
 		if which == 0:
 			continue
-		var b := BeamGeom.blocked_sides(s.seg, which, tang)
+		var b := GdBeamGeom.blocked_sides(s.seg, which, tang)
 		bl = bl or b[0]
 		br = br or b[1]
 	return bl and br
@@ -1041,7 +1041,7 @@ static func _event(w: Walk, kind: String, beam, t_from, t_to, margin: float) -> 
 # farther from pt -- the same position rule that matches a known point to its
 # root (the hit's parameter may be a snapped known point's, not bit-equal to
 # the recomputed root).
-static func _other_root(w: Walk, beam, surf: BeamScene.Surf, depart: int, t0, t, pt: CN):
+static func _other_root(w: Walk, beam, surf: GdBeamScene.Surf, depart: int, t0, t, pt: GdCN):
 	if surf.id == depart:
 		return t0
 	var rs: Array = w.bk.roots(beam, surf, false)
@@ -1076,7 +1076,7 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 		while ci < cands.size():
 			var cand: Array = cands[ci]
 			var t = cand[0]
-			var surf: BeamScene.Surf = cand[1]
+			var surf: GdBeamScene.Surf = cand[1]
 			var rehit: bool = cand[2]
 			w.count += 1
 			if w.count > w.max_events:
@@ -1110,7 +1110,7 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 				ci += 1
 				continue
 			var cl: Array = bk.classify(w.scene, beam, t, surf, rehit and fresh, cand[3])
-			var pt: CN = cl[0]
+			var pt: GdCN = cl[0]
 			var on_seg: bool = cl[1]
 			var left: bool = cl[2]
 			var full_block: bool = cl[3]
@@ -1228,15 +1228,15 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 		t_prev = t0
 
 # Apply surf's effect at t: [beam, depart, t0, fresh] to continue with.
-static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart: int, fresh: bool, t0, rehit: bool, pt: CN,
+static func _apply(w: Walk, beam, t, surf: GdBeamScene.Surf, etype: String, depart: int, fresh: bool, t0, rehit: bool, pt: GdCN,
 		pt_exact: bool = false) -> Array:
 	var bk = w.bk
 	if not w.stack.is_empty() and w.stack.back().pop_id == surf.id and w.stack.back().etype == map_kind(surf, etype):
 		var top: StackEntry = w.stack.pop_back()
-		var src: BeamScene.Surf = w.scene.by_id[top.sid]
+		var src: GdBeamScene.Surf = w.scene.by_id[top.sid]
 		# the point on the restored beam: T^-1(pt) for a portal, pt itself for
 		# a self-inverse effect (its carrier is fixed)
-		var q: CN = BeamEffects.portal_point(pt, src, true) if src.portal else pt
+		var q: GdCN = GdBeamEffects.portal_point(pt, src, true) if src.portal else pt
 		var t_res
 		if rehit:
 			t_res = top.t_hit
@@ -1255,8 +1255,8 @@ static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart
 	w.stack.append(StackEntry.make(beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype)))
 	var old_known := w.known
 	# the surface the new beam departs from, and the departure point
-	var dsurf: BeamScene.Surf = w.scene.by_id[surf.pair] if surf.portal else surf
-	var exit: CN = BeamEffects.portal_point(pt, surf) if surf.portal else pt
+	var dsurf: GdBeamScene.Surf = w.scene.by_id[surf.pair] if surf.portal else surf
+	var exit: GdCN = GdBeamEffects.portal_point(pt, surf) if surf.portal else pt
 	var res: Array
 	if w.anchored and w.chain != null:
 		# anchored: the exact beam of the next plan frame; it departs dsurf at
@@ -1281,7 +1281,7 @@ static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart
 	# old beam's known points on surf's carrier (fixed by the effect)
 	w.known = [[pt, res[2], surf.id]] if pt_exact else []
 	for k in old_known:
-		if not BeamGeom._eq(k[0], pt) and _incident(w, k[0], surf):
+		if not GdBeamGeom._eq(k[0], pt) and _incident(w, k[0], surf):
 			w.known.append([k[0], bk.param_of(res[0], k[0]), -1])
 	# an exact line stays exact through a line reflection; through an
 	# inversion only if it passes exactly through the circle's center (the
@@ -1304,8 +1304,8 @@ static func _apply(w: Walk, beam, t, surf: BeamScene.Surf, etype: String, depart
 					break
 	return res
 
-# Exact: the point is the center of surf's circle.
-static func _is_center(k: CN, surf: BeamScene.Surf) -> bool:
+# GdExact: the point is the center of surf's circle.
+static func _is_center(k: GdCN, surf: GdBeamScene.Surf) -> bool:
 	var kx := k.fx()
 	var ky := k.fy()
 	if surf.full:
@@ -1316,8 +1316,8 @@ static func _is_center(k: CN, surf: BeamScene.Surf) -> bool:
 	if absf(kx - ec[2]) > e or absf(ky - ec[3]) > e:
 		return false
 	var C: Array = ec[0]
-	return Exact.sub(Exact.mul(Exact.of(kx), C[2]), C[0]).is_zero() \
-		and Exact.sub(Exact.mul(Exact.of(ky), C[2]), C[1]).is_zero()
+	return GdExact.sub(GdExact.mul(GdExact.of(kx), C[2]), C[0]).is_zero() \
+		and GdExact.sub(GdExact.mul(GdExact.of(ky), C[2]), C[1]).is_zero()
 
 # Projective effect at pt: a fresh straight beam departing surf; the stack
 # clears and a new epoch begins (the anchored path ends: projectives are not
@@ -1326,23 +1326,23 @@ static func _is_center(k: CN, surf: BeamScene.Surf) -> bool:
 # the cursor pulled back through the entries after j (when that is exact
 # data), along the exact axis -- the carrier normal, the directional normal,
 # or the line from the circle's exact center (oracle projective_hits).
-static func _exit_line(scene: BeamScene, cursor: CN, plan: Array, flags: Dictionary, j: int):
+static func _exit_line(scene: GdBeamScene, cursor: GdCN, plan: Array, flags: Dictionary, j: int):
 	var X = exact_image_h(scene, cursor, plan, EXACT_IMAGE_LIMBS, flags, j + 1)
 	if X == null:
 		return null
-	var surf: BeamScene.Surf = scene.by_id[plan[j].surface_id]
+	var surf: GdBeamScene.Surf = scene.by_id[plan[j].surface_id]
 	var etype := surf.effect(plan[j].left)
 	var L: Array
 	if etype == "circle_normal_projection":
 		# the line through the center C and X (homogeneous cross product)
 		var C: Array = surf.exact_circle()[0]
-		var a := Exact.sub(Exact.mul(C[1], X[2]), Exact.mul(X[1], C[2]))
-		var b := Exact.sub(Exact.mul(X[0], C[2]), Exact.mul(C[0], X[2]))
-		var c := Exact.sub(Exact.mul(X[0], C[1]), Exact.mul(C[0], X[1]))
+		var a := GdExact.sub(GdExact.mul(C[1], X[2]), GdExact.mul(X[1], C[2]))
+		var b := GdExact.sub(GdExact.mul(X[0], C[2]), GdExact.mul(C[0], X[2]))
+		var c := GdExact.sub(GdExact.mul(X[0], C[1]), GdExact.mul(C[0], X[1]))
 		if a.is_zero() and b.is_zero():
 			return null
 		# L = C x X: a x + b y + c' w = 0 with c' = Cx Xy - Cy Xx = -c, i.e.
-		# a x + b y = c (Exact.Line form)
+		# a x + b y = c (GdExact.Line form)
 		L = [a, b, c]
 	else:
 		var ax: float
@@ -1355,16 +1355,16 @@ static func _exit_line(scene: BeamScene, cursor: CN, plan: Array, flags: Diction
 			ax = pr[1]
 			ay = pr[2]
 		# through X = (x/w, y/w) along (ax, ay): -ay w x + ax w y = ax y - ay x
-		var w: BigFloat = X[2]
-		L = [Exact.mul(Exact.of(-ay), w), Exact.mul(Exact.of(ax), w),
-			Exact.sub(Exact.mul(Exact.of(ax), X[1]), Exact.mul(Exact.of(ay), X[0]))]
-	return Exact.Line.from_exact(L)
+		var w: GdBigFloat = X[2]
+		L = [GdExact.mul(GdExact.of(-ay), w), GdExact.mul(GdExact.of(ax), w),
+			GdExact.sub(GdExact.mul(GdExact.of(ax), X[1]), GdExact.mul(GdExact.of(ay), X[0]))]
+	return GdExact.Line.from_exact(L)
 
 # The projective fired at its back-propagated hit point H: of the beam's
 # crossings of surf, the one at pt is the one nearest H (the same position
 # rule that matches a known point to its root). A plan side matched at an
 # earlier crossing is not H: the anchored path ends there.
-static func _at_planned_hit(w: Walk, beam, surf: BeamScene.Surf, pt: CN, H) -> bool:
+static func _at_planned_hit(w: Walk, beam, surf: GdBeamScene.Surf, pt: GdCN, H) -> bool:
 	if H == null:
 		return false
 	# the root nearest pt is the root nearest H (distinct crossings, compared
@@ -1377,7 +1377,7 @@ static func _at_planned_hit(w: Walk, beam, surf: BeamScene.Surf, pt: CN, H) -> b
 	var d_pt := INF
 	var d_h := INF
 	for i in rs.size():
-		var q: CN = w.bk.point(beam, rs[i])
+		var q: GdCN = w.bk.point(beam, rs[i])
 		var a: float = q.sub(pt).abs2().to_float()
 		var b: float = q.sub(H).abs2().to_float()
 		if a < d_pt:
@@ -1388,7 +1388,7 @@ static func _at_planned_hit(w: Walk, beam, surf: BeamScene.Surf, pt: CN, H) -> b
 			near_h = i
 	return near_pt == near_h
 
-static func _project(w: Walk, beam, t, surf: BeamScene.Surf, left: bool, pt: CN, pt_exact: bool) -> Array:
+static func _project(w: Walk, beam, t, surf: GdBeamScene.Surf, left: bool, pt: GdCN, pt_exact: bool) -> Array:
 	w.stack.clear()
 	w.epoch += 1
 	var at_h: bool = w.on_plan and w.chain != null and _at_planned_hit(w, beam, surf, pt, w.chain.hits.get(w.plan_index - 1))
@@ -1426,14 +1426,14 @@ static func _project(w: Walk, beam, t, surf: BeamScene.Surf, left: bool, pt: CN,
 		var L: Array
 		if etype == "line_normal_projection":
 			# perpendicular to the segment: (E - S) . (z - pt) = 0
-			var a := Exact.sub(Exact.of(surf.ex), Exact.of(surf.sx))
-			var b := Exact.sub(Exact.of(surf.ey), Exact.of(surf.sy))
-			L = [a, b, Exact.add(Exact.mul(a, Exact.of(px)), Exact.mul(b, Exact.of(py)))]
+			var a := GdExact.sub(GdExact.of(surf.ex), GdExact.of(surf.sx))
+			var b := GdExact.sub(GdExact.of(surf.ey), GdExact.of(surf.sy))
+			L = [a, b, GdExact.add(GdExact.mul(a, GdExact.of(px)), GdExact.mul(b, GdExact.of(py)))]
 		elif etype == "circle_normal_projection":
-			L = Exact.line_through_h(px, py, surf.exact_circle()[0])
+			L = GdExact.line_through_h(px, py, surf.exact_circle()[0])
 		else:
-			L = Exact.line_from_dir(px, py, pr[1], pr[2])
-		w.line = Exact.Line.from_exact(L)
+			L = GdExact.line_from_dir(px, py, pr[1], pr[2])
+		w.line = GdExact.Line.from_exact(L)
 		_add_line_endpoints(w, nb)
 	if at_h:
 		# on the planned beams (e.g. after a mirror fired at its other
@@ -1447,40 +1447,40 @@ static func _project(w: Walk, beam, t, surf: BeamScene.Surf, left: bool, pt: CN,
 # T(k) of a portal as exact data: the pair is built as T of the source, so
 # endpoints map to endpoints; otherwise a translation's k + d when exactly
 # representable. null: not exact data.
-static func _portal_image(w: Walk, surf: BeamScene.Surf, k: CN):
-	var pair: BeamScene.Surf = w.scene.by_id[surf.pair]
-	var which := BeamGeom.endpoint_at(surf.seg, k)
+static func _portal_image(w: Walk, surf: GdBeamScene.Surf, k: GdCN):
+	var pair: GdBeamScene.Surf = w.scene.by_id[surf.pair]
+	var which := GdBeamGeom.endpoint_at(surf.seg, k)
 	if which == 1:
 		return pair.seg.s
 	if which == 2:
 		return pair.seg.e
 	if surf.theta != 0.0:
 		return null
-	var ex := Exact.add(Exact.of(k.fx()), Exact.of(surf.dx))
-	var ey := Exact.add(Exact.of(k.fy()), Exact.of(surf.dy))
+	var ex := GdExact.add(GdExact.of(k.fx()), GdExact.of(surf.dx))
+	var ey := GdExact.add(GdExact.of(k.fy()), GdExact.of(surf.dy))
 	var fx := ex.to_float()
 	var fy := ey.to_float()
-	if Exact.of(fx).cmp(ex) != 0 or Exact.of(fy).cmp(ey) != 0:
+	if GdExact.of(fx).cmp(ex) != 0 or GdExact.of(fy).cmp(ey) != 0:
 		return null
 	return _cn_like(k, fx, fy)
 
-static func _cn_like(k: CN, x: float, y: float) -> CN:
-	if k.re is BigFloat:
+static func _cn_like(k: GdCN, x: float, y: float) -> GdCN:
+	if k.re is GdBigFloat:
 		var n: int = k.re.limbs.size()
-		return CN.make(BigFloat.from_float(x, n), BigFloat.from_float(y, n))
-	if k.re is DualNum:
-		return CN.make(DualNum.of(x), DualNum.of(y))
-	return CN.make(F64Num.of(x), F64Num.of(y))
+		return GdCN.make(GdBigFloat.from_float(x, n), GdBigFloat.from_float(y, n))
+	if k.re is GdDualNum:
+		return GdCN.make(GdDualNum.of(x), GdDualNum.of(y))
+	return GdCN.make(GdF64Num.of(x), GdF64Num.of(y))
 
 # Known points and exact line after a portal push (the rigid image).
-static func _portal_known(w: Walk, surf: BeamScene.Surf, pt: CN, pt_exact: bool, old_known: Array, res: Array) -> void:
+static func _portal_known(w: Walk, surf: GdBeamScene.Surf, pt: GdCN, pt_exact: bool, old_known: Array, res: Array) -> void:
 	var known: Array = []
 	if pt_exact:
 		var h2 = _portal_image(w, surf, pt)
 		if h2 != null:
 			known.append([h2, res[2], surf.pair])
 	for k in old_known:
-		if BeamGeom._eq(k[0], pt):
+		if GdBeamGeom._eq(k[0], pt):
 			continue
 		var k2 = _portal_image(w, surf, k[0])
 		if k2 != null and _known_index(known, k2) < 0:
@@ -1492,19 +1492,19 @@ static func _portal_known(w: Walk, surf: BeamScene.Surf, pt: CN, pt_exact: bool,
 	else:
 		w.line = null
 
-# Exact: the current exact line is tangent to surf's circle (computed once
+# GdExact: the current exact line is tangent to surf's circle (computed once
 # per line, for every circle surface).
-static func _tangent(w: Walk, surf: BeamScene.Surf) -> bool:
+static func _tangent(w: Walk, surf: GdBeamScene.Surf) -> bool:
 	if not is_same(w.tangent_line, w.line):
 		w.tangent = {}
 		for s in w.scene.surfaces:
 			if not s.line:
 				var ec: Array = s.exact_circle()
-				w.tangent[s.id] = w.line.tangent_to(ec[0], ec[1], ec[2], ec[3], ec[4], _ecc(ec), 8.0 * Exact.U * absf(ec[4]))
+				w.tangent[s.id] = w.line.tangent_to(ec[0], ec[1], ec[2], ec[3], ec[4], _ecc(ec), 8.0 * GdExact.U * absf(ec[4]))
 		w.tangent_line = w.line
 	return w.tangent.get(surf.id, false)
 
-static func _line_through_center(L: Exact.Line, surf: BeamScene.Surf) -> bool:
+static func _line_through_center(L: GdExact.Line, surf: GdBeamScene.Surf) -> bool:
 	if surf.full:
 		return L.contains(surf.cx, surf.cy)
 	var ec: Array = surf.exact_circle()
@@ -1512,11 +1512,11 @@ static func _line_through_center(L: Exact.Line, surf: BeamScene.Surf) -> bool:
 
 # Bound on the float rounding of an exact circle's center (C / w, rounded parts).
 static func _ecc(ec: Array) -> float:
-	return 6.0 * Exact.U * maxf(absf(ec[2]), absf(ec[3]))
+	return 6.0 * GdExact.U * maxf(absf(ec[2]), absf(ec[3]))
 
 # ---------------------------------------------------------------- helpers
 
-# Tangent-linear seed (DualNum tier only): unit perturbation of the beam's
+# Tangent-linear seed (GdDualNum tier only): unit perturbation of the beam's
 # tangent angle where the sensitive forward continuation starts. Every later
 # derivative is then d(quantity)/d(angle) -- the amplification of a rounding
 # error injected at that point. No-op for other tiers.
@@ -1524,22 +1524,22 @@ static func _ecc(ec: Array) -> float:
 # tiers rotate the seeded tangent by this angle (finite-difference gains).
 static var fd_seed_angle = null
 
-static func _seed(b: HPBeam) -> HPBeam:
-	if not (b.kappa is DualNum):
+static func _seed(b: GdHPBeam) -> GdHPBeam:
+	if not (b.kappa is GdDualNum):
 		if fd_seed_angle != null:
 			var rot := b.tau.add(b.tau.mul_i().scale(fd_seed_angle)).unit()
-			return HPBeam.make(b.p, rot, b.kappa)
+			return GdHPBeam.make(b.p, rot, b.kappa)
 		return b
 	var tx: float = b.tau.re.v
 	var ty: float = b.tau.im.v
-	var p := CN.make(DualNum.of(b.p.re.v), DualNum.of(b.p.im.v))
-	var tau := CN.make(DualNum.of(tx, -ty), DualNum.of(ty, tx))
-	return HPBeam.make(p, tau, DualNum.of(b.kappa.v))
+	var p := GdCN.make(GdDualNum.of(b.p.re.v), GdDualNum.of(b.p.im.v))
+	var tau := GdCN.make(GdDualNum.of(tx, -ty), GdDualNum.of(ty, tx))
+	return GdHPBeam.make(p, tau, GdDualNum.of(b.kappa.v))
 
 # A beam restored from the unseeded (anchored) prefix gets a tangent-linear
 # seed (its own rounding error enters the continuation here).
-static func _reseed_if_unseeded(b: HPBeam) -> HPBeam:
-	if not (b.kappa is DualNum):
+static func _reseed_if_unseeded(b: GdHPBeam) -> GdHPBeam:
+	if not (b.kappa is GdDualNum):
 		return b
 	if b.p.re.d == 0.0 and b.p.im.d == 0.0 and b.tau.re.d == 0.0 and b.tau.im.d == 0.0 and b.kappa.d == 0.0:
 		return _seed(b)

@@ -58,7 +58,7 @@ func _init() -> void:
 func _emit(part: String, data: Dictionary) -> void:
 	var path := "%s/%s.json" % [_out, part]
 	data["_schema"] = {"part": part, "floats": "hex of the little-endian bytes of PackedFloat64Array (f64) / PackedFloat32Array (Vector2)",
-		"num": "f<hex> F64Num | d<hex><hex> DualNum (value, derivative) | b<sign:exp:limbs> BigFloat | null",
+		"num": "f<hex> GdF64Num | d<hex><hex> GdDualNum (value, derivative) | b<sign:exp:limbs> GdBigFloat | null",
 		"cn": "<num>/<num>", "event": EVENT_FIELDS, "beam": "p;tau;kappa", "generator": "tools/dump_goldens.gd"}
 	if not _check:
 		var f := FileAccess.open(path, FileAccess.WRITE)
@@ -107,7 +107,7 @@ static func h64(x: float) -> String:
 static func h32v(v: Vector2) -> String:
 	return PackedFloat32Array([v.x, v.y]).to_byte_array().hex_encode()
 
-static func big(b: BigFloat) -> String:
+static func big(b: GdBigFloat) -> String:
 	var ls := PackedStringArray()
 	for l in b.limbs:
 		ls.append(str(l))
@@ -118,11 +118,11 @@ static func num(x) -> String:
 		return "null"
 	if x is float:
 		return h64(x)
-	if x is F64Num:
+	if x is GdF64Num:
 		return "f" + h64(x.v)
-	if x is DualNum:
+	if x is GdDualNum:
 		return "d" + h64(x.v) + h64(x.d)
-	if x is BigFloat:
+	if x is GdBigFloat:
 		return "b" + big(x)
 	if x is Array:
 		return "[" + ",".join(x.map(func(y): return num(y))) + "]"
@@ -133,7 +133,7 @@ static func num(x) -> String:
 		return "[" + ",".join(out) + "]"
 	return str(x)
 
-static func cn(z: CN) -> String:
+static func cn(z: GdCN) -> String:
 	return "null" if z == null else num(z.re) + "/" + num(z.im)
 
 static func sha16(s: String) -> String:
@@ -144,7 +144,7 @@ static func sha16(s: String) -> String:
 
 # One event = one string of EVENT_FIELDS joined by ";" (flags are 0/1); beams
 # are numbered by first appearance (object identity) and listed as
-# "p;tau;kappa". A gain (FastSolver) is appended as a 21st field.
+# "p;tau;kappa". A gain (GdFastSolver) is appended as a 21st field.
 const EVENT_FIELDS := "kind;sid;left;applied;terminal;on_segment;rehit;popped;teleport;projective;state;anchored;seeded;epoch;beam;margin;point;t_from;t_to;flags[;gain]"
 
 static func b(v: bool) -> String:
@@ -155,23 +155,23 @@ static func events(evs: Array, gains: Array = []) -> Dictionary:
 	var ids := {}
 	var out: Array = []
 	for i in evs.size():
-		var e: BeamSolver.Event = evs[i]
+		var e: GdBeamSolver.Event = evs[i]
 		var bid: int = e.beam.get_instance_id() if e.beam != null else 0
 		if e.beam != null and not ids.has(bid):
 			ids[bid] = beams.size()
 			beams.append("%s;%s;%s" % [cn(e.beam.p), cn(e.beam.tau), num(e.beam.kappa)])
 		var f := [e.kind, str(e.surface_id), b(e.left), b(e.applied), b(e.terminal), b(e.on_segment), b(e.rehit),
 			b(e.popped), b(e.teleport), b(e.projective), b(e.state), b(e.anchored), b(e.seeded), str(e.epoch),
-			str(ids.get(bid, -1)), h64(e.margin), cn(e.point), num(e.t_from), num(e.t_to), BeamTracer._flags_key(e.flags)]
+			str(ids.get(bid, -1)), h64(e.margin), cn(e.point), num(e.t_from), num(e.t_to), GdBeamTracer._flags_key(e.flags)]
 		if i < gains.size():
 			f.append(h64(gains[i]))
 		out.append(";".join(f))
 	return {"beams": beams, "events": out}
 
-static func step_canon(s: TraceStep) -> String:
+static func step_canon(s: GdTraceStep) -> String:
 	var hit := "-"
 	if s.hit != null:
-		var h: TraceHit = s.hit
+		var h: GdTraceHit = s.hit
 		var seg := "-"
 		if h.segment != null:
 			seg = h32v(h.segment.start.coords) + h32v(h.segment.end.coords)
@@ -180,7 +180,7 @@ static func step_canon(s: TraceStep) -> String:
 		s.type, s.surface_id, s.hit_side, s.hit_on_segment, s.after_portal, s.ghost, s.is_arc_step,
 		h64(s.est_error), s.precision_bits, hit]
 
-static func path_canon(p: TracePath) -> String:
+static func path_canon(p: GdTracePath) -> String:
 	if p == null:
 		return "null"
 	var steps := PackedStringArray()
@@ -190,12 +190,12 @@ static func path_canon(p: TracePath) -> String:
 	targets.sort()
 	return "ci=%d;hc=%d;targets=%s;steps=%s" % [p.cursor_index, p.hit_count, str(targets), "|".join(steps)]
 
-static func pair_canon(pair: BeamTracer.Pair) -> String:
+static func pair_canon(pair: GdBeamTracer.Pair) -> String:
 	if pair == null:
 		return "null"
-	var r: PrecisionLadder.Result = pair.result
+	var r: GdPrecisionLadder.Result = pair.result
 	return "P:%s\nH:%s\nF:%s\nR:%d,%d,%s,%s" % [path_canon(pair.planned), path_canon(pair.physical),
-		BeamTracer._flags_key(pair.final_flags), r.planned_tier, r.physical_tier, r.converged, str(r.tiers_tried)]
+		GdBeamTracer._flags_key(pair.final_flags), r.planned_tier, r.physical_tier, r.converged, str(r.tiers_tried)]
 
 static func f32(x: float) -> float:
 	return Vector2(x, 0.0).x
@@ -250,15 +250,15 @@ func _bigfloat() -> Dictionary:
 	rng.seed = 90
 	for n in [2, 4, 8, 16, 32, 64]:
 		for i in 40:
-			var a: BigFloat
-			var b: BigFloat
+			var a: GdBigFloat
+			var b: GdBigFloat
 			var ia: String
 			var ib: String
 			if i % 4 == 3:
 				ia = "%d.%09d%09d" % [rng.randi_range(-99999, 99999), rng.randi_range(0, 999999999), rng.randi_range(0, 999999999)]
 				ib = "%d.%09d%09d" % [rng.randi_range(-99999, 99999), rng.randi_range(0, 999999999), rng.randi_range(0, 999999999)]
-				a = BigFloat.from_string(ia, n)
-				b = BigFloat.from_string(ib, n)
+				a = GdBigFloat.from_string(ia, n)
+				b = GdBigFloat.from_string(ib, n)
 			else:
 				var fa := _rand_float(rng)
 				var fb := _rand_float(rng)
@@ -266,8 +266,8 @@ func _bigfloat() -> Dictionary:
 					fb = 0.0
 				ia = h64(fa)
 				ib = h64(fb)
-				a = BigFloat.from_float(fa, n)
-				b = BigFloat.from_float(fb, n)
+				a = GdBigFloat.from_float(fa, n)
+				b = GdBigFloat.from_float(fb, n)
 			var k := rng.randi_range(-70, 70)
 			var d := {"in_a": ia, "in_b": ib, "a": big(a), "b": big(b), "add": big(a.add(b)), "sub": big(a.sub(b)),
 				"mul": big(a.mul(b)), "cmp": a.cmp(b), "cmp_abs": a.cmp_abs(b), "neg": big(a.neg()),
@@ -278,10 +278,10 @@ func _bigfloat() -> Dictionary:
 			if not b.is_zero():
 				d["div"] = big(a.div(b))
 			out["%d/%02d" % [n, i]] = d
-		var inf := BigFloat.infinity(n)
+		var inf := GdBigFloat.infinity(n)
 		out["%d/inf" % n] = {"inf": big(inf), "is_inf": inf.is_inf(), "to_float": h64(inf.to_float()),
-			"cmp_one": inf.cmp(BigFloat.from_int(1, n)), "zero": big(BigFloat.zero(n)),
-			"from_int": big(BigFloat.from_int(-123456789, n)), "limbs_for_bits": BigFloat.limbs_for_bits(n * 28 - 3)}
+			"cmp_one": inf.cmp(GdBigFloat.from_int(1, n)), "zero": big(GdBigFloat.zero(n)),
+			"from_int": big(GdBigFloat.from_int(-123456789, n)), "limbs_for_bits": GdBigFloat.limbs_for_bits(n * 28 - 3)}
 	return out
 
 # ---------------------------------------------------------------- exact
@@ -311,7 +311,7 @@ func _exact() -> Dictionary:
 			cx = _dyadic(rng) + rng.randf()
 			cy = _dyadic(rng) + rng.randf()
 		var d := {"in": [h64(ax), h64(ay), h64(bx), h64(by), h64(cx), h64(cy)],
-			"orient_zero": Exact.orient_zero(ax, ay, bx, by, cx, cy)}
+			"orient_zero": GdExact.orient_zero(ax, ay, bx, by, cx, cy)}
 		# circle through (3,4,5) offsets: exactly on it, an ulp off it, random
 		var r: float = [5.0, 10.0, 2.5][i % 3]
 		var sc: float = r / 5.0
@@ -324,7 +324,7 @@ func _exact() -> Dictionary:
 		elif mode == 2:
 			kx += rng.randf()
 		d["on_circle_in"] = [h64(ax), h64(ay), h64(r), h64(kx), h64(ky)]
-		d["on_circle_zero"] = Exact.on_circle_zero(ax, ay, r, kx, ky)
+		d["on_circle_zero"] = GdExact.on_circle_zero(ax, ay, r, kx, ky)
 		# four points on that circle (cocircular), one perturbed or random
 		var p1 := Vector2(ax + 3 * sc, ay + 4 * sc)
 		var p2 := Vector2(ax - 4 * sc, ay + 3 * sc)
@@ -336,24 +336,24 @@ func _exact() -> Dictionary:
 		elif mode == 2:
 			p4x += rng.randf() * 3.0
 		d["incircle_in"] = [h64(p1.x), h64(p1.y), h64(p2.x), h64(p2.y), h64(p3.x), h64(p3.y), h64(p4x), h64(p4y)]
-		d["incircle_zero"] = Exact.incircle_zero(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, p4x, p4y)
+		d["incircle_zero"] = GdExact.incircle_zero(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, p4x, p4y)
 		# exact constructions
-		var L := Exact.line_through(ax, ay, bx, by)
+		var L := GdExact.line_through(ax, ay, bx, by)
 		d["line_through"] = num(L)
-		var Ld := Exact.line_from_dir(ax, ay, bx - ax, by - ay)
+		var Ld := GdExact.line_from_dir(ax, ay, bx - ax, by - ay)
 		d["line_from_dir"] = num(Ld)
-		var X := [Exact.of(cx), Exact.of(cy), Exact.of(1.0)]
-		d["reflect_point_h"] = num(Exact.reflect_point_h(X, ax, ay, bx, by))
-		var C := Exact.circumcenter_h(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
+		var X := [GdExact.of(cx), GdExact.of(cy), GdExact.of(1.0)]
+		d["reflect_point_h"] = num(GdExact.reflect_point_h(X, ax, ay, bx, by))
+		var C := GdExact.circumcenter_h(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y)
 		d["circumcenter_h"] = num(C)
-		var rw2 := Exact.of(r * r)
-		var inv = Exact.invert_point_h(X, [Exact.of(ax), Exact.of(ay), Exact.of(1.0)], rw2)
+		var rw2 := GdExact.of(r * r)
+		var inv = GdExact.invert_point_h(X, [GdExact.of(ax), GdExact.of(ay), GdExact.of(1.0)], rw2)
 		d["invert_point_h"] = num(inv)
-		d["on_line_h"] = Exact.on_line_h(L, X)
-		d["reflect_line"] = num(Exact.reflect_line(L, p1.x, p1.y, p2.x, p2.y))
-		d["line_through_h"] = num(Exact.line_through_h(bx, by, X))
-		d["tangent_zero"] = Exact.tangent_zero(L, [Exact.of(ax), Exact.of(ay), Exact.of(1.0)], rw2)
-		var line := Exact.Line.from_exact(L)
+		d["on_line_h"] = GdExact.on_line_h(L, X)
+		d["reflect_line"] = num(GdExact.reflect_line(L, p1.x, p1.y, p2.x, p2.y))
+		d["line_through_h"] = num(GdExact.line_through_h(bx, by, X))
+		d["tangent_zero"] = GdExact.tangent_zero(L, [GdExact.of(ax), GdExact.of(ay), GdExact.of(1.0)], rw2)
+		var line := GdExact.Line.from_exact(L)
 		d["contains_c"] = line.contains(cx, cy)
 		d["contains_b"] = line.contains(bx, by)
 		d["concurrent"] = line.concurrent(p1.x, p1.y, p2.x, p2.y, p3.x, p3.y, p4x, p4y)
@@ -401,10 +401,10 @@ func _beam() -> Dictionary:
 	rng.seed = 92
 	var defs := _beam_defs(rng)
 	out["defs"] = defs
-	var f64 := NumCtx.f64()
-	var big4 := NumCtx.with_limbs(4)
-	var sc_f := BeamScene.from_defs(f64, defs)
-	var sc_b := BeamScene.from_defs(big4, defs)
+	var f64 := GdNumCtx.f64()
+	var big4 := GdNumCtx.with_limbs(4)
+	var sc_f := GdBeamScene.from_defs(f64, defs)
+	var sc_b := GdBeamScene.from_defs(big4, defs)
 	for i in 200:
 		var px := f32(rng.randf_range(0, 1920))
 		var py := f32(rng.randf_range(0, 1080))
@@ -418,17 +418,17 @@ func _beam() -> Dictionary:
 		var zy := f32(rng.randf_range(0, 1080))
 		var dx := cos(ang + 0.7)
 		var dy := sin(ang + 0.7)
-		var b := FastSolver.beam(px, py, tx, ty, k)
-		var bs := FastSolver.seeded(b)
+		var b := GdFastSolver.beam(px, py, tx, ty, k)
+		var bs := GdFastSolver.seeded(b)
 		var d := {"in": [h64(px), h64(py), h64(tx), h64(ty), h64(k), h64(t), h64(dt), h64(zx), h64(zy), h64(dx), h64(dy)],
-			"fast_at": num(FastSolver.at(bs, t, dt)), "fast_at_view": num(FastSolver.at_view(b, t)),
-			"fast_tangent_at": num(FastSolver.tangent_at(bs, t, dt)), "fast_param_of": h64(FastSolver.param_of(b, zx, zy)),
-			"fast_antipode": num(FastSolver.antipode(b)) if k != 0.0 else "straight"}
+			"fast_at": num(GdFastSolver.at(bs, t, dt)), "fast_at_view": num(GdFastSolver.at_view(b, t)),
+			"fast_tangent_at": num(GdFastSolver.tangent_at(bs, t, dt)), "fast_param_of": h64(GdFastSolver.param_of(b, zx, zy)),
+			"fast_antipode": num(GdFastSolver.antipode(b)) if k != 0.0 else "straight"}
 		for ctx_name in ["f64", "big4"]:
-			var ctx: NumCtx = f64 if ctx_name == "f64" else big4
+			var ctx: GdNumCtx = f64 if ctx_name == "f64" else big4
 			if ctx_name == "big4" and i % 4 != 0:
 				continue
-			var hb := HPBeam.make(ctx.cn(px, py), ctx.cn(tx, ty), ctx.num(k))
+			var hb := GdHPBeam.make(ctx.cn(px, py), ctx.cn(tx, ty), ctx.num(k))
 			var tt = ctx.num(t)
 			d[ctx_name + "_at"] = cn(hb.at(tt))
 			d[ctx_name + "_tangent_at"] = cn(hb.tangent_at(tt))
@@ -437,34 +437,34 @@ func _beam() -> Dictionary:
 				d[ctx_name + "_at_infinity"] = cn(hb.at_infinity())
 		var per_surf := []
 		for si in sc_f.surfaces.size():
-			var s: BeamScene.Surf = sc_f.surfaces[si]
-			var sd := {"id": s.id, "fast_hits": num(FastSolver.surf_hits(bs, s, false)),
-				"fast_on_segment": FastSolver.on_segment(s, zx, zy), "fast_side_left": FastSolver.side_left(s, zx, zy, dx, dy),
-				"fast_endpoint_at": [FastSolver.endpoint_at(s, zx, zy), FastSolver.endpoint_at(s, s.sx, s.sy), FastSolver.endpoint_at(s, s.ex, s.ey)],
-				"fast_blocked_sides": str(FastSolver.blocked_sides(s, 1, dx, dy)) + str(FastSolver.blocked_sides(s, 2, dx, dy)),
-				"fast_apply": num(FastSolver.apply_surf(bs, t, dt, s))}
-			var hits := FastSolver.surf_hits(bs, s, false)
+			var s: GdBeamScene.Surf = sc_f.surfaces[si]
+			var sd := {"id": s.id, "fast_hits": num(GdFastSolver.surf_hits(bs, s, false)),
+				"fast_on_segment": GdFastSolver.on_segment(s, zx, zy), "fast_side_left": GdFastSolver.side_left(s, zx, zy, dx, dy),
+				"fast_endpoint_at": [GdFastSolver.endpoint_at(s, zx, zy), GdFastSolver.endpoint_at(s, s.sx, s.sy), GdFastSolver.endpoint_at(s, s.ex, s.ey)],
+				"fast_blocked_sides": str(GdFastSolver.blocked_sides(s, 1, dx, dy)) + str(GdFastSolver.blocked_sides(s, 2, dx, dy)),
+				"fast_apply": num(GdFastSolver.apply_surf(bs, t, dt, s))}
+			var hits := GdFastSolver.surf_hits(bs, s, false)
 			if hits.size() >= 2:
-				sd["fast_apply_at_root"] = num(FastSolver.apply_surf(bs, hits[0], hits[1], s))
+				sd["fast_apply_at_root"] = num(GdFastSolver.apply_surf(bs, hits[0], hits[1], s))
 			for ctx_name in ["f64", "big4"]:
-				var ctx: NumCtx = f64 if ctx_name == "f64" else big4
+				var ctx: GdNumCtx = f64 if ctx_name == "f64" else big4
 				if ctx_name == "big4" and i % 4 != 0:
 					continue
-				var scx: BeamScene = sc_f if ctx_name == "f64" else sc_b
-				var sx: BeamScene.Surf = scx.surfaces[si]
-				var hb := HPBeam.make(ctx.cn(px, py), ctx.cn(tx, ty), ctx.num(k))
+				var scx: GdBeamScene = sc_f if ctx_name == "f64" else sc_b
+				var sx: GdBeamScene.Surf = scx.surfaces[si]
+				var hb := GdHPBeam.make(ctx.cn(px, py), ctx.cn(tx, ty), ctx.num(k))
 				var z := ctx.cn(zx, zy)
 				var dir := ctx.cn(dx, dy)
-				var roots: Array = BeamGeom.hits(hb, sx.seg, false)
+				var roots: Array = GdBeamGeom.hits(hb, sx.seg, false)
 				sd[ctx_name + "_hits"] = num(roots)
-				sd[ctx_name + "_on_segment"] = BeamGeom.on_segment(sx.seg, z)
-				sd[ctx_name + "_side_left"] = BeamGeom.side_left(sx.seg, z, dir)
-				sd[ctx_name + "_endpoint_at"] = BeamGeom.endpoint_at(sx.seg, z)
-				sd[ctx_name + "_blocked_sides"] = str(BeamGeom.blocked_sides(sx.seg, 1, dir))
-				var ap := BeamEffects.apply(hb, ctx.num(t), sx, sx.effect(true))
+				sd[ctx_name + "_on_segment"] = GdBeamGeom.on_segment(sx.seg, z)
+				sd[ctx_name + "_side_left"] = GdBeamGeom.side_left(sx.seg, z, dir)
+				sd[ctx_name + "_endpoint_at"] = GdBeamGeom.endpoint_at(sx.seg, z)
+				sd[ctx_name + "_blocked_sides"] = str(GdBeamGeom.blocked_sides(sx.seg, 1, dir))
+				var ap := GdBeamEffects.apply(hb, ctx.num(t), sx, sx.effect(true))
 				sd[ctx_name + "_apply"] = cn(ap.p) + ";" + cn(ap.tau) + ";" + num(ap.kappa)
 				if roots.size() >= 1:
-					var ar := BeamEffects.apply(hb, roots[0], sx, sx.effect(true))
+					var ar := GdBeamEffects.apply(hb, roots[0], sx, sx.effect(true))
 					sd[ctx_name + "_apply_at_root"] = cn(ar.p) + ";" + cn(ar.tau) + ";" + num(ar.kappa)
 			per_surf.append(sd)
 		d["surfaces"] = per_surf
@@ -477,37 +477,37 @@ static func plan_of(j: Array) -> Array:
 	var out: Array = []
 	for e in j:
 		var c = e.get("click")
-		out.append(BeamSolver.PlanItem.make(int(e["surface_id"]), e["side"] == "LEFT",
+		out.append(GdBeamSolver.PlanItem.make(int(e["surface_id"]), e["side"] == "LEFT",
 			null if c == null else Vector2(c[0], c[1])))
 	return out
 
-func _walk_generic(fx: Dictionary, ctx: NumCtx) -> Array:
-	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
+func _walk_generic(fx: Dictionary, ctx: GdNumCtx) -> Array:
+	var scene := GdBeamScene.from_defs(ctx, fx["surfaces"])
 	var player := ctx.cn(fx["player"][0], fx["player"][1])
 	var cursor = null if fx["cursor"] == null else ctx.cn(fx["cursor"][0], fx["cursor"][1])
-	var mode: int = BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED
+	var mode: int = GdBeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else GdBeamSolver.Mode.PLANNED
 	var plan := plan_of(fx["plan"])
 	var flags: Dictionary = fx.get("flags", {})
 	if fx["direction"] != null:
-		return BeamSolver.trace_direction(ctx, scene, player, ctx.cn(fx["direction"][0], fx["direction"][1]), plan, cursor, mode,
-			BeamSolver.MAX_HITS, flags)
-	if mode == BeamSolver.Mode.PLANNED:
-		return BeamSolver.planned(ctx, scene, player, cursor, plan, BeamSolver.MAX_HITS, flags)
-	return BeamSolver.physical(ctx, scene, player, cursor, plan, BeamSolver.MAX_HITS, flags)
+		return GdBeamSolver.trace_direction(ctx, scene, player, ctx.cn(fx["direction"][0], fx["direction"][1]), plan, cursor, mode,
+			GdBeamSolver.MAX_HITS, flags)
+	if mode == GdBeamSolver.Mode.PLANNED:
+		return GdBeamSolver.planned(ctx, scene, player, cursor, plan, GdBeamSolver.MAX_HITS, flags)
+	return GdBeamSolver.physical(ctx, scene, player, cursor, plan, GdBeamSolver.MAX_HITS, flags)
 
-func _walk_fast(fx: Dictionary) -> FastSolver.Out:
-	var sc := FastSolver.Scene.from_defs(fx["surfaces"])
+func _walk_fast(fx: Dictionary) -> GdFastSolver.Out:
+	var sc := GdFastSolver.Scene.from_defs(fx["surfaces"])
 	var player := PackedFloat64Array([fx["player"][0], fx["player"][1]])
 	var cursor = null if fx["cursor"] == null else PackedFloat64Array([fx["cursor"][0], fx["cursor"][1]])
-	var mode: int = BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED
+	var mode: int = GdBeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else GdBeamSolver.Mode.PLANNED
 	var plan := plan_of(fx["plan"])
 	var flags: Dictionary = fx.get("flags", {})
 	if fx["direction"] != null:
-		return FastSolver.trace_direction(sc, player, PackedFloat64Array([fx["direction"][0], fx["direction"][1]]), plan, cursor, mode,
-			BeamSolver.MAX_HITS, flags)
-	if mode == BeamSolver.Mode.PLANNED:
-		return FastSolver.planned(sc, player, cursor, plan, BeamSolver.MAX_HITS, flags)
-	return FastSolver.physical(sc, player, cursor, plan, BeamSolver.MAX_HITS, flags)
+		return GdFastSolver.trace_direction(sc, player, PackedFloat64Array([fx["direction"][0], fx["direction"][1]]), plan, cursor, mode,
+			GdBeamSolver.MAX_HITS, flags)
+	if mode == GdBeamSolver.Mode.PLANNED:
+		return GdFastSolver.planned(sc, player, cursor, plan, GdBeamSolver.MAX_HITS, flags)
+	return GdFastSolver.physical(sc, player, cursor, plan, GdBeamSolver.MAX_HITS, flags)
 
 func _fixtures() -> Dictionary:
 	var out := {}
@@ -523,8 +523,8 @@ func _fixtures() -> Dictionary:
 				clicks.append(null if c == null else [h64(float(c[0])), h64(float(c[1]))])
 			var inputs := inputs_of(fx["surfaces"], {"player": fx["player"], "cursor": fx["cursor"], "direction": fx["direction"]})
 			inputs["clicks"] = clicks
-			out[key] = {"inputs": inputs, "f64": events(_walk_generic(fx, NumCtx.f64())), "fast": events(fast.events, fast.gain),
-				"big4": events(_walk_generic(fx, NumCtx.with_limbs(4)))}
+			out[key] = {"inputs": inputs, "f64": events(_walk_generic(fx, GdNumCtx.f64())), "fast": events(fast.events, fast.gain),
+				"big4": events(_walk_generic(fx, GdNumCtx.with_limbs(4)))}
 	return out
 
 # ---------------------------------------------------------------- corpora
@@ -539,12 +539,12 @@ func _corpus() -> Dictionary:
 			var player := PackedFloat64Array([float(scn["player"][0]), float(scn["player"][1])])
 			var cursor := PackedFloat64Array([float(scn["cursor"][0]), float(scn["cursor"][1])])
 			var plan := PrecisionBench.plan_items(scn)
-			var fsc := FastSolver.Scene.from_defs(defs)
-			var fp := FastSolver.planned(fsc, player, cursor, plan)
-			var fh := FastSolver.physical(fsc, player, cursor, plan)
-			var r := PrecisionLadder.solve(defs, [player[0], player[1]], [cursor[0], cursor[1]], plan, 32, 32, 0.01, false, fsc)
-			var big4 := NumCtx.with_limbs(4)
-			var scb := BeamScene.from_defs(big4, defs)
+			var fsc := GdFastSolver.Scene.from_defs(defs)
+			var fp := GdFastSolver.planned(fsc, player, cursor, plan)
+			var fh := GdFastSolver.physical(fsc, player, cursor, plan)
+			var r := GdPrecisionLadder.solve(defs, [player[0], player[1]], [cursor[0], cursor[1]], plan, 32, 32, 0.01, false, fsc)
+			var big4 := GdNumCtx.with_limbs(4)
+			var scb := GdBeamScene.from_defs(big4, defs)
 			var pb := big4.cn(player[0], player[1])
 			var cb := big4.cn(cursor[0], cursor[1])
 			out["%s/%s" % [sub if sub != "" else "main", name]] = {
@@ -553,15 +553,15 @@ func _corpus() -> Dictionary:
 				"ladder": {"planned": events(r.planned), "planned_err": num(r.planned_err), "planned_tier": r.planned_tier,
 					"physical": events(r.physical), "physical_err": num(r.physical_err), "physical_tier": r.physical_tier,
 					"converged": r.converged, "tiers_tried": r.tiers_tried, "planned_from_physical": r.planned_from_physical},
-				"big4_planned": events(BeamSolver.planned(big4, scb, pb, cb, plan)),
-				"big4_physical": events(BeamSolver.physical(big4, scb, pb, cb, plan)),
+				"big4_planned": events(GdBeamSolver.planned(big4, scb, pb, cb, plan)),
+				"big4_physical": events(GdBeamSolver.physical(big4, scb, pb, cb, plan)),
 			}
 	PrecisionBench.use_corpus("")
 	return out
 
 # ---------------------------------------------------------------- anchored chains
 
-static func beam_str(b: HPBeam) -> String:
+static func beam_str(b: GdHPBeam) -> String:
 	return "%s;%s;%s" % [cn(b.p), cn(b.tau), num(b.kappa)]
 
 # The anchored chain (B_0..B_K) of every main corpus scenario at f64 and 4
@@ -576,11 +576,11 @@ func _chain() -> Dictionary:
 		var d := {"inputs": inputs_of(defs, {"player": [float(scn["player"][0]), float(scn["player"][1])],
 			"cursor": [float(scn["cursor"][0]), float(scn["cursor"][1])]})}
 		for ctx_name in ["f64", "big4"]:
-			var ctx: NumCtx = NumCtx.f64() if ctx_name == "f64" else NumCtx.with_limbs(4)
-			var scene := BeamScene.from_defs(ctx, defs)
+			var ctx: GdNumCtx = GdNumCtx.f64() if ctx_name == "f64" else GdNumCtx.with_limbs(4)
+			var scene := GdBeamScene.from_defs(ctx, defs)
 			var player := ctx.cn(float(scn["player"][0]), float(scn["player"][1]))
 			var cursor := ctx.cn(float(scn["cursor"][0]), float(scn["cursor"][1]))
-			var chain := BeamSolver.AnchorChain.build(scene, player, cursor, plan, {})
+			var chain := GdBeamSolver.AnchorChain.build(scene, player, cursor, plan, {})
 			if chain == null:
 				d[ctx_name] = null
 				continue
@@ -597,14 +597,14 @@ func _chain() -> Dictionary:
 			var X = cursor
 			var images := []
 			for j in range(plan.size() - 1, -1, -1):
-				X = BeamEffects.map_point(X, scene.by_id[plan[j].surface_id], true)
+				X = GdBeamEffects.map_point(X, scene.by_id[plan[j].surface_id], true)
 				images.append("null" if X == null else cn(X))
 				if X == null:
 					break
 			var pole: Array = [player, null, null]
 			var poles := []
 			for j in plan.size():
-				pole = BeamEffects.map_pole(pole, scene.by_id[plan[j].surface_id])
+				pole = GdBeamEffects.map_pole(pole, scene.by_id[plan[j].surface_id])
 				poles.append("%s|%s|%s" % ["null" if pole[0] == null else cn(pole[0]), "null" if pole[1] == null else cn(pole[1]),
 					"null" if pole[2] == null else cn(pole[2])])
 				if pole[0] == null:
@@ -618,7 +618,7 @@ func _chain() -> Dictionary:
 func _instantiate(path: String) -> Node:
 	printerr("[goldens] sweeps: loading %s" % path)
 	Surface.reset_id_counter()
-	BeamTracer.clear_cache()
+	GdBeamTracer.clear_cache()
 	var scene: Node = load(path).instantiate()
 	scene.gravity = Vector2.ZERO
 	root.add_child(scene)
@@ -641,7 +641,7 @@ static func h32(x: float) -> String:
 # the plan, so a native tracer can reproduce every combo.
 func _sweep_group(out: Dictionary, key: String, scene: Node, positions: Array, plans: Array, skip_equal: bool) -> void:
 	var flags: Dictionary = {}
-	var defs: Array = BeamScene.defs_from_surfaces(scene.surfaces)
+	var defs: Array = GdBeamScene.defs_from_surfaces(scene.surfaces)
 	var pos_hex := []
 	for p in positions:
 		pos_hex.append([h32(p.x), h32(p.y)])
@@ -660,7 +660,7 @@ func _sweep_group(out: Dictionary, key: String, scene: Node, positions: Array, p
 				idx += 1
 				if i % _stride != 0:
 					continue
-				var pair := BeamTracer.trace_pair(scene.surfaces, p, c, plan, flags)
+				var pair := GdBeamTracer.trace_pair(scene.surfaces, p, c, plan, flags)
 				var canon := pair_canon(pair)
 				hashes.append(sha16(canon))
 				if i == 0 or i == 977:
@@ -717,7 +717,7 @@ func _sweeps() -> Dictionary:
 	# test_sweep_surface_combos
 	for combo in SweepPlans.combo_configs():
 		var scene := SweepPlans.build_combo_scene(combo)
-		BeamTracer.clear_cache()
+		GdBeamTracer.clear_cache()
 		root.add_child(scene)
 		await process_frame
 		var runner := SweepPlans.bounded_runner(scene, 5, 10, 42)

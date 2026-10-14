@@ -16,7 +16,7 @@ static func config_color(config: SideConfig) -> Color:
 		return PASSTHROUGH_COLOR
 	if config.effect == null:
 		if config.state_change != null:
-			return GHOST_TOGGLER_COLOR if config.state_change.key == BeamScene.GHOST else FLAG_TOGGLER_COLOR
+			return GHOST_TOGGLER_COLOR if config.state_change.key == BeamScene.GHOST() else FLAG_TOGGLER_COLOR
 		return PASSTHROUGH_COLOR
 	return config.effect.get_display_color()
 

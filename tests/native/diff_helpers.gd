@@ -20,15 +20,15 @@ static func hex(f: float) -> String:
 	return b.hex_encode()
 
 
-## GDScript scalar (F64Num / DualNum / BigFloat / null) vs NNum (or null).
+## GDScript scalar (GdF64Num / GdDualNum / GdBigFloat / null) vs Num (or null).
 static func num_diff(a, b, label: String) -> String:
 	if a == null or b == null:
 		return "" if a == null and b == null else "%s: %s vs %s" % [label, a, b]
-	if a is BigFloat:
+	if a is GdBigFloat:
 		if a.sign != b.sign or a.exp != b.exp or a.limbs != b.get_limbs():
 			return "%s: bigfloat (%d, %d, %s) vs (%d, %d, %s)" % [label, a.sign, a.exp, a.limbs, b.sign, b.exp, b.get_limbs()]
 		return ""
-	if a is DualNum:
+	if a is GdDualNum:
 		if not same_float(a.v, b.v) or not same_float(a.d, b.d):
 			return "%s: dual (%s, %s) vs (%s, %s)" % [label, hex(a.v), hex(a.d), hex(b.v), hex(b.d)]
 		return ""
@@ -37,7 +37,7 @@ static func num_diff(a, b, label: String) -> String:
 	return ""
 
 
-## CN vs NCN.
+## GdCN vs CN.
 static func cn_diff(a, b, label: String) -> String:
 	if a == null or b == null:
 		return "" if a == null and b == null else "%s: %s vs %s" % [label, a, b]
@@ -47,7 +47,7 @@ static func cn_diff(a, b, label: String) -> String:
 	return num_diff(a.im, b.im, label + ".im")
 
 
-## HPBeam vs NHPBeam.
+## GdHPBeam vs HPBeam.
 static func beam_diff(a, b, label: String) -> String:
 	if a == null or b == null:
 		return "" if a == null and b == null else "%s: %s vs %s" % [label, a, b]
@@ -64,7 +64,7 @@ const EVENT_FIELDS := ["kind", "surface_id", "left", "applied", "terminal", "on_
 	"popped", "teleport", "projective", "epoch", "seeded", "state", "anchored"]
 
 
-## BeamSolver.Event vs NBeamSolverEvent.
+## GdBeamSolver.Event vs BeamSolverEvent.
 static func event_diff(a, b, label: String) -> String:
 	for f in EVENT_FIELDS:
 		if a.get(f) != b.get(f):
@@ -137,7 +137,7 @@ static func same_vec(a: Vector2, b: Vector2) -> bool:
 	return bits32(a) == bits32(b)
 
 
-## TraceStep vs NTraceStep. The native hit carries the surface id where the
+## GdTraceStep vs TraceStep. The native hit carries the surface id where the
 ## GDScript hit carries the surface's Segment.
 static func step_diff(a, b, label: String) -> String:
 	for f in ["start", "end", "via"]:
@@ -153,7 +153,7 @@ static func step_diff(a, b, label: String) -> String:
 	if a.hit != null:
 		if not same_float(a.hit.t, b.hit.t):
 			return "%s.hit.t: %s vs %s" % [label, hex(a.hit.t), hex(b.hit.t)]
-		if not same_vec(a.hit.point.coords, b.hit.point):
+		if not same_vec(a.hit.point.coords, b.hit.point.coords):
 			return "%s.hit.point: %s vs %s" % [label, a.hit.point.coords, b.hit.point]
 		var sid: int = -1 if a.hit.segment == null else a.surface_id
 		if sid != b.hit.surface_id:
@@ -163,14 +163,14 @@ static func step_diff(a, b, label: String) -> String:
 	if (a.ray == null) != (b.ray == null):
 		return "%s.ray: %s vs %s" % [label, a.ray, b.ray]
 	if a.ray != null:
-		if not same_vec(a.ray.origin.coords, b.ray.origin):
+		if not same_vec(a.ray.origin.coords, b.ray.origin.coords):
 			return "%s.ray.origin: %s vs %s" % [label, a.ray.origin.coords, b.ray.origin]
-		if not same_vec(a.ray.direction.start.coords, b.ray.direction.start) or not same_vec(a.ray.direction.end.coords, b.ray.direction.end):
+		if not same_vec(a.ray.direction.start.coords, b.ray.direction.start.coords) or not same_vec(a.ray.direction.end.coords, b.ray.direction.end.coords):
 			return "%s.ray.direction differs" % label
 	return ""
 
 
-## TracePath vs NTracePath.
+## GdTracePath vs TracePath.
 static func path_diff(a, b, label: String) -> String:
 	if a == null or b == null:
 		return "" if a == null and b == null else "%s: %s vs %s" % [label, a, b]
@@ -191,7 +191,7 @@ static func path_diff(a, b, label: String) -> String:
 	return ""
 
 
-## ErrorEstimate.Sensitivity vs NErrorEstimateSensitivity. The native
+## GdErrorEstimate.Sensitivity vs ErrorEstimateSensitivity. The native
 ## sensitivity of a ladder result keeps its float64 events only when tier 0
 ## was accepted, so events compare only when the native side has them.
 static func sens_diff(a, b, label: String) -> String:
@@ -209,7 +209,7 @@ static func sens_diff(a, b, label: String) -> String:
 	return ""
 
 
-## PrecisionLadder.Result vs NPrecisionLadderResult (the usec fields are timing).
+## GdPrecisionLadder.Result vs PrecisionLadderResult (the usec fields are timing).
 static func result_diff(a, b, label: String) -> String:
 	if a == null or b == null:
 		return "" if a == null and b == null else "%s: %s vs %s" % [label, a, b]
@@ -228,7 +228,7 @@ static func result_diff(a, b, label: String) -> String:
 	return r
 
 
-## BeamTracer.Pair vs NBeamTracerPair.
+## GdBeamTracer.Pair vs BeamTracerPair.
 static func pair_diff(a, b, label: String) -> String:
 	if a == null or b == null:
 		return "" if a == null and b == null else "%s: %s vs %s" % [label, a, b]

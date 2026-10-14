@@ -1,16 +1,16 @@
-class_name PrecisionLadder
+class_name GdPrecisionLadder
 extends RefCounted
 
-# Dynamic-precision driver for BeamSolver.
+# Dynamic-precision driver for GdBeamSolver.
 #
-# 1. One float64 pass over DualNum yields the float64 trace AND its a-priori
-#    accumulated-error estimate (ErrorEstimate: tangent-linear envelope; the
+# 1. One float64 pass over GdDualNum yields the float64 trace AND its a-priori
+#    accumulated-error estimate (GdErrorEstimate: tangent-linear envelope; the
 #    value parts are bit-identical to plain float64), plus a reliability flag:
 #    every ordering/root decision's margin must exceed its error estimate,
 #    otherwise the float64 trajectory may be on a different branch and its
 #    gains do not describe the true one.
 # 2. float64 is accepted when the estimate is <= tol and the trace is reliable.
-# 3. Otherwise BigFloat: start at the tier the estimate asks for (at least
+# 3. Otherwise GdBigFloat: start at the tier the estimate asks for (at least
 #    112 bits) and climb until two consecutive tiers agree within tol with
 #    identical event structure (a-posteriori convergence). The higher tier is
 #    returned; its estimated error is the measured gap scaled by eps ratio.
@@ -30,7 +30,7 @@ class Result extends RefCounted:
 	var usec: int = 0
 	var usec_planned: int = 0
 	var usec_physical: int = 0
-	var physical_sens: ErrorEstimate.Sensitivity = null   # float64 tangent-linear gains of the physical pass
+	var physical_sens: GdErrorEstimate.Sensitivity = null   # float64 tangent-linear gains of the physical pass
 	var planned_from_physical: bool = false
 
 class Climb extends RefCounted:
@@ -40,18 +40,18 @@ class Climb extends RefCounted:
 	var converged: bool = false
 	var tried: Array = []
 
-# defs: scene defs (BeamScene). player / cursor: [x, y] float64 (Vector2 would
+# defs: scene defs (GdBeamScene). player / cursor: [x, y] float64 (Vector2 would
 # round them to float32). max_planned / max_physical: event limits (MAX_HITS).
 # Degenerate inputs (no anchored construction) return an empty Result.
-# fsc: the float64 scene of defs (FastSolver.Scene.from_defs), if cached.
+# fsc: the float64 scene of defs (GdFastSolver.Scene.from_defs), if cached.
 # flags: the trace's initial state flags (the game state's).
 static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
-		max_planned: int, max_physical: int, tol: float, verify: bool = false, fsc: FastSolver.Scene = null,
+		max_planned: int, max_physical: int, tol: float, verify: bool = false, fsc: GdFastSolver.Scene = null,
 		flags: Dictionary = {}) -> Result:
 	var t0 := Time.get_ticks_usec()
 	var r := Result.new()
 	if fsc == null:
-		fsc = FastSolver.Scene.from_defs(defs)
+		fsc = GdFastSolver.Scene.from_defs(defs)
 	# ---- physical
 	var cp := _solve_physical(r, defs, player, cursor, plan, max_physical, tol, verify, fsc, flags)
 	var t1 := Time.get_ticks_usec()
@@ -74,11 +74,11 @@ static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
 		r.planned_from_physical = true
 		r.usec = Time.get_ticks_usec() - t0
 		return r
-	var sq := ErrorEstimate.planned_sensitivity(defs, player, cursor, plan, max_planned, fsc, flags)
+	var sq := GdErrorEstimate.planned_sensitivity(defs, player, cursor, plan, max_planned, fsc, flags)
 	if sq.events.is_empty():
 		r.physical = []
 		return r
-	var est_q := ErrorEstimate.estimate(sq, NumCtx.f64().eps())
+	var est_q := GdErrorEstimate.estimate(sq, GdNumCtx.f64().eps())
 	var res_q := planned_residuals(sq.events, fsc.scene)
 	for i in est_q.size():
 		est_q[i] = maxf(est_q[i], res_q[i])
@@ -92,8 +92,8 @@ static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
 		r.planned_tier = cp.limbs
 	else:
 		var planned_fn := func(limbs: int) -> Array:
-			var ctx := NumCtx.with_limbs(limbs)
-			return BeamSolver.planned(ctx, BeamScene.from_defs(ctx, defs),
+			var ctx := GdNumCtx.with_limbs(limbs)
+			return GdBeamSolver.planned(ctx, GdBeamScene.from_defs(ctx, defs),
 				ctx.cn(player[0], player[1]), ctx.cn(cursor[0], cursor[1]), plan, max_planned, flags)
 		var cq := _decide(sq, est_q, tol, verify, planned_fn, defs, fsc)
 		r.planned = cq.events
@@ -106,20 +106,20 @@ static func solve(defs: Array, player: Array, cursor: Array, plan: Array,
 # The physical trace alone (no planned pass): physical, physical_err,
 # physical_tier, converged, tiers_tried and physical_sens of the Result.
 static func solve_physical(defs: Array, player: Array, cursor: Array, plan: Array,
-		max_physical: int, tol: float, fsc: FastSolver.Scene = null, flags: Dictionary = {}) -> Result:
+		max_physical: int, tol: float, fsc: GdFastSolver.Scene = null, flags: Dictionary = {}) -> Result:
 	var t0 := Time.get_ticks_usec()
 	var r := Result.new()
 	if fsc == null:
-		fsc = FastSolver.Scene.from_defs(defs)
+		fsc = GdFastSolver.Scene.from_defs(defs)
 	_solve_physical(r, defs, player, cursor, plan, max_physical, tol, false, fsc, flags)
 	r.usec_physical = Time.get_ticks_usec() - t0
 	r.usec = r.usec_physical
 	return r
 
 static func _solve_physical(r: Result, defs: Array, player: Array, cursor: Array, plan: Array,
-		max_physical: int, tol: float, verify: bool, fsc: FastSolver.Scene, flags: Dictionary = {}) -> Climb:
-	var sp := ErrorEstimate.physical_sensitivity(defs, player, cursor, plan, max_physical, fsc, flags)
-	var est_p := ErrorEstimate.estimate(sp, NumCtx.f64().eps())
+		max_physical: int, tol: float, verify: bool, fsc: GdFastSolver.Scene, flags: Dictionary = {}) -> Climb:
+	var sp := GdErrorEstimate.physical_sensitivity(defs, player, cursor, plan, max_physical, fsc, flags)
+	var est_p := GdErrorEstimate.estimate(sp, GdNumCtx.f64().eps())
 	var physical_fn := func(limbs: int) -> Array:
 		return _physical_at(limbs, defs, player, cursor, plan, max_physical, flags)
 	var cp := _decide(sp, est_p, tol, verify, physical_fn, defs, fsc)
@@ -142,14 +142,14 @@ static func _same_structure(a: Array, b: Array, n: int) -> bool:
 	if a.size() < n or b.size() < n:
 		return false
 	for i in n:
-		var x: BeamSolver.Event = a[i]
-		var y: BeamSolver.Event = b[i]
+		var x: GdBeamSolver.Event = a[i]
+		var y: GdBeamSolver.Event = b[i]
 		if x.kind != y.kind or x.surface_id != y.surface_id or x.left != y.left or x.applied != y.applied or x.state != y.state:
 			return false
 	return true
 
-static func _decide(sens: ErrorEstimate.Sensitivity, est: Array, tol: float, verify: bool, compute: Callable,
-		defs: Array = [], fsc: FastSolver.Scene = null) -> Climb:
+static func _decide(sens: GdErrorEstimate.Sensitivity, est: Array, tol: float, verify: bool, compute: Callable,
+		defs: Array = [], fsc: GdFastSolver.Scene = null) -> Climb:
 	var reliable := sens.unreliable_from < 0 and not sens.events.is_empty()
 	if reliable and _worst(est) <= tol and not verify:
 		var c := Climb.new()
@@ -167,17 +167,17 @@ static func _decide(sens: ErrorEstimate.Sensitivity, est: Array, tol: float, ver
 		return climb(start_limbs if start_events.is_empty() else 0, start_events, tol, compute)
 	return replay_climb(start_limbs, tol, compute, defs, fsc)
 
-static func _required_for_prefix(sens: ErrorEstimate.Sensitivity, n: int, tol: float) -> int:
-	var prefix := ErrorEstimate.Sensitivity.new()
+static func _required_for_prefix(sens: GdErrorEstimate.Sensitivity, n: int, tol: float) -> int:
+	var prefix := GdErrorEstimate.Sensitivity.new()
 	prefix.gain = sens.gain.slice(0, n)
 	for g in prefix.gain:
 		prefix.max_gain = maxf(prefix.max_gain, g)
-	return ErrorEstimate.required_limbs(prefix, tol, TIERS.slice(1))
+	return GdErrorEstimate.required_limbs(prefix, tol, TIERS.slice(1))
 
 # Compute at `limbs`, re-estimate along that (high-precision) trajectory with
-# ErrorEstimate.replay, accept when the estimate meets tol and every decision
+# GdErrorEstimate.replay, accept when the estimate meets tol and every decision
 # is reliable at that tier; otherwise jump to the tier the replay asks for.
-static func replay_climb(limbs: int, tol: float, compute: Callable, defs: Array, fsc: FastSolver.Scene = null) -> Climb:
+static func replay_climb(limbs: int, tol: float, compute: Callable, defs: Array, fsc: GdFastSolver.Scene = null) -> Climb:
 	var c := Climb.new()
 	var ti := TIERS.find(limbs)
 	while ti < TIERS.size():
@@ -186,10 +186,10 @@ static func replay_climb(limbs: int, tol: float, compute: Callable, defs: Array,
 		c.tried.append(L)
 		c.events = ev
 		c.limbs = L
-		var eps := NumCtx.with_limbs(L).eps()
-		var rs := ErrorEstimate.replay(ev, defs, fsc)
-		c.err = ErrorEstimate.estimate(rs, eps)
-		var bad := ErrorEstimate.unreliable_index(rs, eps)
+		var eps := GdNumCtx.with_limbs(L).eps()
+		var rs := GdErrorEstimate.replay(ev, defs, fsc)
+		c.err = GdErrorEstimate.estimate(rs, eps)
+		var bad := GdErrorEstimate.unreliable_index(rs, eps)
 		if bad < 0 and _worst(c.err) <= tol and not ev.is_empty():
 			c.converged = true
 			return c
@@ -214,7 +214,7 @@ static func climb(limbs: int, first_events: Array, tol: float, compute: Callable
 		var d := event_distance(prev, ev)
 		c.events = ev
 		c.limbs = nxt
-		var ratio: float = NumCtx.with_limbs(nxt).eps() / NumCtx.with_limbs(TIERS[ti]).eps()
+		var ratio: float = GdNumCtx.with_limbs(nxt).eps() / GdNumCtx.with_limbs(TIERS[ti]).eps()
 		c.err = d.map(func(x): return x * ratio)
 		if _worst(d) <= tol and not ev.is_empty():
 			c.converged = true
@@ -225,8 +225,8 @@ static func climb(limbs: int, first_events: Array, tol: float, compute: Callable
 
 static func _physical_at(limbs: int, defs: Array, player: Array, cursor: Array, plan: Array, max_physical: int,
 		flags: Dictionary = {}) -> Array:
-	var ctx := NumCtx.with_limbs(limbs)
-	return BeamSolver.physical(ctx, BeamScene.from_defs(ctx, defs),
+	var ctx := GdNumCtx.with_limbs(limbs)
+	return GdBeamSolver.physical(ctx, GdBeamScene.from_defs(ctx, defs),
 		ctx.cn(player[0], player[1]), ctx.cn(cursor[0], cursor[1]), plan, max_physical, flags)
 
 static func _worst(a: Array) -> float:
@@ -245,8 +245,8 @@ static func event_distance(a: Array, b: Array) -> Array:
 			out.append(INF)
 			broken = true
 			continue
-		var ea: BeamSolver.Event = a[i]
-		var eb: BeamSolver.Event = b[i]
+		var ea: GdBeamSolver.Event = a[i]
+		var eb: GdBeamSolver.Event = b[i]
 		if ea.kind != eb.kind or ea.surface_id != eb.surface_id or ea.left != eb.left or ea.applied != eb.applied:
 			out.append(INF)
 			broken = true
@@ -263,14 +263,14 @@ static func event_distance(a: Array, b: Array) -> Array:
 # point must lie on its surface's carrier and, for applied non-portal hits, on
 # the next beam (constructed independently). Inconsistency ~ error, since nothing
 # propagates. float64 only.
-static func planned_residuals(events: Array, scene: BeamScene) -> Array:
+static func planned_residuals(events: Array, scene: GdBeamScene) -> Array:
 	var out: Array = []
-	var floor_err := NumCtx.f64().eps() * ErrorEstimate.SCALE * 4.0
+	var floor_err := GdNumCtx.f64().eps() * GdErrorEstimate.SCALE * 4.0
 	for i in events.size():
-		var e: BeamSolver.Event = events[i]
+		var e: GdBeamSolver.Event = events[i]
 		var res := 0.0
 		if e.point != null and e.kind == "hit":
-			var s: BeamScene.Surf = scene.by_id[e.surface_id]
+			var s: GdBeamScene.Surf = scene.by_id[e.surface_id]
 			var x := e.point.fx()
 			var y := e.point.fy()
 			if s.line:
@@ -281,13 +281,13 @@ static func planned_residuals(events: Array, scene: BeamScene) -> Array:
 				res = absf(sqrt((x - s.cx) * (x - s.cx) + (y - s.cy) * (y - s.cy)) - s.r)
 			# (a portal's next beam starts at T(point), elsewhere: no shared point)
 			if e.applied and not e.terminal and not e.teleport and i + 1 < events.size():
-				var nx: BeamSolver.Event = events[i + 1]
+				var nx: GdBeamSolver.Event = events[i + 1]
 				if nx.raw != null:
 					var rb: PackedFloat64Array = nx.raw
-					var q := FastSolver.at(rb, FastSolver.param_of(rb, x, y), 0.0)
+					var q := GdFastSolver.at(rb, GdFastSolver.param_of(rb, x, y), 0.0)
 					res = maxf(res, sqrt((q[0] - x) * (q[0] - x) + (q[1] - y) * (q[1] - y)))
 				else:
-					var nb: HPBeam = nx.beam
+					var nb: GdHPBeam = nx.beam
 					var qq := nb.at(nb.param_of(e.point))
 					res = maxf(res, qq.sub(e.point).abs_val().to_float())
 		out.append(maxf(res * 4.0, floor_err))

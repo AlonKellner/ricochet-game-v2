@@ -1,5 +1,5 @@
 extends GutTest
-## Stage 96 differential test: NBeamTracer against BeamTracer on the sweep
+## Stage 96 differential test: BeamTracer against GdBeamTracer on the sweep
 ## scenes, positions and plans (SweepPlans), every DIFF_STRIDE-th combo
 ## (default 97; DIFF_STRIDE=1 is the full sweep, minutes). Planned and
 ## physical TracePaths, the ladder result and the final flags must be
@@ -20,7 +20,7 @@ func before_all() -> void:
 
 func _instantiate(path: String) -> Node:
 	Surface.reset_id_counter()
-	BeamTracer.clear_cache()
+	GdBeamTracer.clear_cache()
 	var scene: Node = load(path).instantiate()
 	scene.gravity = Vector2.ZERO
 	add_child_autofree(scene)
@@ -28,8 +28,8 @@ func _instantiate(path: String) -> Node:
 
 
 func _sweep(label: String, scene: Node, positions: Array, plans: Array, skip_equal: bool) -> void:
-	var defs: Array = BeamScene.defs_from_surfaces(scene.surfaces)
-	var tracer := NBeamTracer.new()
+	var defs: Array = GdBeamScene.defs_from_surfaces(scene.surfaces)
+	var tracer := BeamTracer.new()
 	for plan in plans:
 		var idx := 0
 		for p in positions:
@@ -40,7 +40,7 @@ func _sweep(label: String, scene: Node, positions: Array, plans: Array, skip_equ
 				idx += 1
 				if i % _stride != 0:
 					continue
-				var a := BeamTracer.trace_pair(scene.surfaces, p, c, plan, {})
+				var a := GdBeamTracer.trace_pair(scene.surfaces, p, c, plan, {})
 				var b := tracer.trace_pair(defs, p, c, plan, {})
 				_combos += 1
 				var r := Diff.pair_diff(a, b, "%s plan=%s p=%s c=%s" % [label, SweepPlans.plan_to_data(plan), p, c])
@@ -109,7 +109,7 @@ func test_precision_scene() -> void:
 func test_surface_combos() -> void:
 	for combo in SweepPlans.combo_configs():
 		var scene := SweepPlans.build_combo_scene(combo)
-		BeamTracer.clear_cache()
+		GdBeamTracer.clear_cache()
 		add_child_autofree(scene)
 		await get_tree().process_frame
 		var runner := SweepRunner.new().configure(4, 6, 42)
@@ -124,12 +124,12 @@ func test_plan_refuses_and_to_path() -> void:
 	for path in scenes:
 		var scene := _instantiate(path)
 		await get_tree().process_frame
-		var defs: Array = BeamScene.defs_from_surfaces(scene.surfaces)
-		var tracer := NBeamTracer.new()
+		var defs: Array = GdBeamScene.defs_from_surfaces(scene.surfaces)
+		var tracer := BeamTracer.new()
 		for plan in SweepPlans.reflective_plans(scene).slice(0, 3):
 			for s in scene.surfaces:
 				for left in [true, false]:
-					assert_eq(tracer.plan_refuses(defs, plan, s.id, left, {}), BeamTracer.plan_refuses(scene.surfaces, plan, s.id, left, {}),
+					assert_eq(tracer.plan_refuses(defs, plan, s.id, left, {}), GdBeamTracer.plan_refuses(scene.surfaces, plan, s.id, left, {}),
 						"%s plan_refuses %d %s" % [path.get_file(), s.id, left])
 					checked += 1
 	assert_gt(checked, 0)

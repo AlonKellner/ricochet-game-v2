@@ -20,11 +20,11 @@ func _walk(name: String, ctx: NumCtx) -> Array:
 	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
 	var player := ctx.cn(fx["player"][0], fx["player"][1])
 	var cursor = null if fx["cursor"] == null else ctx.cn(fx["cursor"][0], fx["cursor"][1])
-	var mode: int = BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED
+	var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
 	var plan := Rules.plan_of(fx["plan"])
 	if fx["direction"] != null:
 		return BeamSolver.trace_direction(ctx, scene, player, ctx.cn(fx["direction"][0], fx["direction"][1]), plan, cursor, mode)
-	if mode == BeamSolver.Mode.PLANNED:
+	if mode == BeamSolver.PLANNED:
 		return BeamSolver.planned(ctx, scene, player, cursor, plan)
 	return BeamSolver.physical(ctx, scene, player, cursor, plan)
 
@@ -34,7 +34,7 @@ func _check(events: Array, expected: Array, label: String, tol: float) -> bool:
 			", ".join(events.map(func(e): return e.describe()))])
 		return false
 	for i in expected.size():
-		var e: BeamSolver.Event = events[i]
+		var e: BeamSolverEvent = events[i]
 		var x: Dictionary = expected[i]
 		var got := [e.kind, e.surface_id, ("LEFT" if e.left else "RIGHT") if e.kind == "hit" else "",
 			e.applied, e.terminal, e.on_segment, e.rehit]
@@ -72,7 +72,7 @@ func test_projective_resets_stack_and_epoch():
 		assert_eq(ev[2].epoch, 1, "a projective starts a new epoch")
 	# frame ids: steps after the projective are a new frame, even with an
 	# empty stack
-	var path := BeamTracer.to_path(ev, [], 0, {}, {}, null)
+	var path := BeamTracer.new().to_path(ev, [], 0, {}, null)
 	var ids := {}
 	for s in path.steps:
 		ids[s.frame_id] = true
@@ -100,12 +100,11 @@ func test_degenerate_inputs_native():
 			"cursor_at_inversion_center", "cursor_at_inversion_center_no_plan"]:
 		_check_fixture(name, 0.01)
 	# the game path is the beam solver, no fallback
-	BeamTracer.clear_cache()
 	Surface.reset_id_counter()
 	var scene: Node = load("res://scenes/playground/inversion_grid.tscn").instantiate()
 	add_child_autofree(scene)
 	await get_tree().process_frame
-	var pair := BeamTracer.trace_pair(scene.surfaces, Vector2(760, 380), Vector2(1000, 700),
+	var pair := TestTrace.trace_pair(scene.surfaces, Vector2(760, 380), Vector2(1000, 700),
 		[PlanManager.PlanEntry.new(1, Side.Value.RIGHT)])
 	assert_not_null(pair, "player at an inversion center: beam solver, no fallback")
 
@@ -116,13 +115,13 @@ func test_fast_twin_projective():
 		if fx["direction"] == null:
 			continue
 		var gen := _walk(name, ctx)
-		var out := FastSolver.trace_direction(FastSolver.Scene.from_defs(fx["surfaces"]), PackedFloat64Array(fx["player"]),
+		var out := FastSolver.trace_direction(FastSolverScene.from_defs(fx["surfaces"]), PackedFloat64Array(fx["player"]),
 			PackedFloat64Array(fx["direction"]), Rules.plan_of(fx["plan"]), null,
-			BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED)
+			BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED)
 		assert_eq(out.events.size(), gen.size(), "%s: event count" % name)
 		for i in mini(out.events.size(), gen.size()):
-			var a: BeamSolver.Event = out.events[i]
-			var b: BeamSolver.Event = gen[i]
+			var a: BeamSolverEvent = out.events[i]
+			var b: BeamSolverEvent = gen[i]
 			assert_eq([a.kind, a.surface_id, a.left, a.applied], [b.kind, b.surface_id, b.left, b.applied], "%s event %d" % [name, i])
 			if a.point != null and b.point != null:
 				assert_eq([a.point.fx(), a.point.fy()], [b.point.fx(), b.point.fy()], "%s event %d: bit-identical" % [name, i])
@@ -136,7 +135,6 @@ func test_every_scene_uses_beam():
 		for fn in DirAccess.open(dir_path).get_files():
 			if not fn.ends_with(".tscn"):
 				continue
-			BeamTracer.clear_cache()
 			Surface.reset_id_counter()
 			var scene: Node = load(dir_path + "/" + fn).instantiate()
 			add_child_autofree(scene)
@@ -148,6 +146,6 @@ func test_every_scene_uses_beam():
 			scene.get_node("Cursor").global_position = Vector2(1130, 470)
 			renderer._compute_trace()
 			assert_eq(renderer.last_solver, "beam", fn)
-			assert_true(BeamTracer.scene_supported(scene.surfaces), fn + " supported")
+			assert_true(BeamTracer.scene_supported(SceneDefs.defs_from_surfaces(scene.surfaces)), fn + " supported")
 			n += 1
 	assert_gt(n, 25)

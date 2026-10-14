@@ -79,11 +79,20 @@ godot::Dictionary flags_to_dict(const rc::Flags &f);
 
 std::vector<rc::SurfaceDef> defs_from_array(const godot::Array &defs);
 
-// ---- plan items: NBeamSolverPlanItem objects, or PlanManager.PlanEntry-like objects
+// ---- plan items: BeamSolverPlanItem objects, or PlanManager.PlanEntry-like objects
 // (surface_id, side, click) in trace_pair's plan_entries.
 std::vector<rc::PlanItem> plan_from_items(const godot::Array &items);
 
-// ---- effect names
+// ---- effect names and the taxonomy lists (BeamScene.TRANSFORMATIVE / PROJECTIVE)
+inline godot::Array effect_names_where(bool (*pred)(rc::EffectType)) {
+	godot::Array out;
+	for (int t = int(rc::EffectType::Pass); t <= int(rc::EffectType::CircleDirectionalProjection); t++) {
+		if (pred(rc::EffectType(t))) {
+			out.push_back(godot::String(rc::effect_type_json_name(rc::EffectType(t))));
+		}
+	}
+	return out;
+}
 inline godot::String effect_name(rc::EffectType t) {
 	return godot::String(rc::effect_type_json_name(t));
 }

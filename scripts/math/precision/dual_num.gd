@@ -1,16 +1,16 @@
-class_name DualNum
+class_name GdDualNum
 extends RefCounted
 
 # Forward-mode dual number (value, derivative) in float64, with the same
-# method API as F64Num/BigFloat. Running BeamSolver over DualNum propagates the
+# method API as GdF64Num/GdBigFloat. Running GdBeamSolver over GdDualNum propagates the
 # sensitivity of every quantity to a seeded perturbation (tangent-linear
-# model), which ErrorEstimate turns into an a-priori rounding-error estimate.
+# model), which GdErrorEstimate turns into an a-priori rounding-error estimate.
 
 var v: float
 var d: float
 
-static func of(x: float, dx: float = 0.0) -> DualNum:
-	var n := DualNum.new()
+static func of(x: float, dx: float = 0.0) -> GdDualNum:
+	var n := GdDualNum.new()
 	n.v = x
 	n.d = dx
 	return n
@@ -27,37 +27,37 @@ func is_negative() -> bool:
 func to_float() -> float:
 	return v
 
-func neg() -> DualNum:
-	return DualNum.of(-v, -d)
+func neg() -> GdDualNum:
+	return GdDualNum.of(-v, -d)
 
-func abs_val() -> DualNum:
-	return DualNum.of(-v, -d) if v < 0.0 else self
+func abs_val() -> GdDualNum:
+	return GdDualNum.of(-v, -d) if v < 0.0 else self
 
-func add(o: DualNum) -> DualNum:
-	return DualNum.of(v + o.v, d + o.d)
+func add(o: GdDualNum) -> GdDualNum:
+	return GdDualNum.of(v + o.v, d + o.d)
 
-func sub(o: DualNum) -> DualNum:
-	return DualNum.of(v - o.v, d - o.d)
+func sub(o: GdDualNum) -> GdDualNum:
+	return GdDualNum.of(v - o.v, d - o.d)
 
-func mul(o: DualNum) -> DualNum:
-	return DualNum.of(v * o.v, d * o.v + v * o.d)
+func mul(o: GdDualNum) -> GdDualNum:
+	return GdDualNum.of(v * o.v, d * o.v + v * o.d)
 
-func div(o: DualNum) -> DualNum:
+func div(o: GdDualNum) -> GdDualNum:
 	var q := v / o.v
-	return DualNum.of(q, (d - q * o.d) / o.v)
+	return GdDualNum.of(q, (d - q * o.d) / o.v)
 
-func sqrt_val() -> DualNum:
+func sqrt_val() -> GdDualNum:
 	var s := sqrt(v)
-	return DualNum.of(s, d / (2.0 * s) if s != 0.0 else 0.0)
+	return GdDualNum.of(s, d / (2.0 * s) if s != 0.0 else 0.0)
 
-func mul_pow2(k: int) -> DualNum:
+func mul_pow2(k: int) -> GdDualNum:
 	var f := pow(2.0, k)
-	return DualNum.of(v * f, d * f)
+	return GdDualNum.of(v * f, d * f)
 
-func cmp(o: DualNum) -> int:
+func cmp(o: GdDualNum) -> int:
 	if v == o.v:
 		return 0
 	return 1 if v > o.v else -1
 
 func _to_string() -> String:
-	return "DualNum(%s, d=%s)" % [String.num(v, 17), String.num(d, 6)]
+	return "GdDualNum(%s, d=%s)" % [String.num(v, 17), String.num(d, 6)]

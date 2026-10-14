@@ -21,11 +21,11 @@ func _walk(name: String, ctx: NumCtx) -> Array:
 	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
 	var player := ctx.cn(fx["player"][0], fx["player"][1])
 	var cursor = null if fx["cursor"] == null else ctx.cn(fx["cursor"][0], fx["cursor"][1])
-	var mode: int = BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED
+	var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
 	var plan := Rules.plan_of(fx["plan"])
 	if fx["direction"] != null:
 		return BeamSolver.trace_direction(ctx, scene, player, ctx.cn(fx["direction"][0], fx["direction"][1]), plan, cursor, mode)
-	if mode == BeamSolver.Mode.PLANNED:
+	if mode == BeamSolver.PLANNED:
 		return BeamSolver.planned(ctx, scene, player, cursor, plan)
 	return BeamSolver.physical(ctx, scene, player, cursor, plan)
 
@@ -35,7 +35,7 @@ func _check(events: Array, expected: Array, label: String, tol: float) -> bool:
 			", ".join(events.map(func(e): return e.describe()))])
 		return false
 	for i in expected.size():
-		var e: BeamSolver.Event = events[i]
+		var e: BeamSolverEvent = events[i]
 		var x: Dictionary = expected[i]
 		var got := [e.kind, e.surface_id, ("LEFT" if e.left else "RIGHT") if e.kind == "hit" else "",
 			e.applied, e.terminal, e.on_segment, e.rehit]
@@ -157,7 +157,6 @@ func test_plan_through_portal_reaches_cursor():
 # ---------------------------------------------------------------- display
 
 func test_after_portal_gap_flag():
-	BeamTracer.clear_cache()
 	Surface.reset_id_counter()
 	var scene: Node = load("res://scenes/test_levels/portals.tscn").instantiate()
 	add_child_autofree(scene)
@@ -190,13 +189,13 @@ func test_fast_twin_portal():
 			continue
 		var gen := _walk(name, ctx)
 		assert_eq(gen.size(), fx["expected"].size(), "%s: generic walk matches the oracle length" % name)
-		var out := FastSolver.trace_direction(FastSolver.Scene.from_defs(fx["surfaces"]), PackedFloat64Array(fx["player"]),
+		var out := FastSolver.trace_direction(FastSolverScene.from_defs(fx["surfaces"]), PackedFloat64Array(fx["player"]),
 			PackedFloat64Array(fx["direction"]), Rules.plan_of(fx["plan"]), null,
-			BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED)
+			BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED)
 		assert_eq(out.events.size(), gen.size(), "%s: event count" % name)
 		for i in mini(out.events.size(), gen.size()):
-			var a: BeamSolver.Event = out.events[i]
-			var b: BeamSolver.Event = gen[i]
+			var a: BeamSolverEvent = out.events[i]
+			var b: BeamSolverEvent = gen[i]
 			assert_eq([a.kind, a.surface_id, a.left, a.applied, a.on_segment, a.rehit],
 				[b.kind, b.surface_id, b.left, b.applied, b.on_segment, b.rehit], "%s event %d" % [name, i])
 			if a.point != null and b.point != null:

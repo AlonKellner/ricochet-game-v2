@@ -9,7 +9,6 @@ const SCENE := "res://scenes/playground/inversion_grid.tscn"
 var _scene: Node
 
 func before_each():
-	BeamTracer.clear_cache()
 	Surface.reset_id_counter()
 	_scene = load(SCENE).instantiate()
 	_scene.gravity = Vector2.ZERO
@@ -56,7 +55,6 @@ func test_cancelling_rehit_restores_straight_beam():
 	var renderer := _scene.get_node("PathRenderer")
 	var dir := (cursor - player).normalized()
 	for dy in [0.0, 0.0005, -0.0005, 0.01, -0.01]:
-		BeamTracer.clear_cache()
 		_scene.get_node("Player").global_position = player
 		_scene.get_node("Cursor").global_position = cursor + Vector2(0, dy)
 		renderer._compute_trace()
@@ -95,7 +93,6 @@ func test_huge_long_way_arc_not_drawn_as_chord():
 	for sid in [7, 4, 1, 3]:
 		gm.plan.add_entry(sid, Side.Value.LEFT)
 	for cur in [Vector2(1246.298, 440.8163), Vector2(1245.297, 440.8163)]:
-		BeamTracer.clear_cache()
 		_scene.get_node("Player").global_position = Vector2(620.0, 679.9991)
 		_scene.get_node("Cursor").global_position = cur
 		renderer._compute_trace()
@@ -126,7 +123,6 @@ func _sweep(plans: Array, positions: Array) -> Dictionary:
 			for c in positions:
 				if p == c:
 					continue
-				BeamTracer.clear_cache()
 				var vs := checker.check_all(p, c, plan)
 				runs += 1
 				if renderer.last_solver != "beam":

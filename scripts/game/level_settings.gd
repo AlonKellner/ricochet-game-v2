@@ -197,7 +197,7 @@ func _ready() -> void:
 		var tog := SideConfig.new(null, true, StateChange.new(state_key, StateChange.Op.TOGGLE))
 		_add_surface(Surface.new(_seg_from_v4(line_def), tog, tog, false, false), "Toggle")
 	for line_def in ghost_toggler_lines:
-		var g := SideConfig.new(null, true, StateChange.new(BeamScene.GHOST, StateChange.Op.TOGGLE))
+		var g := SideConfig.new(null, true, StateChange.new(BeamScene.GHOST(), StateChange.Op.TOGGLE))
 		_add_surface(Surface.new(_seg_from_v4(line_def), g, g, false, false), "GhostToggle")
 	for line_def in gate_lines:
 		var block := SideConfig.new(TerminalEffect.new(), false)

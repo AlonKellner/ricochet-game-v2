@@ -1,6 +1,9 @@
 class_name PathRenderer
 extends Node2D
 
+# The beam solver's tracer (owns the solve caches: one per owner).
+var _tracer := BeamTracer.new()
+
 const LINE_WIDTH := 2.0
 const DASH_ON := 10.0
 const DASH_OFF := 5.0
@@ -20,7 +23,7 @@ var _physical_hits: Dictionary = {}
 var last_solver := ""
 # Plan source when the scene has no GameManager (invariant sweeps).
 var plan_override: PlanManager = null
-var last_beam_result: PrecisionLadder.Result = null
+var last_beam_result: PrecisionLadderResult = null
 
 func _ready() -> void:
 	_player = get_node_or_null("../Player")
@@ -57,7 +60,7 @@ func _compute_trace() -> void:
 	var bounds := VisualConverter.DEFAULT_BOUNDS
 	# The precision-converging beam solver; null only for player = cursor (no
 	# line, UX7).
-	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, plan_entries, get_flags())
+	var pair: BeamTracerPair = _tracer.trace_pair(SceneDefs.defs_from_surfaces(surfaces), player_pos, cursor_pos, plan_entries, get_flags(), SceneDefs.segments_by_id(surfaces))
 	last_solver = "beam"
 	if pair == null:
 		last_beam_result = null

@@ -22,7 +22,7 @@ static func _mirror(x: float, y: float, sx: float, sy: float, ex: float, ey: flo
 	var wy := -(y - sy)            # conj(z - S)
 	return PackedFloat64Array([sx + u2r * wx - u2i * wy, sy + u2r * wy + u2i * wx])
 
-func _line_seg(ctx: NumCtx, sid: int, s: Vector2, e: Vector2) -> BeamGeom.Seg:
+func _line_seg(ctx: NumCtx, sid: int, s: Vector2, e: Vector2) -> BeamGeomSeg:
 	return BeamGeom.seg_from_dict(ctx, {"kind": "line", "id": sid, "start": [s.x, s.y], "end": [e.x, e.y],
 		"via": [(s.x + e.x) / 2.0, (s.y + e.y) / 2.0]})
 
@@ -82,7 +82,7 @@ func test_arc_reflection_equals_inversion():
 	if refl == null:
 		return
 	var surf = refl.by_id[1]
-	var circ := HPBeam.Circle.make(1, ctx.cn(500.0, 0.0), ctx.num(200.0))
+	var circ := HPBeamCircle.make(1, ctx.cn(500.0, 0.0), ctx.num(200.0))
 	var rng := _rng()
 	for i in 50:
 		var ang := rng.randf_range(-PI, PI)

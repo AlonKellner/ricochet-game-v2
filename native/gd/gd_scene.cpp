@@ -10,10 +10,10 @@ using godot::Ref;
 using godot::Variant;
 using namespace rcgd;
 
-// ---------------------------------------------------------------- NBeamSceneSurf
+// ---------------------------------------------------------------- BeamSceneSurf
 
 #define RC_SURF_GETTER(name, type, expr)                 \
-	type NBeamSceneSurf::get_##name() const {            \
+	type BeamSceneSurf::get_##name() const {            \
 		return visit([](const auto &s) { return type(expr); }); \
 	}
 
@@ -39,10 +39,10 @@ RC_SURF_GETTER(vx, double, s.vx)
 RC_SURF_GETTER(vy, double, s.vy)
 RC_SURF_GETTER(is_target, bool, s.is_target)
 
-godot::String NBeamSceneSurf::get_left_type() const {
+godot::String BeamSceneSurf::get_left_type() const {
 	return visit([](const auto &s) { return effect_name(s.left_type); });
 }
-godot::String NBeamSceneSurf::get_right_type() const {
+godot::String BeamSceneSurf::get_right_type() const {
 	return visit([](const auto &s) { return effect_name(s.right_type); });
 }
 namespace {
@@ -57,24 +57,24 @@ godot::Array proj_array(const rc::Projective &p, bool present) {
 	return a;
 }
 } // namespace
-godot::Array NBeamSceneSurf::get_left_proj() const {
+godot::Array BeamSceneSurf::get_left_proj() const {
 	return visit([](const auto &s) { return proj_array(s.left_proj, rc::is_projective(s.left_type)); });
 }
-godot::Array NBeamSceneSurf::get_right_proj() const {
+godot::Array BeamSceneSurf::get_right_proj() const {
 	return visit([](const auto &s) { return proj_array(s.right_proj, rc::is_projective(s.right_type)); });
 }
 // alpha / dvec: the portal map's rotation and translation; null unless a portal (BeamScene.Surf).
-Ref<NCN> NBeamSceneSurf::get_alpha() const {
-	return visit([](const auto &s) { return s.portal ? NCN::wrap(s.alpha) : Ref<NCN>(); });
+Ref<CN> BeamSceneSurf::get_alpha() const {
+	return visit([](const auto &s) { return s.portal ? CN::wrap(s.alpha) : Ref<CN>(); });
 }
-Ref<NCN> NBeamSceneSurf::get_dvec() const {
-	return visit([](const auto &s) { return s.portal ? NCN::wrap(s.dvec) : Ref<NCN>(); });
+Ref<CN> BeamSceneSurf::get_dvec() const {
+	return visit([](const auto &s) { return s.portal ? CN::wrap(s.dvec) : Ref<CN>(); });
 }
-godot::String NBeamSceneSurf::effect(bool left, const godot::Dictionary &flags) const {
+godot::String BeamSceneSurf::effect(bool left, const godot::Dictionary &flags) const {
 	const rc::Flags f = flags_from_dict(flags);
 	return visit([&](const auto &s) { return effect_name(s.effect(left, f)); });
 }
-Variant NBeamSceneSurf::state_change(bool left, const godot::Dictionary &flags) const {
+Variant BeamSceneSurf::state_change(bool left, const godot::Dictionary &flags) const {
 	const rc::Flags f = flags_from_dict(flags);
 	return visit([&](const auto &s) -> Variant {
 		const rc::StateChangeDef *ch = s.state_change(left, f);
@@ -88,14 +88,14 @@ Variant NBeamSceneSurf::state_change(bool left, const godot::Dictionary &flags) 
 		return d;
 	});
 }
-bool NBeamSceneSurf::ghosted(bool left, const godot::Dictionary &flags) const {
+bool BeamSceneSurf::ghosted(bool left, const godot::Dictionary &flags) const {
 	const rc::Flags f = flags_from_dict(flags);
 	return visit([&](const auto &s) { return s.ghosted(left, f); });
 }
 
-void NBeamSceneSurf::_bind_methods() {
+void BeamSceneSurf::_bind_methods() {
 #define RC_SURF_PROP(name, vtype)                                                              \
-	ClassDB::bind_method(D_METHOD("get_" #name), &NBeamSceneSurf::get_##name);                 \
+	ClassDB::bind_method(D_METHOD("get_" #name), &BeamSceneSurf::get_##name);                 \
 	ADD_PROPERTY(PropertyInfo(Variant::vtype, #name), "", "get_" #name);
 	RC_SURF_PROP(id, INT)
 	RC_SURF_PROP(line, BOOL)
@@ -124,32 +124,35 @@ void NBeamSceneSurf::_bind_methods() {
 	RC_SURF_PROP(left_proj, ARRAY)
 	RC_SURF_PROP(right_proj, ARRAY)
 #undef RC_SURF_PROP
-	ClassDB::bind_method(D_METHOD("get_alpha"), &NBeamSceneSurf::get_alpha);
-	ClassDB::bind_method(D_METHOD("get_dvec"), &NBeamSceneSurf::get_dvec);
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "alpha", godot::PROPERTY_HINT_RESOURCE_TYPE, "NCN"), "", "get_alpha");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "dvec", godot::PROPERTY_HINT_RESOURCE_TYPE, "NCN"), "", "get_dvec");
-	ClassDB::bind_method(D_METHOD("get_seg"), &NBeamSceneSurf::get_seg);
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "seg", godot::PROPERTY_HINT_RESOURCE_TYPE, "NBeamGeomSeg"), "", "get_seg");
-	ClassDB::bind_method(D_METHOD("effect", "left", "flags"), &NBeamSceneSurf::effect, DEFVAL(godot::Dictionary()));
-	ClassDB::bind_method(D_METHOD("state_change", "left", "flags"), &NBeamSceneSurf::state_change, DEFVAL(godot::Dictionary()));
-	ClassDB::bind_method(D_METHOD("ghosted", "left", "flags"), &NBeamSceneSurf::ghosted);
+	ClassDB::bind_method(D_METHOD("get_alpha"), &BeamSceneSurf::get_alpha);
+	ClassDB::bind_method(D_METHOD("get_dvec"), &BeamSceneSurf::get_dvec);
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "alpha", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN"), "", "get_alpha");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "dvec", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN"), "", "get_dvec");
+	ClassDB::bind_method(D_METHOD("get_seg"), &BeamSceneSurf::get_seg);
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "seg", godot::PROPERTY_HINT_RESOURCE_TYPE, "BeamGeomSeg"), "", "get_seg");
+	ClassDB::bind_method(D_METHOD("effect", "left", "flags"), &BeamSceneSurf::effect, DEFVAL(godot::Dictionary()));
+	ClassDB::bind_method(D_METHOD("state_change", "left", "flags"), &BeamSceneSurf::state_change, DEFVAL(godot::Dictionary()));
+	ClassDB::bind_method(D_METHOD("ghosted", "left", "flags"), &BeamSceneSurf::ghosted);
 }
 
-// ---------------------------------------------------------------- NBeamScene
+// ---------------------------------------------------------------- BeamScene
 
-void NBeamScene::_bind_methods() {
-	ClassDB::bind_static_method("NBeamScene", D_METHOD("from_defs", "ctx", "defs"), &NBeamScene::from_defs);
-	ClassDB::bind_static_method("NBeamScene", D_METHOD("supported", "defs"), &NBeamScene::supported);
-	ClassDB::bind_method(D_METHOD("get_surfaces"), &NBeamScene::get_surfaces);
-	ClassDB::bind_method(D_METHOD("get_by_id"), &NBeamScene::get_by_id);
-	ClassDB::bind_method(D_METHOD("get_limbs"), &NBeamScene::get_limbs);
+void BeamScene::_bind_methods() {
+	ClassDB::bind_static_method("BeamScene", D_METHOD("from_defs", "ctx", "defs"), &BeamScene::from_defs);
+	ClassDB::bind_static_method("BeamScene", D_METHOD("supported", "defs"), &BeamScene::supported);
+	ClassDB::bind_static_method("BeamScene", D_METHOD("GHOST"), &BeamScene::GHOST);
+	ClassDB::bind_static_method("BeamScene", D_METHOD("TRANSFORMATIVE"), &BeamScene::TRANSFORMATIVE);
+	ClassDB::bind_static_method("BeamScene", D_METHOD("PROJECTIVE"), &BeamScene::PROJECTIVE);
+	ClassDB::bind_method(D_METHOD("get_surfaces"), &BeamScene::get_surfaces);
+	ClassDB::bind_method(D_METHOD("get_by_id"), &BeamScene::get_by_id);
+	ClassDB::bind_method(D_METHOD("get_limbs"), &BeamScene::get_limbs);
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "surfaces"), "", "get_surfaces");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "by_id"), "", "get_by_id");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "limbs"), "", "get_limbs");
 }
 
-Ref<NBeamScene> NBeamScene::from_defs(const Ref<NNumCtx> &ctx, const godot::Array &defs) {
-	Ref<NBeamScene> sc;
+Ref<BeamScene> BeamScene::from_defs(const Ref<NumCtx> &ctx, const godot::Array &defs) {
+	Ref<BeamScene> sc;
 	sc.instantiate();
 	const std::vector<rc::SurfaceDef> d = defs_from_array(defs);
 	sc->limbs = ctx->limbs;
@@ -174,7 +177,7 @@ Ref<NBeamScene> NBeamScene::from_defs(const Ref<NNumCtx> &ctx, const godot::Arra
 		sc->scene = s;
 	}
 	for (int id : ids) {
-		Ref<NBeamSceneSurf> w;
+		Ref<BeamSceneSurf> w;
 		w.instantiate();
 		w->scene = sc->scene;
 		w->surface_id = id;
@@ -184,6 +187,6 @@ Ref<NBeamScene> NBeamScene::from_defs(const Ref<NNumCtx> &ctx, const godot::Arra
 	return sc;
 }
 
-bool NBeamScene::supported(const godot::Array &defs) {
+bool BeamScene::supported(const godot::Array &defs) {
 	return rc::scene_supported(defs_from_array(defs));
 }

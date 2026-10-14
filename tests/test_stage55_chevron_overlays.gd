@@ -130,11 +130,11 @@ func test_portal_explicit_pair_linking() -> void:
 
 func test_physical_hits_has_continuation_mid_trace() -> void:
 	var path := TracePath.new()
-	var s1 := TraceStep.new()
+	var s1 := TraceStep.make()
 	s1.surface_id = 1
 	s1.hit_side = Side.Value.LEFT
 	s1.hit_on_segment = true
-	var s2 := TraceStep.new()
+	var s2 := TraceStep.make()
 	s2.surface_id = 2
 	s2.hit_side = Side.Value.RIGHT
 	s2.hit_on_segment = true
@@ -145,11 +145,11 @@ func test_physical_hits_has_continuation_mid_trace() -> void:
 
 func test_physical_hits_has_continuation_last_step() -> void:
 	var path := TracePath.new()
-	var s1 := TraceStep.new()
+	var s1 := TraceStep.make()
 	s1.surface_id = 1
 	s1.hit_side = Side.Value.LEFT
 	s1.hit_on_segment = true
-	var s2 := TraceStep.new()
+	var s2 := TraceStep.make()
 	s2.surface_id = 2
 	s2.hit_side = Side.Value.RIGHT
 	s2.hit_on_segment = true
@@ -160,7 +160,7 @@ func test_physical_hits_has_continuation_last_step() -> void:
 
 func test_physical_hits_backward_compat() -> void:
 	var path := TracePath.new()
-	var step := TraceStep.new()
+	var step := TraceStep.make()
 	step.surface_id = 5
 	step.hit_side = Side.Value.LEFT
 	step.hit_on_segment = true

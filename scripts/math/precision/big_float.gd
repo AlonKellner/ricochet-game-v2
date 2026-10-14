@@ -1,4 +1,4 @@
-class_name BigFloat
+class_name GdBigFloat
 extends RefCounted
 
 # Arbitrary-precision binary floating point.
@@ -15,8 +15,8 @@ var sign: int = 0
 var exp: int = 0
 var limbs: PackedInt64Array
 
-static func zero(n: int) -> BigFloat:
-	var z := BigFloat.new()
+static func zero(n: int) -> GdBigFloat:
+	var z := GdBigFloat.new()
 	z.limbs = PackedInt64Array()
 	z.limbs.resize(n)
 	return z
@@ -25,8 +25,8 @@ static func zero(n: int) -> BigFloat:
 # comparisons order it above every finite value and to_float() gives INF.
 const INF_EXP := 1 << 40
 
-static func infinity(n: int) -> BigFloat:
-	var r := BigFloat.from_int(1, n)
+static func infinity(n: int) -> GdBigFloat:
+	var r := GdBigFloat.from_int(1, n)
 	r.exp = INF_EXP
 	return r
 
@@ -36,8 +36,8 @@ func is_inf() -> bool:
 static func limbs_for_bits(bits: int) -> int:
 	return maxi(2, (bits + BITS - 1) / BITS)
 
-static func from_float(f: float, n: int) -> BigFloat:
-	var r := BigFloat.zero(n)
+static func from_float(f: float, n: int) -> GdBigFloat:
+	var r := GdBigFloat.zero(n)
 	if f == 0.0:
 		return r
 	r.sign = 1 if f > 0.0 else -1
@@ -61,7 +61,7 @@ static func from_float(f: float, n: int) -> BigFloat:
 	r.exp = e - 3 - BITS * (n - 2)
 	return r
 
-static func from_string(s: String, n: int) -> BigFloat:
+static func from_string(s: String, n: int) -> GdBigFloat:
 	# decimal string "[-]digits[.digits][e[+-]digits]"
 	var str := s.strip_edges()
 	var neg := false
@@ -80,17 +80,17 @@ static func from_string(s: String, n: int) -> BigFloat:
 		e10 -= str.length() - dot - 1
 		str = str.substr(0, dot) + str.substr(dot + 1)
 	var wp := n + 1
-	var acc := BigFloat.zero(wp)
-	var ten := BigFloat.from_int(10, wp)
+	var acc := GdBigFloat.zero(wp)
+	var ten := GdBigFloat.from_int(10, wp)
 	# process 6 digits at a time
 	var i := 0
 	while i < str.length():
 		var chunk_len := mini(6, str.length() - i)
 		var chunk := str.substr(i, chunk_len).to_int()
-		acc = acc.mul(BigFloat.from_int(int(pow(10, chunk_len)), wp)).add(BigFloat.from_int(chunk, wp))
+		acc = acc.mul(GdBigFloat.from_int(int(pow(10, chunk_len)), wp)).add(GdBigFloat.from_int(chunk, wp))
 		i += chunk_len
 	if e10 != 0:
-		var p := BigFloat.from_int(1, wp)
+		var p := GdBigFloat.from_int(1, wp)
 		var base := ten
 		var k: int = absi(e10)
 		while k > 0:
@@ -103,9 +103,9 @@ static func from_string(s: String, n: int) -> BigFloat:
 		acc = acc.neg()
 	return acc.with_limbs(n)
 
-static func from_int(v: int, n: int) -> BigFloat:
+static func from_int(v: int, n: int) -> GdBigFloat:
 	if v == 0:
-		return BigFloat.zero(n)
+		return GdBigFloat.zero(n)
 	var a := PackedInt64Array()
 	var x: int = absi(v)
 	while x > 0:
@@ -122,32 +122,32 @@ func is_zero() -> bool:
 func is_negative() -> bool:
 	return sign < 0
 
-func neg() -> BigFloat:
-	var r := BigFloat.new()
+func neg() -> GdBigFloat:
+	var r := GdBigFloat.new()
 	r.sign = -sign
 	r.exp = exp
 	r.limbs = limbs
 	return r
 
-func abs_val() -> BigFloat:
+func abs_val() -> GdBigFloat:
 	if sign >= 0:
 		return self
 	return neg()
 
-func mul_pow2(k: int) -> BigFloat:
+func mul_pow2(k: int) -> GdBigFloat:
 	if sign == 0:
 		return self
-	var r := BigFloat.new()
+	var r := GdBigFloat.new()
 	r.sign = sign
 	r.exp = exp + k
 	r.limbs = limbs
 	return r
 
-func with_limbs(n: int) -> BigFloat:
+func with_limbs(n: int) -> GdBigFloat:
 	if limbs.size() == n:
 		return self
 	if sign == 0:
-		return BigFloat.zero(n)
+		return GdBigFloat.zero(n)
 	return _normalize(limbs, exp, sign, n)
 
 func to_float() -> float:
@@ -164,7 +164,7 @@ func to_float() -> float:
 func top_exp() -> int:
 	return exp + BITS * limbs.size() - 1
 
-func cmp_abs(o: BigFloat) -> int:
+func cmp_abs(o: GdBigFloat) -> int:
 	if sign == 0:
 		return 0 if o.sign == 0 else -1
 	if o.sign == 0:
@@ -186,21 +186,21 @@ func cmp_abs(o: BigFloat) -> int:
 		k += 1
 	return 0
 
-func cmp(o: BigFloat) -> int:
+func cmp(o: GdBigFloat) -> int:
 	if sign != o.sign:
 		return 1 if sign > o.sign else -1
 	if sign == 0:
 		return 0
 	return cmp_abs(o) * sign
 
-func add(o: BigFloat) -> BigFloat:
+func add(o: GdBigFloat) -> GdBigFloat:
 	if o.sign == 0:
 		return self
 	if sign == 0:
 		return o.with_limbs(limbs.size())
 	var n := limbs.size()
-	var big: BigFloat = self
-	var small: BigFloat = o
+	var big: GdBigFloat = self
+	var small: GdBigFloat = o
 	if cmp_abs(o) < 0:
 		big = o
 		small = self
@@ -235,13 +235,13 @@ func add(o: BigFloat) -> BigFloat:
 		wb[i] = d
 	return _normalize(wb, w_exp, big.sign, n)
 
-func sub(o: BigFloat) -> BigFloat:
+func sub(o: GdBigFloat) -> GdBigFloat:
 	return add(o.neg())
 
-func mul(o: BigFloat) -> BigFloat:
+func mul(o: GdBigFloat) -> GdBigFloat:
 	var n := limbs.size()
 	if sign == 0 or o.sign == 0:
-		return BigFloat.zero(n)
+		return GdBigFloat.zero(n)
 	var a := limbs
 	var b := o.limbs
 	var na := a.size()
@@ -261,21 +261,21 @@ func mul(o: BigFloat) -> BigFloat:
 		carry = s >> BITS
 	return _normalize(cols, exp + o.exp, sign * o.sign, n)
 
-func mul_float(f: float) -> BigFloat:
-	return mul(BigFloat.from_float(f, limbs.size()))
+func mul_float(f: float) -> GdBigFloat:
+	return mul(GdBigFloat.from_float(f, limbs.size()))
 
-func div(o: BigFloat) -> BigFloat:
+func div(o: GdBigFloat) -> GdBigFloat:
 	var n := limbs.size()
-	assert(o.sign != 0, "BigFloat division by zero")
+	assert(o.sign != 0, "GdBigFloat division by zero")
 	if sign == 0:
-		return BigFloat.zero(n)
+		return GdBigFloat.zero(n)
 	var wp := n + 1
 	var b := o.with_limbs(wp)
 	# Newton reciprocal: x <- x (2 - b x), seeded from float64
 	var e_b := b.top_exp()
 	var b_scaled := b.mul_pow2(-e_b)  # in [1, 2)
-	var x := BigFloat.from_float(1.0 / b_scaled.to_float(), wp)
-	var two := BigFloat.from_int(2, wp)
+	var x := GdBigFloat.from_float(1.0 / b_scaled.to_float(), wp)
+	var two := GdBigFloat.from_int(2, wp)
 	var correct_bits := 50
 	while correct_bits < BITS * wp + 8:
 		x = x.mul(two.sub(b_scaled.mul(x)))
@@ -298,11 +298,11 @@ func div(o: BigFloat) -> BigFloat:
 		QD1 = _iadd(QD1, D)
 	return _normalize(Q, r.exp, sign * o.sign, n)
 
-func sqrt_val() -> BigFloat:
+func sqrt_val() -> GdBigFloat:
 	var n := limbs.size()
 	if sign == 0:
 		return self
-	assert(sign > 0, "BigFloat sqrt of negative")
+	assert(sign > 0, "GdBigFloat sqrt of negative")
 	var wp := n + 1
 	var a := self.with_limbs(wp)
 	# scale to even exponent near 1
@@ -311,8 +311,8 @@ func sqrt_val() -> BigFloat:
 		e -= 1
 	var a_s := a.mul_pow2(-e)  # in [1, 4)
 	# Newton on inverse sqrt: y <- y (3 - a y^2) / 2
-	var y := BigFloat.from_float(1.0 / sqrt(a_s.to_float()), wp)
-	var three := BigFloat.from_int(3, wp)
+	var y := GdBigFloat.from_float(1.0 / sqrt(a_s.to_float()), wp)
+	var three := GdBigFloat.from_int(3, wp)
 	var correct_bits := 50
 	while correct_bits < BITS * wp + 8:
 		y = y.mul(three.sub(a_s.mul(y).mul(y))).mul_pow2(-1)
@@ -356,12 +356,12 @@ static func _place(src: PackedInt64Array, src_exp: int, frame_exp: int, len: int
 		out[i] = (lo | hi) & MASK
 	return out
 
-static func _normalize(arr: PackedInt64Array, e: int, s: int, n: int) -> BigFloat:
+static func _normalize(arr: PackedInt64Array, e: int, s: int, n: int) -> GdBigFloat:
 	var top := arr.size() - 1
 	while top >= 0 and arr[top] == 0:
 		top -= 1
 	if top < 0:
-		return BigFloat.zero(n)
+		return GdBigFloat.zero(n)
 	# bit length of top limb
 	var t: int = arr[top]
 	var bl := 0
@@ -369,7 +369,7 @@ static func _normalize(arr: PackedInt64Array, e: int, s: int, n: int) -> BigFloa
 		bl += 1
 		t >>= 1
 	var lshift: int = BITS - bl  # shift left so top limb has bit BITS-1 set
-	var r := BigFloat.new()
+	var r := GdBigFloat.new()
 	r.sign = s
 	r.limbs = PackedInt64Array()
 	r.limbs.resize(n)
@@ -470,4 +470,4 @@ static func _isub(a, b) -> PackedInt64Array:
 	return _itrim(out)
 
 func _to_string() -> String:
-	return "BigFloat(%s, %d limbs)" % [String.num(to_float(), 17), limbs.size()]
+	return "GdBigFloat(%s, %d limbs)" % [String.num(to_float(), 17), limbs.size()]

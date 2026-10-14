@@ -33,7 +33,7 @@ func _check(events: Array, expected: Array, label: String) -> bool:
 			", ".join(events.map(func(e): return e.describe()))])
 		return false
 	for i in expected.size():
-		var e: BeamSolver.Event = events[i]
+		var e: BeamSolverEvent = events[i]
 		var x: Dictionary = expected[i]
 		var got := [e.kind, e.surface_id, ("LEFT" if e.left else "RIGHT") if e.kind == "hit" else "",
 			e.applied, e.terminal, e.on_segment, e.rehit]
@@ -74,7 +74,7 @@ func test_back_propagation_per_type():
 		"via": [400.0, 173.20508075688772], "full": true, "circle": {"center": [500.0, 0.0], "radius": 200.0},
 		"left": mk.call("circle_normal_projection", false, null), "right": mk.call("circle_normal_projection", false, null)}])
 	var X := ctx.cn(500.0 + 300.0, 400.0)       # u = (0.6, 0.8): c +- R u = (620, 160), (380, -160)
-	var s1: BeamScene.Surf = cn.by_id[1]
+	var s1: BeamSceneSurf = cn.by_id[1]
 	var lft := BeamGeom.side_left(s1.seg, ctx.cn(500.0 - 200.0, 0.0), ctx.cn(1.0, 0.0))
 	var Ha = BeamEffects.back_propagate(s1, lft, X, false, Vector2(375, -150))
 	assert_almost_eq(Vector2(Ha.fx(), Ha.fy()), Vector2(380.0, -160.0), Vector2(1e-9, 1e-9), "circle normal: the candidate nearest the click")
@@ -138,14 +138,14 @@ func test_fast_twin_projective_plans():
 	for name in _fx:
 		var fx: Dictionary = _fx[name]
 		var gen := _walk(name, ctx)
-		var sc := FastSolver.Scene.from_defs(fx["surfaces"])
+		var sc := FastSolverScene.from_defs(fx["surfaces"])
 		var plan := Rules.plan_of(fx["plan"])
 		var out = FastSolver.planned(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan) \
 			if fx["mode"] == "planned" else FastSolver.physical(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan)
 		assert_eq(out.events.size(), gen.size(), "%s: event count" % name)
 		for i in mini(out.events.size(), gen.size()):
-			var a: BeamSolver.Event = out.events[i]
-			var b: BeamSolver.Event = gen[i]
+			var a: BeamSolverEvent = out.events[i]
+			var b: BeamSolverEvent = gen[i]
 			assert_eq([a.kind, a.surface_id, a.left, a.applied], [b.kind, b.surface_id, b.left, b.applied], "%s event %d" % [name, i])
 			if a.point != null and b.point != null:
 				assert_eq([a.point.fx(), a.point.fy()], [b.point.fx(), b.point.fy()], "%s event %d: bit-identical" % [name, i])
@@ -157,13 +157,12 @@ func test_fast_twin_projective_plans():
 # tier and the pair was rejected (no line drawn).
 func test_planned_exit_beam_exactly_straight():
 	Surface.reset_id_counter()
-	BeamTracer.clear_cache()
 	var scene: Node = load("res://scenes/playground/projective.tscn").instantiate()
 	scene.gravity = Vector2.ZERO
 	add_child_autofree(scene)
 	await get_tree().process_frame
 	var plan := [PlanManager.PlanEntry.new(6, Side.Value.LEFT), PlanManager.PlanEntry.new(7, Side.Value.LEFT)]
-	var pair := BeamTracer.trace_pair(scene.surfaces, Vector2(1243.33337402344, 390.0), Vector2(1810.0, 90.0), plan)
+	var pair := TestTrace.trace_pair(scene.surfaces, Vector2(1243.33337402344, 390.0), Vector2(1810.0, 90.0), plan)
 	assert_not_null(pair, "a trace pair (finite events)")
 	if pair == null:
 		return
@@ -203,8 +202,8 @@ func test_click_settles_fork():
 	# the on-arc candidate too (one pick, no search)
 	var ctx := NumCtx.f64()
 	var fx: Dictionary = _fx["user_capture_1_planned"]
-	var plain: Array = Rules.plan_of(fx["plan"]).map(func(it): return BeamSolver.PlanItem.make(it.surface_id, it.left))
-	var chain := BeamSolver.AnchorChain.build(BeamScene.from_defs(ctx, fx["surfaces"]), ctx.cn(fx["player"][0], fx["player"][1]),
+	var plain: Array = Rules.plan_of(fx["plan"]).map(func(it): return BeamSolverPlanItem.make(it.surface_id, it.left))
+	var chain := BeamSolver.anchor_chain(BeamScene.from_defs(ctx, fx["surfaces"]), ctx.cn(fx["player"][0], fx["player"][1]),
 		ctx.cn(fx["cursor"][0], fx["cursor"][1]), plain)
 	assert_not_null(chain)
 	if chain != null:
@@ -238,8 +237,8 @@ func test_planned_pass_shared_when_physical_reaches_cursor_anchored():
 			ctx.cn(fx["cursor"][0], fx["cursor"][1]), plan, BeamSolver.MAX_HITS, fx["flags"] if fx["flags"] != null else {})
 		assert_eq(r.planned.size(), own.size(), "%s: planned event count" % name)
 		for i in mini(r.planned.size(), own.size()):
-			var a: BeamSolver.Event = r.planned[i]
-			var b: BeamSolver.Event = own[i]
+			var a: BeamSolverEvent = r.planned[i]
+			var b: BeamSolverEvent = own[i]
 			assert_eq([a.kind, a.surface_id, a.left, a.applied, a.state], [b.kind, b.surface_id, b.left, b.applied, b.state], "%s event %d" % [name, i])
 			if a.point != null and b.point != null:
 				assert_eq(Vector2(a.point.fx(), a.point.fy()), Vector2(b.point.fx(), b.point.fy()), "%s event %d point" % [name, i])

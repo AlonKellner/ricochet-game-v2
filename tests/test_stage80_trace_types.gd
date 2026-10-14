@@ -10,7 +10,7 @@ const PATH_FIELDS := ["steps", "targets_hit", "cursor_index", "hit_count"]
 const HIT_FIELDS := ["t", "point", "segment", "side", "on_segment", "at_endpoint", "blocked_left", "blocked_right"]
 
 func test_trace_step_fields_and_aliases():
-	var s = TraceStep.new(Vector2(0, 0), Vector2(1, 0), 0, null)
+	var s = TraceStep.make(Vector2(0, 0), Vector2(1, 0), 0, null)
 	assert_true(s is TraceStep, "TraceStep is an alias of TraceStep")
 	for f in STEP_FIELDS:
 		assert_true(f in s, "TraceStep has field %s" % f)
@@ -19,7 +19,7 @@ func test_trace_step_fields_and_aliases():
 	for f in PATH_FIELDS:
 		assert_true(f in TracePath.new(), "TracePath has field %s" % f)
 	var seg := Segment.from_coords(Vector2(0, 0), Vector2(10, 0), Vector2(5, 0))
-	var h = TraceHit.new(0.5, Vector2(5, 0), seg, Side.Value.LEFT, true)
+	var h = TraceHit.make(0.5, Vector2(5, 0), seg, Side.Value.LEFT, true)
 	assert_true(h is TraceHit, "TraceHit is an alias of TraceHit")
 	for f in HIT_FIELDS:
 		assert_true(f in h, "TraceHit has field %s" % f)
@@ -29,8 +29,8 @@ func test_trace_step_fields_and_aliases():
 # bounds -> end, and the second piece carries the hit.
 func _meta_step() -> TraceStep:
 	var seg := Segment.from_coords(Vector2(1500, 400), Vector2(1500, 600), Vector2(1500, 500))
-	var hit := TraceHit.new(-1.0, Vector2(1500, 500), seg, Side.Value.LEFT, true)
-	var step := TraceStep.new(Vector2(100, 500), Vector2(1500, 500), 0, hit, null, Vector2(INF, INF), false)
+	var hit := TraceHit.make(-1.0, Vector2(1500, 500), seg, Side.Value.LEFT, true)
+	var step := TraceStep.make(Vector2(100, 500), Vector2(1500, 500), 0, hit, null, Vector2(INF, INF), false)
 	step.surface_id = 5
 	step.hit_side = Side.Value.LEFT
 	step.hit_on_segment = true

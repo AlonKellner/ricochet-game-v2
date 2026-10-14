@@ -19,6 +19,7 @@ struct TracePair {
 	TracePath physical;
 	LadderResult result;
 	Flags final_flags; // the physical trace's flags at its end (promoted after a shot)
+	bool shared = false; // one trajectory: planned is the physical path (the GDScript shares the step objects)
 };
 
 class Tracer {
@@ -97,6 +98,7 @@ public:
 		} else {
 			pair.planned = to_path(res.planned, frames, aim, flags);
 		}
+		pair.shared = shared;
 		pair.result = std::move(res);
 		cache_key_ = key;
 		cache_pair_ = pair;

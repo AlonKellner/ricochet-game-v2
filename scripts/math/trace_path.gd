@@ -1,7 +1,7 @@
-class_name TracePath
+class_name GdTracePath
 extends RefCounted
 
-# A traced path: steps plus trace-level results (BeamTracer.to_path).
+# A traced path: steps plus trace-level results (GdBeamTracer.to_path).
 
 var steps: Array = []
 var targets_hit: Dictionary = {}

@@ -21,12 +21,12 @@ func _walk(name: String, ctx: NumCtx) -> Array:
 	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
 	var player := ctx.cn(fx["player"][0], fx["player"][1])
 	var cursor = null if fx["cursor"] == null else ctx.cn(fx["cursor"][0], fx["cursor"][1])
-	var mode: int = BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED
+	var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
 	var plan := Rules.plan_of(fx["plan"])
 	if fx["direction"] != null:
 		return BeamSolver.trace_direction(ctx, scene, player, ctx.cn(fx["direction"][0], fx["direction"][1]), plan, cursor, mode,
 			BeamSolver.MAX_HITS, fx["flags"])
-	if mode == BeamSolver.Mode.PLANNED:
+	if mode == BeamSolver.PLANNED:
 		return BeamSolver.planned(ctx, scene, player, cursor, plan, BeamSolver.MAX_HITS, fx["flags"])
 	return BeamSolver.physical(ctx, scene, player, cursor, plan, BeamSolver.MAX_HITS, fx["flags"])
 
@@ -36,7 +36,7 @@ func _check(events: Array, expected: Array, label: String) -> bool:
 			", ".join(events.map(func(e): return e.describe()))])
 		return false
 	for i in expected.size():
-		var e: BeamSolver.Event = events[i]
+		var e: BeamSolverEvent = events[i]
 		var x: Dictionary = expected[i]
 		var got := [e.kind, e.surface_id, ("LEFT" if e.left else "RIGHT") if e.kind == "hit" else "",
 			e.applied, e.terminal, e.on_segment, e.rehit, e.state]
@@ -91,27 +91,27 @@ func test_fast_twin_ghost():
 	for name in _fx:
 		var fx: Dictionary = _fx[name]
 		var gen := _walk(name, ctx)
-		var sc := FastSolver.Scene.from_defs(fx["surfaces"])
-		var mode: int = BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED
+		var sc := FastSolverScene.from_defs(fx["surfaces"])
+		var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
 		var plan := Rules.plan_of(fx["plan"])
 		var out
 		if fx["direction"] != null:
 			out = FastSolver.trace_direction(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["direction"]), plan,
 				null, mode, BeamSolver.MAX_HITS, fx["flags"])
-		elif mode == BeamSolver.Mode.PLANNED:
+		elif mode == BeamSolver.PLANNED:
 			out = FastSolver.planned(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan, BeamSolver.MAX_HITS, fx["flags"])
 		else:
 			out = FastSolver.physical(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan, BeamSolver.MAX_HITS, fx["flags"])
 		assert_eq(out.events.size(), gen.size(), "%s: event count" % name)
 		for i in mini(out.events.size(), gen.size()):
-			var a: BeamSolver.Event = out.events[i]
-			var b: BeamSolver.Event = gen[i]
+			var a: BeamSolverEvent = out.events[i]
+			var b: BeamSolverEvent = gen[i]
 			assert_eq([a.kind, a.surface_id, a.left, a.applied, a.state, a.flags], [b.kind, b.surface_id, b.left, b.applied, b.state, b.flags],
 				"%s event %d" % [name, i])
 
 func test_ghost_steps_flagged():
 	var ev := _walk("ghost_ends_at_next_toggler", NumCtx.f64())
-	var path := BeamTracer.to_path(ev, [], 0, {}, {}, null)
+	var path := BeamTracer.new().to_path(ev, [], 0, {}, null)
 	# steps: player -> toggler 1 (solid), -> mirror 2 (ghost), -> toggler 3
 	# (ghost), -> mirror 4 (solid)
 	var ghost: Array = path.steps.slice(0, 4).map(func(s): return s.ghost)
@@ -132,12 +132,11 @@ func test_ghost_toggler_rendering():
 # materialized at the second toggler -- the mirror after it acts.
 func test_ghost_room_demo():
 	Surface.reset_id_counter()
-	BeamTracer.clear_cache()
 	var scene: Node = load("res://scenes/test_levels/ghost_room.tscn").instantiate()
 	scene.gravity = Vector2.ZERO
 	add_child_autofree(scene)
 	await get_tree().process_frame
-	var pair := BeamTracer.trace_pair(scene.surfaces, Vector2(900, 540), Vector2(1300, 540), [])
+	var pair := TestTrace.trace_pair(scene.surfaces, Vector2(900, 540), Vector2(1300, 540), [])
 	assert_not_null(pair)
 	if pair == null:
 		return
@@ -157,14 +156,13 @@ func test_ghost_room_demo():
 # ghost after a shot -- even when the shot ends ghosted.
 func test_ghost_is_per_shot():
 	Surface.reset_id_counter()
-	BeamTracer.clear_cache()
 	var scene: Node = load("res://scenes/test_levels/ghost_room.tscn").instantiate()
 	scene.gravity = Vector2.ZERO
 	add_child_autofree(scene)
 	await get_tree().process_frame
 	var gm = scene.get_node("GameManager")
-	var p := BeamTracer.trace_pair(scene.surfaces, Vector2(900, 540), Vector2(1300, 540), [], {"ghost": true})
-	var q := BeamTracer.trace_pair(scene.surfaces, Vector2(900, 540), Vector2(1300, 540), [], {})
+	var p := TestTrace.trace_pair(scene.surfaces, Vector2(900, 540), Vector2(1300, 540), [], {"ghost": true})
+	var q := TestTrace.trace_pair(scene.surfaces, Vector2(900, 540), Vector2(1300, 540), [], {})
 	assert_eq(p.result.physical.size(), q.result.physical.size(), "a trace never starts ghosted")
 	scene.get_node("Player").global_position = Vector2(900, 540)
 	scene.get_node("Cursor").global_position = Vector2(1300, 540)
@@ -179,7 +177,6 @@ func test_ghost_is_per_shot():
 
 func _ghost_room() -> Node:
 	Surface.reset_id_counter()
-	BeamTracer.clear_cache()
 	var scene: Node = load("res://scenes/test_levels/ghost_room.tscn").instantiate()
 	scene.gravity = Vector2.ZERO
 	add_child_autofree(scene)
@@ -202,19 +199,19 @@ func test_plan_refuses_non_toggler_inside_ghost_stretch():
 	var L := Side.Value.LEFT
 	var R := Side.Value.RIGHT
 	# solid plan: everything interactive is accepted
-	assert_false(BeamTracer.plan_refuses(scene.surfaces, [], mirror.id, true))
+	assert_false(TestTrace.plan_refuses(scene.surfaces, [], mirror.id, true))
 	# after A the plan is ghosted: the mirror is refused (both sides), the
 	# togglers are not
 	var ghosted := [P.new(a.id, L)]
-	assert_true(BeamTracer.plan_refuses(scene.surfaces, ghosted, mirror.id, true), "mirror inside the stretch")
-	assert_true(BeamTracer.plan_refuses(scene.surfaces, ghosted, mirror.id, false), "both sides")
-	assert_true(BeamTracer.plan_refuses(scene.surfaces, ghosted, block.id, true), "non-interactive too")
-	assert_false(BeamTracer.plan_refuses(scene.surfaces, ghosted, b.id, false), "the second toggler")
-	assert_false(BeamTracer.plan_refuses(scene.surfaces, ghosted, a.id, true), "the same toggler again")
+	assert_true(TestTrace.plan_refuses(scene.surfaces, ghosted, mirror.id, true), "mirror inside the stretch")
+	assert_true(TestTrace.plan_refuses(scene.surfaces, ghosted, mirror.id, false), "both sides")
+	assert_true(TestTrace.plan_refuses(scene.surfaces, ghosted, block.id, true), "non-interactive too")
+	assert_false(TestTrace.plan_refuses(scene.surfaces, ghosted, b.id, false), "the second toggler")
+	assert_false(TestTrace.plan_refuses(scene.surfaces, ghosted, a.id, true), "the same toggler again")
 	# after A, B the plan is solid again
-	assert_false(BeamTracer.plan_refuses(scene.surfaces, [P.new(a.id, L), P.new(b.id, R)], mirror.id, true))
+	assert_false(TestTrace.plan_refuses(scene.surfaces, [P.new(a.id, L), P.new(b.id, R)], mirror.id, true))
 	# ghost is per shot: a plan starts solid whatever the game state holds
-	assert_false(BeamTracer.plan_refuses(scene.surfaces, [], mirror.id, true, {"ghost": true}))
+	assert_false(TestTrace.plan_refuses(scene.surfaces, [], mirror.id, true, {"ghost": true}))
 
 func test_click_and_hover_refuse_inside_ghost_stretch():
 	var scene := _ghost_room()
@@ -257,7 +254,7 @@ func test_click_near_refused_side_takes_toggler():
 	var surfaces := [s1, s2, s3]
 	var plan := [PlanManager.PlanEntry.new(s3.id, Side.Value.RIGHT)]
 	var accept := func(surf: Surface, side: Side.Value) -> bool:
-		return not BeamTracer.plan_refuses(surfaces, plan, surf.id, side == Side.Value.LEFT)
+		return not TestTrace.plan_refuses(surfaces, plan, surf.id, side == Side.Value.LEFT)
 	var r: Dictionary = ClickDetector.new().detect_click(Vector2(8, 0), surfaces, null, accept)
 	assert_false(r.is_empty())
 	if not r.is_empty():

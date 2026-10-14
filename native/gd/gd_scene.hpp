@@ -1,15 +1,15 @@
-// Bindings of the scene (Stage 93): NBeamScene.from_defs(ctx, defs) with its
-// surfaces (NBeamSceneSurf: the raw float64 geometry, effect resolution under
-// flags, ghost mode) and NBeamScene.supported(defs).
+// Bindings of the scene (Stage 93): BeamScene.from_defs(ctx, defs) with its
+// surfaces (BeamSceneSurf: the raw float64 geometry, effect resolution under
+// flags, ghost mode) and BeamScene.supported(defs).
 #pragma once
 
 #include "gd_common.hpp"
 #include "gd_num.hpp"
 
-class NBeamGeomSeg;
+class BeamGeomSeg;
 
-class NBeamSceneSurf : public godot::RefCounted {
-	GDCLASS(NBeamSceneSurf, godot::RefCounted)
+class BeamSceneSurf : public godot::RefCounted {
+	GDCLASS(BeamSceneSurf, godot::RefCounted)
 
 protected:
 	static void _bind_methods();
@@ -57,16 +57,16 @@ public:
 	godot::String get_right_type() const;
 	godot::Array get_left_proj() const;
 	godot::Array get_right_proj() const;
-	godot::Ref<NCN> get_alpha() const;
-	godot::Ref<NCN> get_dvec() const;
-	godot::Ref<NBeamGeomSeg> get_seg() const; // gd_geom.cpp
+	godot::Ref<CN> get_alpha() const;
+	godot::Ref<CN> get_dvec() const;
+	godot::Ref<BeamGeomSeg> get_seg() const; // gd_geom.cpp
 	godot::String effect(bool left, const godot::Dictionary &flags = godot::Dictionary()) const;
 	godot::Variant state_change(bool left, const godot::Dictionary &flags = godot::Dictionary()) const;
 	bool ghosted(bool left, const godot::Dictionary &flags) const;
 };
 
-class NBeamScene : public godot::RefCounted {
-	GDCLASS(NBeamScene, godot::RefCounted)
+class BeamScene : public godot::RefCounted {
+	GDCLASS(BeamScene, godot::RefCounted)
 
 protected:
 	static void _bind_methods();
@@ -74,14 +74,17 @@ protected:
 public:
 	rcgd::SceneV scene;
 	int limbs = 0;
-	godot::Array surfaces_; // NBeamSceneSurf objects
+	godot::Array surfaces_; // BeamSceneSurf objects
 	godot::Dictionary by_id_;
 
-	static godot::Ref<NBeamScene> from_defs(const godot::Ref<NNumCtx> &ctx, const godot::Array &defs);
+	static godot::Ref<BeamScene> from_defs(const godot::Ref<NumCtx> &ctx, const godot::Array &defs);
 	static bool supported(const godot::Array &defs);
 	godot::Array get_surfaces() const { return surfaces_; }
 	godot::Dictionary get_by_id() const { return by_id_; }
 	int get_limbs() const { return limbs; }
 
-	static constexpr const char *GHOST = "ghost";
+	// the ghost flag key (GDScript BeamScene.GHOST; a String constant cannot be bound)
+	static godot::String GHOST() { return godot::String(rc::GHOST.c_str()); }
+	static godot::Array TRANSFORMATIVE() { return rcgd::effect_names_where(&rc::is_transformative); }
+	static godot::Array PROJECTIVE() { return rcgd::effect_names_where(&rc::is_projective); }
 };

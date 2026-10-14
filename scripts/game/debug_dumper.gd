@@ -47,7 +47,7 @@ static func dump(gm) -> void:
 	if path_renderer:
 		lines.append("Display mode: %s (TAB to cycle)" % path_renderer.DISPLAY_MODE_NAMES[path_renderer.display_mode])
 		lines.append("Solver: %s" % path_renderer.last_solver)
-		var br: PrecisionLadder.Result = path_renderer.last_beam_result
+		var br: PrecisionLadderResult = path_renderer.last_beam_result
 		if br != null:
 			lines.append("  planned: %d bits   physical: %d bits (tiers tried %s, converged=%s)   %.1f ms" % [
 				NumCtx.with_limbs(br.planned_tier).bits(), NumCtx.with_limbs(br.physical_tier).bits(),
@@ -56,7 +56,7 @@ static func dump(gm) -> void:
 				var evs: Array = br.planned if label == "planned" else br.physical
 				lines.append("  beam %s events (%d):" % [label, evs.size()])
 				for i in evs.size():
-					var e: BeamSolver.Event = evs[i]
+					var e: BeamSolverEvent = evs[i]
 					lines.append("    [%d] %s%s%s" % [i, e.describe(), " terminal" if e.terminal else "", " rehit" if e.rehit else ""])
 
 	if player and cursor and path_renderer:
@@ -64,7 +64,7 @@ static func dump(gm) -> void:
 		var p: PlanManager = path_renderer._get_plan()
 		if p and not p.is_empty():
 			plan_entries = p.entries
-		var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, plan_entries, path_renderer.get_flags())
+		var pair: BeamTracerPair = BeamTracer.new().trace_pair(SceneDefs.defs_from_surfaces(surfaces), player_pos, cursor_pos, plan_entries, path_renderer.get_flags(), SceneDefs.segments_by_id(surfaces))
 		if pair != null and not pair.result.planned.is_empty():
 			# the shot's aim: the exact initial tangent of the planned beam
 			var b0: HPBeam = pair.result.planned[0].beam

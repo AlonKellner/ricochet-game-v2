@@ -11,7 +11,6 @@ const DEEP := ["grid60_chain_d10_007", "grid60_chain_d13_069", "grid60_chain_d15
 var _scene: Node
 
 func before_each():
-	BeamTracer.clear_cache()
 	Surface.reset_id_counter()
 	_scene = load(SCENE).instantiate()
 	add_child_autofree(_scene)
@@ -107,9 +106,9 @@ func test_merged_view_aligned_until_first_divergence():
 
 func test_every_effect_type_is_supported():
 	var supported: Array = [RoomBuilder.create_block_surface(Vector2(0, 0), Vector2(100, 0), Vector2(50, 0))]
-	assert_true(BeamTracer.scene_supported(supported), "terminal blocks are supported (Stage 81)")
+	assert_true(BeamTracer.scene_supported(SceneDefs.defs_from_surfaces(supported)), "terminal blocks are supported (Stage 81)")
 	var seg := Segment.from_coords(Vector2(0, 0), Vector2(0, 100), Vector2(0, 50))
 	var proj := LineNormalProjection.new(false)
 	var cfg := SideConfig.new(proj, true)
 	var surf := Surface.new(seg, cfg, cfg, false, true)
-	assert_true(BeamTracer.scene_supported([surf]), "projections are supported (Stage 83)")
+	assert_true(BeamTracer.scene_supported(SceneDefs.defs_from_surfaces([surf])), "projections are supported (Stage 83)")

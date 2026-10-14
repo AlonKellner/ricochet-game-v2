@@ -16,124 +16,181 @@ using namespace rcgd;
 
 namespace {
 
-template <class T>
 PropertyInfo obj_prop(const char *name, const char *cls) {
 	return PropertyInfo(Variant::OBJECT, name, godot::PROPERTY_HINT_RESOURCE_TYPE, cls);
 }
 
 } // namespace
 
-// ---------------------------------------------------------------- NDirection
+// ---------------------------------------------------------------- Point
 
-void NDirection::_bind_methods() {
-	ClassDB::bind_static_method("NDirection", D_METHOD("from_coords", "start", "end"), &NDirection::from_coords);
-	ClassDB::bind_method(D_METHOD("get_start"), &NDirection::get_start);
-	ClassDB::bind_method(D_METHOD("set_start", "v"), &NDirection::set_start);
-	ClassDB::bind_method(D_METHOD("get_end"), &NDirection::get_end);
-	ClassDB::bind_method(D_METHOD("set_end", "v"), &NDirection::set_end);
-	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "start"), "set_start", "get_start");
-	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "end"), "set_end", "get_end");
-	ClassDB::bind_method(D_METHOD("is_zero_length"), &NDirection::is_zero_length);
-	ClassDB::bind_method(D_METHOD("to_vector"), &NDirection::to_vector);
-	ClassDB::bind_method(D_METHOD("to_normalized"), &NDirection::to_normalized);
+void Point::_bind_methods() {
+	ClassDB::bind_static_method("Point", D_METHOD("at", "position"), &Point::at);
+	ClassDB::bind_method(D_METHOD("get_coords"), &Point::get_coords);
+	ClassDB::bind_method(D_METHOD("set_coords", "v"), &Point::set_coords);
+	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "coords"), "set_coords", "get_coords");
+	ClassDB::bind_method(D_METHOD("same_position", "other"), &Point::same_position);
 }
 
-Ref<NDirection> NDirection::from_coords(const Vector2 &p_start, const Vector2 &p_end) {
-	Ref<NDirection> d;
+Ref<Point> Point::at(const Vector2 &position) {
+	Ref<Point> p;
+	p.instantiate();
+	p->coords = position;
+	return p;
+}
+
+// ---------------------------------------------------------------- Direction
+
+void Direction::_bind_methods() {
+	ClassDB::bind_static_method("Direction", D_METHOD("make", "start", "end"), &Direction::make);
+	ClassDB::bind_static_method("Direction", D_METHOD("from_coords", "start", "end"), &Direction::from_coords);
+	ClassDB::bind_method(D_METHOD("get_start"), &Direction::get_start);
+	ClassDB::bind_method(D_METHOD("set_start", "v"), &Direction::set_start);
+	ClassDB::bind_method(D_METHOD("get_end"), &Direction::get_end);
+	ClassDB::bind_method(D_METHOD("set_end", "v"), &Direction::set_end);
+	ADD_PROPERTY(obj_prop("start", "Point"), "set_start", "get_start");
+	ADD_PROPERTY(obj_prop("end", "Point"), "set_end", "get_end");
+	ClassDB::bind_method(D_METHOD("is_zero_length"), &Direction::is_zero_length);
+	ClassDB::bind_method(D_METHOD("to_vector"), &Direction::to_vector);
+	ClassDB::bind_method(D_METHOD("to_normalized"), &Direction::to_normalized);
+}
+
+Ref<Direction> Direction::make(const Ref<Point> &p_start, const Ref<Point> &p_end) {
+	Ref<Direction> d;
 	d.instantiate();
 	d->start = p_start;
 	d->end = p_end;
 	return d;
 }
 
-Vector2 NDirection::to_normalized() const {
+Ref<Direction> Direction::from_coords(const Vector2 &p_start, const Vector2 &p_end) {
+	return make(Point::at(p_start), Point::at(p_end));
+}
+
+Vector2 Direction::to_normalized() const {
 	// Direction.to_normalized: Vector2.normalized() of the float32 vector (zero stays zero)
-	return to_vec(rc::Ray{to_v2(Vector2()), to_v2(start), to_v2(end)}.to_normalized());
+	return to_vec(rc::Ray{rc::V2{}, to_v2(start_coords()), to_v2(end_coords())}.to_normalized());
 }
 
-// ---------------------------------------------------------------- NRay
+// ---------------------------------------------------------------- Ray
 
-void NRay::_bind_methods() {
-	ClassDB::bind_static_method("NRay", D_METHOD("from_coords", "origin", "direction"), &NRay::from_coords);
-	ClassDB::bind_method(D_METHOD("get_origin"), &NRay::get_origin);
-	ClassDB::bind_method(D_METHOD("set_origin", "v"), &NRay::set_origin);
-	ClassDB::bind_method(D_METHOD("get_direction"), &NRay::get_direction);
-	ClassDB::bind_method(D_METHOD("set_direction", "d"), &NRay::set_direction);
-	ADD_PROPERTY(PropertyInfo(Variant::VECTOR2, "origin"), "set_origin", "get_origin");
-	ADD_PROPERTY(obj_prop<NDirection>("direction", "NDirection"), "set_direction", "get_direction");
+void Ray::_bind_methods() {
+	ClassDB::bind_static_method("Ray", D_METHOD("make", "origin", "direction"), &Ray::make);
+	ClassDB::bind_static_method("Ray", D_METHOD("from_coords", "origin", "direction"), &Ray::from_coords);
+	ClassDB::bind_method(D_METHOD("get_origin"), &Ray::get_origin);
+	ClassDB::bind_method(D_METHOD("set_origin", "v"), &Ray::set_origin);
+	ClassDB::bind_method(D_METHOD("get_direction"), &Ray::get_direction);
+	ClassDB::bind_method(D_METHOD("set_direction", "d"), &Ray::set_direction);
+	ADD_PROPERTY(obj_prop("origin", "Point"), "set_origin", "get_origin");
+	ADD_PROPERTY(obj_prop("direction", "Direction"), "set_direction", "get_direction");
 }
 
-Ref<NRay> NRay::from_coords(const Vector2 &p_origin, const Ref<NDirection> &p_direction) {
-	Ref<NRay> r;
+Ref<Ray> Ray::make(const Ref<Point> &p_origin, const Ref<Direction> &p_direction) {
+	Ref<Ray> r;
 	r.instantiate();
 	r->origin = p_origin;
 	r->direction = p_direction;
 	return r;
 }
 
-Ref<NRay> NRay::wrap(const rc::Ray &r) {
-	return from_coords(to_vec(r.origin), NDirection::from_coords(to_vec(r.dir_start), to_vec(r.dir_end)));
+Ref<Ray> Ray::from_coords(const Vector2 &p_origin, const Ref<Direction> &p_direction) {
+	return make(Point::at(p_origin), p_direction);
 }
 
-rc::Ray NRay::to_rc() const {
+Ref<Ray> Ray::wrap(const rc::Ray &r) {
+	return from_coords(to_vec(r.origin), Direction::from_coords(to_vec(r.dir_start), to_vec(r.dir_end)));
+}
+
+rc::Ray Ray::to_rc() const {
 	rc::Ray r;
-	r.origin = to_v2(origin);
+	if (origin.is_valid()) {
+		r.origin = to_v2(origin->coords);
+	}
 	if (direction.is_valid()) {
-		r.dir_start = to_v2(direction->start);
-		r.dir_end = to_v2(direction->end);
+		r.dir_start = to_v2(direction->start_coords());
+		r.dir_end = to_v2(direction->end_coords());
 	}
 	return r;
 }
 
-// ---------------------------------------------------------------- NTraceHit
+// ---------------------------------------------------------------- RayCache
 
-void NTraceHit::_bind_methods() {
-	ClassDB::bind_static_method("NTraceHit", D_METHOD("make", "t", "point", "surface_id", "side", "on_segment"), &NTraceHit::make);
+Ref<Ray> RayCache::get(const rc::Ray &r) {
+	for (const auto &kv : rays) {
+		if (kv.first.origin == r.origin && kv.first.dir_start == r.dir_start && kv.first.dir_end == r.dir_end) {
+			return kv.second;
+		}
+	}
+	rays.emplace_back(r, Ray::wrap(r));
+	return rays.back().second;
+}
+
+// ---------------------------------------------------------------- TraceHit
+
+void TraceHit::_bind_methods() {
+	ClassDB::bind_static_method("TraceHit", D_METHOD("make", "t", "point", "segment", "side", "on_segment", "at_endpoint", "blocked_left", "blocked_right"),
+			&TraceHit::make, DEFVAL(0), DEFVAL(false), DEFVAL(false));
 #define RC_HIT_PROP(name, vtype)                                                      \
-	ClassDB::bind_method(D_METHOD("get_" #name), &NTraceHit::get_##name);             \
-	ClassDB::bind_method(D_METHOD("set_" #name, "v"), &NTraceHit::set_##name);        \
+	ClassDB::bind_method(D_METHOD("get_" #name), &TraceHit::get_##name);              \
+	ClassDB::bind_method(D_METHOD("set_" #name, "v"), &TraceHit::set_##name);         \
 	ADD_PROPERTY(PropertyInfo(Variant::vtype, #name), "set_" #name, "get_" #name);
 	RC_HIT_PROP(t, FLOAT)
-	RC_HIT_PROP(point, VECTOR2)
 	RC_HIT_PROP(surface_id, INT)
 	RC_HIT_PROP(side, INT)
 	RC_HIT_PROP(on_segment, BOOL)
+	RC_HIT_PROP(at_endpoint, INT)
+	RC_HIT_PROP(blocked_left, BOOL)
+	RC_HIT_PROP(blocked_right, BOOL)
 #undef RC_HIT_PROP
+	ClassDB::bind_method(D_METHOD("get_point"), &TraceHit::get_point);
+	ClassDB::bind_method(D_METHOD("set_point", "v"), &TraceHit::set_point);
+	ADD_PROPERTY(obj_prop("point", "Point"), "set_point", "get_point");
+	ClassDB::bind_method(D_METHOD("get_segment"), &TraceHit::get_segment);
+	ClassDB::bind_method(D_METHOD("set_segment", "v"), &TraceHit::set_segment);
+	ADD_PROPERTY(PropertyInfo(Variant::NIL, "segment", godot::PROPERTY_HINT_NONE, "", godot::PROPERTY_USAGE_DEFAULT | godot::PROPERTY_USAGE_NIL_IS_VARIANT),
+			"set_segment", "get_segment");
+	ClassDB::bind_method(D_METHOD("is_fully_blocked"), &TraceHit::is_fully_blocked);
 }
 
-Ref<NTraceHit> NTraceHit::make(double p_t, const Vector2 &p_point, int p_surface_id, int p_side, bool p_on_segment) {
-	Ref<NTraceHit> h;
+Ref<TraceHit> TraceHit::make(double p_t, const Vector2 &p_point, const Variant &p_segment, int p_side, bool p_on_segment, int p_at_endpoint,
+		bool p_blocked_left, bool p_blocked_right) {
+	Ref<TraceHit> h;
 	h.instantiate();
 	h->t = p_t;
-	h->point = p_point;
-	h->surface_id = p_surface_id;
+	h->point = Point::at(p_point);
+	h->segment = p_segment;
 	h->side = p_side;
 	h->on_segment = p_on_segment;
+	h->at_endpoint = p_at_endpoint;
+	h->blocked_left = p_blocked_left;
+	h->blocked_right = p_blocked_right;
 	return h;
 }
 
-Ref<NTraceHit> NTraceHit::wrap(const rc::TraceHit &h) {
-	return make(h.t, to_vec(h.point), h.surface_id, int(h.side), h.on_segment);
+Ref<TraceHit> TraceHit::wrap(const rc::TraceHit &h, const Dictionary &segments) {
+	Ref<TraceHit> o = make(h.t, to_vec(h.point), segments.get(h.surface_id, Variant()), int(h.side), h.on_segment);
+	o->surface_id = h.surface_id;
+	return o;
 }
 
-rc::TraceHit NTraceHit::to_rc() const {
+rc::TraceHit TraceHit::to_rc() const {
 	rc::TraceHit h;
 	h.t = t;
-	h.point = to_v2(point);
+	h.point = point.is_valid() ? to_v2(point->coords) : rc::V2{};
 	h.surface_id = surface_id;
 	h.side = rc::Side(side);
 	h.on_segment = on_segment;
 	return h;
 }
 
-// ---------------------------------------------------------------- NTraceStep
+// ---------------------------------------------------------------- TraceStep
 
-void NTraceStep::_bind_methods() {
-	ClassDB::bind_static_method("NTraceStep", D_METHOD("make", "start", "end", "frame_id", "hit", "ray", "via", "is_arc"), &NTraceStep::make,
-			DEFVAL(0), DEFVAL(Variant()), DEFVAL(Variant()), DEFVAL(Vector2()), DEFVAL(false));
+void TraceStep::_bind_methods() {
+	ClassDB::bind_static_method("TraceStep", D_METHOD("make", "start", "end", "frame_id", "hit", "ray", "via", "is_arc"), &TraceStep::make,
+			DEFVAL(Vector2()), DEFVAL(Vector2()), DEFVAL(0), DEFVAL(Variant()), DEFVAL(Variant()), DEFVAL(Vector2()), DEFVAL(false));
 #define RC_STEP_PROP(name, vtype)                                                     \
-	ClassDB::bind_method(D_METHOD("get_" #name), &NTraceStep::get_##name);            \
-	ClassDB::bind_method(D_METHOD("set_" #name, "v"), &NTraceStep::set_##name);       \
+	ClassDB::bind_method(D_METHOD("get_" #name), &TraceStep::get_##name);             \
+	ClassDB::bind_method(D_METHOD("set_" #name, "v"), &TraceStep::set_##name);        \
 	ADD_PROPERTY(PropertyInfo(Variant::vtype, #name), "set_" #name, "get_" #name);
 	RC_STEP_PROP(start, VECTOR2)
 	RC_STEP_PROP(end, VECTOR2)
@@ -149,20 +206,20 @@ void NTraceStep::_bind_methods() {
 	RC_STEP_PROP(est_error, FLOAT)
 	RC_STEP_PROP(precision_bits, INT)
 #undef RC_STEP_PROP
-	ClassDB::bind_method(D_METHOD("get_hit"), &NTraceStep::get_hit);
-	ClassDB::bind_method(D_METHOD("set_hit", "v"), &NTraceStep::set_hit);
-	ADD_PROPERTY(obj_prop<NTraceHit>("hit", "NTraceHit"), "set_hit", "get_hit");
-	ClassDB::bind_method(D_METHOD("get_ray"), &NTraceStep::get_ray);
-	ClassDB::bind_method(D_METHOD("set_ray", "v"), &NTraceStep::set_ray);
-	ADD_PROPERTY(obj_prop<NRay>("ray", "NRay"), "set_ray", "get_ray");
-	ClassDB::bind_method(D_METHOD("with_type", "new_type"), &NTraceStep::with_type);
-	ClassDB::bind_method(D_METHOD("copy_meta_from", "o"), &NTraceStep::copy_meta_from);
+	ClassDB::bind_method(D_METHOD("get_hit"), &TraceStep::get_hit);
+	ClassDB::bind_method(D_METHOD("set_hit", "v"), &TraceStep::set_hit);
+	ADD_PROPERTY(obj_prop("hit", "TraceHit"), "set_hit", "get_hit");
+	ClassDB::bind_method(D_METHOD("get_ray"), &TraceStep::get_ray);
+	ClassDB::bind_method(D_METHOD("set_ray", "v"), &TraceStep::set_ray);
+	ADD_PROPERTY(obj_prop("ray", "Ray"), "set_ray", "get_ray");
+	ClassDB::bind_method(D_METHOD("with_type", "new_type"), &TraceStep::with_type);
+	ClassDB::bind_method(D_METHOD("copy_meta_from", "o"), &TraceStep::copy_meta_from);
 	BIND_CONSTANT(IDENTITY_FRAME);
 }
 
-Ref<NTraceStep> NTraceStep::make(const Vector2 &p_start, const Vector2 &p_end, int p_frame_id, const Ref<NTraceHit> &p_hit, const Ref<NRay> &p_ray,
+Ref<TraceStep> TraceStep::make(const Vector2 &p_start, const Vector2 &p_end, int p_frame_id, const Ref<TraceHit> &p_hit, const Ref<Ray> &p_ray,
 		const Vector2 &p_via, bool p_is_arc) {
-	Ref<NTraceStep> s;
+	Ref<TraceStep> s;
 	s.instantiate();
 	s->start = p_start;
 	s->end = p_end;
@@ -175,18 +232,18 @@ Ref<NTraceStep> NTraceStep::make(const Vector2 &p_start, const Vector2 &p_end, i
 	return s;
 }
 
-Ref<NTraceStep> NTraceStep::wrap(const rc::TraceStep &st) {
-	Ref<NTraceStep> s;
+Ref<TraceStep> TraceStep::wrap(const rc::TraceStep &st, const Dictionary &segments, RayCache &rays) {
+	Ref<TraceStep> s;
 	s.instantiate();
 	s->start = to_vec(st.start);
 	s->end = to_vec(st.end);
 	s->via = to_vec(st.via);
 	s->frame_id = st.frame_id;
 	if (st.hit) {
-		s->hit = NTraceHit::wrap(*st.hit);
+		s->hit = TraceHit::wrap(*st.hit, segments);
 	}
 	if (st.ray) {
-		s->ray = NRay::wrap(*st.ray);
+		s->ray = rays.get(*st.ray);
 	}
 	s->is_arc_step = st.is_arc_step;
 	s->type = int(st.type);
@@ -200,7 +257,7 @@ Ref<NTraceStep> NTraceStep::wrap(const rc::TraceStep &st) {
 	return s;
 }
 
-rc::TraceStep NTraceStep::to_rc() const {
+rc::TraceStep TraceStep::to_rc() const {
 	rc::TraceStep st;
 	st.start = to_v2(start);
 	st.end = to_v2(end);
@@ -224,14 +281,14 @@ rc::TraceStep NTraceStep::to_rc() const {
 	return st;
 }
 
-Ref<NTraceStep> NTraceStep::with_type(int new_type) const {
-	Ref<NTraceStep> copy = make(start, end, frame_id, hit, ray, via, is_arc_step);
+Ref<TraceStep> TraceStep::with_type(int new_type) const {
+	Ref<TraceStep> copy = make(start, end, frame_id, hit, ray, via, is_arc_step);
 	copy->type = new_type;
-	copy->copy_meta_from(Ref<NTraceStep>(this));
+	copy->copy_meta_from(Ref<TraceStep>(this));
 	return copy;
 }
 
-void NTraceStep::copy_meta_from(const Ref<NTraceStep> &o) {
+void TraceStep::copy_meta_from(const Ref<TraceStep> &o) {
 	if (o.is_null()) {
 		return;
 	}
@@ -244,28 +301,28 @@ void NTraceStep::copy_meta_from(const Ref<NTraceStep> &o) {
 	ghost = o->ghost;
 }
 
-// ---------------------------------------------------------------- NTracePath
+// ---------------------------------------------------------------- TracePath
 
-void NTracePath::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("get_steps"), &NTracePath::get_steps);
-	ClassDB::bind_method(D_METHOD("set_steps", "v"), &NTracePath::set_steps);
-	ClassDB::bind_method(D_METHOD("get_targets_hit"), &NTracePath::get_targets_hit);
-	ClassDB::bind_method(D_METHOD("set_targets_hit", "v"), &NTracePath::set_targets_hit);
-	ClassDB::bind_method(D_METHOD("get_cursor_index"), &NTracePath::get_cursor_index);
-	ClassDB::bind_method(D_METHOD("set_cursor_index", "v"), &NTracePath::set_cursor_index);
-	ClassDB::bind_method(D_METHOD("get_hit_count"), &NTracePath::get_hit_count);
-	ClassDB::bind_method(D_METHOD("set_hit_count", "v"), &NTracePath::set_hit_count);
+void TracePath::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("get_steps"), &TracePath::get_steps);
+	ClassDB::bind_method(D_METHOD("set_steps", "v"), &TracePath::set_steps);
+	ClassDB::bind_method(D_METHOD("get_targets_hit"), &TracePath::get_targets_hit);
+	ClassDB::bind_method(D_METHOD("set_targets_hit", "v"), &TracePath::set_targets_hit);
+	ClassDB::bind_method(D_METHOD("get_cursor_index"), &TracePath::get_cursor_index);
+	ClassDB::bind_method(D_METHOD("set_cursor_index", "v"), &TracePath::set_cursor_index);
+	ClassDB::bind_method(D_METHOD("get_hit_count"), &TracePath::get_hit_count);
+	ClassDB::bind_method(D_METHOD("set_hit_count", "v"), &TracePath::set_hit_count);
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "steps"), "set_steps", "get_steps");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "targets_hit"), "set_targets_hit", "get_targets_hit");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "cursor_index"), "set_cursor_index", "get_cursor_index");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "hit_count"), "set_hit_count", "get_hit_count");
 }
 
-Ref<NTracePath> NTracePath::wrap(const rc::TracePath &p) {
-	Ref<NTracePath> o;
+Ref<TracePath> TracePath::wrap(const rc::TracePath &p, const Dictionary &segments, RayCache &rays) {
+	Ref<TracePath> o;
 	o.instantiate();
 	for (const rc::TraceStep &s : p.steps) {
-		o->steps.push_back(NTraceStep::wrap(s));
+		o->steps.push_back(TraceStep::wrap(s, segments, rays));
 	}
 	for (int id : p.targets_hit) {
 		o->targets_hit[id] = true;
@@ -275,65 +332,76 @@ Ref<NTracePath> NTracePath::wrap(const rc::TracePath &p) {
 	return o;
 }
 
-// ---------------------------------------------------------------- NBeamTracerPair
+// ---------------------------------------------------------------- BeamTracerPair
 
-void NBeamTracerPair::_bind_methods() {
-	ClassDB::bind_method(D_METHOD("get_planned"), &NBeamTracerPair::get_planned);
-	ClassDB::bind_method(D_METHOD("get_physical"), &NBeamTracerPair::get_physical);
-	ClassDB::bind_method(D_METHOD("get_result"), &NBeamTracerPair::get_result);
-	ClassDB::bind_method(D_METHOD("get_final_flags"), &NBeamTracerPair::get_final_flags);
-	ADD_PROPERTY(obj_prop<NTracePath>("planned", "NTracePath"), "", "get_planned");
-	ADD_PROPERTY(obj_prop<NTracePath>("physical", "NTracePath"), "", "get_physical");
-	ADD_PROPERTY(obj_prop<NPrecisionLadderResult>("result", "NPrecisionLadderResult"), "", "get_result");
+void BeamTracerPair::_bind_methods() {
+	ClassDB::bind_method(D_METHOD("get_planned"), &BeamTracerPair::get_planned);
+	ClassDB::bind_method(D_METHOD("get_physical"), &BeamTracerPair::get_physical);
+	ClassDB::bind_method(D_METHOD("get_result"), &BeamTracerPair::get_result);
+	ClassDB::bind_method(D_METHOD("get_final_flags"), &BeamTracerPair::get_final_flags);
+	ADD_PROPERTY(obj_prop("planned", "TracePath"), "", "get_planned");
+	ADD_PROPERTY(obj_prop("physical", "TracePath"), "", "get_physical");
+	ADD_PROPERTY(obj_prop("result", "PrecisionLadderResult"), "", "get_result");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "final_flags"), "", "get_final_flags");
 }
 
-// ---------------------------------------------------------------- NBeamTracer
+// ---------------------------------------------------------------- BeamTracer
 
-void NBeamTracer::_bind_methods() {
-	ClassDB::bind_static_method("NBeamTracer", D_METHOD("TOL"), &NBeamTracer::TOL);
-	ClassDB::bind_static_method("NBeamTracer", D_METHOD("scene_supported", "defs"), &NBeamTracer::scene_supported);
-	ClassDB::bind_static_method("NBeamTracer", D_METHOD("plan_items", "plan_entries"), &NBeamTracer::plan_items);
-	ClassDB::bind_method(D_METHOD("trace_pair", "defs", "player", "cursor", "plan_entries", "flags"), &NBeamTracer::trace_pair, DEFVAL(Dictionary()));
-	ClassDB::bind_method(D_METHOD("plan_refuses", "defs", "plan_entries", "surface_id", "left", "flags"), &NBeamTracer::plan_refuses, DEFVAL(Dictionary()));
-	ClassDB::bind_method(D_METHOD("clear_cache"), &NBeamTracer::clear_cache);
-	ClassDB::bind_method(D_METHOD("to_path", "events", "errs", "limbs", "frames", "aim", "flags"), &NBeamTracer::to_path,
-			DEFVAL(Variant()), DEFVAL(Dictionary()));
+void BeamTracer::_bind_methods() {
+	ClassDB::bind_static_method("BeamTracer", D_METHOD("TOL"), &BeamTracer::TOL);
+	ClassDB::bind_static_method("BeamTracer", D_METHOD("scene_supported", "defs"), &BeamTracer::scene_supported);
+	ClassDB::bind_static_method("BeamTracer", D_METHOD("plan_items", "plan_entries"), &BeamTracer::plan_items);
+	ClassDB::bind_method(D_METHOD("trace_pair", "defs", "player", "cursor", "plan_entries", "flags", "segments"), &BeamTracer::trace_pair,
+			DEFVAL(Dictionary()), DEFVAL(Dictionary()));
+	ClassDB::bind_method(D_METHOD("plan_refuses", "defs", "plan_entries", "surface_id", "left", "flags"), &BeamTracer::plan_refuses, DEFVAL(Dictionary()));
+	ClassDB::bind_method(D_METHOD("clear_cache"), &BeamTracer::clear_cache);
+	ClassDB::bind_method(D_METHOD("to_path", "events", "errs", "limbs", "frames", "aim", "flags", "segments"), &BeamTracer::to_path,
+			DEFVAL(Variant()), DEFVAL(Dictionary()), DEFVAL(Dictionary()));
 }
 
-bool NBeamTracer::scene_supported(const Array &defs) {
+bool BeamTracer::scene_supported(const Array &defs) {
 	return rc::scene_supported(defs_from_array(defs));
 }
 
-Array NBeamTracer::plan_items(const Array &plan_entries) {
+Array BeamTracer::plan_items(const Array &plan_entries) {
 	Array out;
 	for (const rc::PlanItem &p : plan_from_items(plan_entries)) {
 		Variant hint;
 		if (p.hint) {
 			hint = Vector2(p.hint->x, p.hint->y);
 		}
-		out.push_back(NBeamSolverPlanItem::make(p.surface_id, p.left, hint));
+		out.push_back(BeamSolverPlanItem::make(p.surface_id, p.left, hint));
 	}
 	return out;
 }
 
-Ref<NBeamTracerPair> NBeamTracer::trace_pair(const Array &defs, const Vector2 &player, const Vector2 &cursor, const Array &plan_entries,
-		const Dictionary &flags) {
+Ref<BeamTracerPair> BeamTracer::trace_pair(const Array &defs, const Vector2 &player, const Vector2 &cursor, const Array &plan_entries,
+		const Dictionary &flags, const Dictionary &segments) {
 	tracer.set_defs(defs_from_array(defs));
 	const std::optional<rc::TracePair> pair = tracer.trace_pair(to_v2(player), to_v2(cursor), plan_from_items(plan_entries), flags_from_dict(flags));
 	if (!pair) {
-		return Ref<NBeamTracerPair>();
+		return Ref<BeamTracerPair>();
 	}
-	Ref<NBeamTracerPair> o;
+	Ref<BeamTracerPair> o;
 	o.instantiate();
-	o->planned = NTracePath::wrap(pair->planned);
-	o->physical = NTracePath::wrap(pair->physical);
-	o->result = NPrecisionLadderResult::wrap(pair->result);
+	RayCache rays;
+	o->physical = TracePath::wrap(pair->physical, segments, rays);
+	if (pair->shared) {
+		// one trajectory: the same step objects (BeamTracer.trace_pair duplicates the Array)
+		o->planned.instantiate();
+		o->planned->steps = o->physical->steps.duplicate();
+		o->planned->targets_hit = o->physical->targets_hit.duplicate();
+		o->planned->cursor_index = o->physical->cursor_index;
+		o->planned->hit_count = o->physical->hit_count;
+	} else {
+		o->planned = TracePath::wrap(pair->planned, segments, rays);
+	}
+	o->result = PrecisionLadderResult::wrap(pair->result);
 	o->final_flags = flags_to_dict(pair->final_flags);
 	return o;
 }
 
-bool NBeamTracer::plan_refuses(const Array &defs, const Array &plan_entries, int surface_id, bool left, const Dictionary &flags) {
+bool BeamTracer::plan_refuses(const Array &defs, const Array &plan_entries, int surface_id, bool left, const Dictionary &flags) {
 	tracer.set_defs(defs_from_array(defs));
 	return tracer.plan_refuses(plan_from_items(plan_entries), surface_id, left, flags_from_dict(flags));
 }
@@ -344,7 +412,7 @@ template <class N>
 std::vector<rc::Event<N>> events_of(const Array &events) {
 	std::vector<rc::Event<N>> out;
 	for (int64_t i = 0; i < events.size(); i++) {
-		Ref<NBeamSolverEvent> e = events[i];
+		Ref<BeamSolverEvent> e = events[i];
 		if (e.is_valid()) {
 			if (const auto *ev = std::get_if<rc::Event<N>>(&e->event)) {
 				out.push_back(*ev);
@@ -354,14 +422,53 @@ std::vector<rc::Event<N>> events_of(const Array &events) {
 	return out;
 }
 
+// F64 events as Dual events: the same float64 values, no derivatives.
+rc::Event<rc::Dual> dual_of(const rc::Event<rc::F64> &e) {
+	rc::Event<rc::Dual> d;
+	d.kind = e.kind;
+	d.surface_id = e.surface_id;
+	d.left = e.left;
+	d.applied = e.applied;
+	d.terminal = e.terminal;
+	d.on_segment = e.on_segment;
+	d.rehit = e.rehit;
+	d.popped = e.popped;
+	d.teleport = e.teleport;
+	d.projective = e.projective;
+	d.epoch = e.epoch;
+	if (e.point) {
+		d.point = rc::CN<rc::Dual>{rc::Dual{e.point->re.v, 0.0}, rc::Dual{e.point->im.v, 0.0}};
+	}
+	if (e.beam) {
+		d.beam = std::make_shared<const rc::Beam<rc::Dual>>(rc::Beam<rc::Dual>{{rc::Dual{e.beam->p.re.v, 0.0}, rc::Dual{e.beam->p.im.v, 0.0}},
+			{rc::Dual{e.beam->tau.re.v, 0.0}, rc::Dual{e.beam->tau.im.v, 0.0}}, rc::Dual{e.beam->kappa.v, 0.0}});
+	}
+	if (e.t_from) {
+		d.t_from = rc::Dual{e.t_from->v, 0.0};
+	}
+	if (e.t_to) {
+		d.t_to = rc::Dual{e.t_to->v, 0.0};
+	}
+	d.margin = e.margin;
+	d.seeded = e.seeded;
+	d.state = e.state;
+	d.flags = e.flags;
+	d.anchored = e.anchored;
+	d.beam_view = e.beam_view;
+	return d;
+}
+
 } // namespace
 
-Ref<NTracePath> NBeamTracer::to_path(const Array &events, const Array &errs, int limbs, const Dictionary &frames, const Variant &aim,
-		const Dictionary &flags) {
+Ref<TracePath> BeamTracer::to_path(const Array &events, const Array &errs, int limbs, const Dictionary &frames, const Variant &aim,
+		const Dictionary &flags, const Dictionary &segments) {
+	if (tracer.defs().empty()) {
+		tracer.set_defs({}); // a solve context without surfaces: no targets, no hit segments
+	}
 	rc::Climb climb;
 	climb.limbs = limbs;
 	if (events.size() > 0) {
-		Ref<NBeamSolverEvent> e0 = events[0];
+		Ref<BeamSolverEvent> e0 = events[0];
 		if (e0.is_valid() && std::holds_alternative<rc::Event<rc::BigFloat>>(e0->event)) {
 			climb.big_events = events_of<rc::BigFloat>(events);
 			if (limbs == 0) {
@@ -371,40 +478,8 @@ Ref<NTracePath> NBeamTracer::to_path(const Array &events, const Array &errs, int
 			climb.f64_events = events_of<rc::Dual>(events);
 			climb.limbs = 0;
 		} else {
-			// F64 events: the same float64 values as the Dual tier
 			for (const rc::Event<rc::F64> &e : events_of<rc::F64>(events)) {
-				rc::Event<rc::Dual> d;
-				d.kind = e.kind;
-				d.surface_id = e.surface_id;
-				d.left = e.left;
-				d.applied = e.applied;
-				d.terminal = e.terminal;
-				d.on_segment = e.on_segment;
-				d.rehit = e.rehit;
-				d.popped = e.popped;
-				d.teleport = e.teleport;
-				d.projective = e.projective;
-				d.epoch = e.epoch;
-				if (e.point) {
-					d.point = rc::CN<rc::Dual>{rc::Dual{e.point->re.v, 0.0}, rc::Dual{e.point->im.v, 0.0}};
-				}
-				if (e.beam) {
-					d.beam = std::make_shared<const rc::Beam<rc::Dual>>(rc::Beam<rc::Dual>{{rc::Dual{e.beam->p.re.v, 0.0}, rc::Dual{e.beam->p.im.v, 0.0}},
-						{rc::Dual{e.beam->tau.re.v, 0.0}, rc::Dual{e.beam->tau.im.v, 0.0}}, rc::Dual{e.beam->kappa.v, 0.0}});
-				}
-				if (e.t_from) {
-					d.t_from = rc::Dual{e.t_from->v, 0.0};
-				}
-				if (e.t_to) {
-					d.t_to = rc::Dual{e.t_to->v, 0.0};
-				}
-				d.margin = e.margin;
-				d.seeded = e.seeded;
-				d.state = e.state;
-				d.flags = e.flags;
-				d.anchored = e.anchored;
-				d.beam_view = e.beam_view;
-				climb.f64_events.push_back(std::move(d));
+				climb.f64_events.push_back(dual_of(e));
 			}
 			climb.limbs = 0;
 		}
@@ -419,7 +494,7 @@ Ref<NTracePath> NBeamTracer::to_path(const Array &events, const Array &errs, int
 		fm[to_std(godot::String(keys[i]))] = int(int64_t(entry["id"]));
 	}
 	rc::Ray ray;
-	const Ref<NRay> aim_ray = aim;
+	const Ref<Ray> aim_ray = aim;
 	if (aim_ray.is_valid()) {
 		ray = aim_ray->to_rc();
 	}
@@ -438,5 +513,6 @@ Ref<NTracePath> NBeamTracer::to_path(const Array &events, const Array &errs, int
 			out_frames[k] = entry;
 		}
 	}
-	return NTracePath::wrap(path);
+	RayCache rays;
+	return TracePath::wrap(path, segments, rays);
 }

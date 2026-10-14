@@ -1,4 +1,4 @@
-class_name BeamScene
+class_name GdBeamScene
 extends RefCounted
 
 # A scene for the beam solver: segment surfaces with per-side effect types,
@@ -20,11 +20,11 @@ const PROJECTIVE := ["line_normal_projection", "circle_normal_projection", "line
 class Surf extends RefCounted:
 	var id: int
 	var index: int
-	var seg: BeamGeom.Seg
+	var seg: GdBeamGeom.Seg
 	var left_type: String = ""
 	var right_type: String = ""
 	var is_target: bool = false
-	# raw float64 geometry (FastSolver): line s -> e, or circle (cx, cy, r)
+	# raw float64 geometry (GdFastSolver): line s -> e, or circle (cx, cy, r)
 	var line: bool = true
 	var sx: float
 	var sy: float
@@ -37,8 +37,8 @@ class Surf extends RefCounted:
 	# portal: rigid motion a z + d (a at the scene's tier, and its float64
 	# twin pa + i pb), the paired surface id
 	var portal: bool = false
-	var alpha: CN = null
-	var dvec: CN = null
+	var alpha: GdCN = null
+	var dvec: GdCN = null
 	var pa: float = 1.0
 	var pb: float = 0.0
 	var dx: float = 0.0
@@ -100,21 +100,21 @@ class Surf extends RefCounted:
 		var ch = _base_state(left, flags)
 		return ch == null or String(ch.get("key", "")) != GHOST
 
-	# Exact circle data (cached): homogeneous center [x, y, w], radius² times
-	# w² (BigFloat), and their float64 roundings (for certified filters).
+	# GdExact circle data (cached): homogeneous center [x, y, w], radius² times
+	# w² (GdBigFloat), and their float64 roundings (for certified filters).
 	var _exact_circle = null
 	func exact_circle() -> Array:
 		if _exact_circle == null:
 			var C: Array
-			var rw2: BigFloat
+			var rw2: GdBigFloat
 			if full:
-				C = [Exact.of(cx), Exact.of(cy), Exact.of(1.0)]
-				rw2 = Exact.mul(Exact.of(r), Exact.of(r))
+				C = [GdExact.of(cx), GdExact.of(cy), GdExact.of(1.0)]
+				rw2 = GdExact.mul(GdExact.of(r), GdExact.of(r))
 			else:
-				C = Exact.circumcenter_h(sx, sy, vx, vy, ex, ey)
-				var dx := Exact.sub(Exact.mul(Exact.of(sx), C[2]), C[0])
-				var dy := Exact.sub(Exact.mul(Exact.of(sy), C[2]), C[1])
-				rw2 = Exact.add(Exact.mul(dx, dx), Exact.mul(dy, dy))
+				C = GdExact.circumcenter_h(sx, sy, vx, vy, ex, ey)
+				var dx := GdExact.sub(GdExact.mul(GdExact.of(sx), C[2]), C[0])
+				var dy := GdExact.sub(GdExact.mul(GdExact.of(sy), C[2]), C[1])
+				rw2 = GdExact.add(GdExact.mul(dx, dx), GdExact.mul(dy, dy))
 			var w: float = C[2].to_float()
 			_exact_circle = [C, rw2, C[0].to_float() / w, C[1].to_float() / w, rw2.to_float() / (w * w)]
 		return _exact_circle
@@ -135,8 +135,8 @@ static func _type_of(cfg) -> String:
 	var t := String(cfg.get("type", "pass"))
 	return "" if t == "pass" else t
 
-static func from_defs(ctx: NumCtx, defs: Array) -> BeamScene:
-	var sc := BeamScene.new()
+static func from_defs(ctx: GdNumCtx, defs: Array) -> GdBeamScene:
+	var sc := GdBeamScene.new()
 	for d in defs:
 		var s := Surf.new()
 		s.id = int(d["id"])
@@ -150,8 +150,8 @@ static func from_defs(ctx: NumCtx, defs: Array) -> BeamScene:
 			g["radius"] = d["circle"]["radius"]
 		else:
 			g["kind"] = "arc"
-		s.seg = BeamGeom.seg_from_dict(ctx, g)
-		s.line = s.seg.kind == BeamGeom.Kind.LINE
+		s.seg = GdBeamGeom.seg_from_dict(ctx, g)
+		s.line = s.seg.kind == GdBeamGeom.Kind.LINE
 		s.full = s.seg.full
 		if s.seg.v != null:
 			s.has_v = true

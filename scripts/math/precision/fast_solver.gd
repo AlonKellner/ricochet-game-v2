@@ -1,17 +1,17 @@
-class_name FastSolver
+class_name GdFastSolver
 extends RefCounted
 
-# Raw-float backend of BeamSolver for the float64 tier, ~50x faster than the
+# Raw-float backend of GdBeamSolver for the float64 tier, ~50x faster than the
 # precision-generic code (which wraps every scalar in an object). The beam
-# math performs the same operations in the same order as HPBeam / BeamGeom /
-# BeamEffects, so float64 values are bit-identical to BeamSolver over F64Num,
-# and it carries the tangent-linear derivative (DualNum semantics) inline for
-# ErrorEstimate. The trace rules are BeamSolver's walker (one implementation);
-# topology decisions run the shared BeamGeom code on the (bit-identical)
-# float64 points. BigFloat tiers use BeamSolver.NumBackend.
+# math performs the same operations in the same order as GdHPBeam / GdBeamGeom /
+# GdBeamEffects, so float64 values are bit-identical to GdBeamSolver over GdF64Num,
+# and it carries the tangent-linear derivative (GdDualNum semantics) inline for
+# GdErrorEstimate. The trace rules are GdBeamSolver's walker (one implementation);
+# topology decisions run the shared GdBeamGeom code on the (bit-identical)
+# float64 points. GdBigFloat tiers use GdBeamSolver.NumBackend.
 #
 # Beam: PackedFloat64Array [px, py, tx, ty, k, dpx, dpy, dtx, dty, dk]
-# Parameters t on the walker side: DualNum (value, derivative).
+# Parameters t on the walker side: GdDualNum (value, derivative).
 
 const PX := 0
 const PY := 1
@@ -24,17 +24,17 @@ const DTX := 7
 const DTY := 8
 const DK := 9
 
-# A BeamScene at float64 (its raw geometry feeds the raw math).
+# A GdBeamScene at float64 (its raw geometry feeds the raw math).
 class Scene extends RefCounted:
-	var scene: BeamScene
+	var scene: GdBeamScene
 
 	static func from_defs(defs: Array) -> Scene:
 		var s := Scene.new()
-		s.scene = BeamScene.from_defs(NumCtx.f64(), defs)
+		s.scene = GdBeamScene.from_defs(GdNumCtx.f64(), defs)
 		return s
 
 class Out extends RefCounted:
-	var events: Array = []    # BeamSolver.Event (F64Num points / beams)
+	var events: Array = []    # GdBeamSolver.Event (GdF64Num points / beams)
 	var gain: Array = []      # per event |d point / d seed angle| (0 = unseeded)
 
 # ---------------------------------------------------------------- beam math
@@ -76,7 +76,7 @@ static func at(b: PackedFloat64Array, t: float, dt: float) -> PackedFloat64Array
 	return PackedFloat64Array([b[PX] + re3, b[PY] + im3, b[DPX] + dre3, b[DPY] + dim3])
 
 # unit tangent at t: [tx, ty, dtx, dty]
-# t = inf: p + 2 i tau / kappa (HPBeam.at_infinity twin) with its derivative.
+# t = inf: p + 2 i tau / kappa (GdHPBeam.at_infinity twin) with its derivative.
 static func antipode(b: PackedFloat64Array) -> PackedFloat64Array:
 	var k := b[K]
 	var dk := b[DK]
@@ -86,7 +86,7 @@ static func antipode(b: PackedFloat64Array) -> PackedFloat64Array:
 	var dy := b[DPY] + 2.0 * (b[DTX] * k - b[TX] * dk) / (k * k)
 	return PackedFloat64Array([x, y, dx, dy])
 
-# Point at t for display and margins only: no overflow for huge |t| (the
+# GdPoint at t for display and margins only: no overflow for huge |t| (the
 # parametrization is evaluated as tau / (1/t - i kappa/2) there).
 static func at_view(b: PackedFloat64Array, t: float) -> PackedFloat64Array:
 	if is_inf(t):
@@ -139,7 +139,7 @@ static func param_of(b: PackedFloat64Array, zx: float, zy: float) -> float:
 		return INF      # z is the antipode
 	var ww := wx * wx + wy * wy
 	if k != 0.0 and ww > d:
-		# near the antipode: t = 1 / Re(den / w) (HPBeam.param_of twin)
+		# near the antipode: t = 1 / Re(den / w) (GdHPBeam.param_of twin)
 		var qre := (denx * wx - deny * (-wy)) / ww
 		if qre == 0.0:
 			return INF
@@ -148,7 +148,7 @@ static func param_of(b: PackedFloat64Array, zx: float, zy: float) -> float:
 	return nre / d
 
 # Roots of beam ∩ circle (cx, cy, R²): [t0, dt0, t1, dt1, ...]
-# (HPBeam.hits twin: same float64 operation order -> bit-identical values).
+# (GdHPBeam.hits twin: same float64 operation order -> bit-identical values).
 static func circle_hits(b: PackedFloat64Array, cx: float, cy: float, r2: float, depart_on: bool) -> PackedFloat64Array:
 	var out := PackedFloat64Array()
 	var qx := cx - b[PX]
@@ -224,7 +224,7 @@ static func circle_hits(b: PackedFloat64Array, cx: float, cy: float, r2: float, 
 	return out
 
 # Roots of beam ∩ line through (sx,sy)->(ex,ey) as [t0, dt0, t1, dt1, ...]:
-# BeamGeom.hits twin (same float64 operation order -> bit-identical values)
+# GdBeamGeom.hits twin (same float64 operation order -> bit-identical values)
 # with the tangent-linear derivative carried inline.
 static func line_hits(b: PackedFloat64Array, sx: float, sy: float, ex: float, ey: float, depart_on: bool) -> PackedFloat64Array:
 	var out := PackedFloat64Array()
@@ -311,7 +311,7 @@ static func line_hits(b: PackedFloat64Array, sx: float, sy: float, ex: float, ey
 	out.append((dfp * 2.0 - r2 * dbig) / big)
 	return out
 
-# Inversion of the beam at t in the circle (cx, cy, R) (HPBeam.invert_at twin).
+# Inversion of the beam at t in the circle (cx, cy, R) (GdHPBeam.invert_at twin).
 static func invert_circle(b: PackedFloat64Array, t: float, dt: float, cx: float, cy: float, r: float, r2: float,
 		has_h: bool = false, hx: float = 0.0, hy: float = 0.0) -> PackedFloat64Array:
 	var h := at(b, t, dt)
@@ -368,7 +368,7 @@ static func invert_circle(b: PackedFloat64Array, t: float, dt: float, cx: float,
 	return PackedFloat64Array([h[0], h[1], tx2, ty2, k2, h[2], h[3], dtx2, dty2, dk2])
 
 
-# Reflection of the beam at t in the line s -> e (BeamEffects.reflect_line
+# Reflection of the beam at t in the line s -> e (GdBeamEffects.reflect_line
 # twin): h' = h, tau' = unit(u² conj(tau_h)), u² = D²/|D|², kappa' = -kappa.
 static func reflect_line(b: PackedFloat64Array, t: float, dt: float, sx: float, sy: float, ex: float, ey: float,
 		has_h: bool = false, hx: float = 0.0, hy: float = 0.0) -> PackedFloat64Array:
@@ -404,13 +404,13 @@ static func reflect_line(b: PackedFloat64Array, t: float, dt: float, sx: float, 
 # ---------------------------------------------------------------- surfaces
 
 # Roots of the beam with a scene surface's carrier: [t0, dt0, t1, dt1, ...].
-static func surf_hits(b: PackedFloat64Array, s: BeamScene.Surf, depart_on: bool) -> PackedFloat64Array:
+static func surf_hits(b: PackedFloat64Array, s: GdBeamScene.Surf, depart_on: bool) -> PackedFloat64Array:
 	if s.line:
 		return line_hits(b, s.sx, s.sy, s.ex, s.ey, depart_on)
 	return circle_hits(b, s.cx, s.cy, s.r2, depart_on)
 
-# Portal (BeamEffects.portal twin): p' = a h + d, tau' = a tau_h, kappa' = kappa.
-static func portal(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.Surf,
+# Portal (GdBeamEffects.portal twin): p' = a h + d, tau' = a tau_h, kappa' = kappa.
+static func portal(b: PackedFloat64Array, t: float, dt: float, s: GdBeamScene.Surf,
 		has_h: bool = false, hx: float = 0.0, hy: float = 0.0) -> PackedFloat64Array:
 	var h := at(b, t, dt)
 	if has_h:
@@ -425,8 +425,8 @@ static func portal(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.Surf
 		ar * h[2] - ai * h[3], ar * h[3] + ai * h[2],
 		ar * th[2] - ai * th[3], ar * th[3] + ai * th[2], b[DK]])
 
-# Projective (BeamEffects.project twin): straight beam from h along +-axis.
-static func project(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.Surf, left: bool,
+# Projective (GdBeamEffects.project twin): straight beam from h along +-axis.
+static func project(b: PackedFloat64Array, t: float, dt: float, s: GdBeamScene.Surf, left: bool,
 		has_h: bool = false, hx: float = 0.0, hy: float = 0.0) -> PackedFloat64Array:
 	var h := at(b, t, dt)
 	if has_h:
@@ -479,9 +479,9 @@ static func project(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.Sur
 		duy = (day - uy * proj) / n
 	return PackedFloat64Array([h[0], h[1], ux, uy, 0.0, h[2], h[3], dux, duy, 0.0])
 
-# The surface's transformative effect at t (BeamEffects.apply twin).
+# The surface's transformative effect at t (GdBeamEffects.apply twin).
 # has_h: (hx, hy) is the hit point, exact by provenance (else at(t)).
-static func apply_surf(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.Surf,
+static func apply_surf(b: PackedFloat64Array, t: float, dt: float, s: GdBeamScene.Surf,
 		has_h: bool = false, hx: float = 0.0, hy: float = 0.0) -> PackedFloat64Array:
 	if s.portal:
 		return portal(b, t, dt, s, has_h, hx, hy)
@@ -490,12 +490,12 @@ static func apply_surf(b: PackedFloat64Array, t: float, dt: float, s: BeamScene.
 	return invert_circle(b, t, dt, s.cx, s.cy, s.r, s.r2, has_h, hx, hy)
 
 # ---------------------------------------------------------------- decisions
-# Raw twins of BeamGeom's topology decisions (same float64 operation order,
-# hence the same decisions as the generic code over F64Num).
+# Raw twins of GdBeamGeom's topology decisions (same float64 operation order,
+# hence the same decisions as the generic code over GdF64Num).
 
-# BeamGeom.on_segment: Re(CR(S, P; E, V)) >= 0 (homogeneous; V at infinity
+# GdBeamGeom.on_segment: Re(CR(S, P; E, V)) >= 0 (homogeneous; V at infinity
 # for full lines).
-static func on_segment(s: BeamScene.Surf, px: float, py: float) -> bool:
+static func on_segment(s: GdBeamScene.Surf, px: float, py: float) -> bool:
 	if s.full:
 		return true
 	var svx: float
@@ -523,8 +523,8 @@ static func on_segment(s: BeamScene.Surf, px: float, py: float) -> bool:
 	var dim := spx * evy + spy * evx
 	return not ((nre * dre + nim * dim) < 0.0)
 
-# BeamGeom.side_left (winding sign cached on the generic segment).
-static func side_left(s: BeamScene.Surf, px: float, py: float, dx: float, dy: float) -> bool:
+# GdBeamGeom.side_left (winding sign cached on the generic segment).
+static func side_left(s: GdBeamScene.Surf, px: float, py: float, dx: float, dy: float) -> bool:
 	var gx: float
 	var gy: float
 	if s.line:
@@ -536,11 +536,11 @@ static func side_left(s: BeamScene.Surf, px: float, py: float, dx: float, dy: fl
 	var approach := -(dx * gx + dy * gy)
 	var approach_pos := not (approach < 0.0) and approach != 0.0
 	if s.seg._wind_nonneg == null:
-		s.seg._wind_nonneg = not BeamGeom.winding(s.seg).is_negative()
+		s.seg._wind_nonneg = not GdBeamGeom.winding(s.seg).is_negative()
 	return approach_pos if s.seg._wind_nonneg else not approach_pos
 
-# BeamGeom.endpoint_at: 1 / 2 if the point is exactly the start / end.
-static func endpoint_at(s: BeamScene.Surf, px: float, py: float) -> int:
+# GdBeamGeom.endpoint_at: 1 / 2 if the point is exactly the start / end.
+static func endpoint_at(s: GdBeamScene.Surf, px: float, py: float) -> int:
 	if s.full:
 		return 0
 	if px == s.sx and py == s.sy:
@@ -549,8 +549,8 @@ static func endpoint_at(s: BeamScene.Surf, px: float, py: float) -> int:
 		return 2
 	return 0
 
-# BeamGeom.blocked_sides: [blocked_left, blocked_right] through endpoint `which`.
-static func blocked_sides(s: BeamScene.Surf, which: int, dx: float, dy: float) -> Array:
+# GdBeamGeom.blocked_sides: [blocked_left, blocked_right] through endpoint `which`.
+static func blocked_sides(s: GdBeamScene.Surf, which: int, dx: float, dy: float) -> Array:
 	var tx: float
 	var ty: float
 	if s.line:
@@ -581,66 +581,66 @@ static func blocked_sides(s: BeamScene.Surf, which: int, dx: float, dy: float) -
 
 # ---------------------------------------------------------------- backend
 
-static func _f64cn(x: float, y: float) -> CN:
-	return CN.make(F64Num.of(x), F64Num.of(y))
+static func _f64cn(x: float, y: float) -> GdCN:
+	return GdCN.make(GdF64Num.of(x), GdF64Num.of(y))
 
-# BeamSolver walker backend over raw beams.
+# GdBeamSolver walker backend over raw beams.
 class Backend extends RefCounted:
 	static func make() -> Backend:
 		return Backend.new()
 
-	func roots(b: PackedFloat64Array, surf: BeamScene.Surf, depart_on: bool) -> Array:
-		var raw := FastSolver.surf_hits(b, surf, depart_on)
+	func roots(b: PackedFloat64Array, surf: GdBeamScene.Surf, depart_on: bool) -> Array:
+		var raw := GdFastSolver.surf_hits(b, surf, depart_on)
 		var out: Array = []
 		var i := 0
 		while i < raw.size():
-			out.append(DualNum.of(raw[i], raw[i + 1]))
+			out.append(GdDualNum.of(raw[i], raw[i + 1]))
 			i += 2
 		return out
-	func point(b: PackedFloat64Array, t: DualNum) -> CN:
-		var h := FastSolver.at(b, t.v, 0.0)
-		return FastSolver._f64cn(h[0], h[1])
-	func tangent(b: PackedFloat64Array, t: DualNum) -> CN:
-		var g := FastSolver.tangent_at(b, t.v, 0.0)
-		return FastSolver._f64cn(g[0], g[1])
-	func origin(b: PackedFloat64Array) -> CN:
-		return FastSolver._f64cn(b[PX], b[PY])
-	func param_of(b: PackedFloat64Array, z: CN) -> DualNum:
-		return DualNum.of(FastSolver.param_of(b, z.fx(), z.fy()))
-	func apply(b: PackedFloat64Array, t: DualNum, surf: BeamScene.Surf, _etype: String, h: CN = null) -> PackedFloat64Array:
+	func point(b: PackedFloat64Array, t: GdDualNum) -> GdCN:
+		var h := GdFastSolver.at(b, t.v, 0.0)
+		return GdFastSolver._f64cn(h[0], h[1])
+	func tangent(b: PackedFloat64Array, t: GdDualNum) -> GdCN:
+		var g := GdFastSolver.tangent_at(b, t.v, 0.0)
+		return GdFastSolver._f64cn(g[0], g[1])
+	func origin(b: PackedFloat64Array) -> GdCN:
+		return GdFastSolver._f64cn(b[PX], b[PY])
+	func param_of(b: PackedFloat64Array, z: GdCN) -> GdDualNum:
+		return GdDualNum.of(GdFastSolver.param_of(b, z.fx(), z.fy()))
+	func apply(b: PackedFloat64Array, t: GdDualNum, surf: GdBeamScene.Surf, _etype: String, h: GdCN = null) -> PackedFloat64Array:
 		if h == null:
-			return FastSolver.apply_surf(b, t.v, t.d, surf)
-		return FastSolver.apply_surf(b, t.v, t.d, surf, true, h.fx(), h.fy())
+			return GdFastSolver.apply_surf(b, t.v, t.d, surf)
+		return GdFastSolver.apply_surf(b, t.v, t.d, surf, true, h.fx(), h.fy())
 	func straight(b: PackedFloat64Array) -> bool:
 		return b[K] == 0.0
-	func project(b: PackedFloat64Array, t: DualNum, surf: BeamScene.Surf, left: bool, h: CN = null) -> PackedFloat64Array:
+	func project(b: PackedFloat64Array, t: GdDualNum, surf: GdBeamScene.Surf, left: bool, h: GdCN = null) -> PackedFloat64Array:
 		if h == null:
-			return FastSolver.project(b, t.v, t.d, surf, left)
-		return FastSolver.project(b, t.v, t.d, surf, left, true, h.fx(), h.fy())
+			return GdFastSolver.project(b, t.v, t.d, surf, left)
+		return GdFastSolver.project(b, t.v, t.d, surf, left, true, h.fx(), h.fy())
 	func straightened(b: PackedFloat64Array) -> PackedFloat64Array:
 		var o := PackedFloat64Array(b)
 		o[K] = 0.0
 		return o
-	func zero() -> DualNum:
-		return DualNum.of(0.0)
+	func zero() -> GdDualNum:
+		return GdDualNum.of(0.0)
 	func seed(b: PackedFloat64Array) -> PackedFloat64Array:
-		return FastSolver.seeded(b)
+		return GdFastSolver.seeded(b)
 	func reseed(b: PackedFloat64Array) -> PackedFloat64Array:
 		if b[DPX] == 0.0 and b[DPY] == 0.0 and b[DTX] == 0.0 and b[DTY] == 0.0 and b[DK] == 0.0:
-			return FastSolver.seeded(b)
+			return GdFastSolver.seeded(b)
 		return b
-	func from_hp(hb: HPBeam) -> PackedFloat64Array:
-		return FastSolver.beam(hb.p.fx(), hb.p.fy(), hb.tau.fx(), hb.tau.fy(), hb.kappa.to_float())
-	func hp(b: PackedFloat64Array) -> HPBeam:
-		return HPBeam.make(FastSolver._f64cn(b[PX], b[PY]), FastSolver._f64cn(b[TX], b[TY]), F64Num.of(b[K]))
+	func from_hp(hb: GdHPBeam) -> PackedFloat64Array:
+		return GdFastSolver.beam(hb.p.fx(), hb.p.fy(), hb.tau.fx(), hb.tau.fy(), hb.kappa.to_float())
+	func hp(b: PackedFloat64Array) -> GdHPBeam:
+		return GdHPBeam.make(GdFastSolver._f64cn(b[PX], b[PY]), GdFastSolver._f64cn(b[TX], b[TY]), GdF64Num.of(b[K]))
 	func raw(b: PackedFloat64Array):
 		return b
-	func ev_t(t: DualNum) -> F64Num:
-		return F64Num.of(t.v)
-	func gain(b: PackedFloat64Array, t: DualNum) -> float:
-		var h := FastSolver.at(b, t.v, t.d)
+	func ev_t(t: GdDualNum) -> GdF64Num:
+		return GdF64Num.of(t.v)
+	func gain(b: PackedFloat64Array, t: GdDualNum) -> float:
+		var h := GdFastSolver.at(b, t.v, t.d)
 		return sqrt(h[2] * h[2] + h[3] * h[3])
-	func classify(scene: BeamScene, b: PackedFloat64Array, t: DualNum, surf: BeamScene.Surf, at_origin: bool, known_pt = null) -> Array:
+	func classify(scene: GdBeamScene, b: PackedFloat64Array, t: GdDualNum, surf: GdBeamScene.Surf, at_origin: bool, known_pt = null) -> Array:
 		var px: float
 		var py: float
 		if known_pt != null:
@@ -650,33 +650,33 @@ class Backend extends RefCounted:
 			px = b[PX]
 			py = b[PY]
 		else:
-			var h := FastSolver.at(b, t.v, 0.0)
+			var h := GdFastSolver.at(b, t.v, 0.0)
 			px = h[0]
 			py = h[1]
-		var g := FastSolver.tangent_at(b, t.v, 0.0)
-		var on_seg := FastSolver.on_segment(surf, px, py)
-		var left := FastSolver.side_left(surf, px, py, g[0], g[1])
+		var g := GdFastSolver.tangent_at(b, t.v, 0.0)
+		var on_seg := GdFastSolver.on_segment(surf, px, py)
+		var left := GdFastSolver.side_left(surf, px, py, g[0], g[1])
 		var fb := false
 		if on_seg:
-			if FastSolver.endpoint_at(surf, px, py) == 0:
+			if GdFastSolver.endpoint_at(surf, px, py) == 0:
 				fb = true
 			else:
 				var bl := false
 				var br := false
 				for s in scene.surfaces:
-					var which := FastSolver.endpoint_at(s, px, py)
+					var which := GdFastSolver.endpoint_at(s, px, py)
 					if which == 0:
 						continue
-					var bs := FastSolver.blocked_sides(s, which, g[0], g[1])
+					var bs := GdFastSolver.blocked_sides(s, which, g[0], g[1])
 					bl = bl or bs[0]
 					br = br or bs[1]
 				fb = bl and br
-		return [FastSolver._f64cn(px, py), on_seg, left, fb]
-	func prefix_gain(b: PackedFloat64Array, t: DualNum) -> float:
-		var h := FastSolver.at(FastSolver.seeded(b), t.v, 0.0)
+		return [GdFastSolver._f64cn(px, py), on_seg, left, fb]
+	func prefix_gain(b: PackedFloat64Array, t: GdDualNum) -> float:
+		var h := GdFastSolver.at(GdFastSolver.seeded(b), t.v, 0.0)
 		return sqrt(h[2] * h[2] + h[3] * h[3])
-	func f64_point(b: PackedFloat64Array, t: DualNum) -> PackedFloat64Array:
-		var h := FastSolver.at_view(b, t.v)
+	func f64_point(b: PackedFloat64Array, t: GdDualNum) -> PackedFloat64Array:
+		var h := GdFastSolver.at_view(b, t.v)
 		return PackedFloat64Array([h[0], h[1]])
 
 # ---------------------------------------------------------------- entry points
@@ -688,19 +688,19 @@ static func _out(w) -> Out:
 		o.gain = w.gains
 	return o
 
-static func _cn(a) -> CN:
+static func _cn(a) -> GdCN:
 	return _f64cn(float(a[0]), float(a[1]))
 
 static func trace_direction(sc: Scene, player: PackedFloat64Array, dir: PackedFloat64Array, plan: Array, cursor, mode: int,
-		max_events: int = BeamSolver.MAX_HITS, flags: Dictionary = {}) -> Out:
-	return _out(BeamSolver.run_direction(Backend.make(), sc.scene, _cn(player), _cn(dir), plan,
+		max_events: int = GdBeamSolver.MAX_HITS, flags: Dictionary = {}) -> Out:
+	return _out(GdBeamSolver.run_direction(Backend.make(), sc.scene, _cn(player), _cn(dir), plan,
 		null if cursor == null else _cn(cursor), mode, max_events, flags))
 
 # Planned trace (anchored chain built at float64, generic) with gains.
 static func planned(sc: Scene, player: PackedFloat64Array, cursor: PackedFloat64Array, plan: Array,
-		max_events: int = BeamSolver.MAX_HITS, flags: Dictionary = {}) -> Out:
-	return _out(BeamSolver.run(Backend.make(), sc.scene, _cn(player), _cn(cursor), plan, BeamSolver.Mode.PLANNED, max_events, flags))
+		max_events: int = GdBeamSolver.MAX_HITS, flags: Dictionary = {}) -> Out:
+	return _out(GdBeamSolver.run(Backend.make(), sc.scene, _cn(player), _cn(cursor), plan, GdBeamSolver.Mode.PLANNED, max_events, flags))
 
 static func physical(sc: Scene, player: PackedFloat64Array, cursor: PackedFloat64Array, plan: Array,
-		max_events: int = BeamSolver.MAX_HITS, flags: Dictionary = {}) -> Out:
-	return _out(BeamSolver.run(Backend.make(), sc.scene, _cn(player), _cn(cursor), plan, BeamSolver.Mode.PHYSICAL, max_events, flags))
+		max_events: int = GdBeamSolver.MAX_HITS, flags: Dictionary = {}) -> Out:
+	return _out(GdBeamSolver.run(Backend.make(), sc.scene, _cn(player), _cn(cursor), plan, GdBeamSolver.Mode.PHYSICAL, max_events, flags))

@@ -37,7 +37,7 @@ func _surfaces_of(path: String):
 	root.add_child(scene)
 	await process_frame
 	# the solver's own conversion (BeamTracer feeds the same defs to the solver)
-	var out: Array = BeamScene.defs_from_surfaces(scene.surfaces)
+	var out: Array = SceneDefs.defs_from_surfaces(scene.surfaces)
 	scene.queue_free()
 	await process_frame
 	return out

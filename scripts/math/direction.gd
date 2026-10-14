@@ -1,15 +1,15 @@
-class_name Direction
+class_name GdDirection
 extends RefCounted
 
-var start: Point
-var end: Point
+var start: GdPoint
+var end: GdPoint
 
-func _init(p_start: Point, p_end: Point) -> void:
+func _init(p_start: GdPoint, p_end: GdPoint) -> void:
 	start = p_start
 	end = p_end
 
-static func from_coords(p_start: Vector2, p_end: Vector2) -> Direction:
-	return Direction.new(Point.at(p_start), Point.at(p_end))
+static func from_coords(p_start: Vector2, p_end: Vector2) -> GdDirection:
+	return GdDirection.new(GdPoint.at(p_start), GdPoint.at(p_end))
 
 func is_zero_length() -> bool:
 	return start.coords == end.coords

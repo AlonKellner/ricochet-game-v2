@@ -1,10 +1,10 @@
-class_name TraceHit
+class_name GdTraceHit
 extends RefCounted
 
 # A hit of a beam on a surface's segment (the hit step's record).
 
 var t: float
-var point: Point
+var point: GdPoint
 var segment: Segment
 var side: Side.Value
 var on_segment: bool
@@ -14,7 +14,7 @@ var blocked_right: bool
 
 func _init(p_t: float, p_point: Vector2, p_segment: Segment, p_side: Side.Value, p_on_segment: bool, p_at_endpoint: int = 0, p_blocked_left: bool = false, p_blocked_right: bool = false) -> void:
 	t = p_t
-	point = Point.at(p_point)
+	point = GdPoint.at(p_point)
 	segment = p_segment
 	side = p_side
 	on_segment = p_on_segment

@@ -1,10 +1,10 @@
-class_name Exact
+class_name GdExact
 extends RefCounted
 
-# Exact geometric predicates on float64 data (robust-geometry style): a
+# GdExact geometric predicates on float64 data (robust-geometry style): a
 # float64 evaluation with a rigorous forward error bound decides whenever the
 # value is certainly non-zero; otherwise the value is evaluated exactly with
-# BigFloat at adaptive width (no truncation: products get the limbs of both
+# GdBigFloat at adaptive width (no truncation: products get the limbs of both
 # factors, sums the limbs spanning both exponents). The answer is always the
 # exact one; the bound only selects the cheap path, it never decides a result.
 
@@ -12,24 +12,24 @@ const U := 1.1102230246251565e-16          # 2^-53, unit roundoff
 
 # ---------------------------------------------------------------- exact ops
 
-static func of(x: float) -> BigFloat:
-	return BigFloat.from_float(x, 2)       # 53 bits fit in 2 limbs (56 bits)
+static func of(x: float) -> GdBigFloat:
+	return GdBigFloat.from_float(x, 2)       # 53 bits fit in 2 limbs (56 bits)
 
-static func mul(a: BigFloat, b: BigFloat) -> BigFloat:
+static func mul(a: GdBigFloat, b: GdBigFloat) -> GdBigFloat:
 	if a.is_zero() or b.is_zero():
-		return BigFloat.zero(2)
+		return GdBigFloat.zero(2)
 	return a.with_limbs(a.limbs.size() + b.limbs.size()).mul(b)
 
-static func add(a: BigFloat, b: BigFloat) -> BigFloat:
+static func add(a: GdBigFloat, b: GdBigFloat) -> GdBigFloat:
 	if a.is_zero():
 		return b
 	if b.is_zero():
 		return a
 	var gap: int = absi(a.top_exp() - b.top_exp())
-	var n: int = maxi(a.limbs.size(), b.limbs.size()) + gap / BigFloat.BITS + 3
+	var n: int = maxi(a.limbs.size(), b.limbs.size()) + gap / GdBigFloat.BITS + 3
 	return a.with_limbs(n).add(b.with_limbs(n))
 
-static func sub(a: BigFloat, b: BigFloat) -> BigFloat:
+static func sub(a: GdBigFloat, b: GdBigFloat) -> GdBigFloat:
 	return add(a, b.neg())
 
 # ---------------------------------------------------------------- predicates
@@ -91,7 +91,7 @@ static func incircle_zero(ax: float, ay: float, bx: float, by: float, cx: float,
 	return add(add(mul(ea, ebc), mul(eb, eca)), mul(ec, eab)).is_zero()
 
 # ---------------------------------------------------------------- exact lines
-# A line in implicit form a x + b y = c with exact (BigFloat) coefficients, as
+# A line in implicit form a x + b y = c with exact (GdBigFloat) coefficients, as
 # an Array [a, b, c] (any nonzero scale).
 
 static func line_from_dir(px: float, py: float, dx: float, dy: float) -> Array:
@@ -112,7 +112,7 @@ static func reflect_point_h(X: Array, sx: float, sy: float, ex: float, ey: float
 	var mm := add(mul(mx, mx), mul(my, my))
 	var m2r := sub(mul(mx, mx), mul(my, my))
 	var m2i := add(mul(mx, my), mul(my, mx))
-	var w: BigFloat = X[2]
+	var w: GdBigFloat = X[2]
 	# conj(X - s w)
 	var cx := sub(X[0], mul(of(sx), w))
 	var cy := sub(mul(of(sy), w), X[1])
@@ -124,9 +124,9 @@ static func reflect_point_h(X: Array, sx: float, sy: float, ex: float, ey: float
 # Homogeneous X inverted in the circle with homogeneous center C and radius²
 # times C_w² rw2: X' = c + r² (X - c) / |X - c|², over the common denominator
 # C_w |X w C_w - C w|² (made positive). null at the center (image at infinity).
-static func invert_point_h(X: Array, C: Array, rw2: BigFloat):
-	var w: BigFloat = X[2]
-	var cw: BigFloat = C[2]
+static func invert_point_h(X: Array, C: Array, rw2: GdBigFloat):
+	var w: GdBigFloat = X[2]
+	var cw: GdBigFloat = C[2]
 	var dx := sub(mul(X[0], cw), mul(C[0], w))
 	var dy := sub(mul(X[1], cw), mul(C[1], w))
 	var dd := add(mul(dx, dx), mul(dy, dy))
@@ -140,7 +140,7 @@ static func invert_point_h(X: Array, C: Array, rw2: BigFloat):
 
 # The line through (px, py) and the homogeneous point X.
 static func line_through_h(px: float, py: float, X: Array) -> Array:
-	var w: BigFloat = X[2]
+	var w: GdBigFloat = X[2]
 	var a := sub(X[1], mul(of(py), w)).neg()
 	var b := sub(X[0], mul(of(px), w))
 	return [a, b, add(mul(a, of(px)), mul(b, of(py)))]
@@ -164,13 +164,13 @@ static func circumcenter_h(ax: float, ay: float, bx: float, by: float, cx: float
 	var ny := add(add(mul(la, sub(ecx, ebx)), mul(lb, sub(eax, ecx))), mul(lc, sub(ebx, eax)))
 	return [nx, ny, w]
 
-# Exact: the homogeneous point X lies on the line L (a x + b y = c w).
+# GdExact: the homogeneous point X lies on the line L (a x + b y = c w).
 static func on_line_h(L: Array, X: Array) -> bool:
 	return sub(add(mul(L[0], X[0]), mul(L[1], X[1])), mul(L[2], X[2])).is_zero()
 
-# Exact: the line L is tangent to the circle with homogeneous center C and
+# GdExact: the line L is tangent to the circle with homogeneous center C and
 # radius² times w² rw2: (a cx + b cy - c w)² == rw2 (a² + b²).
-static func tangent_zero(L: Array, C: Array, rw2: BigFloat) -> bool:
+static func tangent_zero(L: Array, C: Array, rw2: GdBigFloat) -> bool:
 	var d := sub(add(mul(L[0], C[0]), mul(L[1], C[1])), mul(L[2], C[2]))
 	var n2 := add(mul(L[0], L[0]), mul(L[1], L[1]))
 	return sub(mul(d, d), mul(rw2, n2)).is_zero()
@@ -208,9 +208,9 @@ static func reflect_line(L: Array, sx: float, sy: float, ex: float, ey: float) -
 	var mm := add(mul(mx, mx), mul(my, my))
 	var m2r := sub(mul(mx, mx), mul(my, my))
 	var m2i := add(mul(mx, my), mul(my, mx))
-	var a: BigFloat = L[0]
-	var b: BigFloat = L[1]
-	var c: BigFloat = L[2]
+	var a: GdBigFloat = L[0]
+	var b: GdBigFloat = L[1]
+	var c: GdBigFloat = L[2]
 	var esx := of(sx)
 	var esy := of(sy)
 	var a2 := add(mul(a, m2r), mul(b, m2i))
@@ -233,7 +233,7 @@ class Line extends RefCounted:
 	var ea: float      # |fa - a| <= ea, ...
 	var eb: float
 	var ec: float
-	var _exact = null  # [a, b, c] BigFloat, or null until needed
+	var _exact = null  # [a, b, c] GdBigFloat, or null until needed
 	var parent: Line = null
 	var mirror: PackedFloat64Array
 	var source: Callable   # computes the exact coefficients on demand (from_approx)
@@ -278,9 +278,9 @@ class Line extends RefCounted:
 				return null
 			if mirror.size() == 2:
 				# translated by (dx, dy): c' = c + a dx + b dy
-				_exact = [L[0], L[1], Exact.add(L[2], Exact.add(Exact.mul(L[0], Exact.of(mirror[0])), Exact.mul(L[1], Exact.of(mirror[1]))))]
+				_exact = [L[0], L[1], GdExact.add(L[2], GdExact.add(GdExact.mul(L[0], GdExact.of(mirror[0])), GdExact.mul(L[1], GdExact.of(mirror[1]))))]
 			else:
-				_exact = Exact.reflect_line(L, mirror[0], mirror[1], mirror[2], mirror[3])
+				_exact = GdExact.reflect_line(L, mirror[0], mirror[1], mirror[2], mirror[3])
 		return _exact
 
 	# The translation by (dx, dy) (float64 part with its bound).
@@ -292,7 +292,7 @@ class Line extends RefCounted:
 		o.ea = ea
 		o.fb = fb
 		o.eb = eb
-		var c2 := Exact._eadd([fc, ec], Exact._eadd(Exact._emul([fa, ea], [dx, 0.0]), Exact._emul([fb, eb], [dy, 0.0])))
+		var c2 := GdExact._eadd([fc, ec], GdExact._eadd(GdExact._emul([fa, ea], [dx, 0.0]), GdExact._emul([fb, eb], [dy, 0.0])))
 		o.fc = c2[0]
 		o.ec = c2[1]
 		return o
@@ -302,20 +302,20 @@ class Line extends RefCounted:
 		var o := Line.new()
 		o.parent = self
 		o.mirror = PackedFloat64Array([sx, sy, ex, ey])
-		var mx := Exact._esub([ex, 0.0], [sx, 0.0])
-		var my := Exact._esub([ey, 0.0], [sy, 0.0])
-		var mm := Exact._eadd(Exact._emul(mx, mx), Exact._emul(my, my))
-		var m2r := Exact._esub(Exact._emul(mx, mx), Exact._emul(my, my))
-		var m2i := Exact._eadd(Exact._emul(mx, my), Exact._emul(my, mx))
+		var mx := GdExact._esub([ex, 0.0], [sx, 0.0])
+		var my := GdExact._esub([ey, 0.0], [sy, 0.0])
+		var mm := GdExact._eadd(GdExact._emul(mx, mx), GdExact._emul(my, my))
+		var m2r := GdExact._esub(GdExact._emul(mx, mx), GdExact._emul(my, my))
+		var m2i := GdExact._eadd(GdExact._emul(mx, my), GdExact._emul(my, mx))
 		var a := [fa, ea]
 		var b := [fb, eb]
 		var c := [fc, ec]
 		var esx := [sx, 0.0]
 		var esy := [sy, 0.0]
-		var a2 := Exact._eadd(Exact._emul(a, m2r), Exact._emul(b, m2i))
-		var b2 := Exact._esub(Exact._emul(a, m2i), Exact._emul(b, m2r))
-		var c2 := Exact._eadd(Exact._esub(Exact._emul(c, mm), Exact._emul(Exact._eadd(Exact._emul(a, esx), Exact._emul(b, esy)), mm)),
-			Exact._eadd(Exact._emul(a2, esx), Exact._emul(b2, esy)))
+		var a2 := GdExact._eadd(GdExact._emul(a, m2r), GdExact._emul(b, m2i))
+		var b2 := GdExact._esub(GdExact._emul(a, m2i), GdExact._emul(b, m2r))
+		var c2 := GdExact._eadd(GdExact._esub(GdExact._emul(c, mm), GdExact._emul(GdExact._eadd(GdExact._emul(a, esx), GdExact._emul(b, esy)), mm)),
+			GdExact._eadd(GdExact._emul(a2, esx), GdExact._emul(b2, esy)))
 		o.fa = a2[0]
 		o.ea = a2[1]
 		o.fb = b2[0]
@@ -324,7 +324,7 @@ class Line extends RefCounted:
 		o.ec = c2[1]
 		return o
 
-	# Exact: this line and the carriers of segments p -> q and r -> s meet at
+	# GdExact: this line and the carriers of segments p -> q and r -> s meet at
 	# one point (det [L; A; B] == 0).
 	func concurrent(px: float, py: float, qx: float, qy: float, rx: float, ry: float, sx: float, sy: float) -> bool:
 		# float filter (scalar; first-order rigorous bound with generous
@@ -351,14 +351,14 @@ class Line extends RefCounted:
 		var L = exact()
 		if L == null:
 			return false
-		var A := Exact.line_through(px, py, qx, qy)
-		var B := Exact.line_through(rx, ry, sx, sy)
-		var e1 := Exact.sub(Exact.mul(A[1], B[2]), Exact.mul(B[1], A[2]))
-		var e2 := Exact.sub(Exact.mul(A[0], B[2]), Exact.mul(B[0], A[2]))
-		var e3 := Exact.sub(Exact.mul(A[0], B[1]), Exact.mul(B[0], A[1]))
-		return Exact.add(Exact.sub(Exact.mul(L[0], e1), Exact.mul(L[1], e2)), Exact.mul(L[2], e3)).is_zero()
+		var A := GdExact.line_through(px, py, qx, qy)
+		var B := GdExact.line_through(rx, ry, sx, sy)
+		var e1 := GdExact.sub(GdExact.mul(A[1], B[2]), GdExact.mul(B[1], A[2]))
+		var e2 := GdExact.sub(GdExact.mul(A[0], B[2]), GdExact.mul(B[0], A[2]))
+		var e3 := GdExact.sub(GdExact.mul(A[0], B[1]), GdExact.mul(B[0], A[1]))
+		return GdExact.add(GdExact.sub(GdExact.mul(L[0], e1), GdExact.mul(L[1], e2)), GdExact.mul(L[2], e3)).is_zero()
 
-	# Exact: (x, y) on the line (exact float data point).
+	# GdExact: (x, y) on the line (exact float data point).
 	func contains(x: float, y: float) -> bool:
 		var l := fa * x
 		var r := fb * y
@@ -368,27 +368,27 @@ class Line extends RefCounted:
 		var L = exact()
 		if L == null:
 			return false
-		return Exact.sub(Exact.add(Exact.mul(L[0], Exact.of(x)), Exact.mul(L[1], Exact.of(y))), L[2]).is_zero()
+		return GdExact.sub(GdExact.add(GdExact.mul(L[0], GdExact.of(x)), GdExact.mul(L[1], GdExact.of(y))), L[2]).is_zero()
 
-	# Exact: the homogeneous exact point X (float roundings x, y with bounds
+	# GdExact: the homogeneous exact point X (float roundings x, y with bounds
 	# ex, ey of X / w) on the line.
 	func contains_h(X: Array, x: float, y: float, exy: float) -> bool:
-		var v := Exact._eadd(Exact._esub(Exact._emul([fa, ea], [x, exy]), [fc, ec]), Exact._emul([fb, eb], [y, exy]))
+		var v := GdExact._eadd(GdExact._esub(GdExact._emul([fa, ea], [x, exy]), [fc, ec]), GdExact._emul([fb, eb], [y, exy]))
 		if absf(v[0]) > v[1]:
 			return false
 		var L = exact()
-		return L != null and Exact.on_line_h(L, X)
+		return L != null and GdExact.on_line_h(L, X)
 
-	# Exact: tangent to the circle with exact homogeneous center C and rw2
+	# GdExact: tangent to the circle with exact homogeneous center C and rw2
 	# (float roundings cx, cy, rr with bounds ecc, err).
-	func tangent_to(C: Array, rw2: BigFloat, cx: float, cy: float, rr: float, ecc: float, err: float) -> bool:
-		var d := Exact._eadd(Exact._esub(Exact._emul([fa, ea], [cx, ecc]), [fc, ec]), Exact._emul([fb, eb], [cy, ecc]))
-		var n2 := Exact._eadd(Exact._emul([fa, ea], [fa, ea]), Exact._emul([fb, eb], [fb, eb]))
-		var v := Exact._esub(Exact._emul(d, d), Exact._emul([rr, err], n2))
+	func tangent_to(C: Array, rw2: GdBigFloat, cx: float, cy: float, rr: float, ecc: float, err: float) -> bool:
+		var d := GdExact._eadd(GdExact._esub(GdExact._emul([fa, ea], [cx, ecc]), [fc, ec]), GdExact._emul([fb, eb], [cy, ecc]))
+		var n2 := GdExact._eadd(GdExact._emul([fa, ea], [fa, ea]), GdExact._emul([fb, eb], [fb, eb]))
+		var v := GdExact._esub(GdExact._emul(d, d), GdExact._emul([rr, err], n2))
 		if absf(v[0]) > v[1]:
 			return false
 		var L = exact()
-		return L != null and Exact.tangent_zero(L, C, rw2)
+		return L != null and GdExact.tangent_zero(L, C, rw2)
 
 # Running error analysis on [value, bound] pairs (standard model, u = 2^-53).
 static func _emul(x: Array, y: Array) -> Array:

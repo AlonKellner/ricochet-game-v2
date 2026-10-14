@@ -150,7 +150,6 @@ func test_sweep_projective_plans() -> void:
 	for scene_path in SweepPlans.projective_scenes():
 		var name := scene_path.get_file().get_basename()
 		Surface.reset_id_counter()
-		BeamTracer.clear_cache()
 		var scene: Node = load(scene_path).instantiate()
 		scene.gravity = Vector2.ZERO
 		add_child_autofree(scene)

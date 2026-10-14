@@ -14,13 +14,13 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 |-------|-------|--------|
 | 88a | Infinity specified: oracle `infinity` event + ∞ plan entry, `stage88_infinity.json`, GAME_SPEC 2.11.0 | Done (spec; implementation 88b–d) |
 | 89 | Toolchain (CMake, godot-cpp pinned, doctest/ctest, `NativeProbe`, runners) + goldens of the pure-GDScript stack + `SweepPlans` | Done (toolchain verified by its author; full-suite run after merge pending) |
-| 90 | `BigFloat`, `F64`, `Dual`, `CN<N>`, the `Num` concept | Core done, bit-identical (4578 golden checks); bindings `NNumCtx`/`NNum`/`NCN`/`NBigFloat` done; flip pending |
-| 91 | `Exact` predicates, constructions, lazy `Line` | Core done, bit-identical (6800); binding (`NExact`) pending; flip pending |
-| 92 | `Beam<N>`, segment geometry, effect maps: one template, FastSolver's f64 twin folded in | Core done, bit-identical (24261); `NHPBeam` + `NFastSolver` raw math done; `NBeamGeom`/`NBeamEffects` pending; flip pending |
-| 93 | `Flags`, `SurfaceDef`/`Scene<N>` from Variant-free defs, categorical tables, ghost | Core done; `NBeamScene`/`NBeamSceneSurf` done, GUT diff identical on every fixture; flip pending |
-| 94 | `Solver<N>`: the walker, anchored chains, exact aim images, caches on an instance | Core done, bit-identical on every fixture (345) and corpus chain (9154); `NBeamSolver`/`NFastSolver` done, `test_diff_beam_solver.gd` identical (115 fixtures × 3 tiers); flip pending |
-| 95 | `ErrorEstimate` + `PrecisionLadder` | Core done, bit-identical on the corpus (7137 incl. tiers/estimates); `NErrorEstimate`/`NPrecisionLadder` done, `test_diff_precision_ladder.gd` identical; flip pending |
-| 96 | `TraceStep`/`TracePath` (float32), `Tracer` (`trace_pair`, `plan_refuses`, `to_path`) | Core done; `NBeamTracer` + trace data classes done, `test_diff_beam_tracer.gd` identical on the sweep scenes (stride 97); full 284k-combo sweep-goldens check pending (goldens regenerating); flip pending |
+| 90 | `BigFloat`, `F64`, `Dual`, `CN<N>`, the `Num` concept | Done: native `NumCtx` / `Num` / `CN` / `BigFloat` (+ `F64Num`, `DualNum` factories) under their final names; GDScript kept as `Gd*` until Stage 99 |
+| 91 | `Exact` predicates, constructions, lazy `Line` | Done: native `Exact` flipped; `test_diff_beam_geom.gd` identical (B12 noted) |
+| 92 | `Beam<N>`, segment geometry, effect maps: one template, FastSolver's f64 twin folded in | Done: `HPBeam`, `HPBeamCircle`, `BeamGeom`, `BeamGeomSeg`, `BeamEffects`, `FastSolver` flipped |
+| 93 | `Flags`, `SurfaceDef`/`Scene<N>` from Variant-free defs, categorical tables, ghost | Done: `BeamScene` / `BeamSceneSurf` flipped; the Surface -> defs glue moved to `SceneDefs` (scripts/game) |
+| 94 | `Solver<N>`: the walker, anchored chains, exact aim images, caches on an instance | Done: `BeamSolver` (+ `Event`, `PlanItem`, `AnchorChain` flat) flipped; identical on every fixture at 3 tiers |
+| 95 | `ErrorEstimate` + `PrecisionLadder` | Done: flipped; identical on the corpus |
+| 96 | `TraceStep`/`TracePath` (float32), `Tracer` (`trace_pair`, `plan_refuses`, `to_path`) | Done: `BeamTracer` is an instance per owner; `Point`/`Direction`/`Ray`/`TraceHit`/`TraceStep`/`TracePath` native; 284,096 sweep combos identical; full suite green |
 | 97 | Visual/testing kernels: arc geometry, `VisualConverter`, `StepTreeMerge`, click geometry, arrow advance | Planned |
 | 98 | `InvariantChecker` kernel + native sweeps (shard by combo) | Planned |
 | 99 | Delete the GDScript implementations, final names, source-scan tests rewritten | Planned |
@@ -417,8 +417,76 @@ findings:
   behaviour change for approval. The only long decimal literal in the ported
   GDScript.
 
-Pending for these stages: shadow mode and the per-class flips (`GdX` rename +
-registration rename + inner-class edit).
+### The flip (Stages 90-96 together)
+
+The core classes depend on each other through their scalar and beam types, so
+they flip together: the native classes register under the final names and the
+GDScript originals become `Gd*` (`scripts/math/precision/*.gd`, `point.gd`,
+`direction.gd`, `ray.gd`, `trace_hit.gd`, `trace_step.gd`, `trace_path.gd`),
+kept for the differential tests and `tools/dump_goldens.gd` until Stage 99.
+What changed outside the core (220 mechanical edits in 40 test files and the
+glue, plus a few by hand):
+
+- **Inner classes are flat**: `BeamSolver.Event` -> `BeamSolverEvent`,
+  `BeamSolver.PlanItem` -> `BeamSolverPlanItem`, `BeamSolver.Mode.X` ->
+  `BeamSolver.X`, `BeamSolver.AnchorChain.build(...)` ->
+  `BeamSolver.anchor_chain(...)`, `FastSolver.Scene` -> `FastSolverScene`,
+  `BeamScene.Surf` -> `BeamSceneSurf`, `HPBeam.Circle` -> `HPBeamCircle`,
+  `BeamGeom.Seg` -> `BeamGeomSeg`, `BeamGeom.Kind.X` -> `BeamGeom.X`,
+  `PrecisionLadder.Result` -> `PrecisionLadderResult`,
+  `ErrorEstimate.Sensitivity` -> `ErrorEstimateSensitivity`,
+  `BeamTracer.Pair` -> `BeamTracerPair`.
+- **Non-integer constants are methods**: `Exact.U()`, `ErrorEstimate.C()`,
+  `SCALE()`, `MARGIN_SAFETY()`, `BeamTracer.TOL()`, `PrecisionLadder.tiers()`,
+  `BeamScene.GHOST()`, `BeamScene.TRANSFORMATIVE()` / `PROJECTIVE()` (also on
+  `BeamSolver`). Integer constants and enums are unchanged (`MAX_HITS`,
+  `PLANNED`, `BigFloat.BITS`, `FastSolver.K`).
+- **One scalar class**: `Num` carries an F64, Dual or BigFloat value;
+  `F64Num.of`, `DualNum.of`, `BigFloat.from_float` / `from_string` / `from_int`
+  / `zero` / `infinity` are factories returning `Num`. Type hints `: BigFloat`
+  / `-> F64Num` became `Num`.
+- **Private helpers tests used are public**: `Exact.emul/eadd/esub`,
+  `BeamGeom.eq/grad`.
+- **`SceneDefs`** (`scripts/game/scene_defs.gd`) now holds
+  `defs_from_surfaces`, `describe_surface`, `describe_config`,
+  `describe_resolver` and `segments_by_id`: the only place the solver's inputs
+  are read from game `Surface`s. The math layer no longer depends on the game
+  layer (A-list).
+- **`BeamTracer` is an instance** owning its caches (`GameManager` and
+  `PathRenderer` each hold one; `DebugDumper` makes one per dump); it takes
+  defs and the id -> `Segment` map (`trace_pair(defs, player, cursor, entries,
+  flags, segments)`). The static caches are gone (A-list). Tests go through
+  `TestTrace.trace_pair` / `TestTrace.plan_refuses` (fresh tracer, game
+  surfaces); the 22 `BeamTracer.clear_cache()` calls in tests were deleted.
+- **Trace data classes are native** with the GDScript shapes (`Point.coords`,
+  `Direction.start/end`, `Ray.origin/direction`, `TraceHit.point/segment/side`,
+  `TraceStep` meta fields, `TracePath.targets_hit` as a Dictionary) and are
+  built with `TraceStep.make(...)`, `TraceHit.make(...)`, `Ray.make` /
+  `from_coords`, `Direction.make` / `from_coords`, `Point.at` (GDExtension
+  classes take no constructor arguments). Consumers (`VisualConverter`,
+  `StepTreeMerge`, `ArrowAnimator`, `InvariantChecker`, `DebugDumper`) run
+  unchanged apart from `.new(` -> `.make(`.
+- **Identity semantics preserved**: events of one walk on the same beam share
+  one `HPBeam` object (a popped frame restores the earlier object; the
+  invariant checker compares `a.beam != b.beam`), every step of a pair shares
+  one aim `Ray` object, and a one-trajectory pair shares its step objects
+  between `planned` and `physical` (`BeamTracer.trace_pair` duplicated the
+  Array). `BeamSolverEvent.point` / `.beam` are settable (the
+  deliberate-violation tests rotate a beam and offset a point).
+- The differential tests now compare `Gd*` against the final names; they, the
+  goldens dumper and the `Gd*` files go away in Stage 99.
+- Import-time noise: the editor documents the extension on `--import` and
+  warns "Instantiated CN used as default value for ..." for object-typed
+  properties of default instances. Harmless; every getter answers on a default
+  instance (an earlier null dereference in `BeamSceneSurf` aborted the import).
+
+**Gate after the flip:** `./run_tests_parallel.sh`: 756 passing, 0 failing,
+65 s wall (the GDScript suite took about 5 minutes; the sweeps now trace
+natively through `PathRenderer`). `make test-fast`: 696 passing in 90 s
+(ctest 23 s of it, the 284k-combo sweep check included). Shadow mode is the
+full-stride differential run: `DIFF_STRIDE=1` on
+`tests/native/test_diff_beam_tracer.gd` compares `GdBeamTracer` with
+`BeamTracer` on every sweep combo through the bindings and the live scenes.
 
 ## B-list: behaviour changes awaiting approval (found during the port)
 

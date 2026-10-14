@@ -361,7 +361,7 @@ func check_PLAN_EFFECTS_APPLIED(player_pos: Vector2, cursor_pos: Vector2, plan_e
 	var effs: Array = BeamSolver.plan_effects(sc, all_items, _flags())
 	var items: Array = []
 	for j in all_items.size():
-		if effs[j] in BeamScene.TRANSFORMATIVE:
+		if effs[j] in BeamScene.TRANSFORMATIVE():
 			items.append(all_items[j])
 	return check_plan_effects_applied_events(r.planned, items, true)
 
@@ -439,10 +439,10 @@ func check_ON_SEGMENT_CONSISTENCY(player_pos: Vector2, cursor_pos: Vector2) -> A
 	var out: Array[String] = []
 	for events in [r.planned, r.physical]:
 		for i in events.size():
-			var e: BeamSolver.Event = events[i]
+			var e: BeamSolverEvent = events[i]
 			if e.kind != "hit" or e.point == null:
 				continue
-			var s: BeamScene.Surf = sc.by_id[e.surface_id]
+			var s: BeamSceneSurf = sc.by_id[e.surface_id]
 			var p := CN.make(F64Num.of(e.point.fx()), F64Num.of(e.point.fy()))
 			if BeamGeom.on_segment(s.seg, p) == e.on_segment:
 				continue
@@ -514,7 +514,7 @@ func check_VISUAL_ON_PHYSICAL_CARRIER(player_pos: Vector2, cursor_pos: Vector2) 
 				if not step.hit_on_segment:
 					continue
 				if step.frame_id != TraceStep.IDENTITY_FRAME and step.hit.segment != null:
-					var nc := step.hit.segment.get_carrier()
+					var nc: GeneralizedCircle = step.hit.segment.get_carrier()
 					var norm_err := _geometric_carrier_dist(step.hit.point.coords, nc)
 					if norm_err < 1.0:
 						continue
@@ -537,11 +537,11 @@ func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries
 	var flags := _flags()
 	var effs: Array = BeamSolver.plan_effects(sc, BeamTracer.plan_items(plan_entries), flags)
 	for j in range(plan_entries.size() - 1, -1, -1):
-		var surf: BeamScene.Surf = sc.by_id.get(plan_entries[j].surface_id)
+		var surf: BeamSceneSurf = sc.by_id.get(plan_entries[j].surface_id)
 		var etype: String = effs[j]
-		if etype in BeamScene.PROJECTIVE:
+		if etype in BeamScene.PROJECTIVE():
 			return out
-		if not (etype in BeamScene.TRANSFORMATIVE):
+		if not (etype in BeamScene.TRANSFORMATIVE()):
 			continue
 		X = BeamEffects.map_point(X, surf, true)
 		if X == null:
@@ -556,12 +556,12 @@ func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries
 		return out
 	var defs := _defs()
 	var ref := PrecisionLadder.solve_physical(defs, [player_pos.x, player_pos.y], [X.fx(), X.fy()], [],
-		BeamSolver.MAX_HITS, BeamTracer.TOL, _fsc_cache, flags)
+		BeamSolver.MAX_HITS, BeamTracer.TOL(), _fsc_cache, flags)
 	# the reference aims at the float64 rounding of the image: compare only
 	# while the rounding of the aim angle (bound delta) cannot move an event
 	# by more than 0.005 px (tangent-linear gains of the reference trace)
-	var sens: ErrorEstimate.Sensitivity = ref.physical_sens
-	var delta: float = 64.0 * Exact.U * scale / maxf(img.distance_to(player_pos), 1e-300)
+	var sens: ErrorEstimateSensitivity = ref.physical_sens
+	var delta: float = 64.0 * Exact.U() * scale / maxf(img.distance_to(player_pos), 1e-300)
 	var a: Array = r.physical.filter(func(e): return e.kind == "hit")
 	var b: Array = ref.physical.filter(func(e): return e.kind == "hit")
 	var hit_gain: Array = []
@@ -726,7 +726,7 @@ var _defs_cache: Array = []
 var _scene_cache: BeamScene = null
 var _defs_src: Array = []
 var _defs_n := -1
-var _fsc_cache: FastSolver.Scene = null
+var _fsc_cache: FastSolverScene = null
 
 # Scene defs of the checked scene, built once per surface set (the same
 # surfaces array with the same surfaces: sweeps never edit surfaces).
@@ -737,9 +737,9 @@ func _defs() -> Array:
 		return _defs_cache
 	_defs_src = surfaces
 	_defs_n = surfaces.size()
-	_defs_cache = BeamScene.defs_from_surfaces(surfaces)
+	_defs_cache = SceneDefs.defs_from_surfaces(surfaces)
 	_scene_cache = BeamScene.from_defs(NumCtx.f64(), _defs_cache)
-	_fsc_cache = FastSolver.Scene.from_defs(_defs_cache)
+	_fsc_cache = FastSolverScene.from_defs(_defs_cache)
 	return _defs_cache
 
 func _beam_scene() -> BeamScene:
@@ -777,7 +777,7 @@ static func _f64_beam(b: HPBeam) -> HPBeam:
 	return HPBeam.make(CN.make(F64Num.of(b.p.fx()), F64Num.of(b.p.fy())), CN.make(F64Num.of(b.tau.fx()), F64Num.of(b.tau.fy())),
 		F64Num.of(b.kappa.to_float()))
 
-static func _f64_t(t) -> F64Num:
+static func _f64_t(t) -> Num:
 	return F64Num.of(t.to_float())
 
 static func _tol(x: float, y: float) -> float:
@@ -789,10 +789,10 @@ static func _tol(x: float, y: float) -> float:
 static func check_effect_law(events: Array, scene: BeamScene) -> Array[String]:
 	var out: Array[String] = []
 	for i in events.size() - 1:
-		var e: BeamSolver.Event = events[i]
+		var e: BeamSolverEvent = events[i]
 		if e.kind != "hit" or not e.applied or e.terminal or e.popped or e.point == null:
 			continue
-		var s: BeamScene.Surf = scene.by_id[e.surface_id]
+		var s: BeamSceneSurf = scene.by_id[e.surface_id]
 		var b := _f64_beam(e.beam)
 		var t := _f64_t(e.t_to)
 		var h := CN.make(F64Num.of(e.point.fx()), F64Num.of(e.point.fy()))
@@ -816,12 +816,12 @@ static func check_effect_law(events: Array, scene: BeamScene) -> Array[String]:
 static func _carrier_violations(events: Array, scene: BeamScene) -> Array[String]:
 	var out: Array[String] = []
 	for i in events.size():
-		var e: BeamSolver.Event = events[i]
+		var e: BeamSolverEvent = events[i]
 		if e.kind != "hit" or e.point == null:
 			continue
-		var s: BeamScene.Surf = scene.by_id[e.surface_id]
-		var x := e.point.fx()
-		var y := e.point.fy()
+		var s: BeamSceneSurf = scene.by_id[e.surface_id]
+		var x: float = e.point.fx()
+		var y: float = e.point.fy()
 		var d: float
 		if s.line:
 			var dx := s.ex - s.sx
@@ -838,7 +838,7 @@ static func _carrier_violations(events: Array, scene: BeamScene) -> Array[String
 static func check_event_on_beam(events: Array, scene: BeamScene) -> Array[String]:
 	var out: Array[String] = []
 	for i in events.size():
-		var e: BeamSolver.Event = events[i]
+		var e: BeamSolverEvent = events[i]
 		if e.point == null or e.t_to == null:
 			continue
 		var b := e.beam
@@ -854,8 +854,8 @@ static func check_event_on_beam(events: Array, scene: BeamScene) -> Array[String
 static func check_beam_order(events: Array) -> Array[String]:
 	var out: Array[String] = []
 	for i in range(1, events.size()):
-		var a: BeamSolver.Event = events[i - 1]
-		var b: BeamSolver.Event = events[i]
+		var a: BeamSolverEvent = events[i - 1]
+		var b: BeamSolverEvent = events[i]
 		if a.beam != b.beam or a.t_to == null or b.t_from == null:
 			continue
 		if a.t_to.to_float() != b.t_from.to_float():

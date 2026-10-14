@@ -22,7 +22,7 @@ func _left_only_mirror(x: float) -> Surface:
 # ============================================================
 
 func test_step_defaults() -> void:
-	var step := TraceStep.new()
+	var step := TraceStep.make()
 	assert_eq(step.surface_id, -1, "Default surface_id should be -1")
 	assert_eq(step.hit_side, -1, "Default hit_side should be -1")
 	assert_eq(step.hit_on_segment, false, "Default hit_on_segment should be false")
@@ -75,7 +75,7 @@ func test_escape_step_has_no_surface_id() -> void:
 		assert_eq(step.surface_id, -1, "Escape steps should have no surface_id")
 
 func test_with_type_preserves_surface_fields() -> void:
-	var step := TraceStep.new()
+	var step := TraceStep.make()
 	step.surface_id = 42
 	step.hit_side = Side.Value.RIGHT
 	step.hit_on_segment = true
@@ -90,7 +90,7 @@ func test_with_type_preserves_surface_fields() -> void:
 
 func test_physical_hits_contains_hit_surface() -> void:
 	var path := TracePath.new()
-	var step := TraceStep.new()
+	var step := TraceStep.make()
 	step.surface_id = 5
 	step.hit_side = Side.Value.LEFT
 	step.hit_on_segment = true
@@ -100,7 +100,7 @@ func test_physical_hits_contains_hit_surface() -> void:
 
 func test_physical_hits_records_side_and_on_segment() -> void:
 	var path := TracePath.new()
-	var step := TraceStep.new()
+	var step := TraceStep.make()
 	step.surface_id = 5
 	step.hit_side = Side.Value.LEFT
 	step.hit_on_segment = true
@@ -113,15 +113,15 @@ func test_physical_hits_records_side_and_on_segment() -> void:
 
 func test_physical_hits_empty_for_no_hits() -> void:
 	var path := TracePath.new()
-	var step := TraceStep.new()
+	var step := TraceStep.make()
 	path.steps.append(step)
 	var hits := PathRendererScript.build_physical_hits(path)
 	assert_eq(hits.size(), 0, "No enriched steps → empty dict")
 
 func test_physical_hits_skips_negative_surface_id() -> void:
 	var path := TracePath.new()
-	var s1 := TraceStep.new()
-	var s2 := TraceStep.new()
+	var s1 := TraceStep.make()
+	var s2 := TraceStep.make()
 	s2.surface_id = 3
 	s2.hit_side = Side.Value.RIGHT
 	s2.hit_on_segment = true

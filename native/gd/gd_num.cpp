@@ -9,208 +9,208 @@ using godot::Ref;
 using godot::Variant;
 using namespace rcgd;
 
-// ---------------------------------------------------------------- NNumCtx
+// ---------------------------------------------------------------- NumCtx
 
-void NNumCtx::_bind_methods() {
-	ClassDB::bind_static_method("NNumCtx", D_METHOD("f64"), &NNumCtx::f64);
-	ClassDB::bind_static_method("NNumCtx", D_METHOD("with_limbs", "n"), &NNumCtx::with_limbs);
-	ClassDB::bind_static_method("NNumCtx", D_METHOD("dual"), &NNumCtx::dual);
-	ClassDB::bind_method(D_METHOD("is_f64"), &NNumCtx::is_f64);
-	ClassDB::bind_method(D_METHOD("is_dual"), &NNumCtx::is_dual);
-	ClassDB::bind_method(D_METHOD("bits"), &NNumCtx::bits);
-	ClassDB::bind_method(D_METHOD("eps"), &NNumCtx::eps);
-	ClassDB::bind_method(D_METHOD("num", "f"), &NNumCtx::num);
-	ClassDB::bind_method(D_METHOD("from_string", "s"), &NNumCtx::from_string);
-	ClassDB::bind_method(D_METHOD("inf"), &NNumCtx::inf);
-	ClassDB::bind_method(D_METHOD("zero"), &NNumCtx::zero);
-	ClassDB::bind_method(D_METHOD("one"), &NNumCtx::one);
-	ClassDB::bind_method(D_METHOD("cn", "x", "y"), &NNumCtx::cn);
-	ClassDB::bind_method(D_METHOD("name"), &NNumCtx::name);
-	ClassDB::bind_method(D_METHOD("get_limbs"), &NNumCtx::get_limbs);
-	ClassDB::bind_method(D_METHOD("set_limbs", "n"), &NNumCtx::set_limbs);
+void NumCtx::_bind_methods() {
+	ClassDB::bind_static_method("NumCtx", D_METHOD("f64"), &NumCtx::f64);
+	ClassDB::bind_static_method("NumCtx", D_METHOD("with_limbs", "n"), &NumCtx::with_limbs);
+	ClassDB::bind_static_method("NumCtx", D_METHOD("dual"), &NumCtx::dual);
+	ClassDB::bind_method(D_METHOD("is_f64"), &NumCtx::is_f64);
+	ClassDB::bind_method(D_METHOD("is_dual"), &NumCtx::is_dual);
+	ClassDB::bind_method(D_METHOD("bits"), &NumCtx::bits);
+	ClassDB::bind_method(D_METHOD("eps"), &NumCtx::eps);
+	ClassDB::bind_method(D_METHOD("num", "f"), &NumCtx::num);
+	ClassDB::bind_method(D_METHOD("from_string", "s"), &NumCtx::from_string);
+	ClassDB::bind_method(D_METHOD("inf"), &NumCtx::inf);
+	ClassDB::bind_method(D_METHOD("zero"), &NumCtx::zero);
+	ClassDB::bind_method(D_METHOD("one"), &NumCtx::one);
+	ClassDB::bind_method(D_METHOD("cn", "x", "y"), &NumCtx::cn);
+	ClassDB::bind_method(D_METHOD("name"), &NumCtx::name);
+	ClassDB::bind_method(D_METHOD("get_limbs"), &NumCtx::get_limbs);
+	ClassDB::bind_method(D_METHOD("set_limbs", "n"), &NumCtx::set_limbs);
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "limbs"), "set_limbs", "get_limbs");
 	BIND_CONSTANT(DUAL_LIMBS);
 }
 
-Ref<NNumCtx> NNumCtx::f64() {
-	Ref<NNumCtx> c;
+Ref<NumCtx> NumCtx::f64() {
+	Ref<NumCtx> c;
 	c.instantiate();
 	c->limbs = 0;
 	return c;
 }
-Ref<NNumCtx> NNumCtx::with_limbs(int n) {
-	Ref<NNumCtx> c;
+Ref<NumCtx> NumCtx::with_limbs(int n) {
+	Ref<NumCtx> c;
 	c.instantiate();
 	c->limbs = n;
 	return c;
 }
-Ref<NNumCtx> NNumCtx::dual() {
-	Ref<NNumCtx> c;
+Ref<NumCtx> NumCtx::dual() {
+	Ref<NumCtx> c;
 	c.instantiate();
 	c->limbs = DUAL_LIMBS;
 	return c;
 }
-double NNumCtx::eps() const {
+double NumCtx::eps() const {
 	return std::pow(2.0, -bits());
 }
-Ref<NNum> NNumCtx::num(double f) const {
-	return NNum::wrap(num_of(limbs, f));
+Ref<Num> NumCtx::num(double f) const {
+	return Num::wrap(num_of(limbs, f));
 }
-Ref<NNum> NNumCtx::from_string(const godot::String &s) const {
+Ref<Num> NumCtx::from_string(const godot::String &s) const {
 	if (limbs <= 0) {
 		return num(s.to_float());
 	}
-	return NNum::wrap(rc::BigFloat::from_string(to_std(s), limbs));
+	return Num::wrap(rc::BigFloat::from_string(to_std(s), limbs));
 }
-Ref<NNum> NNumCtx::inf() const {
+Ref<Num> NumCtx::inf() const {
 	if (limbs <= 0) {
 		return num(std::numeric_limits<double>::infinity());
 	}
-	return NNum::wrap(rc::BigFloat::infinity(limbs));
+	return Num::wrap(rc::BigFloat::infinity(limbs));
 }
-Ref<NNum> NNumCtx::zero() const {
+Ref<Num> NumCtx::zero() const {
 	return num(0.0);
 }
-Ref<NNum> NNumCtx::one() const {
+Ref<Num> NumCtx::one() const {
 	return num(1.0);
 }
-Ref<NCN> NNumCtx::cn(double x, double y) const {
+Ref<CN> NumCtx::cn(double x, double y) const {
 	if (limbs == 0) {
-		return NCN::wrap(rc::CN<rc::F64>{rc::F64{x}, rc::F64{y}});
+		return CN::wrap(rc::CN<rc::F64>{rc::F64{x}, rc::F64{y}});
 	}
 	if (limbs == DUAL_LIMBS) {
-		return NCN::wrap(rc::CN<rc::Dual>{rc::Dual{x, 0.0}, rc::Dual{y, 0.0}});
+		return CN::wrap(rc::CN<rc::Dual>{rc::Dual{x, 0.0}, rc::Dual{y, 0.0}});
 	}
-	return NCN::wrap(rc::CN<rc::BigFloat>{rc::BigFloat::from_float(x, limbs), rc::BigFloat::from_float(y, limbs)});
+	return CN::wrap(rc::CN<rc::BigFloat>{rc::BigFloat::from_float(x, limbs), rc::BigFloat::from_float(y, limbs)});
 }
-godot::String NNumCtx::name() const {
+godot::String NumCtx::name() const {
 	if (limbs == DUAL_LIMBS) {
 		return "dual";
 	}
 	return limbs == 0 ? godot::String("f64") : to_gd("big" + std::to_string(bits()));
 }
 
-// ---------------------------------------------------------------- NNum
+// ---------------------------------------------------------------- Num
 
-void NNum::_bind_methods() {
-	ClassDB::bind_static_method("NNum", D_METHOD("of", "x"), &NNum::of);
-	ClassDB::bind_static_method("NNum", D_METHOD("dual_of", "x", "dx"), &NNum::dual_of);
-	ClassDB::bind_method(D_METHOD("is_inf"), &NNum::is_inf);
-	ClassDB::bind_method(D_METHOD("is_zero"), &NNum::is_zero);
-	ClassDB::bind_method(D_METHOD("is_negative"), &NNum::is_negative);
-	ClassDB::bind_method(D_METHOD("to_float"), &NNum::to_float);
-	ClassDB::bind_method(D_METHOD("neg"), &NNum::neg);
-	ClassDB::bind_method(D_METHOD("abs_val"), &NNum::abs_val);
-	ClassDB::bind_method(D_METHOD("add", "o"), &NNum::add);
-	ClassDB::bind_method(D_METHOD("sub", "o"), &NNum::sub);
-	ClassDB::bind_method(D_METHOD("mul", "o"), &NNum::mul);
-	ClassDB::bind_method(D_METHOD("div", "o"), &NNum::div);
-	ClassDB::bind_method(D_METHOD("sqrt_val"), &NNum::sqrt_val);
-	ClassDB::bind_method(D_METHOD("mul_pow2", "k"), &NNum::mul_pow2);
-	ClassDB::bind_method(D_METHOD("cmp", "o"), &NNum::cmp);
-	ClassDB::bind_method(D_METHOD("limbs"), &NNum::limbs);
-	ClassDB::bind_method(D_METHOD("get_v"), &NNum::get_v);
-	ClassDB::bind_method(D_METHOD("get_d"), &NNum::get_d);
-	ClassDB::bind_method(D_METHOD("get_sign"), &NNum::get_sign);
-	ClassDB::bind_method(D_METHOD("get_exp"), &NNum::get_exp);
-	ClassDB::bind_method(D_METHOD("get_limbs"), &NNum::get_limbs);
-	ClassDB::bind_method(D_METHOD("with_limbs", "n"), &NNum::with_limbs);
-	ClassDB::bind_method(D_METHOD("precision_limbs"), &NNum::precision_limbs);
-	ClassDB::bind_method(D_METHOD("top_exp"), &NNum::top_exp);
-	ClassDB::bind_method(D_METHOD("debug_string"), &NNum::debug_string);
+void Num::_bind_methods() {
+	ClassDB::bind_static_method("Num", D_METHOD("of", "x"), &Num::of);
+	ClassDB::bind_static_method("Num", D_METHOD("dual_of", "x", "dx"), &Num::dual_of);
+	ClassDB::bind_method(D_METHOD("is_inf"), &Num::is_inf);
+	ClassDB::bind_method(D_METHOD("is_zero"), &Num::is_zero);
+	ClassDB::bind_method(D_METHOD("is_negative"), &Num::is_negative);
+	ClassDB::bind_method(D_METHOD("to_float"), &Num::to_float);
+	ClassDB::bind_method(D_METHOD("neg"), &Num::neg);
+	ClassDB::bind_method(D_METHOD("abs_val"), &Num::abs_val);
+	ClassDB::bind_method(D_METHOD("add", "o"), &Num::add);
+	ClassDB::bind_method(D_METHOD("sub", "o"), &Num::sub);
+	ClassDB::bind_method(D_METHOD("mul", "o"), &Num::mul);
+	ClassDB::bind_method(D_METHOD("div", "o"), &Num::div);
+	ClassDB::bind_method(D_METHOD("sqrt_val"), &Num::sqrt_val);
+	ClassDB::bind_method(D_METHOD("mul_pow2", "k"), &Num::mul_pow2);
+	ClassDB::bind_method(D_METHOD("cmp", "o"), &Num::cmp);
+	ClassDB::bind_method(D_METHOD("limbs"), &Num::limbs);
+	ClassDB::bind_method(D_METHOD("get_v"), &Num::get_v);
+	ClassDB::bind_method(D_METHOD("get_d"), &Num::get_d);
+	ClassDB::bind_method(D_METHOD("get_sign"), &Num::get_sign);
+	ClassDB::bind_method(D_METHOD("get_exp"), &Num::get_exp);
+	ClassDB::bind_method(D_METHOD("get_limbs"), &Num::get_limbs);
+	ClassDB::bind_method(D_METHOD("with_limbs", "n"), &Num::with_limbs);
+	ClassDB::bind_method(D_METHOD("precision_limbs"), &Num::precision_limbs);
+	ClassDB::bind_method(D_METHOD("top_exp"), &Num::top_exp);
+	ClassDB::bind_method(D_METHOD("debug_string"), &Num::debug_string);
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "v"), "", "get_v");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "d"), "", "get_d");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "sign"), "", "get_sign");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "exp"), "", "get_exp");
 }
 
-Ref<NNum> NNum::wrap(NumV v) {
-	Ref<NNum> n;
+Ref<Num> Num::wrap(NumV v) {
+	Ref<Num> n;
 	n.instantiate();
 	n->value = std::move(v);
 	return n;
 }
-Ref<NNum> NNum::of(double x) {
+Ref<Num> Num::of(double x) {
 	return wrap(rc::F64{x});
 }
-Ref<NNum> NNum::dual_of(double x, double dx) {
+Ref<Num> Num::dual_of(double x, double dx) {
 	return wrap(rc::Dual{x, dx});
 }
-bool NNum::is_inf() const {
+bool Num::is_inf() const {
 	return std::visit([](const auto &x) { return x.is_inf(); }, value);
 }
-bool NNum::is_zero() const {
+bool Num::is_zero() const {
 	return std::visit([](const auto &x) { return x.is_zero(); }, value);
 }
-bool NNum::is_negative() const {
+bool Num::is_negative() const {
 	return std::visit([](const auto &x) { return x.is_negative(); }, value);
 }
-double NNum::to_float() const {
+double Num::to_float() const {
 	return rcgd::to_float(value);
 }
-Ref<NNum> NNum::neg() const {
+Ref<Num> Num::neg() const {
 	return std::visit([](const auto &x) { return wrap(x.neg()); }, value);
 }
-Ref<NNum> NNum::abs_val() const {
+Ref<Num> Num::abs_val() const {
 	return std::visit([](const auto &x) { return wrap(x.abs_val()); }, value);
 }
 namespace {
 template <class F>
-Ref<NNum> binop(const NumV &a, const Ref<NNum> &o, F &&f) {
-	return std::visit([&](const auto &x) -> Ref<NNum> {
+Ref<Num> binop(const NumV &a, const Ref<Num> &o, F &&f) {
+	return std::visit([&](const auto &x) -> Ref<Num> {
 		using T = std::decay_t<decltype(x)>;
 		const T *y = std::get_if<T>(&o->value);
-		ERR_FAIL_NULL_V_MSG(y, Ref<NNum>(), "NNum: operands of different tiers");
-		return NNum::wrap(f(x, *y));
+		ERR_FAIL_NULL_V_MSG(y, Ref<Num>(), "Num: operands of different tiers");
+		return Num::wrap(f(x, *y));
 	}, a);
 }
 } // namespace
-Ref<NNum> NNum::add(const Ref<NNum> &o) const {
+Ref<Num> Num::add(const Ref<Num> &o) const {
 	return binop(value, o, [](const auto &x, const auto &y) { return x.add(y); });
 }
-Ref<NNum> NNum::sub(const Ref<NNum> &o) const {
+Ref<Num> Num::sub(const Ref<Num> &o) const {
 	return binop(value, o, [](const auto &x, const auto &y) { return x.sub(y); });
 }
-Ref<NNum> NNum::mul(const Ref<NNum> &o) const {
+Ref<Num> Num::mul(const Ref<Num> &o) const {
 	return binop(value, o, [](const auto &x, const auto &y) { return x.mul(y); });
 }
-Ref<NNum> NNum::div(const Ref<NNum> &o) const {
+Ref<Num> Num::div(const Ref<Num> &o) const {
 	return binop(value, o, [](const auto &x, const auto &y) { return x.div(y); });
 }
-Ref<NNum> NNum::sqrt_val() const {
+Ref<Num> Num::sqrt_val() const {
 	return std::visit([](const auto &x) { return wrap(x.sqrt_val()); }, value);
 }
-Ref<NNum> NNum::mul_pow2(int k) const {
+Ref<Num> Num::mul_pow2(int k) const {
 	return std::visit([k](const auto &x) { return wrap(x.mul_pow2(k)); }, value);
 }
-int NNum::cmp(const Ref<NNum> &o) const {
+int Num::cmp(const Ref<Num> &o) const {
 	return std::visit([&](const auto &x) -> int {
 		using T = std::decay_t<decltype(x)>;
 		const T *y = std::get_if<T>(&o->value);
-		ERR_FAIL_NULL_V_MSG(y, 0, "NNum: operands of different tiers");
+		ERR_FAIL_NULL_V_MSG(y, 0, "Num: operands of different tiers");
 		return x.cmp(*y);
 	}, value);
 }
-double NNum::get_d() const {
+double Num::get_d() const {
 	if (const rc::Dual *d = std::get_if<rc::Dual>(&value)) {
 		return d->d;
 	}
 	return 0.0;
 }
-int NNum::get_sign() const {
+int Num::get_sign() const {
 	if (const rc::BigFloat *b = std::get_if<rc::BigFloat>(&value)) {
 		return b->sign;
 	}
 	const double v = to_float();
 	return v == 0.0 ? 0 : (v > 0.0 ? 1 : -1);
 }
-int64_t NNum::get_exp() const {
+int64_t Num::get_exp() const {
 	if (const rc::BigFloat *b = std::get_if<rc::BigFloat>(&value)) {
 		return b->exp;
 	}
 	return 0;
 }
-godot::PackedInt64Array NNum::get_limbs() const {
+godot::PackedInt64Array Num::get_limbs() const {
 	godot::PackedInt64Array out;
 	if (const rc::BigFloat *b = std::get_if<rc::BigFloat>(&value)) {
 		out.resize(int64_t(b->limbs.size()));
@@ -220,198 +220,207 @@ godot::PackedInt64Array NNum::get_limbs() const {
 	}
 	return out;
 }
-Ref<NNum> NNum::with_limbs(int n) const {
+Ref<Num> Num::with_limbs(int n) const {
 	if (const rc::BigFloat *b = std::get_if<rc::BigFloat>(&value)) {
 		return wrap(b->with_limbs(n));
 	}
 	return wrap(value);
 }
-int NNum::precision_limbs() const {
+int Num::precision_limbs() const {
 	if (const rc::BigFloat *b = std::get_if<rc::BigFloat>(&value)) {
 		return b->precision_limbs();
 	}
 	return 0;
 }
-int64_t NNum::top_exp() const {
+int64_t Num::top_exp() const {
 	if (const rc::BigFloat *b = std::get_if<rc::BigFloat>(&value)) {
 		return b->top_exp();
 	}
 	return 0;
 }
-godot::String NNum::debug_string() const {
+godot::String Num::debug_string() const {
 	if (const rc::BigFloat *b = std::get_if<rc::BigFloat>(&value)) {
 		return to_gd(b->debug_string());
 	}
 	return godot::String::num(to_float(), 17);
 }
 
-// ---------------------------------------------------------------- NCN
+// ---------------------------------------------------------------- CN
 
-void NCN::_bind_methods() {
-	ClassDB::bind_static_method("NCN", D_METHOD("make", "re", "im"), &NCN::make);
-	ClassDB::bind_static_method("NCN", D_METHOD("dot", "a", "b"), &NCN::dot);
-	ClassDB::bind_static_method("NCN", D_METHOD("cross", "a", "b"), &NCN::cross);
-	ClassDB::bind_method(D_METHOD("add", "o"), &NCN::add);
-	ClassDB::bind_method(D_METHOD("sub", "o"), &NCN::sub);
-	ClassDB::bind_method(D_METHOD("neg"), &NCN::neg);
-	ClassDB::bind_method(D_METHOD("conj"), &NCN::conj);
-	ClassDB::bind_method(D_METHOD("mul", "o"), &NCN::mul);
-	ClassDB::bind_method(D_METHOD("scale", "s"), &NCN::scale);
-	ClassDB::bind_method(D_METHOD("mul_i"), &NCN::mul_i);
-	ClassDB::bind_method(D_METHOD("mul_neg_i"), &NCN::mul_neg_i);
-	ClassDB::bind_method(D_METHOD("abs2"), &NCN::abs2);
-	ClassDB::bind_method(D_METHOD("abs_val"), &NCN::abs_val);
-	ClassDB::bind_method(D_METHOD("div", "o"), &NCN::div);
-	ClassDB::bind_method(D_METHOD("div_real", "s"), &NCN::div_real);
-	ClassDB::bind_method(D_METHOD("unit"), &NCN::unit);
-	ClassDB::bind_method(D_METHOD("is_zero"), &NCN::is_zero);
-	ClassDB::bind_method(D_METHOD("to_vector2"), &NCN::to_vector2);
-	ClassDB::bind_method(D_METHOD("fx"), &NCN::fx);
-	ClassDB::bind_method(D_METHOD("fy"), &NCN::fy);
-	ClassDB::bind_method(D_METHOD("get_re"), &NCN::get_re);
-	ClassDB::bind_method(D_METHOD("get_im"), &NCN::get_im);
-	ClassDB::bind_method(D_METHOD("limbs"), &NCN::limbs);
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "re", godot::PROPERTY_HINT_RESOURCE_TYPE, "NNum"), "", "get_re");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "im", godot::PROPERTY_HINT_RESOURCE_TYPE, "NNum"), "", "get_im");
+void CN::_bind_methods() {
+	ClassDB::bind_static_method("CN", D_METHOD("make", "re", "im"), &CN::make);
+	ClassDB::bind_static_method("CN", D_METHOD("dot", "a", "b"), &CN::dot);
+	ClassDB::bind_static_method("CN", D_METHOD("cross", "a", "b"), &CN::cross);
+	ClassDB::bind_method(D_METHOD("add", "o"), &CN::add);
+	ClassDB::bind_method(D_METHOD("sub", "o"), &CN::sub);
+	ClassDB::bind_method(D_METHOD("neg"), &CN::neg);
+	ClassDB::bind_method(D_METHOD("conj"), &CN::conj);
+	ClassDB::bind_method(D_METHOD("mul", "o"), &CN::mul);
+	ClassDB::bind_method(D_METHOD("scale", "s"), &CN::scale);
+	ClassDB::bind_method(D_METHOD("mul_i"), &CN::mul_i);
+	ClassDB::bind_method(D_METHOD("mul_neg_i"), &CN::mul_neg_i);
+	ClassDB::bind_method(D_METHOD("abs2"), &CN::abs2);
+	ClassDB::bind_method(D_METHOD("abs_val"), &CN::abs_val);
+	ClassDB::bind_method(D_METHOD("div", "o"), &CN::div);
+	ClassDB::bind_method(D_METHOD("div_real", "s"), &CN::div_real);
+	ClassDB::bind_method(D_METHOD("unit"), &CN::unit);
+	ClassDB::bind_method(D_METHOD("is_zero"), &CN::is_zero);
+	ClassDB::bind_method(D_METHOD("to_vector2"), &CN::to_vector2);
+	ClassDB::bind_method(D_METHOD("fx"), &CN::fx);
+	ClassDB::bind_method(D_METHOD("fy"), &CN::fy);
+	ClassDB::bind_method(D_METHOD("get_re"), &CN::get_re);
+	ClassDB::bind_method(D_METHOD("get_im"), &CN::get_im);
+	ClassDB::bind_method(D_METHOD("limbs"), &CN::limbs);
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "re", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num"), "", "get_re");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "im", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num"), "", "get_im");
 }
 
-Ref<NCN> NCN::wrap(CNV v) {
-	Ref<NCN> z;
+Ref<CN> CN::wrap(CNV v) {
+	Ref<CN> z;
 	z.instantiate();
 	z->value = std::move(v);
 	return z;
 }
-Ref<NCN> NCN::make(const Ref<NNum> &re, const Ref<NNum> &im) {
-	return std::visit([&](const auto &r) -> Ref<NCN> {
+Ref<CN> CN::make(const Ref<Num> &re, const Ref<Num> &im) {
+	return std::visit([&](const auto &r) -> Ref<CN> {
 		using T = std::decay_t<decltype(r)>;
 		const T *i = std::get_if<T>(&im->value);
-		ERR_FAIL_NULL_V_MSG(i, Ref<NCN>(), "NCN.make: parts of different tiers");
+		ERR_FAIL_NULL_V_MSG(i, Ref<CN>(), "CN.make: parts of different tiers");
 		return wrap(rc::CN<T>{r, *i});
 	}, re->value);
 }
 namespace {
 template <class F>
-Ref<NCN> cn_binop(const CNV &a, const Ref<NCN> &o, F &&f) {
-	return std::visit([&](const auto &x) -> Ref<NCN> {
+Ref<CN> cn_binop(const CNV &a, const Ref<CN> &o, F &&f) {
+	return std::visit([&](const auto &x) -> Ref<CN> {
 		using T = std::decay_t<decltype(x)>;
 		const T *y = std::get_if<T>(&o->value);
-		ERR_FAIL_NULL_V_MSG(y, Ref<NCN>(), "NCN: operands of different tiers");
-		return NCN::wrap(f(x, *y));
+		ERR_FAIL_NULL_V_MSG(y, Ref<CN>(), "CN: operands of different tiers");
+		return CN::wrap(f(x, *y));
 	}, a);
 }
 template <class F>
-Ref<NCN> cn_scalar(const CNV &a, const Ref<NNum> &s, F &&f) {
-	return std::visit([&](const auto &x) -> Ref<NCN> {
+Ref<CN> cn_scalar(const CNV &a, const Ref<Num> &s, F &&f) {
+	return std::visit([&](const auto &x) -> Ref<CN> {
 		using N = std::decay_t<decltype(x.re)>;
 		const N *y = std::get_if<N>(&s->value);
-		ERR_FAIL_NULL_V_MSG(y, Ref<NCN>(), "NCN: scalar of a different tier");
-		return NCN::wrap(f(x, *y));
+		ERR_FAIL_NULL_V_MSG(y, Ref<CN>(), "CN: scalar of a different tier");
+		return CN::wrap(f(x, *y));
 	}, a);
 }
 } // namespace
-Ref<NCN> NCN::add(const Ref<NCN> &o) const {
+Ref<CN> CN::add(const Ref<CN> &o) const {
 	return cn_binop(value, o, [](const auto &x, const auto &y) { return x.add(y); });
 }
-Ref<NCN> NCN::sub(const Ref<NCN> &o) const {
+Ref<CN> CN::sub(const Ref<CN> &o) const {
 	return cn_binop(value, o, [](const auto &x, const auto &y) { return x.sub(y); });
 }
-Ref<NCN> NCN::neg() const {
+Ref<CN> CN::neg() const {
 	return std::visit([](const auto &x) { return wrap(x.neg()); }, value);
 }
-Ref<NCN> NCN::conj() const {
+Ref<CN> CN::conj() const {
 	return std::visit([](const auto &x) { return wrap(x.conj()); }, value);
 }
-Ref<NCN> NCN::mul(const Ref<NCN> &o) const {
+Ref<CN> CN::mul(const Ref<CN> &o) const {
 	return cn_binop(value, o, [](const auto &x, const auto &y) { return x.mul(y); });
 }
-Ref<NCN> NCN::scale(const Ref<NNum> &s) const {
+Ref<CN> CN::scale(const Ref<Num> &s) const {
 	return cn_scalar(value, s, [](const auto &x, const auto &y) { return x.scale(y); });
 }
-Ref<NCN> NCN::mul_i() const {
+Ref<CN> CN::mul_i() const {
 	return std::visit([](const auto &x) { return wrap(x.mul_i()); }, value);
 }
-Ref<NCN> NCN::mul_neg_i() const {
+Ref<CN> CN::mul_neg_i() const {
 	return std::visit([](const auto &x) { return wrap(x.mul_neg_i()); }, value);
 }
-Ref<NNum> NCN::abs2() const {
-	return std::visit([](const auto &x) { return NNum::wrap(x.abs2()); }, value);
+Ref<Num> CN::abs2() const {
+	return std::visit([](const auto &x) { return Num::wrap(x.abs2()); }, value);
 }
-Ref<NNum> NCN::abs_val() const {
-	return std::visit([](const auto &x) { return NNum::wrap(x.abs_val()); }, value);
+Ref<Num> CN::abs_val() const {
+	return std::visit([](const auto &x) { return Num::wrap(x.abs_val()); }, value);
 }
-Ref<NCN> NCN::div(const Ref<NCN> &o) const {
+Ref<CN> CN::div(const Ref<CN> &o) const {
 	return cn_binop(value, o, [](const auto &x, const auto &y) { return x.div(y); });
 }
-Ref<NCN> NCN::div_real(const Ref<NNum> &s) const {
+Ref<CN> CN::div_real(const Ref<Num> &s) const {
 	return cn_scalar(value, s, [](const auto &x, const auto &y) { return x.div_real(y); });
 }
-Ref<NCN> NCN::unit() const {
+Ref<CN> CN::unit() const {
 	return std::visit([](const auto &x) { return wrap(x.unit()); }, value);
 }
-bool NCN::is_zero() const {
+bool CN::is_zero() const {
 	return std::visit([](const auto &x) { return x.is_zero(); }, value);
 }
-Ref<NNum> NCN::dot(const Ref<NCN> &a, const Ref<NCN> &b) {
-	return std::visit([&](const auto &x) -> Ref<NNum> {
+Ref<Num> CN::dot(const Ref<CN> &a, const Ref<CN> &b) {
+	return std::visit([&](const auto &x) -> Ref<Num> {
 		using T = std::decay_t<decltype(x)>;
 		const T *y = std::get_if<T>(&b->value);
-		ERR_FAIL_NULL_V_MSG(y, Ref<NNum>(), "NCN.dot: operands of different tiers");
-		return NNum::wrap(T::dot(x, *y));
+		ERR_FAIL_NULL_V_MSG(y, Ref<Num>(), "CN.dot: operands of different tiers");
+		return Num::wrap(T::dot(x, *y));
 	}, a->value);
 }
-Ref<NNum> NCN::cross(const Ref<NCN> &a, const Ref<NCN> &b) {
-	return std::visit([&](const auto &x) -> Ref<NNum> {
+Ref<Num> CN::cross(const Ref<CN> &a, const Ref<CN> &b) {
+	return std::visit([&](const auto &x) -> Ref<Num> {
 		using T = std::decay_t<decltype(x)>;
 		const T *y = std::get_if<T>(&b->value);
-		ERR_FAIL_NULL_V_MSG(y, Ref<NNum>(), "NCN.cross: operands of different tiers");
-		return NNum::wrap(T::cross(x, *y));
+		ERR_FAIL_NULL_V_MSG(y, Ref<Num>(), "CN.cross: operands of different tiers");
+		return Num::wrap(T::cross(x, *y));
 	}, a->value);
 }
-godot::Vector2 NCN::to_vector2() const {
+godot::Vector2 CN::to_vector2() const {
 	return godot::Vector2(real_t(fx()), real_t(fy()));
 }
-double NCN::fx() const {
+double CN::fx() const {
 	return std::visit([](const auto &x) { return x.fx(); }, value);
 }
-double NCN::fy() const {
+double CN::fy() const {
 	return std::visit([](const auto &x) { return x.fy(); }, value);
 }
-Ref<NNum> NCN::get_re() const {
-	return std::visit([](const auto &x) { return NNum::wrap(x.re); }, value);
+Ref<Num> CN::get_re() const {
+	return std::visit([](const auto &x) { return Num::wrap(x.re); }, value);
 }
-Ref<NNum> NCN::get_im() const {
-	return std::visit([](const auto &x) { return NNum::wrap(x.im); }, value);
+Ref<Num> CN::get_im() const {
+	return std::visit([](const auto &x) { return Num::wrap(x.im); }, value);
 }
-int NCN::limbs() const {
+int CN::limbs() const {
 	return std::visit([](const auto &x) { return rcgd::limbs_of(x.re); }, value);
 }
 
-// ---------------------------------------------------------------- NBigFloat
+// ---------------------------------------------------------------- BigFloat
 
-void NBigFloat::_bind_methods() {
-	ClassDB::bind_static_method("NBigFloat", D_METHOD("zero", "n"), &NBigFloat::zero);
-	ClassDB::bind_static_method("NBigFloat", D_METHOD("infinity", "n"), &NBigFloat::infinity);
-	ClassDB::bind_static_method("NBigFloat", D_METHOD("limbs_for_bits", "bits"), &NBigFloat::limbs_for_bits);
-	ClassDB::bind_static_method("NBigFloat", D_METHOD("from_float", "f", "n"), &NBigFloat::from_float);
-	ClassDB::bind_static_method("NBigFloat", D_METHOD("from_string", "s", "n"), &NBigFloat::from_string);
-	ClassDB::bind_static_method("NBigFloat", D_METHOD("from_int", "v", "n"), &NBigFloat::from_int);
+void BigFloat::_bind_methods() {
+	ClassDB::bind_static_method("BigFloat", D_METHOD("zero", "n"), &BigFloat::zero);
+	ClassDB::bind_static_method("BigFloat", D_METHOD("infinity", "n"), &BigFloat::infinity);
+	ClassDB::bind_static_method("BigFloat", D_METHOD("limbs_for_bits", "bits"), &BigFloat::limbs_for_bits);
+	ClassDB::bind_static_method("BigFloat", D_METHOD("from_float", "f", "n"), &BigFloat::from_float);
+	ClassDB::bind_static_method("BigFloat", D_METHOD("from_string", "s", "n"), &BigFloat::from_string);
+	ClassDB::bind_static_method("BigFloat", D_METHOD("from_int", "v", "n"), &BigFloat::from_int);
 	BIND_CONSTANT(BITS);
 }
-Ref<NNum> NBigFloat::zero(int n) {
-	return NNum::wrap(rc::BigFloat::zero(n));
+Ref<Num> BigFloat::zero(int n) {
+	return Num::wrap(rc::BigFloat::zero(n));
 }
-Ref<NNum> NBigFloat::infinity(int n) {
-	return NNum::wrap(rc::BigFloat::infinity(n));
+Ref<Num> BigFloat::infinity(int n) {
+	return Num::wrap(rc::BigFloat::infinity(n));
 }
-int NBigFloat::limbs_for_bits(int bits) {
+int BigFloat::limbs_for_bits(int bits) {
 	return rc::BigFloat::limbs_for_bits(bits);
 }
-Ref<NNum> NBigFloat::from_float(double f, int n) {
-	return NNum::wrap(rc::BigFloat::from_float(f, n));
+Ref<Num> BigFloat::from_float(double f, int n) {
+	return Num::wrap(rc::BigFloat::from_float(f, n));
 }
-Ref<NNum> NBigFloat::from_string(const godot::String &s, int n) {
-	return NNum::wrap(rc::BigFloat::from_string(to_std(s), n));
+Ref<Num> BigFloat::from_string(const godot::String &s, int n) {
+	return Num::wrap(rc::BigFloat::from_string(to_std(s), n));
 }
-Ref<NNum> NBigFloat::from_int(int64_t v, int n) {
-	return NNum::wrap(rc::BigFloat::from_int(v, n));
+Ref<Num> BigFloat::from_int(int64_t v, int n) {
+	return Num::wrap(rc::BigFloat::from_int(v, n));
+}
+
+// ---------------------------------------------------------------- F64Num / DualNum
+
+void F64Num::_bind_methods() {
+	ClassDB::bind_static_method("F64Num", D_METHOD("of", "x"), &F64Num::of);
+}
+void DualNum::_bind_methods() {
+	ClassDB::bind_static_method("DualNum", D_METHOD("of", "x", "dx"), &DualNum::of, DEFVAL(0.0));
 }

@@ -8,7 +8,7 @@ extends GutTest
 
 const TIERS := [2, 4, 16]
 
-func _b(x: float, n: int) -> BigFloat:
+func _b(x: float, n: int) -> Num:
 	return BigFloat.from_float(x, n)
 
 func test_exact_quotients():

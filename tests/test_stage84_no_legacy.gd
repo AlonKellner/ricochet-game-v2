@@ -148,7 +148,7 @@ func test_portal_pair_construction_without_frames():
 	var pp0 := RigidMotionEffect.create_portal_pair(seg0, 0.0, Vector2(500, 0))
 	var sa := Surface.new(seg0, SideConfig.new(pp0.source_effect, true), SideConfig.new(pp0.source_effect, true))
 	var sb := Surface.new(pp0.target_segment, SideConfig.new(pp0.target_effect, true), SideConfig.new(pp0.target_effect, true))
-	var defs := BeamScene.defs_from_surfaces([sa, sb])
+	var defs := SceneDefs.defs_from_surfaces([sa, sb])
 	assert_eq(int(defs[0]["left"]["pair"]), sb.id)
 	assert_eq(int(defs[1]["left"]["pair"]), sa.id)
 	# no frame provenance left on points

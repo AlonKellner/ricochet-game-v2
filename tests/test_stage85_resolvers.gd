@@ -48,7 +48,7 @@ func test_active_side_config_delegates():
 	assert_eq(s.active_side_config(Side.Value.LEFT, GameState.new({"door": true})), mirror)
 	assert_eq(s.active_side_config(Side.Value.LEFT, GameState.new({})), open)
 	# scene defs describe the table (oracle format)
-	var d := BeamScene.describe_surface(s)
+	var d := SceneDefs.describe_surface(s)
 	assert_eq(d["resolver"]["key"], "door")
 	assert_eq(d["resolver"]["table"]["true"]["left"]["type"], "reflection")
 	assert_eq(d["resolver"]["table"]["DEFAULT"]["left"]["type"], "pass")
