@@ -74,7 +74,7 @@ class Surf extends RefCounted:
 		return table.values()[0]
 
 	func effect(left: bool, flags: Dictionary = {}) -> String:
-		if _ghosted(left, flags):
+		if ghosted(left, flags):
 			return ""
 		var e = _entry(flags)
 		if e != null:
@@ -82,7 +82,7 @@ class Surf extends RefCounted:
 		return left_type if left else right_type
 
 	func state_change(left: bool, flags: Dictionary = {}):
-		if _ghosted(left, flags):
+		if ghosted(left, flags):
 			return null
 		return _base_state(left, flags)
 
@@ -94,7 +94,7 @@ class Surf extends RefCounted:
 
 	# Ghost mode (GAME_SPEC 10.6, Stage 86): while the "ghost" flag is true
 	# every side but a ghost toggler (its state change writes "ghost") is a pass.
-	func _ghosted(left: bool, flags: Dictionary) -> bool:
+	func ghosted(left: bool, flags: Dictionary) -> bool:
 		if flags.get(GHOST) != true:
 			return false
 		var ch = _base_state(left, flags)

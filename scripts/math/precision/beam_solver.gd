@@ -751,6 +751,19 @@ static func plan_effects(scene: BeamScene, plan: Array, flags: Dictionary = {}) 
 			f = apply_state(f, ch)
 	return out
 
+# The flags after the plan's entries, simulated forward from `flags` (the
+# state the planned trace reaches after its last entry).
+static func plan_flags(scene: BeamScene, plan: Array, flags: Dictionary = {}) -> Dictionary:
+	var f := flags
+	for item in plan:
+		var surf: BeamScene.Surf = scene.by_id.get(item.surface_id)
+		if surf == null:
+			continue
+		var ch = surf.state_change(item.left, f)
+		if ch != null:
+			f = apply_state(f, ch)
+	return f
+
 # The flags after a state change {key, op: "set" | "toggle", value} (a new
 # dictionary): toggle stores the negation of the current truth value.
 static func apply_state(flags: Dictionary, change: Dictionary) -> Dictionary:

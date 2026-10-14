@@ -7,6 +7,7 @@ var _last_cycle_position := Vector2.ZERO
 var _last_cycle_index := -1
 
 # game_state: the configs of categorical surfaces depend on it.
+# accept(surface, side) -> bool: sides the plan refuses are skipped.
 func detect_click(cursor_pos: Vector2, surfaces: Array, game_state: GameState = null, accept: Callable = Callable()) -> Dictionary:
 	var state := game_state if game_state != null else GameState.new()
 	var best_surface: Surface = null
@@ -21,6 +22,8 @@ func detect_click(cursor_pos: Vector2, surfaces: Array, game_state: GameState = 
 		var side: Side.Value = surf.segment.determine_side(cursor_pos)
 		var config: SideConfig = surf.active_side_config(side, state)
 		if config == null or not config.interactive:
+			continue
+		if accept.is_valid() and not accept.call(surf, side):
 			continue
 
 		if dist < best_dist:

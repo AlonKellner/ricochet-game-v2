@@ -62,7 +62,7 @@ func _update_hover() -> void:
 		return
 
 	var surfaces := _get_surfaces()
-	var result := click_detector.detect_click(_cursor.global_position, surfaces, game_state)
+	var result := click_detector.detect_click(_cursor.global_position, surfaces, game_state, _plan_accepts.bind(surfaces))
 
 	_clear_all_hover()
 
@@ -79,6 +79,10 @@ func _update_hover() -> void:
 						_hovered_node = child
 					else:
 						_hover_partner_node = child
+
+# Inside a ghost stretch of the plan only ghost togglers can be planned.
+func _plan_accepts(surf: Surface, side: Side.Value, surfaces: Array) -> bool:
+	return not BeamTracer.plan_refuses(surfaces, plan.entries, surf.id, side == Side.Value.LEFT, game_state.flags)
 
 func _clear_all_hover() -> void:
 	if _hovered_node and is_instance_valid(_hovered_node):
@@ -146,7 +150,7 @@ func _handle_plan_click(is_right_click: bool) -> void:
 	if not _cursor:
 		return
 	var surfaces := _get_surfaces()
-	var result := click_detector.detect_click(_cursor.global_position, surfaces, game_state)
+	var result := click_detector.detect_click(_cursor.global_position, surfaces, game_state, _plan_accepts.bind(surfaces))
 
 	if result.is_empty():
 		if not is_right_click:

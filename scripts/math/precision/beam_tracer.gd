@@ -21,6 +21,8 @@ static var _cache_key: String = ""
 static var _cache_pair: Pair = null
 static var _scene_key: String = ""
 static var _scene: FastSolver.Scene = null
+static var _plan_scene_key: String = ""
+static var _plan_scene: BeamScene = null
 
 # Capability check per effect type.
 static func scene_supported(surfaces: Array) -> bool:
@@ -34,8 +36,24 @@ static func plan_items(plan_entries: Array) -> Array:
 			c if c is Vector2 and is_finite(c.x) and is_finite(c.y) else null))
 	return out
 
+# Whether planning `surface_id`'s side after `plan_entries` is refused: inside
+# a ghost stretch of the plan (its simulated state is ghosted) only ghost
+# togglers can be planned (GAME_SPEC 10.6). The plan starts solid: ghost is
+# per shot.
 static func plan_refuses(surfaces: Array, plan_entries: Array, surface_id: int, left: bool, flags: Dictionary = {}) -> bool:
-	return false
+	var defs := BeamScene.defs_from_surfaces(surfaces)
+	var skey := str(defs)
+	if skey != _plan_scene_key or _plan_scene == null:
+		_plan_scene = BeamScene.from_defs(NumCtx.f64(), defs)
+		_plan_scene_key = skey
+	var surf: BeamScene.Surf = _plan_scene.by_id.get(surface_id)
+	if surf == null:
+		return false
+	var start := flags
+	if start.has(BeamScene.GHOST):
+		start = start.duplicate()
+		start.erase(BeamScene.GHOST)
+	return surf.ghosted(left, BeamSolver.plan_flags(_plan_scene, plan_items(plan_entries), start))
 
 # Planned + physical traces, or null if the scene is not supported or the
 # input is degenerate (player = cursor, a pole / image at infinity).
@@ -126,6 +144,8 @@ static func clear_cache() -> void:
 	_cache_pair = null
 	_scene_key = ""
 	_scene = null
+	_plan_scene_key = ""
+	_plan_scene = null
 
 # ---------------------------------------------------------------- conversion
 

@@ -667,6 +667,9 @@ This follows your clarifications, which replace the original Stage 86 plan where
 - `test_ghost_toggler_rendering`
 - `test_ghost_room_demo`
 - `test_ghost_is_per_shot`
+- Follow-up after sign-off (refusing entries inside a ghost stretch): `test_plan_refuses_non_toggler_inside_ghost_stretch`, `test_click_and_hover_refuse_inside_ghost_stretch`, `test_click_near_refused_side_takes_toggler`
+
+**Follow-up: planning inside a ghost stretch.** You decided that while the plan is ghosted only ghost togglers can be planned. The plan's state is simulated forward from a solid start (`BeamSolver.plan_flags`). A side is refused when the predicate the solver uses to pass it holds (`Surf.ghosted`: ghost on, and the side does not toggle ghost). `BeamTracer.plan_refuses` gates both the click and the hover through `ClickDetector.detect_click(..., accept)`, so a refused side is never highlighted, and a toggler next to it is still picked. The solver itself is unchanged: a programmatic plan that names such a side passes it (`test_plan_entry_inside_ghost_stretch_is_a_pass`).
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
 Scene: `scenes/test_levels/ghost_room.tscn`.
@@ -699,6 +702,7 @@ Scene: `scenes/test_levels/ghost_room.tscn`.
 | `scripts/game/{level_settings,game_manager,surface_node}.gd`, `scripts/visual/path_renderer.gd` | Modify | Export; per-shot promotion; toggler colours; ghost drawing |
 | `docs/research/oracle/{trace2,gen_fixtures_stage86}.py`, `bench/fixtures/stage86_ghost.json` | Modify/Create | Spec and fixtures |
 | `scenes/test_levels/ghost_room.tscn`, `tests/test_stage86_ghost.gd` | Create | Demo and specification |
+| `scripts/math/precision/{beam_solver,beam_scene,beam_tracer}.gd`, `scripts/game/{click_detector,game_manager}.gd` | Modify | Follow-up: `plan_flags`, `Surf.ghosted`, `plan_refuses`; the click and the hover skip refused sides |
 
 ---
 

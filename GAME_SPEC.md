@@ -751,6 +751,7 @@ State changes are applied sequentially along the trace. If multiple hits write t
 - **While ghosted, everything else passes.** Every other side resolves to a pass, together with its state change: mirrors, inversions, portals, projectives, terminals and room walls. A ghost arrow therefore crosses everything, can leave through a wall, and wraps through infinity, since a straight beam is a projective line.
 - **Materializing:** the arrow materializes at the next toggler hit, or at the same toggler one loop later. A loop around the beam that changed the state is walked again; a loop that changed nothing ends the trace as usual. MAX_HITS bounds both.
 - **Drawing:** ghost steps (`TraceStep.ghost`) are drawn paler and translucent, and ghost togglers have their own colour.
+- **Planning inside a ghost stretch:** the plan's state is simulated forward from a solid start (§13.7). While it is ghosted, after an odd number of planned ghost togglers, only a ghost toggler can be added: every other side is refused at the click and gets no hover highlight. A click within reach of both a refused side and a toggler takes the toggler. A programmatic plan that still names such a side treats it as a pass (`BeamTracer.plan_refuses`).
 
 ### 10.7 Provenance stack and frame identity by effect type
 
@@ -2631,4 +2632,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.9.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.10.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
