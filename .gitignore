@@ -44,3 +44,6 @@ violations.json
 # Precision benchmark outputs (regenerate with make bench)
 bench/results/
 violations.*.shard*.json
+
+# Claude Code agent worktrees
+.claude/worktrees/
