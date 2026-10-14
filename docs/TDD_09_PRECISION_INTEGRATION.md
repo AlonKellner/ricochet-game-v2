@@ -18,7 +18,7 @@ Background and benchmark data: `docs/precision_benchmark_findings.md`.
 | 84 | Delete the legacy solver | Done (user sign-off) |
 | 85 | State flags (ConfigResolver + StateChange) | Done (user sign-off) |
 | 86 | Ghost mode & toggler surfaces | Done (user sign-off) |
-| 87 | Plannable projectives (mixed chains) | In progress (green; awaiting user sign-off) |
+| 87 | Plannable projectives (mixed chains) | Done (user sign-off) |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests. The full
 suite must pass before proceeding to Stage N+1. No exceptions.
@@ -774,20 +774,23 @@ The sweep found the motivating case. An exit along a diagonal normal ran exactly
 
 ### Interactive User Tests **[BEHAVIORAL -- USER SIGN-OFF REQUIRED]**
 Scenes: `scenes/playground/projective.tscn`, `projective_lines`, `projective_arcs`, `directional_lines`, `directional_arcs`.
-- [ ] Clicking a projective surface's side into the plan aims the preview so that the projected beam reaches the cursor. Check line normal, circle normal, and both directional kinds.
-- [ ] A mixed plan (mirror → projective → mirror) reaches the cursor.
-- [ ] Firing follows the preview when the planned hit is on the segment. When it is not, the preview shows the physical divergence there.
-- [ ] A plan side that can't be approached directly is shown honestly: the planned path fires at the first matching crossing and does not reach the cursor.
+- [x] Clicking a projective surface's side into the plan aims the preview so that the projected beam reaches the cursor. Check line normal, circle normal, and both directional kinds.
+- [x] A mixed plan (mirror → projective → mirror) reaches the cursor.
+- [x] Firing follows the preview when the planned hit is on the segment. When it is not, the preview shows the physical divergence there.
+- [x] A plan side that can't be approached directly is shown honestly: the planned path fires at the first matching crossing and does not reach the cursor.
+- [x] Circle forks are settled by the click: with the target inside the circle, clicking near either candidate takes that one, and the midpoint is the default (`projective_arcs`, now plannable).
+- [x] Hover and plan chevrons show on every interactive side.
+- [x] Off the planned path, no cursor event is shown.
 
 ### Validation Summary
 
 | Check | Status | Notes |
 |-------|--------|-------|
 | Red tests fail for the right reason | [x] | 8 failed on assertions with a stub (commit `8dd7cb4`) |
-| All unit tests pass | [x] | Full suite: 628 tests, plus every sweep shard |
+| All unit tests pass | [x] | Full suite: 639 tests (699 counting sweep shards), 0 failing, after the click forks and the on-plan cursor rule |
 | Oracle fixtures, corpus, fast twin | [x] | All fixtures at f64 and 4 limbs; 348 corpus scenarios; FastSolver bit-identical |
 | Sweeps, including projective plans | [x] | Zero violations. The first run found 36: the exit beam was not exactly straight, max-cut ends and portal gaps were flagged by the checker, and a corner concurrency had no exact exit line. All are fixed and the sweep is clean |
-| Stage complete | [ ] | Awaiting user sign-off |
+| Stage complete | [x] | User signed off |
 
 ### Files Modified/Created
 
@@ -798,6 +801,9 @@ Scenes: `scenes/playground/projective.tscn`, `projective_lines`, `projective_arc
 | `scripts/testing/invariant_checker.gd` | Modify | Max-cut trace ends; portal gaps |
 | `docs/research/oracle/{trace2,gen_fixtures_stage87}.py`, `bench/fixtures/*`, `bench/scenes_corpus/expected/*` | Modify/Create | Spec, fixtures, regenerated expectations |
 | `tests/test_stage87_mixed_planning.gd`, `tests/test_stage83_projective.gd`, `tests/test_invariant_sweep.gd` | Create/Modify | Specification and sweep |
+| `scripts/game/{plan_manager,checkpoint,game_manager}.gd`, `scripts/math/precision/beam_tracer.gd` | Modify | `PlanEntry.click` stored, restored and passed to the solver as the hint; in the cache key |
+| `docs/research/oracle/gen_fixtures_stage87_clicks.py`, `bench/fixtures/stage87_click_forks.json`, `tests/test_stage87_click_forks.gd` | Create | Click-settled forks: spec, fixtures, tests |
+| `scenes/playground/projective_arcs.tscn` | Modify | Plannable (GameManager, PlanHUD, ArrowAnimator) for testing forks |
 
 ## Legacy quirks: explicit resolution
 
