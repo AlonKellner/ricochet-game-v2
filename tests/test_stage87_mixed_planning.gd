@@ -167,3 +167,19 @@ func test_planned_exit_beam_exactly_straight():
 	for i in range(1, ev.size()):
 		if ev[i - 1].kind == "hit" and ev[i - 1].applied and ev[i - 1].projective:
 			assert_true(ev[i].beam.kappa.is_zero(), "the exit beam is exactly straight")
+
+
+# User capture: a 7-entry projective plan whose exact path needs the on-arc
+# candidate at a circle normal; the nearer candidate dead-ends further back.
+# The backward pass searches the candidates (on-segment first) and backtracks.
+func test_backtracking_finds_exact_path():
+	for k in 2:
+		for mode in ["planned", "physical"]:
+			var n := "user_capture_%d_%s" % [k, mode]
+			_check_fixture(n)
+			var ev := _walk(n, NumCtx.f64())
+			var cur := Vector2(_fx[n]["cursor"][0], _fx[n]["cursor"][1])
+			var ce := ev.filter(func(e): return e.kind == "cursor")
+			assert_eq(ce.size(), 1, n + ": the cursor is reached")
+			if ce.size() == 1:
+				assert_almost_eq(Vector2(ce[0].point.fx(), ce[0].point.fy()), cur, Vector2(1e-6, 1e-6), n + ": exactly at the cursor")

@@ -86,6 +86,13 @@ static func _projective_axis(surf: BeamScene.Surf, etype: String, pr: Array, h: 
 # later projective entry on this surface, or the cursor exactly on its
 # carrier): X itself is a candidate and is excluded.
 static func back_propagate(surf: BeamScene.Surf, left: bool, X: CN, x_on_carrier: bool = false):
+	var c := back_propagate_candidates(surf, left, X, x_on_carrier)
+	return null if c.is_empty() else c[0]
+
+# The candidates in preference order: on-segment first (only an on-segment hit
+# fires physically), then a direct exit, then nearer X (oracle
+# back_propagate_candidates).
+static func back_propagate_candidates(surf: BeamScene.Surf, left: bool, X: CN, x_on_carrier: bool = false) -> Array:
 	var etype := surf.effect(left)
 	var pr: Array = surf.left_proj if left else surf.right_proj
 	var seg: BeamGeom.Seg = surf.seg
@@ -97,7 +104,7 @@ static func back_propagate(surf: BeamScene.Surf, left: bool, X: CN, x_on_carrier
 	elif etype == "circle_normal_projection":
 		var u := X.sub(seg.circ.c)
 		if u.is_zero():
-			return null
+			return []
 		cands = [seg.circ.c.add(u.unit().scale(seg.circ.r)), seg.circ.c.sub(u.unit().scale(seg.circ.r))]
 	else:
 		var n := CN.make(zero.add(_num_like(X.re, pr[1])), zero.add(_num_like(X.re, pr[2])))
@@ -105,7 +112,7 @@ static func back_propagate(surf: BeamScene.Surf, left: bool, X: CN, x_on_carrier
 			var D := seg.e.sub(seg.s)
 			var den = CN.cross(D, n)
 			if den.is_zero():
-				return null
+				return []
 			cands = [X.sub(n.scale(CN.cross(D, X.sub(seg.s)).div(den)))]
 		else:
 			# |X - s n - c|^2 = R^2
@@ -115,7 +122,7 @@ static func back_propagate(surf: BeamScene.Surf, left: bool, X: CN, x_on_carrier
 			var c0 = CN.dot(dc, dc).sub(seg.circ.r.mul(seg.circ.r))
 			var disc = b.mul(b).sub(a.mul(c0).mul_pow2(2))
 			if disc.is_negative():
-				return null
+				return []
 			var sq = disc.sqrt_val()
 			var two_a = a.mul_pow2(1)
 			cands = [X.sub(n.scale(b.neg().add(sq).div(two_a))), X.sub(n.scale(b.neg().sub(sq).div(two_a)))]
@@ -124,16 +131,20 @@ static func back_propagate(surf: BeamScene.Surf, left: bool, X: CN, x_on_carrier
 		var d0: float = X.sub(cands[0]).abs2().to_float()
 		var d1: float = X.sub(cands[1]).abs2().to_float()
 		cands = [cands[0] if d0 > d1 else cands[1]]
-	var best = null
-	var best_key := [2, INF]
+	var keyed: Array = []
 	for H in cands:
 		var ex := projective_exit(surf, left, H)
-		var direct: int = 0 if (CN.dot(X.sub(H), ex).is_negative() == false and not CN.dot(X.sub(H), ex).is_zero()) else 1
-		var dist: float = X.sub(H).abs2().to_float()
-		if direct < best_key[0] or (direct == best_key[0] and dist < best_key[1]):
-			best_key = [direct, dist]
-			best = H
-	return best
+		var d = CN.dot(X.sub(H), ex)
+		var direct: int = 0 if (not d.is_negative() and not d.is_zero()) else 1
+		var on: int = 0 if BeamGeom.on_segment(seg, H) else 1
+		keyed.append([on, direct, X.sub(H).abs2().to_float(), H])
+	keyed.sort_custom(func(a, b):
+		if a[0] != b[0]:
+			return a[0] < b[0]
+		if a[1] != b[1]:
+			return a[1] < b[1]
+		return a[2] < b[2])
+	return keyed.map(func(k): return k[3])
 
 static func _num_like(x, f: float):
 	if x is F64Num:

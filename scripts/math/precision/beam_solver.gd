@@ -227,24 +227,27 @@ class AnchorChain extends RefCounted:
 				proj.append(j)
 		if proj.is_empty():
 			return _build_simple(scene, player, cursor, plan, effs)
-		# backward: targets of the sub-chains
-		var H := {}
-		var X = cursor
-		var on_sid := -2         # the surface whose carrier X lies on (provenance)
-		for j in range(plan.size() - 1, -1, -1):
-			var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+		# backward: targets of the sub-chains -- the first complete chain of
+		# candidate hit points (BeamSolver.run verifies among several)
+		var opts := candidate_hits(scene, plan, effs, cursor)
+		if opts.is_empty():
+			return null
+		return from_hits(scene, player, cursor, plan, flags, effs, opts[0])
+
+	# The complete chains of candidate hit points ({projective entry index:
+	# H}), depth-first in preference order (oracle trace2._backward).
+	static func candidate_hits(scene: BeamScene, plan: Array, effs: Array, cursor: CN) -> Array:
+		var out: Array = []
+		_search(scene, plan, effs, plan.size() - 1, cursor, -2, {}, out)
+		return out
+
+	# The chain of sub-chains through the given projective hit points.
+	static func from_hits(scene: BeamScene, player: CN, cursor: CN, plan: Array, flags: Dictionary, effs: Array,
+			H: Dictionary) -> AnchorChain:
+		var proj: Array = []
+		for j in plan.size():
 			if effs[j] in PROJECTIVE:
-				var on: bool = on_sid == surf.id or (on_sid == -2 and BeamSolver._on_carrier(surf, X))
-				X = BeamEffects.back_propagate(surf, plan[j].left, X, on)
-				if X == null:
-					return null
-				H[j] = X
-				on_sid = surf.id
-			elif effs[j] in TRANSFORMATIVE:
-				on_sid = -1
-				X = BeamEffects.map_point(X, surf, true)
-				if X == null:
-					return null
+				proj.append(j)
 		var chain := AnchorChain.new()
 		var a := 0
 		var origin: CN = player
@@ -280,6 +283,27 @@ class AnchorChain extends RefCounted:
 				exit_dir = BeamEffects.projective_exit(scene.by_id[plan[b].surface_id], plan[b].left, H[b])
 			a = b + 1
 		return chain
+
+	# The backward pass from entry j with target X: appends every complete
+	# chain ({projective entry index: H}) to out, in preference order.
+	static func _search(scene: BeamScene, plan: Array, effs: Array, j: int, X: CN, on_sid: int, hits: Dictionary, out: Array) -> void:
+		if j < 0:
+			out.append(hits)
+			return
+		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+		if effs[j] in PROJECTIVE:
+			var on: bool = on_sid == surf.id or (on_sid == -2 and BeamSolver._on_carrier(surf, X))
+			for Hc in BeamEffects.back_propagate_candidates(surf, plan[j].left, X, on):
+				var h2 := hits.duplicate()
+				h2[j] = Hc
+				_search(scene, plan, effs, j - 1, Hc, surf.id, h2, out)
+			return
+		if not (effs[j] in TRANSFORMATIVE):
+			_search(scene, plan, effs, j - 1, X, on_sid, hits, out)
+			return
+		var X2 = BeamEffects.map_point(X, surf, true)
+		if X2 != null:
+			_search(scene, plan, effs, j - 1, X2, -1, hits, out)
 
 	static func _build_simple(scene: BeamScene, player: CN, cursor: CN, plan: Array, effs: Array) -> AnchorChain:
 		var K := plan.size()
@@ -433,9 +457,47 @@ static func physical(ctx: NumCtx, scene: BeamScene, player: CN, cursor: CN, plan
 # / image at infinity: Stage 83).
 static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int = MAX_HITS,
 		flags: Dictionary = {}) -> Walk:
-	var chain := AnchorChain.build(scene, player, cursor, plan, flags)
+	var chain := _select_chain(bk, scene, player, cursor, plan, max_events, flags)
 	if chain == null:
 		return _run_degenerate(bk, scene, player, cursor, plan, mode, max_events, flags)
+	return _walk_chain(bk, scene, player, cursor, plan, mode, max_events, flags, chain)
+
+# The anchored chain of a plan. With projectives there may be several complete
+# chains of candidate hit points: each is walked (PLANNED); the first whose
+# planned trace reaches the cursor with every projective hit on-segment wins
+# (the shot can follow it), else the first that reaches the cursor, else the
+# first complete chain (oracle trace2._backward).
+static func _select_chain(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int,
+		flags: Dictionary) -> AnchorChain:
+	var effs := plan_effects(scene, plan, flags)
+	if not effs.any(func(e): return e in PROJECTIVE):
+		return AnchorChain.build(scene, player, cursor, plan, flags)
+	var opts := AnchorChain.candidate_hits(scene, plan, effs, cursor)
+	if opts.size() == 1:
+		return AnchorChain.from_hits(scene, player, cursor, plan, flags, effs, opts[0])
+	var first: AnchorChain = null
+	var reaching: AnchorChain = null
+	for H in opts:
+		var ch := AnchorChain.from_hits(scene, player, cursor, plan, flags, effs, H)
+		if ch == null:
+			continue
+		if first == null:
+			first = ch
+		var vw := _walk_chain(bk, scene, player, cursor, plan, Mode.PLANNED, max_events, flags, ch)
+		if not vw.events.any(func(e): return e.kind == "cursor"):
+			continue
+		var on_seg := true
+		for k in H:
+			if not BeamGeom.on_segment(scene.by_id[plan[k].surface_id].seg, H[k]):
+				on_seg = false
+		if on_seg:
+			return ch
+		if reaching == null:
+			reaching = ch
+	return reaching if reaching != null else first
+
+static func _walk_chain(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int,
+		flags: Dictionary, chain: AnchorChain) -> Walk:
 	var w := _new_walk(bk, scene, plan, cursor, mode, max_events, flags)
 	w.chain = chain
 	w.anchored = true

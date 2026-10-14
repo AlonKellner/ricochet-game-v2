@@ -932,12 +932,19 @@ def projective_exit(surf, side, cfg, H, axis):
 
 
 def back_propagate(surf, side, X, flags=None, x_on_carrier=False):
+    """The preferred candidate (back_propagate_candidates), or None."""
+    c = back_propagate_candidates(surf, side, X, flags, x_on_carrier)
+    return c[0] if c else None
+
+
+def back_propagate_candidates(surf, side, X, flags=None, x_on_carrier=False):
     """The hit point H on a projective side from which the projected beam
     passes through X (GAME_SPEC 13.3), on the carrier: line normal -> the
     foot of X; circle normal -> c +- R u (u = unit(X - c)); directional ->
     the carrier crossings of the line through X along the normal. Of two
     candidates: the one whose exit ray reaches X directly ((X - H) . exit >
-    0), then the one nearer X. None if there is no candidate. x_on_carrier
+    0), then the one nearer X -- preceded by on-segment (only an on-segment
+    hit fires physically). Returns the candidates in that order. x_on_carrier
     (provenance: X is the hit point of a later projective entry on this
     surface, or the cursor exactly on its carrier): X is itself a candidate
     and is excluded -- the beam must reach X from the other one."""
@@ -951,7 +958,7 @@ def back_propagate(surf, side, X, flags=None, x_on_carrier=False):
     elif etype == "circle_normal_projection":
         u = X - seg.c
         if u == 0:
-            return None
+            return []
         u = u / abs(u)
         R = mp.sqrt(seg.R2)
         cands = [seg.c + R * u, seg.c - R * u]
@@ -961,7 +968,7 @@ def back_propagate(surf, side, X, flags=None, x_on_carrier=False):
             D = seg.E - seg.S
             den = cross(D, n)
             if den == 0:
-                return None
+                return []
             cands = [X - (cross(D, X - seg.S) / den) * n]
         else:
             # |X - s n - c|^2 = R^2
@@ -970,7 +977,7 @@ def back_propagate(surf, side, X, flags=None, x_on_carrier=False):
             c0 = dot(X - seg.c, X - seg.c) - seg.R2
             disc = b * b - 4 * a * c0
             if disc < 0:
-                return None
+                return []
             sq = mp.sqrt(disc)
             cands = [X - ((-b + sq) / (2 * a)) * n, X - ((-b - sq) / (2 * a)) * n]
 
@@ -986,8 +993,8 @@ def back_propagate(surf, side, X, flags=None, x_on_carrier=False):
 
     def key(H):
         e = projective_exit(surf, side, cfg, H, axis_at(H))
-        return (0 if dot(X - H, e) > 0 else 1, abs(X - H))
-    return min(cands, key=key)
+        return (0 if on_segment(seg, H) else 1, 0 if dot(X - H, e) > 0 else 1, abs(X - H))
+    return sorted(cands, key=key)
 
 
 def plan_effects(surfaces, plan, flags=None):
@@ -1032,19 +1039,19 @@ def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="
     return walk
 
 
-def aim_image(surfaces, plan, cursor, flags=None):
+def aim_image(surfaces, plan, cursor, flags=None, player=None):
     """The aim point: the cursor pulled back through the plan -- transformative
     entries by their inverse maps, projectives by back-propagation (13.3;
     an entry without a back-propagated point is skipped)."""
-    return _backward(surfaces, plan, cursor, flags)[0]
+    return _backward(surfaces, plan, cursor, flags, player)[0]
 
 
-def projective_hits(surfaces, plan, cursor, flags=None):
+def projective_hits(surfaces, plan, cursor, flags=None, player=None):
     """Plan entry index -> (H, exact exit line or None) of each projective
     entry: the back-propagated hit point, and -- for the last projective, when
     the cursor pulled back through the entries after it is exact data -- the
     exact line it leaves along (through that point, along the exact axis)."""
-    hits = _backward(surfaces, plan, cursor, flags)[1]
+    hits = _backward(surfaces, plan, cursor, flags, player)[1]
     if not hits:
         return {}
     by_id = {s.id: s for s in surfaces}
@@ -1069,14 +1076,60 @@ def projective_hits(surfaces, plan, cursor, flags=None):
     return {k: (hits[k], line if k == j else None) for k in hits}
 
 
-def _backward(surfaces, plan, cursor, flags=None):
-    """(aim point or None, {projective entry index: H}): the backward pass."""
+def _backward(surfaces, plan, cursor, flags=None, player=None):
+    """(aim point or None, {projective entry index: H}): the backward pass.
+    A projective may have two candidate hit points: the complete chains are
+    enumerated depth-first in preference order (backtracking when an earlier
+    entry has no candidate, or an image is at infinity). With several, each is
+    walked forward (PLANNED, from `player`): the first whose planned trace
+    reaches the cursor with every projective hit on-segment wins (the shot can
+    follow it), else the first that reaches the cursor, else the first
+    complete chain. Without one: the greedy pass that skips an entry without a
+    candidate."""
     by_id = {s.id: s for s in surfaces}
-    hits = {}
     plan = list(plan)
     res = plan_resolved(surfaces, plan, flags)
+
+    def rec(j, z, on_sid, hits):
+        if j < 0:
+            yield z, hits
+            return
+        sid, side = plan[j]
+        eff, f = res[j]
+        if eff in PROJECTIVE:
+            on = on_sid == sid or (on_sid is None and incident(z, by_id[sid]))
+            for H in back_propagate_candidates(by_id[sid], side, z, f, on):
+                yield from rec(j - 1, H, sid, {**hits, j: H})
+            return
+        if eff not in TRANSFORMATIVE:
+            yield from rec(j - 1, z, on_sid, hits)
+            return
+        z2 = map_point(z, by_id[sid], inverse=True)
+        if z2 is not None:
+            yield from rec(j - 1, z2, -1, hits)
+
+    chains = list(rec(len(plan) - 1, P(cursor), None, {}))
+    if len(chains) == 1 or (chains and player is None):
+        return chains[0]
+    if chains:
+        reaching = None
+        for z, hits in chains:
+            d = z - P(player)
+            if d == 0:
+                continue
+            w = trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=None, flags=flags,
+                                     proj_hits={k: (H, None) for k, H in hits.items()})
+            if not any(e.kind == "cursor" for e in w.events):
+                continue
+            if all(on_segment(by_id[plan[k][0]].seg, H) for k, H in hits.items()):
+                return z, hits
+            if reaching is None:
+                reaching = (z, hits)
+        return reaching if reaching is not None else chains[0]
+    # no complete chain: greedy, skipping an entry without a candidate
+    hits = {}
     z = P(cursor)
-    on_sid = None        # the surface whose carrier z lies on (provenance)
+    on_sid = None
     for j in range(len(plan) - 1, -1, -1):
         sid, side = plan[j]
         eff, f = res[j]
@@ -1098,7 +1151,7 @@ def _backward(surfaces, plan, cursor, flags=None):
 
 
 def exact_direction(surfaces, plan, player, cursor, flags=None):
-    img = aim_image(surfaces, plan, cursor, flags)
+    img = aim_image(surfaces, plan, cursor, flags, player)
     if img is None:
         return None
     d = img - P(player)
@@ -1189,10 +1242,10 @@ def planned(surfaces, player, cursor, plan, flags=None):
     """Planned trace = forward PLANNED-mode walk of the exact aim direction."""
     d, line, known = _aim(surfaces, player, cursor, plan, flags)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
-                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags))
+                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, player))
 
 
 def physical(surfaces, player, cursor, plan, flags=None):
     d, line, known = _aim(surfaces, player, cursor, plan, flags)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PHYSICAL, line=line, flags=flags,
-                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags))
+                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, player))

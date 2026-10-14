@@ -70,6 +70,16 @@ def main():
              line(2, (0, 200), (380, 200), *(proj("line_normal_projection", False),) * 2),
              line(3, (0, 450), (380, 450), REFL, REFL)] + walls
     planned_pair(fx, "mixed_chain", mixed, (200.0, -200.0), (250.0, 300.0), [1, 2, 3])
+    # user capture (playground/projective): a 7-entry projective plan; the
+    # second cursor needs the on-arc candidate at the circle normal (entry 5)
+    # -- the nearer one dead-ends at entry 3: backtracking finds the exact path
+    pl = json.load(open(os.path.join(ROOT, "bench", "scenes", "playground__projective.surfaces.json")))["surfaces"]
+    uplan = [(7, "RIGHT"), (10, "RIGHT"), (8, "RIGHT"), (10, "LEFT"), (7, "LEFT"), (9, "LEFT"), (13, "LEFT")]
+    for k, cur in enumerate([(383.3994, 487.9036), (146.1522, 559.0353)]):
+        for mode in ("planned", "physical"):
+            f = fixture("user_capture_%d_%s" % (k, mode), pl, (842.1705, 878.0266), plan=uplan, mode=mode, cursor=cur)
+            assert reaches(f), kinds(f)
+            fx.append(f)
     out = os.path.join(ROOT, "bench", "fixtures", "stage87_projective_plans.json")
     json.dump({"dps": mp.mp.dps, "fixtures": fx}, open(out, "w"), indent=1)
     for f in fx:
