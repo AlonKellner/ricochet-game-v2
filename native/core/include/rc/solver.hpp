@@ -1,0 +1,1852 @@
+// The precision-generic trajectory solver (Stage 94): the port of
+// scripts/math/precision/beam_solver.gd, one walker for every tier. The
+// trace rules are those of the mpmath oracle (docs/research/oracle/trace2.py),
+// listed in that file's header; the anchored planned path (B_j through
+// P_j, X_j, Q_j) is the construction of GAME_SPEC 13.1.
+//
+// Tiers: F64 (the generic float64 walk), Dual (the shipped float64 walk with
+// tangent-linear gains: the GDScript FastSolver), BigFloat (the ladder's high
+// tiers). Backend<N> holds the few tier-specific rules (seeding, straightening,
+// the display-safe float64 point of margins); everything else is written once.
+// Beams are shared pointers: an event's beam identity (which events lie on one
+// beam object) is part of the observable output.
+#pragma once
+
+#include "rc/beam_effects.hpp"
+
+#include <algorithm>
+#include <limits>
+#include <map>
+#include <memory>
+#include <optional>
+#include <string>
+#include <tuple>
+#include <vector>
+
+namespace rc {
+
+constexpr int MAX_HITS = 32;
+// Anchored-prefix gains are scaled to their own calibration constant
+// (C_prefix = ErrorEstimate.C * PREFIX_GAIN_SCALE).
+constexpr double PREFIX_GAIN_SCALE = 64.0 / 4096.0;
+// Budget of the exact aim image (limbs of its homogeneous weight).
+constexpr int EXACT_IMAGE_LIMBS = 320;
+constexpr double INF_D = std::numeric_limits<double>::infinity();
+
+enum class Mode { Physical = 0, Planned = 1 };
+
+enum class EventKind { Hit, Cursor, Origin, Escape, Max };
+inline const char *event_kind_name(EventKind k) {
+	switch (k) {
+		case EventKind::Hit: return "hit";
+		case EventKind::Cursor: return "cursor";
+		case EventKind::Origin: return "origin";
+		case EventKind::Escape: return "escape";
+		case EventKind::Max: return "max";
+	}
+	return "";
+}
+
+struct PlanItem {
+	int surface_id = 0;
+	bool left = true;
+	std::optional<effects::F32Point> hint; // where the player clicked (settles a fork)
+};
+
+template <Num N>
+using BeamPtr = std::shared_ptr<const Beam<N>>;
+
+template <Num N>
+struct Event {
+	EventKind kind = EventKind::Hit;
+	int surface_id = -1;
+	bool left = false;      // side the beam comes from: true = LEFT
+	bool applied = false;   // the side's effect fired (terminal included)
+	bool terminal = false;
+	bool on_segment = false;
+	bool rehit = false;     // the departure point, re-hit after the full loop
+	bool popped = false;    // the applied effect popped the transform stack
+	bool teleport = false;  // the applied effect was a portal
+	bool projective = false;
+	int epoch = 0;          // projectives start a new epoch
+	std::optional<CN<N>> point;
+	BeamPtr<N> beam;        // beam the arc leading to this event lies on
+	std::optional<N> t_from;
+	std::optional<N> t_to;  // nullopt = infinity
+	double margin = INF_D;  // px gap to the nearest competing decision
+	bool seeded = false;    // lies on the sensitive forward continuation
+	bool state = false;     // the side's state change fired
+	Flags flags;            // the trace's flags after this event (hits)
+	bool anchored = false;  // cursor: reached on the anchored path
+	int beam_view = -1;     // identity of the beam as the events see it (Backend::views_per_run)
+};
+
+template <Num N>
+struct Walk; // forward
+
+// ---------------------------------------------------------------- tier rules
+
+template <Num N>
+struct Backend {
+	static bool is_dual() { return std::is_same_v<N, Dual>; }
+
+	// Tangent-linear seed (Dual only): unit perturbation of the beam's tangent
+	// angle where the sensitive forward continuation starts. Returns the same
+	// object when nothing changes.
+	static BeamPtr<N> seed(const BeamPtr<N> &b) {
+		if constexpr (std::is_same_v<N, Dual>) {
+			const double tx = b->tau.re.v;
+			const double ty = b->tau.im.v;
+			return std::make_shared<const Beam<N>>(Beam<N>{{Dual{b->p.re.v, 0.0}, Dual{b->p.im.v, 0.0}},
+				{Dual{tx, -ty}, Dual{ty, tx}}, Dual{b->kappa.v, 0.0}});
+		} else {
+			return b;
+		}
+	}
+	// A beam restored from the unseeded (anchored) prefix gets a seed.
+	static BeamPtr<N> reseed(const BeamPtr<N> &b) {
+		if constexpr (std::is_same_v<N, Dual>) {
+			if (b->p.re.d == 0.0 && b->p.im.d == 0.0 && b->tau.re.d == 0.0 && b->tau.im.d == 0.0 && b->kappa.d == 0.0) {
+				return seed(b);
+			}
+			return b;
+		} else {
+			return b;
+		}
+	}
+	// the same beam with curvature exactly zero (provenance: it is a line)
+	static BeamPtr<N> straightened(const BeamPtr<N> &b) {
+		if constexpr (std::is_same_v<N, Dual>) {
+			return std::make_shared<const Beam<N>>(Beam<N>{b->p, b->tau, Dual{0.0, b->kappa.d}});
+		} else {
+			return std::make_shared<const Beam<N>>(Beam<N>{b->p, b->tau, b->kappa.sub(b->kappa)});
+		}
+	}
+	static double gain(const Beam<N> &b, const N &t) {
+		if constexpr (std::is_same_v<N, Dual>) {
+			const CN<Dual> h = b.at(t);
+			return std::sqrt(h.re.d * h.re.d + h.im.d * h.im.d);
+		} else {
+			(void)b;
+			(void)t;
+			return 0.0;
+		}
+	}
+	// anchored prefix: sensitivity to the anchored beam's own angle
+	static double prefix_gain(const Beam<N> &b, const N &t) {
+		if constexpr (std::is_same_v<N, Dual>) {
+			const BeamPtr<N> s = seed(std::make_shared<const Beam<N>>(b));
+			const CN<Dual> h = s->at(Dual{t.v, 0.0});
+			return std::sqrt(h.re.d * h.re.d + h.im.d * h.im.d);
+		} else {
+			(void)b;
+			(void)t;
+			return 0.0;
+		}
+	}
+	// The parameter of a point: FastSolver's backend returns it without a
+	// derivative (only roots carry one); the other tiers have none.
+	static N param_of(const Beam<N> &b, const CN<N> &z) {
+		if constexpr (std::is_same_v<N, Dual>) {
+			return Dual{b.param_of(z).v, 0.0};
+		} else {
+			return b.param_of(z);
+		}
+	}
+	// An exact hit point h on the beam at t: FastSolver takes the derivative
+	// of the beam's own evaluation at t with h's values; the other tiers have no derivative.
+	static CN<N> exact_point(const Beam<N> &b, const N &t, const CN<N> &h) {
+		if constexpr (std::is_same_v<N, Dual>) {
+			const CN<Dual> a = b.at(t);
+			return CN<Dual>{Dual{h.re.v, a.re.d}, Dual{h.im.v, a.im.d}};
+		} else {
+			(void)b;
+			(void)t;
+			return h;
+		}
+	}
+	// Event beam identity: the shipped float64 walk views the raw beam anew
+	// whenever it changes from the previous event's (a returning beam gets a
+	// new view); the generic tiers identify the beam object itself.
+	static constexpr bool views_per_run() { return std::is_same_v<N, Dual>; }
+	// float64 view of a point (decision margins only)
+	static void f64_point(const Beam<N> &b, const N &t, double &x, double &y) {
+		if constexpr (std::is_same_v<N, F64>) {
+			const CN<N> z = b.at(t);
+			x = z.fx();
+			y = z.fy();
+		} else {
+			fast::at_view(b.p.fx(), b.p.fy(), b.tau.fx(), b.tau.fy(), b.kappa.to_float(), t.to_float(), x, y);
+		}
+	}
+};
+
+// ---------------------------------------------------------------- walk data
+
+// A known point of the current beam: exact data the beam passes through.
+template <Num N>
+struct Known {
+	CN<N> p;
+	N t;
+	int skip = -1; // the departure surface for a departure point
+	std::optional<std::vector<const Surf<N> *>> incident; // surfaces whose carrier contains p (cached)
+};
+
+template <Num N>
+struct StackEntry {
+	BeamPtr<N> beam;
+	int sid = 0;
+	N t_hit;
+	N other;
+	std::vector<Known<N>> known;
+	std::shared_ptr<const exact::Line> line;
+	int pop_id = -1;      // the surface whose hit pops this entry (sid; a portal's pair)
+	EffectType etype = EffectType::Pass; // the map pushed (a pop needs the same map)
+};
+
+template <Num N>
+struct Candidate {
+	N t;
+	const Surf<N> *surf = nullptr; // nullptr = the cursor
+	bool rehit = false;
+	std::optional<CN<N>> pt;       // the exact point, by provenance
+	int tie = -1;                  // concurrent-tie group index
+};
+
+// Anchored beams B_0..B_K of a plan (flat: beams[j] is the beam after j
+// consumed entries; a popped frame IS the earlier beam object).
+template <Num N>
+struct AnchorChain {
+	std::vector<BeamPtr<N>> beams;
+	std::map<int, CN<N>> hits;                                 // projective entry index -> its back-propagated H
+	std::map<int, std::shared_ptr<const exact::Line>> exit_lines; // projective entry index -> exact exit line
+};
+
+template <Num N>
+struct Walk {
+	const Scene<N> *scene = nullptr;
+	std::vector<PlanItem> plan;
+	std::optional<CN<N>> cursor;
+	Mode mode = Mode::Physical;
+	Mode post_mode = Mode::Physical;
+	int plan_index = 0;
+	bool plan_matched = true;
+	bool cursor_done = false;
+	int count = 0;
+	int max_events = MAX_HITS;
+	std::vector<Event<N>> events;
+	std::vector<double> gains;
+	std::vector<StackEntry<N>> stack;
+	bool done = false;
+	bool seeded = false;
+	std::shared_ptr<const AnchorChain<N>> chain;
+	bool anchored = false;
+	int epoch = 0;
+	std::vector<Known<N>> known;
+	std::shared_ptr<const exact::Line> line;
+	std::map<std::tuple<double, double, int>, bool> incidence;
+	std::shared_ptr<const exact::Line> tangent_line;
+	std::map<int, bool> tangent;
+	Flags flags;
+	bool on_plan = true;
+	BeamPtr<N> hp_src;
+	int hp_view = -1;
+	int view_count = 0;
+	std::map<const Beam<N> *, int> beam_views;
+};
+
+// Caches owned by the caller (one per solve / tracer): the anchored chain of
+// the last inputs and the exact aim images (capped).
+template <Num N>
+struct SolveCache {
+	struct ChainKey {
+		const void *scene = nullptr;
+		double px = 0, py = 0, cx = 0, cy = 0;
+		std::string flags;
+		std::vector<std::tuple<int, bool, bool, float, float>> plan;
+		bool operator==(const ChainKey &o) const {
+			return scene == o.scene && px == o.px && py == o.py && cx == o.cx && cy == o.cy && flags == o.flags && plan == o.plan;
+		}
+	};
+	std::optional<ChainKey> chain_key;
+	std::shared_ptr<const AnchorChain<N>> chain;
+	bool chain_null = false;
+	std::map<std::string, std::optional<exact::Point3>> images;
+};
+
+// ---------------------------------------------------------------- the solver
+
+template <Num N>
+class Solver {
+public:
+	Solver(const Scene<N> &scene, SolveCache<N> *cache = nullptr) : scene_(scene), cache_(cache) {}
+
+	// Walk an explicit direction from the player (forward shooting).
+	Walk<N> run_direction(const CN<N> &player, const CN<N> &dir, const std::vector<PlanItem> &plan,
+			const std::optional<CN<N>> &cursor, Mode mode, int max_events = MAX_HITS, const Flags &flags = Flags()) {
+		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
+		BeamPtr<N> b0 = std::make_shared<const Beam<N>>(Beam<N>{player, dir.unit(), player.re.sub(player.re)});
+		if (mode == Mode::Physical) {
+			b0 = Backend<N>::seed(b0);
+			w.seeded = true;
+		}
+		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
+		w.line = exact::Line::from_exact(exact::line_from_dir(player.fx(), player.fy(), dir.fx(), dir.fy()));
+		add_line_endpoints(w, *b0);
+		walk_from(w, b0, -1, std::nullopt);
+		return w;
+	}
+
+	std::vector<Event<N>> planned(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
+			int max_events = MAX_HITS, const Flags &flags = Flags()) {
+		std::optional<Walk<N>> w = run(player, cursor, plan, Mode::Planned, max_events, flags);
+		return w ? std::move(w->events) : std::vector<Event<N>>{};
+	}
+
+	std::vector<Event<N>> physical(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
+			int max_events = MAX_HITS, const Flags &flags = Flags()) {
+		std::optional<Walk<N>> w = run(player, cursor, plan, Mode::Physical, max_events, flags);
+		return w ? std::move(w->events) : std::vector<Event<N>>{};
+	}
+
+	// nullopt if the anchored construction is degenerate and player = cursor.
+	std::optional<Walk<N>> run(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan, Mode mode,
+			int max_events = MAX_HITS, const Flags &flags = Flags()) {
+		std::shared_ptr<const AnchorChain<N>> chain = select_chain(player, cursor, plan, flags);
+		if (!chain) {
+			return run_degenerate(player, cursor, plan, mode, max_events, flags);
+		}
+		return walk_chain(player, cursor, plan, mode, max_events, flags, chain);
+	}
+
+	// Forward state simulation (GAME_SPEC 13.7): the effect each plan entry
+	// resolves to, under the flags left by the entries before it.
+	std::vector<EffectType> plan_effects(const std::vector<PlanItem> &plan, const Flags &flags) const {
+		Flags f = flags;
+		std::vector<EffectType> out;
+		for (const PlanItem &item : plan) {
+			const Surf<N> *surf = scene_.find(item.surface_id);
+			if (surf == nullptr) {
+				out.push_back(EffectType::Pass);
+				continue;
+			}
+			out.push_back(surf->effect(item.left, f));
+			if (const StateChangeDef *ch = surf->state_change(item.left, f)) {
+				f = f.applied(*ch);
+			}
+		}
+		return out;
+	}
+
+	// The flags after the plan's entries, simulated forward from `flags`.
+	Flags plan_flags(const std::vector<PlanItem> &plan, const Flags &flags) const {
+		Flags f = flags;
+		for (const PlanItem &item : plan) {
+			const Surf<N> *surf = scene_.find(item.surface_id);
+			if (surf == nullptr) {
+				continue;
+			}
+			if (const StateChangeDef *ch = surf->state_change(item.left, f)) {
+				f = f.applied(*ch);
+			}
+		}
+		return f;
+	}
+
+	// The map an effect applies: reflection on a circle carrier is the inversion in it.
+	static EffectType map_kind(const Surf<N> &surf, EffectType etype) {
+		if (etype == EffectType::Reflection && !surf.line) {
+			return EffectType::Inversion;
+		}
+		return etype;
+	}
+
+	// Ids of target surfaces hit on-segment.
+	std::vector<int> targets_of(const std::vector<Event<N>> &events) const {
+		std::vector<int> out;
+		for (const Event<N> &e : events) {
+			if (e.kind == EventKind::Hit && e.on_segment) {
+				const Surf<N> *s = scene_.find(e.surface_id);
+				if (s != nullptr && s->is_target && std::find(out.begin(), out.end(), e.surface_id) == out.end()) {
+					out.push_back(e.surface_id);
+				}
+			}
+		}
+		std::sort(out.begin(), out.end());
+		return out;
+	}
+
+	// Exact: every frame change of the plan fixes the cursor (it lies on the
+	// carrier of each planned reflection / inversion; a portal fixes nothing).
+	bool fixes_cursor(const CN<N> &cursor, const std::vector<PlanItem> &plan, const Flags &flags) const {
+		const double kx = cursor.fx();
+		const double ky = cursor.fy();
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		for (EffectType e : effs) {
+			if (is_projective(e)) {
+				return false;
+			}
+		}
+		for (size_t ji = 0; ji < plan.size(); ji++) {
+			const Surf<N> *surf = scene_.find(plan[ji].surface_id);
+			if (surf == nullptr || !is_transformative(effs[ji])) {
+				continue;
+			}
+			if (surf->portal) {
+				return false;
+			}
+			bool on;
+			if (geom::endpoint_at(surf->seg, cursor) != 0) {
+				on = true;
+			} else if (surf->line) {
+				on = exact::orient_zero(surf->sx, surf->sy, surf->ex, surf->ey, kx, ky);
+			} else if (surf->full) {
+				on = exact::on_circle_zero(surf->cx, surf->cy, surf->r, kx, ky);
+			} else {
+				on = exact::incircle_zero(surf->sx, surf->sy, surf->vx, surf->vy, surf->ex, surf->ey, kx, ky);
+			}
+			if (!on) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	// The aim image F_K^-1(cursor) as an exact homogeneous point, when every
+	// frame change of the plan is a rational map of exact data; nullopt for a
+	// rotation portal, an image at infinity, or beyond max_limbs (0 = no budget).
+	std::optional<exact::Point3> exact_image_h(const CN<N> &cursor, const std::vector<PlanItem> &plan, int max_limbs,
+			const Flags &flags, size_t from_index = 0) const {
+		exact::Point3 X = {exact::of(cursor.fx()), exact::of(cursor.fy()), exact::of(1.0)};
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		for (size_t j = from_index; j < effs.size(); j++) {
+			if (is_projective(effs[j])) {
+				return std::nullopt;
+			}
+		}
+		for (size_t jj = plan.size(); jj-- > from_index;) {
+			const Surf<N> *surf = scene_.find(plan[jj].surface_id);
+			if (surf == nullptr || !is_transformative(effs[jj])) {
+				continue;
+			}
+			if (surf->portal) {
+				if (surf->theta != 0.0) {
+					return std::nullopt;
+				}
+				// T^-1(X) = X - d (homogeneous: X - d w)
+				X = {exact::sub(X[0], exact::mul(exact::of(surf->dx), X[2])), exact::sub(X[1], exact::mul(exact::of(surf->dy), X[2])), X[2]};
+				continue;
+			}
+			if (!surf->line) {
+				const auto &ec = surf->exact_circle();
+				std::optional<exact::Point3> inv = exact::invert_point_h(X, ec.C, ec.rw2);
+				if (!inv) {
+					return std::nullopt;
+				}
+				X = *inv;
+				if (max_limbs > 0 && X[2].precision_limbs() > max_limbs) {
+					return std::nullopt;
+				}
+				continue;
+			}
+			X = exact::reflect_point_h(X, surf->sx, surf->sy, surf->ex, surf->ey);
+		}
+		return X;
+	}
+
+	// The aim image as float64 homogeneous coordinates with rigorous bounds,
+	// along the same maps as exact_image_h; each step rescales by a power of two.
+	std::optional<std::array<exact::EB, 3>> exact_image_approx(const CN<N> &cursor, const std::vector<PlanItem> &plan,
+			const Flags &flags) const {
+		using exact::EB;
+		std::array<EB, 3> X = {EB{cursor.fx(), 0.0}, EB{cursor.fy(), 0.0}, EB{1.0, 0.0}};
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		for (EffectType e : effs) {
+			if (is_projective(e)) {
+				return std::nullopt; // a back-propagated hit point is not exact data
+			}
+		}
+		for (size_t jj = plan.size(); jj-- > 0;) {
+			const Surf<N> *surf = scene_.find(plan[jj].surface_id);
+			if (surf == nullptr || !is_transformative(effs[jj])) {
+				continue;
+			}
+			if (surf->portal) {
+				if (surf->theta != 0.0) {
+					return std::nullopt;
+				}
+				X = {exact::esub(X[0], exact::emul(EB{surf->dx, 0.0}, X[2])), exact::esub(X[1], exact::emul(EB{surf->dy, 0.0}, X[2])), X[2]};
+				continue;
+			}
+			if (surf->line) {
+				X = reflect_approx(X, surf->sx, surf->sy, surf->ex, surf->ey);
+			} else {
+				const auto &ec = surf->exact_circle();
+				const std::array<EB, 3> C = {approx(ec.C[0]), approx(ec.C[1]), approx(ec.C[2])};
+				const EB rw2 = approx(ec.rw2);
+				const EB w = X[2];
+				const EB cw = C[2];
+				const EB dx = exact::esub(exact::emul(X[0], cw), exact::emul(C[0], w));
+				const EB dy = exact::esub(exact::emul(X[1], cw), exact::emul(C[1], w));
+				const EB dd = exact::eadd(exact::emul(dx, dx), exact::emul(dy, dy));
+				const EB rw = exact::emul(rw2, w);
+				X = {exact::eadd(exact::emul(C[0], dd), exact::emul(rw, dx)), exact::eadd(exact::emul(C[1], dd), exact::emul(rw, dy)),
+					exact::emul(cw, dd)};
+			}
+			// rescale by a power of two near 1 / |w| (exact on values and bounds)
+			const double m = std::fabs(X[2].v);
+			if (m == 0.0 || !std::isfinite(m)) {
+				return std::nullopt;
+			}
+			const double k = std::pow(2.0, -std::floor(std::log(m) / std::log(2.0)));
+			X = {EB{X[0].v * k, X[0].e * k}, EB{X[1].v * k, X[1].e * k}, EB{X[2].v * k, X[2].e * k}};
+		}
+		return X;
+	}
+
+	const Scene<N> &scene() const { return scene_; }
+
+	// The anchored chain of a plan (public for the differential tests).
+	std::shared_ptr<const AnchorChain<N>> anchor_chain(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
+			const Flags &flags) const {
+		return build_chain(player, cursor, plan, flags);
+	}
+
+private:
+	const Scene<N> &scene_;
+	SolveCache<N> *cache_;
+
+	static exact::EB approx(const BigFloat &v) {
+		const double f = v.to_float();
+		return exact::EB{f, 2.0 * exact::U * std::fabs(f)};
+	}
+
+	static std::array<exact::EB, 3> reflect_approx(const std::array<exact::EB, 3> &X, double sx, double sy, double ex, double ey) {
+		using exact::EB;
+		const EB mx = exact::esub(EB{ex, 0.0}, EB{sx, 0.0});
+		const EB my = exact::esub(EB{ey, 0.0}, EB{sy, 0.0});
+		const EB mm = exact::eadd(exact::emul(mx, mx), exact::emul(my, my));
+		const EB m2r = exact::esub(exact::emul(mx, mx), exact::emul(my, my));
+		const EB m2i = exact::eadd(exact::emul(mx, my), exact::emul(my, mx));
+		const EB w = X[2];
+		const EB cx = exact::esub(X[0], exact::emul(EB{sx, 0.0}, w));
+		const EB cy = exact::esub(exact::emul(EB{sy, 0.0}, w), X[1]);
+		const EB swm = exact::emul(w, mm);
+		const EB rx = exact::eadd(exact::emul(EB{sx, 0.0}, swm), exact::esub(exact::emul(m2r, cx), exact::emul(m2i, cy)));
+		const EB ry = exact::eadd(exact::emul(EB{sy, 0.0}, swm), exact::eadd(exact::emul(m2r, cy), exact::emul(m2i, cx)));
+		return {rx, ry, swm};
+	}
+
+	// The exact aim image within the budget (nullopt beyond it), cached per
+	// (cursor, plan, plan surfaces' data).
+	std::optional<exact::Point3> exact_image_cached(const CN<N> &cursor, const std::vector<PlanItem> &plan, const Flags &flags) const {
+		if (cache_ == nullptr) {
+			return exact_image_h(cursor, plan, EXACT_IMAGE_LIMBS, flags);
+		}
+		std::string key = std::to_string(cursor.fx()) + "," + std::to_string(cursor.fy());
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		for (size_t ji = 0; ji < plan.size(); ji++) {
+			const PlanItem &item = plan[ji];
+			const Surf<N> *s = scene_.find(item.surface_id);
+			key += "|" + std::to_string(item.surface_id) + (item.left ? "L" : "R");
+			if (s != nullptr) {
+				char buf[400];
+				std::snprintf(buf, sizeof buf, ":%d:%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g", int(effs[ji]),
+					s->sx, s->sy, s->ex, s->ey, s->has_v ? s->vx : 0.0, s->has_v ? s->vy : 0.0, s->cx, s->cy, s->r, s->dx, s->dy, s->theta);
+				key += buf;
+			}
+		}
+		auto it = cache_->images.find(key);
+		if (it != cache_->images.end()) {
+			return it->second;
+		}
+		if (cache_->images.size() > 256) {
+			cache_->images.clear();
+		}
+		std::optional<exact::Point3> X = exact_image_h(cursor, plan, EXACT_IMAGE_LIMBS, flags);
+		cache_->images[key] = X;
+		return X;
+	}
+
+	// The exact implicit line of B_0, when it is exact data: lazy float64
+	// coefficients with rigorous bounds; the exact homogeneous image only when a
+	// predicate needs it.
+	std::shared_ptr<const exact::Line> initial_line(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
+			const Flags &flags) const {
+		using exact::EB;
+		std::optional<std::array<EB, 3>> X = exact_image_approx(cursor, plan, flags);
+		if (!X) {
+			return nullptr;
+		}
+		const double px = player.fx();
+		const double py = player.fy();
+		// a = -(y - py w), b = x - px w, c = a px + b py
+		const EB a = exact::esub(exact::emul(EB{py, 0.0}, (*X)[2]), (*X)[1]);
+		const EB b = exact::esub((*X)[0], exact::emul(EB{px, 0.0}, (*X)[2]));
+		const EB c = exact::eadd(exact::emul(a, EB{px, 0.0}), exact::emul(b, EB{py, 0.0}));
+		const Solver *self = this;
+		return exact::Line::from_approx(a, b, c, [self, cursor, plan, flags, px, py]() -> std::optional<exact::Line3> {
+			std::optional<exact::Point3> Xh = self->exact_image_cached(cursor, plan, flags);
+			if (!Xh) {
+				return std::nullopt;
+			}
+			return exact::line_through_h(px, py, *Xh);
+		});
+	}
+
+	// ---- the anchored chain
+
+	std::shared_ptr<const AnchorChain<N>> select_chain(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
+			const Flags &flags) {
+		if (cache_ == nullptr) {
+			return build_chain(player, cursor, plan, flags);
+		}
+		typename SolveCache<N>::ChainKey key;
+		key.scene = &scene_;
+		key.px = player.fx();
+		key.py = player.fy();
+		key.cx = cursor.fx();
+		key.cy = cursor.fy();
+		key.flags = flags.canonical_key();
+		for (const PlanItem &p : plan) {
+			key.plan.emplace_back(p.surface_id, p.left, p.hint.has_value(), p.hint ? p.hint->x : 0.0f, p.hint ? p.hint->y : 0.0f);
+		}
+		if (cache_->chain_key && *cache_->chain_key == key) {
+			return cache_->chain;
+		}
+		cache_->chain = build_chain(player, cursor, plan, flags);
+		cache_->chain_key = key;
+		return cache_->chain;
+	}
+
+	int pop_id_of(int sid) const {
+		const Surf<N> *s = scene_.find(sid);
+		return (s != nullptr && s->portal) ? s->pair : sid;
+	}
+
+	static std::string stack_key(const std::vector<int> &st) {
+		std::string k;
+		for (size_t i = 0; i < st.size(); i++) {
+			if (i) {
+				k += ",";
+			}
+			k += std::to_string(st[i]);
+		}
+		return k;
+	}
+
+	// Projective entries split the plan into sub-chains (GAME_SPEC 13.3/13.4).
+	std::shared_ptr<const AnchorChain<N>> build_chain(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
+			const Flags &flags) const {
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		std::vector<size_t> proj;
+		for (size_t j = 0; j < plan.size(); j++) {
+			if (is_projective(effs[j])) {
+				proj.push_back(j);
+			}
+		}
+		if (proj.empty()) {
+			return build_simple(player, cursor, plan, effs);
+		}
+		// backward: the targets of the sub-chains (a fork settled by the click)
+		std::optional<std::map<size_t, CN<N>>> H = backward_hits(plan, effs, cursor);
+		if (!H) {
+			return nullptr;
+		}
+		for (size_t j : proj) {
+			if (!H->count(j)) {
+				return nullptr; // an entry without a hit point: the greedy aim
+			}
+		}
+		return from_hits(player, cursor, plan, flags, effs, *H);
+	}
+
+	// Exact: the point k lies on surf's carrier.
+	static bool on_carrier(const Surf<N> &surf, const CN<N> &k) {
+		if (geom::endpoint_at(surf.seg, k) != 0) {
+			return true;
+		}
+		if (surf.line) {
+			return exact::orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, k.fx(), k.fy());
+		}
+		if (surf.full) {
+			return exact::on_circle_zero(surf.cx, surf.cy, surf.r, k.fx(), k.fy());
+		}
+		return exact::incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, k.fx(), k.fy());
+	}
+
+	// The backward pass: {projective entry index: H}, or nullopt when an image is at infinity.
+	std::optional<std::map<size_t, CN<N>>> backward_hits(const std::vector<PlanItem> &plan, const std::vector<EffectType> &effs,
+			const CN<N> &cursor) const {
+		std::map<size_t, CN<N>> hits;
+		std::optional<CN<N>> X = cursor;
+		int on_sid = -2; // the surface whose carrier X lies on (provenance)
+		for (size_t jj = plan.size(); jj-- > 0;) {
+			const Surf<N> *surf = scene_.find(plan[jj].surface_id);
+			if (surf == nullptr) {
+				continue;
+			}
+			if (is_projective(effs[jj])) {
+				const bool on = on_sid == surf->id || (on_sid == -2 && on_carrier(*surf, *X));
+				const effects::F32Point *hint = plan[jj].hint ? &*plan[jj].hint : nullptr;
+				std::optional<CN<N>> Hc = effects::back_propagate(*surf, plan[jj].left, *X, on, hint);
+				if (!Hc) {
+					continue;
+				}
+				X = Hc;
+				hits.emplace(jj, *Hc);
+				on_sid = surf->id;
+			} else if (is_transformative(effs[jj])) {
+				on_sid = -1;
+				X = effects::map_point(X, *surf, true);
+				if (!X) {
+					return std::nullopt;
+				}
+			}
+		}
+		return hits;
+	}
+
+	// The chain of sub-chains through the given projective hit points.
+	std::shared_ptr<const AnchorChain<N>> from_hits(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
+			const Flags &flags, const std::vector<EffectType> &effs, const std::map<size_t, CN<N>> &H) const {
+		std::vector<size_t> proj;
+		for (size_t j = 0; j < plan.size(); j++) {
+			if (is_projective(effs[j])) {
+				proj.push_back(j);
+			}
+		}
+		auto chain = std::make_shared<AnchorChain<N>>();
+		size_t a = 0;
+		CN<N> origin = player;
+		std::optional<CN<N>> exit_dir; // the exit at origin of the previous projective
+		std::vector<size_t> bounds = proj;
+		bounds.push_back(plan.size());
+		for (size_t b : bounds) {
+			const CN<N> target = b < plan.size() ? H.at(b) : cursor;
+			std::vector<PlanItem> sub_plan(plan.begin() + long(a), plan.begin() + long(b));
+			std::vector<EffectType> sub_effs(effs.begin() + long(a), effs.begin() + long(b));
+			std::shared_ptr<const AnchorChain<N>> sub = build_simple(origin, target, sub_plan, sub_effs);
+			if (!sub) {
+				return nullptr;
+			}
+			std::vector<BeamPtr<N>> beams = sub->beams;
+			if (exit_dir) {
+				// after a projective the beam leaves along its exit; when that
+				// points away from the target, the target is reached through
+				// infinity: the sub-chain's beams run the other way round
+				const BeamPtr<N> b0 = beams[0];
+				const bool rev = CN<N>::dot(*exit_dir, b0->tau).is_negative();
+				// the exit beam itself is exactly straight; a frame popped back to it is the same object
+				const BeamPtr<N> straight = std::make_shared<const Beam<N>>(Beam<N>{origin, exit_dir->unit(), b0->kappa.sub(b0->kappa)});
+				std::map<const Beam<N> *, BeamPtr<N>> mapped;
+				for (BeamPtr<N> &bm : beams) {
+					if (bm == b0) {
+						bm = straight;
+					} else if (rev) {
+						auto it = mapped.find(bm.get());
+						if (it == mapped.end()) {
+							it = mapped.emplace(bm.get(), std::make_shared<const Beam<N>>(Beam<N>{bm->p, bm->tau.neg(), bm->kappa.neg()})).first;
+						}
+						bm = it->second;
+					}
+				}
+			}
+			chain->beams.insert(chain->beams.end(), beams.begin(), beams.end());
+			if (b < plan.size()) {
+				chain->hits.emplace(int(b), H.at(b));
+				if (b == proj.back()) {
+					std::shared_ptr<const exact::Line> L = exit_line(cursor, plan, flags, b);
+					if (L) {
+						chain->exit_lines.emplace(int(b), L);
+					}
+				}
+				origin = H.at(b);
+				exit_dir = effects::projective_exit(*scene_.find(plan[b].surface_id), plan[b].left, H.at(b));
+			}
+			a = b + 1;
+		}
+		return chain;
+	}
+
+	std::shared_ptr<const AnchorChain<N>> build_simple(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
+			const std::vector<EffectType> &effs) const {
+		const size_t K = plan.size();
+		std::vector<std::vector<int>> stacks = {{}};
+		std::vector<int> st;
+		std::vector<bool> changes; // plan entry j changes the frame
+		for (size_t ji = 0; ji < K; ji++) {
+			const Surf<N> *surf = scene_.find(plan[ji].surface_id);
+			const bool t = surf != nullptr && is_transformative(effs[ji]);
+			changes.push_back(t);
+			if (t) {
+				if (!st.empty() && pop_id_of(st.back()) == plan[ji].surface_id) {
+					st.pop_back();
+				} else {
+					st.push_back(plan[ji].surface_id);
+				}
+			}
+			stacks.push_back(st);
+		}
+		// pole chain: key -> [P, Q or null, delta or null]
+		std::map<std::string, effects::Poles<N>> memo;
+		memo[""] = effects::Poles<N>{player, std::nullopt, std::nullopt};
+		for (const std::vector<int> &s : stacks) {
+			for (size_t n = 1; n <= s.size(); n++) {
+				const std::string key = stack_key(std::vector<int>(s.begin(), s.begin() + long(n)));
+				if (memo.count(key)) {
+					continue;
+				}
+				const effects::Poles<N> &parent = memo.at(stack_key(std::vector<int>(s.begin(), s.begin() + long(n - 1))));
+				if (!parent.P) {
+					return nullptr;
+				}
+				memo[key] = effects::map_pole(parent, *scene_.find(s[n - 1]));
+			}
+		}
+		// image chain X_j, memoized by frame (exact provenance across pops)
+		std::vector<std::optional<CN<N>>> X(K + 1);
+		std::map<std::string, std::optional<CN<N>>> seen;
+		for (size_t jj = K + 1; jj-- > 0;) {
+			const std::string key = stack_key(stacks[jj]);
+			auto it = seen.find(key);
+			if (it != seen.end()) {
+				X[jj] = it->second;
+			} else if (jj == K) {
+				X[jj] = cursor;
+			} else if (!changes[jj]) {
+				X[jj] = X[jj + 1];
+			} else {
+				if (!X[jj + 1]) {
+					return nullptr;
+				}
+				X[jj] = effects::map_point(X[jj + 1], *scene_.find(plan[jj].surface_id), true);
+			}
+			seen[key] = X[jj];
+		}
+		auto chain = std::make_shared<AnchorChain<N>>();
+		std::map<std::string, BeamPtr<N>> beam_of;
+		for (size_t j = 0; j <= K; j++) {
+			const std::string key = stack_key(stacks[j]);
+			auto it = beam_of.find(key);
+			if (it == beam_of.end()) {
+				const effects::Poles<N> &pc = memo.at(key);
+				if (!pc.P || !X[j] || X[j]->sub(*pc.P).is_zero()) {
+					return nullptr;
+				}
+				const CN<N> *delta = pc.delta ? &*pc.delta : nullptr;
+				it = beam_of.emplace(key, std::make_shared<const Beam<N>>(Beam<N>::through(*pc.P, *X[j], delta))).first;
+			}
+			chain->beams.push_back(it->second);
+		}
+		return chain;
+	}
+
+	// The exact line the last projective entry j of a plan leaves along.
+	std::shared_ptr<const exact::Line> exit_line(const CN<N> &cursor, const std::vector<PlanItem> &plan, const Flags &flags, size_t j) const {
+		std::optional<exact::Point3> X = exact_image_h(cursor, plan, EXACT_IMAGE_LIMBS, flags, j + 1);
+		if (!X) {
+			return nullptr;
+		}
+		const Surf<N> &surf = *scene_.find(plan[j].surface_id);
+		const EffectType etype = surf.effect(plan[j].left);
+		exact::Line3 L;
+		if (etype == EffectType::CircleNormalProjection) {
+			// the line through the center C and X (homogeneous cross product)
+			const exact::Point3 &C = surf.exact_circle().C;
+			const BigFloat a = exact::sub(exact::mul(C[1], (*X)[2]), exact::mul((*X)[1], C[2]));
+			const BigFloat b = exact::sub(exact::mul((*X)[0], C[2]), exact::mul(C[0], (*X)[2]));
+			const BigFloat c = exact::sub(exact::mul((*X)[0], C[1]), exact::mul(C[0], (*X)[1]));
+			if (a.is_zero() && b.is_zero()) {
+				return nullptr;
+			}
+			L = {a, b, c};
+		} else {
+			double ax;
+			double ay;
+			if (etype == EffectType::LineNormalProjection) {
+				ax = -(surf.ey - surf.sy);
+				ay = surf.ex - surf.sx;
+			} else {
+				const Projective &pr = surf.proj(plan[j].left);
+				ax = pr.nx;
+				ay = pr.ny;
+			}
+			// through X = (x/w, y/w) along (ax, ay): -ay w x + ax w y = ax y - ay x
+			const BigFloat &w = (*X)[2];
+			L = {exact::mul(exact::of(-ay), w), exact::mul(exact::of(ax), w),
+				exact::sub(exact::mul(exact::of(ax), (*X)[1]), exact::mul(exact::of(ay), (*X)[0]))};
+		}
+		return exact::Line::from_exact(L);
+	}
+
+	// ---- walks
+
+	Walk<N> new_walk(const std::vector<PlanItem> &plan, const std::optional<CN<N>> &cursor, Mode mode, int max_events, const Flags &flags) const {
+		Walk<N> w;
+		w.flags = flags;
+		w.scene = &scene_;
+		w.plan = plan;
+		w.cursor = cursor;
+		w.mode = mode;
+		w.post_mode = Mode::Physical;
+		w.max_events = max_events;
+		return w;
+	}
+
+	Walk<N> walk_chain(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan, Mode mode, int max_events,
+			const Flags &flags, const std::shared_ptr<const AnchorChain<N>> &chain) {
+		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
+		w.chain = chain;
+		w.anchored = true;
+		BeamPtr<N> b0 = chain->beams[0];
+		if (mode == Mode::Physical && plan.empty()) {
+			// no plan: the physical trace is the forward continuation from the start
+			b0 = Backend<N>::seed(b0);
+			w.seeded = true;
+			w.anchored = false;
+		}
+		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
+		w.line = initial_line(player, cursor, plan, flags);
+		if (w.line) {
+			// every frame change fixes the cursor: the aim image is the cursor itself
+			if (!plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
+				w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, std::nullopt});
+			}
+			add_line_endpoints(w, *b0);
+		}
+		walk_from(w, b0, -1, std::nullopt);
+		return w;
+	}
+
+	// A point at infinity in the anchored construction: forward walk from the
+	// exact aim direction, or straight at the cursor when the aim image is at
+	// infinity. nullopt only for player = cursor.
+	std::optional<Walk<N>> run_degenerate(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan, Mode mode,
+			int max_events, const Flags &flags) {
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		std::optional<CN<N>> X = cursor;
+		int on_sid = -2;
+		for (size_t jj = plan.size(); jj-- > 0;) {
+			const Surf<N> *surf = scene_.find(plan[jj].surface_id);
+			if (surf != nullptr && is_projective(effs[jj]) && X) {
+				const bool on = on_sid == surf->id || (on_sid == -2 && on_carrier(*surf, *X));
+				const effects::F32Point *hint = plan[jj].hint ? &*plan[jj].hint : nullptr;
+				std::optional<CN<N>> Hh = effects::back_propagate(*surf, plan[jj].left, *X, on, hint);
+				if (Hh) {
+					X = Hh;
+					on_sid = surf->id;
+				}
+				continue;
+			}
+			if (surf != nullptr && is_transformative(effs[jj])) {
+				on_sid = -1;
+			}
+			if (surf == nullptr || !is_transformative(effs[jj])) {
+				continue;
+			}
+			X = effects::map_point(X, *surf, true);
+			if (!X) {
+				break;
+			}
+		}
+		CN<N> dir;
+		std::shared_ptr<const exact::Line> line;
+		if (!X || X->sub(player).is_zero()) {
+			dir = cursor.sub(player);
+			if (dir.is_zero()) {
+				return std::nullopt;
+			}
+			line = exact::Line::from_exact(exact::line_through(player.fx(), player.fy(), cursor.fx(), cursor.fy()));
+		} else {
+			dir = X->sub(player);
+			line = initial_line(player, cursor, plan, flags);
+		}
+		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
+		BeamPtr<N> b0 = std::make_shared<const Beam<N>>(Beam<N>{player, dir.unit(), player.re.sub(player.re)});
+		if (mode == Mode::Physical) {
+			b0 = Backend<N>::seed(b0);
+			w.seeded = true;
+		}
+		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
+		w.line = line;
+		if (w.line) {
+			if (X && !X->sub(player).is_zero() && !plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
+				w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, std::nullopt});
+			}
+			add_line_endpoints(w, *b0);
+		}
+		walk_from(w, b0, -1, std::nullopt);
+		return w;
+	}
+
+	// Segment data points (endpoints, via) exactly on the current exact line are known points.
+	static void add_line_endpoints(Walk<N> &w, const Beam<N> &b) {
+		for (const auto &s : w.scene->surfaces) {
+			if (s->seg.full) {
+				continue;
+			}
+			const CN<N> *eps[3] = {&s->seg.s, &s->seg.e, s->seg.v ? &*s->seg.v : nullptr};
+			for (const CN<N> *ep : eps) {
+				if (ep == nullptr) {
+					continue;
+				}
+				if (known_index(w.known, *ep) < 0 && w.line->contains(ep->fx(), ep->fy())) {
+					w.known.push_back(Known<N>{*ep, Backend<N>::param_of(b, *ep), -1, std::nullopt});
+				}
+			}
+		}
+	}
+
+	static int known_index(const std::vector<Known<N>> &known, const CN<N> &z) {
+		for (size_t i = 0; i < known.size(); i++) {
+			if (geom::eq(known[i].p, z)) {
+				return int(i);
+			}
+		}
+		return -1;
+	}
+
+	// Exact: the known point k lies on surf's carrier (cached per walk).
+	static bool incident(Walk<N> &w, const CN<N> &k, const Surf<N> &surf) {
+		if (geom::endpoint_at(surf.seg, k) != 0) {
+			return true;
+		}
+		const double kx = k.fx();
+		const double ky = k.fy();
+		const std::tuple<double, double, int> key{kx, ky, surf.id};
+		auto it = w.incidence.find(key);
+		if (it != w.incidence.end()) {
+			return it->second;
+		}
+		bool r;
+		if (surf.line) {
+			r = exact::orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, kx, ky);
+		} else if (surf.full) {
+			r = exact::on_circle_zero(surf.cx, surf.cy, surf.r, kx, ky);
+		} else {
+			r = exact::incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, kx, ky);
+		}
+		w.incidence[key] = r;
+		return r;
+	}
+
+	// Projective order along a beam starting at t0: true if a comes before b.
+	static bool before(const N &a, const N &b, const N &t0) {
+		const int ka = a.cmp(t0) > 0 ? 0 : 1;
+		const int kb = b.cmp(t0) > 0 ? 0 : 1;
+		if (ka != kb) {
+			return ka < kb;
+		}
+		return a.cmp(b) < 0;
+	}
+
+	// Exact: the current exact line is tangent to surf's circle (computed once per line).
+	static bool tangent(Walk<N> &w, const Surf<N> &surf) {
+		if (w.tangent_line != w.line) {
+			w.tangent.clear();
+			for (const auto &s : w.scene->surfaces) {
+				if (!s->line) {
+					const auto &ec = s->exact_circle();
+					w.tangent[s->id] = w.line->tangent_to(ec.C, ec.rw2, ec.fcx, ec.fcy, ec.frr, ecc(ec), 8.0 * exact::U * std::fabs(ec.frr));
+				}
+			}
+			w.tangent_line = w.line;
+		}
+		auto it = w.tangent.find(surf.id);
+		return it != w.tangent.end() && it->second;
+	}
+
+	// Bound on the float rounding of an exact circle's center (C / w, rounded parts).
+	static double ecc(const typename Surf<N>::ExactCircle &ec) {
+		return 6.0 * exact::U * std::max(std::fabs(ec.fcx), std::fabs(ec.fcy));
+	}
+
+	// Candidates in walk order: [t, surf (nullptr = cursor), rehit, exact point].
+	std::vector<Candidate<N>> candidates(Walk<N> &w, const Beam<N> &beam, int depart, bool fresh, const N &t0) const {
+		std::vector<Candidate<N>> cands;
+		for (const auto &sp : w.scene->surfaces) {
+			const Surf<N> &s = *sp;
+			if (w.line && !s.line && tangent(w, s)) {
+				continue; // a tangent touch is not a crossing (exact)
+			}
+			std::vector<N> rs;
+			if (fresh) {
+				rs = geom::hits(beam, s.seg, depart == s.id);
+				if (depart == s.id) {
+					std::vector<N> f;
+					for (const N &t : rs) {
+						if (!t.is_zero()) {
+							f.push_back(t);
+						}
+					}
+					rs = f;
+				}
+			} else {
+				rs = geom::hits(beam, s.seg, false);
+				if (depart == s.id) {
+					std::vector<N> f;
+					for (const N &t : rs) {
+						if (t.cmp(t0) != 0) {
+							f.push_back(t);
+						}
+					}
+					rs = f;
+				}
+			}
+			for (const N &t : rs) {
+				cands.push_back(Candidate<N>{t, &s, false, std::nullopt, -1});
+			}
+		}
+		bool cursor_now = false;
+		// the cursor is on the beam only on the planned path
+		if (!w.cursor_done && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.cursor && w.on_plan) {
+			N tc = Backend<N>::param_of(beam, *w.cursor);
+			const int ki = known_index(w.known, *w.cursor);
+			// the cursor exactly at the departure point is reached immediately
+			if ((fresh && geom::eq(beam.p, *w.cursor))
+					|| (ki >= 0 && w.known[size_t(ki)].skip == depart && depart >= 0 && w.known[size_t(ki)].t.cmp(t0) == 0)) {
+				tc = t0;
+				cursor_now = true;
+			}
+			cands.push_back(Candidate<N>{tc, nullptr, false, std::nullopt, -1});
+			if (ki < 0) {
+				w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
+			}
+		}
+		for (Known<N> &kp : w.known) {
+			snap(w, beam, cands, kp);
+		}
+		std::sort(cands.begin(), cands.end(), [&](const Candidate<N> &a, const Candidate<N> &b) {
+			if (cursor_now && (a.surf == nullptr) != (b.surf == nullptr)) {
+				return a.surf == nullptr;
+			}
+			const int c = a.t.cmp(b.t);
+			if (c != 0) {
+				return before(a.t, b.t, t0);
+			}
+			const int ia = a.surf == nullptr ? -1 : a.surf->id;
+			const int ib = b.surf == nullptr ? -1 : b.surf->id;
+			return ia < ib;
+		});
+		if (w.line) {
+			concurrent_ties(w, cands);
+		}
+		if (depart >= 0) {
+			// the departure re-hit is at the departure point (exact when known)
+			std::optional<CN<N>> dep_pt;
+			for (const Known<N> &k : w.known) {
+				if (k.skip == depart && k.t.cmp(t0) == 0) {
+					dep_pt = k.p;
+				}
+			}
+			cands.push_back(Candidate<N>{t0, w.scene->find(depart), true, dep_pt, -1});
+		}
+		return cands;
+	}
+
+	// On an exact line, adjacent crossings of two line carriers that meet the
+	// line at the same point share one parameter, ordered by id.
+	static void concurrent_ties(Walk<N> &w, std::vector<Candidate<N>> &cands) {
+		for (size_t i = 0; i + 1 < cands.size(); i++) {
+			Candidate<N> &x = cands[i];
+			Candidate<N> &y = cands[i + 1];
+			if (x.surf == nullptr || y.surf == nullptr || x.rehit || y.rehit || !x.surf->line || !y.surf->line) {
+				continue;
+			}
+			const Surf<N> *p = x.surf;
+			const Surf<N> *q = y.surf;
+			if (!w.line->concurrent(p->sx, p->sy, p->ex, p->ey, q->sx, q->sy, q->ex, q->ey)) {
+				continue;
+			}
+			const Surf<N> *lo = p->id < q->id ? p : q;
+			const Surf<N> *hi = p->id < q->id ? q : p;
+			const N t = x.t;
+			const std::optional<CN<N>> pt = x.pt ? x.pt : y.pt;
+			cands[i] = Candidate<N>{t, lo, false, pt, int(i)};
+			cands[i + 1] = Candidate<N>{t, hi, false, pt, int(i)};
+		}
+	}
+
+	// A surface whose carrier contains the known point kp is hit exactly there:
+	// its root nearest kp becomes (kt, kp).
+	static void snap(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands, Known<N> &rec) {
+		if (!rec.incident) {
+			std::vector<const Surf<N> *> inc;
+			for (const auto &s0 : w.scene->surfaces) {
+				if (incident(w, rec.p, *s0)) {
+					inc.push_back(s0.get());
+				}
+			}
+			rec.incident = inc;
+		}
+		for (const Surf<N> *s : *rec.incident) {
+			if (s->id == rec.skip) {
+				continue;
+			}
+			int best = -1;
+			double best_d = INF_D;
+			for (size_t i = 0; i < cands.size(); i++) {
+				if (cands[i].surf != s) {
+					continue;
+				}
+				const double d = beam.at(cands[i].t).sub(rec.p).abs2().to_float();
+				if (d < best_d) {
+					best_d = d;
+					best = int(i);
+				}
+			}
+			if (best >= 0) {
+				cands[size_t(best)] = Candidate<N>{rec.t, s, false, rec.p, -1};
+			}
+		}
+	}
+
+	static double d64(double ax, double ay, double x, double y) {
+		const double dx = ax - x;
+		const double dy = ay - y;
+		return std::sqrt(dx * dx + dy * dy);
+	}
+
+	// Per candidate: px distance to its neighbours in the walk order (and, for
+	// a segment, to its endpoints).
+	static std::vector<double> gaps(const Beam<N> &beam, const std::vector<Candidate<N>> &cands) {
+		std::vector<std::pair<double, double>> pts;
+		for (const Candidate<N> &cand : cands) {
+			if (cand.pt) {
+				pts.emplace_back(cand.pt->fx(), cand.pt->fy());
+			} else {
+				double x, y;
+				Backend<N>::f64_point(beam, cand.t, x, y);
+				pts.emplace_back(x, y);
+			}
+		}
+		std::vector<double> out;
+		for (size_t i = 0; i < cands.size(); i++) {
+			double g = INF_D;
+			const Surf<N> *s = cands[i].surf;
+			if (s != nullptr) {
+				const bool exact_i = cands[i].pt.has_value();
+				const int tie_i = cands[i].tie;
+				long l = long(i) - 1;
+				while (l >= 0 && (cands[size_t(l)].surf == nullptr || (exact_i && cands[size_t(l)].pt) || (tie_i >= 0 && cands[size_t(l)].tie == tie_i))) {
+					l--;
+				}
+				if (l >= 0) {
+					g = std::min(g, d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second));
+				}
+				size_t r = i + 1;
+				while (r < cands.size() && (cands[r].surf == nullptr || (exact_i && cands[r].pt) || (tie_i >= 0 && cands[r].tie == tie_i))) {
+					r++;
+				}
+				if (r < cands.size()) {
+					g = std::min(g, d64(pts[i].first, pts[i].second, pts[r].first, pts[r].second));
+				}
+				if (!s->seg.full) {
+					const double ds = d64(pts[i].first, pts[i].second, s->sx, s->sy);
+					const double de = d64(pts[i].first, pts[i].second, s->ex, s->ey);
+					// an exact endpoint hit is decided by provenance, not by a margin
+					if (ds > 0.0) {
+						g = std::min(g, ds);
+					}
+					if (de > 0.0) {
+						g = std::min(g, de);
+					}
+				}
+			}
+			out.push_back(g);
+		}
+		return out;
+	}
+
+	// Blocked sides at an exact endpoint, incl. other segments sharing it.
+	static bool full_block(const Scene<N> &scene, const Surf<N> &surf, const CN<N> &pt, const CN<N> &tang, bool on_seg) {
+		if (!on_seg) {
+			return false;
+		}
+		if (geom::endpoint_at(surf.seg, pt) == 0) {
+			return true;
+		}
+		bool bl = false;
+		bool br = false;
+		for (const auto &s : scene.surfaces) {
+			const int which = geom::endpoint_at(s->seg, pt);
+			if (which == 0) {
+				continue;
+			}
+			const geom::Blocked b = geom::blocked_sides(s->seg, which, tang);
+			bl = bl || b.left;
+			br = br || b.right;
+		}
+		return bl && br;
+	}
+
+	struct Classified {
+		CN<N> pt;
+		bool on_seg;
+		bool left;
+		bool full_block;
+	};
+
+	// [point, on_segment, side LEFT, fully blocked] of the hit at t on surf.
+	static Classified classify(const Scene<N> &scene, const Beam<N> &beam, const N &t, const Surf<N> &surf, bool at_origin,
+			const std::optional<CN<N>> &known_pt) {
+		const CN<N> pt = known_pt ? *known_pt : (at_origin ? beam.p : beam.at(t));
+		const CN<N> tang = beam.tangent_at(t);
+		const bool on_seg = geom::on_segment(surf.seg, pt);
+		return Classified{pt, on_seg, geom::side_left(surf.seg, pt, tang), full_block(scene, surf, pt, tang, on_seg)};
+	}
+
+	static void plan_bookkeeping(Walk<N> &w, int sid) {
+		if (w.plan_index < int(w.plan.size())) {
+			if (sid == w.plan[size_t(w.plan_index)].surface_id) {
+				w.plan_index++;
+			} else {
+				w.plan_matched = false;
+			}
+		} else {
+			w.plan_matched = false;
+		}
+		if (!w.plan_matched) {
+			w.on_plan = false; // a surface fired out of plan: off the planned beams
+		}
+	}
+
+	static Event<N> &emit(Walk<N> &w, EventKind kind, const BeamPtr<N> &beam, const N &t_from, const std::optional<N> &t_to, double margin) {
+		Event<N> e;
+		e.kind = kind;
+		e.beam = beam;
+		if (Backend<N>::views_per_run()) {
+			if (w.hp_view < 0 || w.hp_src != beam) {
+				w.hp_src = beam;
+				w.hp_view = w.view_count++;
+			}
+			e.beam_view = w.hp_view;
+		} else {
+			auto it = w.beam_views.find(beam.get());
+			if (it == w.beam_views.end()) {
+				it = w.beam_views.emplace(beam.get(), int(w.beam_views.size())).first;
+			}
+			e.beam_view = it->second;
+		}
+		e.t_from = t_from;
+		e.t_to = t_to;
+		if (t_to) {
+			e.point = beam->at(*t_to);
+		}
+		e.margin = margin;
+		e.seeded = w.seeded;
+		e.epoch = w.epoch;
+		w.events.push_back(std::move(e));
+		double g = 0.0;
+		if (t_to) {
+			if (w.seeded) {
+				g = Backend<N>::gain(*beam, *t_to);
+			} else if (w.anchored) {
+				g = Backend<N>::prefix_gain(*beam, *t_to) * PREFIX_GAIN_SCALE;
+			}
+		}
+		w.gains.push_back(g);
+		return w.events.back();
+	}
+
+	// The other intersection of `beam` with surf, given the one applied at t.
+	static N other_root(const Beam<N> &beam, const Surf<N> &surf, int depart, const N &t0, const N &t, const CN<N> &pt) {
+		if (surf.id == depart) {
+			return t0;
+		}
+		const std::vector<N> rs = geom::hits(beam, surf.seg, false);
+		if (rs.size() < 2) {
+			return t; // tangent / straight beam: a single root
+		}
+		N far = rs[0];
+		double far_d = -1.0;
+		for (const N &r : rs) {
+			const double d = beam.at(r).sub(pt).abs2().to_float();
+			if (d > far_d) {
+				far_d = d;
+				far = r;
+			}
+		}
+		return far;
+	}
+
+	struct Next {
+		BeamPtr<N> beam;
+		int depart;
+		N t0;
+		bool fresh;
+	};
+
+	// Forward walk. depart: id of the surface the beam departs from (-1: none).
+	// t_start nullopt: fresh (the beam's own point p is the departure, t = 0).
+	void walk_from(Walk<N> &w, BeamPtr<N> beam, int depart, std::optional<N> t_start) {
+		bool fresh = !t_start.has_value();
+		N t0 = fresh ? beam->kappa.like(0.0) : *t_start;
+		size_t skip = 0; // candidates already processed (in-place reseed)
+		N t_prev = t0;
+		bool fired_state = false; // a state change in the current loop
+		while (!w.done) {
+			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0);
+			std::vector<double> gp = gaps(*beam, cands);
+			std::optional<Next> next;
+			bool restart = false;
+			size_t ci = skip;
+			skip = 0;
+			while (ci < cands.size()) {
+				const Candidate<N> cand = cands[ci];
+				const N t = cand.t;
+				const Surf<N> *surf = cand.surf;
+				const bool rehit = cand.rehit;
+				w.count++;
+				if (w.count > w.max_events) {
+					// cut at the next crossing: drawn up to it, no effect
+					Event<N> &me = emit(w, EventKind::Max, beam, t_prev, t, INF_D);
+					if (cand.pt) {
+						me.point = cand.pt;
+					} else if (rehit && fresh) {
+						me.point = beam->p;
+					}
+					w.done = true;
+					return;
+				}
+				if (surf == nullptr) {
+					Event<N> &ce = emit(w, EventKind::Cursor, beam, t_prev, t, gp[ci]);
+					ce.anchored = w.anchored;
+					t_prev = t;
+					w.cursor_done = true;
+					w.mode = w.post_mode;
+					// the post-cursor continuation is the sensitive part
+					w.anchored = false;
+					if (!w.seeded) {
+						w.seeded = true;
+						BeamPtr<N> sb = Backend<N>::seed(beam);
+						if (sb != beam) {
+							beam = sb;
+							skip = ci;
+							restart = true;
+							break;
+						}
+					}
+					ci++;
+					continue;
+				}
+				const Classified cl = classify(*w.scene, *beam, t, *surf, rehit && fresh, cand.pt);
+				const CN<N> pt = cl.pt;
+				const bool on_seg = cl.on_seg;
+				const bool left = cl.left;
+				const bool fb = cl.full_block;
+				const EffectType eff = surf->effect(left, w.flags);
+				const StateChangeDef *change = surf->state_change(left, w.flags);
+				const bool plan_match = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].surface_id == surf->id
+					&& w.plan[size_t(w.plan_index)].left == left;
+				const EffectType plan_do = (plan_match && (is_transformative(eff) || is_projective(eff))) ? eff : EffectType::Pass;
+				const EffectType phys_do = fb ? eff : EffectType::Pass;
+				const bool plan_state = plan_match && change != nullptr;
+				const bool phys_state = fb && change != nullptr;
+				EffectType do_ = EffectType::Pass;
+				bool fires_state = false;
+				bool diverged = false;
+				if (w.mode == Mode::Physical) {
+					do_ = phys_do;
+					fires_state = phys_state;
+					if (w.anchored && !(phys_do == plan_do && phys_state == plan_state && (phys_do != EffectType::Pass || phys_state || !plan_match))) {
+						diverged = true;
+					}
+					if (is_transformative(do_) || is_projective(do_) || fires_state) {
+						plan_bookkeeping(w, surf->id);
+					}
+				} else {
+					if (plan_match) {
+						w.plan_index++;
+					}
+					do_ = plan_do;
+					fires_state = plan_state;
+				}
+				if (fires_state) {
+					w.flags = w.flags.applied(*change);
+					fired_state = true;
+				}
+				Event<N> &e = emit(w, EventKind::Hit, beam, t_prev, t, gp[ci]);
+				e.surface_id = surf->id;
+				e.left = left;
+				e.state = fires_state;
+				e.flags = w.flags;
+				e.applied = do_ != EffectType::Pass;
+				e.terminal = do_ == EffectType::Terminal;
+				e.on_segment = on_seg;
+				e.rehit = rehit;
+				if ((rehit && fresh) || cand.pt) {
+					e.point = pt;
+				}
+				t_prev = t;
+				if (do_ == EffectType::Terminal) {
+					w.done = true;
+					return;
+				}
+				if (diverged) {
+					w.anchored = false;
+					if (do_ == EffectType::Pass && !w.seeded) {
+						// physical passes where planned applies: the continuation is this same beam
+						w.seeded = true;
+						BeamPtr<N> sb = Backend<N>::seed(beam);
+						if (sb != beam) {
+							beam = sb;
+							skip = ci + 1;
+							restart = true;
+							break;
+						}
+					}
+				}
+				if (is_transformative(do_)) {
+					const bool pt_exact = (cand.pt || (rehit && fresh)) && known_index(w.known, pt) >= 0;
+					const size_t depth = w.stack.size();
+					next = apply(w, beam, t, *surf, do_, depart, fresh, t0, rehit, pt, pt_exact);
+					Event<N> &ev = w.events.back();
+					ev.popped = w.stack.size() < depth;
+					ev.teleport = surf->portal || (ev.popped && w.scene->find(next->depart)->portal);
+					if (diverged && !w.seeded) {
+						w.seeded = true;
+						next->beam = Backend<N>::seed(next->beam);
+					}
+					break;
+				}
+				if (is_projective(do_)) {
+					const bool pt_exact2 = (cand.pt || (rehit && fresh)) && known_index(w.known, pt) >= 0;
+					next = project(w, beam, t, *surf, left, pt, pt_exact2);
+					w.events.back().projective = true;
+					if (!w.anchored && !w.seeded) {
+						w.seeded = true;
+						next->beam = Backend<N>::seed(next->beam);
+					}
+					break;
+				}
+				// the plan completed here without a frame change: the cursor is on
+				// this same beam -- a candidate if it lies ahead
+				if (!w.cursor_done && w.cursor && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan
+						&& std::none_of(cands.begin(), cands.end(), [](const Candidate<N> &c) { return c.surf == nullptr; })) {
+					const N tc = Backend<N>::param_of(*beam, *w.cursor);
+					if (!before(tc, t, t0)) {
+						size_t j = ci + 1;
+						// after everything strictly before it; ties: the cursor first
+						while (j < cands.size() && !cands[j].rehit && before(cands[j].t, tc, t0)) {
+							j++;
+						}
+						cands.insert(cands.begin() + long(j), Candidate<N>{tc, nullptr, false, std::nullopt, -1});
+						gp.insert(gp.begin() + long(j), INF_D);
+						if (known_index(w.known, *w.cursor) < 0) {
+							w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
+						}
+					}
+				}
+				ci++;
+			}
+			if (restart) {
+				continue;
+			}
+			if (!next && fired_state) {
+				// no effect, but the loop changed the state: walk the same beam again
+				fired_state = false;
+				continue;
+			}
+			if (!next) {
+				w.count++;
+				if (w.count <= w.max_events) {
+					const bool straight = beam->kappa.is_zero();
+					const std::optional<N> t_end = straight ? std::nullopt : std::optional<N>(t0);
+					Event<N> &oe = emit(w, straight ? EventKind::Escape : EventKind::Origin, beam, t_prev, t_end, INF_D);
+					if (t_end && fresh) {
+						oe.point = beam->p;
+					}
+				}
+				w.done = true;
+				return;
+			}
+			fired_state = false;
+			beam = next->beam;
+			depart = next->depart;
+			t0 = next->t0;
+			fresh = next->fresh;
+			t_prev = t0;
+		}
+	}
+
+	// Apply surf's effect at t: the continuation.
+	Next apply(Walk<N> &w, const BeamPtr<N> &beam, const N &t, const Surf<N> &surf, EffectType etype, int depart, bool fresh,
+			const N &t0, bool rehit, const CN<N> &pt, bool pt_exact) const {
+		if (!w.stack.empty() && w.stack.back().pop_id == surf.id && w.stack.back().etype == map_kind(surf, etype)) {
+			StackEntry<N> top = std::move(w.stack.back());
+			w.stack.pop_back();
+			const Surf<N> &src = *w.scene->find(top.sid);
+			// the point on the restored beam: T^-1(pt) for a portal, pt itself otherwise
+			const CN<N> q = src.portal ? effects::portal_point(pt, src, true) : pt;
+			N t_res = top.t_hit;
+			if (rehit) {
+				t_res = top.t_hit;
+			} else if (fresh && depart == surf.id) {
+				t_res = top.other;
+			} else {
+				const double dh = top.beam->at(top.t_hit).sub(q).abs2().to_float();
+				const double dd = top.beam->at(top.other).sub(q).abs2().to_float();
+				t_res = dh < dd ? top.t_hit : top.other;
+			}
+			w.known = top.known;
+			w.line = top.line;
+			return Next{w.seeded ? Backend<N>::reseed(top.beam) : top.beam, top.sid, t_res, false};
+		}
+		const N other = other_root(*beam, surf, depart, t0, t, pt);
+		const int pop_id = surf.portal ? surf.pair : surf.id;
+		w.stack.push_back(StackEntry<N>{beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype)});
+		const std::vector<Known<N>> old_known = w.known;
+		// the surface the new beam departs from, and the departure point
+		const Surf<N> &dsurf = surf.portal ? *w.scene->find(surf.pair) : surf;
+		const CN<N> exit = surf.portal ? effects::portal_point(pt, surf) : pt;
+		Next res{nullptr, dsurf.id, beam->kappa.like(0.0), true};
+		if (w.anchored && w.chain) {
+			// anchored: the exact beam of the next plan frame; it departs dsurf at
+			// the root nearest the exit point
+			const BeamPtr<N> nb = w.chain->beams[size_t(w.plan_index)];
+			std::optional<N> best;
+			double best_d = INF_D;
+			for (const N &r : geom::hits(*nb, dsurf.seg, false)) {
+				const double d = nb->at(r).sub(exit).abs2().to_float();
+				if (d < best_d) {
+					best_d = d;
+					best = r;
+				}
+			}
+			if (!best) {
+				best = Backend<N>::param_of(*nb, exit);
+			}
+			res = Next{nb, dsurf.id, *best, false};
+		} else {
+			const CN<N> hp = Backend<N>::exact_point(*beam, t, pt);
+			res = Next{std::make_shared<const Beam<N>>(effects::apply(*beam, t, surf, &hp)), dsurf.id, beam->kappa.like(0.0), true};
+		}
+		if (surf.portal) {
+			portal_known(w, surf, pt, pt_exact, old_known, res);
+			return res;
+		}
+		// known points of the new beam: its departure point (if exact), and the
+		// old beam's known points on surf's carrier (fixed by the effect)
+		w.known.clear();
+		if (pt_exact) {
+			w.known.push_back(Known<N>{pt, res.t0, surf.id, std::nullopt});
+		}
+		for (const Known<N> &k : old_known) {
+			if (!geom::eq(k.p, pt) && incident(w, k.p, surf)) {
+				w.known.push_back(Known<N>{k.p, Backend<N>::param_of(*res.beam, k.p), -1, std::nullopt});
+			}
+		}
+		if (w.line && surf.line) {
+			w.line = w.line->reflected(surf.sx, surf.sy, surf.ex, surf.ey);
+			add_line_endpoints(w, *res.beam);
+		} else if (w.line && line_through_center(*w.line, surf)) {
+			res.beam = Backend<N>::straightened(res.beam);
+			std::vector<Known<N>> kept;
+			for (const Known<N> &k : w.known) {
+				if (k.skip == surf.id) {
+					kept.push_back(k);
+				}
+			}
+			w.known = kept;
+			add_line_endpoints(w, *res.beam);
+		} else {
+			w.line = nullptr;
+			if (!surf.line) {
+				for (const Known<N> &k : old_known) {
+					if (is_center(k.p, surf)) {
+						// the old beam passes exactly through the inversion center: its image is exactly a line
+						res.beam = Backend<N>::straightened(res.beam);
+						break;
+					}
+				}
+			}
+		}
+		return res;
+	}
+
+	// Exact: the point is the center of surf's circle.
+	static bool is_center(const CN<N> &k, const Surf<N> &surf) {
+		const double kx = k.fx();
+		const double ky = k.fy();
+		if (surf.full) {
+			return kx == surf.cx && ky == surf.cy;
+		}
+		const auto &ec = surf.exact_circle();
+		const double e = 2.0 * ecc(ec);
+		if (std::fabs(kx - ec.fcx) > e || std::fabs(ky - ec.fcy) > e) {
+			return false;
+		}
+		return exact::sub(exact::mul(exact::of(kx), ec.C[2]), ec.C[0]).is_zero()
+			&& exact::sub(exact::mul(exact::of(ky), ec.C[2]), ec.C[1]).is_zero();
+	}
+
+	static bool line_through_center(const exact::Line &L, const Surf<N> &surf) {
+		if (surf.full) {
+			return L.contains(surf.cx, surf.cy);
+		}
+		const auto &ec = surf.exact_circle();
+		return L.contains_h(ec.C, ec.fcx, ec.fcy, ecc(ec));
+	}
+
+	// The projective fired at its back-propagated hit point H: of the beam's
+	// crossings of surf, the one at pt is the one nearest H.
+	static bool at_planned_hit(const Beam<N> &beam, const Surf<N> &surf, const CN<N> &pt, const CN<N> *H) {
+		if (H == nullptr) {
+			return false;
+		}
+		const std::vector<N> rs = geom::hits(beam, surf.seg, false);
+		if (rs.empty()) {
+			return false;
+		}
+		int near_pt = -1;
+		int near_h = -1;
+		double d_pt = INF_D;
+		double d_h = INF_D;
+		for (size_t i = 0; i < rs.size(); i++) {
+			const CN<N> q = beam.at(rs[i]);
+			const double a = q.sub(pt).abs2().to_float();
+			const double b = q.sub(*H).abs2().to_float();
+			if (a < d_pt) {
+				d_pt = a;
+				near_pt = int(i);
+			}
+			if (b < d_h) {
+				d_h = b;
+				near_h = int(i);
+			}
+		}
+		return near_pt == near_h;
+	}
+
+	Next project(Walk<N> &w, const BeamPtr<N> &beam, const N &t, const Surf<N> &surf, bool left, const CN<N> &pt, bool pt_exact) const {
+		w.stack.clear();
+		w.epoch++;
+		const CN<N> *H = nullptr;
+		if (w.chain) {
+			auto it = w.chain->hits.find(w.plan_index - 1);
+			if (it != w.chain->hits.end()) {
+				H = &it->second;
+			}
+		}
+		const bool at_h = w.on_plan && w.chain && at_planned_hit(*beam, surf, pt, H);
+		if (!at_h) {
+			w.on_plan = false;
+		}
+		if (at_h && w.anchored && w.plan_index < int(w.chain->beams.size())) {
+			// planned through the projective (Stage 87): the next sub-chain's anchored beam
+			const BeamPtr<N> ab = w.chain->beams[size_t(w.plan_index)];
+			std::optional<N> best;
+			double best_d = INF_D;
+			for (const N &r : geom::hits(*ab, surf.seg, false)) {
+				const double d = ab->at(r).sub(pt).abs2().to_float();
+				if (d < best_d) {
+					best_d = d;
+					best = r;
+				}
+			}
+			if (!best) {
+				best = Backend<N>::param_of(*ab, pt);
+			}
+			w.known.clear();
+			if (pt_exact) {
+				w.known.push_back(Known<N>{pt, *best, surf.id, std::nullopt});
+			}
+			auto el = w.chain->exit_lines.find(w.plan_index - 1);
+			w.line = el == w.chain->exit_lines.end() ? nullptr : el->second;
+			if (w.line) {
+				add_line_endpoints(w, *ab);
+			}
+			return Next{ab, surf.id, *best, false};
+		}
+		const CN<N> hp = Backend<N>::exact_point(*beam, t, pt);
+		BeamPtr<N> nb = std::make_shared<const Beam<N>>(effects::project(*beam, t, surf, left, &hp));
+		w.anchored = false;
+		w.known.clear();
+		if (pt_exact) {
+			w.known.push_back(Known<N>{pt, beam->kappa.like(0.0), surf.id, std::nullopt});
+		}
+		w.line = nullptr;
+		if (pt_exact) {
+			// an exact data line: through pt along the exact axis
+			const EffectType etype = surf.effect(left);
+			const Projective &pr = surf.proj(left);
+			const double px = pt.fx();
+			const double py = pt.fy();
+			exact::Line3 L;
+			if (etype == EffectType::LineNormalProjection) {
+				const BigFloat a = exact::sub(exact::of(surf.ex), exact::of(surf.sx));
+				const BigFloat b = exact::sub(exact::of(surf.ey), exact::of(surf.sy));
+				L = {a, b, exact::add(exact::mul(a, exact::of(px)), exact::mul(b, exact::of(py)))};
+			} else if (etype == EffectType::CircleNormalProjection) {
+				L = exact::line_through_h(px, py, surf.exact_circle().C);
+			} else {
+				L = exact::line_from_dir(px, py, pr.nx, pr.ny);
+			}
+			w.line = exact::Line::from_exact(L);
+			add_line_endpoints(w, *nb);
+		}
+		if (at_h) {
+			auto el = w.chain->exit_lines.find(w.plan_index - 1);
+			if (el != w.chain->exit_lines.end()) {
+				w.line = el->second;
+				add_line_endpoints(w, *nb);
+			}
+		}
+		return Next{nb, surf.id, beam->kappa.like(0.0), true};
+	}
+
+	// T(k) of a portal as exact data, or nullopt.
+	static std::optional<CN<N>> portal_image(const Walk<N> &w, const Surf<N> &surf, const CN<N> &k) {
+		const Surf<N> &pair = *w.scene->find(surf.pair);
+		const int which = geom::endpoint_at(surf.seg, k);
+		if (which == 1) {
+			return pair.seg.s;
+		}
+		if (which == 2) {
+			return pair.seg.e;
+		}
+		if (surf.theta != 0.0) {
+			return std::nullopt;
+		}
+		const BigFloat ex = exact::add(exact::of(k.fx()), exact::of(surf.dx));
+		const BigFloat ey = exact::add(exact::of(k.fy()), exact::of(surf.dy));
+		const double fx = ex.to_float();
+		const double fy = ey.to_float();
+		if (exact::of(fx).cmp(ex) != 0 || exact::of(fy).cmp(ey) != 0) {
+			return std::nullopt;
+		}
+		return CN<N>{k.re.like(fx), k.re.like(fy)};
+	}
+
+	// Known points and exact line after a portal push (the rigid image).
+	static void portal_known(Walk<N> &w, const Surf<N> &surf, const CN<N> &pt, bool pt_exact, const std::vector<Known<N>> &old_known,
+			const Next &res) {
+		std::vector<Known<N>> known;
+		if (pt_exact) {
+			std::optional<CN<N>> h2 = portal_image(w, surf, pt);
+			if (h2) {
+				known.push_back(Known<N>{*h2, res.t0, surf.pair, std::nullopt});
+			}
+		}
+		for (const Known<N> &k : old_known) {
+			if (geom::eq(k.p, pt)) {
+				continue;
+			}
+			std::optional<CN<N>> k2 = portal_image(w, surf, k.p);
+			if (k2 && known_index(known, *k2) < 0) {
+				known.push_back(Known<N>{*k2, Backend<N>::param_of(*res.beam, *k2), -1, std::nullopt});
+			}
+		}
+		w.known = known;
+		if (w.line && surf.theta == 0.0) {
+			w.line = w.line->translated(surf.dx, surf.dy);
+			add_line_endpoints(w, *res.beam);
+		} else {
+			w.line = nullptr;
+		}
+	}
+};
+
+} // namespace rc

@@ -51,3 +51,5 @@ native/build*/
 
 # Shadow-run mismatch dumps (native vs GDScript solver)
 shadow_mismatches.json
+# Claude Code agent worktrees
+.claude/worktrees/
