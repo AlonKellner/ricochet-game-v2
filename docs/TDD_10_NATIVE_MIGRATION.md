@@ -14,13 +14,13 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 |-------|-------|--------|
 | 88a | Infinity specified: oracle `infinity` event + ∞ plan entry, `stage88_infinity.json`, GAME_SPEC 2.11.0 | Done (spec; implementation 88b–d) |
 | 89 | Toolchain (CMake, godot-cpp pinned, doctest/ctest, `NativeProbe`, runners) + goldens of the pure-GDScript stack + `SweepPlans` | Done (toolchain verified by its author; full-suite run after merge pending) |
-| 90 | `BigFloat`, `F64`, `Dual`, `CN<N>`, the `Num` concept | Core done, bit-identical (4578 golden checks); bindings + GUT diff pending |
-| 91 | `Exact` predicates, constructions, lazy `Line` | Core done, bit-identical (6800); bindings + GUT diff pending |
-| 92 | `Beam<N>`, segment geometry, effect maps: one template, FastSolver's f64 twin folded in | Core done, bit-identical (24261); bindings + GUT diff pending |
-| 93 | `Flags`, `SurfaceDef`/`Scene<N>` from Variant-free defs, categorical tables, ghost | Core done; bindings + GUT diff pending |
-| 94 | `Solver<N>`: the walker, anchored chains, exact aim images, caches on an instance | Core done, bit-identical on every fixture (345) and corpus chain (9154); bindings + GUT diff pending |
-| 95 | `ErrorEstimate` + `PrecisionLadder` | Core done, bit-identical on the corpus (7137 incl. tiers/estimates); bindings pending |
-| 96 | `TraceStep`/`TracePath` (float32), `Tracer` (`trace_pair`, `plan_refuses`, `to_path`) | Core written; verification against the sweep goldens pending (needs the goldens' per-group inputs: regeneration interrupted) |
+| 90 | `BigFloat`, `F64`, `Dual`, `CN<N>`, the `Num` concept | Core done, bit-identical (4578 golden checks); bindings `NNumCtx`/`NNum`/`NCN`/`NBigFloat` done; flip pending |
+| 91 | `Exact` predicates, constructions, lazy `Line` | Core done, bit-identical (6800); binding (`NExact`) pending; flip pending |
+| 92 | `Beam<N>`, segment geometry, effect maps: one template, FastSolver's f64 twin folded in | Core done, bit-identical (24261); `NHPBeam` + `NFastSolver` raw math done; `NBeamGeom`/`NBeamEffects` pending; flip pending |
+| 93 | `Flags`, `SurfaceDef`/`Scene<N>` from Variant-free defs, categorical tables, ghost | Core done; `NBeamScene`/`NBeamSceneSurf` done, GUT diff identical on every fixture; flip pending |
+| 94 | `Solver<N>`: the walker, anchored chains, exact aim images, caches on an instance | Core done, bit-identical on every fixture (345) and corpus chain (9154); `NBeamSolver`/`NFastSolver` done, `test_diff_beam_solver.gd` identical (115 fixtures × 3 tiers); flip pending |
+| 95 | `ErrorEstimate` + `PrecisionLadder` | Core done, bit-identical on the corpus (7137 incl. tiers/estimates); `NErrorEstimate`/`NPrecisionLadder` done, `test_diff_precision_ladder.gd` identical; flip pending |
+| 96 | `TraceStep`/`TracePath` (float32), `Tracer` (`trace_pair`, `plan_refuses`, `to_path`) | Core done; `NBeamTracer` + trace data classes done, `test_diff_beam_tracer.gd` identical on the sweep scenes (stride 97); full 284k-combo sweep-goldens check pending (goldens regenerating); flip pending |
 | 97 | Visual/testing kernels: arc geometry, `VisualConverter`, `StepTreeMerge`, click geometry, arrow advance | Planned |
 | 98 | `InvariantChecker` kernel + native sweeps (shard by combo) | Planned |
 | 99 | Delete the GDScript implementations, final names, source-scan tests rewritten | Planned |
@@ -336,8 +336,43 @@ raw beam object changes (`Event::beam_view`).
 `native/tests/test_goldens.cpp` runs all of it under ctest in 2.6 s (49739
 assertions); the same corpus pass takes 139 s in GDScript.
 
-Pending for these stages: the sweep-goldens comparison of `Tracer` (the
-goldens must be regenerated with per-group inputs: 19 minutes, one Godot
-process), the GDExtension bindings (`N*` classes, flat inner classes), the
-`tests/native/test_diff_*.gd` differential GUT tests, shadow mode, and the
-per-class flips.
+### The bindings (`native/gd/`) and the differential GUT tests
+
+Flat `N`-prefixed `RefCounted` classes for the dual-implementation period
+(section 1.6): GDScript inner classes register flat (`BeamSolver.Event` →
+`NBeamSolverEvent`, `FastSolver.Scene` → `NFastSolverScene`,
+`PrecisionLadder.Result` → `NPrecisionLadderResult`, `BeamTracer.Pair` →
+`NBeamTracerPair`). Conventions that the flip's mechanical edit must apply:
+
+- GDExtension has no static properties: float constants and the tier list are
+  static methods (`ErrorEstimate.C` → `C()`, `BeamTracer.TOL` → `TOL()`,
+  `PrecisionLadder.TIERS` → `tiers()`). Integer constants and enums bind as
+  usual (`NBeamSolver.MAX_HITS`, `NBeamSolver.PLANNED`).
+- One scalar class per tier family: `NNum` carries an `F64`, `Dual` or
+  `BigFloat` value (`v`, `d`, `sign`/`exp`/`limbs`), `NCN` a complex of one
+  tier, `NNumCtx` (limbs 0 / `DUAL_LIMBS` = -1 / n) makes them. `NHPBeam`,
+  `NBeamScene` and `NBeamSolverEvent` are tier variants too; mixing tiers in
+  one call is reported through the error sink.
+- `NBeamTracer` is an instance that owns its caches (no statics; one per
+  `PathRenderer` / `GameManager` at the flip) and takes scene **defs**
+  (`BeamScene.defs_from_surfaces`), not game `Surface` objects. `NTraceHit`
+  carries `surface_id` instead of a `Segment`; `NRay.origin` and
+  `NDirection.start/end` are `Vector2`, not `Point`.
+- Plan arguments accept `NBeamSolverPlanItem`, GDScript `BeamSolver.PlanItem`
+  and `PlanManager.PlanEntry` alike (`surface_id`, `left` or `side`, `hint` or
+  `click`), so tests and glue need no conversion during the dual period.
+
+| Test (`tests/native/`) | Compares | Scope | Result |
+|---|---|---|---|
+| `test_diff_beam_solver.gd` | `NBeamScene` surfaces; `NBeamSolver` events (every field, points / parameters / margins bit for bit, flags, beam identity partition); `NFastSolver` events + gains; `plan_effects`, `plan_flags`, `fixes_cursor`, `targets_of` | 115 fixtures × {F64, 4 limbs, float64 walk} | identical |
+| `test_diff_precision_ladder.gd` | `NPrecisionLadder.solve` (tiers, events, errors, climb record, sensitivity), `solve_physical`, `verify` mode; `NErrorEstimate` sensitivities, `estimate`, `unreliable_index`, `required_limbs`, `replay`; `event_distance`, `planned_residuals` | corpus (every 5th scenario; `DIFF_ALL=1` for all) | identical |
+| `test_diff_beam_tracer.gd` | `NBeamTracer.trace_pair` pairs: both `TracePath`s step for step (float32 bits, frames, types, hits, rays, meta), ladder result, final flags; `plan_refuses` | the sweep scenes / positions / plans of `SweepPlans`, every 97th combo (`DIFF_STRIDE=1` = the full sweep) | identical |
+
+`tests/native/diff_helpers.gd` holds the comparators (`events_diff`,
+`pair_diff`, ...); each returns the first difference as one line, so a failing
+run names the fixture, the event and the field.
+
+Pending for these stages: the 284k-combo sweep-goldens comparison of `Tracer`
+under ctest (the goldens are being regenerated with per-group inputs), the
+`NExact` / `NBeamGeom` / `NBeamEffects` bindings, shadow mode, and the
+per-class flips (`GdX` rename + registration rename + inner-class edit).

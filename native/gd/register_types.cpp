@@ -4,6 +4,8 @@
 #include "gd_num.hpp"
 #include "gd_scene.hpp"
 #include "gd_solver.hpp"
+#include "gd_ladder.hpp"
+#include "gd_tracer.hpp"
 #include "rc/error.hpp"
 
 #include <gdextension_interface.h>
@@ -41,6 +43,19 @@ void initialize_ricochet_module(godot::ModuleInitializationLevel p_level) {
     GDREGISTER_CLASS(NFastSolverScene);
     GDREGISTER_CLASS(NFastSolverOut);
     GDREGISTER_CLASS(NFastSolver);
+    // Stage 95: the ladder
+    GDREGISTER_CLASS(NErrorEstimateSensitivity);
+    GDREGISTER_CLASS(NErrorEstimate);
+    GDREGISTER_CLASS(NPrecisionLadderResult);
+    GDREGISTER_CLASS(NPrecisionLadder);
+    // Stage 96: the tracer and its data types
+    GDREGISTER_CLASS(NDirection);
+    GDREGISTER_CLASS(NRay);
+    GDREGISTER_CLASS(NTraceHit);
+    GDREGISTER_CLASS(NTraceStep);
+    GDREGISTER_CLASS(NTracePath);
+    GDREGISTER_CLASS(NBeamTracerPair);
+    GDREGISTER_CLASS(NBeamTracer);
 }
 
 void uninitialize_ricochet_module(godot::ModuleInitializationLevel p_level) {
