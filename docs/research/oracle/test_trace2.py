@@ -325,3 +325,173 @@ def test_cursor_event_only_on_the_planned_path():
         assert bool(cur) == reach
         for e in cur:
             assert abs(e.point - P((520.0, 30.0))) < mp.mpf(10) ** -30
+
+
+# ---------------------------------------------------------------- Stage 88: infinity
+
+import contextlib
+
+
+@contextlib.contextmanager
+def emit_infinity(on=True):
+    old = T.EMIT_INFINITY
+    T.EMIT_INFINITY = on
+    try:
+        yield
+    finally:
+        T.EMIT_INFINITY = old
+
+
+def kinds(walk):
+    return [e.kind for e in walk.events]
+
+
+def test_infinity_off_by_default_emits_no_infinity_events():
+    assert T.EMIT_INFINITY is False
+    p = line(1, (50, -500), (50, 500), PASS, PASS)
+    w = T.trace_physical_direction([p], (0, 0), mp.mpc(1, 0))
+    assert "infinity" not in kinds(w)
+    assert kinds(w) == ["hit", "escape"]
+
+
+def test_infinity_event_between_ahead_and_wrapped_crossings():
+    # pass lines ahead (x = 50) and behind (x = -50) of the player: the beam
+    # crosses the one ahead, wraps, crosses the one behind, then escapes
+    ahead = line(1, (50, -500), (50, 500), PASS, PASS)
+    behind = line(2, (-50, -500), (-50, 500), PASS, PASS)
+    with emit_infinity():
+        w = T.trace_physical_direction([ahead, behind], (0, 0), mp.mpc(1, 0))
+    assert kinds(w) == ["hit", "infinity", "hit", "escape"]
+    assert [e.surface_id for e in w.events] == [1, T.INFINITY_ID, 2, -1]
+    inf_ev = w.events[1]
+    assert inf_ev.point is None and mp.isinf(inf_ev.t) and not inf_ev.applied
+    assert w.count == 4, "the infinity event counts toward MAX_HITS"
+
+
+def test_infinity_counts_toward_max_hits():
+    # one two-sided mirror in an open scene: reflect, wrap, re-hit (pop), wrap,
+    # ... until MAX_HITS. Every other event is now the wrap.
+    m = line(1, (100, -500), (100, 500), REFL, REFL)
+    with emit_infinity():
+        w = T.trace_physical_direction([m], (0, 0), mp.mpc(1, 1))
+    ks = kinds(w)
+    assert ks[-1] == "max"
+    body = ks[:-1]
+    assert len(body) == T.MAX_HITS
+    assert body[::2] == ["hit"] * (T.MAX_HITS // 2) and body[1::2] == ["infinity"] * (T.MAX_HITS // 2)
+
+
+def test_max_hits_cut_at_the_wrap_is_a_max_at_infinity():
+    # 32 pass lines ahead: the 33rd event is the wrap itself
+    lines = [line(i + 1, (10 * (i + 1), -500), (10 * (i + 1), 500), PASS, PASS) for i in range(T.MAX_HITS)]
+    with emit_infinity():
+        w = T.trace_physical_direction(lines, (0, 0), mp.mpc(1, 0))
+    assert kinds(w) == ["hit"] * T.MAX_HITS + ["max"]
+    last = w.events[-1]
+    assert last.point is None and last.surface_id == T.INFINITY_ID and mp.isinf(last.t)
+
+
+def test_circle_beam_never_emits_infinity():
+    # after an inversion the beam is a circle: its t = inf is a finite point
+    inv = {"type": "inversion", "interactive": True}
+    c = T.surface_from_json({"id": 1, "line": False, "start": [700, 0], "end": [400, -150], "via": [400, 150],
+                             "full": True, "circle": {"center": [500, 0], "radius": 200}, "left": inv, "right": inv})
+    with emit_infinity():
+        w = T.trace_physical_direction([c], (0, 0), mp.mpc(1, 0.1))
+    assert w.events[0].kind == "hit" and w.events[0].applied
+    # the event after the inversion lies on the circle beam: no wrap there
+    assert w.events[0].beam.kappa == 0 and w.events[1].beam.kappa != 0
+    assert w.events[1].kind == "hit", "the circle beam's next event is its re-hit of the circle (pop)"
+    # the pop restores the straight beam, which wraps again: every infinity
+    # event lies on a straight beam
+    assert any(e.kind == "infinity" for e in w.events)
+    assert all(e.beam.kappa == 0 for e in w.events if e.kind == "infinity")
+
+
+def test_infinity_only_plan_aims_away_and_reaches_cursor():
+    # plan [inf]: the second realization of the empty plan -- shoot away from
+    # the cursor, wrap, come back onto it
+    with emit_infinity():
+        w = T.planned([], (0, 0), (300, 0), [(T.INFINITY_ID, "")])
+    assert kinds(w) == ["infinity", "cursor", "escape"]
+    assert w.events[0].applied, "the wrap consumed the infinity entry"
+    assert abs(w.events[1].point - mp.mpc(300, 0)) < mp.mpf(10) ** -40
+    # the aim is reversed: the beam departs away from the cursor
+    assert w.events[0].beam.tau.real < 0
+    # without the entry the direct realization reaches the cursor first
+    with emit_infinity():
+        w0 = T.planned([], (0, 0), (300, 0), [])
+    assert kinds(w0) == ["cursor", "infinity", "escape"]
+    assert not w0.events[1].applied
+
+
+def test_infinity_then_mirror_is_the_other_realization():
+    # vertical mirror x = 200 between the player (0, 0) and the cursor
+    # (300, 50): the cursor's image (100, 50) lies before the mirror. The two
+    # realizations of plan [M]: direct -- pass the image, hit M, the reflected
+    # beam wraps (an unapplied infinity event) and returns onto the cursor; or
+    # [inf, M] -- away, wrap (applied), hit M from the other side, reflect
+    # straight onto the cursor.
+    m = line(1, (200, -300), (200, 300), REFL, REFL)
+    with emit_infinity():
+        direct = T.planned([m], (0, 0), (300, 50), [(1, "RIGHT")])
+        assert kinds(direct)[:3] == ["hit", "infinity", "cursor"], kinds(direct)
+        assert direct.events[0].applied and not direct.events[1].applied
+        found = None
+        for side in ("LEFT", "RIGHT"):
+            w = T.planned([m], (0, 0), (300, 50), [(T.INFINITY_ID, ""), (1, side)])
+            if "cursor" in kinds(w):
+                found = (side, w)
+        assert found is not None
+        side, w = found
+        ks = kinds(w)
+        assert ks[:3] == ["infinity", "hit", "cursor"], ks
+        assert w.events[0].applied and w.events[1].applied and w.events[1].surface_id == 1
+        # physical twin: same decisions through the cursor
+        wp = T.physical([m], (0, 0), (300, 50), [(T.INFINITY_ID, ""), (1, side)])
+        assert kinds(wp)[:3] == ["infinity", "hit", "cursor"]
+
+
+def test_mirror_then_infinity_wraps_after_the_reflection():
+    # mirror x = 200 ahead of the player; cursor (600, 50) beyond it: the
+    # reflected beam heads back, wraps, and returns onto the cursor
+    m = line(1, (200, -300), (200, 300), REFL, REFL)
+    with emit_infinity():
+        found = None
+        for side in ("LEFT", "RIGHT"):
+            w = T.planned([m], (0, 0), (600, 50), [(1, side), (T.INFINITY_ID, "")])
+            if "cursor" in kinds(w):
+                found = w
+        assert found is not None
+        ks = kinds(found)
+        assert ks[:3] == ["hit", "infinity", "cursor"], ks
+        assert found.events[1].applied
+        # the misplaced entry order does not reach the cursor: [inf, M]
+        other = [kinds(T.planned([m], (0, 0), (600, 50), [(T.INFINITY_ID, ""), (1, s)])) for s in ("LEFT", "RIGHT")]
+        assert all("cursor" not in k for k in other), other
+
+
+def test_infinity_after_inversion_is_unrealizable():
+    inv = {"type": "inversion", "interactive": True}
+    c = T.surface_from_json({"id": 1, "line": False, "start": [700, 0], "end": [400, -150], "via": [400, 150],
+                             "full": True, "circle": {"center": [500, 0], "radius": 200}, "left": inv, "right": inv})
+    with emit_infinity():
+        for side in ("LEFT", "RIGHT"):
+            w = T.planned([c], (0, 0), (900, 60), [(1, side), (T.INFINITY_ID, "")])
+            assert "cursor" not in kinds(w)
+            assert not any(e.kind == "infinity" and e.applied for e in w.events)
+
+
+def test_projective_exit_away_reaches_cursor_through_infinity():
+    # a through line-normal projection on x = 300 with the cursor on the
+    # approach side: the exit points away, the cursor is reached through the
+    # wrap. The infinity entry in the projective's epoch is optional (the exit
+    # fixes the orientation): with it the wrap is applied, without it it passes.
+    proj = {"type": "line_normal_projection", "interactive": True, "back": False}
+    ln = line(1, (300, -400), (300, 400), proj, proj)
+    with emit_infinity():
+        for plan in ([(1, "RIGHT")], [(1, "RIGHT"), (T.INFINITY_ID, "")]):
+            w = T.planned([ln], (100, -100), (100, 200), plan)
+            ks = kinds(w)
+            assert ks[:3] == ["hit", "infinity", "cursor"], (plan, ks)
+            assert w.events[1].applied == (len(plan) == 2)
