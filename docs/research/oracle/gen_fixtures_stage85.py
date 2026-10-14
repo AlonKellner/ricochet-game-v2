@@ -48,15 +48,18 @@ def circle(sid, center, radius, left=None, right=None):
 
 def fixture(name, surfs, player, plan=(), mode="physical", direction=None, cursor=None, flags=None):
     sc = T.scene_from_json(surfs)
-    plan = [tuple(p) for p in plan]
+    # plan entries: (surface id, side) or (surface id, side, click point)
+    hints = {i: p[2] for i, p in enumerate(plan) if len(p) > 2}
+    clicks = [list(p[2]) if len(p) > 2 else None for p in plan]
+    plan = [(p[0], p[1]) for p in plan]
     if direction is not None:
         m = T.PHYSICAL if mode == "physical" else T.PLANNED
         w = T.trace_mode_direction(sc, player, mp.mpc(*direction), plan,
                                    None if cursor is None else T.P(cursor), m, flags=flags)
     elif mode == "physical":
-        w = T.physical(sc, player, cursor, plan, flags)
+        w = T.physical(sc, player, cursor, plan, flags, hints)
     else:
-        w = T.planned(sc, player, cursor, plan, flags)
+        w = T.planned(sc, player, cursor, plan, flags, hints)
     expected = []
     for e in w.events:
         o = ev_json(e)
@@ -66,7 +69,8 @@ def fixture(name, surfs, player, plan=(), mode="physical", direction=None, curso
     return {"name": name, "surfaces": surfs, "player": list(player),
             "direction": None if direction is None else list(direction),
             "cursor": None if cursor is None else list(cursor),
-            "plan": [{"surface_id": a, "side": b} for a, b in plan], "mode": mode,
+            "plan": [dict({"surface_id": a, "side": b}, **({"click": c} if c else {})) for (a, b), c in zip(plan, clicks)],
+            "mode": mode,
             "flags": dict(flags or {}),
             "expected": expected, "targets": sorted(w.targets)}
 

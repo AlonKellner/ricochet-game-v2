@@ -85,13 +85,30 @@ static func _projective_axis(surf: BeamScene.Surf, etype: String, pr: Array, h: 
 # X. null if there is none. x_on_carrier (provenance: X is the hit point of a
 # later projective entry on this surface, or the cursor exactly on its
 # carrier): X itself is a candidate and is excluded.
-static func back_propagate(surf: BeamScene.Surf, left: bool, X: CN, x_on_carrier: bool = false):
+# The hit point (oracle back_propagate): the candidate nearest the point the
+# player clicked (click: Vector2 or null) -- by default the segment's midpoint
+# (its via point). A circle projective has two candidates (both exit lines
+# pass through X; one may reach X only through infinity): a fork, settled at
+# planning time by the click.
+static func back_propagate(surf: BeamScene.Surf, left: bool, X: CN, x_on_carrier: bool = false, click = null):
 	var c := back_propagate_candidates(surf, left, X, x_on_carrier)
-	return null if c.is_empty() else c[0]
+	if c.is_empty():
+		return null
+	var pool: Array = c.map(func(k): return k[0])
+	if pool.size() == 1:
+		return pool[0]
+	var point: Vector2 = click if click != null else Vector2(surf.vx, surf.vy)
+	var best = pool[0]
+	var best_d := INF
+	for H in pool:
+		var d := Vector2(H.fx(), H.fy()).distance_squared_to(point)
+		if d < best_d:
+			best_d = d
+			best = H
+	return best
 
-# The candidates in preference order: on-segment first (only an on-segment hit
-# fires physically), then a direct exit, then nearer X (oracle
-# back_propagate_candidates).
+# The candidates [[H, direct]] (oracle back_propagate_candidates; direct: the
+# exit ray from H reaches X directly).
 static func back_propagate_candidates(surf: BeamScene.Surf, left: bool, X: CN, x_on_carrier: bool = false) -> Array:
 	var etype := surf.effect(left)
 	var pr: Array = surf.left_proj if left else surf.right_proj
@@ -131,20 +148,11 @@ static func back_propagate_candidates(surf: BeamScene.Surf, left: bool, X: CN, x
 		var d0: float = X.sub(cands[0]).abs2().to_float()
 		var d1: float = X.sub(cands[1]).abs2().to_float()
 		cands = [cands[0] if d0 > d1 else cands[1]]
-	var keyed: Array = []
+	var out: Array = []
 	for H in cands:
-		var ex := projective_exit(surf, left, H)
-		var d = CN.dot(X.sub(H), ex)
-		var direct: int = 0 if (not d.is_negative() and not d.is_zero()) else 1
-		var on: int = 0 if BeamGeom.on_segment(seg, H) else 1
-		keyed.append([on, direct, X.sub(H).abs2().to_float(), H])
-	keyed.sort_custom(func(a, b):
-		if a[0] != b[0]:
-			return a[0] < b[0]
-		if a[1] != b[1]:
-			return a[1] < b[1]
-		return a[2] < b[2])
-	return keyed.map(func(k): return k[3])
+		var d = CN.dot(X.sub(H), projective_exit(surf, left, H))
+		out.append([H, not d.is_negative() and not d.is_zero()])
+	return out
 
 static func _num_like(x, f: float):
 	if x is F64Num:

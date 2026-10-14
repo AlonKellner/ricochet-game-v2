@@ -228,6 +228,7 @@ The player builds a plan by clicking on **surface sides** in order. The plan is 
 
 - **Click detection**: surfaces are clickable within a tolerance band of **8 pixels** from the rendered line/arc. When multiple surfaces are within tolerance, the nearest one wins. For arc segments, the nearest point on the arc is found by projecting the cursor onto the carrier circle (nearest point on circle), then clamping to the arc's bounds using the same cross-product containment test as §11.1. This is a UI-layer concern, not math-layer. When multiple surfaces coincide geometrically within the tolerance band, repeated clicks cycle through them by surface ID order.
 - **Side selection**: when the player clicks near a surface, the side is determined by which side of the surface the cursor is on (left or right of the traversal direction). The selected side is locked into the plan entry. When the cursor is exactly on the surface carrier (`f(P) = 0`), the side is determined by the cursor's previous position (the last non-zero side evaluation). If no previous position exists, default to LEFT.
+- **Click position**: the plan entry also remembers *where* on the surface the player clicked. It settles the one kind of fork in planning. A circle projective (§13.3) can have two hit points whose projected beams both pass through the target; the one nearer the click is taken, so every plan has exactly one path. Without a click, the segment's midpoint stands in.
 - **Highlighting**: when the cursor hovers over a surface, the approachable side highlights to indicate it is clickable.
 - **Plan display**: planned surface sides are visually marked (e.g., numbered overlay, distinct color on the planned side).
 - **Preview**: the trajectory preview updates in real time as the plan and cursor change.
@@ -1044,7 +1045,7 @@ For a contiguous sub-sequence of transformative entries, the anchored constructi
 > **Back-propagation** happens on the carrier.
 > - A line normal has one candidate H; so does a directional on a line.
 > - A circle normal has two candidates, c ± R·u; so can a directional on a circle.
-> - Between two candidates, the one whose exit ray (from the plan side, by the exact exit rule) reaches the target directly is preferred, then the nearer one.
+> - **Forks:** two candidates are a fork, settled at planning time. The one nearer the point the player clicked is taken (§4.2), and without a click the segment's midpoint stands in. There is no search: one deterministic path.
 > - When the target itself lies on the carrier (provenance: a later projective entry on the same surface, or the cursor exactly on it), the candidate at the target is excluded.
 > - An entry with no candidate is skipped by the aim.
 >
@@ -2630,4 +2631,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.8.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.9.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

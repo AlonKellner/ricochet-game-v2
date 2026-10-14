@@ -73,11 +73,16 @@ func test_back_propagation_per_type():
 	var cn := BeamScene.from_defs(ctx, [{"id": 1, "line": false, "start": [700.0, 0.0], "end": [400.0, -173.20508075688772],
 		"via": [400.0, 173.20508075688772], "full": true, "circle": {"center": [500.0, 0.0], "radius": 200.0},
 		"left": mk.call("circle_normal_projection", false, null), "right": mk.call("circle_normal_projection", false, null)}])
-	var X := ctx.cn(500.0 + 300.0, 400.0)       # u = (0.6, 0.8)
+	var X := ctx.cn(500.0 + 300.0, 400.0)       # u = (0.6, 0.8): c +- R u = (620, 160), (380, -160)
 	var s1: BeamScene.Surf = cn.by_id[1]
-	var Hc = BeamEffects.back_propagate(s1, BeamGeom.side_left(s1.seg, ctx.cn(500.0 - 200.0, 0.0), ctx.cn(1.0, 0.0)), X)
-	assert_almost_eq(Vector2(Hc.fx(), Hc.fy()), Vector2(500.0 - 120.0, -160.0), Vector2(1e-9, 1e-9),
-		"circle normal (entering, through): the exit through the center reaches X directly")
+	var lft := BeamGeom.side_left(s1.seg, ctx.cn(500.0 - 200.0, 0.0), ctx.cn(1.0, 0.0))
+	var Ha = BeamEffects.back_propagate(s1, lft, X, false, Vector2(375, -150))
+	assert_almost_eq(Vector2(Ha.fx(), Ha.fy()), Vector2(380.0, -160.0), Vector2(1e-9, 1e-9), "circle normal: the candidate nearest the click")
+	var Hb = BeamEffects.back_propagate(s1, lft, X, false, Vector2(630, 150))
+	assert_almost_eq(Vector2(Hb.fx(), Hb.fy()), Vector2(620.0, 160.0), Vector2(1e-9, 1e-9), "circle normal: the other click, the other candidate")
+	# no click: the segment's midpoint (via (400, 173.2)) stands in
+	var Hd = BeamEffects.back_propagate(s1, lft, X)
+	assert_almost_eq(Vector2(Hd.fx(), Hd.fy()), Vector2(620.0, 160.0), Vector2(1e-9, 1e-9), "default: nearest the midpoint")
 	# directional on a line: the line through X along the normal
 	var ld := BeamScene.from_defs(ctx, [{"id": 1, "line": true, "start": [300.0, -400.0], "end": [300.0, 400.0], "via": [300.0, 0.0],
 		"full": false, "left": mk.call("line_directional_projection", false, [1.0, 1.0]), "right": mk.call("line_directional_projection", false, [1.0, 1.0])}])
@@ -169,10 +174,11 @@ func test_planned_exit_beam_exactly_straight():
 			assert_true(ev[i].beam.kappa.is_zero(), "the exit beam is exactly straight")
 
 
-# User capture: a 7-entry projective plan whose exact path needs the on-arc
-# candidate at a circle normal; the nearer candidate dead-ends further back.
-# The backward pass searches the candidates (on-segment first) and backtracks.
-func test_backtracking_finds_exact_path():
+# User capture: a 7-entry projective plan. The circle normal (entry 5) forks
+# -- the target lies inside its circle, both candidates' exits reach it. The
+# fork is settled at planning time by the click: the candidate nearer where
+# the player clicked the arc. No search: one deterministic path.
+func test_click_settles_fork():
 	for k in 2:
 		for mode in ["planned", "physical"]:
 			var n := "user_capture_%d_%s" % [k, mode]
@@ -183,3 +189,24 @@ func test_backtracking_finds_exact_path():
 			assert_eq(ce.size(), 1, n + ": the cursor is reached")
 			if ce.size() == 1:
 				assert_almost_eq(Vector2(ce[0].point.fx(), ce[0].point.fy()), cur, Vector2(1e-6, 1e-6), n + ": exactly at the cursor")
+	# a click on the other half takes the other candidate (as the oracle)
+	_check_fixture("fork_other_click_planned")
+	var a := _walk("user_capture_1_planned", NumCtx.f64())
+	var b := _walk("fork_other_click_planned", NumCtx.f64())
+	var hit9 := func(ev: Array):
+		for e in ev:
+			if e.kind == "hit" and e.surface_id == 9 and e.applied:
+				return Vector2(e.point.fx(), e.point.fy())
+		return null
+	assert_ne(hit9.call(a), hit9.call(b), "the click picks the hit point")
+	# no click: the segment's midpoint is the default click -- here it picks
+	# the on-arc candidate too (one pick, no search)
+	var ctx := NumCtx.f64()
+	var fx: Dictionary = _fx["user_capture_1_planned"]
+	var plain: Array = Rules.plan_of(fx["plan"]).map(func(it): return BeamSolver.PlanItem.make(it.surface_id, it.left))
+	var chain := BeamSolver.AnchorChain.build(BeamScene.from_defs(ctx, fx["surfaces"]), ctx.cn(fx["player"][0], fx["player"][1]),
+		ctx.cn(fx["cursor"][0], fx["cursor"][1]), plain)
+	assert_not_null(chain)
+	if chain != null:
+		assert_almost_eq(Vector2(chain.hits[5].fx(), chain.hits[5].fy()), hit9.call(a), Vector2(1e-6, 1e-6),
+			"the default click (the arc's midpoint) picks the on-arc candidate")

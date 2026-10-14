@@ -21,7 +21,9 @@ func before_all():
 static func plan_of(j: Array) -> Array:
 	var out: Array = []
 	for e in j:
-		out.append(BeamSolver.PlanItem.make(int(e["surface_id"]), e["side"] == "LEFT"))
+		var c = e.get("click")
+		out.append(BeamSolver.PlanItem.make(int(e["surface_id"]), e["side"] == "LEFT",
+			null if c == null else Vector2(c[0], c[1])))
 	return out
 
 # Walk a fixture with the generic solver at `ctx`.

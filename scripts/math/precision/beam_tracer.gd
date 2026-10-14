@@ -29,7 +29,9 @@ static func scene_supported(surfaces: Array) -> bool:
 static func plan_items(plan_entries: Array) -> Array:
 	var out: Array = []
 	for e in plan_entries:
-		out.append(BeamSolver.PlanItem.make(e.surface_id, e.side == Side.Value.LEFT))
+		var c = e.get("click")
+		out.append(BeamSolver.PlanItem.make(e.surface_id, e.side == Side.Value.LEFT,
+			c if c is Vector2 and is_finite(c.x) and is_finite(c.y) else null))
 	return out
 
 # Planned + physical traces, or null if the scene is not supported or the
@@ -47,7 +49,7 @@ static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_e
 		flags.erase(BeamScene.GHOST)
 	var skey := str(defs)
 	var key := "%s|%s|%s|%s|%s" % [var_to_str(player), var_to_str(cursor),
-		str(plan_entries.map(func(e): return [e.surface_id, e.side])), var_to_str(flags), skey]
+		str(plan_entries.map(func(e): return [e.surface_id, e.side, e.get("click")])), var_to_str(flags), skey]
 	if key == _cache_key and _cache_pair != null:
 		return _cache_pair
 	if skey != _scene_key or _scene == null:

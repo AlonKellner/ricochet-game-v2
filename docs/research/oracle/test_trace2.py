@@ -254,3 +254,74 @@ def test_projective_clears_stack():
     # reflects on the mirror (a push on an empty stack), never a pop
     assert hits[1].surface_id == 1 and hits[1].applied
     assert abs(hits[1].point - mp.mpc(100, 50)) < mp.mpf(10) ** -40
+
+
+# ---------------------------------------------------------------- Stage 87: click forks
+
+def _circle_normal(back=False):
+    cfg = {"type": "circle_normal_projection", "interactive": True, "back": back}
+    return T.surface_from_json({"id": 1, "line": False, "start": [700.0, 0.0], "end": [400.0, -150.0],
+                                "via": [400.0, 150.0], "full": True,
+                                "circle": {"center": [500.0, 0.0], "radius": 200.0},
+                                "left": cfg, "right": cfg})
+
+
+def test_back_propagate_click_picks_nearest_candidate():
+    s = _circle_normal()
+    X = P((520.0, 30.0))                     # inside the circle: a fork
+    cands = [H for H, _ in T.back_propagate_candidates(s, T.LEFT, X)]
+    assert len(cands) == 2
+    for H in cands:
+        # both exit lines pass through X (radial lines through the center)
+        assert abs(abs(H - P((500.0, 0.0))) - 200) < mp.mpf(10) ** -40
+        click = (float(H.real) + 5, float(H.imag) - 5)
+        assert T.back_propagate(s, T.LEFT, X, click=click) == H
+
+
+def test_back_propagate_default_click_is_midpoint():
+    s = _circle_normal()
+    X = P((520.0, 30.0))
+    cands = [H for H, _ in T.back_propagate_candidates(s, T.LEFT, X)]
+    want = min(cands, key=lambda H: abs(H - P((400.0, 150.0))))
+    assert T.back_propagate(s, T.LEFT, X) == want
+
+
+def test_back_propagate_click_decides_outside_too():
+    s = _circle_normal()
+    X = P((900.0, 100.0))                    # outside: one direct, one through infinity
+    c = T.back_propagate_candidates(s, T.LEFT, X)
+    assert sorted(d for _, d in c) == [False, True]
+    for H, _ in c:
+        assert T.back_propagate(s, T.LEFT, X, click=(float(H.real), float(H.imag))) == H
+
+
+def test_back_propagate_provenance_excludes_target_even_when_clicked():
+    s = _circle_normal()
+    X = P((500.0, 200.0))                    # on the carrier
+    H = T.back_propagate(s, T.LEFT, X, x_on_carrier=True, click=(500.0, 200.0))
+    assert abs(H - X) > 100
+
+
+def test_line_projective_ignores_click():
+    cfg = {"type": "line_normal_projection", "interactive": True, "back": False}
+    s = line(1, (300, -400), (300, 400), cfg, cfg)
+    X = P((600.0, 200.0))
+    a = T.back_propagate(s, T.RIGHT, X, click=(300.0, -390.0))
+    b = T.back_propagate(s, T.RIGHT, X, click=(300.0, 390.0))
+    assert a == b == P((300.0, 200.0))
+
+
+def test_cursor_event_only_on_the_planned_path():
+    # the far click: the beam meets the circle earlier on the planned side
+    # and fires there -- off the planned path, no cursor event (never at a
+    # projection of the cursor)
+    walls = [line(10 + i, a, b, TERM, TERM) for i, (a, b) in enumerate(
+        [((-1000, -1000), (1000, -1000)), ((1000, -1000), (1000, 1000)),
+         ((1000, 1000), (-1000, 1000)), ((-1000, 1000), (-1000, -1000))])]
+    sc = [_circle_normal()] + walls
+    for click, reach in (((390.0, -160.0), True), ((610.0, 165.0), False)):
+        w = T.planned(sc, (100.0, -300.0), (520.0, 30.0), [(1, T.LEFT)], hints={0: click})
+        cur = [e for e in w.events if e.kind == "cursor"]
+        assert bool(cur) == reach
+        for e in cur:
+            assert abs(e.point - P((520.0, 30.0))) < mp.mpf(10) ** -30

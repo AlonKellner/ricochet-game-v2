@@ -160,7 +160,7 @@ func _handle_plan_click(is_right_click: bool) -> void:
 			else:
 				plan.clear()
 		else:
-			plan.add_entry(surf.id, result.side)
+			plan.add_entry(surf.id, result.side, _cursor.global_position)
 
 	_refresh_ui()
 

@@ -715,21 +715,24 @@ In PLANNED mode a projective plan entry is applied, even off-segment, like a tra
 | Circle normal | c ± R·u, with u the unit vector from c to the target |
 | Directional | the carrier crossings of the line through the target along the normal |
 
-**Choosing between candidates.** This was revised after your report: an exact path existed, but a different one was found and drawn.
-- **Ordering:** a circle normal (and a directional on a circle) gives two candidate hit points. They are ordered:
-  1. on-segment first, since only an on-segment hit fires physically;
-  2. then a direct exit, fixed by the plan side and the exact Stage 83 rule;
-  3. then the nearer one.
-- **Provenance exclusion:** when the target is known to lie on the carrier, the candidate at the target is excluded. That is the case when it is a later projective entry's H on the same surface with nothing transformative between, or the cursor exactly on the carrier.
-- **Backtracking search:** the backward pass enumerates the complete chains depth-first in that order, backing up when an earlier entry has no candidate or an image is at infinity. Originally the choice was greedy, so a nearer candidate that dead-ended further back made the solver fall back silently to a wrong path.
-- **Forward verification:** with several complete chains, each is walked forward in PLANNED mode. The winner is:
-  1. the first whose planned trace reaches the cursor with every projective hit on-segment, so the shot can follow it;
-  2. else the first that reaches the cursor;
-  3. else the first complete chain;
-  4. else the greedy fallback.
+**Forks are settled when you plan, by the click.** This was revised after your report: an exact path existed, but a different one was found and drawn, and you chose this design.
+- **When a fork exists:** a circle normal (and a circle directional) gives two candidate hit points. Both exit lines pass through the target, though one may reach it only through infinity.
+- **The click decides.** A plan entry remembers where the player clicked (`PlanEntry.click`, passed to the solver as `PlanItem.hint`, and kept by restore and checkpoints). The candidate nearest the click is taken.
+- **Default:** without a click (programmatic plans, the corpus), the segment's midpoint (its via point) stands in for the click.
+- **No search:** there is no backtracking and no forward verification. Each plan has exactly one deterministic path, so the plan is never a search the player cannot see.
+- **Provenance still wins:** when the target is known to lie on the carrier (a later projective entry's H on the same surface, or the cursor exactly on it), the candidate at the target is excluded even when clicked.
+- **Unrealizable clicks are shown, not hidden.** A clicked branch the shot cannot follow (the beam meets the surface earlier on the planned side) fires at that first crossing and does not reach the cursor.
+- **Same rule on both sides:** oracle `back_propagate(..., click)`; solver `BeamEffects.back_propagate(..., click)`.
+- **Tests:** `test_stage87_click_forks.gd` (oracle fixtures `stage87_click_forks.json`) covers:
+  - near and far clicks, circle normal and directional, through and back, the target inside and outside the circle;
+  - the midpoint default, the provenance exclusion, line projectives that ignore the click;
+  - a fork after a mirror, and two forks in all four click combinations;
+  - a property sweep over random targets and clicks;
+  - the click's path through the game (storage, undo, solver, cache key).
 
-  The oracle `_backward` and the solver `_select_chain` apply the same rule.
-- **Corpus effect:** 18 of 46 projective-scene plans now reach the cursor, up from 16, and none lost it. Your capture is a fixture: `user_capture_*`.
+  The oracle side has six pytest units.
+
+**The cursor is reached only on the planned path.** This retires the legacy quirk "the cursor step ends at the aim even when off the ray". A trace leaves the planned path only when a projective fires anywhere but its planned H. Mirrors and inversions are maps of the whole plane, so firing them at another crossing still gives the planned beam. Off the planned path, no cursor event is emitted. A cursor event used to be placed at the cursor's projection onto an unrelated beam, which was the second half of your report: "reached" somewhere that wasn't the cursor, with no divergence shown. Oracle `Walk.on_plan` = solver `Walk.on_plan`.
 
 **Anchored sub-chains:** `AnchorChain.build` runs backward through the plan and then builds one sub-chain per epoch, from origin to target, with flat beam indices.
 - **Exit beam:** the beam leaving a projective is built exactly straight, along its exit. Built as a circle through rounded points, it kept residual curvature.
@@ -764,7 +767,8 @@ The sweep found the motivating case. An exit along a diagonal normal ran exactly
   - `test_physical_matches_planned_when_realizable`
   - `test_fast_twin_projective_plans`
   - `test_planned_exit_beam_exactly_straight` (added after the sweep: an exactly straight exit, and the corner concurrency decided at f64)
-  - `test_backtracking_finds_exact_path` (your capture: the cursor is reached exactly)
+  - `test_click_settles_fork` (your capture: the click on the arc reaches the cursor exactly; a click on the other half takes the other candidate)
+- `test_stage87_click_forks.gd`: 14 tests on click-settled forks (see above).
 - `test_stage83_projective.gd`: `test_planned_passes_projectives_until_87` is inverted as `test_planned_applies_projective`.
 - `test_invariant_sweep.gd`: `test_sweep_projective_plans` covers the five projective playgrounds, with one-entry plans on each side and a two-entry plan.
 
@@ -804,7 +808,7 @@ Scenes: `scenes/playground/projective.tscn`, `projective_lines`, `projective_arc
 | Projective plan entry consumed but never applied | Keep until 87, then fix | `test_planned_passes_projectives_until_87` → inverted in 87 |
 | Zero-length hits in PLANNED require a full block | Fix | `test_zero_length_rule_same_in_planned` (81) |
 | Origin-after-wrap re-applies the origin surface, ignoring rules | Change: an ordinary hit | `test_departure_rehit_is_ordinary_hit` (81) |
-| Cursor step ends at the cursor even when off the ray | Keep | ported cursor tests (84) |
+| Cursor step ends at the cursor even when off the ray | **Changed (Stage 87):** the cursor is reached only on the planned path; off it there is no cursor event | `test_cursor_event_only_at_the_cursor`, `test_cursor_event_only_on_the_planned_path` (oracle) |
 | Endpoint and collinear detection by float `==` | Replace: provenance plus exact sign | `test_on_segment_exact_at_endpoints` (80) |
 | MAX_HITS counts the origin and cursor too | Keep (§12.6) | `test_max_hits_32_counts_all_events` (81) |
 | `targets_hit` recorded in PLANNED | Keep for preview; promote only from physical | `test_state_promoted_after_shot_and_undo_restores` (85) |

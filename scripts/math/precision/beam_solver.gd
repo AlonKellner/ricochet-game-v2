@@ -95,10 +95,12 @@ class Event extends RefCounted:
 class PlanItem extends RefCounted:
 	var surface_id: int
 	var left: bool
-	static func make(sid: int, p_left: bool) -> PlanItem:
+	var hint = null           # Vector2: where the player clicked (settles a fork), or null
+	static func make(sid: int, p_left: bool, p_hint = null) -> PlanItem:
 		var o := PlanItem.new()
 		o.surface_id = sid
 		o.left = p_left
+		o.hint = p_hint
 		return o
 
 # Transform-stack entry: the beam before applying surface `sid` at t_hit, and
@@ -227,19 +229,44 @@ class AnchorChain extends RefCounted:
 				proj.append(j)
 		if proj.is_empty():
 			return _build_simple(scene, player, cursor, plan, effs)
-		# backward: targets of the sub-chains -- the first complete chain of
-		# candidate hit points (BeamSolver.run verifies among several)
-		var opts := candidate_hits(scene, plan, effs, cursor)
-		if opts.is_empty():
+		# backward: the targets of the sub-chains (a fork settled by the click)
+		var H = backward_hits(scene, plan, effs, cursor)
+		if H == null:
 			return null
-		return from_hits(scene, player, cursor, plan, flags, effs, opts[0])
+		for j in proj:
+			if not H.has(j):
+				return null    # an entry without a hit point: the greedy aim
+		return from_hits(scene, player, cursor, plan, flags, effs, H)
 
-	# The complete chains of candidate hit points ({projective entry index:
-	# H}), depth-first in preference order (oracle trace2._backward).
-	static func candidate_hits(scene: BeamScene, plan: Array, effs: Array, cursor: CN) -> Array:
-		var out: Array = []
-		_search(scene, plan, effs, plan.size() - 1, cursor, -2, {}, out)
-		return out
+	# The backward pass (oracle trace2._backward): {projective entry index: H},
+	# or null when an image is at infinity. A circle projective whose target
+	# lies inside the circle has two candidate hit points; the fork is settled
+	# at planning time: the candidate nearer the point the player clicked
+	# (PlanItem.hint), by default the segment's midpoint (BeamEffects.
+	# back_propagate). An entry without a candidate is left out (skipped by
+	# the aim).
+	static func backward_hits(scene: BeamScene, plan: Array, effs: Array, cursor: CN):
+		var hits := {}
+		var X = cursor
+		var on_sid := -2         # the surface whose carrier X lies on (provenance)
+		for j in range(plan.size() - 1, -1, -1):
+			var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
+			if surf == null:
+				continue
+			if effs[j] in PROJECTIVE:
+				var on: bool = on_sid == surf.id or (on_sid == -2 and BeamSolver._on_carrier(surf, X))
+				var Hc = BeamEffects.back_propagate(surf, plan[j].left, X, on, plan[j].hint)
+				if Hc == null:
+					continue
+				X = Hc
+				hits[j] = Hc
+				on_sid = surf.id
+			elif effs[j] in TRANSFORMATIVE:
+				on_sid = -1
+				X = BeamEffects.map_point(X, surf, true)
+				if X == null:
+					return null
+		return hits
 
 	# The chain of sub-chains through the given projective hit points.
 	static func from_hits(scene: BeamScene, player: CN, cursor: CN, plan: Array, flags: Dictionary, effs: Array,
@@ -283,27 +310,6 @@ class AnchorChain extends RefCounted:
 				exit_dir = BeamEffects.projective_exit(scene.by_id[plan[b].surface_id], plan[b].left, H[b])
 			a = b + 1
 		return chain
-
-	# The backward pass from entry j with target X: appends every complete
-	# chain ({projective entry index: H}) to out, in preference order.
-	static func _search(scene: BeamScene, plan: Array, effs: Array, j: int, X: CN, on_sid: int, hits: Dictionary, out: Array) -> void:
-		if j < 0:
-			out.append(hits)
-			return
-		var surf: BeamScene.Surf = scene.by_id.get(plan[j].surface_id)
-		if effs[j] in PROJECTIVE:
-			var on: bool = on_sid == surf.id or (on_sid == -2 and BeamSolver._on_carrier(surf, X))
-			for Hc in BeamEffects.back_propagate_candidates(surf, plan[j].left, X, on):
-				var h2 := hits.duplicate()
-				h2[j] = Hc
-				_search(scene, plan, effs, j - 1, Hc, surf.id, h2, out)
-			return
-		if not (effs[j] in TRANSFORMATIVE):
-			_search(scene, plan, effs, j - 1, X, on_sid, hits, out)
-			return
-		var X2 = BeamEffects.map_point(X, surf, true)
-		if X2 != null:
-			_search(scene, plan, effs, j - 1, X2, -1, hits, out)
 
 	static func _build_simple(scene: BeamScene, player: CN, cursor: CN, plan: Array, effs: Array) -> AnchorChain:
 		var K := plan.size()
@@ -389,6 +395,8 @@ class Walk extends RefCounted:
 	var tangent_line = null   # the line `tangent` was computed for
 	var tangent := {}         # surface id -> exact tangency of tangent_line
 	var flags: Dictionary = {} # trace state flags (GAME_SPEC 9.4 / 10.6)
+	var on_plan: bool = true   # on the planned beams: every projective fired at its H (oracle Walk.on_plan);
+	                           # a transformative entry maps the whole plane: any crossing gives the planned beam
 	var hp_src = null         # beam whose HPBeam view is hp_view (events share it)
 	var hp_view: HPBeam = null
 
@@ -462,39 +470,10 @@ static func run(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode:
 		return _run_degenerate(bk, scene, player, cursor, plan, mode, max_events, flags)
 	return _walk_chain(bk, scene, player, cursor, plan, mode, max_events, flags, chain)
 
-# The anchored chain of a plan. With projectives there may be several complete
-# chains of candidate hit points: each is walked (PLANNED); the first whose
-# planned trace reaches the cursor with every projective hit on-segment wins
-# (the shot can follow it), else the first that reaches the cursor, else the
-# first complete chain (oracle trace2._backward).
-static func _select_chain(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, max_events: int,
+# The anchored chain of a plan (forks settled by the clicks: no search).
+static func _select_chain(_bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, _max_events: int,
 		flags: Dictionary) -> AnchorChain:
-	var effs := plan_effects(scene, plan, flags)
-	if not effs.any(func(e): return e in PROJECTIVE):
-		return AnchorChain.build(scene, player, cursor, plan, flags)
-	var opts := AnchorChain.candidate_hits(scene, plan, effs, cursor)
-	if opts.size() == 1:
-		return AnchorChain.from_hits(scene, player, cursor, plan, flags, effs, opts[0])
-	var first: AnchorChain = null
-	var reaching: AnchorChain = null
-	for H in opts:
-		var ch := AnchorChain.from_hits(scene, player, cursor, plan, flags, effs, H)
-		if ch == null:
-			continue
-		if first == null:
-			first = ch
-		var vw := _walk_chain(bk, scene, player, cursor, plan, Mode.PLANNED, max_events, flags, ch)
-		if not vw.events.any(func(e): return e.kind == "cursor"):
-			continue
-		var on_seg := true
-		for k in H:
-			if not BeamGeom.on_segment(scene.by_id[plan[k].surface_id].seg, H[k]):
-				on_seg = false
-		if on_seg:
-			return ch
-		if reaching == null:
-			reaching = ch
-	return reaching if reaching != null else first
+	return AnchorChain.build(scene, player, cursor, plan, flags)
 
 static func _walk_chain(bk, scene: BeamScene, player: CN, cursor: CN, plan: Array, mode: int, max_events: int,
 		flags: Dictionary, chain: AnchorChain) -> Walk:
@@ -706,7 +685,7 @@ static func _run_degenerate(bk, scene: BeamScene, player: CN, cursor: CN, plan: 
 		if surf != null and effs[j] in PROJECTIVE and X != null:
 			# an entry without a back-propagated point is skipped (oracle aim)
 			var on: bool = on_sid == surf.id or (on_sid == -2 and _on_carrier(surf, X))
-			var H = BeamEffects.back_propagate(surf, plan[j].left, X, on)
+			var H = BeamEffects.back_propagate(surf, plan[j].left, X, on, plan[j].hint)
 			if H != null:
 				X = H
 				on_sid = surf.id
@@ -830,7 +809,10 @@ static func _candidates(w: Walk, beam, depart: int, fresh: bool, t0) -> Array:
 		for t in rs:
 			cands.append([t, s, false, null])
 	var cursor_now := false
-	if not w.cursor_done and w.plan_index >= w.plan.size() and w.plan_matched and w.cursor != null:
+	# the cursor is on the beam only on the planned path (its final anchored
+	# beam passes through the cursor by construction); off it, a cursor is
+	# never "reached" at its projection
+	if not w.cursor_done and w.plan_index >= w.plan.size() and w.plan_matched and w.cursor != null and w.on_plan:
 		var tc = bk.param_of(beam, w.cursor)
 		var ki := _known_index(w.known, w.cursor)
 		# the cursor exactly at the departure point is reached immediately
@@ -994,6 +976,8 @@ static func _plan_bookkeeping(w: Walk, sid: int) -> void:
 			w.plan_matched = false
 	else:
 		w.plan_matched = false
+	if not w.plan_matched:
+		w.on_plan = false         # a surface fired out of plan: off the planned beams
 
 static func _event(w: Walk, kind: String, beam, t_from, t_to, margin: float) -> Event:
 	var e := Event.new()
@@ -1176,7 +1160,7 @@ static func walk_from(w: Walk, beam, depart: int, t_start) -> void:
 			# the plan completed here without a frame change (an entry that
 			# resolves to a pass / state change, or an unapplied projective):
 			# the cursor is on this same beam -- a candidate if it lies ahead
-			if not w.cursor_done and w.cursor != null and w.plan_index >= w.plan.size() and w.plan_matched \
+			if not w.cursor_done and w.cursor != null and w.plan_index >= w.plan.size() and w.plan_matched and w.on_plan \
 					and not cands.any(func(c): return c[1] == null):
 				var tc = bk.param_of(beam, w.cursor)
 				if not _before(tc, t, t0):
@@ -1352,17 +1336,34 @@ static func _exit_line(scene: BeamScene, cursor: CN, plan: Array, flags: Diction
 static func _at_planned_hit(w: Walk, beam, surf: BeamScene.Surf, pt: CN, H) -> bool:
 	if H == null:
 		return false
-	var d_pt: float = pt.sub(H).abs2().to_float()
-	for r in w.bk.roots(beam, surf, false):
-		if w.bk.point(beam, r).sub(H).abs2().to_float() < d_pt:
-			return false
-	return true
+	# the root nearest pt is the root nearest H (distinct crossings, compared
+	# as roots -- not as near-zero distances)
+	var rs: Array = w.bk.roots(beam, surf, false)
+	if rs.is_empty():
+		return false
+	var near_pt := -1
+	var near_h := -1
+	var d_pt := INF
+	var d_h := INF
+	for i in rs.size():
+		var q: CN = w.bk.point(beam, rs[i])
+		var a: float = q.sub(pt).abs2().to_float()
+		var b: float = q.sub(H).abs2().to_float()
+		if a < d_pt:
+			d_pt = a
+			near_pt = i
+		if b < d_h:
+			d_h = b
+			near_h = i
+	return near_pt == near_h
 
 static func _project(w: Walk, beam, t, surf: BeamScene.Surf, left: bool, pt: CN, pt_exact: bool) -> Array:
 	w.stack.clear()
 	w.epoch += 1
-	if w.anchored and w.chain != null and w.plan_index < w.chain.beams.size() \
-			and _at_planned_hit(w, beam, surf, pt, w.chain.hits.get(w.plan_index - 1)):
+	var at_h: bool = w.on_plan and w.chain != null and _at_planned_hit(w, beam, surf, pt, w.chain.hits.get(w.plan_index - 1))
+	if not at_h:
+		w.on_plan = false
+	if at_h and w.anchored and w.plan_index < w.chain.beams.size():
 		# planned through the projective (Stage 87): the next sub-chain's
 		# anchored beam, from the back-propagated hit point; it departs the
 		# surface at its root nearest the hit
@@ -1403,6 +1404,13 @@ static func _project(w: Walk, beam, t, surf: BeamScene.Surf, left: bool, pt: CN,
 			L = Exact.line_from_dir(px, py, pr[1], pr[2])
 		w.line = Exact.Line.from_exact(L)
 		_add_line_endpoints(w, nb)
+	if at_h:
+		# on the planned beams (e.g. after a mirror fired at its other
+		# crossing): the exit is the planned exact line (oracle planned_exit)
+		var EL = w.chain.exit_lines.get(w.plan_index - 1)
+		if EL != null:
+			w.line = EL
+			_add_line_endpoints(w, nb)
 	return [nb, surf.id, w.bk.zero(), true]
 
 # T(k) of a portal as exact data: the pair is built as T of the source, so

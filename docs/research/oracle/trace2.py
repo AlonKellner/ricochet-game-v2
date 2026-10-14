@@ -389,7 +389,9 @@ class Walk:
     flags: dict = field(default_factory=dict)
     flags_before: dict = field(default_factory=dict)   # flags the current event resolved under
     proj_hits: dict = field(default_factory=dict)      # projective entry index -> (H, exact exit line or None)
-    on_plan: bool = True                               # still on the planned path (no divergence yet)
+    on_plan: bool = True                               # on the planned beams: every projective fired at its H
+    # (transformative entries are maps of the whole plane: whichever crossing
+    # fires them, the next beam is the planned one -- with the plan matched)
 
 
 # ---------------------------------------------------------------- exact data
@@ -552,8 +554,11 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     rs = [t for t in rs if t != t0]
             for t in rs:
                 cands.append((sort_key(t, t0), 1, s.id, t, False))
+        # the cursor is on the beam only on the planned path (its final
+        # anchored beam passes through the cursor by construction); off it, a
+        # cursor is never "reached" at its projection
         if not walk.cursor_done and walk.plan_index >= len(walk.plan) and walk.plan_matched \
-                and walk.cursor is not None:
+                and walk.cursor is not None and walk.on_plan:
             tc = beam.param_of(walk.cursor)
             # the cursor exactly at the departure point is reached immediately
             dep = beam.p if fresh else beam.at(t0)
@@ -607,17 +612,6 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             do = None
             change = surf.state_change(side, walk.flags)
             fires_state = False
-            if walk.mode == PHYSICAL and walk.on_plan:
-                # the first decision that differs from the planned one ends the
-                # planned path (as the solver's anchored path)
-                pm = walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side)
-                eff0 = surf.effect(side, walk.flags)
-                plan_do = eff0 if pm and (eff0 in TRANSFORMATIVE or eff0 in PROJECTIVE) else None
-                phys_do = eff0 if full_block else None
-                plan_st = pm and change is not None
-                phys_st = full_block and change is not None
-                if not (plan_do == phys_do and plan_st == phys_st and (phys_do is not None or phys_st or not pm)):
-                    walk.on_plan = False
             if walk.mode == PHYSICAL:
                 do = physical_decision(walk, surf, side, full_block)
                 fires_state = change is not None and full_block
@@ -649,7 +643,12 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 planned_exit = None
                 if walk.on_plan:
                     hj = walk.proj_hits.get(walk.plan_index - 1)
-                    if hj is None or abs(pt - hj[0]) > min(abs(beam.at(r) - hj[0]) for r in roots(beam, surf, False)):
+                    # the crossing fired is the one at H: of the beam's crossings
+                    # of surf, the one nearest pt is the one nearest H (distinct
+                    # crossings, compared as roots -- not as near-zero distances)
+                    rs = roots(beam, surf, False)
+                    if hj is None or not rs or \
+                            min(rs, key=lambda r: abs(beam.at(r) - pt)) != min(rs, key=lambda r: abs(beam.at(r) - hj[0])):
                         walk.on_plan = False
                     else:
                         planned_exit = hj[1]
@@ -663,7 +662,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             # the plan completed here without a frame change (an entry that
             # resolves to a pass / state change, or an unapplied projective):
             # the cursor is on this same beam -- a candidate if it lies ahead
-            if not walk.cursor_done and walk.cursor is not None and walk.plan_index >= len(walk.plan) \
+            if not walk.cursor_done and walk.cursor is not None and walk.plan_index >= len(walk.plan) and walk.on_plan \
                     and walk.plan_matched and not any(c[1] == 0 for c in cands):
                 tc = beam.param_of(walk.cursor)
                 kc = sort_key(tc, t0)
@@ -743,6 +742,8 @@ def _plan_bookkeeping(walk: Walk, sid):
             walk.plan_matched = False
     else:
         walk.plan_matched = False
+    if not walk.plan_matched:
+        walk.on_plan = False      # a surface fired out of plan: off the planned beams
 
 
 def _other_root(beam, surf: Surface, t, fresh, depart, t0, pt):
@@ -931,20 +932,29 @@ def projective_exit(surf, side, cfg, H, axis):
     return axis * sgn
 
 
-def back_propagate(surf, side, X, flags=None, x_on_carrier=False):
-    """The preferred candidate (back_propagate_candidates), or None."""
+def back_propagate(surf, side, X, flags=None, x_on_carrier=False, click=None):
+    """The hit point: the candidate nearest the point the player clicked --
+    by default the segment's midpoint (its via point). A circle projective
+    has two candidates (both exit lines pass through X; one may reach X only
+    through infinity): a fork, settled at planning time by the click. None
+    without a candidate."""
     c = back_propagate_candidates(surf, side, X, flags, x_on_carrier)
-    return c[0] if c else None
+    if not c:
+        return None
+    pool = [H for H, _ in c]
+    if len(pool) == 1:
+        return pool[0]
+    point = P(click) if click is not None else surf.seg.V
+    return min(pool, key=lambda H: abs(H - point))
 
 
 def back_propagate_candidates(surf, side, X, flags=None, x_on_carrier=False):
-    """The hit point H on a projective side from which the projected beam
-    passes through X (GAME_SPEC 13.3), on the carrier: line normal -> the
-    foot of X; circle normal -> c +- R u (u = unit(X - c)); directional ->
-    the carrier crossings of the line through X along the normal. Of two
-    candidates: the one whose exit ray reaches X directly ((X - H) . exit >
-    0), then the one nearer X -- preceded by on-segment (only an on-segment
-    hit fires physically). Returns the candidates in that order. x_on_carrier
+    """The candidate hit points H on a projective side from which the
+    projected beam passes through X (GAME_SPEC 13.3), on the carrier: line
+    normal -> the foot of X; circle normal -> c +- R u (u = unit(X - c));
+    directional -> the carrier crossings of the line through X along the
+    normal. Returns [(H, direct)] (direct: the exit ray from H, by the plan
+    side and the exact exit rule, reaches X directly). x_on_carrier
     (provenance: X is the hit point of a later projective entry on this
     surface, or the cursor exactly on its carrier): X is itself a candidate
     and is excluded -- the beam must reach X from the other one."""
@@ -991,10 +1001,9 @@ def back_propagate_candidates(surf, side, X, flags=None, x_on_carrier=False):
     if x_on_carrier and len(cands) == 2:
         cands = [max(cands, key=lambda H: abs(X - H))]
 
-    def key(H):
-        e = projective_exit(surf, side, cfg, H, axis_at(H))
-        return (0 if on_segment(seg, H) else 1, 0 if dot(X - H, e) > 0 else 1, abs(X - H))
-    return sorted(cands, key=key)
+    def direct(H):
+        return dot(X - H, projective_exit(surf, side, cfg, H, axis_at(H))) > 0
+    return [(H, direct(H)) for H in cands]
 
 
 def plan_effects(surfaces, plan, flags=None):
@@ -1039,19 +1048,19 @@ def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="
     return walk
 
 
-def aim_image(surfaces, plan, cursor, flags=None, player=None):
+def aim_image(surfaces, plan, cursor, flags=None, hints=None):
     """The aim point: the cursor pulled back through the plan -- transformative
     entries by their inverse maps, projectives by back-propagation (13.3;
     an entry without a back-propagated point is skipped)."""
-    return _backward(surfaces, plan, cursor, flags, player)[0]
+    return _backward(surfaces, plan, cursor, flags, hints)[0]
 
 
-def projective_hits(surfaces, plan, cursor, flags=None, player=None):
+def projective_hits(surfaces, plan, cursor, flags=None, hints=None):
     """Plan entry index -> (H, exact exit line or None) of each projective
     entry: the back-propagated hit point, and -- for the last projective, when
     the cursor pulled back through the entries after it is exact data -- the
     exact line it leaves along (through that point, along the exact axis)."""
-    hits = _backward(surfaces, plan, cursor, flags, player)[1]
+    hits = _backward(surfaces, plan, cursor, flags, hints)[1]
     if not hits:
         return {}
     by_id = {s.id: s for s in surfaces}
@@ -1076,70 +1085,31 @@ def projective_hits(surfaces, plan, cursor, flags=None, player=None):
     return {k: (hits[k], line if k == j else None) for k in hits}
 
 
-def _backward(surfaces, plan, cursor, flags=None, player=None):
+def _backward(surfaces, plan, cursor, flags=None, hints=None):
     """(aim point or None, {projective entry index: H}): the backward pass.
-    A projective may have two candidate hit points: the complete chains are
-    enumerated depth-first in preference order (backtracking when an earlier
-    entry has no candidate, or an image is at infinity). With several, each is
-    walked forward (PLANNED, from `player`): the first whose planned trace
-    reaches the cursor with every projective hit on-segment wins (the shot can
-    follow it), else the first that reaches the cursor, else the first
-    complete chain. Without one: the greedy pass that skips an entry without a
-    candidate."""
+    A circle projective whose target lies inside the circle has two
+    candidate hit points (both exits reach the target): the fork is settled
+    at planning time by back_propagate -- the candidate nearer the point the
+    player clicked (hints: plan entry index -> click point), by default the
+    segment's midpoint. An entry without a candidate is skipped."""
     by_id = {s.id: s for s in surfaces}
     plan = list(plan)
+    hints = hints or {}
     res = plan_resolved(surfaces, plan, flags)
-
-    def rec(j, z, on_sid, hits):
-        if j < 0:
-            yield z, hits
-            return
-        sid, side = plan[j]
-        eff, f = res[j]
-        if eff in PROJECTIVE:
-            on = on_sid == sid or (on_sid is None and incident(z, by_id[sid]))
-            for H in back_propagate_candidates(by_id[sid], side, z, f, on):
-                yield from rec(j - 1, H, sid, {**hits, j: H})
-            return
-        if eff not in TRANSFORMATIVE:
-            yield from rec(j - 1, z, on_sid, hits)
-            return
-        z2 = map_point(z, by_id[sid], inverse=True)
-        if z2 is not None:
-            yield from rec(j - 1, z2, -1, hits)
-
-    chains = list(rec(len(plan) - 1, P(cursor), None, {}))
-    if len(chains) == 1 or (chains and player is None):
-        return chains[0]
-    if chains:
-        reaching = None
-        for z, hits in chains:
-            d = z - P(player)
-            if d == 0:
-                continue
-            w = trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=None, flags=flags,
-                                     proj_hits={k: (H, None) for k, H in hits.items()})
-            if not any(e.kind == "cursor" for e in w.events):
-                continue
-            if all(on_segment(by_id[plan[k][0]].seg, H) for k, H in hits.items()):
-                return z, hits
-            if reaching is None:
-                reaching = (z, hits)
-        return reaching if reaching is not None else chains[0]
-    # no complete chain: greedy, skipping an entry without a candidate
     hits = {}
     z = P(cursor)
-    on_sid = None
+    on_sid = None        # the surface whose carrier z lies on (provenance)
     for j in range(len(plan) - 1, -1, -1):
         sid, side = plan[j]
         eff, f = res[j]
         if eff in PROJECTIVE:
             on = on_sid == sid or (on_sid is None and incident(z, by_id[sid]))
-            H = back_propagate(by_id[sid], side, z, f, on)
-            if H is not None:
-                z = H
-                on_sid = sid
-                hits[j] = H
+            H = back_propagate(by_id[sid], side, z, f, on, hints.get(j))
+            if H is None:
+                continue
+            z = H
+            on_sid = sid
+            hits[j] = H
             continue
         if eff not in TRANSFORMATIVE:
             continue
@@ -1150,8 +1120,8 @@ def _backward(surfaces, plan, cursor, flags=None, player=None):
     return z, hits
 
 
-def exact_direction(surfaces, plan, player, cursor, flags=None):
-    img = aim_image(surfaces, plan, cursor, flags, player)
+def exact_direction(surfaces, plan, player, cursor, flags=None, hints=None):
+    img = aim_image(surfaces, plan, cursor, flags, hints)
     if img is None:
         return None
     d = img - P(player)
@@ -1226,26 +1196,27 @@ def fixes_cursor(surfaces, cursor, plan, flags=None):
     return True
 
 
-def _aim(surfaces, player, cursor, plan, flags=None):
+def _aim(surfaces, player, cursor, plan, flags=None, hints=None):
     """(direction, exact line or None, known points): the exact aim image's
     direction, or -- when the image is at infinity (aim undetermined) --
     straight at the cursor. When every frame change fixes the cursor, the aim
     image is the cursor: exact data the initial beam passes through (known)."""
-    d = exact_direction(surfaces, plan, player, cursor, flags)
+    d = exact_direction(surfaces, plan, player, cursor, flags, hints)
     if d is None:
         return P(cursor) - P(player), "direction", []
     known = [P(cursor)] if plan and fixes_cursor(surfaces, cursor, plan, flags) else []
     return d, initial_line(surfaces, player, cursor, plan, flags), known
 
 
-def planned(surfaces, player, cursor, plan, flags=None):
-    """Planned trace = forward PLANNED-mode walk of the exact aim direction."""
-    d, line, known = _aim(surfaces, player, cursor, plan, flags)
+def planned(surfaces, player, cursor, plan, flags=None, hints=None):
+    """Planned trace = forward PLANNED-mode walk of the exact aim direction.
+    hints: plan entry index -> the point the player clicked (settles forks)."""
+    d, line, known = _aim(surfaces, player, cursor, plan, flags, hints)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
-                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, player))
+                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints))
 
 
-def physical(surfaces, player, cursor, plan, flags=None):
-    d, line, known = _aim(surfaces, player, cursor, plan, flags)
+def physical(surfaces, player, cursor, plan, flags=None, hints=None):
+    d, line, known = _aim(surfaces, player, cursor, plan, flags, hints)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PHYSICAL, line=line, flags=flags,
-                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, player))
+                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints))

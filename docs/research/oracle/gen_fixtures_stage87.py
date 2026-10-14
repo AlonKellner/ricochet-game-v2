@@ -30,13 +30,14 @@ def reaches(f):
     return any(e["kind"] == "cursor" for e in f["expected"])
 
 
-def planned_pair(fx, name, surfs, player, cursor, ids, sides_only=None):
+def planned_pair(fx, name, surfs, player, cursor, ids, sides_only=None, clicks=None):
     """Planned and physical fixtures of a plan over `ids`, with the plan sides
     chosen as the first combination whose planned trace reaches the cursor
     (or exactly `sides_only`)."""
     combos = [sides_only] if sides_only else itertools.product(("LEFT", "RIGHT"), repeat=len(ids))
     for sides in combos:
-        plan = list(zip(ids, sides))
+        plan = [(i, sd) if not clicks or clicks[k] is None else (i, sd, clicks[k])
+                for k, (i, sd) in enumerate(zip(ids, sides))]
         f = fixture(name + "_planned", surfs, player, plan=plan, mode="planned", cursor=cursor)
         if reaches(f):
             fx.append(f)
@@ -63,23 +64,31 @@ def main():
     cd = circle(1, (500.0, 0.0), 100.0, *(proj("circle_directional_projection", False, (1, 0)),) * 2)
     planned_pair(fx, "circle_directional", [cd] + walls, (200.0, 30.0), (800.0, 60.0), [1])
     # a full circle acts at both crossings: the realizable plan names both
-    f = planned_pair(fx, "circle_normal_both_crossings", [cn(False)] + walls, (100.0, 0.0), (900.0, 100.0), [1, 1], ("LEFT", "RIGHT"))
-    f = planned_pair(fx, "circle_directional_both_crossings", [cd] + walls, (200.0, 30.0), (800.0, 60.0), [1, 1], ("LEFT", "RIGHT"))
+    f = planned_pair(fx, "circle_normal_both_crossings", [cn(False)] + walls, (100.0, 0.0), (900.0, 100.0), [1, 1], ("LEFT", "RIGHT"),
+                     clicks=[None, (690.0, 50.0)])
+    f = planned_pair(fx, "circle_directional_both_crossings", [cd] + walls, (200.0, 30.0), (800.0, 60.0), [1, 1], ("LEFT", "RIGHT"),
+                     clicks=[None, (580.0, 60.0)])
     # mixed chain: mirror, line normal, mirror
     mixed = [line(1, (400, -500), (400, 200), REFL, REFL),
              line(2, (0, 200), (380, 200), *(proj("line_normal_projection", False),) * 2),
              line(3, (0, 450), (380, 450), REFL, REFL)] + walls
     planned_pair(fx, "mixed_chain", mixed, (200.0, -200.0), (250.0, 300.0), [1, 2, 3])
-    # user capture (playground/projective): a 7-entry projective plan; the
-    # second cursor needs the on-arc candidate at the circle normal (entry 5)
-    # -- the nearer one dead-ends at entry 3: backtracking finds the exact path
+    # user capture (playground/projective): a 7-entry projective plan. For the
+    # second cursor the circle normal (entry 5) forks -- the target lies inside
+    # its circle: the click on the arc (near (940, 430)) settles it. Without
+    # the click the default pick is the nearer, off-arc candidate, which does
+    # not reach the cursor.
     pl = json.load(open(os.path.join(ROOT, "bench", "scenes", "playground__projective.surfaces.json")))["surfaces"]
-    uplan = [(7, "RIGHT"), (10, "RIGHT"), (8, "RIGHT"), (10, "LEFT"), (7, "LEFT"), (9, "LEFT"), (13, "LEFT")]
+    uplan = [(7, "RIGHT"), (10, "RIGHT"), (8, "RIGHT"), (10, "LEFT"), (7, "LEFT"), (9, "LEFT", (945.0, 425.0)), (13, "LEFT")]
     for k, cur in enumerate([(383.3994, 487.9036), (146.1522, 559.0353)]):
         for mode in ("planned", "physical"):
             f = fixture("user_capture_%d_%s" % (k, mode), pl, (842.1705, 878.0266), plan=uplan, mode=mode, cursor=cur)
             assert reaches(f), kinds(f)
             fx.append(f)
+    # the same fork, clicked on the other half: the other candidate
+    f = fixture("fork_other_click_planned", pl, (842.1705, 878.0266), mode="planned", cursor=(146.1522, 559.0353),
+                plan=uplan[:5] + [(9, "LEFT", (460.0, 570.0)), (13, "LEFT")])
+    fx.append(f)
     out = os.path.join(ROOT, "bench", "fixtures", "stage87_projective_plans.json")
     json.dump({"dps": mp.mp.dps, "fixtures": fx}, open(out, "w"), indent=1)
     for f in fx:
