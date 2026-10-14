@@ -172,3 +172,93 @@ func test_ghost_is_per_shot():
 	gm._on_flight_completed()
 	assert_false(gm.game_state.flags.has("ghost"), "ghost is not kept after the shot")
 	get_tree().paused = false
+
+# --- Planning inside a ghost stretch: while the plan's simulated state is
+# ghosted (after an odd number of planned ghost togglers), only ghost togglers
+# can be planned; every other side is refused -- at the click and at the hover.
+
+func _ghost_room() -> Node:
+	Surface.reset_id_counter()
+	BeamTracer.clear_cache()
+	var scene: Node = load("res://scenes/test_levels/ghost_room.tscn").instantiate()
+	scene.gravity = Vector2.ZERO
+	add_child_autofree(scene)
+	return scene
+
+func _surf_at(scene: Node, x: float, y: float) -> Surface:
+	for s in scene.surfaces:
+		if s.segment.start.coords == Vector2(x, y):
+			return s
+	return null
+
+func test_plan_refuses_non_toggler_inside_ghost_stretch():
+	var scene := _ghost_room()
+	await get_tree().process_frame
+	var a := _surf_at(scene, 1000, 400)
+	var b := _surf_at(scene, 650, 400)
+	var block := _surf_at(scene, 1100, 400)
+	var mirror := _surf_at(scene, 720, 480)
+	var P := PlanManager.PlanEntry
+	var L := Side.Value.LEFT
+	var R := Side.Value.RIGHT
+	# solid plan: everything interactive is accepted
+	assert_false(BeamTracer.plan_refuses(scene.surfaces, [], mirror.id, true))
+	# after A the plan is ghosted: the mirror is refused (both sides), the
+	# togglers are not
+	var ghosted := [P.new(a.id, L)]
+	assert_true(BeamTracer.plan_refuses(scene.surfaces, ghosted, mirror.id, true), "mirror inside the stretch")
+	assert_true(BeamTracer.plan_refuses(scene.surfaces, ghosted, mirror.id, false), "both sides")
+	assert_true(BeamTracer.plan_refuses(scene.surfaces, ghosted, block.id, true), "non-interactive too")
+	assert_false(BeamTracer.plan_refuses(scene.surfaces, ghosted, b.id, false), "the second toggler")
+	assert_false(BeamTracer.plan_refuses(scene.surfaces, ghosted, a.id, true), "the same toggler again")
+	# after A, B the plan is solid again
+	assert_false(BeamTracer.plan_refuses(scene.surfaces, [P.new(a.id, L), P.new(b.id, R)], mirror.id, true))
+	# ghost is per shot: a plan starts solid whatever the game state holds
+	assert_false(BeamTracer.plan_refuses(scene.surfaces, [], mirror.id, true, {"ghost": true}))
+
+func test_click_and_hover_refuse_inside_ghost_stretch():
+	var scene := _ghost_room()
+	await get_tree().process_frame
+	var gm = scene.get_node("GameManager")
+	var a := _surf_at(scene, 1000, 400)
+	var b := _surf_at(scene, 650, 400)
+	var mirror := _surf_at(scene, 720, 480)
+	var cursor: Node2D = scene.get_node("Cursor")
+	gm.plan.add_entry(a.id, Side.Value.LEFT)
+	# a click on the mirror is refused; no hover highlight either
+	cursor.global_position = Vector2(745, 530)
+	gm._update_hover()
+	assert_null(gm._hovered_node, "no hover on a refused side")
+	gm._handle_plan_click(false)
+	assert_eq(gm.plan.entries.size(), 1, "the mirror is refused")
+	# the toggler B is accepted
+	cursor.global_position = Vector2(655, 550)
+	gm._update_hover()
+	assert_not_null(gm._hovered_node, "hover on the toggler")
+	gm._handle_plan_click(false)
+	assert_eq(gm.plan.entries.size(), 2)
+	assert_eq(gm.plan.entries[1].surface_id, b.id)
+	# solid again: the mirror is accepted
+	cursor.global_position = Vector2(745, 530)
+	gm._handle_plan_click(false)
+	assert_eq(gm.plan.entries.size(), 3)
+	assert_eq(gm.plan.entries[2].surface_id, mirror.id)
+	get_tree().paused = false
+
+# A click within reach of both a refused side and a toggler takes the toggler.
+func test_click_near_refused_side_takes_toggler():
+	Surface.reset_id_counter()
+	var tog := SideConfig.new(null, true, StateChange.new("ghost", StateChange.Op.TOGGLE))
+	var seg2 := Segment.from_coords(Vector2(10, -100), Vector2(10, 100), Vector2(10, 0))
+	var mir := SideConfig.new(ReflectionEffect.new(seg2.get_carrier()), true)
+	var s1 := Surface.new(Segment.from_coords(Vector2(0, -100), Vector2(0, 100), Vector2(0, 0)), tog, tog, false, false)
+	var s2 := Surface.new(seg2, mir, mir, false, false)
+	var s3 := Surface.new(Segment.from_coords(Vector2(-200, -100), Vector2(-200, 100), Vector2(-200, 0)), tog, tog, false, false)
+	var surfaces := [s1, s2, s3]
+	var plan := [PlanManager.PlanEntry.new(s3.id, Side.Value.RIGHT)]
+	var accept := func(surf: Surface, side: Side.Value) -> bool:
+		return not BeamTracer.plan_refuses(surfaces, plan, surf.id, side == Side.Value.LEFT)
+	var r: Dictionary = ClickDetector.new().detect_click(Vector2(8, 0), surfaces, null, accept)
+	assert_false(r.is_empty())
+	if not r.is_empty():
+		assert_eq(r.surface.id, s1.id, "the mirror is nearer but refused")

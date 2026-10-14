@@ -7,7 +7,7 @@ var _last_cycle_position := Vector2.ZERO
 var _last_cycle_index := -1
 
 # game_state: the configs of categorical surfaces depend on it.
-func detect_click(cursor_pos: Vector2, surfaces: Array, game_state: GameState = null) -> Dictionary:
+func detect_click(cursor_pos: Vector2, surfaces: Array, game_state: GameState = null, accept: Callable = Callable()) -> Dictionary:
 	var state := game_state if game_state != null else GameState.new()
 	var best_surface: Surface = null
 	var best_side: Side.Value = Side.Value.LEFT

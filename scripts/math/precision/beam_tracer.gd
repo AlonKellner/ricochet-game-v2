@@ -34,6 +34,9 @@ static func plan_items(plan_entries: Array) -> Array:
 			c if c is Vector2 and is_finite(c.x) and is_finite(c.y) else null))
 	return out
 
+static func plan_refuses(surfaces: Array, plan_entries: Array, surface_id: int, left: bool, flags: Dictionary = {}) -> bool:
+	return false
+
 # Planned + physical traces, or null if the scene is not supported or the
 # input is degenerate (player = cursor, a pole / image at infinity).
 # flags: the game state's flags (the traces start from them).
