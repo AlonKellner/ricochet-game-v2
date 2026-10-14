@@ -372,7 +372,27 @@ Flat `N`-prefixed `RefCounted` classes for the dual-implementation period
 `pair_diff`, ...); each returns the first difference as one line, so a failing
 run names the fixture, the event and the field.
 
-Pending for these stages: the 284k-combo sweep-goldens comparison of `Tracer`
-under ctest (the goldens are being regenerated with per-group inputs), the
-`NExact` / `NBeamGeom` / `NBeamEffects` bindings, shadow mode, and the
-per-class flips (`GdX` rename + registration rename + inner-class edit).
+### Stage 96 gate: the sweep goldens (284,096 combos)
+
+`bench/goldens/sweeps.json` now records each group's inputs (defs as parsed,
+positions as float32 hex, the plan); the doctest "goldens: the sweep combos of
+Tracer.trace_pair" replays every combo of the ten sweep tests through
+`rc::Tracer`, canonicalizes the pair exactly as `tools/dump_goldens.gd` does and
+compares SHA-256 prefixes (vendored `tests/support/sha256.hpp`), plus the two
+full sample strings per group. 284,096 combos in about 20 s; `RC_SWEEP_STRIDE`
+thins it.
+
+The first run found 2 mismatches, both in the climb record (`tiers_tried`
+[4, 8, 16, 64] vs [4, 8, 16, 32, 64]) of max-tier traces: Godot's `maxf(a, b)`
+is `(a > b) ? a : b`, so a NaN gain (a tangent root's 0/0 derivative in the
+replay) replaces the envelope, whereas `std::max` keeps the envelope. The
+estimate then reads NaN, `required_limbs` jumps to the last tier. The core now
+uses `rc::gd_maxf` / `gd_minf` wherever GDScript wrote `maxf` / `minf`
+(envelopes, estimates, residual floors, margin minima, `_worst`), and the
+sweep goldens are identical. Whether a NaN gain should rather count as
+"unknown, climb one tier" is B-list material (B2 neighbourhood); the shipped
+behaviour is reproduced.
+
+Pending for these stages: the `NExact` / `NBeamGeom` / `NBeamEffects`
+bindings, shadow mode, and the per-class flips (`GdX` rename + registration
+rename + inner-class edit).

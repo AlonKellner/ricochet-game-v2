@@ -1059,7 +1059,7 @@ private:
 
 	// Bound on the float rounding of an exact circle's center (C / w, rounded parts).
 	static double ecc(const typename Surf<N>::ExactCircle &ec) {
-		return 6.0 * exact::U * std::max(std::fabs(ec.fcx), std::fabs(ec.fcy));
+		return 6.0 * exact::U * gd_maxf(std::fabs(ec.fcx), std::fabs(ec.fcy));
 	}
 
 	// Candidates in walk order: [t, surf (nullptr = cursor), rehit, exact point].
@@ -1233,24 +1233,24 @@ private:
 					l--;
 				}
 				if (l >= 0) {
-					g = std::min(g, d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second));
+					g = gd_minf(g, d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second));
 				}
 				size_t r = i + 1;
 				while (r < cands.size() && (cands[r].surf == nullptr || (exact_i && cands[r].pt) || (tie_i >= 0 && cands[r].tie == tie_i))) {
 					r++;
 				}
 				if (r < cands.size()) {
-					g = std::min(g, d64(pts[i].first, pts[i].second, pts[r].first, pts[r].second));
+					g = gd_minf(g, d64(pts[i].first, pts[i].second, pts[r].first, pts[r].second));
 				}
 				if (!s->seg.full) {
 					const double ds = d64(pts[i].first, pts[i].second, s->sx, s->sy);
 					const double de = d64(pts[i].first, pts[i].second, s->ex, s->ey);
 					// an exact endpoint hit is decided by provenance, not by a margin
 					if (ds > 0.0) {
-						g = std::min(g, ds);
+						g = gd_minf(g, ds);
 					}
 					if (de > 0.0) {
-						g = std::min(g, de);
+						g = gd_minf(g, de);
 					}
 				}
 			}

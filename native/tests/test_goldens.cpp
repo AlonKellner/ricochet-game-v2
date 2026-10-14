@@ -498,3 +498,187 @@ TEST_CASE("goldens: anchored chains, image chains and pole chains of the main co
 	}
 	CHECK(n == 161);
 }
+
+// ---------------------------------------------------------------- sweeps (Stage 96)
+
+#include "rc/tracer.hpp"
+#include "sha256.hpp"
+
+namespace {
+
+// tools/dump_goldens.gd: h32v / h64 / step_canon / path_canon / pair_canon / sha16.
+std::string h32v(const V2 &v) {
+	unsigned char b[8];
+	std::memcpy(b, &v.x, 4);
+	std::memcpy(b + 4, &v.y, 4);
+	char out[17];
+	for (int i = 0; i < 8; i++) {
+		std::snprintf(out + i * 2, 3, "%02x", b[i]);
+	}
+	return std::string(out, 16);
+}
+std::string tf(bool v) { return v ? "true" : "false"; }
+std::string int_list(std::vector<int> v) {
+	std::sort(v.begin(), v.end());
+	std::string s = "[";
+	for (size_t i = 0; i < v.size(); i++) {
+		if (i) {
+			s += ", ";
+		}
+		s += std::to_string(v[i]);
+	}
+	return s + "]";
+}
+std::string step_canon(const TraceStep &s, const std::vector<SurfaceDef> &defs) {
+	std::string hit = "-";
+	if (s.hit) {
+		const TraceHit &h = *s.hit;
+		std::string seg = "-";
+		for (const SurfaceDef &d : defs) {
+			if (d.id == h.surface_id) {
+				seg = h32v(V2::of(d.sx, d.sy)) + h32v(V2::of(d.ex, d.ey));
+				break;
+			}
+		}
+		hit = hex(h.t) + ";" + h32v(h.point) + ";" + seg + ";" + std::to_string(int(h.side)) + ";" + tf(h.on_segment);
+	}
+	return h32v(s.start) + "," + h32v(s.end) + "," + h32v(s.via) + "," + std::to_string(s.frame_id) + "," + std::to_string(int(s.type)) + "," +
+		std::to_string(s.surface_id) + "," + std::to_string(s.hit_side) + "," + tf(s.hit_on_segment) + "," + tf(s.after_portal) + "," + tf(s.ghost) + "," +
+		tf(s.is_arc_step) + "," + hex(s.est_error) + "," + std::to_string(s.precision_bits) + "," + hit;
+}
+std::string path_canon(const TracePath &p, const std::vector<SurfaceDef> &defs) {
+	std::string steps;
+	for (size_t i = 0; i < p.steps.size(); i++) {
+		if (i) {
+			steps += "|";
+		}
+		steps += step_canon(p.steps[i], defs);
+	}
+	return "ci=" + std::to_string(p.cursor_index) + ";hc=" + std::to_string(p.hit_count) + ";targets=" + int_list(p.targets_hit) + ";steps=" + steps;
+}
+std::string pair_canon(const std::optional<TracePair> &pair, const std::vector<SurfaceDef> &defs) {
+	if (!pair) {
+		return "null";
+	}
+	const LadderResult &r = pair->result;
+	return "P:" + path_canon(pair->planned, defs) + "\nH:" + path_canon(pair->physical, defs) + "\nF:" + pair->final_flags.canonical_key() + "\nR:" +
+		std::to_string(r.planned.limbs) + "," + std::to_string(r.physical.limbs) + "," + tf(r.physical.converged) + "," + int_list(r.physical.tried);
+}
+std::string sha16(const std::string &s) { return rc_test::Sha256::hex(s).substr(0, 16); }
+// the first differing position of two canonical strings, with context
+std::string first_diff(const std::string &got, const std::string &want) {
+	size_t i = 0;
+	while (i < got.size() && i < want.size() && got[i] == want[i]) {
+		i++;
+	}
+	const size_t from = i > 60 ? i - 60 : 0;
+	return "at " + std::to_string(i) + "\n  got  ..." + got.substr(from, 200) + "\n  want ..." + want.substr(from, 200);
+}
+
+V2 v2_of_hex(const ojson &pair) {
+	float f[2];
+	for (int k = 0; k < 2; k++) {
+		const std::string h = pair[size_t(k)].get<std::string>();
+		unsigned char b[4];
+		for (int i = 0; i < 4; i++) {
+			b[i] = static_cast<unsigned char>(std::stoul(h.substr(size_t(i) * 2, 2), nullptr, 16));
+		}
+		std::memcpy(&f[k], b, 4);
+	}
+	return V2{f[0], f[1]};
+}
+
+} // namespace
+
+TEST_CASE("sha256: FIPS 180-4 test vectors") {
+	CHECK(rc_test::Sha256::hex("abc") == "ba7816bf8f01cfea414140de5dae2223b00361a396177a9cb410ff61f20015ad");
+	CHECK(rc_test::Sha256::hex("") == "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855");
+	CHECK(rc_test::Sha256::hex("abcdbcdecdefdefgefghfghighijhijkijkljklmklmnlmnomnopnopq") == "248d6a61d20638b8e5c026930c3e6039a33ce45964ff2167f6ecedd419db06c1");
+}
+
+// Every (player, cursor, plan) combo of the ten sweep tests, as BeamTracer.trace_pair
+// produced it in GDScript: planned + physical TracePaths (float32 bit patterns and all
+// meta fields), the ladder's tiers and climb record, the final flags. RC_SWEEP_STRIDE
+// thins the combos (default: the goldens' own stride, i.e. all of them).
+TEST_CASE("goldens: the sweep combos of Tracer.trace_pair") {
+	const ojson gold = load_json("bench/goldens/sweeps.json");
+	int extra_stride = 1;
+	if (const char *s = std::getenv("RC_SWEEP_STRIDE")) {
+		extra_stride = std::max(1, std::atoi(s));
+	}
+	int groups = 0;
+	int skipped = 0;
+	long combos = 0;
+	long mismatches = 0;
+	std::string first_mismatch;
+	std::vector<std::string> mismatch_keys;
+	for (auto it = gold.begin(); it != gold.end(); ++it) {
+		if (it.key() == "_schema") {
+			continue;
+		}
+		const ojson &g = it.value();
+		if (!g.contains("inputs")) {
+			skipped++;
+			continue;
+		}
+		groups++;
+		const ojson &inputs = g["inputs"];
+		const std::vector<SurfaceDef> defs = defs_of(inputs["defs"], inputs);
+		std::vector<V2> positions;
+		for (const ojson &p : inputs["positions"]) {
+			positions.push_back(v2_of_hex(p));
+		}
+		std::vector<PlanItem> plan;
+		for (const ojson &e : g["plan"]) {
+			plan.push_back(PlanItem{e["surface_id"].get<int>(), e["side"].get<std::string>() == "LEFT", std::nullopt});
+		}
+		const int stride = g["stride"].get<int>();
+		const bool skip_equal = g["skip_equal"].get<bool>();
+		const std::string hashes = g["hashes"].get<std::string>();
+		const ojson &samples = g["samples"];
+		Tracer tracer;
+		tracer.set_defs(defs);
+		long idx = 0;
+		size_t k = 0;
+		for (const V2 &p : positions) {
+			for (const V2 &c : positions) {
+				if (skip_equal && p == c) {
+					continue;
+				}
+				const long i = idx++;
+				if (i % stride != 0) {
+					continue;
+				}
+				const size_t hk = k++;
+				if ((i / stride) % extra_stride != 0) {
+					continue;
+				}
+				const std::optional<TracePair> pair = tracer.trace_pair(p, c, plan, Flags());
+				const std::string canon = pair_canon(pair, defs);
+				combos++;
+				const std::string key = it.key() + " combo " + std::to_string(i);
+				if (samples.contains(std::to_string(i))) {
+					const std::string want = samples[std::to_string(i)].get<std::string>();
+					CHECK_MESSAGE(canon == want, (key + " sample: " + first_diff(canon, want)));
+				}
+				if (hk * 16 + 16 > hashes.size() || sha16(canon) != hashes.substr(hk * 16, 16)) {
+					mismatches++;
+					if (mismatch_keys.size() < 12) {
+						mismatch_keys.push_back(key + " tiers " + std::to_string(pair ? pair->result.planned.limbs : -1) + "/" +
+							std::to_string(pair ? pair->result.physical.limbs : -1));
+					}
+					if (first_mismatch.empty()) {
+						first_mismatch = key + ": " + canon.substr(0, 400);
+					}
+				}
+			}
+		}
+		CHECK_MESSAGE(k * 16 == hashes.size(), (it.key() + ": hash count"));
+	}
+	MESSAGE("sweeps: " << groups << " groups, " << combos << " combos, " << skipped << " groups without inputs (old goldens), " << mismatches << " mismatches");
+	for (const std::string &k : mismatch_keys) {
+		MESSAGE("  mismatch: " << k);
+	}
+	CHECK_MESSAGE(mismatches == 0, ("first mismatch: " + first_mismatch));
+	CHECK(groups + skipped == 117);
+}

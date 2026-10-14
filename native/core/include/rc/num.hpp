@@ -13,6 +13,14 @@
 
 namespace rc {
 
+// Godot's maxf / minf: (a > b) ? a : b and (a < b) ? a : b. Unlike std::max /
+// std::min they return the second argument when either one is NaN; the
+// ladder's gain envelopes and error estimates inherit that (GDScript
+// ErrorEstimate / PrecisionLadder), so every max / min of a float the
+// GDScript wrote as maxf / minf goes through these.
+inline double gd_maxf(double a, double b) { return (a > b) ? a : b; }
+inline double gd_minf(double a, double b) { return (a < b) ? a : b; }
+
 struct F64 {
 	double v = 0.0;
 

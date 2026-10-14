@@ -47,7 +47,7 @@ inline std::vector<double> estimate(const Sensitivity &sens, double ctx_eps) {
 	std::vector<double> out;
 	const double floor_err = ctx_eps * SCALE * 4.0;
 	for (double g : sens.gain) {
-		out.push_back(std::max(C * ctx_eps * g, floor_err));
+		out.push_back(gd_maxf(C * ctx_eps * g, floor_err));
 	}
 	return out;
 }
@@ -68,7 +68,7 @@ Sensitivity collect(const std::vector<Event<N>> &ev, const std::vector<double> &
 	Sensitivity s;
 	double envelope = 0.0;
 	for (size_t i = 0; i < ev.size(); i++) {
-		envelope = std::max(envelope, gains[i]);
+		envelope = gd_maxf(envelope, gains[i]);
 		s.gain.push_back(envelope);
 		s.margin.push_back(ev[i].margin);
 	}
@@ -130,7 +130,7 @@ Sensitivity replay(const std::vector<Event<N>> &events, const Scene<Dual> &scene
 				}
 			}
 		}
-		envelope = std::max(envelope, g);
+		envelope = gd_maxf(envelope, g);
 		s.gain.push_back(envelope);
 		s.margin.push_back(e.margin);
 	}
@@ -256,7 +256,7 @@ public:
 		std::vector<double> est_q = estimate::estimate(sq, tier_eps(0));
 		const std::vector<double> res_q = planned_residuals(wq->events, ctx_.dual_scene());
 		for (size_t i = 0; i < est_q.size(); i++) {
-			est_q[i] = std::max(est_q[i], res_q[i]);
+			est_q[i] = gd_maxf(est_q[i], res_q[i]);
 		}
 		// the planned prefix must be reliable in float64 and the accepted physical
 		// trace must still agree with it through the cursor
@@ -344,10 +344,10 @@ public:
 					const CN<Dual> q = rb.at(Dual{rb.param_of(CN<Dual>{Dual{x, 0.0}, Dual{y, 0.0}}).v, 0.0});
 					const double qx = q.re.v;
 					const double qy = q.im.v;
-					res = std::max(res, std::sqrt((qx - x) * (qx - x) + (qy - y) * (qy - y)));
+					res = gd_maxf(res, std::sqrt((qx - x) * (qx - x) + (qy - y) * (qy - y)));
 				}
 			}
-			out.push_back(std::max(res * 4.0, floor_err));
+			out.push_back(gd_maxf(res * 4.0, floor_err));
 		}
 		return out;
 	}
@@ -420,7 +420,7 @@ private:
 	static double worst(const std::vector<double> &a) {
 		double w = 0.0;
 		for (double x : a) {
-			w = std::max(w, x);
+			w = gd_maxf(w, x);
 		}
 		return w;
 	}
@@ -452,7 +452,7 @@ private:
 		estimate::Sensitivity prefix;
 		prefix.gain.assign(sens.gain.begin(), sens.gain.begin() + n);
 		for (double g : prefix.gain) {
-			prefix.max_gain = std::max(prefix.max_gain, g);
+			prefix.max_gain = gd_maxf(prefix.max_gain, g);
 		}
 		return estimate::required_limbs(prefix, tol, std::vector<int>(TIERS.begin() + 1, TIERS.end()));
 	}

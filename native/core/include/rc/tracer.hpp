@@ -361,7 +361,7 @@ private:
 		if (!is_line && (std::isinf(tt) || std::isinf(tf))) {
 			// an end at the antipode (t = inf): any parameter strictly between the ends is on the arc
 			const double span = 4.0 / std::fabs(bf.kappa.v);
-			const double tm = std::isinf(tt) ? (std::max(tf, 0.0) + span) : (std::min(tt, 0.0) - span);
+			const double tm = std::isinf(tt) ? (gd_maxf(tf, 0.0) + span) : (gd_minf(tt, 0.0) - span);
 			via = at_view_v2(bf, tm);
 		} else if (tt > tf || tt == tf) {
 			via = at_view_v2(bf, (tf + tt) * 0.5);
