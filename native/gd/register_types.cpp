@@ -1,6 +1,9 @@
 #include "register_types.hpp"
 
 #include "gd_native_probe.hpp"
+#include "gd_num.hpp"
+#include "gd_scene.hpp"
+#include "gd_solver.hpp"
 #include "rc/error.hpp"
 
 #include <gdextension_interface.h>
@@ -22,6 +25,22 @@ void initialize_ricochet_module(godot::ModuleInitializationLevel p_level) {
 
     GDREGISTER_CLASS(NativeProbeChild);
     GDREGISTER_CLASS(NativeProbe);
+    // Stage 90: scalar tiers
+    GDREGISTER_CLASS(NNumCtx);
+    GDREGISTER_CLASS(NNum);
+    GDREGISTER_CLASS(NCN);
+    GDREGISTER_CLASS(NBigFloat);
+    // Stage 93: scene
+    GDREGISTER_CLASS(NBeamSceneSurf);
+    GDREGISTER_CLASS(NBeamScene);
+    // Stage 92-94: beams and the solver
+    GDREGISTER_CLASS(NHPBeam);
+    GDREGISTER_CLASS(NBeamSolverPlanItem);
+    GDREGISTER_CLASS(NBeamSolverEvent);
+    GDREGISTER_CLASS(NBeamSolver);
+    GDREGISTER_CLASS(NFastSolverScene);
+    GDREGISTER_CLASS(NFastSolverOut);
+    GDREGISTER_CLASS(NFastSolver);
 }
 
 void uninitialize_ricochet_module(godot::ModuleInitializationLevel p_level) {
