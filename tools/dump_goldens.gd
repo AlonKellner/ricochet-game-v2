@@ -633,9 +633,21 @@ func _plan_key(plan: Array) -> String:
 		return "[]"
 	return "[" + ",".join(plan.map(func(e): return "%d/%s" % [e.surface_id, "L" if e.side == Side.Value.LEFT else "R"])) + "]"
 
-# All (player, cursor) combos of `positions` under `plan`, hashed in order.
+static func h32(x: float) -> String:
+	return PackedFloat32Array([x]).to_byte_array().hex_encode()
+
+# All (player, cursor) combos of `positions` under `plan`, hashed in order,
+# with the scene defs (parsed floats as hex), the positions (float32 hex) and
+# the plan, so a native tracer can reproduce every combo.
 func _sweep_group(out: Dictionary, key: String, scene: Node, positions: Array, plans: Array, skip_equal: bool) -> void:
 	var flags: Dictionary = {}
+	var defs: Array = BeamScene.defs_from_surfaces(scene.surfaces)
+	var pos_hex := []
+	for p in positions:
+		pos_hex.append([h32(p.x), h32(p.y)])
+	var inputs := inputs_of(defs, {})
+	inputs["defs"] = defs
+	inputs["positions"] = pos_hex
 	for plan in plans:
 		var hashes := PackedStringArray()
 		var samples := {}
@@ -654,7 +666,8 @@ func _sweep_group(out: Dictionary, key: String, scene: Node, positions: Array, p
 				if i == 0 or i == 977:
 					samples[str(i)] = canon
 		out["%s/%s" % [key, _plan_key(plan)]] = {"positions": positions.size(), "combos": idx, "stride": _stride,
-			"hashes": "".join(hashes), "samples": samples}
+			"skip_equal": skip_equal, "plan": plan.map(func(e): return {"surface_id": e.surface_id, "side": "LEFT" if e.side == Side.Value.LEFT else "RIGHT"}),
+			"inputs": inputs, "hashes": "".join(hashes), "samples": samples}
 		printerr("[goldens] sweeps: %s/%s: %d combos" % [key, _plan_key(plan), idx])
 
 func _sweeps() -> Dictionary:
