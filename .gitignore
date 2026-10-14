@@ -44,3 +44,10 @@ violations.json
 # Precision benchmark outputs (regenerate with make bench)
 bench/results/
 violations.*.shard*.json
+
+# Native (C++ GDExtension) build outputs; native/godot-api/ is tracked on purpose
+native/bin/
+native/build*/
+
+# Shadow-run mismatch dumps (native vs GDScript solver)
+shadow_mismatches.json

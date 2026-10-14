@@ -1,0 +1,19 @@
+[configuration]
+
+entry_symbol = "ricochet_library_init"
+compatibility_minimum = "4.7"
+reloadable = true
+
+[libraries]
+
+; File names are exactly what native/CMakeLists.txt produces:
+; libricochet_gd${GODOTCPP_SUFFIX}.<ext>, where GODOTCPP_SUFFIX is
+; .<platform>.<template_debug|template_release>.<arch>. Build with `make native`.
+macos.debug.arm64 = "res://native/bin/libricochet_gd.macos.template_debug.arm64.dylib"
+macos.release.arm64 = "res://native/bin/libricochet_gd.macos.template_release.arm64.dylib"
+macos.debug.x86_64 = "res://native/bin/libricochet_gd.macos.template_debug.x86_64.dylib"
+macos.release.x86_64 = "res://native/bin/libricochet_gd.macos.template_release.x86_64.dylib"
+linux.debug.x86_64 = "res://native/bin/libricochet_gd.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://native/bin/libricochet_gd.linux.template_release.x86_64.so"
+windows.debug.x86_64 = "res://native/bin/libricochet_gd.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://native/bin/libricochet_gd.windows.template_release.x86_64.dll"
