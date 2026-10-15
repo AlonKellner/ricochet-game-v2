@@ -19,6 +19,10 @@ const CIRCLE_NO_WALLS := "res://scenes/test_levels/circle_no_walls.tscn"
 const K2_PLAYER := Vector2(1160, 440)
 const K2_CURSOR := Vector2(760, 640)
 const K2_IMAGE := Vector2(1160, 640)
+# K3: the cursor the player's mirror image in the planned mirror x = 960: every
+# direction solves the plan; the convention is straight at the cursor
+const K3_PLAYER := Vector2(835, 665)
+const K3_CURSOR := Vector2(1085, 665)
 
 var _fx: Dictionary = {}
 
@@ -35,7 +39,7 @@ func after_each() -> void:
 # ---------------------------------------------------------------- the fixtures
 
 func test_fixture_schema():
-	assert_eq(_fx.size(), 9, "9 Stage 106 fixtures")
+	assert_eq(_fx.size(), 11, "11 Stage 106 fixtures")
 	for name in ["k2_player_on_inversion_circle_physical", "k2_reference_aimed_at_the_image", "cursor_on_arc_pop_planned",
 			"periodic_orbit_direction", "portal_pop_by_rehit_direction"]:
 		assert_true(_fx.has(name), name)
@@ -124,6 +128,10 @@ func test_k2_on_the_tangent_infinity_playground():
 	assert_eq(planned_shot, _hits(renderer.last_beam_result.physical), "the same walk as the shot aimed at the image")
 	assert_gt(planned_shot.size(), 3)
 	assert_eq(planned_shot[0][0], planned_shot[1][0], "in at the image, out at the player: the same circle")
+	# K3: the degenerate aim: no violation (REAPPLY-IN-PLACE included), the planned path reaches the cursor
+	assert_eq(checker.check_all(K3_PLAYER, K3_CURSOR, plan), [] as Array[String], "K3: no violation")
+	assert_true(renderer.last_beam_result.planned.any(func(e): return e.kind == "cursor"), "K3: the planned path reaches the cursor")
+	assert_eq(InvariantChecker.check_reapply_in_place(renderer.last_beam_result.physical), [] as Array[String])
 
 # The cursor exactly on the circle mirror of circle_no_walls: the preview
 # reflects there and continues through the circle's far side; no zero-length

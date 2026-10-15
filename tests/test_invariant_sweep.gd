@@ -149,15 +149,8 @@ func test_sweep_infinity_plans() -> void:
 # Known findings (docs/TDD_10_NATIVE_MIGRATION.md, "Known findings"): a
 # violation matching one is reported, not failed; a finding that no longer
 # occurs fails the sweep so the list stays true.
-# K3 (Stage 106): on tangent_infinity, with the mirror through Q0 planned and
-# the cursor the player's mirror image (the aim image is the player: every
-# direction solves the plan), native picks the arc through Q0 and reflects
-# there in place; the oracle picks the other arc. A degenerate aim, pre-existing
-# (TDD_10, "Known findings").
-const KNOWN_FINDINGS := [
-	{"id": "K3", "scene": "res://scenes/playground/tangent_infinity.tscn", "plan": "[6/L]", "prefix": "REAPPLY-IN-PLACE"},
-	{"id": "K3", "scene": "res://scenes/playground/tangent_infinity.tscn", "plan": "[6/R]", "prefix": "REAPPLY-IN-PLACE"},
-]
+# (K1, K2 and K3 were resolved by Stages 105 and 106: none are open.)
+const KNOWN_FINDINGS := []
 
 static func _known(f: Dictionary, plan_str: String) -> String:
 	for k in KNOWN_FINDINGS:

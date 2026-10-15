@@ -1548,6 +1548,7 @@ def _aim(surfaces, player, cursor, plan, flags=None, hints=None):
     An infinity entry in the first epoch reverses the aim (via_infinity)."""
     away = via_infinity(surfaces, plan, flags)
     d = exact_direction(surfaces, plan, player, cursor, flags, hints)
+    straight_at_cursor = d is None
     if d is None:
         d = P(cursor) - P(player)
         line, known = "direction", []
@@ -1560,7 +1561,12 @@ def _aim(surfaces, player, cursor, plan, flags=None, hints=None):
     # a pre-transform: the circle through the player, the aim point and Q0;
     # the exact aim image for the exact pole record (None when not exact)
     b = beam_through(P(player), P(player) + d, q0)
-    xe = exact_image(surfaces, cursor, plan, flags) if line != "direction" else None
+    # the exact aim image for the exact pole record; a shot straight at the cursor
+    # (the image at infinity or the player itself, K3) passes the cursor: exact data
+    if straight_at_cursor:
+        xe = FC(P(cursor))
+    else:
+        xe = exact_image(surfaces, cursor, plan, flags) if line != "direction" else None
     return d, None, known, (reversed_beam(b) if away else b), xe
 
 

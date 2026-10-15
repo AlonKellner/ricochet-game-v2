@@ -1070,7 +1070,11 @@ private:
 
 	// A point at infinity in the anchored construction: forward walk from the
 	// exact aim direction, or straight at the cursor when the aim image is at
-	// infinity. nullopt only for player = cursor.
+	// infinity or is the player itself (a plan every direction solves: the
+	// cursor's mirror image is the player, K3). The beam passes the aim point
+	// (the image, else the cursor): in a pre-transform frame the circle through
+	// the player, that point and Q0 (the oracle's beam_through), the straight
+	// line toward it otherwise. nullopt only for player = cursor.
 	std::optional<Walk<N>> run_degenerate(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan, Mode mode,
 			int max_events, const Flags &flags) {
 		const std::vector<EffectType> effs = plan_effects(plan, flags);
@@ -1099,24 +1103,38 @@ private:
 				break;
 			}
 		}
-		CN<N> dir;
+		CN<N> aim; // the point the beam passes
 		std::shared_ptr<const exact::Line> line;
 		if (!X || X->sub(player).is_zero()) {
-			dir = cursor.sub(player);
-			if (dir.is_zero()) {
+			aim = cursor;
+			if (cursor.sub(player).is_zero()) {
 				return std::nullopt;
 			}
 			line = exact::Line::from_exact(exact::line_through(player.fx(), player.fy(), cursor.fx(), cursor.fy()));
 		} else {
-			dir = X->sub(player);
+			aim = *X;
 			line = initial_line(player, cursor, plan, flags);
 		}
-		if (via_infinity(plan, flags)) {
-			dir = dir.neg(); // the second realization: away from the aim image (Stage 88)
-		}
 		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
-		BeamPtr<N> b0 = std::make_shared<const Beam<N>>(w.Q ? Beam<N>::through_tangent(player, dir.unit(), *w.Q)
-															 : Beam<N>{player, dir.unit(), player.re.sub(player.re)});
+		const CN<N> delta = w.Q ? player.sub(*w.Q) : player.sub(player);
+		Beam<N> b = Beam<N>::through(player, aim, w.Q ? &delta : nullptr);
+		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
+			// the exact pole record (Stage 105): the circle through the player, the aim
+			// point and Q0; a shot straight at the cursor passes exact data
+			std::optional<exact::Point3> X0;
+			if (!X || X->sub(player).is_zero()) {
+				X0 = exact::Point3{exact::of(cursor.fx()), exact::of(cursor.fy()), exact::of(1.0)};
+			} else {
+				X0 = exact_image_cached(cursor, plan, flags);
+			}
+			if (X0) {
+				set_pole(w, exact::pole_start_aimed(player.fx(), player.fy(), *X0, *q0));
+			}
+		}
+		if (via_infinity(plan, flags)) {
+			b = Beam<N>{b.p, b.tau.neg(), b.kappa.neg()}; // the second realization: the same circle the other way (Stage 88)
+		}
+		BeamPtr<N> b0 = std::make_shared<const Beam<N>>(b);
 		if (w.Q) {
 			line = nullptr; // a circle beam has no exact line
 		}

@@ -902,7 +902,7 @@ The walker visits the candidates **in this order, one event each**, until an eff
 | Carriers through the frame's infinity point | Crossed exactly at `Q` (the root nearest `Q` takes `Q`'s parameter): simultaneous crossings there tie by id, then the passage of infinity. When the beam departs from `Q` (an effect fired at `Q`), another carrier through `Q` is crossed at the departure point at the end of the loop, and the departing carrier's root at `Q` is the departure. |
 | Concurrent line carriers | On an exact line, adjacent crossings of two line carriers that meet the line at one point (exact 3×3 determinant) share one parameter. The ID rule orders them. |
 | Inversion of a beam through the inversion center | Any beam through a known point that is exactly the center becomes an exactly straight beam. |
-| Player or cursor exactly at an inversion center (point at ∞ in the anchored construction) | Forward walk from the exact aim direction. If the aim image itself is at ∞, the walk goes straight at the cursor. |
+| Player or cursor exactly at an inversion center (point at ∞ in the anchored construction) | Forward walk from the exact aim direction. If the aim image itself is at ∞, or is the player (the cursor's image under the plan is the player: every direction solves the plan), the walk goes straight at the cursor: the beam through the player and the cursor (in a pre-transform frame the circle through the player, the cursor and `Q_0`), the same in the oracle and natively (Stage 106, K3). |
 | Player = cursor | No aim: no trace (`BeamTracer.trace_pair` returns null). |
 | Zero-length segment | Rejected at load (§23). |
 
