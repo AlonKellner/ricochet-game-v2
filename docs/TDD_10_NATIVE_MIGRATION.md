@@ -24,7 +24,7 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 97 | Visual/testing kernels: arc geometry, `VisualConverter`, `StepTreeMerge`, click geometry, arrow advance | Done: `GeneralizedCircle`, `Segment`, `VisualConverter`, `StepTreeMerge`, `ArrowAdvance`, `SurfaceGeom` native (float32 Vector2 semantics mirrored); `test_diff_visual.gd` identical on the sweep scenes and random inputs |
 | 98 | `InvariantChecker` kernel + native sweeps (shard by combo) | Done: `rc/invariants.hpp` + `rc/sweep.hpp`; `InvariantKernel` / `SweepKernel` bindings; `InvariantChecker` is a thin driver; the plan sweeps run natively (one live combo per scene kept); `test_invariant_detects.gd`, `test_diff_invariants.gd` |
 | 99 | Delete the GDScript implementations, final names, source-scan tests rewritten | Done: 25 GDScript implementation files, the Gd* test copies, the differential tests and `tools/dump_goldens.gd` deleted; `test_stage99_no_legacy.gd` scans for Gd* / N* / inner-class names and checks every registered class is a RefCounted; the goldens stay as pins |
-| 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Planned |
+| 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Evidence ready: `docs/research/stage88b_fixture_diff.md` (B9); **awaiting the user's approval** before the committed corpora change |
 | 88c | Native `infinity` event, ∞ plan item, reversed anchored orientation | Planned |
 | 88d | Edge click, hover band, plan chevrons, HUD, `level_bounds` | Planned |
 | 100 | Performance pass: dirty flags, no per-frame defs, cached arc params | Planned |
@@ -287,6 +287,20 @@ existing fixture regenerates byte-identically. GAME_SPEC §4.2, §6.3, §11.2,
 
 Design note for 88d: an ∞ entry inside a ghost stretch is **allowed** (a ghost
 arrow wraps); only sides are refused there (GAME_SPEC 10.6).
+
+### Stage 88b: the fixture diff (evidence, not yet applied)
+
+Two scratch copies of the repository at Stage 99 regenerated every corpus with
+`EMIT_INFINITY` on and off; the off copy reproduces the committed files
+byte-identically. The on copy differs in exactly three ways, all consequences
+of the decided semantics: pure insertions of `infinity` events, traces already
+at MAX_HITS cut earlier (the `max` event moves to the next old crossing), and
+cuts landing on an infinity event (a `max` with no point). Counts per corpus,
+every cut case by name and the GUT tests it reaches are in
+`docs/research/stage88b_fixture_diff.md` (classifier: `stage88b_classify.py`).
+The committed corpora stay as they are until the user approves that diff (B9);
+88c then flips the oracle default, regenerates, and makes the native solver
+emit the event.
 
 ## Stage 89 additions: goldens, SweepPlans, machine quirks
 
@@ -589,8 +603,22 @@ extension class is a RefCounted and not a Node (the native-era
 B-items: `TestTrace` / `TraceMode` (B6) and `TraceHit.at_endpoint` /
 `blocked_*`.
 
-**Gate:** `./run_tests_parallel.sh` 734 passing / 0 failing in 11 s wall (the
-GDScript suite took about 5 minutes of wall time and 24 minutes of CPU).
+**Gate (all green on 2026-10-15, commit `8d96433`):**
+
+- `./run_tests_parallel.sh`: 734 passing / 0 failing in 11 s wall (the GDScript
+  suite took about 5 minutes of wall time and 24 minutes of CPU).
+- `ctest` (RelWithDebInfo): 23 cases, 50131 assertions, about 23 s; the sweep
+  goldens replay all 284,096 combos.
+- `make native-asan JOBS=4` + `ctest --test-dir native/build-asan`: 3/3 passed,
+  548 s, no AddressSanitizer / UndefinedBehaviorSanitizer / LeakSanitizer report.
+- `make bench` (`--tag=main`, 161 v2 scenarios): identical to the table recorded
+  in TDD_09 at tag `pre-native`: ladder and ladder_verify 161/161 planned and
+  physical; beam_f64 planned 161/161, physical 112/161; beam_big112 planned
+  161/161, physical 160/161.
+- oracle: `pytest -q docs/research/oracle` 76 passed.
+
+`native-migration` merged into `main` (`--no-ff`) at this point, per the plan;
+the second merge follows Stage 100.
 
 ## Machine quirks: the open editor and the migration
 
@@ -614,4 +642,5 @@ two aborts fixed in Stages 93 and 96), not the editor.
 |---|---|---|---|
 | B1 | `BigFloat.mul` int64 column overflow above ~128 limbs per factor (reproduced natively) | `big_float.gd:251-256` | doctest with `__int128` reference |
 | B12 | `Exact.U` parsed two ulps below 2^-53 by Godot | `exact.gd:11` | `test_diff_beam_geom.gd` (`Exact.U` bits), `tools/dump_goldens.gd` hex inputs; native `exact.hpp` comment |
+| B9 | The `infinity` event counts toward MAX_HITS: 443 events inserted across the corpora, 79 traces at MAX_HITS cut earlier (182 old tail events dropped), stress corpus unchanged; no visible-output change until 88c | oracle `trace2.py` `EMIT_INFINITY` | `docs/research/stage88b_fixture_diff.md` (per-case list), `stage88b_classify.py` |
 | B13 | A NaN replay gain poisons the envelope through `maxf` and jumps the ladder to the last tier | `error_estimate.gd:111`, `precision_ladder.gd` | sweep goldens `precision/no_plan` combos 4883, 4919 (`tiers_tried`) |
