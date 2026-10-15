@@ -204,6 +204,19 @@
      }
     },
     {
+     "kind": "infinity",
+     "surface_id": -3,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "state": false,
+     "flags": {
+      "ghost": true
+     }
+    },
+    {
      "kind": "hit",
      "surface_id": 10,
      "side": "LEFT",

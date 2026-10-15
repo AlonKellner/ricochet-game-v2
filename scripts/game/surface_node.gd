@@ -65,8 +65,15 @@ func set_plan_overlays(overlays: Array, indices: Array[int]) -> void:
 	queue_redraw()
 
 
+const PRE_TRANSFORM_COLOR := Color(0.55, 0.45, 0.85, 0.35)
+
 func _draw() -> void:
 	if not surface:
+		return
+	if surface.pre_transform:
+		# the frame the shot starts in (Stage 101): a faint circle, no sides, no chevrons
+		var carrier := surface.segment.get_carrier()
+		draw_arc(carrier.center(), carrier.radius(), 0, TAU, VisualConverter.POINTS_PER_FULL_CIRCLE, PRE_TRANSFORM_COLOR, 1.0)
 		return
 	# the configs under the current game state (categorical surfaces)
 	var gm := get_node_or_null("../GameManager")

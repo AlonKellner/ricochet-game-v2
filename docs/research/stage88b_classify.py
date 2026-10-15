@@ -33,6 +33,8 @@ def classify(base, inf):
             last_inf = inf[-2]["kind"] == "infinity" if len(inf) >= 2 else False
             if s[-1].get("surface_id") == -3 and s[-1].get("x") is None:
                 return "cut at infinity (max at inf)", n_inf, len(base) - len(s)
+            if s[-1].get("surface_id") == -3:
+                return "cut at infinity (max at the frame's infinity point)", n_inf, len(base) - len(s)
             if nxt is not None and pt(s[-1]) == pt(nxt):
                 return "cut earlier (max at next crossing)", n_inf, len(base) - len(s)
             return f"cut earlier, max point differs from next ({pt(s[-1])} vs {pt(nxt) if nxt else None})", n_inf, -1
@@ -45,7 +47,7 @@ for corpus, pat in [("fixtures", "fixtures/*.json"), ("scenes_corpus", "scenes_c
                     ("expected", "expected/*.json"), ("stress", "stress/expected/*.json")]:
     files = sorted(set(os.path.relpath(p, A) for p in glob.glob(f"{A}/{pat}")) |
                    set(os.path.relpath(p, B) for p in glob.glob(f"{B}/{pat}")))
-    tot = {"files": 0, "files_changed": 0, "lists": 0, "identical": 0, "pure insertion": 0, "cut at infinity": 0, "cut at infinity (max at inf)": 0, "cut earlier (max at next crossing)": 0,
+    tot = {"files": 0, "files_changed": 0, "lists": 0, "identical": 0, "pure insertion": 0, "cut at infinity": 0, "cut at infinity (max at inf)": 0, "cut at infinity (max at the frame's infinity point)": 0, "cut earlier (max at next crossing)": 0,
            "other": 0, "infinity_events": 0, "events_dropped": 0, "new_files": [], "details": []}
     for f in files:
         pa, pb = f"{A}/{f}", f"{B}/{f}"

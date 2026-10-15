@@ -100,6 +100,15 @@
    "y": "-192.7105858234457653733268519317103039121"
   },
   {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
+  },
+  {
    "kind": "hit",
    "surface_id": 11,
    "side": "LEFT",
@@ -186,6 +195,17 @@
    "rehit": false,
    "x": "1092.808093854057810187737575721760734202",
    "y": "400.0029265062628298057811420016237872368"
+  },
+  {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "908.7500000000000000000000000000000000000",
+   "y": "540.0000000000000000000000000000000000000"
   },
   {
    "kind": "hit",

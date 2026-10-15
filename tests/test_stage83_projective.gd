@@ -17,7 +17,7 @@ func before_all():
 
 func _walk(name: String, ctx: NumCtx) -> Array:
 	var fx: Dictionary = _fx[name]
-	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
+	var scene := Rules.scene_of(ctx, fx["surfaces"])
 	var player := ctx.cn(fx["player"][0], fx["player"][1])
 	var cursor = null if fx["cursor"] == null else ctx.cn(fx["cursor"][0], fx["cursor"][1])
 	var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
@@ -115,7 +115,7 @@ func test_fast_twin_projective():
 		if fx["direction"] == null:
 			continue
 		var gen := _walk(name, ctx)
-		var out := FastSolver.trace_direction(FastSolverScene.from_defs(fx["surfaces"]), PackedFloat64Array(fx["player"]),
+		var out := FastSolver.trace_direction(Rules.fast_scene_of(fx["surfaces"]), PackedFloat64Array(fx["player"]),
 			PackedFloat64Array(fx["direction"]), Rules.plan_of(fx["plan"]), null,
 			BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED)
 		assert_eq(out.events.size(), gen.size(), "%s: event count" % name)

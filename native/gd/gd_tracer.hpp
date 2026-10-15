@@ -237,6 +237,11 @@ public:
 	bool plan_refuses(const godot::Array &defs, const godot::Array &plan_entries, int surface_id, bool left,
 			const godot::Dictionary &flags = godot::Dictionary());
 	void clear_cache() { tracer.clear_cache(); }
+	// Stage 101: where the next infinity entry would be passed (Vector2), or null for infinity (the edge)
+	godot::Variant infinity_point(const godot::Array &defs, const godot::Array &plan_entries, const godot::Dictionary &flags = godot::Dictionary());
+	// Stage 88: the `infinity` event and the infinity plan entry (off: the pre-Stage-88 traces)
+	void set_emit_infinity(bool on) { tracer.set_emit_infinity(on); }
+	bool get_emit_infinity() const { return tracer.emit_infinity(); }
 	// events of one tier (limbs), their errors, the frames map (key -> {"id": n}, updated), the aim ray (or null).
 	godot::Ref<TracePath> to_path(const godot::Array &events, const godot::Array &errs, int limbs, const godot::Dictionary &frames,
 			const godot::Variant &aim = godot::Variant(), const godot::Dictionary &flags = godot::Dictionary(),

@@ -76,6 +76,9 @@ struct SurfaceDef {
 	std::optional<SideDef> right;
 	bool is_target = false;
 	std::optional<ResolverDef> resolver;
+	// Stage 101: part of the scene's pre-transform (a full inversion circle,
+	// never hit): it moves infinity before the shot
+	bool pre_transform = false;
 	bool operator==(const SurfaceDef &) const = default;
 };
 
@@ -211,6 +214,13 @@ template <Num N>
 struct Scene {
 	std::vector<std::shared_ptr<Surf<N>>> surfaces;
 	std::map<int, Surf<N> *> by_id;
+	// Stage 101: the pre-transform's surfaces, in order (not hittable); their
+	// composite image of infinity is the frame the shot starts in
+	std::vector<std::shared_ptr<Surf<N>>> pre_surfaces;
+	// Stage 88: a straight beam passing t = infinity emits the `infinity` event
+	// (counted toward MAX_HITS). Off reproduces the pre-Stage-88 traces; the
+	// game turns it on (B9) and so do the Stage 88 fixture tests.
+	bool emit_infinity = false;
 
 	const Surf<N> *find(int id) const {
 		auto it = by_id.find(id);
@@ -312,6 +322,10 @@ Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like)
 			}
 		}
 		s->is_target = d.is_target;
+		if (d.pre_transform) {
+			sc.pre_surfaces.push_back(std::move(s));
+			continue;
+		}
 		sc.by_id[s->id] = s.get();
 		sc.surfaces.push_back(std::move(s));
 	}

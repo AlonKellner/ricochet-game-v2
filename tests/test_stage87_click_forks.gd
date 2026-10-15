@@ -21,7 +21,7 @@ func before_all():
 		_fx[x["name"]] = x
 
 func _scene(ctx: NumCtx, name: String) -> BeamScene:
-	return BeamScene.from_defs(ctx, _fx[name]["surfaces"])
+	return Rules.scene_of(ctx, _fx[name]["surfaces"])
 
 func _walk(name: String, ctx: NumCtx) -> Array:
 	var fx: Dictionary = _fx[name]
@@ -85,7 +85,7 @@ func test_fast_twin_click_forks():
 	for name in _fx:
 		var fx: Dictionary = _fx[name]
 		var gen := _walk(name, ctx)
-		var sc := FastSolverScene.from_defs(fx["surfaces"])
+		var sc := Rules.fast_scene_of(fx["surfaces"])
 		var plan := Rules.plan_of(fx["plan"])
 		var out = FastSolver.planned(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan) \
 			if fx["mode"] == "planned" else FastSolver.physical(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan)

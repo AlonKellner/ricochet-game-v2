@@ -44,7 +44,7 @@ struct DualScene {
 	rc::SolveCache<rc::Dual> *cache = nullptr;
 };
 
-DualScene dual_scene_of(const Array &defs, const Variant &fsc) {
+DualScene dual_scene_of(const Array &defs, const Variant &fsc, bool emit_infinity = false) {
 	DualScene d;
 	if (fsc.get_type() == Variant::OBJECT) {
 		const Ref<FastSolverScene> s = fsc;
@@ -57,17 +57,18 @@ DualScene dual_scene_of(const Array &defs, const Variant &fsc) {
 		}
 	}
 	d.own = std::make_shared<rc::Scene<rc::Dual>>(rc::Scene<rc::Dual>::from_defs(defs_from_array(defs), rc::Dual{1.0, 0.0}));
+	d.own->emit_infinity = emit_infinity;
 	d.scene = d.own.get();
 	return d;
 }
 
 Ref<ErrorEstimateSensitivity> sensitivity_of(const Array &defs, const Array &player, const Array &cursor, const Array &plan, int max_events,
-		const Variant &fsc, const Dictionary &flags, rc::Mode mode, const char *where) {
+		const Variant &fsc, const Dictionary &flags, rc::Mode mode, const char *where, bool emit_infinity) {
 	double px, py, cx, cy;
 	if (!pair_of(player, px, py, where) || !pair_of(cursor, cx, cy, where)) {
 		return ErrorEstimateSensitivity::wrap(rc::estimate::Sensitivity{}, Array());
 	}
-	const DualScene d = dual_scene_of(defs, fsc);
+	const DualScene d = dual_scene_of(defs, fsc, emit_infinity);
 	rc::Solver<rc::Dual> solver(*d.scene, d.cache);
 	const std::optional<rc::Walk<rc::Dual>> w = solver.run(rc::CN<rc::Dual>{rc::Dual{px, 0.0}, rc::Dual{py, 0.0}},
 			rc::CN<rc::Dual>{rc::Dual{cx, 0.0}, rc::Dual{cy, 0.0}}, plan_from_items(plan), mode, max_events, flags_from_dict(flags));
@@ -142,10 +143,10 @@ void ErrorEstimate::_bind_methods() {
 	ClassDB::bind_static_method("ErrorEstimate", D_METHOD("C"), &ErrorEstimate::C);
 	ClassDB::bind_static_method("ErrorEstimate", D_METHOD("SCALE"), &ErrorEstimate::SCALE);
 	ClassDB::bind_static_method("ErrorEstimate", D_METHOD("MARGIN_SAFETY"), &ErrorEstimate::MARGIN_SAFETY);
-	ClassDB::bind_static_method("ErrorEstimate", D_METHOD("physical_sensitivity", "defs", "player", "cursor", "plan", "max_events", "fsc", "flags"),
-			&ErrorEstimate::physical_sensitivity, DEFVAL(Variant()), DEFVAL(Dictionary()));
-	ClassDB::bind_static_method("ErrorEstimate", D_METHOD("planned_sensitivity", "defs", "player", "cursor", "plan", "max_events", "fsc", "flags"),
-			&ErrorEstimate::planned_sensitivity, DEFVAL(Variant()), DEFVAL(Dictionary()));
+	ClassDB::bind_static_method("ErrorEstimate", D_METHOD("physical_sensitivity", "defs", "player", "cursor", "plan", "max_events", "fsc", "flags", "emit_infinity"),
+			&ErrorEstimate::physical_sensitivity, DEFVAL(Variant()), DEFVAL(Dictionary()), DEFVAL(false));
+	ClassDB::bind_static_method("ErrorEstimate", D_METHOD("planned_sensitivity", "defs", "player", "cursor", "plan", "max_events", "fsc", "flags", "emit_infinity"),
+			&ErrorEstimate::planned_sensitivity, DEFVAL(Variant()), DEFVAL(Dictionary()), DEFVAL(false));
 	ClassDB::bind_static_method("ErrorEstimate", D_METHOD("replay", "events", "defs", "fsc"), &ErrorEstimate::replay, DEFVAL(Variant()));
 	ClassDB::bind_static_method("ErrorEstimate", D_METHOD("unreliable_index", "sens", "ctx_eps"), &ErrorEstimate::unreliable_index);
 	ClassDB::bind_static_method("ErrorEstimate", D_METHOD("estimate", "sens", "ctx_eps"), &ErrorEstimate::estimate);
@@ -153,13 +154,13 @@ void ErrorEstimate::_bind_methods() {
 }
 
 Ref<ErrorEstimateSensitivity> ErrorEstimate::physical_sensitivity(const Array &defs, const Array &player, const Array &cursor, const Array &plan,
-		int max_events, const Variant &fsc, const Dictionary &flags) {
-	return sensitivity_of(defs, player, cursor, plan, max_events, fsc, flags, rc::Mode::Physical, "ErrorEstimate.physical_sensitivity");
+		int max_events, const Variant &fsc, const Dictionary &flags, bool emit_infinity) {
+	return sensitivity_of(defs, player, cursor, plan, max_events, fsc, flags, rc::Mode::Physical, "ErrorEstimate.physical_sensitivity", emit_infinity);
 }
 
 Ref<ErrorEstimateSensitivity> ErrorEstimate::planned_sensitivity(const Array &defs, const Array &player, const Array &cursor, const Array &plan,
-		int max_events, const Variant &fsc, const Dictionary &flags) {
-	return sensitivity_of(defs, player, cursor, plan, max_events, fsc, flags, rc::Mode::Planned, "ErrorEstimate.planned_sensitivity");
+		int max_events, const Variant &fsc, const Dictionary &flags, bool emit_infinity) {
+	return sensitivity_of(defs, player, cursor, plan, max_events, fsc, flags, rc::Mode::Planned, "ErrorEstimate.planned_sensitivity", emit_infinity);
 }
 
 Ref<ErrorEstimateSensitivity> ErrorEstimate::replay(const Array &events, const Array &defs, const Variant &fsc) {
@@ -237,10 +238,10 @@ Ref<PrecisionLadderResult> PrecisionLadderResult::wrap(const rc::LadderResult &r
 
 void PrecisionLadder::_bind_methods() {
 	ClassDB::bind_static_method("PrecisionLadder", D_METHOD("tiers"), &PrecisionLadder::tiers);
-	ClassDB::bind_static_method("PrecisionLadder", D_METHOD("solve", "defs", "player", "cursor", "plan", "max_planned", "max_physical", "tol", "verify", "fsc", "flags"),
-			&PrecisionLadder::solve, DEFVAL(false), DEFVAL(Variant()), DEFVAL(Dictionary()));
-	ClassDB::bind_static_method("PrecisionLadder", D_METHOD("solve_physical", "defs", "player", "cursor", "plan", "max_physical", "tol", "fsc", "flags"),
-			&PrecisionLadder::solve_physical, DEFVAL(Variant()), DEFVAL(Dictionary()));
+	ClassDB::bind_static_method("PrecisionLadder", D_METHOD("solve", "defs", "player", "cursor", "plan", "max_planned", "max_physical", "tol", "verify", "fsc", "flags", "emit_infinity"),
+			&PrecisionLadder::solve, DEFVAL(false), DEFVAL(Variant()), DEFVAL(Dictionary()), DEFVAL(false));
+	ClassDB::bind_static_method("PrecisionLadder", D_METHOD("solve_physical", "defs", "player", "cursor", "plan", "max_physical", "tol", "fsc", "flags", "emit_infinity"),
+			&PrecisionLadder::solve_physical, DEFVAL(Variant()), DEFVAL(Dictionary()), DEFVAL(false));
 	ClassDB::bind_static_method("PrecisionLadder", D_METHOD("planned_residuals", "events", "scene"), &PrecisionLadder::planned_residuals);
 	ClassDB::bind_static_method("PrecisionLadder", D_METHOD("event_distance", "a", "b"), &PrecisionLadder::event_distance);
 }
@@ -254,25 +255,27 @@ Array PrecisionLadder::tiers() {
 }
 
 Ref<PrecisionLadderResult> PrecisionLadder::solve(const Array &defs, const Array &player, const Array &cursor, const Array &plan, int max_planned,
-		int max_physical, double tol, bool verify, const Variant &fsc, const Dictionary &flags) {
+		int max_physical, double tol, bool verify, const Variant &fsc, const Dictionary &flags, bool emit_infinity) {
 	(void)fsc; // the ladder context builds its own float64 scene; results do not depend on caches
 	double px, py, cx, cy;
 	if (!pair_of(player, px, py, "PrecisionLadder.solve") || !pair_of(cursor, cx, cy, "PrecisionLadder.solve")) {
 		return PrecisionLadderResult::wrap(rc::LadderResult{});
 	}
 	rc::LadderContext ctx(defs_from_array(defs));
+	ctx.set_emit_infinity(emit_infinity);
 	rc::Ladder ladder(ctx);
 	return PrecisionLadderResult::wrap(ladder.solve(px, py, cx, cy, plan_from_items(plan), max_planned, max_physical, tol, verify, flags_from_dict(flags)));
 }
 
 Ref<PrecisionLadderResult> PrecisionLadder::solve_physical(const Array &defs, const Array &player, const Array &cursor, const Array &plan,
-		int max_physical, double tol, const Variant &fsc, const Dictionary &flags) {
+		int max_physical, double tol, const Variant &fsc, const Dictionary &flags, bool emit_infinity) {
 	(void)fsc;
 	double px, py, cx, cy;
 	if (!pair_of(player, px, py, "PrecisionLadder.solve_physical") || !pair_of(cursor, cx, cy, "PrecisionLadder.solve_physical")) {
 		return PrecisionLadderResult::wrap(rc::LadderResult{});
 	}
 	rc::LadderContext ctx(defs_from_array(defs));
+	ctx.set_emit_infinity(emit_infinity);
 	rc::Ladder ladder(ctx);
 	return PrecisionLadderResult::wrap(ladder.solve_physical(px, py, cx, cy, plan_from_items(plan), max_physical, tol, flags_from_dict(flags)));
 }

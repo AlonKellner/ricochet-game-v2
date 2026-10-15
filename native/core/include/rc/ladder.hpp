@@ -182,9 +182,23 @@ public:
 	explicit LadderContext(std::vector<SurfaceDef> defs) : defs_(std::move(defs)) {}
 
 	const std::vector<SurfaceDef> &defs() const { return defs_; }
+	// Stage 88: the `infinity` event switch of every scene this context builds
+	// (a change drops the scenes and the solve caches).
+	bool emit_infinity() const { return emit_infinity_; }
+	void set_emit_infinity(bool on) {
+		if (on == emit_infinity_) {
+			return;
+		}
+		emit_infinity_ = on;
+		dual_.reset();
+		big_.clear();
+		dual_cache_ = SolveCache<Dual>();
+		big_caches_.clear();
+	}
 	Scene<Dual> &dual_scene() {
 		if (!dual_) {
 			dual_ = std::make_unique<Scene<Dual>>(Scene<Dual>::from_defs(defs_, Dual{1.0, 0.0}));
+			dual_->emit_infinity = emit_infinity_;
 		}
 		return *dual_;
 	}
@@ -192,6 +206,7 @@ public:
 		auto it = big_.find(limbs);
 		if (it == big_.end()) {
 			it = big_.emplace(limbs, std::make_unique<Scene<BigFloat>>(Scene<BigFloat>::from_defs(defs_, BigFloat::from_int(1, limbs)))).first;
+			it->second->emit_infinity = emit_infinity_;
 		}
 		return *it->second;
 	}
@@ -200,6 +215,7 @@ public:
 
 private:
 	std::vector<SurfaceDef> defs_;
+	bool emit_infinity_ = false;
 	std::unique_ptr<Scene<Dual>> dual_;
 	std::map<int, std::unique_ptr<Scene<BigFloat>>> big_;
 	SolveCache<Dual> dual_cache_;

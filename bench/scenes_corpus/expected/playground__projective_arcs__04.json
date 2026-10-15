@@ -56,6 +56,15 @@
    "y": "0.0"
   },
   {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
+  },
+  {
    "kind": "hit",
    "surface_id": 9,
    "side": "LEFT",
@@ -175,6 +184,15 @@
    "rehit": false,
    "x": "-1847.827713949146981725854077322914587396",
    "y": "1080.000000000000000000000000000000000000"
+  },
+  {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
   },
   {
    "kind": "hit",
@@ -309,6 +327,15 @@
    "y": "0.0"
   },
   {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
+  },
+  {
    "kind": "hit",
    "surface_id": 9,
    "side": "LEFT",
@@ -320,39 +347,6 @@
    "y": "1080.000000000000000000000000000000000000"
   },
   {
-   "kind": "hit",
-   "surface_id": 3,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "3260.022475306698125410578805780978474602",
-   "y": "840.0000000000000000000000000000000000000"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 8,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1920.000000000000000000000000000000000000",
-   "y": "673.1937786012347116334048497624770290769"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 2,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1360.000000000000000000000000000000000000",
-   "y": "603.4848851276913111523705358680965278778"
-  },
-  {
    "kind": "max",
    "surface_id": -1,
    "side": "",
@@ -360,8 +354,8 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "1241.847727781203582854097231150245264778",
-   "y": "588.7772705602677740226262537483265496673"
+   "x": "3260.022475306698125410578805780978474602",
+   "y": "840.0000000000000000000000000000000000000"
   }
  ],
  "physical": [

@@ -64,7 +64,7 @@ static func dump(gm) -> void:
 		var p: PlanManager = path_renderer._get_plan()
 		if p and not p.is_empty():
 			plan_entries = p.entries
-		var pair: BeamTracerPair = BeamTracer.new().trace_pair(SceneDefs.defs_from_surfaces(surfaces), player_pos, cursor_pos, plan_entries, path_renderer.get_flags(), SceneDefs.segments_by_id(surfaces))
+		var pair: BeamTracerPair = TestTrace.fresh_tracer().trace_pair(SceneDefs.defs_from_surfaces(surfaces), player_pos, cursor_pos, plan_entries, path_renderer.get_flags(), SceneDefs.segments_by_id(surfaces))
 		if pair != null and not pair.result.planned.is_empty():
 			# the shot's aim: the exact initial tangent of the planned beam
 			var b0: HPBeam = pair.result.planned[0].beam

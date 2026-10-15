@@ -18,7 +18,7 @@ func before_all():
 
 func _walk(name: String, ctx: NumCtx) -> Array:
 	var fx: Dictionary = _fx[name]
-	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
+	var scene := Rules.scene_of(ctx, fx["surfaces"])
 	var player := ctx.cn(fx["player"][0], fx["player"][1])
 	var cursor = null if fx["cursor"] == null else ctx.cn(fx["cursor"][0], fx["cursor"][1])
 	var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
@@ -122,7 +122,7 @@ func test_pop_across_pair_resumes_exactly():
 	_check_fixture("portal_pop_departure_rehit")
 	# the pop restores the earlier beam object exactly: a straight beam stays
 	# exactly straight
-	var ev := _walk("portal_pop_departure_rehit", NumCtx.f64())
+	var ev := _walk("portal_pop_departure_rehit", NumCtx.f64()).filter(func(e): return e.kind != "infinity")
 	if ev.size() > 3:
 		assert_true(ev[3].beam == ev[0].beam, "restored beam is the original object")
 		assert_true(ev[3].beam.kappa.is_zero(), "exactly straight")
@@ -144,7 +144,8 @@ func test_plan_through_portal_reaches_cursor():
 		for name in Rules.corpus_names(prefix):
 			var se := Rules.load_corpus(name)
 			var scn: Dictionary = se[0]
-			var res := PrecisionLadder.solve(scn["surfaces"], scn["player"], scn["cursor"], Rules.plan_of(scn["plan"]), 32, 32, CORPUS_TOL)
+			var res := PrecisionLadder.solve(scn["surfaces"], scn["player"], scn["cursor"], Rules.plan_of(scn["plan"]), 32, 32, CORPUS_TOL,
+				false, null, {}, FeatureFlags.infinity_event())
 			_check(res.planned, se[1]["planned"], name + " planned", CORPUS_TOL)
 			_check(res.physical, se[1]["physical"], name + " physical", CORPUS_TOL)
 			for e in res.planned:
@@ -189,7 +190,7 @@ func test_fast_twin_portal():
 			continue
 		var gen := _walk(name, ctx)
 		assert_eq(gen.size(), fx["expected"].size(), "%s: generic walk matches the oracle length" % name)
-		var out := FastSolver.trace_direction(FastSolverScene.from_defs(fx["surfaces"]), PackedFloat64Array(fx["player"]),
+		var out := FastSolver.trace_direction(Rules.fast_scene_of(fx["surfaces"]), PackedFloat64Array(fx["player"]),
 			PackedFloat64Array(fx["direction"]), Rules.plan_of(fx["plan"]), null,
 			BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED)
 		assert_eq(out.events.size(), gen.size(), "%s: event count" % name)

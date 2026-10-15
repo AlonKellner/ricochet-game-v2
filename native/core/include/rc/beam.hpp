@@ -148,12 +148,27 @@ struct Beam {
 			return Beam{P, a.unit(), a.re.sub(a.re)};
 		}
 		const CN<N> b = delta->neg();
+		if (b.sub(a).is_zero() || b.is_zero()) {
+			// X = Q or P = Q (the aim point or the player at the frame's infinity, Stage 101): the line through them
+			return Beam{P, a.unit(), a.re.sub(a.re)};
+		}
 		// g = |a|^2 J(b) - |b|^2 J(a), J = rotate by -90 deg; tau = -i * unit(g)
 		const CN<N> g = b.mul_neg_i().scale(a.abs2()).sub(a.mul_neg_i().scale(b.abs2()));
 		const CN<N> tau_p = g.mul_neg_i().unit();
 		const CN<N> ba = b.sub(a);
 		const N kap = CN<N>::cross(a, b).mul_pow2(1).div(a.abs_val().mul(b.abs_val()).mul(ba.abs_val()));
 		return Beam{P, tau_p, kap};
+	}
+
+	// The beam from P along the unit tangent tau whose circle passes Q (Stage
+	// 101, a pre-transform frame): kappa = 2 cross(tau, Q - P) / |Q - P|^2;
+	// the player at Q: a straight beam (Q at its start).
+	static Beam through_tangent(const CN<N> &P, const CN<N> &tau, const CN<N> &Q) {
+		const CN<N> w = Q.sub(P);
+		if (w.is_zero()) {
+			return Beam{P, tau, w.re};
+		}
+		return Beam{P, tau, CN<N>::cross(tau, w).mul_pow2(1).div(w.abs2())};
 	}
 
 	static CN<N> invert_point(const CN<N> &z, const Circle<N> &circ) {

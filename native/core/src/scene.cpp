@@ -53,6 +53,9 @@ const char *effect_type_json_name(EffectType t) {
 
 bool scene_supported(const std::vector<SurfaceDef> &defs) {
 	for (const SurfaceDef &d : defs) {
+		if (d.pre_transform && (d.line || !(d.full || d.has_circle))) {
+			return false; // a pre-transform is a full inversion circle
+		}
 		if (d.resolver) {
 			for (const auto &row : d.resolver->table) {
 				const auto &l = row.second.first;

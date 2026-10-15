@@ -227,12 +227,7 @@ func test_full_circle_inner_hit_produces_no_escape() -> void:
 	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
 	var circle_center := center
-	var has_escape_to_center := false
-	for step in path.steps:
-		var s: TraceStep = step
-		if s.start.distance_to(circle_center) < 5.0 or s.end.distance_to(circle_center) < 5.0:
-			has_escape_to_center = true
-			break
+	var has_escape_to_center := _escapes_to_center(path, circle_center)
 
 	assert_false(has_escape_to_center,
 		"Inner-side hit should NOT produce escape arcs to circle center")
@@ -247,15 +242,22 @@ func test_semicircle_inner_hit_produces_no_escape() -> void:
 	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
 	var circle_center := center
-	var has_escape_to_center := false
-	for step in path.steps:
-		var s: TraceStep = step
-		if s.start.distance_to(circle_center) < 5.0 or s.end.distance_to(circle_center) < 5.0:
-			has_escape_to_center = true
-			break
+	var has_escape_to_center := _escapes_to_center(path, circle_center)
 
 	assert_false(has_escape_to_center,
 		"Semicircle inner-side hit should NOT produce escape arcs to circle center")
+
+# A step touching the circle center that is not the passage of the inverted
+# frame's infinity (Stage 101: the beam passes the center exactly, the step
+# ending there carries INFINITY_ID and the next one continues from it).
+func _escapes_to_center(path: TracePath, center: Vector2) -> bool:
+	for i in path.steps.size():
+		var s: TraceStep = path.steps[i]
+		if s.end.distance_to(center) < 5.0 and s.surface_id != BeamSolver.INFINITY_ID:
+			return true
+		if s.start.distance_to(center) < 5.0 and (i == 0 or path.steps[i - 1].surface_id != BeamSolver.INFINITY_ID):
+			return true
+	return false
 
 func test_full_circle_inner_hit_returns_to_identity() -> void:
 	var center := Vector2(960, 540)
@@ -334,13 +336,7 @@ func test_proof_no_escape_to_center_after_fix() -> void:
 	var aim := Direction.from_coords(player, Vector2(700, 540))
 	var path := TestTrace.trace(player, aim, surfaces, GameState.new())
 
-	var found_center_step := false
-	for step in path.steps:
-		var s: TraceStep = step
-		if _reflected(s):
-			if s.start.distance_to(center) < 5.0 or s.end.distance_to(center) < 5.0:
-				found_center_step = true
-				break
+	var found_center_step := _escapes_to_center(path, center)
 
 	assert_false(found_center_step,
 		"Inner hit should NOT produce escape arcs to circle center (bug was fixed)")

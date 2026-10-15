@@ -13,10 +13,21 @@ func get_level_gravity() -> Vector2:
 func has_level_gravity() -> bool:
 	return get_level_gravity().length_squared() > 0.0
 
+# The player faces the way the arrow will leave: the preview's first step
+# (a plan's second realization or a curved frame may point away from the
+# cursor); the cursor only when there is no preview.
 func _process(_delta: float) -> void:
+	var visual := $Visual as Node2D
+	var renderer := get_node_or_null("../PathRenderer")
+	if renderer and renderer.has_method("get_planned_path"):
+		var path = renderer.get_planned_path()
+		if path != null and path.steps.size() > 0:
+			var d: Vector2 = ArrowAdvance.start_direction(path.steps[0])
+			if d.length_squared() > 0.0:
+				visual.rotation = d.angle()
+				return
 	var cursor := get_node_or_null("../Cursor")
 	if cursor:
-		var visual := $Visual as Node2D
 		visual.rotation = (cursor.global_position - global_position).angle()
 
 func _physics_process(delta: float) -> void:

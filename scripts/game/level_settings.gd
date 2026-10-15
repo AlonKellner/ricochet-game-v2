@@ -35,6 +35,10 @@ extends Node2D
 # Ghost togglers (Stage 86): each hit toggles the per-shot ghost flag; while
 # ghosted the arrow passes every other surface, walls included.
 @export var ghost_toggler_lines: Array[Vector4] = []
+# Pre-transform (Stage 101): inversion circles (cx, cy, r triples) the shot
+# starts "after": the arrow's natural paths are circles through their image of
+# infinity, which is drawn and plannable like a surface when on screen.
+@export var pre_transform_inversions: PackedFloat64Array = PackedFloat64Array()
 
 var surfaces: Array[Surface] = []
 
@@ -216,6 +220,16 @@ func _ready() -> void:
 		var config := SideConfig.new(null, false)
 		var surf := Surface.new(_seg_from_v4(line_def), config, config, false, false)
 		_add_surface(surf, "PassThrough")
+	for i in range(0, pre_transform_inversions.size(), 3):
+		var pre := Surface.pre_transform_circle(Vector2(pre_transform_inversions[i], pre_transform_inversions[i + 1]),
+			pre_transform_inversions[i + 2])
+		_add_surface(pre, "PreTransform")
+	# the level bounds' edge: hover band and planned infinity entries (Stage 88)
+	var edge := Node2D.new()
+	edge.set_script(load("res://scripts/game/edge_overlay_node.gd"))
+	edge.name = "EdgeOverlay"
+	add_child(edge)
+	edge.setup(level_bounds)
 
 func _add_surface(surf: Surface, prefix: String) -> void:
 	surfaces.append(surf)

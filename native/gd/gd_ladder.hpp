@@ -36,9 +36,11 @@ public:
 	static double SCALE() { return rc::estimate::SCALE; }
 	static double MARGIN_SAFETY() { return rc::estimate::MARGIN_SAFETY; }
 	static godot::Ref<ErrorEstimateSensitivity> physical_sensitivity(const godot::Array &defs, const godot::Array &player, const godot::Array &cursor,
-			const godot::Array &plan, int max_events, const godot::Variant &fsc = godot::Variant(), const godot::Dictionary &flags = godot::Dictionary());
+			const godot::Array &plan, int max_events, const godot::Variant &fsc = godot::Variant(), const godot::Dictionary &flags = godot::Dictionary(),
+			bool emit_infinity = false);
 	static godot::Ref<ErrorEstimateSensitivity> planned_sensitivity(const godot::Array &defs, const godot::Array &player, const godot::Array &cursor,
-			const godot::Array &plan, int max_events, const godot::Variant &fsc = godot::Variant(), const godot::Dictionary &flags = godot::Dictionary());
+			const godot::Array &plan, int max_events, const godot::Variant &fsc = godot::Variant(), const godot::Dictionary &flags = godot::Dictionary(),
+			bool emit_infinity = false);
 	static godot::Ref<ErrorEstimateSensitivity> replay(const godot::Array &events, const godot::Array &defs, const godot::Variant &fsc = godot::Variant());
 	static int unreliable_index(const godot::Ref<ErrorEstimateSensitivity> &sens, double ctx_eps);
 	static godot::Array estimate(const godot::Ref<ErrorEstimateSensitivity> &sens, double ctx_eps);
@@ -91,12 +93,13 @@ protected:
 
 public:
 	static godot::Array tiers();
+	// emit_infinity (Stage 88): the `infinity` event switch of the solve (FeatureFlags.infinity_event())
 	static godot::Ref<PrecisionLadderResult> solve(const godot::Array &defs, const godot::Array &player, const godot::Array &cursor,
 			const godot::Array &plan, int max_planned, int max_physical, double tol, bool verify = false,
-			const godot::Variant &fsc = godot::Variant(), const godot::Dictionary &flags = godot::Dictionary());
+			const godot::Variant &fsc = godot::Variant(), const godot::Dictionary &flags = godot::Dictionary(), bool emit_infinity = false);
 	static godot::Ref<PrecisionLadderResult> solve_physical(const godot::Array &defs, const godot::Array &player, const godot::Array &cursor,
 			const godot::Array &plan, int max_physical, double tol, const godot::Variant &fsc = godot::Variant(),
-			const godot::Dictionary &flags = godot::Dictionary());
+			const godot::Dictionary &flags = godot::Dictionary(), bool emit_infinity = false);
 	static godot::Array planned_residuals(const godot::Array &events, const godot::Ref<BeamScene> &scene);
 	static godot::Array event_distance(const godot::Array &a, const godot::Array &b);
 };
