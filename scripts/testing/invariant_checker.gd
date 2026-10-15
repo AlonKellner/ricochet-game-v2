@@ -90,6 +90,12 @@ static func check_beam_order(events: Array) -> Array[String]:
 	out.assign(InvariantKernel.check_beam_order(events))
 	return out
 
+# Stage 106: no zero-length loop (an effect re-applied at the same point)
+static func check_reapply_in_place(events: Array) -> Array[String]:
+	var out: Array[String] = []
+	out.assign(InvariantKernel.check_reapply_in_place(events))
+	return out
+
 static func check_plan_effects_applied_events(events: Array, plan: Array, cursor_reached: bool) -> Array[String]:
 	var out: Array[String] = []
 	out.assign(InvariantKernel.check_plan_effects_applied_events(events, plan, cursor_reached))

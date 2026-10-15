@@ -896,7 +896,7 @@ The walker visits the candidates **in this order, one event each**, until an eff
 
 | Case | Resolution |
 |------|-----------|
-| Beam departing a surface | After applying at `h` on `S`, the new beam departs `S` at `h`. The departure root is excluded as an ordinary candidate and re-hit last, as an ordinary hit. No `skip_segment` and no epsilon. |
+| Beam departing a surface | After applying at `h` on `S`, the new beam departs `S` at `h`. The departure root is excluded as an ordinary candidate and re-hit last, as an ordinary hit. No `skip_segment` and no epsilon. A **pop** (the stack top's surface hit again, the old beam restored) departs that beam at the pop point, tagged like a push's hit point (Stage 106): the known point that is the pop point, by data or by its parameter on the beam, becomes the departure point, so it never snaps the departing carrier's other crossing onto itself. On a resumed beam the departing carrier's root *nearest* the departure parameter is the departure (identified, never compared for equality: the roots are recomputed on the restored beam). |
 | Exact line exactly tangent to a circle carrier | Touches without crossing: no event. |
 | Beam tangent to a carrier at the frame's infinity point `Q` (Stage 105) | Touches without crossing: no event. Decided exactly from provenance: beside `Q` the walk keeps an exact **pole record** (`Q` and the beam's direction there, §31.3), so a carrier through `Q` is tangent there exactly when its direction at `Q` is parallel to the record's. Where the frame is not exact data (a rotated portal, an aim image beyond the exact budget, a shot from a rounded direction) there is no record and the precision ladder decides, as for any near-tangency. |
 | Carriers through the frame's infinity point | Crossed exactly at `Q` (the root nearest `Q` takes `Q`'s parameter): simultaneous crossings there tie by id, then the passage of infinity. When the beam departs from `Q` (an effect fired at `Q`), another carrier through `Q` is crossed at the departure point at the end of the loop, and the departing carrier's root at `Q` is the departure. |
@@ -2435,6 +2435,7 @@ The following invariants are tested by the sweep but not in the original specifi
 | `NO_POST_CURSOR_DIVERGENCE` | A path fully aligned up to the cursor does not diverge after it |
 | `EFFECT_LAW` | Every applied effect maps its beam by its exact law (§10.8) |
 | `EVENT_ON_BEAM` | Every event point lies on its beam, and every hit on its surface's carrier |
+| `REAPPLY_IN_PLACE` | No zero-length loop: an applied hit, then only cursor / infinity events at the same point, then an applied hit on the same surface at the same point never happens (a teleport moves the beam: a round trip through a portal pair may re-hit the same portal at the same point) (§11.4, Stage 106) |
 | `BEAM_ORDER` | Consecutive events on one beam chain their parameters in walk order |
 
 *Retired with the legacy frames (Stage 83):* `SHARED_RAY`, `RAY_ALIGNMENT`, `ARC_MIDPOINT_ALIGNMENT`, `POST_INVERSION_ARC`, `PARAMETER_MONOTONICITY`, `BACK_TRANSFORM_ALIGNMENT`, `S18_FRAME_DETERMINANT`.
@@ -2498,6 +2499,7 @@ Do not use `|x| < ε` for decisions that change topology (which hit wins, on-seg
 - **Exact predicates** (`Exact`) decide incidence (a known point exactly on a carrier), endpoint identity, tangency of an exact line to a circle, and concurrency of line carriers. A float64 evaluation with a certified error bound handles the cheap case, and exact BigFloat arithmetic handles the rest. The bound only selects the path; it never decides a result.
 - **Provenance** (known points, exact lines, the stack, §31.4) replaces coordinate comparisons. For example, a hit at a segment endpoint lying on an exact line *is* the endpoint.
 - **Rounding never decides an endpoint, an incidence, a tangency, or a root at the antipode** (`t = ∞` is exact).
+- **The departure point is a record, not a comparison** (Stage 106): push, pop and portal tag the point the beam departs from in the known list (`skip` = the departing surface); on a resumed beam the departing carrier's root nearest the departure parameter is the departure. The same point on the same beam is recognised by its parameter as well as by its data.
 - **The pole record** (Stage 105): every beam of an epoch is the image `F(ℓ)` of a straight line under the frame's maps and passes `Q = F(∞)`, its direction there being the image of `ℓ`'s direction. Beside the approximate `Q` the walk keeps `{Q, D}` as exact homogeneous data: set by the pre-transform (the start record of a direction or aimed shot) or by the first inversion of an exact straight beam (`Q` the center, `D` the line's direction); carried through reflections (`Q` reflected, `D' ∝ M²·conj(D)`), inversions (`Q` inverted, `D' ∝ conj(D)·U²`, `U = Q − C`), translation portals (`Q + d`); saved and restored by the stack; dropped by a rotated portal, a projective, an inversion about `Q` itself (the beam becomes straight) or the exact-data budget. Incidence of a carrier with `Q` and tangency there are exact predicates on the record.
 - The remaining tier-precision decisions (on-segment cross-ratio, side, root order) have their **margins** checked against the estimated error. `PrecisionLadder` raises the precision until the trajectory is reliable (§31.5).
 - Zero-length steps are dropped by exact equality of endpoints (`start == end`) in `BeamTracer`.
@@ -2558,7 +2560,7 @@ There is no frame composition. Numerical stability of long effect chains (invers
 | Zero rotation and displacement | Identity — valid no-op. |
 | Parallel straight beam and line surface | No crossing (the linear equation has no finite root). |
 | Exact line tangent to a circle carrier | No event (§11.4). |
-| Beam departing a surface | Departure root excluded as an ordinary candidate; re-hit last (§11.4). |
+| Beam departing a surface | Departure root excluded as an ordinary candidate; re-hit last; a pop tags the pop point as the departure point (§11.4). |
 
 ### 31.7 Consistency
 

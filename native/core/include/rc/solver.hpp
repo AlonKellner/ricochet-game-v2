@@ -279,6 +279,7 @@ struct Walk {
 	// tests only: the record beside each beam loop (record_poles)
 	bool record_poles = false;
 	std::vector<std::pair<BeamPtr<N>, std::optional<exact::ExactPole>>> pole_trace;
+	std::vector<std::vector<Known<N>>> known_trace; // and the known points (Stage 106)
 	// and whether the frame is exact there: Q finite with a record, or the
 	// beam straight (Q at infinity) on an exact line
 	std::vector<bool> exact_trace;
@@ -1340,28 +1341,21 @@ private:
 				}
 			} else {
 				rs = geom::hits(beam, s.seg, false);
-				if (depart == s.id && w.depart_q && pole_on(w, s)) {
-					// departing from Q on this carrier: its root nearest Q is the departure
-					size_t best = rs.size();
+				if (depart == s.id && !rs.empty()) {
+					// a resumed beam departs this carrier at t0: its root nearest t0
+					// is the departure (identified, not compared for equality: the
+					// roots are recomputed on the restored beam and can land an ulp
+					// off t0; Stage 106)
+					size_t best = 0;
 					double best_d = INF_D;
 					for (size_t i = 0; i < rs.size(); i++) {
-						const double d = beam.at(rs[i]).sub(*w.Q).abs2().to_float();
+						const double d = rs[i].is_inf() ? INF_D : std::fabs(rs[i].sub(t0).to_float());
 						if (d < best_d) {
 							best_d = d;
 							best = i;
 						}
 					}
-					if (best < rs.size()) {
-						rs.erase(rs.begin() + std::ptrdiff_t(best));
-					}
-				} else if (depart == s.id) {
-					std::vector<N> f;
-					for (const N &t : rs) {
-						if (t.cmp(t0) != 0) {
-							f.push_back(t);
-						}
-					}
-					rs = f;
+					rs.erase(rs.begin() + std::ptrdiff_t(best));
 				}
 			}
 			for (const N &t : rs) {
@@ -1716,6 +1710,7 @@ private:
 			if (w.record_poles) {
 				w.pole_trace.emplace_back(beam, w.pole);
 				w.exact_trace.push_back(w.Q ? w.pole.has_value() : w.line != nullptr);
+				w.known_trace.push_back(w.known);
 			}
 			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0);
 			std::vector<double> gp = gaps(*beam, cands);
@@ -1939,6 +1934,27 @@ private:
 		}
 	}
 
+	// Stage 106: the pop point is the restored beam's departure point, tagged
+	// like a push's. A known point that is the pop point -- by data (pt_exact
+	// and equal to q) or by its parameter on this beam (t == t_res: the same
+	// beam and the same parameter are the same point) -- gets skip = sid and
+	// t = t_res; an exact pop point not yet known is added (not for a portal:
+	// its mapped-back point is a rounded computation). Without the tag a known
+	// point at the pop point snaps the departing carrier's other root onto it (K2).
+	static void tag_departure(std::vector<Known<N>> &known, const CN<N> &q, const N &t_res, int sid, bool pt_exact, bool portal) {
+		bool found = false;
+		for (Known<N> &k : known) {
+			if ((pt_exact && geom::eq(k.p, q)) || k.t.cmp(t_res) == 0) {
+				k.skip = sid;
+				k.t = t_res;
+				found = true;
+			}
+		}
+		if (!found && pt_exact && !portal) {
+			known.push_back(Known<N>{q, t_res, sid, std::nullopt});
+		}
+	}
+
 	// Apply surf's effect at t: the continuation.
 	Next apply(Walk<N> &w, const BeamPtr<N> &beam, const N &t, const Surf<N> &surf, EffectType etype, int depart, bool fresh,
 			const N &t0, bool rehit, const CN<N> &pt, bool pt_exact) const {
@@ -1958,7 +1974,8 @@ private:
 				const double dd = top.beam->at(top.other).sub(q).abs2().to_float();
 				t_res = dh < dd ? top.t_hit : top.other;
 			}
-			w.known = top.known;
+			w.known = std::move(top.known);
+			tag_departure(w.known, q, t_res, top.sid, pt_exact, src.portal);
 			w.line = top.line;
 			w.Q = top.q;
 			w.pole = top.pole;

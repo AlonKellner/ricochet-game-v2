@@ -30,6 +30,7 @@ public:
 	static godot::Array check_effect_law(const godot::Array &events, const godot::Ref<BeamScene> &scene);
 	static godot::Array check_event_on_beam(const godot::Array &events, const godot::Ref<BeamScene> &scene);
 	static godot::Array check_beam_order(const godot::Array &events);
+	static godot::Array check_reapply_in_place(const godot::Array &events);
 	static godot::Array check_plan_effects_applied_events(const godot::Array &events, const godot::Array &plan, bool cursor_reached);
 	static bool is_infinity_gap(const godot::Vector2 &prev_end, const godot::Vector2 &curr_start);
 	static bool is_at_bounds(const godot::Vector2 &p, const godot::Rect2 &bounds);

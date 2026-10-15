@@ -72,6 +72,7 @@ struct EvInfo {
 	EventKind kind = EventKind::Hit;
 	int surface_id = -1;
 	bool left = false, applied = false, terminal = false, popped = false, projective = false, on_segment = false;
+	bool teleport = false;
 	bool has_point = false;
 	double fx = 0, fy = 0;
 	double margin = INF_D;
@@ -95,6 +96,7 @@ EvInfo ev_info(const Event<N> &e) {
 	i.applied = e.applied;
 	i.terminal = e.terminal;
 	i.popped = e.popped;
+	i.teleport = e.teleport;
 	i.projective = e.projective;
 	i.on_segment = e.on_segment;
 	if (e.point) {
@@ -1033,6 +1035,31 @@ inline Violations check_beam_order(const std::vector<EvInfo> &events) {
 	return out;
 }
 
+// REAPPLY-IN-PLACE (Stage 106): an applied hit, then only cursor / infinity
+// events at the same point, then an applied hit on the same surface at the
+// same point is a zero-length loop: the beam applied an effect twice without
+// travelling. (A pop whose departure point was not recorded re-pushed at the
+// pop point: the old K2 phantoms, and the first attempt at fixing them.)
+inline Violations check_reapply_in_place(const std::vector<EvInfo> &events) {
+	Violations out;
+	const EvInfo *last = nullptr; // the last applied hit, while nothing else happened since
+	for (size_t i = 0; i < events.size(); i++) {
+		const EvInfo &e = events[i];
+		if (last != nullptr && (e.kind == EventKind::Cursor || e.kind == EventKind::Infinity) && e.has_point
+				&& std::fabs(e.fx - last->fx) <= 1e-6 && std::fabs(e.fy - last->fy) <= 1e-6) {
+			continue; // the cursor or the frame's infinity point at the hit point: no travel
+		}
+		if (e.kind == EventKind::Hit && e.applied && last != nullptr && e.surface_id == last->surface_id && e.has_point
+				&& std::fabs(e.fx - last->fx) <= 1e-6 && std::fabs(e.fy - last->fy) <= 1e-6) {
+			out.push_back(v("REAPPLY-IN-PLACE: event %d re-applies s=%d at (%s, %s) without travelling", I(int64_t(i)), I(e.surface_id), F(e.fx), F(e.fy)));
+		}
+		// (a teleport moves the beam elsewhere: a later hit on the same portal at
+		// the same point travelled there, e.g. a round trip through the pair)
+		last = (e.kind == EventKind::Hit && e.applied && e.has_point && !e.teleport) ? &e : nullptr;
+	}
+	return out;
+}
+
 inline Violations check_EFFECT_LAW(const Input &in) {
 	if (!in.has_result() || in.player == in.cursor || in.scene == nullptr) {
 		return {};
@@ -1057,6 +1084,15 @@ inline Violations check_BEAM_ORDER(const Input &in) {
 	}
 	Violations out = check_beam_order(*in.planned_events);
 	const Violations ph = check_beam_order(*in.physical_events);
+	out.insert(out.end(), ph.begin(), ph.end());
+	return out;
+}
+inline Violations check_REAPPLY_IN_PLACE(const Input &in) {
+	if (!in.has_result() || in.player == in.cursor) {
+		return {};
+	}
+	Violations out = check_reapply_in_place(*in.planned_events);
+	const Violations ph = check_reapply_in_place(*in.physical_events);
 	out.insert(out.end(), ph.begin(), ph.end());
 	return out;
 }
@@ -1085,6 +1121,7 @@ inline Violations check_all(const Input &in) {
 	add(check_EFFECT_LAW(in));
 	add(check_EVENT_ON_BEAM(in));
 	add(check_BEAM_ORDER(in));
+	add(check_REAPPLY_IN_PLACE(in));
 	add(check_VIA_ON_ARC(in));
 	add(check_VISUAL_ON_PHYSICAL_CARRIER(in));
 	if (in.plan_applied) {

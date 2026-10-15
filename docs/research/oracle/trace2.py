@@ -647,12 +647,12 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 rs = [t for t in rs if t != 0] if depart == s.id else [t for t in rs]
             else:
                 rs = roots(beam, s, False)
-                if depart == s.id and walk.depart_q and _pole_on(walk.pole, s.seg):
-                    # departing from Q on this carrier: its root nearest Q is the departure
-                    if rs:
-                        rs.remove(min(rs, key=lambda t: abs(beam.at(t) - walk.Q)))
-                elif depart == s.id:
-                    rs = [t for t in rs if t != t0]
+                if depart == s.id and rs:
+                    # a resumed beam departs this carrier at t0: its root nearest t0
+                    # is the departure (identified, not compared for equality: the
+                    # roots are recomputed on the restored beam and can land an ulp
+                    # off t0; Stage 106)
+                    rs.remove(min(rs, key=lambda t: abs(t - t0)))
             for t in rs:
                 cands.append((sort_key(t, t0), 1, s.id, t, False))
         # the cursor is on the beam only on the planned path (its final
@@ -664,7 +664,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             # the cursor exactly at the departure point is reached immediately
             dep = beam.p if fresh else beam.at(t0)
             if (fresh and walk.cursor == dep) or (depart is not None and any(
-                    k[0] == walk.cursor and k[2] == depart for k in walk.known)):
+                    k[0] == walk.cursor and k[2] == depart and k[1] == t0 for k in walk.known)):
                 tc = t0
             cands.append(((-1, 0) if tc == t0 else sort_key(tc, t0), 0, -1, tc, False))
             if not any(k[0] == walk.cursor for k in walk.known):
@@ -752,7 +752,12 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 walk.on_plan = False
                 continue
             surf = by_id[sid]
-            known_pt = beam.p if (rehit and fresh) else (None if rehit else snapped.get((sid, t)))
+            if rehit:
+                # the departure point: the beam's own p when fresh, else the known
+                # point the departure tagged (a push's or, since Stage 106, a pop's)
+                known_pt = beam.p if fresh else next((k[0] for k in walk.known if k[2] == depart and k[1] == t0), None)
+            else:
+                known_pt = snapped.get((sid, t))
             pt_exact = known_pt is not None and any(k[0] == known_pt for k in walk.known)
             pt, on_seg, side, full_block = classify(walk, beam, t, surf, point=known_pt)
             if surf.is_target and on_seg:
@@ -918,6 +923,27 @@ def _other_root(beam, surf: Surface, t, fresh, depart, t0, pt):
     return max(rs, key=lambda r: abs(beam.at(r) - pt))
 
 
+def _tag_departure(known, q, t_res, sid, pt_exact, portal):
+    """Stage 106: the pop point is the restored beam's departure point, tagged
+    like a push's. A known point that is the pop point -- by data (pt_exact and
+    equal to q) or by its parameter on this beam (t == t_res: the same beam and
+    the same parameter are the same point) -- gets skip = sid and t = t_res; an
+    exact pop point not yet known is added (not for a portal: its mapped-back
+    point is a rounded computation). Without the tag a known point at the pop
+    point snaps the departing carrier's other root onto it (K2)."""
+    out = []
+    found = False
+    for k in known:
+        if (pt_exact and k[0] == q) or k[1] == t_res:
+            out.append((k[0], t_res, sid))
+            found = True
+        else:
+            out.append(k)
+    if not found and pt_exact and not portal:
+        out.append((q, t_res, sid))
+    return out
+
+
 def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, pt, pt_exact):
     if walk.stack and walk.stack[-1].pop_id == surf.id and walk.stack[-1].etype == map_kind(surf, etype):
         top = walk.stack.pop()
@@ -932,7 +958,7 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
             dh = abs(top.beam.at(top.t_hit) - q)
             do = abs(top.beam.at(top.other) - q)
             t_res = top.t_hit if dh < do else top.other
-        walk.known = top.known
+        walk.known = _tag_departure(top.known, q, t_res, top.sid, pt_exact, src.portal() is not None)
         walk.line = top.line
         walk.Q = top.q
         walk.pole = top.pole
