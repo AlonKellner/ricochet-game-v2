@@ -587,3 +587,275 @@ def test_projective_exit_away_reaches_cursor_through_infinity():
             ks = kinds(w)
             assert ks[:3] == ["hit", "infinity", "cursor"], (plan, ks)
             assert w.events[1].applied == (len(plan) == 2)
+
+
+# ---------------------------------------------------------------- Stage 105: tangency at the frame's infinity point
+
+import contextlib as _ctx
+import random as _random
+from fractions import Fraction as _Fr
+
+REFL2 = {"type": "reflection", "interactive": True}
+PASS2 = {"type": "pass", "interactive": False}
+INV2 = {"type": "inversion", "interactive": True}
+
+
+def circ(sid, c, r, left, right, pre=False):
+    d = {"id": sid, "line": False, "start": [c[0] + r, c[1]], "end": [c[0] - r / 2.0, c[1] - 0.866 * r],
+         "via": [c[0] - r / 2.0, c[1] + 0.866 * r], "full": True, "circle": {"center": list(c), "radius": r},
+         "left": left, "right": right}
+    if pre:
+        d["pre_transform"] = True
+    return d
+
+
+def lin(sid, s, e, left, right):
+    return {"id": sid, "line": True, "start": list(s), "end": list(e),
+            "via": [(s[0] + e[0]) / 2.0, (s[1] + e[1]) / 2.0], "full": False, "left": left, "right": right}
+
+
+PRE0 = circ(9, (500.0, 0.0), 200.0, {"type": "inversion", "interactive": False},
+            {"type": "inversion", "interactive": False}, pre=True)
+
+
+@_ctx.contextmanager
+def spy_tangents():
+    """The (surface id, Q) pairs the rule skipped."""
+    seen = []
+    orig = T._pole_tangent
+
+    def spy(pole, seg):
+        r = orig(pole, seg)
+        if r:
+            seen.append((seg.id, (pole[0], pole[1])))
+        return r
+    T._pole_tangent = spy
+    try:
+        yield seen
+    finally:
+        T._pole_tangent = orig
+
+
+def hits_on(walk, sid):
+    return [e for e in walk.events if e.kind == "hit" and e.surface_id == sid]
+
+
+def test_pole_transitions_are_exact():
+    # reflection in x = 650 moves Q (500, 0) to (800, 0) and keeps a horizontal direction
+    m = T.surface_from_json(lin(1, (650, -500), (650, 500), REFL2, REFL2))
+    p = T._pole_reflect((_Fr(500), _Fr(0), _Fr(1), _Fr(0)), m.seg)
+    assert p[:2] == (_Fr(800), _Fr(0)) and p[3] == 0
+    # inversion in the circle (0, 0) r 10 of Q (20, 0): Q' (5, 0); a vertical direction stays vertical
+    c = T.surface_from_json(circ(2, (0.0, 0.0), 10.0, INV2, INV2))
+    p = T._pole_invert((_Fr(20), _Fr(0), _Fr(0), _Fr(1)), c.seg)
+    assert p[:2] == (_Fr(5), _Fr(0)) and p[2] == 0 and p[3] != 0
+    # Q at the center goes to infinity
+    assert T._pole_invert((_Fr(0), _Fr(0), _Fr(1), _Fr(0)), c.seg) is None
+    # a straight beam (line y = 3: 0 x + 1 y = 3) inverted: Q = the center, direction horizontal
+    p = T._pole_from_line((_Fr(0), _Fr(1), _Fr(3)), c.seg)
+    assert p[:2] == (_Fr(0), _Fr(0)) and p[3] == 0 and p[2] != 0
+    # a zero direction is no record
+    assert T._pole_ok((_Fr(0), _Fr(0)), (_Fr(0), _Fr(0))) is None
+
+
+def test_pre_transform_tangent_mirror_is_a_touch():
+    # Q0 = (500, 0); the circle through P (400, 200) tangent to (200, -150) there and
+    # through Q0 is centered (250, 0): tangent to the vertical x = 500 at Q0
+    m = lin(1, (500, -300), (500, 300), REFL2, REFL2)
+    sc = T.scene_from_json([PRE0, m])
+    with spy_tangents() as seen:
+        w = T.trace_physical_direction(sc, (400, 200), mp.mpc(200, -150))
+    assert (1, (_Fr(500), _Fr(0))) in seen
+    assert hits_on(w, 1) == [], kinds(w)
+    assert kinds(w)[0] == "infinity"
+    # control: a transversal aim crosses the mirror at Q0 (hits before the passage at a tie)
+    w = T.trace_physical_direction(sc, (400, 200), mp.mpc(1, 0))
+    assert hits_on(w, 1), kinds(w)
+
+
+def test_pre_transform_tangent_circle_is_a_touch():
+    # a pass circle centered (600, 0) r 100 is tangent at Q0 to the beam circle centered (250, 0)
+    c = circ(2, (600.0, 0.0), 100.0, PASS2, PASS2)
+    sc = T.scene_from_json([PRE0, c])
+    with spy_tangents() as seen:
+        w = T.trace_physical_direction(sc, (400, 200), mp.mpc(200, -150))
+    assert any(s[0] == 2 for s in seen)
+    assert hits_on(w, 2) == [], kinds(w)
+
+
+def test_one_ulp_off_is_not_a_tangency():
+    m = lin(1, (500, -300), (500, 300), REFL2, REFL2)
+    sc = T.scene_from_json([PRE0, m])
+    import math
+    with spy_tangents() as seen:
+        w = T.trace_physical_direction(sc, (400, 200), mp.mpc(200, math.nextafter(-150.0, 0.0)))
+    assert seen == []
+    assert hits_on(w, 1), kinds(w)
+
+
+def test_identity_frame_inversion_center_on_a_mirror():
+    # the straight aim y = 100, parallel to the mirror y = 0 through the inversion
+    # center (500, 0): its image is a circle tangent to the mirror at the center
+    inv = circ(2, (500.0, 0.0), 200.0, INV2, INV2)
+    m = lin(1, (0, 0), (1000, 0), REFL2, REFL2)
+    sc = T.scene_from_json([inv, m])
+    with spy_tangents() as seen:
+        w = T.trace_physical_direction(sc, (0, 100), mp.mpc(1, 0))
+    assert (1, (_Fr(500), _Fr(0))) in seen
+    assert all(abs(e.point - mp.mpc(500, 0)) > 1 for e in hits_on(w, 1))
+
+
+def test_reflected_pole_meets_a_second_mirror():
+    # as above, then the image circle (center (500, 200), r 200) reflects in x = 650:
+    # Q' = (800, 0), the direction stays horizontal: tangent to the mirror y = 0 on 700..900
+    inv = circ(2, (500.0, 0.0), 200.0, INV2, INV2)
+    m1 = lin(1, (650, -500), (650, 500), REFL2, REFL2)
+    m3 = lin(3, (700, 0), (900, 0), REFL2, REFL2)
+    sc = T.scene_from_json([inv, m1, m3])
+    with spy_tangents() as seen:
+        w = T.trace_physical_direction(sc, (0, 100), mp.mpc(1, 0))
+    assert (3, (_Fr(800), _Fr(0))) in seen, seen
+    assert all(abs(e.point - mp.mpc(800, 0)) > 1 for e in hits_on(w, 3))
+
+
+def test_translation_portal_moves_the_pole_k1():
+    # K1: the portals playground, the vertical aim at x = 1243.333
+    import json as _json, struct as _struct
+    d = _json.load(open(os.path.join(os.path.dirname(__file__), "..", "..", "..", "bench", "scenes", "playground__portals.surfaces.json")))
+    sc = T.scene_from_json(d["surfaces"])
+    f32 = lambda x: _struct.unpack("f", _struct.pack("f", x))[0]
+    p, c = (f32(1243.333), 690.0), (f32(1243.333), 390.0)
+    with spy_tangents() as seen:
+        a = T.physical(sc, p, c, [])
+        b = T.physical(sc, p, c, [(8, "LEFT"), (8, "LEFT")])
+    assert any(s[0] == 5 for s in seen)
+    assert hits_on(a, 5) == [] and hits_on(b, 5) == []
+    assert kinds(a) == kinds(b)
+    # without the rule the oracle's own answer depends on its precision
+    with _ctx.ExitStack():
+        orig = T._pole_tangent
+        T._pole_tangent = lambda pole, seg: False
+        try:
+            answers = set()
+            with mp.workdps(80):
+                sc_d = T.scene_from_json(d["surfaces"])
+            for dps in (80, 200):
+                with mp.workdps(dps):
+                    answers.add(len(hits_on(T.physical(sc_d, p, c, []), 5)))
+        finally:
+            T._pole_tangent = orig
+    assert len(answers) == 2, "rounding decided the tangency without the rule"
+
+
+def test_rotated_portal_drops_the_record():
+    import math
+    src = T.surface_from_json({"id": 1, "line": True, "start": [100, -500], "end": [100, 500], "via": [100, 0],
+                               "full": False, "left": {"type": "portal", "interactive": True, "theta": math.pi / 2, "d": [0, 0], "pair": 2},
+                               "right": {"type": "portal", "interactive": True, "theta": math.pi / 2, "d": [0, 0], "pair": 2}})
+    assert T._pole_apply((_Fr(1), _Fr(2), _Fr(1), _Fr(0)), mp.mpc(1, 2), None, src) is None
+
+
+def test_pop_and_projective_clear_or_restore_the_record():
+    # a projective clears the record (its exit is straight in screen space)
+    proj = {"type": "line_normal_projection", "interactive": True, "back": False}
+    ln = lin(1, (450, -400), (450, 400), proj, proj)
+    sc = T.scene_from_json([PRE0, ln])
+    records = []
+    T.POLE_HOOK = lambda walk, beam: records.append(walk.pole)
+    try:
+        T.trace_physical_direction(sc, (300, 50), mp.mpc(1, 0.2))
+    finally:
+        T.POLE_HOOK = None
+    assert records[0] is not None and records[-1] is None
+    # a pop restores it: the inversion and its re-hit (identity frame: no record before, none after)
+    inv = circ(2, (500.0, 0.0), 200.0, INV2, INV2)
+    records = []
+    T.POLE_HOOK = lambda walk, beam: records.append(walk.pole)
+    try:
+        T.trace_physical_direction(T.scene_from_json([inv]), (0, 100), mp.mpc(1, 0))
+    finally:
+        T.POLE_HOOK = None
+    assert records[0] is None and any(r is not None for r in records) and records[-1] is None
+
+
+def test_planned_infinity_entry_consumed_at_the_tangent_point():
+    m = lin(1, (500, -300), (500, 300), REFL2, REFL2)
+    sc = T.scene_from_json([PRE0, m])
+    # P (400, 200) and X (100, 200) on the circle centered (250, 0) through Q0
+    for plan in ([], [(T.INFINITY_ID, "")]):
+        for mode in (T.planned, T.physical):
+            w = mode(sc, (400, 200), (100, 200), plan)
+            assert hits_on(w, 1) == [], kinds(w)
+            assert "cursor" in kinds(w)
+    w = T.planned(sc, (400, 200), (100, 200), [(T.INFINITY_ID, "")])
+    ks = kinds(w)
+    assert ks.index("infinity") < ks.index("cursor") and w.events[ks.index("infinity")].applied
+
+
+def test_pole_direction_is_the_beam_tangent_property():
+    # random exact scenes: wherever the record exists, Q is the walk's Q and D is
+    # parallel to the beam's tangent there
+    rng = _random.Random(105)
+    checked = 0
+    for k in range(60):
+        surfs = [circ(20, (rng.randint(3, 15) * 64.0, rng.randint(3, 10) * 64.0), rng.randint(2, 4) * 32.0,
+                      {"type": "inversion", "interactive": False}, {"type": "inversion", "interactive": False}, pre=True)] if k % 2 else []
+        for i in range(rng.randint(2, 5)):
+            if rng.random() < 0.5:
+                surfs.append(circ(i + 1, (rng.randint(2, 28) * 64.0, rng.randint(2, 15) * 64.0), rng.randint(1, 5) * 32.0, INV2, INV2))
+            else:
+                a = (rng.randint(1, 29) * 64.0, rng.randint(1, 16) * 64.0)
+                b = (a[0] + rng.choice([0, 128, -128, 256]), a[1] + rng.choice([0, 128, 256, -128]))
+                if a == b:
+                    b = (a[0] + 64.0, a[1])
+                surfs.append(lin(i + 1, a, b, REFL2, REFL2))
+        sc = T.scene_from_json(surfs)
+
+        def hook(walk, beam):
+            nonlocal checked
+            if walk.pole is None or walk.Q is None:
+                return
+            q = mp.mpc(float(walk.pole[0]), float(walk.pole[1]))
+            assert abs(q - walk.Q) < mp.mpf(10) ** -10 * (1 + abs(q))
+            t = beam.param_of(walk.Q)
+            tg = beam.tangent_at(t)
+            dd = mp.mpc(float(walk.pole[2]), float(walk.pole[3]))
+            cr = abs((tg.real * dd.imag - tg.imag * dd.real) / abs(dd))
+            assert cr < mp.mpf(10) ** -12, (k, cr)
+            checked += 1
+        T.POLE_HOOK = hook
+        try:
+            T.trace_physical_direction(sc, (rng.randint(1, 29) * 64.0 + 7, rng.randint(1, 16) * 64.0 + 3),
+                                       mp.mpc(rng.choice([1, -1, 3]), rng.choice([0, 1, -2])))
+        finally:
+            T.POLE_HOOK = None
+    assert checked > 30
+
+
+def _structure(sc, p, d, dps):
+    with mp.workdps(dps):
+        w = T.trace_physical_direction(sc, p, mp.mpc(*d))
+    return [(e.kind, e.surface_id, e.applied) for e in w.events]
+
+
+def test_departing_from_q_is_precision_independent():
+    # a mirror through Q0 = (576, 320) reflects at Q, the beam returns there (the
+    # departure re-hit, again from Q); a pass circle through Q is crossed at the
+    # departure point at the end of each loop, the mirror's own root there is the departure
+    pre = circ(1, (576.0, 320.0), 64.0, {"type": "inversion", "interactive": False},
+               {"type": "inversion", "interactive": False}, pre=True)
+    sc = T.scene_from_json([pre, circ(2, (608.0, 320.0), 32.0, PASS2, PASS2),
+                            lin(3, (576, 256), (576, 384), REFL2, REFL2)])
+    a = _structure(sc, (608, 528), (0, -1), 80)
+    assert a == _structure(sc, (608, 528), (0, -1), 200)
+    assert sum(1 for k in a if k == ("hit", 3, True)) >= 3, a
+    # a straight beam through Q0 (player, Q0 and the direction collinear): the
+    # concurrent mirror and pass line through Q tie exactly there, the mirror first
+    pre = circ(1, (448.0, 704.0), 96.0, {"type": "inversion", "interactive": False},
+               {"type": "inversion", "interactive": False}, pre=True)
+    sc = T.scene_from_json([pre, lin(2, (448, 505), (448, 903), REFL2, REFL2),
+                            lin(3, (313, 704), (583, 704), PASS2, PASS2),
+                            lin(4, (720, 136), (816, 176), REFL2, REFL2)])
+    a = _structure(sc, (672, 592), (2, -1), 80)
+    assert a == _structure(sc, (672, 592), (2, -1), 200)
+    assert a[1] == ("hit", 2, True), a

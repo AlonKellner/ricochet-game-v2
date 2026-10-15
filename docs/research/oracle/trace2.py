@@ -449,6 +449,7 @@ class StackEntry:
     pop_id: int = None          # the surface whose hit pops this entry (sid, or a portal's pair)
     etype: str = None           # the effect pushed (a pop needs the same effect)
     q: object = None            # the frame's image of infinity before the push (restored by the pop)
+    pole: object = None         # the exact pole record before the push (Stage 105)
 
 
 @dataclass
@@ -474,6 +475,14 @@ class Walk:
     proj_hits: dict = field(default_factory=dict)      # projective entry index -> (H, exact exit line or None)
     on_plan: bool = True                               # on the planned beams: every projective fired at its H
     Q: object = None                                   # the current frame's image of infinity (None = inf)
+    # Stage 105: the exact pole record (Qx, Qy, Dx, Dy), Fractions: the frame's
+    # infinity point and the beam's direction there (any nonzero real scale),
+    # or None (Q at infinity, or the frame's data not exact)
+    pole: object = None
+    # the current beam departs from the frame's infinity point (provenance: an
+    # effect fired at a crossing pinned at Q; reflections and inversions fix the
+    # hit point, portals move it with Q): no pinning, no passage of Q
+    depart_q: bool = False
     # (transformative entries are maps of the whole plane: whichever crossing
     # fires them, the next beam is the planned one -- with the plan matched)
 
@@ -625,16 +634,24 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
     if fresh:
         t0 = mp.mpf(0)
     while not walk.done:
+        if POLE_HOOK is not None:
+            POLE_HOOK(walk, beam)       # tests: the record beside each beam
         cands = []
         for s in walk.surfaces:
             if walk.line is not None and s.seg.kind != "line" and _tangent(walk.line, s.seg):
                 continue        # a tangent touch is not a crossing (exact)
+            if walk.pole is not None and _pole_tangent(walk.pole, s.seg):
+                continue        # tangent at the frame's infinity point (exact, Stage 105)
             if fresh:
                 rs = roots(beam, s, depart == s.id)
                 rs = [t for t in rs if t != 0] if depart == s.id else [t for t in rs]
             else:
                 rs = roots(beam, s, False)
-                if depart == s.id:
+                if depart == s.id and walk.depart_q and _pole_on(walk.pole, s.seg):
+                    # departing from Q on this carrier: its root nearest Q is the departure
+                    if rs:
+                        rs.remove(min(rs, key=lambda t: abs(beam.at(t) - walk.Q)))
+                elif depart == s.id:
                     rs = [t for t in rs if t != t0]
             for t in rs:
                 cands.append((sort_key(t, t0), 1, s.id, t, False))
@@ -663,13 +680,33 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 best = min(idx, key=lambda i: abs(beam.at(cands[i][3]) - kp))
                 cands[best] = (sort_key(kt, t0), 1, s.id, kt, False)
                 snapped[(s.id, kt)] = kp
+        pinned = set()
+        if walk.pole is not None and walk.Q is not None:
+            # Stage 105: a carrier through the frame's infinity point is crossed
+            # exactly there (the record makes Q exact): its root nearest Q becomes
+            # Q's parameter, so simultaneous crossings at Q tie exactly (by id,
+            # the passage of Q last). When the beam departs from Q (depart_q), the
+            # crossing of another carrier through Q is at the departure point:
+            # the end of the loop, like a known departure point's
+            tq = t0 if walk.depart_q else beam.param_of(walk.Q)
+            if walk.depart_q or tq != t0:
+                for s in walk.surfaces:
+                    if not _pole_on(walk.pole, s.seg) or (walk.depart_q and s.id == depart):
+                        continue
+                    idx = [i for i, c in enumerate(cands) if c[1] == 1 and c[2] == s.id]
+                    if not idx:
+                        continue
+                    best = min(idx, key=lambda i: abs(beam.at(cands[i][3]) - walk.Q))
+                    cands[best] = (sort_key(tq, t0), 1, s.id, tq, False)
+                    snapped[(s.id, tq)] = walk.Q
+                    pinned.add((s.id, tq))
         if EMIT_INFINITY:
             if walk.Q is None:
                 if beam.kappa == 0:
                     # the wrap through infinity: after every crossing ahead (t > t0),
                     # before the wrapped ones (no root of a straight beam is at inf)
                     cands.append(((0, mp.inf), 3, INFINITY_ID, mp.inf, False))
-            else:
+            elif not walk.depart_q:
                 # the frame's image of infinity is a finite point on this beam:
                 # an ordinary crossing (not at the departure point)
                 tq = beam.param_of(walk.Q)
@@ -745,6 +782,9 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 return
             if do in TRANSFORMATIVE:
                 beam, depart, t0, fresh = _apply(walk, beam, t, surf, do, depart, fresh, t0, rehit, pt, pt_exact)
+                # the beam departs from Q: an effect fired at Q (a pinned crossing,
+                # or the departure re-hit when the beam had departed from Q)
+                walk.depart_q = walk.pole is not None and ((sid, t) in pinned or (rehit and walk.depart_q))
                 applied = True
                 break
             if do in PROJECTIVE:
@@ -764,6 +804,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     else:
                         planned_exit = hj[1]
                 beam = _project(walk, beam, t, surf, side, pt, pt_exact)
+                walk.depart_q = False
                 if planned_exit is not None:
                     walk.line = planned_exit
                     _add_line_endpoints(walk, beam)
@@ -830,6 +871,7 @@ def _project(walk: Walk, beam, t, surf: Surface, side, pt, pt_exact):
     nb = Beam(pt, exit / abs(exit), mp.mpf(0))
     walk.stack = []
     walk.Q = None
+    walk.pole = None
     walk.known = [(pt, mp.mpf(0), surf.id)] if pt_exact else []
     walk.line = None
     if pt_exact:
@@ -893,11 +935,14 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
         walk.known = top.known
         walk.line = top.line
         walk.Q = top.q
+        walk.pole = top.pole
         return top.beam, top.sid, t_res, False
     other = _other_root(beam, surf, t, fresh, depart, t0, pt)
     portal = surf.portal()
     pop_id = portal[2] if portal is not None else surf.id
-    walk.stack.append(StackEntry(beam, surf.id, t, other, walk.known, walk.line, pop_id, map_kind(surf, etype), walk.Q))
+    walk.stack.append(StackEntry(beam, surf.id, t, other, walk.known, walk.line, pop_id, map_kind(surf, etype), walk.Q,
+                                 walk.pole))
+    walk.pole = _pole_apply(walk.pole, walk.Q, walk.line, surf)
     walk.Q = map_point(walk.Q, surf)
     nb = apply_effect(beam, t, surf, etype, pt)
     old_known = walk.known
@@ -996,6 +1041,7 @@ def _portal_known(walk, surf, pt, pt_exact, old_known, nb):
 
 
 WALK_SURFACES = []
+POLE_HOOK = None    # tests only: called with (walk, beam) at every loop of a beam
 
 
 def _is_center(k, seg):
@@ -1015,6 +1061,128 @@ def _line_through_center(line, seg):
     nx = la * (B[1] - Cc[1]) + lb * (Cc[1] - A[1]) + lc * (A[1] - B[1])
     ny = la * (Cc[0] - B[0]) + lb * (A[0] - Cc[0]) + lc * (B[0] - A[0])
     return a * nx + b * ny == c * w
+
+
+# ---------------------------------------------------------------- the exact pole (Stage 105)
+#
+# Every beam of an epoch is the image F(l) of a straight line l under the
+# frame's maps; it passes Q = F(inf), with the direction there the image of
+# l's direction. The record (Qx, Qy, Dx, Dy) keeps both exactly, so a beam
+# tangent to a carrier at Q is a touch, decided without rounding.
+
+def _cmul(a, b):
+    return (a[0] * b[0] - a[1] * b[1], a[0] * b[1] + a[1] * b[0])
+
+
+def _conj(a):
+    return (a[0], -a[1])
+
+
+def _pole_ok(Q, D):
+    """The record, or None when the direction degenerates."""
+    if D[0] == 0 and D[1] == 0:
+        return None
+    return (Q[0], Q[1], D[0], D[1])
+
+
+def _pole_reflect(pole, seg):
+    S, E = FC(seg.S), FC(seg.E)
+    M = _sub(E, S)
+    mm = M[0] * M[0] + M[1] * M[1]
+    M2 = _cmul(M, M)
+    w = _conj(_sub((pole[0], pole[1]), S))
+    r = _cmul(M2, w)
+    Q = (S[0] + r[0] / mm, S[1] + r[1] / mm)
+    return _pole_ok(Q, _cmul(M2, _conj((pole[2], pole[3]))))
+
+
+def _pole_invert(pole, seg):
+    """Inversion of the record; None when Q is the center (Q goes to inf)."""
+    nx, ny, w, rr = _center_h(seg)
+    U = (pole[0] - nx / w, pole[1] - ny / w)
+    uu = U[0] * U[0] + U[1] * U[1]
+    if uu == 0:
+        return None
+    Q = (nx / w + rr * U[0] / uu, ny / w + rr * U[1] / uu)
+    return _pole_ok(Q, _cmul(_conj((pole[2], pole[3])), _cmul(U, U)))
+
+
+def _pole_from_line(line, seg):
+    """A straight beam (Q at inf) inverted: Q becomes the center, the
+    direction there the line's."""
+    a, b, _c = line
+    nx, ny, w, _rr = _center_h(seg)
+    return _pole_ok((nx / w, ny / w), (b, -a))
+
+
+def _pole_apply(pole, q_before, line, surf):
+    """The record after surf's map; q_before: the approximate Q before it
+    (None: at infinity)."""
+    portal = surf.portal()
+    if portal is not None:
+        cfg = surf.left if surf.left and surf.left.get("type") == "portal" else surf.right
+        if pole is None or cfg["theta"] != 0:
+            return None
+        d = (F(cfg["d"][0]), F(cfg["d"][1]))
+        return (pole[0] + d[0], pole[1] + d[1], pole[2], pole[3])
+    if surf.seg.kind == "line":
+        return None if pole is None else _pole_reflect(pole, surf.seg)
+    if q_before is None:
+        return None if line is None else _pole_from_line(line, surf.seg)
+    return None if pole is None else _pole_invert(pole, surf.seg)
+
+
+def _pole_on(pole, seg):
+    """Exact: seg's carrier passes the frame's infinity point Q."""
+    Q = (pole[0], pole[1])
+    if seg.kind == "line":
+        S, E = FC(seg.S), FC(seg.E)
+        return _cross(_sub(E, S), _sub(Q, S)) == 0
+    nx, ny, w, rr = _center_h(seg)
+    U = (Q[0] - nx / w, Q[1] - ny / w)
+    return U[0] * U[0] + U[1] * U[1] == rr
+
+
+def _pole_tangent(pole, seg):
+    """Exact: seg's carrier passes Q and is tangent there to the beam."""
+    if not _pole_on(pole, seg):
+        return False
+    D = (pole[2], pole[3])
+    if seg.kind == "line":
+        S, E = FC(seg.S), FC(seg.E)
+        return _cross(D, _sub(E, S)) == 0
+    nx, ny, w, _rr = _center_h(seg)
+    U = (pole[0] - nx / w, pole[1] - ny / w)
+    return D[0] * U[0] + D[1] * U[1] == 0
+
+
+def pre_q_exact(surfaces):
+    """Q0 of the pre-transform as exact rationals (None: infinity)."""
+    Q = None
+    for s in surfaces:
+        if not s.pre_transform:
+            continue
+        nx, ny, w, rr = _center_h(s.seg)
+        if Q is None:
+            Q = (nx / w, ny / w)
+            continue
+        U = (Q[0] - nx / w, Q[1] - ny / w)
+        uu = U[0] * U[0] + U[1] * U[1]
+        Q = None if uu == 0 else (nx / w + rr * U[0] / uu, ny / w + rr * U[1] / uu)
+    return Q
+
+
+def pole_start_direction(P0, d, Q0):
+    """A direction shot on the circle through Q0 tangent to d at P0: the
+    direction at Q0 is conj(d) (P0 - Q0)^2 (invert about Q0)."""
+    W = _sub(P0, Q0)
+    return _pole_ok(Q0, _cmul(_conj(d), _cmul(W, W)))
+
+
+def pole_start_aimed(P0, X, Q0):
+    """The circle through P0, X, Q0: the direction at Q0 is
+    conj(P0 - X) (X - Q0) (P0 - Q0)."""
+    return _pole_ok(Q0, _cmul(_conj(_sub(P0, X)), _cmul(_sub(X, Q0), _sub(P0, Q0))))
 
 
 # ---------------------------------------------------------------- entry points
@@ -1149,7 +1317,7 @@ def trace_physical_direction(surfaces, player, direction, plan=(), cursor=None, 
 
 
 def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="direction", flags=None,
-                         extra_known=(), proj_hits=None, beam=None):
+                         extra_known=(), proj_hits=None, beam=None, exact_aim=None):
     """line: the initial beam's exact implicit line; "direction": `direction`
     is exact data; None: not exact. beam: the initial beam itself (a scene
     with a pre-transform: the circle through Q0); else the straight beam
@@ -1160,6 +1328,15 @@ def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="
     walk.proj_hits = proj_hits or {}
     walk.Q = pre_q(surfaces)
     p0 = P(player)
+    # the exact pole record of a pre-transform frame (Stage 105): Q0 exact, the
+    # direction there from the initial beam (an aimed shot needs the exact aim
+    # image `exact_aim`; a direction shot its exact direction)
+    q0e = pre_q_exact(surfaces)
+    if q0e is not None:
+        if beam is not None:
+            walk.pole = None if exact_aim is None else pole_start_aimed(FC(p0), exact_aim, q0e)
+        else:
+            walk.pole = pole_start_direction(FC(p0), FC(direction), q0e)
     if beam is not None:
         b0 = beam
     elif walk.Q is None:
@@ -1353,23 +1530,25 @@ def _aim(surfaces, player, cursor, plan, flags=None, hints=None):
         known = [P(cursor)] if plan and fixes_cursor(surfaces, cursor, plan, flags) else []
     q0 = pre_q(surfaces)
     if q0 is None:
-        return (-d if away else d), line, known, None
-    # a pre-transform: the circle through the player, the aim point and Q0
+        return (-d if away else d), line, known, None, None
+    # a pre-transform: the circle through the player, the aim point and Q0;
+    # the exact aim image for the exact pole record (None when not exact)
     b = beam_through(P(player), P(player) + d, q0)
-    return d, None, known, (reversed_beam(b) if away else b)
+    xe = exact_image(surfaces, cursor, plan, flags) if line != "direction" else None
+    return d, None, known, (reversed_beam(b) if away else b), xe
 
 
 def planned(surfaces, player, cursor, plan, flags=None, hints=None):
     """Planned trace = forward PLANNED-mode walk of the exact aim direction.
     hints: plan entry index -> the point the player clicked (settles forks)."""
-    d, line, known, beam = _aim(surfaces, player, cursor, plan, flags, hints)
+    d, line, known, beam, xe = _aim(surfaces, player, cursor, plan, flags, hints)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
                                 extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
-                                beam=beam)
+                                beam=beam, exact_aim=xe)
 
 
 def physical(surfaces, player, cursor, plan, flags=None, hints=None):
-    d, line, known, beam = _aim(surfaces, player, cursor, plan, flags, hints)
+    d, line, known, beam, xe = _aim(surfaces, player, cursor, plan, flags, hints)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PHYSICAL, line=line, flags=flags,
                                 extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
-                                beam=beam)
+                                beam=beam, exact_aim=xe)
