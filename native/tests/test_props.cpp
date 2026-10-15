@@ -156,3 +156,212 @@ TEST_CASE("B2: the replay of a seeded float64 walk reproduces its tangent-linear
 	CHECK(mismatched <= 4); // the provenance cases above
 	CHECK(with_projective >= 10);
 }
+
+// ---------------------------------------------------------------- Stage 103
+
+namespace {
+
+BigFloat B(double x) { return BigFloat::from_float(x, 64); }
+
+// orient, on-circle and incircle determinants in 64-limb BigFloat (1792 bits:
+// exact for these double inputs), independent of exact::'s filters.
+bool ref_orient_zero(double ax, double ay, double bx, double by, double cx, double cy) {
+	return B(bx).sub(B(ax)).mul(B(cy).sub(B(ay))).sub(B(by).sub(B(ay)).mul(B(cx).sub(B(ax)))).is_zero();
+}
+bool ref_on_circle_zero(double cx, double cy, double r, double kx, double ky) {
+	const BigFloat dx = B(kx).sub(B(cx));
+	const BigFloat dy = B(ky).sub(B(cy));
+	return dx.mul(dx).add(dy.mul(dy)).sub(B(r).mul(B(r))).is_zero();
+}
+bool ref_incircle_zero(double ax, double ay, double bx, double by, double cx, double cy, double dx, double dy) {
+	const BigFloat adx = B(ax).sub(B(dx)), ady = B(ay).sub(B(dy));
+	const BigFloat bdx = B(bx).sub(B(dx)), bdy = B(by).sub(B(dy));
+	const BigFloat cdx = B(cx).sub(B(dx)), cdy = B(cy).sub(B(dy));
+	const BigFloat al = adx.mul(adx).add(ady.mul(ady));
+	const BigFloat bl = bdx.mul(bdx).add(bdy.mul(bdy));
+	const BigFloat cl = cdx.mul(cdx).add(cdy.mul(cdy));
+	const BigFloat det = al.mul(bdx.mul(cdy).sub(cdx.mul(bdy))).add(bl.mul(cdx.mul(ady).sub(adx.mul(cdy)))).add(cl.mul(adx.mul(bdy).sub(bdx.mul(ady))));
+	return det.is_zero();
+}
+
+double nudge(std::mt19937_64 &rng, double x) {
+	switch (rng() % 3) {
+		case 0: return std::nextafter(x, INF_D);
+		case 1: return std::nextafter(x, -INF_D);
+		default: return x;
+	}
+}
+
+} // namespace
+
+TEST_CASE("props: exact predicates agree with a 64-limb reference on degenerate and 1-ulp-perturbed inputs") {
+	std::mt19937_64 rng(1031);
+	std::uniform_int_distribution<int> coord(-2000, 2000);
+	std::uniform_int_distribution<int> small(1, 40);
+	int zeros = 0;
+	int checked = 0;
+	for (int k = 0; k < 3000; k++) {
+		// exactly collinear on a dyadic lattice, then maybe one ulp off
+		const double ax = coord(rng) * 0.25, ay = coord(rng) * 0.25;
+		const double ux = small(rng) * 0.5, uy = small(rng) * 0.5 - 10.0;
+		const double s = small(rng) * 0.125, u = -small(rng) * 0.25;
+		const double bx = ax + s * ux, by = ay + s * uy;
+		const double cx = nudge(rng, ax + u * ux), cy = nudge(rng, ay + u * uy);
+		const bool o = exact::orient_zero(ax, ay, bx, by, cx, cy);
+		CHECK(o == ref_orient_zero(ax, ay, bx, by, cx, cy));
+		zeros += o ? 1 : 0;
+		// exactly on a circle through Pythagorean triples, maybe one ulp off
+		const double ccx = coord(rng) * 0.5, ccy = coord(rng) * 0.5;
+		const int m = small(rng);
+		const int t = int(rng() % 4);
+		const double px = (t & 1) ? 3.0 * m : -4.0 * m;
+		const double py = (t & 2) ? 4.0 * m : -3.0 * m;
+		const double kx = nudge(rng, ccx + px), ky = nudge(rng, ccy + py);
+		const bool c = exact::on_circle_zero(ccx, ccy, 5.0 * m, kx, ky);
+		CHECK(c == ref_on_circle_zero(ccx, ccy, 5.0 * m, kx, ky));
+		zeros += c ? 1 : 0;
+		// four points of one circle (3-4-5 and 5-12-13 multiples share radius 65)
+		const double r65[][2] = {{39, 52}, {-52, 39}, {25, -60}, {-60, -25}, {63, 16}, {-33, 56}};
+		const double qx = ccx, qy = ccy;
+		const double dxp = nudge(rng, qx + r65[3][0]), dyp = qy + r65[3][1];
+		const bool ic = exact::incircle_zero(qx + r65[0][0], qy + r65[0][1], qx + r65[1][0], qy + r65[1][1], qx + r65[2][0], qy + r65[2][1], dxp, dyp);
+		CHECK(ic == ref_incircle_zero(qx + r65[0][0], qy + r65[0][1], qx + r65[1][0], qy + r65[1][1], qx + r65[2][0], qy + r65[2][1], dxp, dyp));
+		zeros += ic ? 1 : 0;
+		checked += 3;
+	}
+	// both outcomes occur: the degenerate cases are hit exactly, and the nudged ones miss
+	CHECK(zeros > checked / 6);
+	CHECK(zeros < checked);
+}
+
+TEST_CASE("props: Beam::param_of inverts Beam::at on random beams (float64 and 4 limbs)") {
+	std::mt19937_64 rng(1032);
+	std::uniform_real_distribution<double> u(-1.0, 1.0);
+	for (int k = 0; k < 4000; k++) {
+		const double ang = u(rng) * 3.14159;
+		const double kap = u(rng) * 0.01;
+		const double t = u(rng) * 150.0;
+		const double px = u(rng) * 1000.0, py = u(rng) * 1000.0;
+		{
+			const Beam<F64> b{{F64{px}, F64{py}}, {F64{std::cos(ang)}, F64{std::sin(ang)}}, F64{kap}};
+			const double back = b.param_of(b.at(F64{t})).v;
+			CHECK(std::fabs(back - t) <= 1e-9 * std::max(1.0, std::fabs(t)));
+		}
+		{
+			const BigFloat l = BigFloat::from_int(1, 4);
+			const Beam<BigFloat> b{{l.like(px), l.like(py)}, CN<BigFloat>{l.like(std::cos(ang)), l.like(std::sin(ang))}.unit(), l.like(kap)};
+			const BigFloat back = b.param_of(b.at(l.like(t)));
+			CHECK(std::fabs(back.to_float() - t) <= 1e-25 * std::max(1.0, std::fabs(t)));
+		}
+	}
+}
+
+namespace {
+
+// A random small scene: room walls (terminal), mirrors (reflection both
+// sides), pass lines and full inversion circles.
+std::vector<SurfaceDef> random_scene(std::mt19937_64 &rng) {
+	std::uniform_real_distribution<double> x(100.0, 1800.0), y(100.0, 1000.0), r(30.0, 160.0);
+	std::vector<SurfaceDef> defs;
+	auto line = [&](double sx, double sy, double ex, double ey, EffectType t) {
+		SurfaceDef d;
+		d.id = int(defs.size()) + 1;
+		d.line = true;
+		d.sx = sx; d.sy = sy; d.ex = ex; d.ey = ey;
+		d.has_via = true; d.vx = (sx + ex) / 2.0; d.vy = (sy + ey) / 2.0;
+		SideDef side;
+		side.type = t;
+		side.interactive = t != EffectType::Pass && t != EffectType::Terminal;
+		d.left = side;
+		d.right = d.left;
+		defs.push_back(d);
+	};
+	line(50, 50, 1870, 50, EffectType::Terminal);
+	line(1870, 50, 1870, 1030, EffectType::Terminal);
+	line(1870, 1030, 50, 1030, EffectType::Terminal);
+	line(50, 1030, 50, 50, EffectType::Terminal);
+	const int n = 2 + int(rng() % 5);
+	for (int i = 0; i < n; i++) {
+		const int kind = int(rng() % 3);
+		if (kind == 2) {
+			SurfaceDef d;
+			d.id = int(defs.size()) + 1;
+			d.line = false;
+			d.full = true;
+			d.has_circle = true;
+			d.cx = x(rng); d.cy = y(rng); d.radius = r(rng);
+			d.sx = d.cx + d.radius; d.sy = d.cy;
+			d.ex = d.cx - d.radius / 2.0; d.ey = d.cy - 0.866 * d.radius;
+			d.has_via = true; d.vx = d.cx - d.radius / 2.0; d.vy = d.cy + 0.866 * d.radius;
+			SideDef inv;
+			inv.type = EffectType::Inversion;
+			inv.interactive = true;
+			d.left = inv;
+			d.right = d.left;
+			defs.push_back(d);
+		} else {
+			line(x(rng), y(rng), x(rng), y(rng), kind == 0 ? EffectType::Reflection : EffectType::Pass);
+		}
+	}
+	return defs;
+}
+
+} // namespace
+
+TEST_CASE("props: walker invariants on random scenes (and the float64 twin is bit-identical)") {
+	std::mt19937_64 rng(1033);
+	std::uniform_real_distribution<double> x(120.0, 1780.0), y(120.0, 980.0), a(-3.14159, 3.14159);
+	int walks = 0;
+	int applied = 0;
+	for (int k = 0; k < 300; k++) {
+		const std::vector<SurfaceDef> defs = random_scene(rng);
+		Scene<F64> s64 = Scene<F64>::from_defs(defs, F64{1});
+		Scene<Dual> sd = Scene<Dual>::from_defs(defs, Dual{1, 0});
+		s64.emit_infinity = true;
+		sd.emit_infinity = true;
+		const double px = x(rng), py = y(rng), ang = a(rng);
+		const double dx = std::cos(ang), dy = std::sin(ang);
+		Solver<F64> solver(s64, nullptr);
+		Solver<Dual> fast(sd, nullptr);
+		const Walk<F64> w = solver.run_direction(CN<F64>{F64{px}, F64{py}}, CN<F64>{F64{dx}, F64{dy}}, {}, std::nullopt, Mode::Physical, MAX_HITS, Flags());
+		const Walk<Dual> wd = fast.run_direction(CN<Dual>{Dual{px, 0}, Dual{py, 0}}, CN<Dual>{Dual{dx, 0}, Dual{dy, 0}}, {}, std::nullopt, Mode::Physical, MAX_HITS, Flags());
+		REQUIRE(!w.events.empty());
+		CHECK(w.events.size() <= size_t(MAX_HITS) + 1);
+		REQUIRE(w.events.size() == wd.events.size());
+		for (size_t i = 0; i < w.events.size(); i++) {
+			const Event<F64> &e = w.events[i];
+			// the float64 twin: the same decisions and bit-identical values
+			CHECK(e.kind == wd.events[i].kind);
+			CHECK(e.surface_id == wd.events[i].surface_id);
+			if (e.point) {
+				REQUIRE(wd.events[i].point.has_value());
+				CHECK(e.point->fx() == wd.events[i].point->fx());
+				CHECK(e.point->fy() == wd.events[i].point->fy());
+				CHECK(std::isfinite(e.point->fx()));
+				CHECK(std::isfinite(e.point->fy()));
+			}
+			// the infinity event: the real infinity in an identity-frame straight beam (no point)
+			if (e.kind == EventKind::Infinity) {
+				CHECK(e.surface_id == INFINITY_ID);
+				CHECK(e.point.has_value() == e.t_to.has_value());
+			}
+			// an applied hit lies on its surface's carrier
+			if (e.kind == EventKind::Hit && e.applied && e.point) {
+				const SurfaceDef &d = defs[size_t(e.surface_id - 1)];
+				const double qx = e.point->fx(), qy = e.point->fy();
+				double dist;
+				if (d.line) {
+					const double lx = d.ex - d.sx, ly = d.ey - d.sy;
+					dist = std::fabs(lx * (qy - d.sy) - ly * (qx - d.sx)) / std::sqrt(lx * lx + ly * ly);
+				} else {
+					dist = std::fabs(std::hypot(qx - d.cx, qy - d.cy) - d.radius);
+				}
+				CHECK_MESSAGE(dist < 1e-6, "walk " << k << " event " << i << " off its carrier by " << dist);
+				applied++;
+			}
+		}
+		walks++;
+	}
+	CHECK(walks == 300);
+	CHECK(applied > 300);
+}
