@@ -663,6 +663,11 @@ TEST_CASE("goldens: the sweep combos of Tracer.trace_pair") {
 				}
 				if (hk * 16 + 16 > hashes.size() || sha16(canon) != hashes.substr(hk * 16, 16)) {
 					mismatches++;
+					// RC_SWEEP_REBLESS=1: print what an approved B-item regenerates
+					// (group, hash slot, new hash, canon) for the golden's update
+					if (std::getenv("RC_SWEEP_REBLESS")) {
+						std::printf("REBLESS\t%s\t%zu\t%ld\t%s\t%s\n", it.key().c_str(), hk, i, sha16(canon).c_str(), canon.c_str());
+					}
 					if (mismatch_keys.size() < 12) {
 						mismatch_keys.push_back(key + " tiers " + std::to_string(pair ? pair->result.planned.limbs : -1) + "/" +
 							std::to_string(pair ? pair->result.physical.limbs : -1));
