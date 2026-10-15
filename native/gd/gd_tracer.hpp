@@ -93,16 +93,11 @@ public:
 	int surface_id = -1;
 	int side = 0;
 	bool on_segment = false;
-	int at_endpoint = 0;
-	bool blocked_left = false;
-	bool blocked_right = false;
 
-	static godot::Ref<TraceHit> make(double p_t, const godot::Vector2 &p_point, const godot::Variant &p_segment, int p_side, bool p_on_segment,
-			int p_at_endpoint = 0, bool p_blocked_left = false, bool p_blocked_right = false);
+	static godot::Ref<TraceHit> make(double p_t, const godot::Vector2 &p_point, const godot::Variant &p_segment, int p_side, bool p_on_segment);
 	// segments: surface id -> game Segment, for `segment`
 	static godot::Ref<TraceHit> wrap(const rc::TraceHit &h, const godot::Dictionary &segments);
 	rc::TraceHit to_rc() const;
-	bool is_fully_blocked() const { return blocked_left && blocked_right; }
 
 #define RC_HIT_ACCESSOR(name, type)         \
 	type get_##name() const { return name; } \
@@ -113,9 +108,6 @@ public:
 	RC_HIT_ACCESSOR(surface_id, int)
 	RC_HIT_ACCESSOR(side, int)
 	RC_HIT_ACCESSOR(on_segment, bool)
-	RC_HIT_ACCESSOR(at_endpoint, int)
-	RC_HIT_ACCESSOR(blocked_left, bool)
-	RC_HIT_ACCESSOR(blocked_right, bool)
 #undef RC_HIT_ACCESSOR
 };
 

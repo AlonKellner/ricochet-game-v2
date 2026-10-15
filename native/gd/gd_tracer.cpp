@@ -128,8 +128,7 @@ Ref<Ray> RayCache::get(const rc::Ray &r) {
 // ---------------------------------------------------------------- TraceHit
 
 void TraceHit::_bind_methods() {
-	ClassDB::bind_static_method("TraceHit", D_METHOD("make", "t", "point", "segment", "side", "on_segment", "at_endpoint", "blocked_left", "blocked_right"),
-			&TraceHit::make, DEFVAL(0), DEFVAL(false), DEFVAL(false));
+	ClassDB::bind_static_method("TraceHit", D_METHOD("make", "t", "point", "segment", "side", "on_segment"), &TraceHit::make);
 #define RC_HIT_PROP(name, vtype)                                                      \
 	ClassDB::bind_method(D_METHOD("get_" #name), &TraceHit::get_##name);              \
 	ClassDB::bind_method(D_METHOD("set_" #name, "v"), &TraceHit::set_##name);         \
@@ -138,9 +137,6 @@ void TraceHit::_bind_methods() {
 	RC_HIT_PROP(surface_id, INT)
 	RC_HIT_PROP(side, INT)
 	RC_HIT_PROP(on_segment, BOOL)
-	RC_HIT_PROP(at_endpoint, INT)
-	RC_HIT_PROP(blocked_left, BOOL)
-	RC_HIT_PROP(blocked_right, BOOL)
 #undef RC_HIT_PROP
 	ClassDB::bind_method(D_METHOD("get_point"), &TraceHit::get_point);
 	ClassDB::bind_method(D_METHOD("set_point", "v"), &TraceHit::set_point);
@@ -149,11 +145,9 @@ void TraceHit::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_segment", "v"), &TraceHit::set_segment);
 	ADD_PROPERTY(PropertyInfo(Variant::NIL, "segment", godot::PROPERTY_HINT_NONE, "", godot::PROPERTY_USAGE_DEFAULT | godot::PROPERTY_USAGE_NIL_IS_VARIANT),
 			"set_segment", "get_segment");
-	ClassDB::bind_method(D_METHOD("is_fully_blocked"), &TraceHit::is_fully_blocked);
 }
 
-Ref<TraceHit> TraceHit::make(double p_t, const Vector2 &p_point, const Variant &p_segment, int p_side, bool p_on_segment, int p_at_endpoint,
-		bool p_blocked_left, bool p_blocked_right) {
+Ref<TraceHit> TraceHit::make(double p_t, const Vector2 &p_point, const Variant &p_segment, int p_side, bool p_on_segment) {
 	Ref<TraceHit> h;
 	h.instantiate();
 	h->t = p_t;
@@ -161,9 +155,6 @@ Ref<TraceHit> TraceHit::make(double p_t, const Vector2 &p_point, const Variant &
 	h->segment = p_segment;
 	h->side = p_side;
 	h->on_segment = p_on_segment;
-	h->at_endpoint = p_at_endpoint;
-	h->blocked_left = p_blocked_left;
-	h->blocked_right = p_blocked_right;
 	return h;
 }
 

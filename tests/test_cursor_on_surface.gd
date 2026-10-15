@@ -77,9 +77,7 @@ func test_effect_applied_when_cursor_on_mirror() -> void:
 		var hit_desc := "null"
 		if step.hit != null:
 			if step.hit.segment != null:
-				hit_desc = "seg(on=%s, side=%d, bl=%s, br=%s)" % [
-					step.hit.on_segment, step.hit.side,
-					step.hit.blocked_left, step.hit.blocked_right]
+				hit_desc = "seg(on=%s, side=%d)" % [step.hit.on_segment, step.hit.side]
 			else:
 				hit_desc = "null-seg"
 		gut.p("  step[%d]: start=%s end=%s fid=%d hit=%s" % [

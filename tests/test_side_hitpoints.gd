@@ -88,8 +88,9 @@ func test_tangent_into_arc_at_start() -> void:
 func test_blocked_sides_off_segment() -> void:
 	var seg := _horiz_segment()
 	var record := TraceHit.make(1.0, Vector2(500, 200), seg, Side.Value.LEFT, false)
+	# (blocking is decided at endpoints only, by BeamGeom.blocked_sides below; the
+	# walker never fully blocks an off-segment hit: rc::Solver::full_block)
 	assert_false(record.on_segment, "Off-segment hit should not be on segment")
-	assert_false(record.is_fully_blocked(), "Off-segment hit should not be fully blocked")
 
 func test_blocked_sides_start_endpoint() -> void:
 	var sides := BeamGeom.blocked_sides(_bg(_horiz_segment()), 1, _cn(Vector2(0, 1)))
