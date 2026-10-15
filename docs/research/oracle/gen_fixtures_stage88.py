@@ -77,11 +77,15 @@ def main():
     last = f["expected"][-1]
     assert last["kind"] == "max" and last["surface_id"] == T.INFINITY_ID and "x" not in last, last
     fx.append(f)
-    # a circle beam never wraps: inversion, re-hit (pop), then the straight beam wraps
+    # a circle beam's infinity is the inversion center (Stage 101), but a beam
+    # that crosses the whole circle pops at the second crossing before reaching
+    # it: inversion, re-hit (pop), then the straight beam wraps (an infinity
+    # event without a point), loop
     inv = circle(1, (500.0, 0.0), 200.0, INV, INV)
-    f = fixture("circle_beam_never_emits_infinity", [inv], (0.0, 0.0), direction=(1.0, 0.1))
+    f = fixture("circle_beam_pops_before_the_center", [inv], (0.0, 0.0), direction=(1.0, 0.1))
     ks = [e["kind"] for e in f["expected"]]
-    assert ks[0] == "hit" and ks[1] == "hit" and "infinity" in ks, ks
+    assert ks[:3] == ["hit", "hit", "infinity"] and "x" not in f["expected"][2], ks
+    assert not any(e["kind"] == "infinity" and "x" in e for e in f["expected"]), ks
     fx.append(f)
     # --- plans ---
     # [inf] alone: the second realization of the empty plan (aim away)
@@ -113,12 +117,18 @@ def main():
         pair_search(fx, "mirror_infinity_mirror", [m1, m2], (0.0, 0.0), (1200.0, 40.0), [1, INF, 2])
     except AssertionError:
         pair_search(fx, "mirror_infinity_mirror", [m1, m2], (0.0, 0.0), (1000.0, 40.0), [1, INF, 2])
-    # infinity after an inversion: the circle beam cannot wrap -- unrealizable
+    # infinity after an inversion (Stage 101): the entry is the passage of the
+    # inverted frame's infinity, the center; met on the side whose reversed
+    # epoch passes the center before the cursor
+    met = []
     for side in ("LEFT", "RIGHT"):
         f = fixture("infinity_after_inversion_%s_planned" % side.lower(), [inv], (0.0, 0.0),
                     plan=[(1, side), INF], mode="planned", cursor=(900.0, 60.0))
-        assert not reaches(f) and True not in infinities(f), kinds(f)
+        assert all(("x" not in e) or (abs(float(e["x"]) - 500.0) < 1e-20 and abs(float(e["y"])) < 1e-20)
+                   for e in f["expected"] if e["kind"] == "infinity"), kinds(f)
+        met.append(reaches(f))
         fx.append(f)
+    assert True in met and False in met, met
     # a projective whose exit points away from the cursor: reached through the
     # wrap; the infinity entry in that epoch is optional
     proj = {"type": "line_normal_projection", "interactive": True, "back": False}

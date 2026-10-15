@@ -45,6 +45,7 @@ inline std::vector<SurfaceDef> defs_from_json(const ojson &arr) {
 		s.left = side_from_json(d.contains("left") ? d["left"] : ojson());
 		s.right = side_from_json(d.contains("right") ? d["right"] : ojson());
 		s.is_target = d.value("is_target", false);
+		s.pre_transform = d.value("pre_transform", false);
 		if (d.contains("resolver") && !d["resolver"].is_null()) {
 			ResolverDef r; r.key = d["resolver"]["key"].get<std::string>();
 			for (auto it = d["resolver"]["table"].begin(); it != d["resolver"]["table"].end(); ++it)

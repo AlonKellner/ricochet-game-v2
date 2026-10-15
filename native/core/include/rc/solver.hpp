@@ -208,6 +208,7 @@ struct StackEntry {
 	std::shared_ptr<const exact::Line> line;
 	int pop_id = -1;      // the surface whose hit pops this entry (sid; a portal's pair)
 	EffectType etype = EffectType::Pass; // the map pushed (a pop needs the same map)
+	std::optional<CN<N>> q; // the frame's image of infinity before the push (restored by the pop)
 };
 
 template <Num N>
@@ -256,6 +257,10 @@ struct Walk {
 	std::map<int, bool> tangent;
 	Flags flags;
 	bool on_plan = true;
+	// Stage 101: the current frame's image of infinity (nullopt = infinity):
+	// the pre-transform's at the start, mapped forward by every applied effect,
+	// restored by a pop, infinity again after a projective
+	std::optional<CN<N>> Q;
 	BeamPtr<N> hp_src;
 	int hp_view = -1;
 	int view_count = 0;
@@ -292,14 +297,18 @@ public:
 	Walk<N> run_direction(const CN<N> &player, const CN<N> &dir, const std::vector<PlanItem> &plan,
 			const std::optional<CN<N>> &cursor, Mode mode, int max_events = MAX_HITS, const Flags &flags = Flags()) {
 		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
-		BeamPtr<N> b0 = std::make_shared<const Beam<N>>(Beam<N>{player, dir.unit(), player.re.sub(player.re)});
+		// a pre-transform frame: the circle through Q0 along the direction (no exact line)
+		BeamPtr<N> b0 = std::make_shared<const Beam<N>>(w.Q ? Beam<N>::through_tangent(player, dir.unit(), *w.Q)
+															 : Beam<N>{player, dir.unit(), player.re.sub(player.re)});
 		if (mode == Mode::Physical) {
 			b0 = Backend<N>::seed(b0);
 			w.seeded = true;
 		}
 		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
-		w.line = exact::Line::from_exact(exact::line_from_dir(player.fx(), player.fy(), dir.fx(), dir.fy()));
-		add_line_endpoints(w, *b0);
+		if (b0->kappa.is_zero()) {
+			w.line = exact::Line::from_exact(exact::line_from_dir(player.fx(), player.fy(), dir.fx(), dir.fy()));
+			add_line_endpoints(w, *b0);
+		}
 		walk_from(w, b0, -1, std::nullopt);
 		return w;
 	}
@@ -363,6 +372,39 @@ public:
 			}
 		}
 		return false;
+	}
+
+	// Stage 101: the frame's image of infinity after `plan` (nullopt = infinity):
+	// the pre-transform's, mapped through the transformative entries of the
+	// last epoch on the provenance stack (a re-hit of the top pops it); a
+	// projective starts the epoch at infinity. The point the next infinity
+	// entry would pass; the UI's marker.
+	std::optional<CN<N>> plan_pole(const std::vector<PlanItem> &plan, const Flags &flags) const {
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		size_t start = 0;
+		std::optional<CN<N>> q = effects::scene_pre_q(scene_);
+		for (size_t j = 0; j < plan.size(); j++) {
+			if (is_projective(effs[j])) {
+				start = j + 1;
+				q = std::nullopt;
+			}
+		}
+		std::vector<const Surf<N> *> st;
+		for (size_t j = start; j < plan.size(); j++) {
+			const Surf<N> *surf = scene_.find(plan[j].surface_id);
+			if (surf == nullptr || !is_transformative(effs[j])) {
+				continue;
+			}
+			if (!st.empty() && pop_id_of(st.back()->id) == surf->id) {
+				st.pop_back();
+			} else {
+				st.push_back(surf);
+			}
+		}
+		for (const Surf<N> *s : st) {
+			q = effects::map_point(q, *s, false);
+		}
+		return q;
 	}
 
 	Flags plan_flags(const std::vector<PlanItem> &plan, const Flags &flags) const {
@@ -600,6 +642,9 @@ private:
 	std::shared_ptr<const exact::Line> initial_line(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
 			const Flags &flags) const {
 		using exact::EB;
+		if (!scene_.pre_surfaces.empty()) {
+			return nullptr; // a pre-transform frame: the initial beam is a circle
+		}
 		std::optional<std::array<EB, 3>> X = exact_image_approx(cursor, plan, flags);
 		if (!X) {
 			return nullptr;
@@ -708,7 +753,7 @@ private:
 			}
 		}
 		if (proj.empty()) {
-			return build_simple(player, cursor, plan, effs);
+			return build_simple(player, cursor, plan, effs, effects::scene_pre_q(scene_));
 		}
 		// backward: the targets of the sub-chains (a fork settled by the click)
 		std::optional<std::map<size_t, CN<N>>> H = backward_hits(plan, effs, cursor);
@@ -788,7 +833,9 @@ private:
 			const CN<N> target = b < plan.size() ? H.at(b) : cursor;
 			std::vector<PlanItem> sub_plan(plan.begin() + long(a), plan.begin() + long(b));
 			std::vector<EffectType> sub_effs(effs.begin() + long(a), effs.begin() + long(b));
-			std::shared_ptr<const AnchorChain<N>> sub = build_simple(origin, target, sub_plan, sub_effs);
+			// the first epoch starts in the pre-transform's frame; after a projective the beam is straight
+			std::shared_ptr<const AnchorChain<N>> sub = build_simple(origin, target, sub_plan, sub_effs,
+				exit_dir ? std::nullopt : effects::scene_pre_q(scene_));
 			if (!sub) {
 				return nullptr;
 			}
@@ -832,7 +879,7 @@ private:
 	}
 
 	std::shared_ptr<const AnchorChain<N>> build_simple(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
-			const std::vector<EffectType> &effs) const {
+			const std::vector<EffectType> &effs, const std::optional<CN<N>> &base_q) const {
 		const size_t K = plan.size();
 		std::vector<std::vector<int>> stacks = {{}};
 		std::vector<int> st;
@@ -852,7 +899,8 @@ private:
 		}
 		// pole chain: key -> [P, Q or null, delta or null]
 		std::map<std::string, effects::Poles<N>> memo;
-		memo[""] = effects::Poles<N>{player, std::nullopt, std::nullopt};
+		// the epoch's base poles: the player and the frame's image of infinity (Stage 101)
+		memo[""] = effects::Poles<N>{player, base_q, base_q ? std::optional<CN<N>>(player.sub(*base_q)) : std::nullopt};
 		for (const std::vector<int> &s : stacks) {
 			for (size_t n = 1; n <= s.size(); n++) {
 				const std::string key = stack_key(std::vector<int>(s.begin(), s.begin() + long(n)));
@@ -953,6 +1001,7 @@ private:
 		w.mode = mode;
 		w.post_mode = Mode::Physical;
 		w.max_events = max_events;
+		w.Q = effects::scene_pre_q(scene_);
 		return w;
 	}
 
@@ -976,6 +1025,8 @@ private:
 				w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, std::nullopt});
 			}
 			add_line_endpoints(w, *b0);
+		} else if (w.Q && !plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
+			w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, std::nullopt});
 		}
 		walk_from(w, b0, -1, std::nullopt);
 		return w;
@@ -1028,7 +1079,11 @@ private:
 			dir = dir.neg(); // the second realization: away from the aim image (Stage 88)
 		}
 		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
-		BeamPtr<N> b0 = std::make_shared<const Beam<N>>(Beam<N>{player, dir.unit(), player.re.sub(player.re)});
+		BeamPtr<N> b0 = std::make_shared<const Beam<N>>(w.Q ? Beam<N>::through_tangent(player, dir.unit(), *w.Q)
+															 : Beam<N>{player, dir.unit(), player.re.sub(player.re)});
+		if (w.Q) {
+			line = nullptr; // a circle beam has no exact line
+		}
 		if (mode == Mode::Physical) {
 			b0 = Backend<N>::seed(b0);
 			w.seeded = true;
@@ -1182,10 +1237,21 @@ private:
 		for (Known<N> &kp : w.known) {
 			snap(w, beam, cands, kp);
 		}
-		if (w.scene->emit_infinity && beam.kappa.is_zero()) {
-			// the wrap through infinity: after every crossing ahead (t > t0),
-			// before the wrapped ones (no root of a straight beam is at inf)
-			cands.push_back(Candidate<N>{t0.like(INF_D), nullptr, false, std::nullopt, -1, true});
+		if (w.scene->emit_infinity) {
+			if (!w.Q) {
+				if (beam.kappa.is_zero()) {
+					// the wrap through infinity: after every crossing ahead (t > t0),
+					// before the wrapped ones (no root of a straight beam is at inf)
+					cands.push_back(Candidate<N>{t0.like(INF_D), nullptr, false, std::nullopt, -1, true});
+				}
+			} else {
+				// the frame's image of infinity is a finite point on this beam: an
+				// ordinary crossing, exact by provenance (not at the departure point)
+				const N tq = Backend<N>::param_of(beam, *w.Q);
+				if (tq.cmp(t0) != 0) {
+					cands.push_back(Candidate<N>{tq, nullptr, false, w.Q, -1, true});
+				}
+			}
 		}
 		std::sort(cands.begin(), cands.end(), [&](const Candidate<N> &a, const Candidate<N> &b) {
 			// the cursor at the departure point comes first (the wrap candidate is not the cursor)
@@ -1197,6 +1263,9 @@ private:
 			const int c = a.t.cmp(b.t);
 			if (c != 0) {
 				return before(a.t, b.t, t0);
+			}
+			if (a.inf != b.inf) {
+				return b.inf; // at a tie the passage of infinity comes after the cursor and the hits
 			}
 			const int ia = a.surf == nullptr ? -1 : a.surf->id;
 			const int ib = b.surf == nullptr ? -1 : b.surf->id;
@@ -1286,7 +1355,7 @@ private:
 	static std::vector<double> gaps(const Beam<N> &beam, const std::vector<Candidate<N>> &cands) {
 		std::vector<std::pair<double, double>> pts;
 		for (const Candidate<N> &cand : cands) {
-			if (cand.inf) {
+			if (cand.inf && !cand.pt) {
 				pts.emplace_back(INF_D, INF_D);
 			} else if (cand.pt) {
 				pts.emplace_back(cand.pt->fx(), cand.pt->fy());
@@ -1477,9 +1546,12 @@ private:
 				if (w.count > w.max_events) {
 					// cut at the next crossing: drawn up to it, no effect (at the
 					// wrap: a max at infinity, no point)
-					Event<N> &me = emit(w, EventKind::Max, beam, t_prev, cand.inf ? std::nullopt : std::optional<N>(t), INF_D);
+					Event<N> &me = emit(w, EventKind::Max, beam, t_prev, (cand.inf && !cand.pt) ? std::nullopt : std::optional<N>(t), INF_D);
 					if (cand.inf) {
 						me.surface_id = INFINITY_ID;
+						if (cand.pt) {
+							me.point = cand.pt;
+						}
 					} else if (cand.pt) {
 						me.point = cand.pt;
 					} else if (rehit && fresh) {
@@ -1495,8 +1567,11 @@ private:
 					if (consumed) {
 						w.plan_index++;
 					}
-					Event<N> &ie = emit(w, EventKind::Infinity, beam, t_prev, std::nullopt, gp[ci]);
+					Event<N> &ie = emit(w, EventKind::Infinity, beam, t_prev, cand.pt ? std::optional<N>(t) : std::nullopt, gp[ci]);
 					ie.surface_id = INFINITY_ID;
+					if (cand.pt) {
+						ie.point = cand.pt; // the frame's image of infinity, exact by provenance
+					}
 					ie.applied = consumed;
 					ie.flags = w.flags;
 					t_prev = t;
@@ -1695,11 +1770,13 @@ private:
 			}
 			w.known = top.known;
 			w.line = top.line;
+			w.Q = top.q;
 			return Next{w.seeded ? Backend<N>::reseed(top.beam) : top.beam, top.sid, t_res, false};
 		}
 		const N other = other_root(*beam, surf, depart, t0, t, pt);
 		const int pop_id = surf.portal ? surf.pair : surf.id;
-		w.stack.push_back(StackEntry<N>{beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype)});
+		w.stack.push_back(StackEntry<N>{beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype), w.Q});
+		w.Q = effects::map_point(w.Q, surf, false);
 		const std::vector<Known<N>> old_known = w.known;
 		// the surface the new beam departs from, and the departure point
 		const Surf<N> &dsurf = surf.portal ? *w.scene->find(surf.pair) : surf;
@@ -1825,6 +1902,7 @@ private:
 
 	Next project(Walk<N> &w, const BeamPtr<N> &beam, const N &t, const Surf<N> &surf, bool left, const CN<N> &pt, bool pt_exact) const {
 		w.stack.clear();
+		w.Q = std::nullopt;
 		w.epoch++;
 		const CN<N> *H = nullptr;
 		if (w.chain) {

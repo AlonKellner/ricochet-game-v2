@@ -121,6 +121,20 @@ public:
 		return pair;
 	}
 
+	// Stage 101: where the next infinity entry of `plan` would be passed: the
+	// frame's image of infinity after the plan (nullopt = infinity: the edge).
+	std::optional<V2> infinity_point(const std::vector<PlanItem> &plan, const Flags &flags) {
+		if (!ctx_) {
+			return std::nullopt;
+		}
+		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		const std::optional<CN<Dual>> q = solver.plan_pole(plan, flags);
+		if (!q) {
+			return std::nullopt;
+		}
+		return V2::of(q->fx(), q->fy());
+	}
+
 	void clear_cache() {
 		cache_valid_ = false;
 		if (!defs_.empty()) {

@@ -412,6 +412,7 @@ void BeamSolver::_bind_methods() {
 			&BeamSolver::physical, DEFVAL(MAX_HITS), DEFVAL(Dictionary()));
 	ClassDB::bind_static_method("BeamSolver", D_METHOD("plan_effects", "scene", "plan", "flags"), &BeamSolver::plan_effects, DEFVAL(Dictionary()));
 	ClassDB::bind_static_method("BeamSolver", D_METHOD("plan_flags", "scene", "plan", "flags"), &BeamSolver::plan_flags, DEFVAL(Dictionary()));
+	ClassDB::bind_static_method("BeamSolver", D_METHOD("plan_pole", "scene", "plan", "flags"), &BeamSolver::plan_pole, DEFVAL(Dictionary()));
 	ClassDB::bind_static_method("BeamSolver", D_METHOD("apply_state", "flags", "change"), &BeamSolver::apply_state);
 	ClassDB::bind_static_method("BeamSolver", D_METHOD("fixes_cursor", "scene", "cursor", "plan", "flags"), &BeamSolver::fixes_cursor, DEFVAL(Dictionary()));
 	ClassDB::bind_static_method("BeamSolver", D_METHOD("targets_of", "scene", "events"), &BeamSolver::targets_of);
@@ -520,6 +521,22 @@ Array BeamSolver::plan_effects(const Ref<BeamScene> &scene, const Array &plan, c
 			return Array();
 		}
 		return names_of(rc::Solver<N>(*sc).plan_effects(items, f));
+	}, scene->scene);
+}
+
+Variant BeamSolver::plan_pole(const Ref<BeamScene> &scene, const Array &plan, const Dictionary &flags) {
+	if (scene.is_null()) {
+		return Variant();
+	}
+	const std::vector<rc::PlanItem> items = plan_from_items(plan);
+	const rc::Flags f = flags_from_dict(flags);
+	return std::visit([&](const auto &sc) -> Variant {
+		using N = typename scene_num<std::decay_t<decltype(sc)>>::type;
+		if (sc == nullptr) {
+			return Variant();
+		}
+		const std::optional<rc::CN<N>> q = rc::Solver<N>(*sc).plan_pole(items, f);
+		return q ? Variant(CN::wrap(*q)) : Variant();
 	}, scene->scene);
 }
 

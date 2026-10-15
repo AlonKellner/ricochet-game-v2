@@ -329,7 +329,20 @@ inline Violations check_UX7(const Input &in) {
 				out.push_back(v("UX7: Line start %s != player %s", line_from, in.player));
 			}
 			const bool has_plan = !in.plan.empty();
-			if (!has_plan) {
+			const bool pre_transform = in.scene != nullptr && !in.scene->pre_surfaces.empty();
+			if (!has_plan && pre_transform) {
+				// Stage 101: the direct path is the circle through the player, the cursor
+				// and the frame's infinity, not a straight line: it must reach the cursor
+				if (in.has_result()) {
+					bool reached = false;
+					for (const EvInfo &e : *in.planned_events) {
+						reached = reached || e.kind == EventKind::Cursor;
+					}
+					if (!reached) {
+						out.push_back(v("UX7: The direct path does not reach the cursor %s", in.cursor));
+					}
+				}
+			} else if (!has_plan) {
 				const V2 expected_dir = (in.cursor - in.player).normalized();
 				const V2 actual_dir = ((*in.typed)[0].end - (*in.typed)[0].start).normalized();
 				if (double(expected_dir.dot(actual_dir)) < 0.99) {
@@ -683,12 +696,18 @@ inline Violations check_PHYSICS_COMPLIANCE(const Input &in) {
 	size_t check_limit = in.physical->cursor_index >= 0 ? size_t(in.physical->cursor_index) : steps.size();
 	check_limit = std::min(check_limit, steps.size());
 	bool portal_seen = false;
+	// the trailing escape step of a loop on which nothing fired retraces the
+	// loop's start (GAME_SPEC 12.5): its crossings were the loop's events
+	const bool ends_in_escape = in.has_result() && !in.physical_events->empty() && in.physical_events->back().kind == EventKind::Escape;
 	for (size_t i = 0; i < check_limit; i++) {
 		const TraceStep &step = steps[i];
 		if (step.after_portal) {
 			portal_seen = true;
 		}
 		if (portal_seen || step.is_arc_step || step.start == step.end || step.frame_id != IDENTITY_FRAME) {
+			continue;
+		}
+		if (ends_in_escape && i + 1 == steps.size() && !step.hit) {
 			continue;
 		}
 		for (const SurfaceInfo &s : *in.surfaces) {
@@ -875,9 +894,23 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 		X = CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}};
 	}
 	if (solver.via_infinity(in.plan, in.flags)) {
-		// Stage 88: the second realization aims away from the image: the reference
-		// aims at the image's reflection through the player
-		X = CN<F64>{F64{2.0 * double(in.player.x) - X->fx()}, F64{2.0 * double(in.player.y) - X->fy()}};
+		const CN<F64> P{F64{double(in.player.x)}, F64{double(in.player.y)}};
+		const std::optional<CN<F64>> q0 = effects::scene_pre_q(sc);
+		if (q0) {
+			// Stage 101: in a pre-transform frame the second realization is the same
+			// circle through the player, the image and Q0 run the other way: the
+			// reference aims at a point of that reversed circle before Q0
+			const CN<F64> delta = P.sub(*q0);
+			const Beam<F64> direct = Beam<F64>::through(P, *X, &delta);
+			const Beam<F64> rev{direct.p, direct.tau.neg(), direct.kappa.neg()};
+			const F64 tq = rev.param_of(*q0);
+			const F64 t = tq.v > 0.0 ? F64{tq.v * 0.5} : F64{1.0};
+			X = rev.at(t);
+		} else {
+			// Stage 88: the second realization aims away from the image: the reference
+			// aims at the image's reflection through the player
+			X = CN<F64>{F64{2.0 * double(in.player.x) - X->fx()}, F64{2.0 * double(in.player.y) - X->fy()}};
+		}
 	}
 	const V2 img = V2::of(X->fx(), X->fy());
 	if (!(std::isfinite(img.x) && std::isfinite(img.y)) || img == in.player) {

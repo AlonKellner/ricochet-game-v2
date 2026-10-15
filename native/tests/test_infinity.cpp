@@ -120,8 +120,8 @@ TEST_CASE("infinity: the Stage 88 fixtures match the oracle at f64, Dual and 4 l
 			if (e.kind == EventKind::Infinity) {
 				infinity_events++;
 				CHECK(e.surface_id == INFINITY_ID);
-				CHECK(!e.point);
-				CHECK(!e.t_to);
+				// the real infinity has no point and no t_to; a finite image of it has both
+				CHECK(e.point.has_value() == e.t_to.has_value());
 				if (e.applied) {
 					consumed++;
 				}
@@ -137,13 +137,45 @@ TEST_CASE("infinity: the Stage 88 fixtures match the oracle at f64, Dual and 4 l
 	CHECK(consumed > 0);
 }
 
-TEST_CASE("infinity: with the switch off the Stage 88 scenes never emit the event") {
-	const ojson fxs = load_json("bench/fixtures/stage88_infinity.json");
+TEST_CASE("infinity: the Stage 101 fixtures (infinity as a point, the pre-transform) match the oracle at f64, Dual and 4 limbs") {
+	const ojson fxs = load_json("bench/fixtures/stage101_infinity_point.json");
+	int fixtures = 0;
+	int with_point = 0;
+	int pre_scenes = 0;
 	for (const ojson &fx : fxs["fixtures"]) {
+		const std::string name = fx["name"].get<std::string>();
 		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
-		for (const Event<F64> &e : walk_infinity_fixture<F64>(fx, defs, F64{1}, false)) {
-			CHECK(e.kind != EventKind::Infinity);
-			CHECK(e.surface_id != INFINITY_ID);
+		for (const SurfaceDef &d : defs) {
+			pre_scenes += d.pre_transform ? 1 : 0;
+		}
+		const auto r64 = walk_infinity_fixture<F64>(fx, defs, F64{1}, true);
+		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
+		const auto rd = walk_infinity_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
+		const auto rb = walk_infinity_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
+		for (const Event<F64> &e : r64) {
+			if ((e.kind == EventKind::Infinity || e.kind == EventKind::Max) && e.surface_id == INFINITY_ID && e.point) {
+				with_point++;
+				CHECK(e.t_to.has_value());
+			}
+		}
+		fixtures++;
+	}
+	CHECK(fixtures == int(fxs["fixtures"].size()));
+	CHECK(with_point > 0);
+	CHECK(pre_scenes > 0);
+}
+
+TEST_CASE("infinity: with the switch off the Stage 88 and 101 scenes never emit the event") {
+	for (const char *f : {"bench/fixtures/stage88_infinity.json", "bench/fixtures/stage101_infinity_point.json"}) {
+		const ojson fxs = load_json(f);
+		for (const ojson &fx : fxs["fixtures"]) {
+			const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
+			for (const Event<F64> &e : walk_infinity_fixture<F64>(fx, defs, F64{1}, false)) {
+				CHECK(e.kind != EventKind::Infinity);
+				CHECK(e.surface_id != INFINITY_ID);
+			}
 		}
 	}
 }
@@ -230,9 +262,10 @@ TEST_CASE("infinity: with the switch on every older fixture differs from its gol
 		}
 	}
 	CHECK(fixtures == 115);
-	// the Stage 88b evidence (docs/research/stage88b_fixture_diff.md): 26 of the
-	// 115 fixtures change, 57 infinity events, 7 traces cut earlier
-	CHECK(changed == 26);
-	CHECK(inserted == 57);
-	CHECK(cut == 7);
+	// the oracle's own diff of the regenerated fixtures against the pre-Stage-88
+	// ones (docs/research/stage88b_fixture_diff.md, updated for Stage 101): 32
+	// of the 115 fixtures change, 83 infinity events, 8 traces cut earlier
+	CHECK(changed == 32);
+	CHECK(inserted == 83);
+	CHECK(cut == 8);
 }

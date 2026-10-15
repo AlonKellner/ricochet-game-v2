@@ -166,6 +166,15 @@
    "y": "1235.808937811304366955741912818320487172"
   },
   {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
+  },
+  {
    "kind": "hit",
    "surface_id": 10,
    "side": "LEFT",
@@ -342,26 +351,13 @@
    "y": "1235.808937811304366955741912818320487172"
   },
   {
-   "kind": "hit",
-   "surface_id": 10,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "-296.8994061278924107237083437663894024623",
-   "y": "0.0"
-  },
-  {
    "kind": "max",
-   "surface_id": -1,
+   "surface_id": -3,
    "side": "",
    "applied": false,
    "terminal": false,
    "on_segment": false,
-   "rehit": false,
-   "x": "0.0",
-   "y": "165.5063548258042991131521420949581187857"
+   "rehit": false
   }
  ],
  "physical": [
@@ -520,6 +516,15 @@
    "y": "1235.808937811304366955741912818320487172"
   },
   {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
+  },
+  {
    "kind": "hit",
    "surface_id": 10,
    "side": "LEFT",
@@ -696,26 +701,13 @@
    "y": "1235.808937811304366955741912818320487172"
   },
   {
-   "kind": "hit",
-   "surface_id": 10,
-   "side": "LEFT",
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
    "applied": false,
    "terminal": false,
    "on_segment": false,
-   "rehit": false,
-   "x": "-296.8994061278924107237083437663894024623",
-   "y": "0.0"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 13,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "0.0",
-   "y": "165.5063548258042991131521420949581187857"
+   "rehit": false
   },
   {
    "kind": "max",
@@ -725,8 +717,8 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "702.4911893411351512525614600278442900567",
-   "y": "557.1095498655818751293434610319764507886"
+   "x": "-296.8994061278924107237083437663894024623",
+   "y": "0.0"
   }
  ],
  "name": "grid60_chain_d01_025",

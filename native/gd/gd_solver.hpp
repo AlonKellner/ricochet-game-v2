@@ -140,6 +140,8 @@ public:
 			const godot::Ref<CN> &cursor, const godot::Array &plan, int max_events = MAX_HITS, const godot::Dictionary &flags = godot::Dictionary());
 	static godot::Array plan_effects(const godot::Ref<BeamScene> &scene, const godot::Array &plan, const godot::Dictionary &flags = godot::Dictionary());
 	static godot::Dictionary plan_flags(const godot::Ref<BeamScene> &scene, const godot::Array &plan, const godot::Dictionary &flags = godot::Dictionary());
+	// Stage 101: the frame's image of infinity after `plan` (a CN, or null for infinity)
+	static godot::Variant plan_pole(const godot::Ref<BeamScene> &scene, const godot::Array &plan, const godot::Dictionary &flags = godot::Dictionary());
 	static godot::Dictionary apply_state(const godot::Dictionary &flags, const godot::Dictionary &change);
 	static bool fixes_cursor(const godot::Ref<BeamScene> &scene, const godot::Ref<CN> &cursor, const godot::Array &plan,
 			const godot::Dictionary &flags = godot::Dictionary());

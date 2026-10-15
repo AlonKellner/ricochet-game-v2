@@ -123,6 +123,7 @@ std::vector<rc::SurfaceDef> defs_from_array(const godot::Array &defs) {
 		s.left = side_from(d.get("left", godot::Variant()));
 		s.right = side_from(d.get("right", godot::Variant()));
 		s.is_target = bool(d.get("is_target", false));
+		s.pre_transform = bool(d.get("pre_transform", false));
 		if (d.has("resolver") && d["resolver"].get_type() != godot::Variant::NIL) {
 			const godot::Dictionary r = d["resolver"];
 			rc::ResolverDef rd;
