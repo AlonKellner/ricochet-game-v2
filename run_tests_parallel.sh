@@ -14,6 +14,12 @@ set -uo pipefail
 GODOT="${GODOT_BIN:-godot}"
 cd "$(dirname "$0")"
 
+# fail fast: the tests/native/ files need native/bin/ and the import step
+if ! GODOT_BIN="$GODOT" make native; then
+	echo "!! native build failed (make native); not running the suite"
+	exit 1
+fi
+
 if [ -z "${JOBS:-}" ]; then
 	JOBS=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 fi
@@ -30,10 +36,11 @@ is_sweep() {
 }
 
 # job list: "<label>|<shard>|<comma-separated res:// test files>"
+# "others" is every non-sweep file, including the native extension tests
 OTHERS=""
-for f in tests/test_*.gd; do
+for f in tests/test_*.gd tests/native/test_*.gd; do
 	b=$(basename "$f")
-	is_sweep "$b" || OTHERS="${OTHERS:+$OTHERS,}res://tests/$b"
+	is_sweep "$b" || OTHERS="${OTHERS:+$OTHERS,}res://$f"
 done
 {
 	for f in "${SWEEPS[@]}"; do

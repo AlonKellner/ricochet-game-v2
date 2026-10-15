@@ -22,7 +22,7 @@ static func plan_of(j: Array) -> Array:
 	var out: Array = []
 	for e in j:
 		var c = e.get("click")
-		out.append(BeamSolver.PlanItem.make(int(e["surface_id"]), e["side"] == "LEFT",
+		out.append(BeamSolverPlanItem.make(int(e["surface_id"]), e["side"] == "LEFT",
 			null if c == null else Vector2(c[0], c[1])))
 	return out
 
@@ -32,11 +32,11 @@ func _walk(name: String, ctx: NumCtx) -> Array:
 	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
 	var player := ctx.cn(fx["player"][0], fx["player"][1])
 	var cursor = null if fx["cursor"] == null else ctx.cn(fx["cursor"][0], fx["cursor"][1])
-	var mode: int = BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED
+	var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
 	if fx["direction"] != null:
 		var d := ctx.cn(fx["direction"][0], fx["direction"][1])
 		return BeamSolver.trace_direction(ctx, scene, player, d, plan_of(fx["plan"]), cursor, mode)
-	if mode == BeamSolver.Mode.PLANNED:
+	if mode == BeamSolver.PLANNED:
 		return BeamSolver.planned(ctx, scene, player, cursor, plan_of(fx["plan"]))
 	return BeamSolver.physical(ctx, scene, player, cursor, plan_of(fx["plan"]))
 
@@ -47,7 +47,7 @@ func _check(events: Array, expected: Array, label: String, tol: float) -> bool:
 		fail_test("%s: %d events, oracle has %d (%s)" % [label, events.size(), expected.size(), _describe(events)])
 		return false
 	for i in expected.size():
-		var e: BeamSolver.Event = events[i]
+		var e: BeamSolverEvent = events[i]
 		var x: Dictionary = expected[i]
 		var got := [e.kind, e.surface_id, ("LEFT" if e.left else "RIGHT") if e.kind == "hit" else "",
 			e.applied, e.terminal, e.on_segment, e.rehit]
@@ -145,7 +145,7 @@ func test_targets_recorded_on_segment():
 	var ctx := NumCtx.f64()
 	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
 	var ev := BeamSolver.trace_direction(ctx, scene, ctx.cn(fx["player"][0], fx["player"][1]),
-		ctx.cn(fx["direction"][0], fx["direction"][1]), [], null, BeamSolver.Mode.PHYSICAL)
+		ctx.cn(fx["direction"][0], fx["direction"][1]), [], null, BeamSolver.PHYSICAL)
 	assert_eq(BeamSolver.targets_of(scene, ev), fx["targets"].map(func(x): return int(x)), "on-segment target hits")
 
 # ---------------------------------------------------------------- FastSolver twin
@@ -159,15 +159,15 @@ func test_fast_twin_trace_rules():
 			continue
 		var gen := _walk(name, ctx)
 		assert_eq(gen.size(), fx["expected"].size(), "%s: generic walk matches the oracle length" % name)
-		var fsc := FastSolver.Scene.from_defs(fx["surfaces"])
-		var mode: int = BeamSolver.Mode.PHYSICAL if fx["mode"] == "physical" else BeamSolver.Mode.PLANNED
+		var fsc := FastSolverScene.from_defs(fx["surfaces"])
+		var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
 		var cur = null if fx["cursor"] == null else PackedFloat64Array(fx["cursor"])
 		var out := FastSolver.trace_direction(fsc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["direction"]),
 			plan_of(fx["plan"]), cur, mode)
 		assert_eq(out.events.size(), gen.size(), "%s: event count" % name)
 		for i in mini(out.events.size(), gen.size()):
-			var a: BeamSolver.Event = out.events[i]
-			var b: BeamSolver.Event = gen[i]
+			var a: BeamSolverEvent = out.events[i]
+			var b: BeamSolverEvent = gen[i]
 			assert_eq([a.kind, a.surface_id, a.left, a.applied, a.on_segment, a.rehit],
 				[b.kind, b.surface_id, b.left, b.applied, b.on_segment, b.rehit], "%s event %d" % [name, i])
 			if a.point != null and b.point != null:

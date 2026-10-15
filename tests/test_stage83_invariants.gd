@@ -17,7 +17,7 @@ func _scene(ctx: NumCtx) -> BeamScene:
 	])
 
 func _events(scene: BeamScene, ctx: NumCtx) -> Array:
-	return BeamSolver.trace_direction(ctx, scene, ctx.cn(0, -40), ctx.cn(1, 0.0625), [], null, BeamSolver.Mode.PHYSICAL)
+	return BeamSolver.trace_direction(ctx, scene, ctx.cn(0, -40), ctx.cn(1, 0.0625), [], null, BeamSolver.PHYSICAL)
 
 func test_valid_trace_has_no_violations():
 	var ctx := NumCtx.f64()
@@ -58,7 +58,7 @@ func test_BEAM_ORDER_detects_reordered_events():
 		{"id": 2, "line": true, "start": [200.0, -500.0], "end": [200.0, 500.0], "via": [200.0, 0.0], "full": false, "left": pass_cfg, "right": pass_cfg},
 		{"id": 3, "line": true, "start": [300.0, -500.0], "end": [300.0, 500.0], "via": [300.0, 0.0], "full": false, "left": term, "right": term},
 	])
-	var ev := BeamSolver.trace_direction(ctx, s2, ctx.cn(0, 0), ctx.cn(1, 0), [], null, BeamSolver.Mode.PHYSICAL)
+	var ev := BeamSolver.trace_direction(ctx, s2, ctx.cn(0, 0), ctx.cn(1, 0), [], null, BeamSolver.PHYSICAL)
 	assert_eq(InvariantChecker.check_beam_order(ev), [] as Array[String])
 	var tmp = ev[0]
 	ev[0] = ev[1]
@@ -72,9 +72,9 @@ func test_PLAN_EFFECTS_APPLIED_by_surface_ids():
 	var applied: Array = []
 	for e in ev:
 		if e.kind == "hit" and e.applied and not e.terminal:
-			applied.append(BeamSolver.PlanItem.make(e.surface_id, e.left))
+			applied.append(BeamSolverPlanItem.make(e.surface_id, e.left))
 	assert_eq(InvariantChecker.check_plan_effects_applied_events(ev, applied, true), [] as Array[String])
-	var wrong: Array = [BeamSolver.PlanItem.make(99, true)]
+	var wrong: Array = [BeamSolverPlanItem.make(99, true)]
 	assert_gt(InvariantChecker.check_plan_effects_applied_events(ev, wrong, true).size(), 0, "plan / applied mismatch detected")
 
 func test_DIRECTION_ONLY_without_legacy():

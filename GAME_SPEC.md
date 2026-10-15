@@ -35,6 +35,7 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Visibility polygon (§15) | Planned |
 | State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Done |
 | Ghost mode & toggler surfaces (Stage 86) | Done |
+| Plannable infinity — the ∞ plan entry, the `infinity` event (§4.2, §6.3, §12.5, §13.1; TDD_10 Stage 88) | Specified (oracle + fixtures, Stage 88a); implementation pending (Stages 88b–d) |
 | Level editor | Planned |
 | Menus, HUD, save system | Planned |
 
@@ -232,7 +233,8 @@ The player builds a plan by clicking on **surface sides** in order. The plan is 
 - **Highlighting**: when the cursor hovers over a surface, the approachable side highlights to indicate it is clickable.
 - **Plan display**: planned surface sides are visually marked (e.g., numbered overlay, distinct color on the planned side).
 - **Preview**: the trajectory preview updates in real time as the plan and cursor change.
-- **Right-click removal**: right-clicking over a planned surface removes the **latest instance** of that surface from the plan. Right-clicking over an unplanned surface or empty space **clears the entire plan**.
+- **Infinity entry** (Stage 88): clicking within the click tolerance **inside the level bounds' edge**, where no interactive surface wins, appends the entry **∞** (`INFINITY_ID = -3`, no side). It means "the beam wraps through the screen edge here" and selects the plan's second realization (§13.1). Hovering the edge band highlights it; planned ∞ entries are marked on the edge like planned sides. While the plan's simulated state is ghosted the entry is still allowed: a ghost arrow wraps.
+- **Right-click removal**: right-clicking over a planned surface removes the **latest instance** of that surface from the plan (right-clicking the edge band removes the latest ∞ entry). Right-clicking over an unplanned surface or empty space **clears the entire plan**.
 - **Clear plan**: dedicated input (C) clears the plan without resetting level state or player position.
 - **Duplicate entries allowed**: a surface side may appear in the plan **multiple times**, including **consecutively** (e.g., plan a circle-inversion surface's left side twice to invert then un-invert). The player is free to construct any plan; the preview shows which entries are active.
 
@@ -390,7 +392,7 @@ Every transformative effect maps a generalized circle to a generalized circle. I
 
 ### 6.3 Lines through infinity
 
-The beam parameter is **projective**. From `t = 0` (at `p`) the beam runs forward through `t → +∞`, wraps to `t → −∞`, and returns towards `p`. A straight beam passes through the point at infinity. On a circle beam, `t = ∞` is the antipode of `p`, an ordinary finite point (an exact value in every precision tier). Candidate hits are ordered **from the current parameter** in this cyclic order, so a hit "beyond infinity" is simply a later candidate (§11.3). In the visual plane, wrapping through ∞ on a straight beam means leaving the screen and returning from the opposite side (§12.5).
+The beam parameter is **projective**. From `t = 0` (at `p`) the beam runs forward through `t → +∞`, wraps to `t → −∞`, and returns towards `p`. A straight beam passes through the point at infinity. On a circle beam, `t = ∞` is the antipode of `p`, an ordinary finite point (an exact value in every precision tier). Candidate hits are ordered **from the current parameter** in this cyclic order, so a hit "beyond infinity" is simply a later candidate (§11.3). In the visual plane, wrapping through ∞ on a straight beam means leaving the screen and returning from the opposite side (§12.5). The wrap of a straight beam is itself an event, `infinity` (Stage 88): ordered between the candidates ahead (`t > t0`) and the wrapped ones, counted toward the hit limit like a pass, with no point. A circle beam never emits it (its `t = ∞` is a finite point).
 
 ### 6.4 Per-step frames → frame identity
 
@@ -859,15 +861,15 @@ The solver emits **events** (`BeamSolver.Event`):
 
 ```
 Event:
-    kind:        "hit" | "cursor" | "origin" | "escape" | "max"
-    surface_id:  int           # -1 for non-hit events
+    kind:        "hit" | "cursor" | "origin" | "escape" | "max" | "infinity"
+    surface_id:  int           # -1 for non-hit events; INFINITY_ID (-3) for infinity
     left:        bool          # side the beam comes from
     applied:     bool          # the side's effect fired (terminal included)
     terminal, popped, teleport, projective: bool
     on_segment:  bool
     rehit:       bool          # the departure point, re-hit after the full loop
     epoch:       int           # projectives start a new epoch
-    point:       CN            # null for escape
+    point:       CN            # null for escape, infinity, and a max at infinity
     beam, t_from, t_to         # the arc leading to this event (t_to null = infinity)
     margin:      float         # px gap to the nearest competing decision (precision control)
 ```
@@ -993,7 +995,7 @@ The frame id of subsequent steps follows the stack (§10.7).
 
 ### 12.5 Beyond-infinity in the visual frame
 
-- **Straight beam:** passing `t = ∞` means the arrow travels to the viewport edge, leaves, and returns from the opposite edge (two escape steps, §12.3). If no effect fires on the whole loop, the trace ends with an `escape` event.
+- **Straight beam:** passing `t = ∞` means the arrow travels to the viewport edge, leaves, and returns from the opposite edge (two escape steps, §12.3). The passage is an `infinity` event (Stage 88): it counts toward the hit limit; a trace cut by the limit there ends with a `max` event at infinity (drawn up to the edge). The event is **applied** when the next plan entry is ∞ (the entry is consumed, in both modes); otherwise it passes. If no effect fires on the whole loop, the trace still ends with an `escape` event.
 - **Circle beam** (e.g. after an inversion): `t = ∞` is the antipode of `p`, a finite point that the arrow simply passes. If no effect fires on the whole circle, the trace ends back at the beam's start with an `origin` event.
 
 ### 12.6 Effect limit
@@ -1030,6 +1032,7 @@ B_j = circle through  P_j = F_j(player),  X_j = F_j(F_K⁻¹(cursor)),  Q_j = F_
 - **Poles:** the poles `P_j` and `Q_j` are mapped forward through the point maps of the effects (`BeamEffects.map_pole`). The difference `P − Q` is carried by **exact Möbius difference formulas**, so it does not cancel catastrophically.
 - **Image chain:** `X_j` is mapped backward from the cursor (`BeamEffects.map_point`) and memoized per stack frame, so a pop returns exactly the earlier image.
 - **Points at infinity** are allowed. If the construction degenerates (player or cursor exactly at an inversion center), see §11.4.
+- **Two realizations** (Stage 88): path order is preserved by every effect, so the orientation of the whole first epoch is fixed by `B_0`'s aim: toward `X_0` (`P → X → Q`, the direct realization), or away from it, reaching `X_0` through ∞ (`P → Q → X`). An ∞ plan entry in the first epoch (before its first projective) selects the second: every `B_j` of that epoch is built `through(P, Q, X)` instead. In a later epoch the projective's exit already fixes the orientation (§13.3), so an ∞ entry there is only matched by the walker. The ∞ entry must sit where the wrap happens; the visual wrap occurs on leg `j` only when `B_j` is straight, so an ∞ entry right after an inversion is unrealizable and the plan shows as invalid (§13.5). *Oracle:* `trace2.via_infinity`, fixtures `bench/fixtures/stage88_infinity.json`.
 
 Each `B_j` is built **independently** (`BeamSolver.AnchorChain`). It is swapped in when plan entry `j` fires on the anchored path (§12.1), so planned-path errors never accumulate along the plan. A mirror-only plan (line reflections and translation-only portals) has an exact rational aim image. `B_0` is then an **exact line** (§31.4).
 
@@ -2632,4 +2635,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.10.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.11.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

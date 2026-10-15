@@ -36,7 +36,6 @@ const BEAM_SCENES := [
 ]
 
 func _solver_for(path: String) -> String:
-	BeamTracer.clear_cache()
 	Surface.reset_id_counter()
 	var scene: Node = load(path).instantiate()
 	add_child_autofree(scene)
@@ -45,7 +44,7 @@ func _solver_for(path: String) -> String:
 	scene.get_node("Cursor").global_position = Vector2(1130, 470)
 	var renderer := scene.get_node("PathRenderer")
 	renderer._compute_trace()
-	var supported := BeamTracer.scene_supported(scene.surfaces)
+	var supported := BeamTracer.scene_supported(SceneDefs.defs_from_surfaces(scene.surfaces))
 	var solver: String = renderer.last_solver
 	return ("%s/%s" % [solver, "supported" if supported else "unsupported"])
 
@@ -65,5 +64,5 @@ func test_scene_defs_match_dump():
 		await get_tree().process_frame
 		if not ("surfaces" in scene):
 			continue
-		var defs: Array = BeamScene.defs_from_surfaces(scene.surfaces)
+		var defs: Array = SceneDefs.defs_from_surfaces(scene.surfaces)
 		assert_true(JSON.parse_string(JSON.stringify(defs, "", false, true)) == dump["surfaces"], fn)

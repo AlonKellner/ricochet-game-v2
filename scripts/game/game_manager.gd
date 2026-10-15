@@ -1,5 +1,8 @@
 extends Node
 
+# The beam solver's tracer (owns the solve caches: one per owner).
+var _tracer := BeamTracer.new()
+
 const _DebugDumper := preload("res://scripts/game/debug_dumper.gd")
 const MOVEMENT_ACTIONS := ["move_up", "move_down", "move_left", "move_right"]
 
@@ -82,7 +85,7 @@ func _update_hover() -> void:
 
 # Inside a ghost stretch of the plan only ghost togglers can be planned.
 func _plan_accepts(surf: Surface, side: Side.Value, surfaces: Array) -> bool:
-	return not BeamTracer.plan_refuses(surfaces, plan.entries, surf.id, side == Side.Value.LEFT, game_state.flags)
+	return not _tracer.plan_refuses(SceneDefs.defs_from_surfaces(surfaces), plan.entries, surf.id, side == Side.Value.LEFT, game_state.flags)
 
 func _clear_all_hover() -> void:
 	if _hovered_node and is_instance_valid(_hovered_node):
@@ -182,7 +185,7 @@ func _try_fire() -> void:
 	var surfaces := _get_surfaces()
 	var entries: Array = plan.entries if not plan.is_empty() else []
 	var path: TracePath
-	var pair: BeamTracer.Pair = BeamTracer.trace_pair(surfaces, player_pos, cursor_pos, entries, game_state.flags)
+	var pair: BeamTracerPair = _tracer.trace_pair(SceneDefs.defs_from_surfaces(surfaces), player_pos, cursor_pos, entries, game_state.flags, SceneDefs.segments_by_id(surfaces))
 	if pair == null:
 		_checkpoints.pop()
 		return
@@ -195,7 +198,7 @@ func _try_fire() -> void:
 	get_tree().paused = true
 
 	if _arrow_animator:
-		var bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS
+		var bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS()
 		if _level_settings and "level_bounds" in _level_settings:
 			bounds = _level_settings.level_bounds
 		path = VisualConverter.prepare_for_display(path, bounds, surfaces)
@@ -212,7 +215,7 @@ func _on_flight_completed() -> void:
 	# fire time keeps the previous one for undo)
 	if _pending_flags != null:
 		var kept: Dictionary = _pending_flags.duplicate(true)
-		kept.erase(BeamScene.GHOST)   # ghost is per shot
+		kept.erase(BeamScene.GHOST())   # ghost is per shot
 		game_state = GameState.new(kept)
 		_pending_flags = null
 		_on_state_changed()

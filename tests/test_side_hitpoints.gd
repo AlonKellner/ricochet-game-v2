@@ -17,7 +17,7 @@ func _arc_segment() -> Segment:
 	return Segment.from_coords(Vector2(300, 200), Vector2(200, 100), Vector2(270, 130))
 
 # Beam geometry (BeamGeom, f64 tier) for the endpoint rules.
-func _bg(seg: Segment) -> BeamGeom.Seg:
+func _bg(seg: Segment) -> BeamGeomSeg:
 	return BeamGeom.seg_from_segment(NumCtx.f64(), seg, 1)
 
 func _cn(p: Vector2) -> CN:
@@ -87,7 +87,7 @@ func test_tangent_into_arc_at_start() -> void:
 
 func test_blocked_sides_off_segment() -> void:
 	var seg := _horiz_segment()
-	var record := TraceHit.new(1.0, Vector2(500, 200), seg, Side.Value.LEFT, false)
+	var record := TraceHit.make(1.0, Vector2(500, 200), seg, Side.Value.LEFT, false)
 	assert_false(record.on_segment, "Off-segment hit should not be on segment")
 	assert_false(record.is_fully_blocked(), "Off-segment hit should not be fully blocked")
 

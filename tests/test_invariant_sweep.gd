@@ -6,7 +6,7 @@ const MAX_VIOLATIONS_PER_GROUP := 5
 const MAX_TOTAL_VIOLATIONS := 200
 
 func test_sweep_all_scenes() -> void:
-	var scene_paths := _discover_scenes()
+	var scene_paths := SweepPlans.discover_scenes(TEST_LEVELS_DIR)
 	assert_gt(scene_paths.size(), 0, "Should find test scenes in %s" % TEST_LEVELS_DIR)
 
 	var total_failures: Array[Dictionary] = []
@@ -47,16 +47,7 @@ func test_sweep_all_scenes() -> void:
 		pass_test("All invariants passed across %d combos in %d scenes" % [total_combos, scene_paths.size()])
 
 func test_sweep_with_plans() -> void:
-	var plan_scenes: Array[String] = [
-		TEST_LEVELS_DIR + "three_mirrors.tscn",
-		TEST_LEVELS_DIR + "mirror_and_wall.tscn",
-		TEST_LEVELS_DIR + "parallel_mirrors.tscn",
-		TEST_LEVELS_DIR + "divergence_room.tscn",
-		TEST_LEVELS_DIR + "room_with_mirror.tscn",
-		TEST_LEVELS_DIR + "two_mirrors.tscn",
-		TEST_LEVELS_DIR + "room_with_inversion.tscn",
-		TEST_LEVELS_DIR + "full_circle_mirror.tscn",
-	]
+	var plan_scenes := SweepPlans.plan_scenes()
 
 	var total_failures: Array[Dictionary] = []
 	var total_combos := 0
@@ -71,44 +62,29 @@ func test_sweep_with_plans() -> void:
 		await get_tree().process_frame
 		await get_tree().process_frame
 
-		var mirrors := _find_reflective_surfaces(scene)
-		var inversions := _find_inversion_surfaces(scene)
-		if mirrors.size() == 0 and inversions.size() == 0:
+		var plans := SweepPlans.reflective_plans(scene)
+		plans.append_array(SweepPlans.inversion_plans(scene))
+		if plans.is_empty():
 			continue
-
-		var plans := _generate_plans(mirrors)
-		plans.append_array(_generate_inversion_plans(inversions))
-		var checker := InvariantChecker.new()
-		checker.setup(scene)
-
-		var runner := SweepRunner.new().configure(5, 10, 42)
-		if "room_rect" in scene:
-			var rect: Rect2 = scene.room_rect
-			runner.set_bounds(rect.position + Vector2(10, 10), rect.position + rect.size - Vector2(10, 10))
+		var runner := SweepPlans.bounded_runner(scene, 5, 10, 42)
 		var poi := runner._extract_points_of_interest(scene)
 		var positions := runner.build_positions(poi)
-
-		for plan in plans:
-			for pi in positions.size():
-				if not SweepRunner.in_shard(pi):
-					continue
-				var player_pos: Vector2 = positions[pi]
-				for cursor_pos in positions:
-					if player_pos == cursor_pos:
-						continue
-					var violations := checker.check_all(player_pos, cursor_pos, plan)
-					if violations.size() > 0:
-						total_combos += 1
-						for v: String in violations:
-							total_failures.append({
-								"scene": scene_path,
-								"player_pos": player_pos,
-								"cursor_pos": cursor_pos,
-								"plan": _plan_to_data(plan),
-								"violation": v,
-							})
-					else:
-						total_combos += 1
+		total_combos += plans.size() * SweepRunner.combo_count(positions, true)
+		for f in SweepRunner.sweep_native(scene, positions, plans, true):
+			for v: String in f.violations:
+				total_failures.append({
+					"scene": scene_path,
+					"player_pos": f.player_pos,
+					"cursor_pos": f.cursor_pos,
+					"plan": SweepPlans.plan_to_data(plans[f.plan_index]),
+					"violation": v,
+				})
+		# one combo through the live PathRenderer: the driver path the game runs
+		var checker := InvariantChecker.new()
+		checker.setup(scene)
+		for v: String in checker.check_all(positions[0], positions[1], plans[0]):
+			total_failures.append({"scene": scene_path, "player_pos": positions[0], "cursor_pos": positions[1],
+				"plan": SweepPlans.plan_to_data(plans[0]), "violation": "LIVE " + v})
 
 	_save_violations(total_failures)
 	if total_failures.size() > 0:
@@ -121,91 +97,6 @@ func test_sweep_with_plans() -> void:
 		fail_test(report)
 	else:
 		pass_test("Plan sweep passed: %d combos with plans" % total_combos)
-
-func _find_reflective_surfaces(scene: Node) -> Array:
-	var mirrors: Array = []
-	if not "surfaces" in scene:
-		return mirrors
-	for surf in scene.surfaces:
-		var s: Surface = surf
-		var left: SideConfig = s.active_side_config(Side.Value.LEFT, GameState.new())
-		var right: SideConfig = s.active_side_config(Side.Value.RIGHT, GameState.new())
-		var left_reflects := left != null and left.effect is ReflectionEffect
-		var right_reflects := right != null and right.effect is ReflectionEffect
-		if left_reflects or right_reflects:
-			mirrors.append({"surface": s, "left_reflects": left_reflects, "right_reflects": right_reflects})
-	return mirrors
-
-func _generate_plans(mirrors: Array) -> Array:
-	var plans: Array = []
-	# Single entries (each mirror × its reflective side)
-	for m in mirrors:
-		var s: Surface = m.surface
-		if m.left_reflects:
-			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.LEFT)])
-		if m.right_reflects:
-			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.RIGHT)])
-	# One pair (first two mirrors) and one repeated (first mirror twice)
-	if mirrors.size() >= 2:
-		var s0: Surface = mirrors[0].surface
-		var s1: Surface = mirrors[1].surface
-		var side0: Side.Value = Side.Value.LEFT if mirrors[0].left_reflects else Side.Value.RIGHT
-		var side1: Side.Value = Side.Value.LEFT if mirrors[1].left_reflects else Side.Value.RIGHT
-		plans.append([PlanManager.PlanEntry.new(s0.id, side0), PlanManager.PlanEntry.new(s1.id, side1)])
-	if mirrors.size() >= 1:
-		var s0: Surface = mirrors[0].surface
-		var side0: Side.Value = Side.Value.LEFT if mirrors[0].left_reflects else Side.Value.RIGHT
-		plans.append([PlanManager.PlanEntry.new(s0.id, side0), PlanManager.PlanEntry.new(s0.id, side0)])
-	if mirrors.size() >= 3:
-		var m0: Surface = mirrors[0].surface
-		var m1: Surface = mirrors[1].surface
-		var m2: Surface = mirrors[2].surface
-		var ms0: Side.Value = Side.Value.LEFT if mirrors[0].left_reflects else Side.Value.RIGHT
-		var ms1: Side.Value = Side.Value.LEFT if mirrors[1].left_reflects else Side.Value.RIGHT
-		var ms2: Side.Value = Side.Value.LEFT if mirrors[2].left_reflects else Side.Value.RIGHT
-		plans.append([PlanManager.PlanEntry.new(m0.id, ms0), PlanManager.PlanEntry.new(m1.id, ms1), PlanManager.PlanEntry.new(m2.id, ms2)])
-	if mirrors.size() >= 2:
-		var m0b: Surface = mirrors[0].surface
-		var m1b: Surface = mirrors[1].surface
-		var ms0b: Side.Value = Side.Value.LEFT if mirrors[0].left_reflects else Side.Value.RIGHT
-		var ms1b: Side.Value = Side.Value.LEFT if mirrors[1].left_reflects else Side.Value.RIGHT
-		plans.append([PlanManager.PlanEntry.new(m0b.id, ms0b), PlanManager.PlanEntry.new(m1b.id, ms1b), PlanManager.PlanEntry.new(m0b.id, ms0b)])
-	return plans
-
-func _find_inversion_surfaces(scene: Node) -> Array:
-	var result: Array = []
-	if not "surfaces" in scene:
-		return result
-	for surf in scene.surfaces:
-		var s: Surface = surf
-		var left: SideConfig = s.active_side_config(Side.Value.LEFT, GameState.new())
-		var right: SideConfig = s.active_side_config(Side.Value.RIGHT, GameState.new())
-		var left_inverts := left != null and left.effect is CircleInversionEffect
-		var right_inverts := right != null and right.effect is CircleInversionEffect
-		if left_inverts or right_inverts:
-			result.append({"surface": s, "left_inverts": left_inverts, "right_inverts": right_inverts})
-	return result
-
-func _generate_inversion_plans(inversions: Array) -> Array:
-	var plans: Array = []
-	for inv in inversions:
-		var s: Surface = inv.surface
-		if inv.left_inverts:
-			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.LEFT)])
-		if inv.right_inverts:
-			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.RIGHT)])
-	if inversions.size() >= 1:
-		var s0: Surface = inversions[0].surface
-		var side0: Side.Value = Side.Value.LEFT if inversions[0].left_inverts else Side.Value.RIGHT
-		plans.append([PlanManager.PlanEntry.new(s0.id, side0), PlanManager.PlanEntry.new(s0.id, side0)])
-	return plans
-
-func _plan_to_data(plan: Array) -> Array:
-	var result: Array = []
-	for entry in plan:
-		var e: PlanManager.PlanEntry = entry
-		result.append({"surface_id": e.surface_id, "side": e.side})
-	return result
 
 func _plan_to_str_from_data(plan_data: Array) -> String:
 	var parts: Array[String] = []
@@ -241,67 +132,34 @@ func _save_violations(failures: Array) -> void:
 		file.close()
 		print("[Sweep] Saved %d violations to %s" % [all_entries.size(), VIOLATIONS_PATH])
 
-func _discover_scenes() -> Array[String]:
-	var scenes: Array[String] = []
-	var dir := DirAccess.open(TEST_LEVELS_DIR)
-	if dir == null:
-		return scenes
-	dir.list_dir_begin()
-	var file_name := dir.get_next()
-	while file_name != "":
-		if file_name.ends_with(".tscn"):
-			scenes.append(TEST_LEVELS_DIR + file_name)
-		file_name = dir.get_next()
-	dir.list_dir_end()
-	scenes.sort()
-	return scenes
-
 # Stage 87: plans through projective surfaces, on the projective playgrounds
 # (each projective side as a one-entry plan, and the first two projectives
 # as a two-entry plan).
 func test_sweep_projective_plans() -> void:
-	var scenes := ["projective", "projective_lines", "projective_arcs", "directional_lines", "directional_arcs"]
 	var total_failures: Array[Dictionary] = []
 	var total_combos := 0
-	for name in scenes:
-		var scene_path := "res://scenes/playground/%s.tscn" % name
+	for scene_path in SweepPlans.projective_scenes():
+		var name := scene_path.get_file().get_basename()
 		Surface.reset_id_counter()
-		BeamTracer.clear_cache()
 		var scene: Node = load(scene_path).instantiate()
 		scene.gravity = Vector2.ZERO
 		add_child_autofree(scene)
 		await get_tree().process_frame
-		var projs: Array = []
-		for s: Surface in scene.surfaces:
-			var c: SideConfig = s.active_side_config(Side.Value.LEFT, GameState.new())
-			if c != null and c.effect != null and c.effect.kind() == Effect.Kind.PROJECTIVE:
-				projs.append(s)
-		assert_gt(projs.size(), 0, "%s has projective surfaces" % name)
-		var plans: Array = []
-		for s: Surface in projs:
-			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.LEFT)])
-			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.RIGHT)])
-		if projs.size() >= 2:
-			plans.append([PlanManager.PlanEntry.new(projs[0].id, Side.Value.LEFT), PlanManager.PlanEntry.new(projs[1].id, Side.Value.LEFT)])
+		assert_gt(SweepPlans.projective_surfaces(scene).size(), 0, "%s has projective surfaces" % name)
+		var plans := SweepPlans.projective_plans(scene)
+		var runner := SweepPlans.bounded_runner(scene, 4, 6, 87)
+		var positions := runner.build_positions()
+		total_combos += plans.size() * SweepRunner.combo_count(positions, true)
+		for f in SweepRunner.sweep_native(scene, positions, plans, true):
+			for v: String in f.violations:
+				total_failures.append({"scene": scene_path, "player_pos": f.player_pos, "cursor_pos": f.cursor_pos,
+					"plan": SweepPlans.plan_to_data(plans[f.plan_index]), "violation": v})
 		var checker := InvariantChecker.new()
 		checker.setup(scene)
-		var runner := SweepRunner.new().configure(4, 6, 87)
-		if "room_rect" in scene:
-			var rect: Rect2 = scene.room_rect
-			runner.set_bounds(rect.position + Vector2(10, 10), rect.position + rect.size - Vector2(10, 10))
-		var positions := runner.build_positions()
-		for plan in plans:
-			for pi in positions.size():
-				if not SweepRunner.in_shard(pi):
-					continue
-				var player_pos: Vector2 = positions[pi]
-				for cursor_pos in positions:
-					if player_pos == cursor_pos:
-						continue
-					total_combos += 1
-					for v: String in checker.check_all(player_pos, cursor_pos, plan):
-						total_failures.append({"scene": scene_path, "player_pos": player_pos, "cursor_pos": cursor_pos,
-							"plan": _plan_to_data(plan), "violation": v})
+		for v: String in checker.check_all(positions[0], positions[1], plans[0]):
+			total_failures.append({"scene": scene_path, "player_pos": positions[0], "cursor_pos": positions[1],
+				"plan": SweepPlans.plan_to_data(plans[0]), "violation": "LIVE " + v})
+
 	_save_violations(total_failures)
 	if total_failures.size() > 0:
 		var report := "Projective plan sweep violations (%d):\n" % total_failures.size()

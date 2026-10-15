@@ -5,51 +5,13 @@ const PLAYGROUND_DIR := "res://scenes/playground/"
 const COMBO_BASE := "res://scenes/test_levels/combo_base.tscn"
 var VIOLATIONS_PATH := SweepRunner.violations_path("combos")
 
-const LINE1 := Vector4(600, 300, 600, 700)
-const LINE2 := Vector4(1300, 300, 1300, 700)
-const ARC1_START := Vector2(400, 250)
-const ARC1_END := Vector2(300, 250)
-const ARC1_VIA := Vector2(350, 200)
-const ARC2_START := Vector2(1550, 750)
-const ARC2_END := Vector2(1450, 750)
-const ARC2_VIA := Vector2(1500, 700)
-
-enum PairType { REFL_REFL, REFL_SEMI, REFL_PROJ, REFL_DIR, SEMI_SEMI, SEMI_PROJ, SEMI_DIR, PROJ_PROJ, PROJ_DIR, DIR_DIR, PORTAL }
-
 # Stage 83: every effect pair is beam-solved and checked
-const _CHECKER_SUPPORTED := [PairType.REFL_REFL, PairType.REFL_SEMI, PairType.REFL_PROJ, PairType.REFL_DIR,
-	PairType.SEMI_SEMI, PairType.SEMI_PROJ, PairType.SEMI_DIR, PairType.PROJ_PROJ, PairType.PROJ_DIR,
-	PairType.DIR_DIR, PairType.PORTAL]
+const _CHECKER_SUPPORTED := [SweepPlans.PairType.REFL_REFL, SweepPlans.PairType.REFL_SEMI, SweepPlans.PairType.REFL_PROJ,
+	SweepPlans.PairType.REFL_DIR, SweepPlans.PairType.SEMI_SEMI, SweepPlans.PairType.SEMI_PROJ, SweepPlans.PairType.SEMI_DIR,
+	SweepPlans.PairType.PROJ_PROJ, SweepPlans.PairType.PROJ_DIR, SweepPlans.PairType.DIR_DIR, SweepPlans.PairType.PORTAL]
 
-const _NON_PORTAL_PAIRS := [
-	PairType.REFL_REFL, PairType.REFL_SEMI, PairType.REFL_PROJ, PairType.REFL_DIR,
-	PairType.SEMI_SEMI, PairType.SEMI_PROJ, PairType.SEMI_DIR,
-	PairType.PROJ_PROJ, PairType.PROJ_DIR, PairType.DIR_DIR,
-]
-
-const _PAIR_LABELS := {
-	PairType.REFL_REFL: "Refl+Refl", PairType.REFL_SEMI: "Refl+Semi",
-	PairType.REFL_PROJ: "Refl+Proj", PairType.REFL_DIR: "Refl+Dir",
-	PairType.SEMI_SEMI: "Semi+Semi", PairType.SEMI_PROJ: "Semi+Proj",
-	PairType.SEMI_DIR: "Semi+Dir", PairType.PROJ_PROJ: "Proj+Proj",
-	PairType.PROJ_DIR: "Proj+Dir", PairType.DIR_DIR: "Dir+Dir",
-	PairType.PORTAL: "Portal",
-}
-
-static func _build_combos() -> Array[Dictionary]:
-	var combos: Array[Dictionary] = []
-	for pair in _NON_PORTAL_PAIRS:
-		combos.append({"lines": pair, "circles": pair,
-			"label": "%s / %s" % [_PAIR_LABELS[pair], _PAIR_LABELS[pair]]})
-	for pair in _NON_PORTAL_PAIRS:
-		combos.append({"lines": PairType.PORTAL, "circles": pair,
-			"label": "Portal / %s" % _PAIR_LABELS[pair]})
-	for pair in _NON_PORTAL_PAIRS:
-		combos.append({"lines": pair, "circles": PairType.PORTAL,
-			"label": "%s / Portal" % _PAIR_LABELS[pair]})
-	return combos
-
-static var COMBOS := _build_combos()
+# the 30 combo configurations (SweepPlans.combo_configs)
+static var COMBOS := SweepPlans.combo_configs()
 
 static func _is_checker_supported(combo: Dictionary) -> bool:
 	return combo.lines in _CHECKER_SUPPORTED and combo.circles in _CHECKER_SUPPORTED
@@ -75,7 +37,7 @@ static func _carrier_intersect_points(c1: GeneralizedCircle, c2: GeneralizedCirc
 		line_carrier = c1 if c1.is_line() else c2
 		other_carrier = c2 if c1.is_line() else c1
 	else:
-		line_carrier = GeneralizedCircle.new(0,
+		line_carrier = GeneralizedCircle.make(0,
 			c1.b - c2.b, c1.c - c2.c, c1.d - c2.d)
 		other_carrier = c1
 
@@ -145,29 +107,12 @@ static func _check_no_intersections(surfaces: Array, verbose: bool = false) -> A
 				violations.append(msg)
 	return violations
 
-# --- Scene discovery ---
-
-func _discover_scenes(dir_path: String) -> Array[String]:
-	var scenes: Array[String] = []
-	var dir := DirAccess.open(dir_path)
-	if dir == null:
-		return scenes
-	dir.list_dir_begin()
-	var file_name := dir.get_next()
-	while file_name != "":
-		if file_name.ends_with(".tscn") and file_name != "combo_base.tscn":
-			scenes.append(dir_path + file_name)
-		file_name = dir.get_next()
-	dir.list_dir_end()
-	scenes.sort()
-	return scenes
-
 # --- No-intersection guard test ---
 
 func test_no_intersecting_segments() -> void:
 	var all_scenes: Array[String] = []
-	all_scenes.append_array(_discover_scenes(TEST_LEVELS_DIR))
-	all_scenes.append_array(_discover_scenes(PLAYGROUND_DIR))
+	all_scenes.append_array(SweepPlans.discover_scenes(TEST_LEVELS_DIR, ["combo_base.tscn"]))
+	all_scenes.append_array(SweepPlans.discover_scenes(PLAYGROUND_DIR, ["combo_base.tscn"]))
 	assert_gt(all_scenes.size(), 0, "Should find scenes")
 
 	var all_violations: Array[String] = []
@@ -193,91 +138,8 @@ func test_no_intersecting_segments() -> void:
 
 # --- Combo scene building ---
 
-func _apply_line_pair(scene: Node, pair_type: int) -> void:
-	match pair_type:
-		PairType.REFL_REFL:
-			scene.mirror_both_lines = Array([LINE1, LINE2], TYPE_VECTOR4, &"", null)
-		PairType.REFL_SEMI:
-			scene.mirror_both_lines = Array([LINE1], TYPE_VECTOR4, &"", null)
-			scene.mirror_lines = Array([LINE2], TYPE_VECTOR4, &"", null)
-		PairType.REFL_PROJ:
-			scene.mirror_both_lines = Array([LINE1], TYPE_VECTOR4, &"", null)
-			scene.normal_projection_lines = Array([LINE2], TYPE_VECTOR4, &"", null)
-		PairType.REFL_DIR:
-			scene.mirror_both_lines = Array([LINE1], TYPE_VECTOR4, &"", null)
-			scene.directional_projection_lines = PackedFloat64Array([
-				LINE2.x, LINE2.y, LINE2.z, LINE2.w, 1, 0])
-		PairType.SEMI_SEMI:
-			scene.mirror_lines = Array([LINE1, LINE2], TYPE_VECTOR4, &"", null)
-		PairType.SEMI_PROJ:
-			scene.mirror_lines = Array([LINE1], TYPE_VECTOR4, &"", null)
-			scene.normal_projection_lines = Array([LINE2], TYPE_VECTOR4, &"", null)
-		PairType.SEMI_DIR:
-			scene.mirror_lines = Array([LINE1], TYPE_VECTOR4, &"", null)
-			scene.directional_projection_lines = PackedFloat64Array([
-				LINE2.x, LINE2.y, LINE2.z, LINE2.w, 1, 0])
-		PairType.PROJ_PROJ:
-			scene.normal_projection_lines = Array([LINE1, LINE2], TYPE_VECTOR4, &"", null)
-		PairType.PROJ_DIR:
-			scene.normal_projection_lines = Array([LINE1], TYPE_VECTOR4, &"", null)
-			scene.directional_projection_lines = PackedFloat64Array([
-				LINE2.x, LINE2.y, LINE2.z, LINE2.w, 1, 0])
-		PairType.DIR_DIR:
-			scene.directional_projection_lines = PackedFloat64Array([
-				LINE1.x, LINE1.y, LINE1.z, LINE1.w, 1, 0,
-				LINE2.x, LINE2.y, LINE2.z, LINE2.w, 1, 0])
-		PairType.PORTAL:
-			scene.portal_lines = PackedFloat64Array([
-				LINE1.x, LINE1.y, LINE1.z, LINE1.w, 0, 1000, 0])
-
-func _apply_circle_pair(scene: Node, pair_type: int) -> void:
-	var arc1 := PackedFloat64Array([ARC1_START.x, ARC1_START.y, ARC1_END.x, ARC1_END.y, ARC1_VIA.x, ARC1_VIA.y])
-	var arc2 := PackedFloat64Array([ARC2_START.x, ARC2_START.y, ARC2_END.x, ARC2_END.y, ARC2_VIA.x, ARC2_VIA.y])
-	var both := PackedFloat64Array(arc1)
-	both.append_array(arc2)
-	match pair_type:
-		PairType.REFL_REFL:
-			scene.reflective_arcs = both
-		PairType.REFL_SEMI:
-			scene.reflective_arcs = arc1
-			scene.semi_reflective_arcs = arc2
-		PairType.REFL_PROJ:
-			scene.reflective_arcs = arc1
-			scene.normal_projection_arcs = arc2
-		PairType.REFL_DIR:
-			scene.reflective_arcs = arc1
-			scene.circle_directional_arcs = PackedFloat64Array([
-				ARC2_START.x, ARC2_START.y, ARC2_END.x, ARC2_END.y, ARC2_VIA.x, ARC2_VIA.y, 1, 0])
-		PairType.SEMI_SEMI:
-			scene.semi_reflective_arcs = both
-		PairType.SEMI_PROJ:
-			scene.semi_reflective_arcs = arc1
-			scene.normal_projection_arcs = arc2
-		PairType.SEMI_DIR:
-			scene.semi_reflective_arcs = arc1
-			scene.circle_directional_arcs = PackedFloat64Array([
-				ARC2_START.x, ARC2_START.y, ARC2_END.x, ARC2_END.y, ARC2_VIA.x, ARC2_VIA.y, 1, 0])
-		PairType.PROJ_PROJ:
-			scene.normal_projection_arcs = both
-		PairType.PROJ_DIR:
-			scene.normal_projection_arcs = arc1
-			scene.circle_directional_arcs = PackedFloat64Array([
-				ARC2_START.x, ARC2_START.y, ARC2_END.x, ARC2_END.y, ARC2_VIA.x, ARC2_VIA.y, 1, 0])
-		PairType.DIR_DIR:
-			scene.circle_directional_arcs = PackedFloat64Array([
-				ARC1_START.x, ARC1_START.y, ARC1_END.x, ARC1_END.y, ARC1_VIA.x, ARC1_VIA.y, 1, 0,
-				ARC2_START.x, ARC2_START.y, ARC2_END.x, ARC2_END.y, ARC2_VIA.x, ARC2_VIA.y, 1, 0])
-		PairType.PORTAL:
-			scene.portal_arcs = PackedFloat64Array([
-				ARC1_START.x, ARC1_START.y, ARC1_END.x, ARC1_END.y, ARC1_VIA.x, ARC1_VIA.y, 0, 500, 0])
-
 func _build_combo_scene(combo: Dictionary) -> Node:
-	Surface.reset_id_counter()
-	var scene: Node = load(COMBO_BASE).instantiate()
-	scene.gravity = Vector2.ZERO
-	_apply_line_pair(scene, combo.lines)
-	_apply_circle_pair(scene, combo.circles)
-	return scene
+	return SweepPlans.build_combo_scene(combo)
 
 func _generate_combo_plans(_scene: Node, _combo: Dictionary) -> Array:
 	return [[]]
@@ -310,9 +172,6 @@ func test_sweep_surface_combos() -> void:
 		if not supported:
 			continue
 
-		var checker := InvariantChecker.new()
-		checker.setup(scene)
-
 		var runner := SweepRunner.new().configure(5, 10, 42)
 		if "room_rect" in scene:
 			var rect: Rect2 = scene.room_rect
@@ -321,27 +180,26 @@ func test_sweep_surface_combos() -> void:
 		var positions := runner.build_positions(poi)
 
 		var plans := _generate_combo_plans(scene, combo)
-
-		for plan in plans:
-			for pi in positions.size():
-				if not SweepRunner.in_shard(pi):
-					continue
-				var player_pos: Vector2 = positions[pi]
-				for cursor_pos in positions:
-					if player_pos == cursor_pos:
-						continue
-					var violations := checker.check_all(player_pos, cursor_pos, plan)
-					total_combos += 1
-					if violations.size() > 0:
-						for v: String in violations:
-							total_failures.append({
-								"scene": COMBO_BASE,
-								"combo": {"label": label, "lines": combo.lines, "circles": combo.circles},
-								"player_pos": player_pos,
-								"cursor_pos": cursor_pos,
-								"plan": [],
-								"violation": v,
-							})
+		total_combos += plans.size() * SweepRunner.combo_count(positions, true)
+		var failing := SweepRunner.sweep_native(scene, positions, plans, true)
+		# one combo through the live PathRenderer: the driver path the game runs
+		var checker := InvariantChecker.new()
+		checker.setup(scene)
+		if plans.size() > 0 and positions.size() > 1:
+			var live := checker.check_all(positions[0], positions[1], plans[0])
+			if live.size() > 0:
+				failing.append({"player_pos": positions[0], "cursor_pos": positions[1], "plan_index": 0,
+					"violations": live.map(func(v): return "LIVE " + v)})
+		for f in failing:
+			for v: String in f.violations:
+				total_failures.append({
+					"scene": COMBO_BASE,
+					"combo": {"label": label, "lines": combo.lines, "circles": combo.circles},
+					"player_pos": f.player_pos,
+					"cursor_pos": f.cursor_pos,
+					"plan": [],
+					"violation": v,
+				})
 
 	_save_violations(total_failures)
 	if total_failures.size() > 0:

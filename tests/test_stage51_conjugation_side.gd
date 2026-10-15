@@ -133,12 +133,12 @@ func test_pass_through_side_respected_after_reflection() -> void:
 # ==========================================================================
 
 func test_same_circle_exact_equality() -> void:
-	var c1 := GeneralizedCircle.new(1.0, -2200.0, -1100.0, 907475.0)
-	var c2 := GeneralizedCircle.new(1.0, -2200.0, -1100.0, 907475.0)
+	var c1 := GeneralizedCircle.make(1.0, -2200.0, -1100.0, 907475.0)
+	var c2 := GeneralizedCircle.make(1.0, -2200.0, -1100.0, 907475.0)
 	assert_true(c1.same_circle(c2),
 		"Two GeneralizedCircles with identical coefficients should be same_circle")
 
-	var c3 := GeneralizedCircle.new(1.0, -2200.0, -1100.0, 999999.0)
+	var c3 := GeneralizedCircle.make(1.0, -2200.0, -1100.0, 999999.0)
 	assert_false(c1.same_circle(c3),
 		"GeneralizedCircles with different coefficients should NOT be same_circle")
 

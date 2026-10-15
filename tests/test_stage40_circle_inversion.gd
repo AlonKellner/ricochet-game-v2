@@ -11,11 +11,11 @@ func _effect() -> CircleInversionEffect:
 	return CircleInversionEffect.new(_carrier())
 
 # The beam scene surface of a full inversion circle (center (200,200), r 100).
-func _surf() -> BeamScene.Surf:
+func _surf() -> BeamSceneSurf:
 	var eff := _effect()
 	var cfg := SideConfig.new(eff, true)
 	var s := Surface.new(Segment.full_from_carrier(_carrier()), cfg, cfg, false, false)
-	var sc := BeamScene.from_defs(NumCtx.f64(), BeamScene.defs_from_surfaces([s]))
+	var sc := BeamScene.from_defs(NumCtx.f64(), SceneDefs.defs_from_surfaces([s]))
 	return sc.surfaces[0]
 
 # map_point as Vector2 (INF for the point at infinity)
@@ -32,7 +32,7 @@ func test_stage40_inversion_construction_valid() -> void:
 	var eff := _effect()
 	assert_not_null(eff, "Effect constructed")
 	assert_true(eff.is_transformative(), "Is transformative")
-	assert_eq(BeamScene.describe_config(SideConfig.new(eff, true))["type"], "inversion",
+	assert_eq(SceneDefs.describe_config(SideConfig.new(eff, true))["type"], "inversion",
 		"Beam scene sees an inversion")
 
 func test_stage40_inversion_construction_rejects_line() -> void:

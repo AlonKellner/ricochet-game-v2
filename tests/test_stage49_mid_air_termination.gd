@@ -44,7 +44,7 @@ static func _geometric_carrier_dist(point: Vector2, carrier: GeneralizedCircle) 
 ## Check ALL visual hitpoints in a trace against physical surface carriers.
 func _check_all_visual_hitpoints(path: TracePath, surfaces: Array, tolerance: float = 5.0) -> Array:
 	var violations := []
-	var bounds := VisualConverter.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS()
 	for i in path.steps.size():
 		var step: TraceStep = path.steps[i]
 		if step.hit == null or step.hit.segment == null:
@@ -78,7 +78,7 @@ func _check_terminal_on_terminal_carrier(path: TracePath, surfaces: Array, toler
 	var end_pos := last.end
 	if is_inf(end_pos.x) or is_inf(end_pos.y):
 		return violations
-	var bounds := VisualConverter.DEFAULT_BOUNDS
+	var bounds := VisualConverter.DEFAULT_BOUNDS()
 	if InvariantChecker._is_at_bounds(end_pos, bounds):
 		return violations
 	var on_terminal := false

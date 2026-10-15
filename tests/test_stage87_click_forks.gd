@@ -39,7 +39,7 @@ func _check(events: Array, expected: Array, label: String) -> bool:
 			", ".join(events.map(func(e): return e.describe()))])
 		return false
 	for i in expected.size():
-		var e: BeamSolver.Event = events[i]
+		var e: BeamSolverEvent = events[i]
 		var x: Dictionary = expected[i]
 		var got := [e.kind, e.surface_id, ("LEFT" if e.left else "RIGHT") if e.kind == "hit" else "",
 			e.applied, e.terminal, e.on_segment, e.rehit]
@@ -67,7 +67,7 @@ func test_hits_match_oracle():
 	var ctx := NumCtx.f64()
 	for name in _fx:
 		var fx: Dictionary = _fx[name]
-		var chain := BeamSolver.AnchorChain.build(_scene(ctx, name), ctx.cn(fx["player"][0], fx["player"][1]),
+		var chain := BeamSolver.anchor_chain(_scene(ctx, name), ctx.cn(fx["player"][0], fx["player"][1]),
 			ctx.cn(fx["cursor"][0], fx["cursor"][1]), Rules.plan_of(fx["plan"]))
 		assert_not_null(chain, name)
 		if chain == null:
@@ -85,14 +85,14 @@ func test_fast_twin_click_forks():
 	for name in _fx:
 		var fx: Dictionary = _fx[name]
 		var gen := _walk(name, ctx)
-		var sc := FastSolver.Scene.from_defs(fx["surfaces"])
+		var sc := FastSolverScene.from_defs(fx["surfaces"])
 		var plan := Rules.plan_of(fx["plan"])
 		var out = FastSolver.planned(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan) \
 			if fx["mode"] == "planned" else FastSolver.physical(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan)
 		assert_eq(out.events.size(), gen.size(), "%s: event count" % name)
 		for i in mini(out.events.size(), gen.size()):
-			var a: BeamSolver.Event = out.events[i]
-			var b: BeamSolver.Event = gen[i]
+			var a: BeamSolverEvent = out.events[i]
+			var b: BeamSolverEvent = gen[i]
 			assert_eq([a.kind, a.surface_id, a.left, a.applied], [b.kind, b.surface_id, b.left, b.applied], "%s event %d" % [name, i])
 			if a.point != null and b.point != null:
 				assert_eq([a.point.fx(), a.point.fy()], [b.point.fx(), b.point.fy()], "%s event %d: bit-identical" % [name, i])
@@ -179,7 +179,7 @@ func test_property_nearest_candidate():
 		"left": {"type": "circle_normal_projection", "interactive": true, "back": false},
 		"right": {"type": "circle_normal_projection", "interactive": true, "back": true}}]
 	var sc := BeamScene.from_defs(ctx, defs)
-	var surf: BeamScene.Surf = sc.by_id[1]
+	var surf: BeamSceneSurf = sc.by_id[1]
 	var rng := RandomNumberGenerator.new()
 	rng.seed = 87
 	var c := Vector2(500, 0)
@@ -229,15 +229,14 @@ func test_click_flows_through_the_game():
 	assert_null(BeamTracer.plan_items(pm.entries)[1].hint, "no click: no hint (the midpoint default)")
 	# the cache key: the same plan clicked on the other half is another trace
 	Surface.reset_id_counter()
-	BeamTracer.clear_cache()
 	var scene: Node = load("res://scenes/playground/projective.tscn").instantiate()
 	add_child_autofree(scene)
 	await get_tree().process_frame
 	var plan_ids := [[7, 1], [10, 1], [8, 1], [10, 0], [7, 0], [9, 0], [13, 0]]
 	var mk := func(click9: Vector2) -> Array:
 		return plan_ids.map(func(x): return PlanManager.PlanEntry.new(x[0], x[1], click9 if x[0] == 9 else Vector2(INF, INF)))
-	var a := BeamTracer.trace_pair(scene.surfaces, Vector2(842.1705, 878.0266), Vector2(146.1522, 559.0353), mk.call(Vector2(945, 425)))
-	var b := BeamTracer.trace_pair(scene.surfaces, Vector2(842.1705, 878.0266), Vector2(146.1522, 559.0353), mk.call(Vector2(460, 570)))
+	var a := TestTrace.trace_pair(scene.surfaces, Vector2(842.1705, 878.0266), Vector2(146.1522, 559.0353), mk.call(Vector2(945, 425)))
+	var b := TestTrace.trace_pair(scene.surfaces, Vector2(842.1705, 878.0266), Vector2(146.1522, 559.0353), mk.call(Vector2(460, 570)))
 	assert_not_null(a)
 	assert_not_null(b)
 	if a != null and b != null:

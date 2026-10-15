@@ -1,7 +1,7 @@
 extends GutTest
 
 func _step(start: Vector2, end_v: Vector2, frame_id: int = 0) -> TraceStep:
-	return TraceStep.new(start, end_v, frame_id)
+	return TraceStep.make(start, end_v, frame_id)
 
 func test_all_aligned() -> void:
 	var steps: Array = [

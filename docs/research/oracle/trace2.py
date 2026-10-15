@@ -97,6 +97,21 @@ State flags (Stage 85, GAME_SPEC 9.4 / 10.6 / 13.7):
   pops it only when the same effect fires again (an involution undone);
   flags are never restored by a pop.
 
+Infinity (Stage 88): a plan entry INFINITY_ID (the player clicked the screen
+edge) means "the beam wraps through infinity here". Every plan has two
+realizations: the aim toward the aim image X_0 (the direct one), and the aim
+away from it, reaching X_0 through infinity. An infinity entry in the plan's
+first epoch (before its first projective) selects the second; in a later
+epoch the projective's exit already fixes the orientation, so the entry is
+only matched. With EMIT_INFINITY, a straight beam passing t = inf (the visual
+wrap: out through one screen edge, back in through the opposite one) emits an
+"infinity" event, ordered between the crossings ahead (t > t0) and the wrapped
+ones (t <= t0), counted toward MAX_HITS like a pass; a trace cut by MAX_HITS
+there ends with a "max" event at infinity (no point). The event is applied
+(consumes the entry) when the next plan entry is the infinity entry, in both
+modes; otherwise it passes. Circle beams never emit it (their t = inf is the
+finite antipode).
+
 Ghost mode (Stage 86): the reserved flag "ghost". While it is true every side
 resolves to a pass -- mirrors, inversions, portals, projectives, terminals and
 room walls alike, their state changes included -- except ghost togglers (a
@@ -124,6 +139,11 @@ PLANNED = 1
 TRANSFORMATIVE = ("reflection", "inversion", "portal")
 PROJECTIVE = ("line_normal_projection", "circle_normal_projection",
               "line_directional_projection", "circle_directional_projection")
+INFINITY_ID = -3        # plan entry / event id of the point at infinity (Stage 88)
+# Stage 88: emit the "infinity" event at the wrap of a straight beam. Off until
+# Stage 88b regenerates the fixtures (the shipped solver does not emit it yet);
+# gen_fixtures_stage88 turns it on.
+EMIT_INFINITY = False
 
 
 # ---------------------------------------------------------------- scene
@@ -342,7 +362,7 @@ def sort_key(t, t0):
 
 @dataclass
 class Event:
-    kind: str                 # hit | cursor | origin | escape | max
+    kind: str                 # hit | cursor | origin | escape | max | infinity
     surface_id: int = -1
     side: str = ""
     applied: bool = False
@@ -579,6 +599,10 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 best = min(idx, key=lambda i: abs(beam.at(cands[i][3]) - kp))
                 cands[best] = (sort_key(kt, t0), 1, s.id, kt, False)
                 snapped[(s.id, kt)] = kp
+        if EMIT_INFINITY and beam.kappa == 0:
+            # the wrap through infinity: after every crossing ahead (t > t0),
+            # before the wrapped ones (no root of a straight beam is at inf)
+            cands.append(((0, mp.inf), 3, INFINITY_ID, mp.inf, False))
         cands.sort(key=lambda c: (c[0], c[1], c[2]))
         if walk.line is not None:
             cands = _concurrent_ties(walk, cands)
@@ -591,6 +615,19 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             key, _, sid, t, rehit = cands[ci]
             ci += 1
             walk.count += 1
+            if sid == INFINITY_ID:
+                if walk.count > MAX_HITS:
+                    walk.events.append(Event("max", INFINITY_ID, t=t, beam=beam))
+                    walk.done = True
+                    return
+                consumed = walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index][0] == INFINITY_ID
+                if consumed:
+                    walk.plan_index += 1
+                walk.events.append(Event("infinity", INFINITY_ID, applied=consumed, t=t, beam=beam,
+                                         flags=walk.flags))
+                if consumed:
+                    _late_cursor(walk, beam, cands, ci, key, t0)
+                continue
             if walk.count > MAX_HITS:
                 # the trace is cut at the next crossing (drawn up to it, no effect)
                 mp_ = beam.p if (rehit and fresh) else snapped.get((sid, t), beam.at(t))
@@ -659,20 +696,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 depart, t0, fresh = sid, mp.mpf(0), True
                 applied = True
                 break
-            # the plan completed here without a frame change (an entry that
-            # resolves to a pass / state change, or an unapplied projective):
-            # the cursor is on this same beam -- a candidate if it lies ahead
-            if not walk.cursor_done and walk.cursor is not None and walk.plan_index >= len(walk.plan) and walk.on_plan \
-                    and walk.plan_matched and not any(c[1] == 0 for c in cands):
-                tc = beam.param_of(walk.cursor)
-                kc = sort_key(tc, t0)
-                if kc >= key:
-                    j = ci
-                    while j < len(cands) and (cands[j][0], cands[j][1]) <= (kc, 0):
-                        j += 1
-                    cands.insert(j, (kc, 0, -1, tc, False))
-                    if not any(k[0] == walk.cursor for k in walk.known):
-                        walk.known.append((walk.cursor, tc, None))
+            _late_cursor(walk, beam, cands, ci, key, t0)
         if not applied and fired_state:
             # no effect, but the loop changed the state: the next loop on the
             # same beam differs (e.g. a ghost toggler re-hit) -- walk it again
@@ -688,6 +712,24 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     walk.events.append(Event("origin", point=beam.p if fresh else beam.at(t0)))
             walk.done = True
             return
+
+
+def _late_cursor(walk: Walk, beam, cands, ci, key, t0):
+    """The plan completed at this event without a frame change (an entry that
+    resolves to a pass / state change, an unapplied projective, or the
+    infinity entry): the cursor is on this same beam -- a candidate if it lies
+    ahead (inserted in order among the remaining candidates)."""
+    if not walk.cursor_done and walk.cursor is not None and walk.plan_index >= len(walk.plan) and walk.on_plan \
+            and walk.plan_matched and not any(c[1] == 0 for c in cands):
+        tc = beam.param_of(walk.cursor)
+        kc = sort_key(tc, t0)
+        if kc >= key:
+            j = ci
+            while j < len(cands) and (cands[j][0], cands[j][1]) <= (kc, 0):
+                j += 1
+            cands.insert(j, (kc, 0, -1, tc, False))
+            if not any(k[0] == walk.cursor for k in walk.known):
+                walk.known.append((walk.cursor, tc, None))
 
 
 def _project(walk: Walk, beam, t, surf: Surface, side, pt, pt_exact):
@@ -1196,16 +1238,31 @@ def fixes_cursor(surfaces, cursor, plan, flags=None):
     return True
 
 
+def via_infinity(surfaces, plan, flags=None):
+    """Stage 88: the plan's first epoch (its entries before the first
+    projective) holds an infinity entry: the aim is the second realization,
+    away from the aim image, reaching it through infinity."""
+    for entry, eff in zip(plan, plan_effects(surfaces, plan, flags)):
+        if eff in PROJECTIVE:
+            return False
+        if entry[0] == INFINITY_ID:
+            return True
+    return False
+
+
 def _aim(surfaces, player, cursor, plan, flags=None, hints=None):
     """(direction, exact line or None, known points): the exact aim image's
     direction, or -- when the image is at infinity (aim undetermined) --
     straight at the cursor. When every frame change fixes the cursor, the aim
-    image is the cursor: exact data the initial beam passes through (known)."""
+    image is the cursor: exact data the initial beam passes through (known).
+    An infinity entry in the first epoch reverses the aim (via_infinity)."""
+    away = via_infinity(surfaces, plan, flags)
     d = exact_direction(surfaces, plan, player, cursor, flags, hints)
     if d is None:
-        return P(cursor) - P(player), "direction", []
+        d0 = P(cursor) - P(player)
+        return (-d0 if away else d0), "direction", []
     known = [P(cursor)] if plan and fixes_cursor(surfaces, cursor, plan, flags) else []
-    return d, initial_line(surfaces, player, cursor, plan, flags), known
+    return (-d if away else d), initial_line(surfaces, player, cursor, plan, flags), known
 
 
 def planned(surfaces, player, cursor, plan, flags=None, hints=None):

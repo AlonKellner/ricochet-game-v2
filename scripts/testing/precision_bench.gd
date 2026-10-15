@@ -76,7 +76,7 @@ static func plan_entries(scn: Dictionary) -> Array:
 static func plan_items(scn: Dictionary) -> Array:
 	var out: Array = []
 	for e in scn["plan"]:
-		out.append(BeamSolver.PlanItem.make(int(e["surface_id"]), e["side"] == "LEFT"))
+		out.append(BeamSolverPlanItem.make(int(e["surface_id"]), e["side"] == "LEFT"))
 	return out
 
 # Scene defs (BeamScene format).
@@ -122,7 +122,7 @@ static func run_estimated_f64(scn: Dictionary, n_physical: int) -> Dictionary:
 static func beam_events(events: Array, errs: Array = []) -> Array:
 	var out: Array = []
 	for i in events.size():
-		var be: BeamSolver.Event = events[i]
+		var be: BeamSolverEvent = events[i]
 		var e := Ev.new()
 		e.kind = be.kind
 		e.surface_id = be.surface_id

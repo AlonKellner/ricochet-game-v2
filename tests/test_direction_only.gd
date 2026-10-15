@@ -18,7 +18,7 @@ func test_extract_geometry_null_path() -> void:
 
 func test_extract_geometry_single_step() -> void:
 	var path := TracePath.new()
-	path.steps.append(TraceStep.new(Vector2(0, 0), Vector2(100, 0), 0))
+	path.steps.append(TraceStep.make(Vector2(0, 0), Vector2(100, 0), 0))
 	var geo := InvariantChecker._extract_trace_geometry(path)
 	assert_eq(geo.size(), 1, "Single step should produce one segment")
 	assert_eq(geo[0].start, Vector2(0, 0))
@@ -26,9 +26,9 @@ func test_extract_geometry_single_step() -> void:
 
 func test_extract_geometry_merges_same_frame_id() -> void:
 	var path := TracePath.new()
-	path.steps.append(TraceStep.new(Vector2(0, 0), Vector2(50, 0), 0))
-	path.steps.append(TraceStep.new(Vector2(50, 0), Vector2(100, 0), 0))
-	path.steps.append(TraceStep.new(Vector2(100, 0), Vector2(200, 100), 1))
+	path.steps.append(TraceStep.make(Vector2(0, 0), Vector2(50, 0), 0))
+	path.steps.append(TraceStep.make(Vector2(50, 0), Vector2(100, 0), 0))
+	path.steps.append(TraceStep.make(Vector2(100, 0), Vector2(200, 100), 1))
 	var geo := InvariantChecker._extract_trace_geometry(path)
 	assert_eq(geo.size(), 2, "Two frame_ids should produce two segments")
 	assert_eq(geo[0].start, Vector2(0, 0))
@@ -38,9 +38,9 @@ func test_extract_geometry_merges_same_frame_id() -> void:
 
 func test_extract_geometry_no_merge_different_frame_ids() -> void:
 	var path := TracePath.new()
-	path.steps.append(TraceStep.new(Vector2(0, 0), Vector2(100, 0), 0))
-	path.steps.append(TraceStep.new(Vector2(100, 0), Vector2(200, 100), 1))
-	path.steps.append(TraceStep.new(Vector2(200, 100), Vector2(300, 0), 2))
+	path.steps.append(TraceStep.make(Vector2(0, 0), Vector2(100, 0), 0))
+	path.steps.append(TraceStep.make(Vector2(100, 0), Vector2(200, 100), 1))
+	path.steps.append(TraceStep.make(Vector2(200, 100), Vector2(300, 0), 2))
 	var geo := InvariantChecker._extract_trace_geometry(path)
 	assert_eq(geo.size(), 3, "All different frame_ids should produce three segments")
 

@@ -7,7 +7,6 @@ const H := preload("res://tests/test_helpers.gd")
 
 func before_each() -> void:
 	H.reset_counters()
-	BeamTracer.clear_cache()
 
 func _scene(scene_name: String) -> Node:
 	var scene: Node = load("res://scenes/test_levels/%s.tscn" % scene_name).instantiate()
@@ -32,21 +31,21 @@ func test_checker_applies_plan_without_game_manager():
 	var player := Vector2(700, 400)
 	var cursor := Vector2(1200, 700)
 	checker.check_all(player, cursor, plan)
-	var r: PrecisionLadder.Result = scene.get_node("PathRenderer").last_beam_result
+	var r: PrecisionLadderResult = scene.get_node("PathRenderer").last_beam_result
 	assert_not_null(r)
 	# the planned trace consumed the plan entry: an applied hit on the inversion
 	var applied := false
-	for e: BeamSolver.Event in r.planned:
+	for e: BeamSolverEvent in r.planned:
 		if e.kind == "hit" and e.surface_id == inv.id and e.applied:
 			applied = true
 	assert_true(applied, "the plan reached the solver")
 	# and it is the same solve the game runs with that plan
-	var pair := BeamTracer.trace_pair(scene.surfaces, player, cursor, plan)
+	var pair := TestTrace.trace_pair(scene.surfaces, player, cursor, plan)
 	assert_eq(r.planned.size(), pair.result.planned.size())
 	# a later combo without a plan clears it
 	checker.check_all(player, cursor, [])
 	r = scene.get_node("PathRenderer").last_beam_result
-	var bare := BeamTracer.trace_pair(scene.surfaces, player, cursor, [])
+	var bare := TestTrace.trace_pair(scene.surfaces, player, cursor, [])
 	assert_eq(r.planned.size(), bare.result.planned.size(), "no stale plan")
 	assert_eq(r.planned.map(func(e): return e.applied), bare.result.planned.map(func(e): return e.applied), "no stale plan")
 
@@ -56,7 +55,7 @@ func test_checker_scene_cache_matches_scene():
 	var checker := InvariantChecker.new()
 	checker.setup(scene)
 	checker.check_all(Vector2(700, 400), Vector2(1200, 700))
-	assert_eq(str(checker._defs()), str(BeamScene.defs_from_surfaces(scene.surfaces)))
+	assert_eq(str(checker._defs()), str(SceneDefs.defs_from_surfaces(scene.surfaces)))
 	assert_eq(checker._beam_scene().surfaces.size(), scene.surfaces.size())
 
 # DIRECTION-ONLY's reference uses the physical-only ladder: identical to the
@@ -64,13 +63,13 @@ func test_checker_scene_cache_matches_scene():
 func test_solve_physical_equals_solve():
 	var scene := _scene("three_mirrors")
 	await get_tree().process_frame
-	var defs := BeamScene.defs_from_surfaces(scene.surfaces)
-	var fsc := FastSolver.Scene.from_defs(defs)
+	var defs := SceneDefs.defs_from_surfaces(scene.surfaces)
+	var fsc := FastSolverScene.from_defs(defs)
 	for pc in [[Vector2(700, 400), Vector2(1200, 700)], [Vector2(600, 300), Vector2(900, 800)], [Vector2(1300, 500), Vector2(650, 350)]]:
 		var p: Vector2 = pc[0]
 		var c: Vector2 = pc[1]
-		var full := PrecisionLadder.solve(defs, [p.x, p.y], [c.x, c.y], [], BeamSolver.MAX_HITS, BeamSolver.MAX_HITS, BeamTracer.TOL, false, fsc)
-		var phys := PrecisionLadder.solve_physical(defs, [p.x, p.y], [c.x, c.y], [], BeamSolver.MAX_HITS, BeamTracer.TOL, fsc)
+		var full := PrecisionLadder.solve(defs, [p.x, p.y], [c.x, c.y], [], BeamSolver.MAX_HITS, BeamSolver.MAX_HITS, BeamTracer.TOL(), false, fsc)
+		var phys := PrecisionLadder.solve_physical(defs, [p.x, p.y], [c.x, c.y], [], BeamSolver.MAX_HITS, BeamTracer.TOL(), fsc)
 		assert_eq(phys.physical.map(func(e): return e.describe()), full.physical.map(func(e): return e.describe()))
 		assert_eq(phys.physical_err, full.physical_err)
 		assert_eq(phys.physical_tier, full.physical_tier)
@@ -107,14 +106,13 @@ func test_plan_through_fixed_points_and_centers_is_exact():
 	]
 	for c in cases:
 		H.reset_counters()
-		BeamTracer.clear_cache()
 		var scene := _scene(c[0])
 		await get_tree().process_frame
 		var checker := InvariantChecker.new()
 		checker.setup(scene)
 		var plan := [PlanManager.PlanEntry.new(5, c[1])]
 		assert_eq(checker.check_all(c[2], c[3], plan), [] as Array[String], "%s %s %s" % c.slice(1))
-		var r: PrecisionLadder.Result = scene.get_node("PathRenderer").last_beam_result
+		var r: PrecisionLadderResult = scene.get_node("PathRenderer").last_beam_result
 		assert_not_null(r, "a trace pair: %s" % [c])
 		if r != null:
 			assert_true(r.converged, "converged: %s" % [c])

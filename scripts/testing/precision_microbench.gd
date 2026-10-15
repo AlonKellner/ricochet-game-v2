@@ -15,7 +15,7 @@ static func sci(v: float) -> String:
 	var e := int(floor(log(absf(v)) / log(10.0)))
 	return "%.2fe%d" % [v / pow(10.0, e), e]
 
-func _rel_err(x: BigFloat, ref: BigFloat) -> float:
+func _rel_err(x: Num, ref: Num) -> float:
 	if ref.is_zero():
 		return x.abs_val().to_float()
 	var d := x.sub(ref)

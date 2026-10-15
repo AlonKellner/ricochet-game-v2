@@ -9,21 +9,21 @@ func before_each() -> void:
 # Reflection maps are checked on the beam solver's map (BeamEffects.map_point
 # of the surface built from the game effect) against closed forms.
 
-func _surf_of(seg: Segment, eff: Effect) -> BeamScene.Surf:
+func _surf_of(seg: Segment, eff: Effect) -> BeamSceneSurf:
 	var cfg := SideConfig.new(eff, true)
 	var s := Surface.new(seg, cfg, cfg, false, false)
-	return BeamScene.from_defs(NumCtx.f64(), BeamScene.defs_from_surfaces([s])).surfaces[0]
+	return BeamScene.from_defs(NumCtx.f64(), SceneDefs.defs_from_surfaces([s])).surfaces[0]
 
-func _line_surf(s: Vector2, e: Vector2) -> BeamScene.Surf:
+func _line_surf(s: Vector2, e: Vector2) -> BeamSceneSurf:
 	var seg := Segment.from_coords(s, e, (s + e) / 2.0)
 	return _surf_of(seg, ReflectionEffect.new(seg.get_carrier()))
 
-func _circle_surf(eff_is_inversion: bool) -> BeamScene.Surf:
+func _circle_surf(eff_is_inversion: bool) -> BeamSceneSurf:
 	var carrier := GeneralizedCircle.from_circle(Vector2(960, 540), 200.0)
 	var eff: Effect = CircleInversionEffect.new(carrier) if eff_is_inversion else ReflectionEffect.new(carrier)
 	return _surf_of(Segment.full_from_carrier(carrier), eff)
 
-func _map(surf: BeamScene.Surf, z: Vector2) -> Vector2:
+func _map(surf: BeamSceneSurf, z: Vector2) -> Vector2:
 	var w = BeamEffects.map_point(NumCtx.f64().cn(z.x, z.y), surf)
 	return Vector2(INF, INF) if w == null else Vector2(w.fx(), w.fy())
 
