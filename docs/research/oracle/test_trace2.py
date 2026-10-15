@@ -859,3 +859,149 @@ def test_departing_from_q_is_precision_independent():
     a = _structure(sc, (672, 592), (2, -1), 80)
     assert a == _structure(sc, (672, 592), (2, -1), 200)
     assert a[1] == ("hit", 2, True), a
+
+
+# ---------------------------------------------------------------- Stage 106: the departure point after a pop
+
+import json as _json
+
+_ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
+TERM2 = {"type": "terminal", "interactive": False}
+BOX2 = [lin(90, (0, 0), (1920, 0), TERM2, TERM2), lin(91, (1920, 0), (1920, 1080), TERM2, TERM2),
+        lin(92, (1920, 1080), (0, 1080), TERM2, TERM2), lin(93, (0, 1080), (0, 0), TERM2, TERM2)]
+
+
+def hit_list(walk):
+    return [(e.surface_id, e.applied, e.point) for e in walk.events if e.kind == "hit"]
+
+
+def hit_ids(walk):
+    return [(e.surface_id, e.applied) for e in walk.events if e.kind == "hit"]
+
+
+def no_reapply_in_place(walk):
+    """No zero-length loop: an applied hit, then only cursor / infinity events at the
+    same point, then an applied hit on the same surface at the same point."""
+    last = None
+    for e in walk.events:
+        if e.kind in ("cursor", "infinity") and last is not None and e.point == last.point:
+            continue
+        if e.kind == "hit" and e.applied and last is not None and e.surface_id == last.surface_id and e.point == last.point:
+            return False
+        last = e if e.kind == "hit" and e.applied else None
+    return True
+
+
+@_ctx.contextmanager
+def known_lists():
+    """Every loop's known list (the record beside each beam)."""
+    seen = []
+    orig = T.POLE_HOOK
+
+    def hook(walk, beam):
+        seen.append(list(walk.known))
+        if orig is not None:
+            orig(walk, beam)
+    T.POLE_HOOK = hook
+    try:
+        yield seen
+    finally:
+        T.POLE_HOOK = orig
+
+
+def _at(dps, f):
+    with mp.workdps(dps):
+        return f()
+
+
+def test_k2_pop_at_the_players_point_keeps_the_other_crossing():
+    # tangent_infinity.tscn: the player on the inversion circle's top (1160, 440),
+    # the aim image under the mirror plan at its bottom (1160, 640): the beam
+    # inverts in at the image and out at the player (a pop at a known point)
+    dump = _json.load(open(os.path.join(_ROOT, "bench", "scenes", "playground__tangent_infinity.surfaces.json")))
+    sc = T.scene_from_json(dump["surfaces"])
+    with known_lists() as seen:
+        w = T.physical(sc, (1160, 440), (760, 640), [(6, "LEFT")])
+    ref = T.physical(sc, (1160, 440), (1160, 640), [])
+    assert hit_ids(w) == hit_ids(ref), (kinds(w), kinds(ref))
+    hl = hit_list(w)
+    assert hl[0][:2] == (8, True) and hl[0][2] == P((1160, 640))
+    assert hl[1][:2] == (8, True) and hl[1][2] == P((1160, 440)), hl[:3]
+    assert hl[2][:2] == (8, True) and hl[2][2] == P((1160, 640)), hl[:3]   # the other crossing again, not the player
+    assert no_reapply_in_place(w) and no_reapply_in_place(ref)
+    # the pop tagged the player's point as the departure point of the circle
+    assert any(any(k[0] == P((1160, 440)) and k[2] == 8 for k in known) for known in seen)
+    assert _at(200, lambda: hit_ids(T.physical(sc, (1160, 440), (760, 640), [(6, "LEFT")]))) == hit_ids(w)
+
+
+def _arc_scene():
+    # the right half of circle C (960, 540) r 200 as a reflective arc: S (960, 340),
+    # V (1160, 540), E (960, 740); its carrier's left half is not a segment
+    arc = {"id": 1, "line": False, "start": [960.0, 340.0], "end": [960.0, 740.0], "via": [1160.0, 540.0],
+           "full": False, "left": REFL2, "right": REFL2}
+    return T.scene_from_json([arc] + BOX2)
+
+
+def test_pop_at_the_cursor_on_an_arc_continues_past_it():
+    sc = _arc_scene()
+    # the aim from (600, 300) through the cursor (1160, 540) on the arc: enters the
+    # carrier off-segment (a pass), reaches the cursor, reflects there (push), the
+    # image circle passes the carrier's other crossing (pass) and returns to the
+    # cursor (the departure re-hit: a pop), then the line goes on to the box
+    w = T.planned(sc, (600, 300), (1160, 540), [])
+    ids = hit_ids(w)
+    assert ids[:5] == [(1, False), (1, True), (1, False), (1, True), (91, True)], (ids, kinds(w))
+    assert kinds(w).index("cursor") == 1
+    assert no_reapply_in_place(w)
+    ph = T.physical(sc, (600, 300), (1160, 540), [])
+    assert no_reapply_in_place(ph)
+    for dps in (20, 30, 200):
+        assert _at(dps, lambda: hit_ids(T.planned(sc, (600, 300), (1160, 540), []))) == ids, dps
+
+
+def test_periodic_orbit_through_a_player_on_an_inversion_circle():
+    c = circ(1, (960.0, 540.0), 200.0, INV2, INV2)
+    sc = T.scene_from_json([c] + BOX2)
+    # the player on the circle at (760, 540), aiming through the center: the line
+    # maps to itself, the beam inverts at (1160, 540), comes back to the player's
+    # point, inverts again (a pop at a known point), and so on: a closed orbit
+    w = T.trace_physical_direction(sc, (760, 540), mp.mpc(1, 0))
+    hl = hit_list(w)
+    # (the inverted beam passes the center, the frame's image of infinity, on the
+    # way back: an infinity event per orbit, counted toward the budget)
+    assert len(hl) >= 20 and kinds(w).count("infinity") >= 10 and kinds(w)[-1] == "max", kinds(w)
+    for i, (sid, applied, pt) in enumerate(hl):
+        assert sid == 1 and applied
+        assert pt == P((1160, 540)) if i % 2 == 0 else pt == P((760, 540)), (i, pt)
+    aimed = T.physical(sc, (760, 540), (1160, 540), [])
+    assert hit_ids(aimed) == hit_ids(w)
+    assert _at(200, lambda: hit_list(T.trace_physical_direction(sc, (760, 540), mp.mpc(1, 0)))) == hl
+
+
+def test_a_known_point_at_the_other_crossing_still_snaps_it():
+    c = circ(1, (960.0, 540.0), 200.0, INV2, INV2)
+    sc = T.scene_from_json([c] + BOX2)
+    # the cursor on the circle at (1160, 540), the player inside at (860, 540):
+    # the planned path reaches the cursor exactly (the known point pins the root)
+    w = T.planned(sc, (860, 540), (1160, 540), [])
+    ev = w.events
+    assert ev[0].kind == "cursor" and ev[0].point == P((1160, 540)), kinds(w)
+    assert ev[1].kind == "hit" and ev[1].surface_id == 1 and ev[1].applied and ev[1].point == P((1160, 540))
+    assert no_reapply_in_place(w)
+    assert _at(200, lambda: hit_ids(T.planned(sc, (860, 540), (1160, 540), []))) == hit_ids(w)
+
+
+def test_portal_pop_by_the_departure_rehit_is_unchanged():
+    portal = {"type": "portal", "interactive": True, "d": [800.0, 0.0], "theta": 0.0, "pair": 2}
+    a = lin(1, (400, 200), (400, 700), portal, portal)
+    b = lin(2, (1200, 200), (1200, 700), {"type": "portal", "interactive": True, "d": [-800.0, 0.0], "theta": 0.0, "pair": 1},
+            {"type": "portal", "interactive": True, "d": [-800.0, 0.0], "theta": 0.0, "pair": 1})
+    m = lin(3, (1500, 100), (1500, 900), REFL2, REFL2)
+    sc = T.scene_from_json([a, b, m] + BOX2)
+    w = T.trace_physical_direction(sc, (300, 450), mp.mpc(1, 0))
+    ids = hit_ids(w)
+    assert ids[:3] == [(1, True), (3, True), (2, True)], (ids, kinds(w))
+    pops = [e for e in w.events if e.kind == "hit" and e.surface_id == 2 and e.applied]
+    assert pops and pops[0].point == P((1200, 450))
+    assert no_reapply_in_place(w)
+    assert _at(200, lambda: hit_ids(T.trace_physical_direction(sc, (300, 450), mp.mpc(1, 0)))) == ids

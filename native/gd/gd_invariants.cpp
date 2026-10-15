@@ -152,6 +152,7 @@ void InvariantKernel::_bind_methods() {
 	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_effect_law", "events", "scene"), &InvariantKernel::check_effect_law);
 	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_event_on_beam", "events", "scene"), &InvariantKernel::check_event_on_beam);
 	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_beam_order", "events"), &InvariantKernel::check_beam_order);
+	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_reapply_in_place", "events"), &InvariantKernel::check_reapply_in_place);
 	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_plan_effects_applied_events", "events", "plan", "cursor_reached"),
 			&InvariantKernel::check_plan_effects_applied_events);
 	ClassDB::bind_static_method("InvariantKernel", D_METHOD("is_infinity_gap", "prev_end", "curr_start"), &InvariantKernel::is_infinity_gap);
@@ -234,6 +235,9 @@ Array InvariantKernel::check_event_on_beam(const Array &events, const Ref<BeamSc
 }
 Array InvariantKernel::check_beam_order(const Array &events) {
 	return render_violations(rc::inv::check_beam_order(ev_infos_of(events)));
+}
+Array InvariantKernel::check_reapply_in_place(const Array &events) {
+	return render_violations(rc::inv::check_reapply_in_place(ev_infos_of(events)));
 }
 Array InvariantKernel::check_plan_effects_applied_events(const Array &events, const Array &plan, bool cursor_reached) {
 	(void)cursor_reached; // unused in GDScript too

@@ -88,6 +88,11 @@ ojson dump_defs(const std::vector<SurfaceDef> &defs) {
 		if (d.has_circle) {
 			j["circle"] = ojson::array({hex(d.cx), hex(d.cy), hex(d.radius)});
 		}
+		const std::optional<SideDef> &side = d.left ? d.left : d.right;
+		if (side && side->pair >= 0) {
+			j["portal"] = ojson::array({hex(side->dx), hex(side->dy), hex(side->theta)});
+			j["pair"] = side->pair;
+		}
 		out.push_back(j);
 	}
 	return out;

@@ -209,6 +209,22 @@ static func q0_positions(scene: Node) -> Array[Vector2]:
 		out.append(q0 + d)
 	return out
 
+# Stage 106: positions exactly on the scene's full circles (their four extreme
+# points), so pops at known points (the player or the cursor on a circle
+# mirror) are swept systematically.
+static func on_surface_positions(scene: Node) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	if not "surfaces" in scene:
+		return out
+	for s in scene.surfaces:
+		if s.pre_transform or s.segment.is_line() or not s.segment.full:
+			continue
+		var c: Vector2 = s.segment.get_carrier().center()
+		var r: float = s.segment.get_carrier().radius()
+		for d in [Vector2(r, 0), Vector2(-r, 0), Vector2(0, r), Vector2(0, -r)]:
+			out.append(c + d)
+	return out
+
 static func plan_to_data(plan: Array) -> Array:
 	var result: Array = []
 	for entry in plan:

@@ -149,9 +149,15 @@ func test_sweep_infinity_plans() -> void:
 # Known findings (docs/TDD_10_NATIVE_MIGRATION.md, "Known findings"): a
 # violation matching one is reported, not failed; a finding that no longer
 # occurs fails the sweep so the list stays true.
-# (K1, a tangency at the frame's infinity point decided by rounding on the
-# portals playground, was resolved by Stage 105: none are open.)
-const KNOWN_FINDINGS := []
+# K3 (Stage 106): on tangent_infinity, with the mirror through Q0 planned and
+# the cursor the player's mirror image (the aim image is the player: every
+# direction solves the plan), native picks the arc through Q0 and reflects
+# there in place; the oracle picks the other arc. A degenerate aim, pre-existing
+# (TDD_10, "Known findings").
+const KNOWN_FINDINGS := [
+	{"id": "K3", "scene": "res://scenes/playground/tangent_infinity.tscn", "plan": "[6/L]", "prefix": "REAPPLY-IN-PLACE"},
+	{"id": "K3", "scene": "res://scenes/playground/tangent_infinity.tscn", "plan": "[6/R]", "prefix": "REAPPLY-IN-PLACE"},
+]
 
 static func _known(f: Dictionary, plan_str: String) -> String:
 	for k in KNOWN_FINDINGS:
@@ -176,6 +182,7 @@ func _sweep_scenes(scenes: Array[String], plans_of: Callable, seed: int, label: 
 		var runner := SweepPlans.bounded_runner(scene, 4, 6, seed)
 		var positions := runner.build_positions()
 		positions.append_array(SweepPlans.q0_positions(scene)) # Stage 105: exact grazes at Q0
+		positions.append_array(SweepPlans.on_surface_positions(scene)) # Stage 106: pops at known points
 		total_combos += plans.size() * SweepRunner.combo_count(positions, true)
 		for f in SweepRunner.sweep_native(scene, positions, plans, true):
 			for v: String in f.violations:
