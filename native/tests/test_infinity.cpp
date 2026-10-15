@@ -269,3 +269,23 @@ TEST_CASE("infinity: with the switch on every older fixture differs from its gol
 	CHECK(inserted == 83);
 	CHECK(cut == 8);
 }
+
+TEST_CASE("Stage 105: the tangency-at-infinity fixtures match the oracle at f64, Dual, 4 and 64 limbs") {
+	const ojson fxs = load_json("bench/fixtures/stage105_tangent_at_infinity.json");
+	int fixtures = 0;
+	for (const ojson &fx : fxs["fixtures"]) {
+		const std::string name = fx["name"].get<std::string>();
+		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
+		const auto r64 = walk_infinity_fixture<F64>(fx, defs, F64{1}, true);
+		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
+		const auto rd = walk_infinity_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
+		const auto r4 = walk_infinity_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		CHECK_MESSAGE(diff_against_oracle(r4, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(r4, fx["expected"])));
+		const auto r64l = walk_infinity_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
+		CHECK_MESSAGE(diff_against_oracle(r64l, fx["expected"]) == "", (name + " big64: " + diff_against_oracle(r64l, fx["expected"])));
+		fixtures++;
+	}
+	CHECK(fixtures == int(fxs["fixtures"].size()));
+	CHECK(fixtures >= 14);
+}

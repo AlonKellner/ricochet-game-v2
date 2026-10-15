@@ -209,6 +209,8 @@ struct StackEntry {
 	int pop_id = -1;      // the surface whose hit pops this entry (sid; a portal's pair)
 	EffectType etype = EffectType::Pass; // the map pushed (a pop needs the same map)
 	std::optional<CN<N>> q; // the frame's image of infinity before the push (restored by the pop)
+	std::optional<exact::ExactPole> pole; // the exact pole record before the push (Stage 105)
+	int pole_serial = 0;
 };
 
 template <Num N>
@@ -219,6 +221,7 @@ struct Candidate {
 	std::optional<CN<N>> pt;       // the exact point, by provenance
 	int tie = -1;                  // concurrent-tie group index
 	bool inf = false;              // the wrap through t = infinity of a straight beam (Stage 88)
+	bool at_q = false;             // pinned at the frame's infinity point (Stage 105)
 };
 
 // Anchored beams B_0..B_K of a plan (flat: beams[j] is the beam after j
@@ -261,6 +264,24 @@ struct Walk {
 	// the pre-transform's at the start, mapped forward by every applied effect,
 	// restored by a pop, infinity again after a projective
 	std::optional<CN<N>> Q;
+	// Stage 105: the exact pole record (Q exactly, and the beam's direction at
+	// Q), or nullopt (Q at infinity, or the frame's data not exact); its serial
+	// keys the tangency cache
+	std::optional<exact::ExactPole> pole;
+	// the current beam departs from the frame's infinity point (provenance: an
+	// effect fired at a crossing pinned at Q): no pinning, no passage of Q
+	bool depart_q = false;
+	int pole_serial = 0;
+	int pole_serials = 0;
+	int pole_tangent_serial = -1;
+	std::map<int, bool> pole_tangent;   // surf id -> tangent at Q
+	std::map<int, bool> pole_on;        // surf id -> its carrier passes Q
+	// tests only: the record beside each beam loop (record_poles)
+	bool record_poles = false;
+	std::vector<std::pair<BeamPtr<N>, std::optional<exact::ExactPole>>> pole_trace;
+	// and whether the frame is exact there: Q finite with a record, or the
+	// beam straight (Q at infinity) on an exact line
+	std::vector<bool> exact_trace;
 	BeamPtr<N> hp_src;
 	int hp_view = -1;
 	int view_count = 0;
@@ -293,6 +314,9 @@ class Solver {
 public:
 	Solver(const Scene<N> &scene, SolveCache<N> *cache = nullptr) : scene_(scene), cache_(cache) {}
 
+	// tests only: walks record the exact pole beside each beam (Walk::pole_trace)
+	void set_record_poles(bool on) { record_poles_ = on; }
+
 	// Walk an explicit direction from the player (forward shooting).
 	Walk<N> run_direction(const CN<N> &player, const CN<N> &dir, const std::vector<PlanItem> &plan,
 			const std::optional<CN<N>> &cursor, Mode mode, int max_events = MAX_HITS, const Flags &flags = Flags()) {
@@ -308,6 +332,9 @@ public:
 		if (b0->kappa.is_zero()) {
 			w.line = exact::Line::from_exact(exact::line_from_dir(player.fx(), player.fy(), dir.fx(), dir.fy()));
 			add_line_endpoints(w, *b0);
+		}
+		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
+			set_pole(w, exact::pole_start_direction(player.fx(), player.fy(), dir.fx(), dir.fy(), *q0));
 		}
 		walk_from(w, b0, -1, std::nullopt);
 		return w;
@@ -581,6 +608,7 @@ public:
 	}
 
 private:
+	bool record_poles_ = false;
 	const Scene<N> &scene_;
 	SolveCache<N> *cache_;
 
@@ -1002,6 +1030,7 @@ private:
 		w.post_mode = Mode::Physical;
 		w.max_events = max_events;
 		w.Q = effects::scene_pre_q(scene_);
+		w.record_poles = record_poles_;
 		return w;
 	}
 
@@ -1027,6 +1056,12 @@ private:
 			add_line_endpoints(w, *b0);
 		} else if (w.Q && !plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
 			w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, std::nullopt});
+		}
+		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
+			// an aimed shot in a pre-transform frame: the circle through P, X0, Q0
+			if (const std::optional<exact::Point3> X0 = exact_image_cached(cursor, plan, flags)) {
+				set_pole(w, exact::pole_start_aimed(player.fx(), player.fy(), *X0, *q0));
+			}
 		}
 		walk_from(w, b0, -1, std::nullopt);
 		return w;
@@ -1161,6 +1196,104 @@ private:
 		return a.cmp(b) < 0;
 	}
 
+	// ---- the exact pole (Stage 105)
+
+	// Q0 of the pre-transform as exact data (nullopt: none, or infinity)
+	std::optional<exact::Point3> pre_q_exact() const {
+		std::optional<exact::Point3> q;
+		for (const auto &sp : scene_.pre_surfaces) {
+			const auto &ec = sp->exact_circle();
+			if (!q) {
+				q = ec.C;
+				continue;
+			}
+			q = exact::invert_point_h(*q, ec.C, ec.rw2);
+			if (!q) {
+				return std::nullopt;
+			}
+		}
+		return q;
+	}
+
+	static void set_pole(Walk<N> &w, std::optional<exact::ExactPole> p) {
+		if (p && exact::pole_limbs(*p) > EXACT_IMAGE_LIMBS) {
+			p.reset(); // past the exact-data budget: no exact claim
+		}
+		w.pole = std::move(p);
+		w.pole_serial = ++w.pole_serials;
+	}
+
+	// The record after surf's map (w.Q, w.line, w.pole: before it).
+	static std::optional<exact::ExactPole> pole_after(const Walk<N> &w, const Surf<N> &surf) {
+		if (surf.portal) {
+			if (!w.pole || surf.theta != 0.0) {
+				return std::nullopt; // a rotation is not exact data
+			}
+			return exact::pole_translate(*w.pole, surf.dx, surf.dy);
+		}
+		if (surf.line) {
+			return w.pole ? exact::pole_reflect(*w.pole, surf.sx, surf.sy, surf.ex, surf.ey) : std::nullopt;
+		}
+		const auto &ec = surf.exact_circle();
+		if (!w.Q) {
+			// a straight beam (Q at infinity) inverted: Q becomes the center
+			if (!w.line) {
+				return std::nullopt;
+			}
+			const std::optional<exact::Line3> L = w.line->exact();
+			return L ? exact::pole_from_line(*L, ec.C) : std::nullopt;
+		}
+		return w.pole ? exact::pole_invert(*w.pole, ec.C, ec.rw2) : std::nullopt;
+	}
+
+	static void pole_cache(Walk<N> &w) {
+		if (w.pole_tangent_serial != w.pole_serial) {
+			w.pole_tangent.clear();
+			w.pole_on.clear();
+			w.pole_tangent_serial = w.pole_serial;
+		}
+	}
+
+	// Exact: surf's carrier passes the frame's infinity point (cached per record).
+	static bool pole_on(Walk<N> &w, const Surf<N> &surf) {
+		pole_cache(w);
+		auto it = w.pole_on.find(surf.id);
+		if (it != w.pole_on.end()) {
+			return it->second;
+		}
+		bool r;
+		if (surf.line) {
+			r = exact::pole_on_line(*w.pole, surf.sx, surf.sy, surf.ex, surf.ey);
+		} else {
+			const auto &ec = surf.exact_circle();
+			r = exact::pole_on_circle(*w.pole, ec.C, ec.rw2);
+		}
+		w.pole_on[surf.id] = r;
+		return r;
+	}
+
+	// Exact: surf's carrier passes the frame's infinity point and is tangent
+	// there to the beam (cached per record).
+	static bool pole_tangent(Walk<N> &w, const Surf<N> &surf) {
+		pole_cache(w);
+		if (!pole_on(w, surf)) {
+			return false;
+		}
+		auto it = w.pole_tangent.find(surf.id);
+		if (it != w.pole_tangent.end()) {
+			return it->second;
+		}
+		bool r;
+		if (surf.line) {
+			r = exact::pole_tangent_line(*w.pole, surf.sx, surf.sy, surf.ex, surf.ey);
+		} else {
+			const auto &ec = surf.exact_circle();
+			r = exact::pole_tangent_circle(*w.pole, ec.C, ec.rw2);
+		}
+		w.pole_tangent[surf.id] = r;
+		return r;
+	}
+
 	// Exact: the current exact line is tangent to surf's circle (computed once per line).
 	static bool tangent(Walk<N> &w, const Surf<N> &surf) {
 		if (w.tangent_line != w.line) {
@@ -1187,6 +1320,9 @@ private:
 		std::vector<Candidate<N>> cands;
 		for (const auto &sp : w.scene->surfaces) {
 			const Surf<N> &s = *sp;
+			if (w.pole && pole_tangent(w, s)) {
+				continue; // tangent at the frame's infinity point: a touch, not a crossing (exact, Stage 105)
+			}
 			if (w.line && !s.line && tangent(w, s)) {
 				continue; // a tangent touch is not a crossing (exact)
 			}
@@ -1204,7 +1340,21 @@ private:
 				}
 			} else {
 				rs = geom::hits(beam, s.seg, false);
-				if (depart == s.id) {
+				if (depart == s.id && w.depart_q && pole_on(w, s)) {
+					// departing from Q on this carrier: its root nearest Q is the departure
+					size_t best = rs.size();
+					double best_d = INF_D;
+					for (size_t i = 0; i < rs.size(); i++) {
+						const double d = beam.at(rs[i]).sub(*w.Q).abs2().to_float();
+						if (d < best_d) {
+							best_d = d;
+							best = i;
+						}
+					}
+					if (best < rs.size()) {
+						rs.erase(rs.begin() + std::ptrdiff_t(best));
+					}
+				} else if (depart == s.id) {
 					std::vector<N> f;
 					for (const N &t : rs) {
 						if (t.cmp(t0) != 0) {
@@ -1237,6 +1387,37 @@ private:
 		for (Known<N> &kp : w.known) {
 			snap(w, beam, cands, kp);
 		}
+		if (w.pole && w.Q) {
+			// Stage 105: a carrier through the frame's infinity point is crossed
+			// exactly there (the record makes Q exact): its root nearest Q becomes
+			// Q's parameter, so simultaneous crossings at Q tie exactly (by id, the
+			// passage of Q last) -- unless Q is the departure point
+			// (departing from Q: another carrier through Q is crossed at the
+			// departure point, at the end of the loop like a known departure point's)
+			const N tq = w.depart_q ? t0 : Backend<N>::param_of(beam, *w.Q);
+			if (w.depart_q || tq.cmp(t0) != 0) {
+				for (const auto &sp : w.scene->surfaces) {
+					if (!pole_on(w, *sp) || (w.depart_q && sp->id == depart)) {
+						continue;
+					}
+					int best = -1;
+					double best_d = INF_D;
+					for (size_t i = 0; i < cands.size(); i++) {
+						if (cands[i].surf != sp.get() || cands[i].inf) {
+							continue;
+						}
+						const double d = beam.at(cands[i].t).sub(*w.Q).abs2().to_float();
+						if (d < best_d) {
+							best_d = d;
+							best = int(i);
+						}
+					}
+					if (best >= 0) {
+						cands[size_t(best)] = Candidate<N>{tq, sp.get(), false, w.Q, -1, false, true};
+					}
+				}
+			}
+		}
 		if (w.scene->emit_infinity) {
 			if (!w.Q) {
 				if (beam.kappa.is_zero()) {
@@ -1244,7 +1425,7 @@ private:
 					// before the wrapped ones (no root of a straight beam is at inf)
 					cands.push_back(Candidate<N>{t0.like(INF_D), nullptr, false, std::nullopt, -1, true});
 				}
-			} else {
+			} else if (!w.depart_q) {
 				// the frame's image of infinity is a finite point on this beam: an
 				// ordinary crossing, exact by provenance (not at the departure point)
 				const N tq = Backend<N>::param_of(beam, *w.Q);
@@ -1305,8 +1486,9 @@ private:
 			const Surf<N> *hi = p->id < q->id ? q : p;
 			const N t = x.t;
 			const std::optional<CN<N>> pt = x.pt ? x.pt : y.pt;
-			cands[i] = Candidate<N>{t, lo, false, pt, int(i)};
-			cands[i + 1] = Candidate<N>{t, hi, false, pt, int(i)};
+			const bool at_q = x.at_q || y.at_q; // concurrent at Q: both pinned there
+			cands[i] = Candidate<N>{t, lo, false, pt, int(i), false, at_q};
+			cands[i + 1] = Candidate<N>{t, hi, false, pt, int(i), false, at_q};
 		}
 	}
 
@@ -1531,6 +1713,10 @@ private:
 		N t_prev = t0;
 		bool fired_state = false; // a state change in the current loop
 		while (!w.done) {
+			if (w.record_poles) {
+				w.pole_trace.emplace_back(beam, w.pole);
+				w.exact_trace.push_back(w.Q ? w.pole.has_value() : w.line != nullptr);
+			}
 			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0);
 			std::vector<double> gp = gaps(*beam, cands);
 			std::optional<Next> next;
@@ -1673,6 +1859,9 @@ private:
 					const bool pt_exact = (cand.pt || (rehit && fresh)) && known_index(w.known, pt) >= 0;
 					const size_t depth = w.stack.size();
 					next = apply(w, beam, t, *surf, do_, depart, fresh, t0, rehit, pt, pt_exact);
+					// the beam departs from Q: an effect fired at Q (a pinned crossing,
+					// or the departure re-hit when the beam had departed from Q)
+					w.depart_q = w.pole.has_value() && (cand.at_q || (rehit && w.depart_q));
 					Event<N> &ev = w.events.back();
 					ev.popped = w.stack.size() < depth;
 					ev.teleport = surf->portal || (ev.popped && w.scene->find(next->depart)->portal);
@@ -1685,6 +1874,7 @@ private:
 				if (is_projective(do_)) {
 					const bool pt_exact2 = (cand.pt || (rehit && fresh)) && known_index(w.known, pt) >= 0;
 					next = project(w, beam, t, *surf, left, pt, pt_exact2);
+					w.depart_q = false;
 					w.events.back().projective = true;
 					if (!w.anchored && !w.seeded) {
 						w.seeded = true;
@@ -1771,11 +1961,14 @@ private:
 			w.known = top.known;
 			w.line = top.line;
 			w.Q = top.q;
+			w.pole = top.pole;
+			w.pole_serial = top.pole_serial;
 			return Next{w.seeded ? Backend<N>::reseed(top.beam) : top.beam, top.sid, t_res, false};
 		}
 		const N other = other_root(*beam, surf, depart, t0, t, pt);
 		const int pop_id = surf.portal ? surf.pair : surf.id;
-		w.stack.push_back(StackEntry<N>{beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype), w.Q});
+		w.stack.push_back(StackEntry<N>{beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype), w.Q, w.pole, w.pole_serial});
+		set_pole(w, pole_after(w, surf));
 		w.Q = effects::map_point(w.Q, surf, false);
 		const std::vector<Known<N>> old_known = w.known;
 		// the surface the new beam departs from, and the departure point
@@ -1903,6 +2096,7 @@ private:
 	Next project(Walk<N> &w, const BeamPtr<N> &beam, const N &t, const Surf<N> &surf, bool left, const CN<N> &pt, bool pt_exact) const {
 		w.stack.clear();
 		w.Q = std::nullopt;
+		set_pole(w, std::nullopt);
 		w.epoch++;
 		const CN<N> *H = nullptr;
 		if (w.chain) {
