@@ -244,11 +244,51 @@ std::optional<ExactPole> pole_start_aimed(double px, double py, const Point3 &X,
 	return pole_ok(Q0, cmul(conj(PX), cmul(XQ, PQ)));
 }
 
+namespace {
+
+// A BigFloat as a float64 with a rigorous bound (to_float is within 2U of the
+// value, Stage 102 B3; 3U of the result covers the difference). nullopt where
+// float64 cannot bound it (overflow, the subnormal range).
+std::optional<EB> eb_of(const BigFloat &x) {
+	const double v = x.to_float();
+	if (!std::isfinite(v) || (v != 0.0 && std::fabs(v) < 1e-280)) {
+		return std::nullopt;
+	}
+	return EB{v, 3.0 * U * std::fabs(v)};
+}
+
+// The filter: certainly non-zero (the bound only selects the cheap path)
+bool certainly_nonzero(const EB &x) {
+	return std::isfinite(x.v) && std::isfinite(x.e) && std::fabs(x.v) > x.e;
+}
+
+} // namespace
+
 bool pole_on_line(const ExactPole &p, double sx, double sy, double ex, double ey) {
+	// filter: (e - s) x (Q - s w), homogeneous
+	const std::optional<EB> qx = eb_of(p.Q[0]), qy = eb_of(p.Q[1]), qw = eb_of(p.Q[2]);
+	if (qx && qy && qw) {
+		const EB dx = esub(EB{ex, 0.0}, EB{sx, 0.0}), dy = esub(EB{ey, 0.0}, EB{sy, 0.0});
+		const EB rx = esub(*qx, emul(EB{sx, 0.0}, *qw)), ry = esub(*qy, emul(EB{sy, 0.0}, *qw));
+		if (certainly_nonzero(esub(emul(dx, ry), emul(dy, rx)))) {
+			return false;
+		}
+	}
 	return on_line_h(line_through(sx, sy, ex, ey), p.Q);
 }
 
 bool pole_on_circle(const ExactPole &p, const Point3 &C, const BigFloat &rw2) {
+	// filter: |Qx Cw - Cx Qw|^2 + |Qy Cw - Cy Qw|^2 - rw2 Qw^2
+	{
+		const std::optional<EB> qx = eb_of(p.Q[0]), qy = eb_of(p.Q[1]), qw = eb_of(p.Q[2]);
+		const std::optional<EB> cx = eb_of(C[0]), cy = eb_of(C[1]), cw = eb_of(C[2]), r2 = eb_of(rw2);
+		if (qx && qy && qw && cx && cy && cw && r2) {
+			const EB ux = esub(emul(*qx, *cw), emul(*cx, *qw)), uy = esub(emul(*qy, *cw), emul(*cy, *qw));
+			if (certainly_nonzero(esub(eadd(emul(ux, ux), emul(uy, uy)), emul(*r2, emul(*qw, *qw))))) {
+				return false;
+			}
+		}
+	}
 	const C2 Uq = rel(p.Q, C);
 	// |Q - C|^2 = r^2: |Uq|^2 = rw2 Qw^2 (rw2 = r^2 Cw^2)
 	return sub(add(mul(Uq.re, Uq.re), mul(Uq.im, Uq.im)), mul(rw2, mul(p.Q[2], p.Q[2]))).is_zero();
