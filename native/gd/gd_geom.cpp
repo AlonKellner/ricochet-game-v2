@@ -129,9 +129,9 @@ void HPBeamCircle::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_r"), &HPBeamCircle::get_r);
 	ClassDB::bind_method(D_METHOD("get_r2"), &HPBeamCircle::get_r2);
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "id"), "", "get_id");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "c", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN"), "", "get_c");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "r", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num"), "", "get_r");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "r2", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num"), "", "get_r2");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "c", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN", godot::PROPERTY_USAGE_NONE), "", "get_c");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "r", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num", godot::PROPERTY_USAGE_NONE), "", "get_r");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "r2", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num", godot::PROPERTY_USAGE_NONE), "", "get_r2");
 }
 
 Ref<HPBeamCircle> HPBeamCircle::wrap(CircleV c) {
@@ -174,8 +174,8 @@ void BeamGeomSeg::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "id"), "", "get_id");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "kind"), "", "get_kind");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "full"), "", "get_full");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "s", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN"), "", "get_s");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "e", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN"), "", "get_e");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "s", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN", godot::PROPERTY_USAGE_NONE), "", "get_s");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "e", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN", godot::PROPERTY_USAGE_NONE), "", "get_e");
 	ADD_PROPERTY(PropertyInfo(Variant::NIL, "v", godot::PROPERTY_HINT_NONE, "", godot::PROPERTY_USAGE_DEFAULT | godot::PROPERTY_USAGE_NIL_IS_VARIANT), "", "get_v");
 	ADD_PROPERTY(PropertyInfo(Variant::NIL, "circ", godot::PROPERTY_HINT_NONE, "", godot::PROPERTY_USAGE_DEFAULT | godot::PROPERTY_USAGE_NIL_IS_VARIANT), "", "get_circ");
 }

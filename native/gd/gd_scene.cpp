@@ -126,10 +126,10 @@ void BeamSceneSurf::_bind_methods() {
 #undef RC_SURF_PROP
 	ClassDB::bind_method(D_METHOD("get_alpha"), &BeamSceneSurf::get_alpha);
 	ClassDB::bind_method(D_METHOD("get_dvec"), &BeamSceneSurf::get_dvec);
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "alpha", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN"), "", "get_alpha");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "dvec", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN"), "", "get_dvec");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "alpha", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN", godot::PROPERTY_USAGE_NONE), "", "get_alpha");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "dvec", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN", godot::PROPERTY_USAGE_NONE), "", "get_dvec");
 	ClassDB::bind_method(D_METHOD("get_seg"), &BeamSceneSurf::get_seg);
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "seg", godot::PROPERTY_HINT_RESOURCE_TYPE, "BeamGeomSeg"), "", "get_seg");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "seg", godot::PROPERTY_HINT_RESOURCE_TYPE, "BeamGeomSeg", godot::PROPERTY_USAGE_NONE), "", "get_seg");
 	ClassDB::bind_method(D_METHOD("effect", "left", "flags"), &BeamSceneSurf::effect, DEFVAL(godot::Dictionary()));
 	ClassDB::bind_method(D_METHOD("state_change", "left", "flags"), &BeamSceneSurf::state_change, DEFVAL(godot::Dictionary()));
 	ClassDB::bind_method(D_METHOD("ghosted", "left", "flags"), &BeamSceneSurf::ghosted);

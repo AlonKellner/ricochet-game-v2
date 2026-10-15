@@ -195,6 +195,28 @@ func test_unplanned_passage_is_not_a_divergence_and_planned_unmet_is():
 	assert_eq(marks.size(), 1)
 	assert_false(marks[0]["valid"], "the mark shows the entry unmet")
 
+# ---------------------------------------------------------------- the player
+
+func test_player_faces_the_path_not_the_cursor():
+	var visual: Node2D = _player.get_node("Visual")
+	# direct: along the preview's first step (an arc here, not straight at the cursor)
+	var planned: TracePath = _renderer.get_planned_path()
+	var d0: Vector2 = ArrowAdvance.start_direction(planned.steps[0])
+	await _frames(1)
+	assert_almost_eq(visual.rotation, d0.angle(), 1e-5, "the player faces the preview's start direction")
+	# the long way round: the start direction points away from the cursor
+	_gm.plan.add_entry(INF_ID, Side.Value.LEFT, Q0)
+	await _frames(2)
+	var long_planned: TracePath = _renderer.get_planned_path()
+	var d1: Vector2 = ArrowAdvance.start_direction(long_planned.steps[0])
+	assert_almost_eq(visual.rotation, d1.angle(), 1e-5, "the player turns with the plan")
+	assert_almost_eq(d1.dot(d0), -1.0, 1e-6, "the two realizations leave in opposite directions")
+	assert_lt(absf(d1.dot((CURSOR - PLAYER).normalized())), 0.999, "neither is straight at the cursor: the paths are arcs")
+	# no preview (cursor on the player): the cursor direction as before
+	_cursor.global_position = PLAYER
+	await _frames(2)
+	assert_null(_renderer.get_planned_path())
+
 # ---------------------------------------------------------------- the invariants
 
 func test_sweep_with_infinity_plans_in_the_pre_transform_scene():

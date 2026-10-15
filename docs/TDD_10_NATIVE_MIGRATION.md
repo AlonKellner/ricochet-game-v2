@@ -772,6 +772,26 @@ under ASan/UBSan (548 s, no report); `./run_tests_parallel.sh` 767 passing /
 161/161, beam_f64 physical 112/161, beam_big112 physical 160/161) against the
 regenerated corpus.
 
+**After the user's first look (2026-10-15):**
+- The player now faces the preview's first step (`ArrowAdvance.start_direction`
+  of the planned path's first step), not the cursor: the second realization
+  and a curved frame leave in another direction. The cursor direction stays
+  the fallback without a preview.
+- The infinity overlays look like the surfaces' (`SurfaceNode`): a gradient
+  band fading away from the "surface" and incoming / outgoing chevron pairs,
+  one per side of the bounds inside the edge, four radial ones around the
+  point; hover in the hover colour, marks in the plan's valid / invalid colour.
+- The editor's errors: a leftover agent worktree (`.claude/worktrees/...`, the
+  Stage 89 toolchain branch, 2.4 GB, long merged) sat inside the project, so
+  the editor's language server parsed a second copy of every script ("hides a
+  global script class"). Removed; `.claude/.gdignore` makes Godot skip that
+  folder and `.gitignore` excludes future worktrees. The eight "Instantiated
+  CN/Num used as default value" warnings: ClassDB instantiates every class to
+  cache the default values of its STORAGE / EDITOR properties and warns when
+  one is an object; the value-wrapper properties (`CN.re/im`, `HPBeam.p/tau/
+  kappa`, `HPBeamCircle.c/r/r2`, `BeamGeomSeg.s/e`, `BeamSceneSurf.seg/alpha/
+  dvec`) now declare `PROPERTY_USAGE_NONE` (still readable, no cached default).
+
 **Interactive checklist (user sign-off):**
 1. `pre_inverted.tscn`: the faint circle is the pre-transform; the circled
    cross at its center is infinity. Aim around: the preview is an arc through

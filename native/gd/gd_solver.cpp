@@ -126,9 +126,9 @@ void HPBeam::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_p"), &HPBeam::get_p);
 	ClassDB::bind_method(D_METHOD("get_tau"), &HPBeam::get_tau);
 	ClassDB::bind_method(D_METHOD("get_kappa"), &HPBeam::get_kappa);
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "p", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN"), "", "get_p");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "tau", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN"), "", "get_tau");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "kappa", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num"), "", "get_kappa");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "p", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN", godot::PROPERTY_USAGE_NONE), "", "get_p");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "tau", godot::PROPERTY_HINT_RESOURCE_TYPE, "CN", godot::PROPERTY_USAGE_NONE), "", "get_tau");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "kappa", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num", godot::PROPERTY_USAGE_NONE), "", "get_kappa");
 	ClassDB::bind_method(D_METHOD("at", "t"), &HPBeam::at);
 	ClassDB::bind_method(D_METHOD("at_infinity"), &HPBeam::at_infinity);
 	ClassDB::bind_method(D_METHOD("tangent_at", "t"), &HPBeam::tangent_at);
