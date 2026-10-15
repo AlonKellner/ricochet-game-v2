@@ -27,7 +27,7 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Evidence ready: `docs/research/stage88b_fixture_diff.md` (B9); **awaiting the user's approval** before the committed corpora change |
 | 88c | Native `infinity` event, ∞ plan item, reversed anchored orientation | Planned |
 | 88d | Edge click, hover band, plan chevrons, HUD, `level_bounds` | Planned |
-| 100 | Performance pass: dirty flags, no per-frame defs, cached arc params | Done: static frames do no solver or draw work (`frame_bench.gd`: 6 µs vs 120-290 µs per frame); `test_stage100_dirty_flags.gd`; **interactive sign-off pending** |
+| 100 | Performance pass: dirty flags, no per-frame defs, cached arc params | Done: static frames do no solver or draw work (`frame_bench.gd`: 6 µs vs 120-290 µs per frame); `test_stage100_dirty_flags.gd`; user sign-off 2026-10-15 ("works perfectly"; the edge is not yet plannable: 88d) |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests (ctest and
 the full GUT suite). The full suite must pass before proceeding to Stage N+1.
@@ -687,6 +687,12 @@ and hover stability, the caches, the plan version, the edge walls).
 5. Tab cycles the display modes immediately (no cursor move needed).
 6. Flag scenes (`flag_switches.tscn`, `ghost_room.tscn`): toggling a flag by a
    shot recolours the gates and mirrors and changes the preview.
+
+**Sign-off (2026-10-15):** the user played the scenes: "other than that, the
+game works perfectly". The one failure reported, infinity (the level bounds)
+not plannable in scenes with plannable surfaces, is the feature of Stages
+88c-d, not yet implemented; it is the next work. `native-migration` merged
+into `main` a second time here.
 
 ## Machine quirks: the open editor and the migration
 
