@@ -116,6 +116,14 @@ def judge_next(beam_hex, D, segs):
     return (first[2], (float(first[3].real), float(first[3].imag)), float(margin))
 
 
+def beams_close(a, b, rel=1e-9):
+    for x, y in zip(a, b):
+        fx, fy = dbl(x), dbl(y)
+        if abs(fx - fy) > rel * max(1.0, abs(fx), abs(fy)):
+            return False
+    return True
+
+
 def matches(expected, event, D):
     if event is None:
         return False
@@ -127,7 +135,18 @@ def matches(expected, event, D):
     return event["sid"] == sid and q is not None and abs(q[0] - p[0]) < POINT_TOL and abs(q[1] - p[1]) < POINT_TOL
 
 
-def judge_trace(old, new, segs):
+def cursor_index(trace):
+    """The number of hit events before the cursor event (None: no cursor event)."""
+    n = 0
+    for e in (trace or {}).get("events", []):
+        if e["kind"] == "cursor":
+            return n
+        if e["kind"] == "hit":
+            n += 1
+    return None
+
+
+def judge_trace(old, new, segs, portal_src):
     ho, hn = hits(old), hits(new)
     n = min(len(ho), len(hn))
     i = 0
@@ -139,17 +158,42 @@ def judge_trace(old, new, segs):
     en = hn[i] if i < len(hn) else None
     if i == 0:
         return {"cls": "undecidable", "why": "the first hit differs (the aim, not a departure)"}
-    if eo is not None and en is not None and eo.get("beam") != en.get("beam"):
-        return {"cls": "beam-differs", "at": i}
     beam_hex = (en or eo).get("beam")
-    D = pt(ho[i - 1])
-    if beam_hex is None or D is None:
-        return {"cls": "undecidable", "why": "no beam or no departure point"}
+    if eo is not None and en is not None and eo.get("beam") != en.get("beam"):
+        # the same restored beam up to rounding (an exact vs a rounded hit point
+        # upstream): judged on the new build's beam; a real difference is not a
+        # departure question
+        if beam_hex is None or eo.get("beam") is None or not beams_close(beam_hex, eo["beam"]):
+            return {"cls": "beam-differs", "at": i}
+    prev = ho[i - 1]
+    # the departure point: a fresh departure (an effect fired, no pop) starts the
+    # beam at its own p (a portal's pair, after a teleport); a pop or a pass
+    # leaves the beam at the previous hit's point
+    if beam_hex is None:
+        return {"cls": "undecidable", "why": "no beam"}
+    D = (dbl(beam_hex[0]), dbl(beam_hex[1])) if (prev["applied"] and not prev.get("popped")) else pt(prev)
+    if prev.get("popped") and prev.get("teleport"):
+        # a pop through a portal pair: the beam resumes at the pop point mapped
+        # back through the source portal (a translation; a rotation is not judged)
+        src = portal_src.get(prev["sid"])
+        if src is None or src[2] != 0.0:
+            return {"cls": "undecidable", "why": "a rotated portal pop"}
+        D = (D[0] - src[0], D[1] - src[1])
+    if D is None:
+        return {"cls": "undecidable", "why": "no departure point"}
     expected = judge_next(beam_hex, D, segs)
     if expected is None:
         return {"cls": "undecidable", "why": "a tie", "at": i}
     ok_old, ok_new = matches(expected, eo, D), matches(expected, en, D)
     cls = {(True, False): "fix", (False, True): "regression", (False, False): "both-wrong", (True, True): "undecidable"}[(ok_new, ok_old)]
+    if ok_old and ok_new and eo is not None and en is not None and eo["applied"] != en["applied"]:
+        # the same crossing, applied in one trace only: the cursor sits at the
+        # departure point and is reached immediately in one of them (so the walk
+        # is in post-cursor physical mode there and not in the other)
+        cls = "applied-differs"
+        return {"cls": cls, "at": i, "expected": [expected[0], list(expected[1]) if expected[0] != "rehit" else list(D), expected[2]],
+                "old": [eo["sid"], list(pt(eo) or ()), eo["applied"]], "new": [en["sid"], list(pt(en) or ()), en["applied"]], "departure": list(D),
+                "cursor_event_index": {"old": cursor_index(old), "new": cursor_index(new)}, "hit_index": i}
     if eo is None or en is None:
         cls = cls if cls != "undecidable" else "prefix"
     return {"cls": cls, "at": i, "expected": [expected[0], list(expected[1]) if expected[0] != "rehit" else list(D), expected[2]],
@@ -175,14 +219,20 @@ def main():
     for key in keys:
         o, nw = old[key], new[key]
         segs = segs_of(nw["defs"])
+        # pair id -> (dx, dy, theta) of the portal whose pair it is: the map that
+        # took the beam from the source to the pair, undone at a pop at the pair
+        portal_src = {}
+        for df in nw["defs"]:
+            if "portal" in df:
+                portal_src[df["pair"]] = tuple(dbl(h) for h in df["portal"])
         rec = {"group": key[0], "combo": key[1]}
         worst = "undecidable"
         for which in ("planned", "physical"):
             if o.get(which) is None or nw.get(which) is None:
                 continue
-            r = judge_trace(o[which], nw[which], segs)
+            r = judge_trace(o[which], nw[which], segs, portal_src)
             rec[which] = r
-            rank = {"regression": 4, "both-wrong": 3, "beam-differs": 2, "fix": 1, "prefix": 1, "undecidable": 0}
+            rank = {"regression": 4, "both-wrong": 3, "beam-differs": 2, "fix": 1, "prefix": 1, "applied-differs": 1, "undecidable": 0}
             if rank[r["cls"]] > rank[worst]:
                 worst = r["cls"]
         rec["cls"] = worst
@@ -198,7 +248,7 @@ def main():
         c = per_group[g]
         other = sum(v for k, v in c.items() if k not in ("fix", "regression", "both-wrong", "undecidable"))
         print("| %s | %d | %d | %d | %d | %d | %d |" % (g, sum(c.values()), c["fix"], c["regression"], c["both-wrong"], c["undecidable"], other))
-    for cls in ("regression", "both-wrong", "beam-differs", "undecidable"):
+    for cls in ("regression", "both-wrong", "beam-differs", "applied-differs", "undecidable"):
         bad = [r for r in records if r["cls"] == cls]
         if bad:
             print("\n%s (%d):" % (cls, len(bad)))
