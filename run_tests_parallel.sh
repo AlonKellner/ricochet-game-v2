@@ -105,6 +105,12 @@ for log in "$LOGDIR"/*.log; do
 		grep -E "Parse Error" <<< "$clean" | sort -u | head -10 | sed 's/^/   /'
 		status=1
 	fi
+	# Stage 103: nothing may leak (side links hold no reference cycles)
+	if grep -qE "instances were leaked at exit|resources still in use at exit" <<< "$clean"; then
+		echo "!! $label: objects leaked at exit:"
+		grep -E "leaked at exit|still in use at exit" <<< "$clean" | sed 's/^/   /'
+		status=1
+	fi
 	if [ "${f:-0}" != "0" ] || grep -q "SCRIPT ERROR" <<< "$clean"; then
 		echo "!! $label: ${f:-0} failing, script errors in the log"
 		sed -n '/Run Summary/,$p' <<< "$clean" | grep -E "^res://|^- |\[Failed\]" | head -40
