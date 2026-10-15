@@ -27,7 +27,7 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Evidence ready: `docs/research/stage88b_fixture_diff.md` (B9); **awaiting the user's approval** before the committed corpora change |
 | 88c | Native `infinity` event, ∞ plan item, reversed anchored orientation | Planned |
 | 88d | Edge click, hover band, plan chevrons, HUD, `level_bounds` | Planned |
-| 100 | Performance pass: dirty flags, no per-frame defs, cached arc params | Planned |
+| 100 | Performance pass: dirty flags, no per-frame defs, cached arc params | Done: static frames do no solver or draw work (`frame_bench.gd`: 6 µs vs 120-290 µs per frame); `test_stage100_dirty_flags.gd`; user sign-off 2026-10-15 ("works perfectly"; the edge is not yet plannable: 88d) |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests (ctest and
 the full GUT suite). The full suite must pass before proceeding to Stage N+1.
@@ -620,6 +620,80 @@ B-items: `TestTrace` / `TraceMode` (B6) and `TraceHit.at_endpoint` /
 `native-migration` merged into `main` (`--no-ff`) at this point, per the plan;
 the second merge follows Stage 100.
 
+## Stage 100: the performance pass (dirty keys)
+
+Before this stage every frame rebuilt the scene defs (`SceneDefs.defs_from_surfaces`
+and `segments_by_id`, one Dictionary per surface), ran the two solver traces,
+the display preparation and the merge, redrew the path, ran the click detector
+for the hover (with `plan_refuses` and its own defs per candidate), rebuilt the
+plan overlays and redrew every surface node, whether or not anything had
+changed. Now each of those runs only when its inputs changed:
+
+- `SceneDefsCache` (scripts/game): the defs and the id -> Segment map of a
+  surfaces array, built once per array (identity + size: scenes append their
+  surfaces in `_ready` and never edit a Surface afterwards); `version` counts
+  the rebuilds. Used by `PathRenderer`, `GameManager` and `InvariantChecker`.
+- `PathRenderer._process` compares `[player, cursor, plan entries by value,
+  flags (a deep copy: the state may be edited in place), defs version]` with
+  the last computation and recomputes only on a change; `trace_version` counts
+  the recomputations; `queue_redraw()` only then (and on a display-mode
+  change). A direct `_compute_trace()` call always recomputes, as the invariant
+  checker and the tests rely on. The equality is Godot's: Dictionary and Array
+  `==` compare contents (checked by `test_stage100_dirty_flags.gd`).
+- `GameManager._update_hover` runs on `[cursor, plan.version, flags]` changes,
+  `_update_surface_overlays` on `[trace_version, plan.version, flags]` changes
+  (forced by `_refresh_ui`, i.e. after a click, undo or reset).
+  `PlanManager.version` is bumped by every mutation.
+- `SurfaceNode` keeps its overlays when the new ones are equal
+  (`ChevronOverlay.equals` / `same_list`), so no redraw; its arc parameters
+  are computed once per setup. `Cursor` no longer calls `queue_redraw()` every
+  frame (a moved CanvasItem does not need one).
+- The edge walls of `LevelSettings` and the display bounds of `PathRenderer`
+  come from `level_bounds` instead of literal 1920x1080 / `DEFAULT_BOUNDS`
+  (B5). Zero diff today: no scene overrides `level_bounds` (grep of every
+  `.tscn`) and the default equals `DEFAULT_BOUNDS`; the test pins both.
+
+`scripts/testing/frame_bench.gd` (`make frame-bench [SCENE=] [FRAMES=]`) loads
+a scene headlessly and runs six phases of 250 frames: static, cursor orbit, a
+two-entry plan static and orbiting, hover resting on a surface, player orbit.
+It reports the wall time per frame (hook to hook of the SceneTree, with the
+headless frame pacing turned off: `OS.low_processor_usage_mode_sleep_usec =
+0`; `Performance.TIME_PROCESS` is a once-per-second maximum and useless here)
+and the recomputation count, fails if a static phase recomputes after its
+setup frame or a mean frame exceeds 8 ms. On this machine (`main.tscn`, 13
+surfaces): static 0.006 ms, cursor orbit 0.121 ms, plan orbit 0.258 ms,
+player orbit 0.109 ms per frame; `projective_arcs.tscn`: 0.006 / 0.157 /
+0.288 / 0.201 ms. The orbit columns are what every frame cost before the
+stage.
+
+**Gate:** `./run_tests_parallel.sh` 750 passing / 0 failing in 11 s wall;
+ctest unchanged (no native change). The dirty paths are compared with fresh
+computations in `test_stage100_dirty_flags.gd` (16 tests: positions, plan,
+flags replaced and edited in place, player on cursor, direct recompute, overlay
+and hover stability, the caches, the plan version, the edge walls).
+
+**Interactive checklist (user sign-off):**
+1. Idle scene: the preview, hover and plan chevrons look as before; the
+   process view of the editor (or Activity Monitor) shows the game near idle
+   while nothing moves.
+2. Move the cursor: the preview follows every frame; hover highlights appear
+   and disappear exactly at the 24 px band; the partner side of a portal
+   highlights too.
+3. Plan: click sides, right-click to remove, C to clear; the chevrons and
+   plan numbers update at once; the HUD matches.
+4. Fire, let the arrow land (and speed it up with a key): the state flags
+   promote, the surfaces recolour, the preview updates after landing; Z (undo)
+   and R (reset) restore the preview and overlays.
+5. Tab cycles the display modes immediately (no cursor move needed).
+6. Flag scenes (`flag_switches.tscn`, `ghost_room.tscn`): toggling a flag by a
+   shot recolours the gates and mirrors and changes the preview.
+
+**Sign-off (2026-10-15):** the user played the scenes: "other than that, the
+game works perfectly". The one failure reported, infinity (the level bounds)
+not plannable in scenes with plannable surfaces, is the feature of Stages
+88c-d, not yet implemented; it is the next work. `native-migration` merged
+into `main` a second time here.
+
 ## Machine quirks: the open editor and the migration
 
 The Godot editor (launched from VSCode) stayed open through Stages 90-97. It
@@ -643,4 +717,5 @@ two aborts fixed in Stages 93 and 96), not the editor.
 | B1 | `BigFloat.mul` int64 column overflow above ~128 limbs per factor (reproduced natively) | `big_float.gd:251-256` | doctest with `__int128` reference |
 | B12 | `Exact.U` parsed two ulps below 2^-53 by Godot | `exact.gd:11` | `test_diff_beam_geom.gd` (`Exact.U` bits), `tools/dump_goldens.gd` hex inputs; native `exact.hpp` comment |
 | B9 | The `infinity` event counts toward MAX_HITS: 443 events inserted across the corpora, 79 traces at MAX_HITS cut earlier (182 old tail events dropped), stress corpus unchanged; no visible-output change until 88c | oracle `trace2.py` `EMIT_INFINITY` | `docs/research/stage88b_fixture_diff.md` (per-case list), `stage88b_classify.py` |
+| B5 | `PathRenderer` display bounds and `LevelSettings` edge walls from `level_bounds` instead of 1920x1080 literals (needed by 88d) | `path_renderer.gd`, `level_settings.gd` | **applied in Stage 100 with zero diff**: no `.tscn` sets `level_bounds`, the default equals `DEFAULT_BOUNDS`; `test_stage100_dirty_flags.gd` pins both; the user may veto |
 | B13 | A NaN replay gain poisons the envelope through `maxf` and jumps the ladder to the last tier | `error_estimate.gd:111`, `precision_ladder.gd` | sweep goldens `precision/no_plan` combos 4883, 4919 (`tiers_tried`) |

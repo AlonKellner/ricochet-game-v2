@@ -2456,6 +2456,7 @@ Preview must update **every frame at 60fps** (~16.6ms per frame). Target: previe
 ### 30.3 Optimization targets
 
 - **Incremental recomputation**: if only the cursor moved (not the plan or player), recompute from the last unchanged step.
+- **Recompute only on change** *(implemented, Stage 100)*: the preview, the hover and the plan overlays are recomputed only when their inputs changed (player, cursor, plan entries, state flags, surfaces); a frame in which nothing moved does no solver or draw work. Scene defs for the solver are built once per level.
 - **Spatial indexing**: broad-phase rejection of distant surfaces.
 - **Precision on demand** *(implemented)*: the float64 `FastSolver` pass is accepted when its `ErrorEstimate` is ≤ 0.01 px and every decision margin exceeds its error. Only otherwise does `PrecisionLadder` climb BigFloat tiers (§31.5). The float64 scene and the last trace pair are cached (§17.2). *(Replaces the legacy "frame transform caching" of `M⁻¹`, which no longer exists.)*
 

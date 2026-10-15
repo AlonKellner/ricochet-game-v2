@@ -4,7 +4,7 @@ CTEST ?= ctest
 # bounded parallelism: a bare `-j` lets Make start every godot-cpp compile at once
 JOBS ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
-.PHONY: test run test-verbose test-stage test-fast bench bench-stress \
+.PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench \
 	native native-debug native-asan ctest
 
 # ---------------------------------------------------------------- native (C++)
@@ -69,6 +69,13 @@ test-fast: native ctest
 # Precision benchmark: GDScript strategies vs the mpmath oracle corpus
 bench:
 	$(GODOT) --headless --path . -s res://scripts/testing/run_precision_bench.gd -- --strategies=beam_f64,beam_big112,ladder,ladder_verify --tag=main
+
+# Stage 100: the per-frame cost of a live scene, headless; static phases must
+# not recompute the trace (dirty flags) and the mean frame stays under budget.
+SCENE ?= res://scenes/main.tscn
+FRAMES ?= 250
+frame-bench: native
+	$(GODOT) --headless --path . -s res://scripts/testing/frame_bench.gd -- --scene=$(SCENE) --frames=$(FRAMES)
 
 bench-stress:
 	$(GODOT) --headless --path . -s res://scripts/testing/run_precision_bench.gd -- --dir=stress --strategies=beam_f64,ladder,ladder_verify --tag=stress

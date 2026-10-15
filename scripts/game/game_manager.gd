@@ -22,6 +22,10 @@ var _checkpoints := CheckpointStack.new()
 var _pending_flags = null   # the fired shot's final flags, promoted when it lands
 var _hovered_node: Node2D = null
 var _hover_partner_node: Node2D = null
+# Stage 100: the per-frame work runs only when its inputs changed
+var _defs_cache := SceneDefsCache.new()
+var _hover_inputs = null     # [cursor, plan.version, flags] of the last hover update
+var _overlay_inputs = null   # [trace_version, plan.version, flags] of the last overlay update
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -62,7 +66,14 @@ func _update_hover() -> void:
 		return
 	if _arrow_animator and _arrow_animator.is_flying():
 		_clear_all_hover()
+		_hover_inputs = null
 		return
+
+	# the hover depends on the cursor, the plan (sides it refuses) and the state
+	var inputs := [_cursor.global_position, plan.version, game_state.flags.duplicate(true)]
+	if _hover_inputs != null and inputs == _hover_inputs:
+		return
+	_hover_inputs = inputs
 
 	var surfaces := _get_surfaces()
 	var result := click_detector.detect_click(_cursor.global_position, surfaces, game_state, _plan_accepts.bind(surfaces))
@@ -85,7 +96,7 @@ func _update_hover() -> void:
 
 # Inside a ghost stretch of the plan only ghost togglers can be planned.
 func _plan_accepts(surf: Surface, side: Side.Value, surfaces: Array) -> bool:
-	return not _tracer.plan_refuses(SceneDefs.defs_from_surfaces(surfaces), plan.entries, surf.id, side == Side.Value.LEFT, game_state.flags)
+	return not _tracer.plan_refuses(_defs_cache.defs(surfaces), plan.entries, surf.id, side == Side.Value.LEFT, game_state.flags)
 
 func _clear_all_hover() -> void:
 	if _hovered_node and is_instance_valid(_hovered_node):
@@ -185,7 +196,7 @@ func _try_fire() -> void:
 	var surfaces := _get_surfaces()
 	var entries: Array = plan.entries if not plan.is_empty() else []
 	var path: TracePath
-	var pair: BeamTracerPair = _tracer.trace_pair(SceneDefs.defs_from_surfaces(surfaces), player_pos, cursor_pos, entries, game_state.flags, SceneDefs.segments_by_id(surfaces))
+	var pair: BeamTracerPair = _tracer.trace_pair(_defs_cache.defs(surfaces), player_pos, cursor_pos, entries, game_state.flags, _defs_cache.segments(surfaces))
 	if pair == null:
 		_checkpoints.pop()
 		return
@@ -260,16 +271,24 @@ func _get_surfaces() -> Array:
 
 func _refresh_ui() -> void:
 	_update_hud()
-	_update_surface_overlays()
+	_update_surface_overlays(true)
 
 func _update_hud() -> void:
 	if not _plan_hud:
 		return
 	_plan_hud.update_plan(plan, _get_surfaces())
 
-func _update_surface_overlays() -> void:
+# The plan overlays depend on the physical hits (the renderer's trace
+# version), the plan and the state; unchanged inputs leave the nodes alone
+# unless forced (the UI refresh after a click, undo or reset).
+func _update_surface_overlays(force: bool = false) -> void:
 	if not _level_settings:
 		return
+	var tv: int = _path_renderer.trace_version if _path_renderer and "trace_version" in _path_renderer else -1
+	var inputs := [tv, plan.version, game_state.flags.duplicate(true)]
+	if not force and _overlay_inputs != null and inputs == _overlay_inputs:
+		return
+	_overlay_inputs = inputs
 	var physical_hits := {}
 	if _path_renderer and _path_renderer.has_method("get_physical_hits"):
 		physical_hits = _path_renderer.get_physical_hits()

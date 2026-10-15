@@ -5,8 +5,8 @@ const CROSSHAIR_COLOR := Color.WHITE
 const CROSSHAIR_WIDTH := 1.5
 
 func _process(_delta: float) -> void:
+	# moving a CanvasItem does not need a redraw: the crosshair is drawn in local coordinates
 	global_position = get_global_mouse_position()
-	queue_redraw()
 
 func _draw() -> void:
 	draw_line(Vector2(-CROSSHAIR_SIZE, 0), Vector2(CROSSHAIR_SIZE, 0), CROSSHAIR_COLOR, CROSSHAIR_WIDTH)
