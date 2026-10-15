@@ -29,7 +29,7 @@ func test_fixture_schema():
 			if e["kind"] == "infinity":
 				infinity_events += 1
 				assert_eq(int(e["surface_id"]), INFINITY_ID, "%s: infinity carries INFINITY_ID" % name)
-				assert_false(e.has("x"), "%s: infinity has no point" % name)
+				# the real infinity has no point; the frame's finite image of it (Stage 101) has one
 				if e["applied"]:
 					consumed += 1
 		for p in x["plan"]:
@@ -80,8 +80,8 @@ func _check(events: Array, expected: Array, label: String) -> bool:
 		if got != want:
 			fail_test("%s event %d: got %s, oracle %s" % [label, i, str(got), str(want)])
 			return false
-		if x["kind"] == "infinity" and e.point != null:
-			fail_test("%s event %d: the infinity event has a point" % [label, i])
+		if x["kind"] == "infinity" and (e.point != null) != x.has("x"):
+			fail_test("%s event %d: the infinity event's point (%s) differs from the oracle's (%s)" % [label, i, e.point != null, x.has("x")])
 			return false
 		if x.has("x") and e.point != null:
 			var d := Vector2(e.point.fx(), e.point.fy()).distance_to(Vector2(String(x["x"]).to_float(), String(x["y"]).to_float()))

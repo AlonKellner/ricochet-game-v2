@@ -27,6 +27,8 @@ var _hover_partner_node: Node2D = null
 var _defs_cache := SceneDefsCache.new()
 var _hover_inputs = null     # [cursor, plan.version, flags] of the last hover update
 var _overlay_inputs = null   # [trace_version, plan.version, flags] of the last overlay update
+var _pole_inputs = null      # [plan.version, flags] of the cached infinity point
+var _pole = null             # the frame's image of infinity after the plan (Vector2), null for infinity
 
 func _ready() -> void:
 	process_mode = Node.PROCESS_MODE_ALWAYS
@@ -82,6 +84,7 @@ func _update_hover() -> void:
 
 	_clear_all_hover()
 	if _edge():
+		_edge().set_point(_infinity_point(), _level_bounds())
 		_edge().set_hovered(result.has("infinity"))
 
 	if result.has("surface"):
@@ -105,11 +108,28 @@ func _edge() -> Node2D:
 		_edge_overlay = _level_settings.get_node_or_null("EdgeOverlay")
 	return _edge_overlay
 
-# What the cursor is over: a surface side, the level bounds' edge, or nothing.
+# What the cursor is over: a surface side, the infinity point or edge, or nothing.
 func _detect_click() -> Dictionary:
 	var surfaces := _get_surfaces()
 	return click_detector.detect_click(_cursor.global_position, surfaces, game_state, _plan_accepts.bind(surfaces),
-		_level_bounds(), FeatureFlags.infinity_event())
+		_level_bounds(), FeatureFlags.infinity_event(), _infinity_point())
+
+# Where the next infinity entry would be passed (Stage 101): the frame's image
+# of infinity after the current plan, a Vector2 when finite, null for infinity.
+func _infinity_point():
+	if not FeatureFlags.infinity_event():
+		return null
+	var inputs := [plan.version, game_state.flags.duplicate(true)]
+	if _pole_inputs == null or inputs != _pole_inputs:
+		_pole_inputs = inputs
+		var surfaces := _get_surfaces()
+		_pole = _tracer.infinity_point(_defs_cache.defs(surfaces), plan.entries, game_state.flags)
+	return _pole
+
+# The image of infinity in the frame before plan entry `index`.
+func _infinity_point_before(index: int):
+	var surfaces := _get_surfaces()
+	return _tracer.infinity_point(_defs_cache.defs(surfaces), plan.entries.slice(0, index), game_state.flags)
 
 func _level_bounds() -> Rect2:
 	if _level_settings and "level_bounds" in _level_settings:
@@ -339,11 +359,17 @@ func _update_surface_overlays(force: bool = false) -> void:
 					wraps += 1
 		var marks: Array = []
 		var k := 0
+		var bounds := _level_bounds()
 		for i in plan.entries.size():
 			var entry: PlanManager.PlanEntry = plan.entries[i]
 			if entry.surface_id == BeamSolver.INFINITY_ID:
 				k += 1
-				marks.append({"index": i + 1, "point": entry.click, "valid": k <= wraps})
+				# the mark sits at the frame's image of infinity when that is on
+				# screen (Stage 101), else on the edge where the player clicked
+				var q = _infinity_point_before(i)
+				var on_point: bool = q is Vector2 and bounds.has_point(q)
+				marks.append({"index": i + 1, "point": q if on_point else entry.click, "on_point": on_point, "valid": k <= wraps})
+		_edge().set_point(_infinity_point(), bounds)
 		_edge().set_marks(marks)
 
 func _dump_debug_state() -> void:

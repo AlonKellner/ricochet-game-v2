@@ -65,11 +65,13 @@ func test_solve_physical_equals_solve():
 	await get_tree().process_frame
 	var defs := SceneDefs.defs_from_surfaces(scene.surfaces)
 	var fsc := FastSolverScene.from_defs(defs)
+	var emit := FeatureFlags.infinity_event()
+	fsc.scene.emit_infinity = emit
 	for pc in [[Vector2(700, 400), Vector2(1200, 700)], [Vector2(600, 300), Vector2(900, 800)], [Vector2(1300, 500), Vector2(650, 350)]]:
 		var p: Vector2 = pc[0]
 		var c: Vector2 = pc[1]
-		var full := PrecisionLadder.solve(defs, [p.x, p.y], [c.x, c.y], [], BeamSolver.MAX_HITS, BeamSolver.MAX_HITS, BeamTracer.TOL(), false, fsc)
-		var phys := PrecisionLadder.solve_physical(defs, [p.x, p.y], [c.x, c.y], [], BeamSolver.MAX_HITS, BeamTracer.TOL(), fsc)
+		var full := PrecisionLadder.solve(defs, [p.x, p.y], [c.x, c.y], [], BeamSolver.MAX_HITS, BeamSolver.MAX_HITS, BeamTracer.TOL(), false, fsc, {}, emit)
+		var phys := PrecisionLadder.solve_physical(defs, [p.x, p.y], [c.x, c.y], [], BeamSolver.MAX_HITS, BeamTracer.TOL(), fsc, {}, emit)
 		assert_eq(phys.physical.map(func(e): return e.describe()), full.physical.map(func(e): return e.describe()))
 		assert_eq(phys.physical_err, full.physical_err)
 		assert_eq(phys.physical_tier, full.physical_tier)

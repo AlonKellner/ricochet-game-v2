@@ -50,6 +50,8 @@ static func describe_surface(s: Surface) -> Dictionary:
 		"is_target": s.is_target,
 		"player_solid": s.player_solid,
 	}
+	if s.pre_transform:
+		out["pre_transform"] = true
 	if s.resolver is CategoricalResolver:
 		out["resolver"] = describe_resolver(s.resolver)
 	return out

@@ -161,7 +161,7 @@ func test_bug3_case1_line_ignores_surfaces() -> void:
 	var post_inversion_escapes := 0
 	for i in path.steps.size():
 		var s: TraceStep = path.steps[i]
-		if s.frame_id != 0 and s.hit == null:
+		if s.frame_id != 0 and s.hit == null and (is_inf(s.start.x) or is_inf(s.end.x)):
 			post_inversion_escapes += 1
 	assert_lt(post_inversion_escapes, 3,
 		"Post-inversion should not have 3+ escape steps (got %d)" % post_inversion_escapes)
@@ -173,7 +173,7 @@ func test_bug3_case2_cursor_inside_circle() -> void:
 	var post_inversion_escapes := 0
 	for i in path.steps.size():
 		var s: TraceStep = path.steps[i]
-		if s.frame_id != 0 and s.hit == null:
+		if s.frame_id != 0 and s.hit == null and (is_inf(s.start.x) or is_inf(s.end.x)):
 			post_inversion_escapes += 1
 	assert_lt(post_inversion_escapes, 3,
 		"Post-inversion should not have 3+ escape steps (got %d)" % post_inversion_escapes)

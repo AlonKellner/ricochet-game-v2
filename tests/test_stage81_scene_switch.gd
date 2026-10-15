@@ -33,6 +33,7 @@ const BEAM_SCENES := [
 	"res://scenes/playground/projective_lines.tscn",
 	"res://scenes/playground/directional_arcs.tscn",
 	"res://scenes/playground/directional_lines.tscn",
+	"res://scenes/playground/pre_inverted.tscn",    # Stage 101: a pre-transform
 ]
 
 func _solver_for(path: String) -> String:

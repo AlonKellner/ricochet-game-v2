@@ -96,7 +96,8 @@ static func run_beam(scn: Dictionary, ctx: NumCtx, n_planned: int, n_physical: i
 
 static func run_ladder(scn: Dictionary, n_physical: int, verify: bool = false) -> Dictionary:
 	var r := PrecisionLadder.solve(scene_defs(scn), [float(scn["player"][0]), float(scn["player"][1])],
-		[float(scn["cursor"][0]), float(scn["cursor"][1])], plan_items(scn), n_physical, n_physical, TOL, verify)
+		[float(scn["cursor"][0]), float(scn["cursor"][1])], plan_items(scn), n_physical, n_physical, TOL, verify, null, {},
+		FeatureFlags.infinity_event())
 	return {"planned": beam_events(r.planned, r.planned_err), "physical": beam_events(r.physical, r.physical_err),
 		"tier": r.physical_tier, "converged": r.converged, "usec_planned": r.usec_planned,
 		"usec_physical": r.usec_physical, "tiers_tried": r.tiers_tried}
@@ -107,8 +108,8 @@ static func run_estimated_f64(scn: Dictionary, n_physical: int) -> Dictionary:
 	var pl := [float(scn["player"][0]), float(scn["player"][1])]
 	var cu := [float(scn["cursor"][0]), float(scn["cursor"][1])]
 	var plan := plan_items(scn)
-	var sp := ErrorEstimate.physical_sensitivity(defs, pl, cu, plan, n_physical)
-	var sq := ErrorEstimate.planned_sensitivity(defs, pl, cu, plan, n_physical)
+	var sp := ErrorEstimate.physical_sensitivity(defs, pl, cu, plan, n_physical, null, {}, FeatureFlags.infinity_event())
+	var sq := ErrorEstimate.planned_sensitivity(defs, pl, cu, plan, n_physical, null, {}, FeatureFlags.infinity_event())
 	var eps := NumCtx.f64().eps()
 	# planned: the ladder's estimate (a-priori envelope and a-posteriori residuals)
 	var est_q := ErrorEstimate.estimate(sq, eps)

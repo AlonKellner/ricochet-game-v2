@@ -103,6 +103,8 @@ static func surface_infos(surfaces: Array, flags: Dictionary) -> Array:
 	var state := GameState.new(flags)
 	for surf in surfaces:
 		var s: Surface = surf
+		if s.pre_transform:
+			continue
 		var has_effect := false
 		for side in [Side.Value.LEFT, Side.Value.RIGHT]:
 			var cfg: SideConfig = s.active_side_config(side, state)

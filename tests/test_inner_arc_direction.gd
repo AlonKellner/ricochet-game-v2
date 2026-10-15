@@ -62,9 +62,13 @@ func test_inner_arc_curves_through_center() -> void:
 	if arc_step == null:
 		return
 
+	# the inverted frame's infinity is the center: the arc ends there (the
+	# infinity event, Stage 101) and the next arc continues from it
+	assert_lt(arc_step.end.distance_to(center), 0.01,
+		"The first reflected arc ends at the circle center %s, got %s" % [center, arc_step.end])
+	assert_eq(arc_step.surface_id, BeamSolver.INFINITY_ID, "it is the passage of the frame's infinity")
 	var arc_mid := _arc_midpoint(arc_step)
-	assert_lt(arc_mid.distance_to(center), 10.0,
-		"Arc midpoint should be near circle center %s, got %s (dist=%.2f)" % [center, arc_mid, arc_mid.distance_to(center)])
+	assert_gt(arc_mid.distance_to(center), 10.0, "the arc curves through the interior toward the center")
 
 
 func test_inner_arc_passes_through_center() -> void:
@@ -76,9 +80,8 @@ func test_inner_arc_passes_through_center() -> void:
 	if inner_arc == null:
 		return
 
-	var arc_mid := _arc_midpoint(inner_arc)
-	assert_lt(arc_mid.distance_to(center), 10.0,
-		"Inner-reflected arc midpoint should be near circle center. dist=%.2f" % arc_mid.distance_to(center))
+	assert_lt(inner_arc.end.distance_to(center), 0.01,
+		"Inner-reflected arc passes through the circle center. dist=%.2f" % inner_arc.end.distance_to(center))
 
 
 func test_inner_arc_via_not_on_carrier() -> void:
@@ -96,7 +99,7 @@ func test_inner_arc_via_not_on_carrier() -> void:
 
 	assert_lt(absf(eval_start), 1.0,
 		"Start should be on carrier (eval=%.2f)" % eval_start)
-	assert_lt(absf(eval_end), 1.0,
-		"End should be on carrier (eval=%.2f)" % eval_end)
+	assert_gt(absf(eval_end), 10.0,
+		"End is the circle center, inside the carrier (eval=%.2f)" % eval_end)
 	assert_gt(absf(eval_via), 10.0,
 		"Via should NOT be on carrier — arc must curve outward, not follow the circle surface. eval=%.2f" % eval_via)

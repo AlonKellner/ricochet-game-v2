@@ -24,9 +24,10 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 97 | Visual/testing kernels: arc geometry, `VisualConverter`, `StepTreeMerge`, click geometry, arrow advance | Done: `GeneralizedCircle`, `Segment`, `VisualConverter`, `StepTreeMerge`, `ArrowAdvance`, `SurfaceGeom` native (float32 Vector2 semantics mirrored); `test_diff_visual.gd` identical on the sweep scenes and random inputs |
 | 98 | `InvariantChecker` kernel + native sweeps (shard by combo) | Done: `rc/invariants.hpp` + `rc/sweep.hpp`; `InvariantKernel` / `SweepKernel` bindings; `InvariantChecker` is a thin driver; the plan sweeps run natively (one live combo per scene kept); `test_invariant_detects.gd`, `test_diff_invariants.gd` |
 | 99 | Delete the GDScript implementations, final names, source-scan tests rewritten | Done: 25 GDScript implementation files, the Gd* test copies, the differential tests and `tools/dump_goldens.gd` deleted; `test_stage99_no_legacy.gd` scans for Gd* / N* / inner-class names and checks every registered class is a RefCounted; the goldens stay as pins |
-| 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Evidence ready: `docs/research/stage88b_fixture_diff.md` (B9); **awaiting the user's approval** before the committed corpora change |
+| 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Done: B9 approved 2026-10-15; the oracle's `EMIT_INFINITY = True`, `FeatureFlags.INFINITY_EVENT_DEFAULT = true`, every fixture and corpus regenerated (with the Stage 101 semantics); `docs/research/stage88b_fixture_diff.md` holds the final classification |
 | 88c | Native `infinity` event, ∞ plan item, reversed anchored orientation | Done behind `Scene::emit_infinity` (off by default: the goldens and fixtures stand); the 26 Stage 88 fixtures match at f64, Dual and 4 limbs; `test_infinity.cpp`, `test_stage88_infinity.gd` |
-| 88d | Edge click, hover band, plan chevrons, HUD, `level_bounds` | Done behind `FeatureFlags.INFINITY_EVENT_DEFAULT` (off): `ClickDetector` edge band, `EdgeOverlayNode`, `GameManager`, `PlanHUD`; `test_stage88_infinity_ui.gd` with real input events and a sweep with ∞ plans; **the flip (B9) awaits the user** |
+| 88d | Edge click, hover band, plan chevrons, HUD, `level_bounds` | Done: `ClickDetector` edge band, `EdgeOverlayNode`, `GameManager`, `PlanHUD`; `test_stage88_infinity_ui.gd` with real input events and a sweep with ∞ plans; on since the flip |
+| 101 | Infinity as a point: the frame's image of infinity `Q = F(∞)`, passed by every beam; the on-screen marker; the pre-transform | Done: oracle (`Walk.Q`, `beam_through`, `pre_transform` surfaces), native (`Walk::Q`, `plan_pole`, `through_tangent`, `Scene::pre_surfaces`), game (`Surface.pre_transform`, `LevelSettings.pre_transform_inversions`, the circled-cross marker, `BeamTracer.infinity_point`), `scenes/playground/pre_inverted.tscn`; `test_infinity.cpp`, `test_stage101_infinity_point.gd`; **interactive sign-off pending** |
 | 100 | Performance pass: dirty flags, no per-frame defs, cached arc params | Done: static frames do no solver or draw work (`frame_bench.gd`: 6 µs vs 120-290 µs per frame); `test_stage100_dirty_flags.gd`; user sign-off 2026-10-15 ("works perfectly"; the edge is not yet plannable: 88d) |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests (ctest and
@@ -701,6 +702,83 @@ two-∞ plans over six positions holds every invariant.
 4. Fire with an ∞ plan: the arrow leaves through one edge and returns from
    the opposite one, the camera following.
 
+## Stage 101: infinity as a point, and the pre-transform
+
+The user's design (2026-10-15): planning infinity must always be possible,
+also when the frame has moved infinity to a finite point; that point, when on
+screen, is drawn and plannable like a surface; levels may start after a
+transform (a pre-transform) so that infinity is a point from the first shot,
+and planning it first settles the short way / long way ambiguity of the
+circle through it. Passing infinity unplanned is not a divergence; a planned
+∞ not reached is.
+
+**The model.** Every beam is the image of a straight line under the frame's
+effects `F`, so it passes `Q = F(∞)` exactly once per loop. `Q` is tracked
+along the walk (`Walk::Q`, oracle `Walk.Q`): the pre-transform's image of
+infinity at the start (`effects::scene_pre_q`), mapped forward by every
+applied effect (`map_point`), saved on the stack entry and restored by a pop,
+the real infinity again after a projective (the exit beam is straight in
+screen space). The candidate: `t = inf` on a straight beam when `Q = ∞`
+(Stage 88), else `param_of(beam, Q)` with the point `Q` exact by provenance
+(not at the departure point). Ties: the cursor, the hits, then the passage.
+`plan_pole(plan, flags)` is the same fold over the plan's provenance stack
+(a re-hit of the top pops it; the last projective resets) and feeds the UI.
+
+**The pre-transform.** `SurfaceDef::pre_transform` surfaces (full inversion
+circles) are kept apart (`Scene::pre_surfaces`, not hittable, not in `by_id`);
+`Q_0` is their composite image of infinity. The initial beam is
+`Beam::through(P, X, delta)` with the pole chain's base `(P, Q_0)`
+(`build_simple(..., base_q)`; later epochs start at infinity), or
+`Beam::through_tangent(P, tau, Q_0)` for a direction (`run_direction`,
+`run_degenerate`); the exact-line machinery is off for a circle (`initial_line`
+returns null). Degeneracies: the player at `Q_0` and the aim point at `Q`
+both give the straight line through them.
+
+**The tracer and the game.** An infinity event with a point is an ordinary
+step ending at `Q`, tagged INFINITY_ID (the display path keeps it; the UI's
+marks count the physical trace's infinity events). `BeamTracer.infinity_point
+(defs, plan, flags)` is where the next ∞ entry would be passed. `ClickDetector`
+takes it: on screen it competes with the surfaces (nearest wins) and the edge
+band stands down; off screen or at the real infinity the band is the entry.
+`EdgeOverlayNode` draws the circled cross (enlarged when hovered) and the plan
+marks at each entry's own frame point, or on the edge. `Surface.pre_transform
+_circle` / `LevelSettings.pre_transform_inversions` build the pre-transform;
+`SurfaceNode` draws it as a faint circle; the click detector and the invariant
+kernel skip it. UX7 for a pre-transform scene checks that the direct path
+reaches the cursor (the initial beam is a circle, not a line toward it).
+
+**Tests.** Oracle: `test_trace2.py` (80 passing): the center passage, the two
+realizations in a pre-transform frame, a mirror moving `Q`, the player at
+`Q`, the aim at `Q`. `gen_fixtures_stage101.py` → `stage101_infinity_point.json`
+(25 fixtures: straight through `Q`, circles, two pre-transform circles, the
+two realizations, mirrors moving `Q`, the tie of `Q` on a mirror, the MAX cut
+at `Q` with its point, a projective resetting `Q`, the inversion-then-∞ long
+way). `test_infinity.cpp`: every Stage 88 and 101 fixture at f64, Dual and 4
+limbs; with the switch on the 115 older fixtures differ from their goldens only
+by insertions and earlier cuts (32 fixtures, 83 events, 8 cuts: the oracle's
+own counts). `test_stage101_infinity_point.gd`: the pre-transform surface is
+invisible to the solver, the click detector and the kernel; `infinity_point`
+follows mirrors and pops and gives an inversion's center; the marker is drawn
+and clickable; ∞ first goes the long way round (the same circle reversed,
+the entry consumed before the cursor, the mark valid); an unplanned passage
+is no divergence while a planned unmet one is; a native sweep with ∞ plans on
+the demo scene. The legacy shape tests were adapted where they encoded the
+pre-Stage-88 step structure (the arc through an inversion center now ends at
+it; event indices skip infinity events).
+
+**Interactive checklist (user sign-off):**
+1. `pre_inverted.tscn`: the faint circle is the pre-transform; the circled
+   cross at its center is infinity. Aim around: the preview is an arc through
+   the cross's circle... every path is a circle through the cross.
+2. Click the cross first, then aim: the path goes the long way round (through
+   the cross before the cursor), the mark at the cross is white; without the
+   entry the path takes the short way and passes the cross after the cursor.
+3. Plan a mirror then ∞: the cross moves to the mirror image of the center
+   for that entry (the mark is drawn there); hover shows the current one.
+4. `main.tscn`: plan the inversion arc then ∞: the mark appears at the arc's
+   center; plan ∞ first in the open room: the edge band as in Stage 88d.
+5. Fire with an ∞ plan: the arrow passes the cross / wraps as previewed.
+
 ## Stage 100: the performance pass (dirty keys)
 
 Before this stage every frame rebuilt the scene defs (`SceneDefs.defs_from_surfaces`
@@ -797,6 +875,6 @@ two aborts fixed in Stages 93 and 96), not the editor.
 |---|---|---|---|
 | B1 | `BigFloat.mul` int64 column overflow above ~128 limbs per factor (reproduced natively) | `big_float.gd:251-256` | doctest with `__int128` reference |
 | B12 | `Exact.U` parsed two ulps below 2^-53 by Godot | `exact.gd:11` | `test_diff_beam_geom.gd` (`Exact.U` bits), `tools/dump_goldens.gd` hex inputs; native `exact.hpp` comment |
-| B9 | The `infinity` event counts toward MAX_HITS: 443 events inserted across the corpora, 79 traces at MAX_HITS cut earlier (182 old tail events dropped), stress corpus unchanged. Implemented behind `Scene::emit_infinity` / `FeatureFlags.INFINITY_EVENT_DEFAULT` (Stages 88c-d); **the flip** = set both defaults true, `EMIT_INFINITY = True` in the oracle, regenerate fixtures/corpora/goldens | oracle `trace2.py` `EMIT_INFINITY` | `docs/research/stage88b_fixture_diff.md` (per-case list), `stage88b_classify.py`, `test_infinity.cpp` (the native diff has the same counts) |
+| B9 | The `infinity` event counts toward MAX_HITS. **Approved and applied 2026-10-15** with the Stage 101 semantics (circle beams pass the frame's infinity too): 980 events inserted across the corpora, 222 traces at MAX_HITS cut earlier, only insertions and cuts; `FeatureFlags.INFINITY_EVENT_DEFAULT = true`, oracle `EMIT_INFINITY = True`; the native default stays off so the pre-native goldens keep pinning the legacy behaviour | oracle `trace2.py` | `docs/research/stage88b_fixture_diff.md` (final classification), `stage88b_classify.py`, `test_infinity.cpp` |
 | B5 | `PathRenderer` display bounds and `LevelSettings` edge walls from `level_bounds` instead of 1920x1080 literals (needed by 88d) | `path_renderer.gd`, `level_settings.gd` | **applied in Stage 100 with zero diff**: no `.tscn` sets `level_bounds`, the default equals `DEFAULT_BOUNDS`; `test_stage100_dirty_flags.gd` pins both; the user may veto |
 | B13 | A NaN replay gain poisons the envelope through `maxf` and jumps the ladder to the last tier | `error_estimate.gd:111`, `precision_ladder.gd` | sweep goldens `precision/no_plan` combos 4883, 4919 (`tiers_tried`) |

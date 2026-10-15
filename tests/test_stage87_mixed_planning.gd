@@ -19,7 +19,7 @@ func before_all():
 
 func _walk(name: String, ctx: NumCtx) -> Array:
 	var fx: Dictionary = _fx[name]
-	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
+	var scene := Rules.scene_of(ctx, fx["surfaces"])
 	var player := ctx.cn(fx["player"][0], fx["player"][1])
 	var cursor := ctx.cn(fx["cursor"][0], fx["cursor"][1])
 	var plan := Rules.plan_of(fx["plan"])
@@ -138,7 +138,7 @@ func test_fast_twin_projective_plans():
 	for name in _fx:
 		var fx: Dictionary = _fx[name]
 		var gen := _walk(name, ctx)
-		var sc := FastSolverScene.from_defs(fx["surfaces"])
+		var sc := Rules.fast_scene_of(fx["surfaces"])
 		var plan := Rules.plan_of(fx["plan"])
 		var out = FastSolver.planned(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan) \
 			if fx["mode"] == "planned" else FastSolver.physical(sc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["cursor"]), plan)
@@ -203,7 +203,7 @@ func test_click_settles_fork():
 	var ctx := NumCtx.f64()
 	var fx: Dictionary = _fx["user_capture_1_planned"]
 	var plain: Array = Rules.plan_of(fx["plan"]).map(func(it): return BeamSolverPlanItem.make(it.surface_id, it.left))
-	var chain := BeamSolver.anchor_chain(BeamScene.from_defs(ctx, fx["surfaces"]), ctx.cn(fx["player"][0], fx["player"][1]),
+	var chain := BeamSolver.anchor_chain(Rules.scene_of(ctx, fx["surfaces"]), ctx.cn(fx["player"][0], fx["player"][1]),
 		ctx.cn(fx["cursor"][0], fx["cursor"][1]), plain)
 	assert_not_null(chain)
 	if chain != null:
@@ -223,7 +223,7 @@ func test_planned_pass_shared_when_physical_reaches_cursor_anchored():
 			continue
 		var plan := Rules.plan_of(fx["plan"])
 		var r := PrecisionLadder.solve(fx["surfaces"], fx["player"], fx["cursor"], plan, BeamSolver.MAX_HITS,
-			BeamSolver.MAX_HITS, 0.01, false, null, fx["flags"] if fx["flags"] != null else {})
+			BeamSolver.MAX_HITS, 0.01, false, null, fx["flags"] if fx["flags"] != null else {}, FeatureFlags.infinity_event())
 		var ci := r.physical.find_custom(func(e): return e.kind == "cursor")
 		if r.planned_from_physical:
 			shared += 1
@@ -233,7 +233,7 @@ func test_planned_pass_shared_when_physical_reaches_cursor_anchored():
 		if r.planned_tier != 0:
 			continue
 		var ctx := NumCtx.f64()
-		var own := BeamSolver.planned(ctx, BeamScene.from_defs(ctx, fx["surfaces"]), ctx.cn(fx["player"][0], fx["player"][1]),
+		var own := BeamSolver.planned(ctx, Rules.scene_of(ctx, fx["surfaces"]), ctx.cn(fx["player"][0], fx["player"][1]),
 			ctx.cn(fx["cursor"][0], fx["cursor"][1]), plan, BeamSolver.MAX_HITS, fx["flags"] if fx["flags"] != null else {})
 		assert_eq(r.planned.size(), own.size(), "%s: planned event count" % name)
 		for i in mini(r.planned.size(), own.size()):

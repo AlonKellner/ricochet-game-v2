@@ -38,6 +38,9 @@ func _cmp_events(path: TracePath, expected: Array, label: String) -> float:
 		var s: TraceStep = path.steps[i]
 		if s.surface_id >= 0 and s.hit != null:
 			events.append({"kind": "hit", "id": s.surface_id, "left": s.hit_side == Side.Value.LEFT, "p": s.end})
+		elif s.surface_id == BeamSolver.INFINITY_ID:
+			# the passage of the frame's infinity (Stage 88/101): a point when finite
+			events.append({"kind": "infinity", "id": s.surface_id, "left": false, "p": s.end})
 		if path.cursor_index == i + 1:
 			events.append({"kind": "cursor", "id": -1, "left": false, "p": s.end})
 	var worst := 0.0

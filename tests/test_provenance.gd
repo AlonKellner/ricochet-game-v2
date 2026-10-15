@@ -66,7 +66,9 @@ func test_tracer_reflection_terminates_and_aim_correct() -> void:
 	var aim := Direction.from_coords(player, cursor)
 	var path := TestTrace.trace(player, aim, [m], GameState.new())
 	assert_true(path.steps.size() > 0, "Should have steps after reflection")
-	assert_true(path.steps.size() < 20, "Should terminate quickly with single mirror")
+	# the loop (reflect, wrap, re-hit, ...) is cut by MAX_HITS, every wrap counted
+	assert_true(path.hit_count <= BeamSolver.MAX_HITS + 1, "the hit limit terminates the loop")
+	assert_true(path.steps.size() <= 2 * (BeamSolver.MAX_HITS + 1), "at most two steps per event")
 
 func _build_three_mirrors_surfaces() -> Array:
 	var surfaces: Array = []

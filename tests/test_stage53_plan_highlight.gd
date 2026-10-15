@@ -72,7 +72,9 @@ func test_escape_step_has_no_surface_id() -> void:
 	var aim := Direction.from_coords(player, Vector2(600, 300))
 	var path := TestTrace.trace(player, aim, [], GameState.new())
 	for step in path.steps:
-		assert_eq(step.surface_id, -1, "Escape steps should have no surface_id")
+		# the wrap's outgoing half carries INFINITY_ID (Stage 88); other escapes none
+		assert_true(step.surface_id == -1 or step.surface_id == BeamSolver.INFINITY_ID, "Escape steps have no surface (or the wrap's id)")
+		assert_null(step.hit, "Escape steps have no hit")
 
 func test_with_type_preserves_surface_fields() -> void:
 	var step := TraceStep.make()
