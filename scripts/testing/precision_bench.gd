@@ -87,6 +87,7 @@ static func scene_defs(scn: Dictionary) -> Array:
 
 static func run_beam(scn: Dictionary, ctx: NumCtx, n_planned: int, n_physical: int) -> Dictionary:
 	var scene := BeamScene.from_defs(ctx, scene_defs(scn))
+	scene.emit_infinity = FeatureFlags.infinity_event()   # the corpora hold the oracle's infinity events
 	var player := ctx.cn(scn["player"][0], scn["player"][1])
 	var cursor := ctx.cn(scn["cursor"][0], scn["cursor"][1])
 	var plan := plan_items(scn)
