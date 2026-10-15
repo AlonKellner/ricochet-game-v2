@@ -620,12 +620,8 @@ inline Violations check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(const Input &in) {
 			}
 			if (!valid) {
 				for (const SurfaceInfo &s : *in.surfaces) {
-					const arc::GeneralizedCircle &g = s.carrier;
-					const double eval_val = g.evaluate(end_pos.x, end_pos.y);
-					// B4: the GDScript formula (not the carrier's gradient at the point); reproduced
-					const double grad_mag = std::sqrt(g.b * g.b + g.c * g.c + 4.0 * g.a * g.a * (double(end_pos.x) * double(end_pos.x) + double(end_pos.y) * double(end_pos.y)));
-					const double dist_to_carrier = std::fabs(eval_val) / gd_maxf(grad_mag, 1e-10);
-					if (dist_to_carrier < 2.0) {
+					// B4 (fixed, Stage 102): the carrier's gradient at the point
+					if (geometric_carrier_dist(end_pos, s.carrier) < 2.0) {
 						valid = true;
 						break;
 					}
