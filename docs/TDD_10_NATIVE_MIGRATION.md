@@ -766,6 +766,12 @@ the demo scene. The legacy shape tests were adapted where they encoded the
 pre-Stage-88 step structure (the arc through an inversion center now ends at
 it; event indices skip infinity events).
 
+**Gate (2026-10-15):** oracle pytest 81 passing; ctest 27 cases green, also
+under ASan/UBSan (548 s, no report); `./run_tests_parallel.sh` 767 passing /
+0 failing in 11 s; `make bench` identical to the pre-native table (ladder
+161/161, beam_f64 physical 112/161, beam_big112 physical 160/161) against the
+regenerated corpus.
+
 **Interactive checklist (user sign-off):**
 1. `pre_inverted.tscn`: the faint circle is the pre-transform; the circled
    cross at its center is infinity. Aim around: the preview is an arc through
