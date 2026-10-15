@@ -96,3 +96,63 @@ TEST_CASE("B3: BigFloat::to_float is within 2U of the value (the bound approx() 
 	}
 	CHECK(checked > 10000);
 }
+
+// ---------------------------------------------------------------- B2
+
+#include "goldens.hpp"
+
+TEST_CASE("B2: the replay of a seeded float64 walk reproduces its tangent-linear gains, projectives included") {
+	// The ladder re-estimates BigFloat trajectories with estimate::replay. On a
+	// walk seeded from its first event (a physical direction trace: no anchored
+	// prefix, whose gains the replay does not model) it must give the gains the
+	// walk computed: both push the same derivatives through the same maps. Before
+	// the B2 fix a projective hit got the surface's reflection / inversion map (15
+	// of these 24 walks differed; 11 of them through a projective). Where a walk
+	// knows a hit point exactly by provenance (endpoints, departure re-hits) its
+	// derivative there is exact data while the replay re-derives the root: the
+	// replay may only be larger there (conservative), never smaller.
+	int walks = 0;
+	int with_projective = 0;
+	int mismatched = 0;
+	int mismatched_projective = 0;
+	for (const char *f : {"stage83_projective", "stage87_projective_plans", "stage87_click_forks", "stage81_rules"}) {
+		const ojson fxs = test::load_json(std::string("bench/fixtures/") + f + ".json");
+		for (const ojson &fx : fxs["fixtures"]) {
+			if (fx["direction"].is_null() || fx["mode"].get<std::string>() != "physical") {
+				continue;
+			}
+			const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
+			Scene<Dual> scene = Scene<Dual>::from_defs(defs, Dual{1.0, 0.0});
+			scene.emit_infinity = true;
+			Solver<Dual> solver(scene, nullptr);
+			const CN<Dual> P{Dual{fx["player"][0].get<double>(), 0.0}, Dual{fx["player"][1].get<double>(), 0.0}};
+			const CN<Dual> D{Dual{fx["direction"][0].get<double>(), 0.0}, Dual{fx["direction"][1].get<double>(), 0.0}};
+			const Walk<Dual> w = solver.run_direction(P, D, plan_from_json(fx["plan"]), std::nullopt, Mode::Physical, MAX_HITS, Flags());
+			if (w.events.empty()) {
+				continue;
+			}
+			const estimate::Sensitivity walked = estimate::collect(w.events, w.gains);
+			const estimate::Sensitivity replayed = estimate::replay(w.events, scene);
+			REQUIRE(walked.gain.size() == replayed.gain.size());
+			bool proj = false;
+			bool bad = false;
+			for (size_t i = 0; i < w.events.size(); i++) {
+				proj = proj || w.events[i].projective;
+				const double a = walked.gain[i];
+				const double b = replayed.gain[i];
+				if (!((std::isnan(a) && std::isnan(b)) || std::fabs(a - b) <= 1e-6 * std::max(1.0, std::fabs(a)))) {
+					bad = true;
+					CHECK_MESSAGE(b >= a * (1.0 - 1e-9), fx["name"].get<std::string>() << " event " << i << ": the replay may not be smaller (walked " << a << ", replayed " << b << ")");
+				}
+			}
+			mismatched += bad ? 1 : 0;
+			mismatched_projective += (bad && proj) ? 1 : 0;
+			with_projective += proj ? 1 : 0;
+			walks++;
+		}
+	}
+	MESSAGE("walks " << walks << " with a projective " << with_projective << " mismatched " << mismatched);
+	CHECK(mismatched_projective == 0);
+	CHECK(mismatched <= 4); // the provenance cases above
+	CHECK(with_projective >= 10);
+}
