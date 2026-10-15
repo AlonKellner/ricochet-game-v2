@@ -120,7 +120,7 @@ static func projective_plans(scene: Node) -> Array:
 # Stage 103: the playgrounds no other sweep plans on.
 static func playground_plan_scenes() -> Array[String]:
 	var out: Array[String] = []
-	for n in ["plannable_inversion", "portals", "two_sided", "pre_inverted"]:
+	for n in ["plannable_inversion", "portals", "two_sided", "pre_inverted", "tangent_infinity"]:
 		out.append(PLAYGROUND_DIR + n + ".tscn")
 	return out
 
@@ -193,6 +193,21 @@ static func bounded_runner(scene: Node, grid: int, fuzz: int, seed: int) -> Swee
 		var rect: Rect2 = scene.room_rect
 		runner.set_bounds(rect.position + Vector2(10, 10), rect.position + rect.size - Vector2(10, 10))
 	return runner
+
+# Stage 105: positions aligned with a pre-transform's Q0 on a small integer
+# lattice, so the sweep meets exact tangencies at the frame's infinity point:
+# Q0 + (-200, +-100) and Q0 + (-125, +-125) lie on the circles through Q0
+# centered on Q0's horizontal (grazes of a vertical carrier at Q0). (None lies
+# on a surface of the scenes that use them: a player standing exactly on an
+# inversion circle is another coincidence, not this one.)
+static func q0_positions(scene: Node) -> Array[Vector2]:
+	var out: Array[Vector2] = []
+	if not "pre_transform_inversions" in scene or scene.pre_transform_inversions.size() < 3:
+		return out
+	var q0 := Vector2(scene.pre_transform_inversions[0], scene.pre_transform_inversions[1])
+	for d in [Vector2(-200, 100), Vector2(-125, 125), Vector2(-200, -100), Vector2(-125, -125), Vector2(125, 125)]:
+		out.append(q0 + d)
+	return out
 
 static func plan_to_data(plan: Array) -> Array:
 	var result: Array = []

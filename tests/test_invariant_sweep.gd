@@ -149,13 +149,9 @@ func test_sweep_infinity_plans() -> void:
 # Known findings (docs/TDD_10_NATIVE_MIGRATION.md, "Known findings"): a
 # violation matching one is reported, not failed; a finding that no longer
 # occurs fails the sweep so the list stays true.
-# K1: on the portals playground the inverted frame's infinity point lands
-# exactly on mirror 5 (the reflective arc's center moved by the portal), and a
-# vertical aim makes the circle beam tangent to that mirror there: the
-# tangency is decided by rounding, differently at two precision tiers.
-const KNOWN_FINDINGS := [
-	{"id": "K1", "scene": "res://scenes/playground/portals.tscn", "plan": "[8/L,8/L]", "prefix": "DIRECTION-ONLY"},
-]
+# (K1, a tangency at the frame's infinity point decided by rounding on the
+# portals playground, was resolved by Stage 105: none are open.)
+const KNOWN_FINDINGS := []
 
 static func _known(f: Dictionary, plan_str: String) -> String:
 	for k in KNOWN_FINDINGS:
@@ -179,6 +175,7 @@ func _sweep_scenes(scenes: Array[String], plans_of: Callable, seed: int, label: 
 		assert_gt(plans.size(), 0, "%s has plans" % scene_path)
 		var runner := SweepPlans.bounded_runner(scene, 4, 6, seed)
 		var positions := runner.build_positions()
+		positions.append_array(SweepPlans.q0_positions(scene)) # Stage 105: exact grazes at Q0
 		total_combos += plans.size() * SweepRunner.combo_count(positions, true)
 		for f in SweepRunner.sweep_native(scene, positions, plans, true):
 			for v: String in f.violations:
