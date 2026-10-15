@@ -157,6 +157,7 @@ struct Input {
 	std::vector<PlanItem> plan;
 	bool plan_applied = false;                // a plan was set on the renderer
 	Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
+	bool emit_infinity = false;               // Stage 88: the renderer's tracer emitted infinity events
 };
 
 inline Beam<F64> f64_beam(const EvInfo &e) {
@@ -635,10 +636,13 @@ inline Violations check_plan_effects_applied_events(const std::vector<EvInfo> &e
 		if (e.kind == EventKind::Hit && e.applied && !e.terminal && !e.projective) {
 			applied.emplace_back(e.surface_id, e.left);
 		}
+		if (e.kind == EventKind::Infinity && e.applied) {
+			applied.emplace_back(INFINITY_ID, false); // the consumed infinity entry (no side)
+		}
 	}
 	PairList want;
 	for (const PlanItem &item : plan) {
-		want.emplace_back(item.surface_id, item.left);
+		want.emplace_back(item.surface_id, item.is_infinity() ? false : item.left);
 	}
 	if (applied != want) {
 		out.push_back(v("PLAN-EFFECTS: applied %s, plan %s", applied, want));
@@ -663,7 +667,7 @@ inline Violations check_PLAN_EFFECTS_APPLIED(const Input &in) {
 	const std::vector<EffectType> effs = Solver<F64>(*in.scene).plan_effects(in.plan, in.flags);
 	std::vector<PlanItem> items;
 	for (size_t j = 0; j < in.plan.size(); j++) {
-		if (is_transformative(effs[j])) {
+		if (is_transformative(effs[j]) || in.plan[j].is_infinity()) {
 			items.push_back(in.plan[j]);
 		}
 	}
@@ -870,12 +874,18 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 	if (solver.fixes_cursor(CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}}, in.plan, in.flags)) {
 		X = CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}};
 	}
+	if (solver.via_infinity(in.plan, in.flags)) {
+		// Stage 88: the second realization aims away from the image: the reference
+		// aims at the image's reflection through the player
+		X = CN<F64>{F64{2.0 * double(in.player.x) - X->fx()}, F64{2.0 * double(in.player.y) - X->fy()}};
+	}
 	const V2 img = V2::of(X->fx(), X->fy());
 	if (!(std::isfinite(img.x) && std::isfinite(img.y)) || img == in.player) {
 		return out;
 	}
 	// the reference: the physical ladder aimed at the image, with its float64 sensitivities
 	LadderContext ctx(*in.defs);
+	ctx.set_emit_infinity(in.emit_infinity);
 	Ladder ladder(ctx);
 	const LadderResult ref = ladder.solve_physical(double(in.player.x), double(in.player.y), X->fx(), X->fy(), {}, MAX_HITS, TRACE_TOL, in.flags);
 	// ErrorEstimate.physical_sensitivity's events (the float64 walk) and gains

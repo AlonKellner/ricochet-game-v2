@@ -26,6 +26,9 @@
 namespace rc {
 
 constexpr int MAX_HITS = 32;
+// Plan entry / event id of the point at infinity (Stage 88): the player
+// clicked the level bounds' edge; the beam wraps through infinity there.
+constexpr int INFINITY_ID = -3;
 // Anchored-prefix gains are scaled to their own calibration constant
 // (C_prefix = ErrorEstimate.C * PREFIX_GAIN_SCALE).
 constexpr double PREFIX_GAIN_SCALE = 64.0 / 4096.0;
@@ -35,7 +38,7 @@ constexpr double INF_D = std::numeric_limits<double>::infinity();
 
 enum class Mode { Physical = 0, Planned = 1 };
 
-enum class EventKind { Hit, Cursor, Origin, Escape, Max };
+enum class EventKind { Hit, Cursor, Origin, Escape, Max, Infinity };
 inline const char *event_kind_name(EventKind k) {
 	switch (k) {
 		case EventKind::Hit: return "hit";
@@ -43,6 +46,7 @@ inline const char *event_kind_name(EventKind k) {
 		case EventKind::Origin: return "origin";
 		case EventKind::Escape: return "escape";
 		case EventKind::Max: return "max";
+		case EventKind::Infinity: return "infinity";
 	}
 	return "";
 }
@@ -51,6 +55,8 @@ struct PlanItem {
 	int surface_id = 0;
 	bool left = true;
 	std::optional<effects::F32Point> hint; // where the player clicked (settles a fork)
+	// the infinity entry (no side): the beam wraps through infinity here
+	bool is_infinity() const { return surface_id == INFINITY_ID; }
 };
 
 template <Num N>
@@ -207,10 +213,11 @@ struct StackEntry {
 template <Num N>
 struct Candidate {
 	N t;
-	const Surf<N> *surf = nullptr; // nullptr = the cursor
+	const Surf<N> *surf = nullptr; // nullptr = the cursor (or the wrap, see `inf`)
 	bool rehit = false;
 	std::optional<CN<N>> pt;       // the exact point, by provenance
 	int tie = -1;                  // concurrent-tie group index
+	bool inf = false;              // the wrap through t = infinity of a straight beam (Stage 88)
 };
 
 // Anchored beams B_0..B_K of a plan (flat: beams[j] is the beam after j
@@ -339,6 +346,25 @@ public:
 	}
 
 	// The flags after the plan's entries, simulated forward from `flags`.
+	// Stage 88: the plan's first epoch (its entries before the first projective)
+	// holds an infinity entry: the aim is the second realization, away from the
+	// aim image, reaching it through infinity (GAME_SPEC 13.1).
+	bool via_infinity(const std::vector<PlanItem> &plan, const Flags &flags) const {
+		if (!scene_.emit_infinity) {
+			return false; // the entry can never be consumed: the direct aim, as before Stage 88
+		}
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		for (size_t j = 0; j < plan.size(); j++) {
+			if (is_projective(effs[j])) {
+				return false;
+			}
+			if (plan[j].is_infinity()) {
+				return true;
+			}
+		}
+		return false;
+	}
+
 	Flags plan_flags(const std::vector<PlanItem> &plan, const Flags &flags) const {
 		Flags f = flags;
 		for (const PlanItem &item : plan) {
@@ -635,8 +661,44 @@ private:
 		return k;
 	}
 
+	// The same circles run the other way round (path order is preserved by
+	// every effect, so one orientation flip reverses a whole epoch); a frame
+	// popped back to an earlier beam stays the same object.
+	static void reverse_beams(std::vector<BeamPtr<N>> &beams, size_t from, size_t to) {
+		std::map<const Beam<N> *, BeamPtr<N>> mapped;
+		for (size_t i = from; i < to && i < beams.size(); i++) {
+			BeamPtr<N> &bm = beams[i];
+			auto it = mapped.find(bm.get());
+			if (it == mapped.end()) {
+				it = mapped.emplace(bm.get(), std::make_shared<const Beam<N>>(Beam<N>{bm->p, bm->tau.neg(), bm->kappa.neg()})).first;
+			}
+			bm = it->second;
+		}
+	}
+
 	// Projective entries split the plan into sub-chains (GAME_SPEC 13.3/13.4).
 	std::shared_ptr<const AnchorChain<N>> build_chain(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
+			const Flags &flags) const {
+		std::shared_ptr<const AnchorChain<N>> chain = build_chain_direct(player, cursor, plan, flags);
+		if (chain && via_infinity(plan, flags)) {
+			// the second realization: the first epoch's beams reversed (every beam
+			// up to and including the one after the last pre-projective entry)
+			const std::vector<EffectType> effs = plan_effects(plan, flags);
+			size_t first_proj = plan.size();
+			for (size_t j = 0; j < plan.size(); j++) {
+				if (is_projective(effs[j])) {
+					first_proj = j;
+					break;
+				}
+			}
+			auto rev = std::make_shared<AnchorChain<N>>(*chain);
+			reverse_beams(rev->beams, 0, first_proj + 1);
+			return rev;
+		}
+		return chain;
+	}
+
+	std::shared_ptr<const AnchorChain<N>> build_chain_direct(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
 			const Flags &flags) const {
 		const std::vector<EffectType> effs = plan_effects(plan, flags);
 		std::vector<size_t> proj;
@@ -962,6 +1024,9 @@ private:
 			dir = X->sub(player);
 			line = initial_line(player, cursor, plan, flags);
 		}
+		if (via_infinity(plan, flags)) {
+			dir = dir.neg(); // the second realization: away from the aim image (Stage 88)
+		}
 		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
 		BeamPtr<N> b0 = std::make_shared<const Beam<N>>(Beam<N>{player, dir.unit(), player.re.sub(player.re)});
 		if (mode == Mode::Physical) {
@@ -1117,9 +1182,17 @@ private:
 		for (Known<N> &kp : w.known) {
 			snap(w, beam, cands, kp);
 		}
+		if (w.scene->emit_infinity && beam.kappa.is_zero()) {
+			// the wrap through infinity: after every crossing ahead (t > t0),
+			// before the wrapped ones (no root of a straight beam is at inf)
+			cands.push_back(Candidate<N>{t0.like(INF_D), nullptr, false, std::nullopt, -1, true});
+		}
 		std::sort(cands.begin(), cands.end(), [&](const Candidate<N> &a, const Candidate<N> &b) {
-			if (cursor_now && (a.surf == nullptr) != (b.surf == nullptr)) {
-				return a.surf == nullptr;
+			// the cursor at the departure point comes first (the wrap candidate is not the cursor)
+			const bool a_cursor = a.surf == nullptr && !a.inf;
+			const bool b_cursor = b.surf == nullptr && !b.inf;
+			if (cursor_now && a_cursor != b_cursor) {
+				return a_cursor;
 			}
 			const int c = a.t.cmp(b.t);
 			if (c != 0) {
@@ -1213,7 +1286,9 @@ private:
 	static std::vector<double> gaps(const Beam<N> &beam, const std::vector<Candidate<N>> &cands) {
 		std::vector<std::pair<double, double>> pts;
 		for (const Candidate<N> &cand : cands) {
-			if (cand.pt) {
+			if (cand.inf) {
+				pts.emplace_back(INF_D, INF_D);
+			} else if (cand.pt) {
 				pts.emplace_back(cand.pt->fx(), cand.pt->fy());
 			} else {
 				double x, y;
@@ -1400,15 +1475,36 @@ private:
 				const bool rehit = cand.rehit;
 				w.count++;
 				if (w.count > w.max_events) {
-					// cut at the next crossing: drawn up to it, no effect
-					Event<N> &me = emit(w, EventKind::Max, beam, t_prev, t, INF_D);
-					if (cand.pt) {
+					// cut at the next crossing: drawn up to it, no effect (at the
+					// wrap: a max at infinity, no point)
+					Event<N> &me = emit(w, EventKind::Max, beam, t_prev, cand.inf ? std::nullopt : std::optional<N>(t), INF_D);
+					if (cand.inf) {
+						me.surface_id = INFINITY_ID;
+					} else if (cand.pt) {
 						me.point = cand.pt;
 					} else if (rehit && fresh) {
 						me.point = beam->p;
 					}
 					w.done = true;
 					return;
+				}
+				if (cand.inf) {
+					// the wrap through infinity (Stage 88): consumes the infinity
+					// entry when it is next in the plan, in both modes
+					const bool consumed = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].is_infinity();
+					if (consumed) {
+						w.plan_index++;
+					}
+					Event<N> &ie = emit(w, EventKind::Infinity, beam, t_prev, std::nullopt, gp[ci]);
+					ie.surface_id = INFINITY_ID;
+					ie.applied = consumed;
+					ie.flags = w.flags;
+					t_prev = t;
+					if (consumed) {
+						late_cursor(w, *beam, cands, gp, ci, t, t0);
+					}
+					ci++;
+					continue;
 				}
 				if (surf == nullptr) {
 					Event<N> &ce = emit(w, EventKind::Cursor, beam, t_prev, t, gp[ci]);
@@ -1521,24 +1617,7 @@ private:
 					}
 					break;
 				}
-				// the plan completed here without a frame change: the cursor is on
-				// this same beam -- a candidate if it lies ahead
-				if (!w.cursor_done && w.cursor && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan
-						&& std::none_of(cands.begin(), cands.end(), [](const Candidate<N> &c) { return c.surf == nullptr; })) {
-					const N tc = Backend<N>::param_of(*beam, *w.cursor);
-					if (!before(tc, t, t0)) {
-						size_t j = ci + 1;
-						// after everything strictly before it; ties: the cursor first
-						while (j < cands.size() && !cands[j].rehit && before(cands[j].t, tc, t0)) {
-							j++;
-						}
-						cands.insert(cands.begin() + long(j), Candidate<N>{tc, nullptr, false, std::nullopt, -1});
-						gp.insert(gp.begin() + long(j), INF_D);
-						if (known_index(w.known, *w.cursor) < 0) {
-							w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
-						}
-					}
-				}
+				late_cursor(w, *beam, cands, gp, ci, t, t0);
 				ci++;
 			}
 			if (restart) {
@@ -1568,6 +1647,30 @@ private:
 			t0 = next->t0;
 			fresh = next->fresh;
 			t_prev = t0;
+		}
+	}
+
+	// The plan completed at the event at t (index ci) without a frame change
+	// (an entry that resolves to a pass / state change, an unapplied
+	// projective, or the infinity entry): the cursor is on this same beam -- a
+	// candidate if it lies ahead, inserted in order among the remaining ones.
+	static void late_cursor(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands, std::vector<double> &gp, size_t ci,
+			const N &t, const N &t0) {
+		if (!w.cursor_done && w.cursor && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan
+				&& std::none_of(cands.begin(), cands.end(), [](const Candidate<N> &c) { return c.surf == nullptr && !c.inf; })) {
+			const N tc = Backend<N>::param_of(beam, *w.cursor);
+			if (!before(tc, t, t0)) {
+				size_t j = ci + 1;
+				// after everything strictly before it; ties: the cursor first
+				while (j < cands.size() && !cands[j].rehit && before(cands[j].t, tc, t0)) {
+					j++;
+				}
+				cands.insert(cands.begin() + long(j), Candidate<N>{tc, nullptr, false, std::nullopt, -1});
+				gp.insert(gp.begin() + long(j), INF_D);
+				if (known_index(w.known, *w.cursor) < 0) {
+					w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
+				}
+			}
 		}
 	}
 

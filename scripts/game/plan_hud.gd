@@ -16,6 +16,9 @@ func update_plan(plan: PlanManager, surfaces: Array) -> void:
 	lines.append("Plan:")
 	for i in plan.entries.size():
 		var entry: PlanManager.PlanEntry = plan.entries[i]
+		if entry.surface_id == BeamSolver.INFINITY_ID:
+			lines.append("  %d. ∞" % [i + 1])
+			continue
 		var name := _surface_name(entry.surface_id, surfaces)
 		var side_str := "L" if entry.side == Side.Value.LEFT else "R"
 		lines.append("  %d. %s (%s)" % [i + 1, name, side_str])

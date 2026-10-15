@@ -63,6 +63,12 @@ BigFloat BigFloat::from_float(double f, int n) {
 	if (f == 0.0) {
 		return r;
 	}
+	if (std::isinf(f)) {
+		// the exact point at infinity of a tier (Stage 88: the wrap candidate's parameter)
+		r = infinity(n);
+		r.sign = f > 0.0 ? 1 : -1;
+		return r;
+	}
 	r.sign = f > 0.0 ? 1 : -1;
 	double m = std::fabs(f);
 	// scale m into [2^52, 2^53): exact power-of-two scaling

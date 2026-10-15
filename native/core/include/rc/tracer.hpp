@@ -33,9 +33,24 @@ public:
 		}
 		defs_ = defs;
 		ctx_ = std::make_unique<LadderContext>(defs);
+		ctx_->set_emit_infinity(emit_infinity_);
 		cache_valid_ = false;
 	}
 	const std::vector<SurfaceDef> &defs() const { return defs_; }
+
+	// Stage 88: whether straight beams emit the `infinity` event (and the
+	// infinity plan entry can be consumed). A change invalidates the caches.
+	bool emit_infinity() const { return emit_infinity_; }
+	void set_emit_infinity(bool on) {
+		if (on == emit_infinity_) {
+			return;
+		}
+		emit_infinity_ = on;
+		cache_valid_ = false;
+		if (ctx_) {
+			ctx_->set_emit_infinity(on);
+		}
+	}
 
 	// Whether planning `surface_id`'s side after `plan` is refused: inside a
 	// ghost stretch of the plan only ghost togglers can be planned (GAME_SPEC
@@ -145,6 +160,8 @@ public:
 			gap = false;
 			if (e.point) {
 				prev_pt = V2::of(e.point->fx(), e.point->fy());
+			} else if (e.kind == EventKind::Infinity) {
+				prev_pt = std::nullopt; // the next arc starts at infinity
 			}
 			const Surf<Dual> *surf = scene.find(e.surface_id);
 			bool appended = false;
@@ -190,6 +207,13 @@ public:
 					path.targets_hit.push_back(surf->id);
 				}
 			}
+			if (e.kind == EventKind::Infinity && appended) {
+				// the outgoing half of the wrap carries the infinity id: plan
+				// highlighting and PLAN_EFFECTS_APPLIED find the entry there
+				TraceStep &last = path.steps.back();
+				last.surface_id = INFINITY_ID;
+				last.hit_on_segment = true;
+			}
 			if (e.kind == EventKind::Hit) {
 				cur_flags = e.flags.canonical_key();
 				ghost = e.flags.is_true(GHOST);
@@ -215,6 +239,7 @@ private:
 	};
 
 	std::vector<SurfaceDef> defs_;
+	bool emit_infinity_ = false;
 	std::unique_ptr<LadderContext> ctx_;
 	Ladder::Clock clock_ = Ladder::steady_usec;
 	bool cache_valid_ = false;
@@ -350,10 +375,23 @@ private:
 		const Beam<N> &b = *e.beam;
 		const Beam<F64> bf{{F64{b.p.fx()}, F64{b.p.fy()}}, {F64{b.tau.fx()}, F64{b.tau.fy()}}, F64{b.kappa.to_float()}};
 		const double tf = e.t_from->to_float();
-		const V2 start = prev_pt ? *prev_pt : at_view_v2(bf, tf);
 		const bool is_line = bf.kappa.v == 0.0;
+		if (is_line && std::isinf(tf)) {
+			// the arc after an `infinity` event (Stage 88): it starts at infinity.
+			// The event itself drew the outgoing half; this is the incoming half
+			// (nothing to draw when the beam only escapes again).
+			if (!e.t_to) {
+				return {};
+			}
+			const double tt1 = e.t_to->to_float();
+			const V2 end1 = V2::of(e.point->fx(), e.point->fy());
+			const CN<F64> tg1 = bf.tangent_at(F64{tt1});
+			return {TraceStep::make(V2::inf(), end1, fid, std::nullopt, ray_of(end1, V2::of(tg1.re.v, tg1.im.v)), -V2::of(tg1.re.v, tg1.im.v), false)};
+		}
+		const V2 start = prev_pt ? *prev_pt : at_view_v2(bf, tf);
 		if (!e.t_to) {
-			// escape to infinity along a straight beam
+			// escape to infinity along a straight beam (also the `infinity`
+			// event's outgoing half, and a max cut at the wrap)
 			const CN<F64> tg = bf.tangent_at(F64{tf});
 			return {TraceStep::make(start, V2::inf(), fid, std::nullopt, ray_of(start, V2::of(tg.re.v, tg.im.v)), V2::of(tg.re.v, tg.im.v), false)};
 		}

@@ -8,7 +8,11 @@ var _last_cycle_index := -1
 
 # game_state: the configs of categorical surfaces depend on it.
 # accept(surface, side) -> bool: sides the plan refuses are skipped.
-func detect_click(cursor_pos: Vector2, surfaces: Array, game_state: GameState = null, accept: Callable = Callable()) -> Dictionary:
+# level_bounds + allow_infinity (Stage 88, GAME_SPEC 4.2): a cursor within the
+# tolerance inside the bounds' edge where no interactive surface wins is the
+# infinity entry: {"infinity": true, "distance": d}.
+func detect_click(cursor_pos: Vector2, surfaces: Array, game_state: GameState = null, accept: Callable = Callable(),
+		level_bounds: Rect2 = Rect2(), allow_infinity: bool = false) -> Dictionary:
 	var state := game_state if game_state != null else GameState.new()
 	var best_surface: Surface = null
 	var best_side: Side.Value = Side.Value.LEFT
@@ -32,9 +36,17 @@ func detect_click(cursor_pos: Vector2, surfaces: Array, game_state: GameState = 
 			best_side = side
 
 	if best_surface == null:
+		if allow_infinity and level_bounds.has_area():
+			var d := edge_distance(cursor_pos, level_bounds)
+			if d >= 0.0 and d <= CLICK_TOLERANCE:
+				return {"infinity": true, "distance": d}
 		return {}
 
 	return {"surface": best_surface, "side": best_side, "distance": best_dist}
+
+# Distance from `p` to the nearest edge of `b`, negative outside it.
+static func edge_distance(p: Vector2, b: Rect2) -> float:
+	return minf(minf(p.x - b.position.x, b.end.x - p.x), minf(p.y - b.position.y, b.end.y - p.y))
 
 
 static func _distance_to_segment(point: Vector2, segment: Segment) -> float:

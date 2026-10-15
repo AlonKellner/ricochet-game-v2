@@ -146,9 +146,24 @@ void BeamScene::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_surfaces"), &BeamScene::get_surfaces);
 	ClassDB::bind_method(D_METHOD("get_by_id"), &BeamScene::get_by_id);
 	ClassDB::bind_method(D_METHOD("get_limbs"), &BeamScene::get_limbs);
+	ClassDB::bind_method(D_METHOD("set_emit_infinity", "on"), &BeamScene::set_emit_infinity);
+	ClassDB::bind_method(D_METHOD("get_emit_infinity"), &BeamScene::get_emit_infinity);
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "emit_infinity"), "set_emit_infinity", "get_emit_infinity");
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "surfaces"), "", "get_surfaces");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "by_id"), "", "get_by_id");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "limbs"), "", "get_limbs");
+}
+
+void BeamScene::set_emit_infinity(bool on) {
+	std::visit([on](auto &s) {
+		if (s) {
+			s->emit_infinity = on;
+		}
+	}, scene);
+}
+
+bool BeamScene::get_emit_infinity() const {
+	return std::visit([](const auto &s) { return s ? s->emit_infinity : false; }, scene);
 }
 
 Ref<BeamScene> BeamScene::from_defs(const Ref<NumCtx> &ctx, const godot::Array &defs) {

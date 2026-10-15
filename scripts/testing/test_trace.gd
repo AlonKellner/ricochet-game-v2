@@ -26,8 +26,14 @@ static func pair_of(player: Vector2, cursor: Vector2, surfaces: Array, plan_entr
 
 # BeamTracer.trace_pair on game surfaces: a fresh tracer per call (tests need no caches).
 static func trace_pair(surfaces: Array, player: Vector2, cursor: Vector2, plan_entries: Array = [], flags: Dictionary = {}) -> BeamTracerPair:
-	return BeamTracer.new().trace_pair(SceneDefs.defs_from_surfaces(surfaces), player, cursor, plan_entries, flags,
+	return fresh_tracer().trace_pair(SceneDefs.defs_from_surfaces(surfaces), player, cursor, plan_entries, flags,
 		SceneDefs.segments_by_id(surfaces))
 
 static func plan_refuses(surfaces: Array, plan_entries: Array, surface_id: int, left: bool, flags: Dictionary = {}) -> bool:
-	return BeamTracer.new().plan_refuses(SceneDefs.defs_from_surfaces(surfaces), plan_entries, surface_id, left, flags)
+	return fresh_tracer().plan_refuses(SceneDefs.defs_from_surfaces(surfaces), plan_entries, surface_id, left, flags)
+
+# A tracer with the game's feature switches.
+static func fresh_tracer() -> BeamTracer:
+	var t := BeamTracer.new()
+	t.set_emit_infinity(FeatureFlags.infinity_event())
+	return t

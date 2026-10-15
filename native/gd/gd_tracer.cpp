@@ -323,7 +323,8 @@ Dictionary TracePath::physical_hits() const {
 	Dictionary result;
 	for (int64_t i = 0; i < steps.size(); i++) {
 		const Ref<TraceStep> s = steps[i];
-		if (s.is_null() || s->surface_id < 0) {
+		// surfaces, and the wrap through infinity (INFINITY_ID: the infinity plan entry's record)
+		if (s.is_null() || (s->surface_id < 0 && s->surface_id != rc::INFINITY_ID)) {
 			continue;
 		}
 		if (!result.has(s->surface_id)) {
@@ -376,6 +377,9 @@ void BeamTracer::_bind_methods() {
 			DEFVAL(Dictionary()), DEFVAL(Dictionary()));
 	ClassDB::bind_method(D_METHOD("plan_refuses", "defs", "plan_entries", "surface_id", "left", "flags"), &BeamTracer::plan_refuses, DEFVAL(Dictionary()));
 	ClassDB::bind_method(D_METHOD("clear_cache"), &BeamTracer::clear_cache);
+	ClassDB::bind_method(D_METHOD("set_emit_infinity", "on"), &BeamTracer::set_emit_infinity);
+	ClassDB::bind_method(D_METHOD("get_emit_infinity"), &BeamTracer::get_emit_infinity);
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "emit_infinity"), "set_emit_infinity", "get_emit_infinity");
 	ClassDB::bind_method(D_METHOD("to_path", "events", "errs", "limbs", "frames", "aim", "flags", "segments"), &BeamTracer::to_path,
 			DEFVAL(Variant()), DEFVAL(Dictionary()), DEFVAL(Dictionary()));
 }

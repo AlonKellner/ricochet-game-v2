@@ -145,10 +145,10 @@ Array render_violations(const rc::inv::Violations &vs) {
 
 void InvariantKernel::_bind_methods() {
 	ClassDB::bind_static_method("InvariantKernel",
-			D_METHOD("check_all", "player", "cursor", "physical", "planned", "typed", "result", "surfaces", "defs", "flags", "plan_entries", "has_renderer", "plan_applied"),
-			&InvariantKernel::check_all);
-	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_direction_only", "player", "cursor", "result", "defs", "flags", "plan_entries"),
-			&InvariantKernel::check_direction_only);
+			D_METHOD("check_all", "player", "cursor", "physical", "planned", "typed", "result", "surfaces", "defs", "flags", "plan_entries", "has_renderer", "plan_applied", "emit_infinity"),
+			&InvariantKernel::check_all, DEFVAL(false));
+	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_direction_only", "player", "cursor", "result", "defs", "flags", "plan_entries", "emit_infinity"),
+			&InvariantKernel::check_direction_only, DEFVAL(false));
 	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_effect_law", "events", "scene"), &InvariantKernel::check_effect_law);
 	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_event_on_beam", "events", "scene"), &InvariantKernel::check_event_on_beam);
 	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_beam_order", "events"), &InvariantKernel::check_beam_order);
@@ -162,11 +162,12 @@ void InvariantKernel::_bind_methods() {
 
 Array InvariantKernel::check_all(const Vector2 &player, const Vector2 &cursor, const Ref<TracePath> &physical, const Ref<TracePath> &planned, const Array &typed,
 		const Ref<PrecisionLadderResult> &result, const Array &surfaces, const Array &defs, const Dictionary &flags, const Array &plan_entries,
-		bool has_renderer, bool plan_applied) {
+		bool has_renderer, bool plan_applied, bool emit_infinity) {
 	rc::inv::Input in;
 	in.player = to_v2(player);
 	in.cursor = to_v2(cursor);
 	in.has_renderer = has_renderer;
+	in.emit_infinity = emit_infinity;
 	const rc::TracePath ph = core_path_of(physical);
 	const rc::TracePath pl = core_path_of(planned);
 	if (physical.is_valid()) {
@@ -189,7 +190,8 @@ Array InvariantKernel::check_all(const Vector2 &player, const Vector2 &cursor, c
 	in.surfaces = &infos;
 	const std::vector<rc::SurfaceDef> d = defs_from_array(defs);
 	in.defs = &d;
-	const rc::Scene<rc::F64> scene = rc::Scene<rc::F64>::from_defs(d, rc::F64{1.0});
+	rc::Scene<rc::F64> scene = rc::Scene<rc::F64>::from_defs(d, rc::F64{1.0});
+	scene.emit_infinity = emit_infinity;
 	in.scene = &scene;
 	in.flags = flags_from_dict(flags);
 	in.plan = plan_from_items(plan_entries);
@@ -198,10 +200,11 @@ Array InvariantKernel::check_all(const Vector2 &player, const Vector2 &cursor, c
 }
 
 Array InvariantKernel::check_direction_only(const Vector2 &player, const Vector2 &cursor, const Ref<PrecisionLadderResult> &result, const Array &defs,
-		const Dictionary &flags, const Array &plan_entries) {
+		const Dictionary &flags, const Array &plan_entries, bool emit_infinity) {
 	rc::inv::Input in;
 	in.player = to_v2(player);
 	in.cursor = to_v2(cursor);
+	in.emit_infinity = emit_infinity;
 	std::vector<rc::inv::EvInfo> pev;
 	std::vector<rc::inv::EvInfo> hev;
 	if (result.is_valid()) {
@@ -212,7 +215,8 @@ Array InvariantKernel::check_direction_only(const Vector2 &player, const Vector2
 	}
 	const std::vector<rc::SurfaceDef> d = defs_from_array(defs);
 	in.defs = &d;
-	const rc::Scene<rc::F64> scene = rc::Scene<rc::F64>::from_defs(d, rc::F64{1.0});
+	rc::Scene<rc::F64> scene = rc::Scene<rc::F64>::from_defs(d, rc::F64{1.0});
+	scene.emit_infinity = emit_infinity;
 	in.scene = &scene;
 	in.flags = flags_from_dict(flags);
 	in.plan = plan_from_items(plan_entries);
@@ -263,12 +267,12 @@ Array InvariantKernel::extract_trace_geometry(const Ref<TracePath> &path) {
 // ---------------------------------------------------------------- SweepKernel
 
 void SweepKernel::_bind_methods() {
-	ClassDB::bind_static_method("SweepKernel", D_METHOD("run", "defs", "surfaces", "positions", "plans", "flags", "shard_i", "shard_n", "skip_equal"),
-			&SweepKernel::run);
+	ClassDB::bind_static_method("SweepKernel", D_METHOD("run", "defs", "surfaces", "positions", "plans", "flags", "shard_i", "shard_n", "skip_equal", "emit_infinity"),
+			&SweepKernel::run, DEFVAL(false));
 }
 
 Array SweepKernel::run(const Array &defs, const Array &surfaces, const PackedVector2Array &positions, const Array &plans, const Dictionary &flags, int shard_i,
-		int shard_n, bool skip_equal) {
+		int shard_n, bool skip_equal, bool emit_infinity) {
 	const std::vector<rc::SurfaceDef> d = defs_from_array(defs);
 	const std::vector<rc::inv::SurfaceInfo> infos = surface_infos_of(surfaces);
 	std::vector<rc::V2> pos;
@@ -279,7 +283,7 @@ Array SweepKernel::run(const Array &defs, const Array &surfaces, const PackedVec
 	for (int64_t i = 0; i < plans.size(); i++) {
 		pls.push_back(plan_from_items(plans[i]));
 	}
-	const std::vector<rc::sweep::Combo> combos = rc::sweep::run(d, infos, pos, pls, flags_from_dict(flags), shard_i, shard_n, skip_equal, true);
+	const std::vector<rc::sweep::Combo> combos = rc::sweep::run(d, infos, pos, pls, flags_from_dict(flags), shard_i, shard_n, skip_equal, true, emit_infinity);
 	Array out;
 	for (const rc::sweep::Combo &c : combos) {
 		Dictionary e;

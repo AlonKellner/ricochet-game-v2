@@ -25,8 +25,8 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 98 | `InvariantChecker` kernel + native sweeps (shard by combo) | Done: `rc/invariants.hpp` + `rc/sweep.hpp`; `InvariantKernel` / `SweepKernel` bindings; `InvariantChecker` is a thin driver; the plan sweeps run natively (one live combo per scene kept); `test_invariant_detects.gd`, `test_diff_invariants.gd` |
 | 99 | Delete the GDScript implementations, final names, source-scan tests rewritten | Done: 25 GDScript implementation files, the Gd* test copies, the differential tests and `tools/dump_goldens.gd` deleted; `test_stage99_no_legacy.gd` scans for Gd* / N* / inner-class names and checks every registered class is a RefCounted; the goldens stay as pins |
 | 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Evidence ready: `docs/research/stage88b_fixture_diff.md` (B9); **awaiting the user's approval** before the committed corpora change |
-| 88c | Native `infinity` event, ∞ plan item, reversed anchored orientation | Planned |
-| 88d | Edge click, hover band, plan chevrons, HUD, `level_bounds` | Planned |
+| 88c | Native `infinity` event, ∞ plan item, reversed anchored orientation | Done behind `Scene::emit_infinity` (off by default: the goldens and fixtures stand); the 26 Stage 88 fixtures match at f64, Dual and 4 limbs; `test_infinity.cpp`, `test_stage88_infinity.gd` |
+| 88d | Edge click, hover band, plan chevrons, HUD, `level_bounds` | Done behind `FeatureFlags.INFINITY_EVENT_DEFAULT` (off): `ClickDetector` edge band, `EdgeOverlayNode`, `GameManager`, `PlanHUD`; `test_stage88_infinity_ui.gd` with real input events and a sweep with ∞ plans; **the flip (B9) awaits the user** |
 | 100 | Performance pass: dirty flags, no per-frame defs, cached arc params | Done: static frames do no solver or draw work (`frame_bench.gd`: 6 µs vs 120-290 µs per frame); `test_stage100_dirty_flags.gd`; user sign-off 2026-10-15 ("works perfectly"; the edge is not yet plannable: 88d) |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests (ctest and
@@ -620,6 +620,87 @@ B-items: `TestTrace` / `TraceMode` (B6) and `TraceHit.at_endpoint` /
 `native-migration` merged into `main` (`--no-ff`) at this point, per the plan;
 the second merge follows Stage 100.
 
+## Stages 88c-88d: the infinity event and the edge click (behind a switch)
+
+The feature is complete and tested, but off: `Scene<N>::emit_infinity`
+(native) and `FeatureFlags.INFINITY_EVENT_DEFAULT` (game) are false until the
+user approves B9, because turning it on changes the committed corpora (the
+Stage 88b evidence). Everything below runs with the switch on in its tests.
+
+**88c, the solver (`rc/solver.hpp`).** `EventKind::Infinity`, `INFINITY_ID =
+-3`, `PlanItem::is_infinity()`. `candidates()` appends a wrap candidate
+(`Candidate::inf`, `t = +inf`) on a straight beam with the switch on; the
+projective order puts it after every crossing ahead and before the wrapped
+ones (the cursor at the departure point still goes first). The walker counts
+it toward MAX_HITS: beyond the limit it emits a `max` at infinity (surface id
+-3, no point); otherwise an `infinity` event (`t_to` null, no point) that
+consumes the next plan entry when that is ∞, in both modes, and then runs the
+late-cursor insertion (extracted into `late_cursor`, shared with the pass
+case). `via_infinity(plan)`: an ∞ entry in the first epoch reverses that
+epoch's anchored beams (`reverse_beams`: `Beam{p, -tau, -kappa}`, popped
+frames keep one object) and the degenerate direction walk's aim. `BigFloat
+::from_float(inf)` is the tier's infinity. The switch travels: `LadderContext
+::set_emit_infinity` (drops scenes and caches), `Tracer::set_emit_infinity`
+(invalidates the trace cache), `inv::Input::emit_infinity` (DIRECTION-ONLY's
+reference ladder), `sweep::run(..., emit_infinity)`; bindings `BeamScene
+.emit_infinity`, `BeamTracer.emit_infinity`, `BeamSolver.INFINITY_ID`,
+`InvariantKernel.check_all/check_direction_only(..., emit_infinity)`,
+`SweepKernel.run(..., emit_infinity)`.
+
+**The trace (`rc/tracer.hpp`).** The `infinity` event's arc is the outgoing
+half of the wrap (start to ∞ along the tangent), tagged `surface_id =
+INFINITY_ID`, `hit_on_segment = true` (no TraceHit); the next event's arc
+starts at `t = inf` and becomes the incoming half (∞ to its point); an escape
+right after the wrap draws nothing. Together they are exactly the split
+`through_infinity` produced before, so the picture does not change; a max at
+infinity is the outgoing half alone. `TracePath.physical_hits()` lists the
+wraps under INFINITY_ID (the edge marks' validity). PLAN-EFFECTS counts a
+consumed infinity event against the ∞ entry.
+
+**Tests.** `native/tests/test_infinity.cpp`: the 26 Stage 88 fixtures match
+the oracle at f64, Dual and 4 limbs (points within 1e-9); with the switch off
+the same scenes never emit the event; with it on every one of the 115 older
+fixtures differs from its golden only by inserted infinity events and the
+earlier MAX_HITS cut (26 fixtures, 57 events, 7 cuts: the counts of the Stage
+88b evidence). `tests/test_stage88_infinity.gd` replays the fixtures through
+the bindings at f64 and 4 limbs and checks the tracer's wrap steps. One
+fixture (`planned_mirror_exact_image`) caught the cursor-at-departure ordering
+bug during development: the wrap candidate must not count as "the cursor".
+
+**88d, the game layer.** `ClickDetector.detect_click(..., level_bounds,
+allow_infinity)`: no surface within tolerance and the cursor within
+CLICK_TOLERANCE inside the bounds' edge is `{"infinity": true, "distance"}`
+(`edge_distance`). `GameManager`: left click appends `PlanEntry(INFINITY_ID,
+LEFT, click)`, right click removes the latest ∞ entry or clears the plan
+(GAME_SPEC 4.2); hover sets `EdgeOverlayNode.set_hovered`; the plan overlays
+set the edge marks (`{index, point, valid}`: the k-th ∞ entry is met when the
+physical trace wraps k times). `EdgeOverlayNode` (added by `LevelSettings
+._ready` as "EdgeOverlay"): the hover band inside the edge, and per mark a
+band stretch, an outward chevron and the number at the click snapped to the
+edge. `PlanHUD` lists "∞". `FeatureFlags.infinity_event()` is read by
+`PathRenderer`, `GameManager`, `InvariantChecker`, `SweepRunner`, `TestTrace`
+and the debug dumper (`infinity_event_override` for tests).
+
+**Tests.** `tests/test_stage88_infinity_ui.gd` (switch forced on): the click
+detector's band, surface precedence and bounds; left click through
+`GameManager._input` with a real `InputEventMouseButton`, the HUD text, the
+edge marks; right-click removal and clearing; hover on and off; the ∞ plan
+reaching the cursor through the wrap (first step tagged INFINITY_ID, aim
+reversed), the unmet entry shown invalid, the direct realization without the
+entry; the switch off leaves the edge alone; a native sweep with one- and
+two-∞ plans over six positions holds every invariant.
+
+**Interactive checklist (user sign-off, after the flip):**
+1. `open_room_playable.tscn`: hover the screen edge: the band highlights;
+   click it: the HUD shows "∞", the preview aims away from the cursor and
+   returns from the opposite edge; the mark on the edge is white (met).
+2. Click a mirror after ∞ and before: the chevrons and numbers follow the plan;
+   right-click the edge removes the latest ∞; right-click elsewhere clears.
+3. `main.tscn` (closed room): an ∞ entry is red (unmet), as an unreachable
+   side would be.
+4. Fire with an ∞ plan: the arrow leaves through one edge and returns from
+   the opposite one, the camera following.
+
 ## Stage 100: the performance pass (dirty keys)
 
 Before this stage every frame rebuilt the scene defs (`SceneDefs.defs_from_surfaces`
@@ -716,6 +797,6 @@ two aborts fixed in Stages 93 and 96), not the editor.
 |---|---|---|---|
 | B1 | `BigFloat.mul` int64 column overflow above ~128 limbs per factor (reproduced natively) | `big_float.gd:251-256` | doctest with `__int128` reference |
 | B12 | `Exact.U` parsed two ulps below 2^-53 by Godot | `exact.gd:11` | `test_diff_beam_geom.gd` (`Exact.U` bits), `tools/dump_goldens.gd` hex inputs; native `exact.hpp` comment |
-| B9 | The `infinity` event counts toward MAX_HITS: 443 events inserted across the corpora, 79 traces at MAX_HITS cut earlier (182 old tail events dropped), stress corpus unchanged; no visible-output change until 88c | oracle `trace2.py` `EMIT_INFINITY` | `docs/research/stage88b_fixture_diff.md` (per-case list), `stage88b_classify.py` |
+| B9 | The `infinity` event counts toward MAX_HITS: 443 events inserted across the corpora, 79 traces at MAX_HITS cut earlier (182 old tail events dropped), stress corpus unchanged. Implemented behind `Scene::emit_infinity` / `FeatureFlags.INFINITY_EVENT_DEFAULT` (Stages 88c-d); **the flip** = set both defaults true, `EMIT_INFINITY = True` in the oracle, regenerate fixtures/corpora/goldens | oracle `trace2.py` `EMIT_INFINITY` | `docs/research/stage88b_fixture_diff.md` (per-case list), `stage88b_classify.py`, `test_infinity.cpp` (the native diff has the same counts) |
 | B5 | `PathRenderer` display bounds and `LevelSettings` edge walls from `level_bounds` instead of 1920x1080 literals (needed by 88d) | `path_renderer.gd`, `level_settings.gd` | **applied in Stage 100 with zero diff**: no `.tscn` sets `level_bounds`, the default equals `DEFAULT_BOUNDS`; `test_stage100_dirty_flags.gd` pins both; the user may veto |
 | B13 | A NaN replay gain poisons the envelope through `maxf` and jumps the ladder to the last tier | `error_estimate.gd:111`, `precision_ladder.gd` | sweep goldens `precision/no_plan` combos 4883, 4919 (`tiers_tried`) |

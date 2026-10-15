@@ -127,6 +127,7 @@ protected:
 public:
 	enum Mode { PHYSICAL = 0, PLANNED = 1 };
 	static constexpr int MAX_HITS = rc::MAX_HITS;
+	static constexpr int INFINITY_ID = rc::INFINITY_ID;
 	static godot::Array TRANSFORMATIVE() { return rcgd::effect_names_where(&rc::is_transformative); }
 	static godot::Array PROJECTIVE() { return rcgd::effect_names_where(&rc::is_projective); }
 

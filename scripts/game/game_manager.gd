@@ -13,6 +13,7 @@ var _path_renderer: Node2D
 var _level_settings: Node2D
 var _plan_hud: Control
 var _camera: Camera2D
+var _edge_overlay: Node2D = null   # the level bounds' edge (EdgeOverlayNode, Stage 88)
 
 var plan := PlanManager.new()
 var click_detector := ClickDetector.new()
@@ -37,6 +38,7 @@ func _ready() -> void:
 	_level_settings = parent
 	_plan_hud = parent.get_node_or_null("PlanHUD")
 	_camera = parent.get_node_or_null("Camera")
+	_tracer.set_emit_infinity(FeatureFlags.infinity_event())
 	if _arrow_animator:
 		_arrow_animator.flight_completed.connect(_on_flight_completed)
 	if _camera and _level_settings and "level_bounds" in _level_settings:
@@ -50,8 +52,7 @@ func _ready() -> void:
 func _process(_delta: float) -> void:
 	_update_camera()
 	_update_hover()
-	if not plan.is_empty():
-		_update_surface_overlays()
+	_update_surface_overlays()   # runs only when its inputs changed (a cleared plan clears the marks)
 
 func _update_camera() -> void:
 	if not _camera:
@@ -66,6 +67,8 @@ func _update_hover() -> void:
 		return
 	if _arrow_animator and _arrow_animator.is_flying():
 		_clear_all_hover()
+		if _edge():
+			_edge().set_hovered(false)
 		_hover_inputs = null
 		return
 
@@ -75,12 +78,13 @@ func _update_hover() -> void:
 		return
 	_hover_inputs = inputs
 
-	var surfaces := _get_surfaces()
-	var result := click_detector.detect_click(_cursor.global_position, surfaces, game_state, _plan_accepts.bind(surfaces))
+	var result := _detect_click()
 
 	_clear_all_hover()
+	if _edge():
+		_edge().set_hovered(result.has("infinity"))
 
-	if not result.is_empty():
+	if result.has("surface"):
 		var surf: Surface = result.surface
 		var side: Side.Value = result.side
 		var overlays := ChevronOverlayBuilder.build_hover_overlays(surf, side, game_state)
@@ -93,6 +97,24 @@ func _update_hover() -> void:
 						_hovered_node = child
 					else:
 						_hover_partner_node = child
+
+# The level bounds' edge overlay (added by the parent's _ready, after this
+# node's: looked up on first use).
+func _edge() -> Node2D:
+	if _edge_overlay == null and _level_settings:
+		_edge_overlay = _level_settings.get_node_or_null("EdgeOverlay")
+	return _edge_overlay
+
+# What the cursor is over: a surface side, the level bounds' edge, or nothing.
+func _detect_click() -> Dictionary:
+	var surfaces := _get_surfaces()
+	return click_detector.detect_click(_cursor.global_position, surfaces, game_state, _plan_accepts.bind(surfaces),
+		_level_bounds(), FeatureFlags.infinity_event())
+
+func _level_bounds() -> Rect2:
+	if _level_settings and "level_bounds" in _level_settings:
+		return _level_settings.level_bounds
+	return VisualConverter.DEFAULT_BOUNDS()
 
 # Inside a ghost stretch of the plan only ghost togglers can be planned.
 func _plan_accepts(surf: Surface, side: Side.Value, surfaces: Array) -> bool:
@@ -163,22 +185,22 @@ func _input(event: InputEvent) -> void:
 func _handle_plan_click(is_right_click: bool) -> void:
 	if not _cursor:
 		return
-	var surfaces := _get_surfaces()
-	var result := click_detector.detect_click(_cursor.global_position, surfaces, game_state, _plan_accepts.bind(surfaces))
+	var result := _detect_click()
 
 	if result.is_empty():
 		if not is_right_click:
 			return
 		plan.clear()
 	else:
-		var surf: Surface = result.surface
+		# a surface side, or the level bounds' edge (the infinity entry, Stage 88)
+		var sid: int = BeamSolver.INFINITY_ID if result.has("infinity") else result.surface.id
 		if is_right_click:
-			if plan.has_surface(surf.id):
-				plan.remove_last_of(surf.id)
+			if plan.has_surface(sid):
+				plan.remove_last_of(sid)
 			else:
 				plan.clear()
 		else:
-			plan.add_entry(surf.id, result.side, _cursor.global_position)
+			plan.add_entry(sid, result.get("side", Side.Value.LEFT), _cursor.global_position)
 
 	_refresh_ui()
 
@@ -306,6 +328,23 @@ func _update_surface_overlays(force: bool = false) -> void:
 				if plan.entries[i].surface_id == child.surface.id:
 					plan_indices.append(i + 1)
 			child.set_plan_overlays(overlays.get(child.surface.id, []), plan_indices)
+	if _edge():
+		# the infinity entries: the k-th one is met when the physical trace wraps k
+		# times (its solver events: the display path clips the wrap to the edge)
+		var wraps := 0
+		var result = _path_renderer.last_beam_result if _path_renderer and "last_beam_result" in _path_renderer else null
+		if result != null:
+			for e in result.physical:
+				if e.kind == "infinity":
+					wraps += 1
+		var marks: Array = []
+		var k := 0
+		for i in plan.entries.size():
+			var entry: PlanManager.PlanEntry = plan.entries[i]
+			if entry.surface_id == BeamSolver.INFINITY_ID:
+				k += 1
+				marks.append({"index": i + 1, "point": entry.click, "valid": k <= wraps})
+		_edge().set_marks(marks)
 
 func _dump_debug_state() -> void:
 	_DebugDumper.dump(self)

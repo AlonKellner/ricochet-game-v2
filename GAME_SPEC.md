@@ -35,7 +35,7 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Visibility polygon (§15) | Planned |
 | State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Done |
 | Ghost mode & toggler surfaces (Stage 86) | Done |
-| Plannable infinity — the ∞ plan entry, the `infinity` event (§4.2, §6.3, §12.5, §13.1; TDD_10 Stage 88) | Specified (oracle + fixtures, Stage 88a); implementation pending (Stages 88b–d) |
+| Plannable infinity — the ∞ plan entry, the `infinity` event (§4.2, §6.3, §12.5, §13.1; TDD_10 Stage 88) | Implemented behind a switch (Stages 88c–d: native solver, edge click, edge overlay, HUD); off until the fixture regeneration (B9) is approved |
 | Level editor | Planned |
 | Menus, HUD, save system | Planned |
 

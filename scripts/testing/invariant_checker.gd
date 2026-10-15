@@ -43,7 +43,7 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 		_renderer._compute_trace()
 	var out: Array[String] = []
 	out.assign(InvariantKernel.check_all(player_pos, cursor_pos, _traced_path(), _planned_path(), _typed_steps(), _beam_result(),
-		surface_infos(_surfaces(), _flags()), _defs(), _flags(), plan_entries, _renderer != null, plan_applied))
+		surface_infos(_surfaces(), _flags()), _defs(), _flags(), plan_entries, _renderer != null, plan_applied, FeatureFlags.infinity_event()))
 	return out
 
 # DIRECTION-ONLY alone, for the traces the renderer computes for these
@@ -57,7 +57,7 @@ func check_DIRECTION_ONLY(player_pos: Vector2, cursor_pos: Vector2, plan_entries
 	if _renderer:
 		_renderer._compute_trace()
 	var out: Array[String] = []
-	out.assign(InvariantKernel.check_direction_only(player_pos, cursor_pos, _beam_result(), _defs(), _flags(), plan_entries))
+	out.assign(InvariantKernel.check_direction_only(player_pos, cursor_pos, _beam_result(), _defs(), _flags(), plan_entries, FeatureFlags.infinity_event()))
 	return out
 
 # ---------------------------------------------------------------- the kernel's statics
@@ -154,6 +154,7 @@ func _defs() -> Array:
 	if _scene_cache == null or _defs_cache.version != _scene_version:
 		_scene_version = _defs_cache.version
 		_scene_cache = BeamScene.from_defs(NumCtx.f64(), defs)
+		_scene_cache.emit_infinity = FeatureFlags.infinity_event()
 	return defs
 
 func _beam_scene() -> BeamScene:

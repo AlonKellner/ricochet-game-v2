@@ -216,6 +216,12 @@ func _ready() -> void:
 		var config := SideConfig.new(null, false)
 		var surf := Surface.new(_seg_from_v4(line_def), config, config, false, false)
 		_add_surface(surf, "PassThrough")
+	# the level bounds' edge: hover band and planned infinity entries (Stage 88)
+	var edge := Node2D.new()
+	edge.set_script(load("res://scripts/game/edge_overlay_node.gd"))
+	edge.name = "EdgeOverlay"
+	add_child(edge)
+	edge.setup(level_bounds)
 
 func _add_surface(surf: Surface, prefix: String) -> void:
 	surfaces.append(surf)
