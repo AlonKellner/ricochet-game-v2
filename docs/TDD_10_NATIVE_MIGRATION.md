@@ -32,6 +32,7 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 102 | The B-list resolved | Done: B1, B2, B4, B12 fixed; B6 partial; B3, B11 closed; B5, B7, B8, B10, B13 kept (table at the end) |
 | 103 | Coverage extras: the oracle in the loop, every level dumped, sweeps for every scene and infinity plans, no leaks, property tests | Done; one known finding (K1) |
 | 104 | Housekeeping: merged branches deleted, docs | Done |
+| 106 | The departure point after a pop (resolves K2) | Done pending the re-bless of 1,795 sweep goldens (evidence: `docs/research/stage106_golden_diff.md`) and the user's interactive sign-off; the pop tags its point like a push, the departing root is identified structurally, the `REAPPLY-IN-PLACE` invariant; K3 found |
 | 105 | Exact tangency at the frame's infinity point (resolves K1) | Done pending the user's interactive sign-off: the pole record in the oracle and natively, the touch rule and the pinning at Q; DIRECTION-ONLY's exact reference; `tangent_infinity.tscn`; tests below |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests (ctest and
@@ -928,7 +929,8 @@ into `main` a second time here.
 | # | Finding | Where | Status |
 |---|---|---|---|
 | K1 | On the portals playground the reflective arc (an inversion) moves the frame's infinity to its center, and the portal's −800 shift puts that point exactly on mirror 5 (x = 400). A vertical aim's image under the inversion is a circle tangent there to the vertical, i.e. to mirror 5. The tangency is exact by construction, but native decided it by rounding (two crossings, resolved differently at two precision tiers); the oracle (80 digits) saw no crossing, and its own answer changed with its precision (none at 80 digits, hits at 200 and 400). | `rc/solver.hpp` candidates | **Resolved** by Stage 105 (the touch rule at Q, exact) |
-| K2 | On `tangent_infinity.tscn`, plan [6/L] (the mirror through Q0), player (1160, 440) exactly on the inversion circle's top, cursor (760, 640), whose image under the plan is the circle's bottom: the walk inverts in at the image and out at the player's own point (a pop at a known point). The planned shot's physical trace then resumes the original beam past the image while DIRECTION-ONLY's reference (no plan, aimed at the image) loops back through it ("hit 2 s=7 vs s=8"). A double coincidence of the player and the aim image on a surface, unrelated to Q; found while choosing the sweep's Q0-aligned positions, which now avoid surfaces. | `rc/solver.hpp` pop resumption at a known point | **Kept** (user: "prioritize simplicity", 2026-10-15). The mechanism: after the pop, the departing circle's root at the departure point is excluded, and a known point at that same point snaps the circle's *other* root onto itself. The simple fix (no snap of the departing surface at the departure point, oracle and native) makes K2's two traces agree, but changes 1,242 of the 284,096 pinned sweep combos in both directions: it removes phantom re-hits (e.g. `circle_no_walls`: the beam popped at the cursor re-hit the mirror there instead of going on) and introduces ping-pong loops elsewhere (e.g. the inversion grid: a beam popped out of a circle went back to its entry point). A real fix needs a redesign of how pops and known points record the departure, not a one-line rule; reverted. Pre-existing (the GDScript goldens have it), rare (a player or cursor exactly on a self-inverse circle surface, then a pop at it) and not swept (the Q0-aligned positions avoid surfaces). |
+| K2 | On `tangent_infinity.tscn`, plan [6/L] (the mirror through Q0), player (1160, 440) exactly on the inversion circle's top, cursor (760, 640), whose image under the plan is the circle's bottom: the walk inverts in at the image and out at the player's own point (a pop at a known point). The planned shot's physical trace then resumed the original beam past the image while DIRECTION-ONLY's reference (no plan, aimed at the image) looped back through it. The mechanism: a pop restored the pre-push known points without tagging the pop point as the departure point, so a known point there snapped the departing circle's other root onto itself; and a resumed beam excluded its departure root by exact equality against a recomputed root. | `rc/solver.hpp` apply (pop) and candidates | **Resolved** by Stage 106 (kept in Stage 105 for simplicity; the one-line fix tried then was right in intent and exposed the second defect) |
+| K3 | On `tangent_infinity.tscn`, plan [6/L] or [6/R], with the cursor the player's mirror image in the planned mirror (e.g. (835, 665) and (1085, 665) about x = 960): the aim image is the player itself, so every direction solves the plan (a degenerate aim). Native picks the arc through Q0 and reflects there, then re-reflects in place at Q0 (a zero-length loop caught by `REAPPLY-IN-PLACE`); the oracle picks the other arc (through (960, 790)) and loops normally. Pre-existing (identical in `main`), found by the Stage 105 Q0-aligned sweep positions. | `run_degenerate` / `_aim` (the aim when the image is the player) | Open: a `KNOWN_FINDINGS` entry (reported, not failed); the degenerate aim needs one convention in both implementations |
 
 **Gate (Stages 102-103, 2026-10-16):** `./run_tests_parallel.sh` 784 passing /
 0 failing in 15 s, no process leaks; `make oracle-test` 91 passing; `ctest`
@@ -1048,6 +1050,64 @@ combos take 22.0 s against 21.6 s on `main` (release, same machine, idle).
    (x = 400) where the arc's image touches it; the preview is steady.
 3. A quick look at `pre_inverted.tscn` and `portals.tscn` as usual: nothing
    else changed.
+
+## Stage 106: the departure point after a pop (K2)
+
+The user asked for a proper rework of K2 after Stage 105 (2026-10-15: "prioritize simplicity"
+had kept it; "what would a proper rework look like" led to this stage), with an independent judge
+for every pinned trace it changes and a checkpoint before any re-bless.
+
+**The two defects** (oracle and native alike). A push records its hit point as the new beam's
+departure point (`Known{pt, 0, surf}`, `skip = surf`). A pop restored the pre-push known points
+verbatim: the pop point was not tagged, so a known point there (the player or the cursor exactly on
+a circle mirror) snapped the departing carrier's *other* root onto itself (the lost crossing /
+phantom re-hit of K2). And a resumed beam excluded its departure root by `t == t0` against a root
+recomputed on the restored beam, an ulp off at times; the stray root had been removed by accident
+by the first defect's snap, which is why the one-line fix of Stage 105 fixed 1,226 pinned combos and
+broke 16 (zero-length loops: the effect re-applied at the pop point).
+
+**The fix.** `_tag_departure` / `tag_departure`: after `known = top.known`, the known point that is
+the pop point, by data identity (when the point is exact) or by its parameter on the beam
+(`t == t_res`: the same beam and the same parameter are the same point), gets `skip = sid` and
+`t = t_res`; an exact pop point not yet known is added (not for a portal: its mapped-back point is
+a rounded computation). On a resumed beam the departing carrier's root nearest `t0` is the
+departure (one root dropped), which subsumes Stage 105's "nearest Q" block (deleted). The oracle's
+departure re-hit after a pop takes the tagged point, as native did. Consequences, all intended: the
+cursor-at-departure rule fires after a pop at the cursor; the ladder stops climbing on the fake
+near-duplicate root (171 of the changed combos now converge at float64).
+
+**`REAPPLY-IN-PLACE`** (`rc/invariants.hpp`, the sweeps, `InvariantChecker.check_reapply_in_place`):
+an applied hit, then only cursor / infinity events at the same point, then an applied hit on the
+same surface at the same point is a zero-length loop; a teleport resets it (a round trip through a
+portal pair re-hits the same portal at the same point legitimately). In the old traces of the
+changed combos it fires 276 times; in the new ones never.
+
+**Evidence** (`docs/research/stage106_golden_diff.md`): 1,795 of 284,096 pinned sweep combos
+change (0.63%, 35 of 117 groups); the fixture corpora, the scenes corpus, the bench corpora and
+the fixture / corpus / chain goldens do not. `docs/research/stage106_judge.py` judged every changed
+combo from geometry alone at 200 digits (the restored beam's next crossing after the departure
+point): **1,784 fixes, 0 regressions, 0 both-wrong**, 6 where only the applied flag differs (the
+cursor at the pop point reached immediately, the rule's order), 5 where no event differs (the
+ladder's tier). Tooling kept: `RC_SWEEP_DUMP`, `RC_GOLDEN_REBLESS`, `docs/research/apply_rebless.py`.
+
+**Tests.** Oracle (113): K2, the cursor on a reflective arc (a pop at the cursor, then the carrier's
+other crossing, then onward), a closed orbit through a player on an inversion circle, a known point
+at the other crossing still snapping it, a portal pop, all at 80 and 200 digits. Fixtures
+`stage106_pop_departure.json` (9, each asserting the pop tagged a known point) at F64 / Dual / 4 /
+64 limbs. Native `test_pop_departure.cpp`: the tag; 1,080 random walks with players and cursors
+exactly on circle mirrors (7,579 pops), the same decisions at every tier, no in-place re-apply.
+GUT `test_stage106_pop_departure.gd`: the fixtures through the bindings, K2 live on the playground
+(`check_all` and `DIRECTION-ONLY` clean; the planned shot is the shot aimed at the image),
+`circle_no_walls` with the cursor on the circle; `SweepPlans.on_surface_positions` (the four
+extreme points of every full circle) in the playground and infinity sweeps.
+
+**Interactive checklist (user sign-off):**
+1. `circle_no_walls`: put the cursor exactly on the circle's right point (1160, 540), the player
+   left of the circle: the preview reflects at the cursor and the arrow continues through the
+   circle's far side; no stutter at the cursor. Shoot: the arrow follows the preview.
+2. `tangent_infinity.tscn`, plan the vertical mirror through the cross, player on the inversion
+   circle's top (1160, 440), cursor (760, 640): the preview shows no divergence marker.
+3. `pre_inverted.tscn` and `portals.tscn` as usual: nothing else changed.
 
 ## Machine quirks: the open editor and the migration
 
