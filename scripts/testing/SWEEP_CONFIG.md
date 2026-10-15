@@ -21,7 +21,11 @@ performance cores). Scenes, plans and positions come from `SweepPlans`.
 The sweeps' traces at tag `pre-native` are pinned in `bench/goldens/sweeps.json`
 (284,096 combos, replayed bit for bit by `native/tests/test_goldens.cpp` with
 the infinity switch off; `RC_SWEEP_REBLESS=1` prints the replacement of a
-combo an approved B-item changes).
+combo an approved behaviour change alters, `RC_GOLDEN_REBLESS=1` the same for
+the fixture and corpus goldens, and `docs/research/apply_rebless.py` applies
+those lines; `RC_SWEEP_DUMP=<list>` dumps listed combos with every event's
+beam for `docs/research/stage106_judge.py`, the independent judge of changed
+traces).
 
 **Known findings** (`KNOWN_FINDINGS` in `tests/test_invariant_sweep.gd`:
 reported, not failed; the sweep fails if one stops occurring): none. K1, a

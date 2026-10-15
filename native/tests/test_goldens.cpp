@@ -6,6 +6,7 @@
 #include <doctest/doctest.h>
 
 #include <filesystem>
+#include <set>
 
 using namespace rc;
 using namespace rc::test;
@@ -23,6 +24,73 @@ int count_checks(const F &f) {
 
 std::vector<SurfaceDef> defs_of(const ojson &surfaces_json, const ojson &inputs) {
 	return defs_from_json_hex(surfaces_json, inputs);
+}
+
+// RC_GOLDEN_REBLESS=1: a pinned value that differs is printed as a replacement
+// line "REBLESS-JSON\t<golden file>\t<key>\t<field path>\t<json>" for
+// docs/research/apply_rebless.py (Stage 106; only with the user's approval of
+// the behaviour change behind it). The CHECK still fails.
+void rebless_json(const char *file, const std::string &key, const std::string &path, const std::string &got_json, const std::string &want_json) {
+	if (got_json != want_json && std::getenv("RC_GOLDEN_REBLESS")) {
+		std::printf("REBLESS-JSON\t%s\t%s\t%s\t%s\n", file, key.c_str(), path.c_str(), got_json.c_str());
+	}
+}
+
+// RC_SWEEP_DUMP=<list file>: the listed sweep combos ("<group>\t<combo>" per
+// line) are printed as one JSON line each, "DUMP\t{...}": the inputs, the
+// surfaces and both traces with every event's point and beam (hex doubles).
+// The evidence judge (docs/research/stage106_judge.py) compares such dumps of
+// two builds; the list is any set of combos, e.g. the mismatches of a run.
+template <Num N>
+ojson dump_events(const std::vector<Event<N>> &evs) {
+	ojson out = ojson::array();
+	for (const Event<N> &e : evs) {
+		ojson j;
+		j["kind"] = event_kind_name(e.kind);
+		j["sid"] = e.surface_id;
+		j["applied"] = e.applied;
+		j["rehit"] = e.rehit;
+		j["popped"] = e.popped;
+		j["teleport"] = e.teleport;
+		j["left"] = e.left;
+		if (e.point) {
+			j["x"] = hex(e.point->fx());
+			j["y"] = hex(e.point->fy());
+		}
+		if (e.beam) {
+			j["beam"] = ojson::array({hex(e.beam->p.fx()), hex(e.beam->p.fy()), hex(e.beam->tau.fx()), hex(e.beam->tau.fy()), hex(e.beam->kappa.to_float())});
+		}
+		out.push_back(j);
+	}
+	return out;
+}
+
+ojson dump_climb(const Climb &c) {
+	ojson j;
+	j["limbs"] = c.limbs;
+	j["events"] = c.limbs == 0 ? dump_events(c.f64_events) : dump_events(c.big_events);
+	return j;
+}
+
+ojson dump_defs(const std::vector<SurfaceDef> &defs) {
+	ojson out = ojson::array();
+	for (const SurfaceDef &d : defs) {
+		ojson j;
+		j["id"] = d.id;
+		j["line"] = d.line;
+		j["full"] = d.full;
+		j["pre"] = d.pre_transform;
+		j["s"] = ojson::array({hex(d.sx), hex(d.sy)});
+		j["e"] = ojson::array({hex(d.ex), hex(d.ey)});
+		if (d.has_via) {
+			j["v"] = ojson::array({hex(d.vx), hex(d.vy)});
+		}
+		if (d.has_circle) {
+			j["circle"] = ojson::array({hex(d.cx), hex(d.cy), hex(d.radius)});
+		}
+		out.push_back(j);
+	}
+	return out;
 }
 
 std::string bs(const geom::Blocked &bl) {
@@ -330,12 +398,15 @@ TEST_CASE("goldens: every stage fixture, generic f64, the float64 walk with gain
 			const std::vector<SurfaceDef> defs = defs_of(fx["surfaces"], inp);
 			const auto r64 = walk_fixture<F64>(fx, inp, defs, F64{1});
 			const std::string g64 = encode_events(r64.first, nullptr);
+			rebless_json("fixtures", key, "f64", g64, gold[key]["f64"].dump());
 			CHECK_MESSAGE(g64 == gold[key]["f64"].dump(), (key + " f64: " + first_event_diff(g64, gold[key]["f64"].dump())));
 			const auto rd = walk_fixture<Dual>(fx, inp, defs, Dual{1, 0});
 			const std::string gd = encode_events(rd.first, &rd.second);
+			rebless_json("fixtures", key, "fast", gd, gold[key]["fast"].dump());
 			CHECK_MESSAGE(gd == gold[key]["fast"].dump(), (key + " fast: " + first_event_diff(gd, gold[key]["fast"].dump())));
 			const auto rb = walk_fixture<BigFloat>(fx, inp, defs, BigFloat::from_int(1, 4));
 			const std::string gb = encode_events(rb.first, nullptr);
+			rebless_json("fixtures", key, "big4", gb, gold[key]["big4"].dump());
 			CHECK_MESSAGE(gb == gold[key]["big4"].dump(), (key + " big4: " + first_event_diff(gb, gold[key]["big4"].dump())));
 			fixtures++;
 		}
@@ -384,9 +455,11 @@ TEST_CASE("goldens: the corpus: float64 walks, the ladder, and 4 limbs") {
 				const CN<Dual> P{Dual{px, 0}, Dual{py, 0}}, C{Dual{cx, 0}, Dual{cy, 0}};
 				auto wp = sv.run(P, C, plan, Mode::Planned);
 				const std::string gp = wp ? encode_events(wp->events, &wp->gains) : encode_events(std::vector<Event<Dual>>{}, nullptr);
+				rebless_json("corpus", key, "fast_planned", gp, gold[key]["fast_planned"].dump());
 				CHECK_MESSAGE(gp == gold[key]["fast_planned"].dump(), (key + " fast_planned: " + first_event_diff(gp, gold[key]["fast_planned"].dump())));
 				auto wh = sv.run(P, C, plan, Mode::Physical);
 				const std::string gh = wh ? encode_events(wh->events, &wh->gains) : encode_events(std::vector<Event<Dual>>{}, nullptr);
+				rebless_json("corpus", key, "fast_physical", gh, gold[key]["fast_physical"].dump());
 				CHECK_MESSAGE(gh == gold[key]["fast_physical"].dump(), (key + " fast_physical: " + first_event_diff(gh, gold[key]["fast_physical"].dump())));
 			}
 			{
@@ -394,18 +467,27 @@ TEST_CASE("goldens: the corpus: float64 walks, the ladder, and 4 limbs") {
 				Ladder lad(lctx, []() { return 0LL; });
 				const LadderResult lr = lad.solve(px, py, cx, cy, plan, 32, 32, 0.01, false);
 				const ojson &gl = gold[key]["ladder"];
+				rebless_json("corpus", key, "ladder/planned", climb_events(lr.planned), gl["planned"].dump());
 				CHECK_MESSAGE(climb_events(lr.planned) == gl["planned"].dump(), (key + " ladder planned"));
+				rebless_json("corpus", key, "ladder/physical", climb_events(lr.physical), gl["physical"].dump());
 				CHECK_MESSAGE(climb_events(lr.physical) == gl["physical"].dump(), (key + " ladder physical"));
+				rebless_json("corpus", key, "ladder/planned_err", ojson(packed(lr.planned.err)).dump(), gl["planned_err"].dump());
 				CHECK_MESSAGE(packed(lr.planned.err) == gl["planned_err"].get<std::string>(), (key + " ladder planned_err"));
+				rebless_json("corpus", key, "ladder/physical_err", ojson(packed(lr.physical.err)).dump(), gl["physical_err"].dump());
 				CHECK_MESSAGE(packed(lr.physical.err) == gl["physical_err"].get<std::string>(), (key + " ladder physical_err"));
+				rebless_json("corpus", key, "ladder/planned_tier", ojson(lr.planned.limbs).dump(), ojson(int(gl["planned_tier"].get<double>())).dump());
 				CHECK_MESSAGE(lr.planned.limbs == int(gl["planned_tier"].get<double>()), (key + " ladder planned_tier"));
+				rebless_json("corpus", key, "ladder/physical_tier", ojson(lr.physical.limbs).dump(), ojson(int(gl["physical_tier"].get<double>())).dump());
 				CHECK_MESSAGE(lr.physical.limbs == int(gl["physical_tier"].get<double>()), (key + " ladder physical_tier"));
+				rebless_json("corpus", key, "ladder/converged", ojson(lr.physical.converged).dump(), gl["converged"].dump());
 				CHECK_MESSAGE(lr.physical.converged == gl["converged"].get<bool>(), (key + " ladder converged"));
 				ojson tried = ojson::array();
 				for (int tt : lr.physical.tried) {
 					tried.push_back(tt);
 				}
+				rebless_json("corpus", key, "ladder/tiers_tried", tried.dump(), gl["tiers_tried"].dump());
 				CHECK_MESSAGE(tried.dump() == gl["tiers_tried"].dump(), (key + " ladder tiers_tried"));
+				rebless_json("corpus", key, "ladder/planned_from_physical", ojson(lr.planned_from_physical).dump(), gl["planned_from_physical"].dump());
 				CHECK_MESSAGE(lr.planned_from_physical == gl["planned_from_physical"].get<bool>(), (key + " ladder planned_from_physical"));
 			}
 			{
@@ -415,8 +497,10 @@ TEST_CASE("goldens: the corpus: float64 walks, the ladder, and 4 limbs") {
 				Solver<BigFloat> sv(sc, &cache);
 				const CN<BigFloat> P{l.like(px), l.like(py)}, C{l.like(cx), l.like(cy)};
 				const std::string gp = encode_events(sv.planned(P, C, plan), nullptr);
+				rebless_json("corpus", key, "big4_planned", gp, gold[key]["big4_planned"].dump());
 				CHECK_MESSAGE(gp == gold[key]["big4_planned"].dump(), (key + " big4_planned: " + first_event_diff(gp, gold[key]["big4_planned"].dump())));
 				const std::string gh = encode_events(sv.physical(P, C, plan), nullptr);
+				rebless_json("corpus", key, "big4_physical", gh, gold[key]["big4_physical"].dump());
 				CHECK_MESSAGE(gh == gold[key]["big4_physical"].dump(), (key + " big4_physical: " + first_event_diff(gh, gold[key]["big4_physical"].dump())));
 			}
 			scenarios++;
@@ -617,6 +701,17 @@ TEST_CASE("goldens: the sweep combos of Tracer.trace_pair") {
 	}
 	// RC_SWEEP_PART=k/n: replay every n-th of the selected combos, from the k-th
 	// (ctest runs the parts as separate entries, in parallel)
+	std::set<std::pair<std::string, long>> dump_list;
+	if (const char *s = std::getenv("RC_SWEEP_DUMP")) {
+		std::ifstream in(s);
+		std::string line;
+		while (std::getline(in, line)) {
+			const size_t tab = line.find('\t');
+			if (tab != std::string::npos) {
+				dump_list.emplace(line.substr(0, tab), std::atol(line.c_str() + tab + 1));
+			}
+		}
+	}
 	long part_k = 0;
 	long part_n = 1;
 	if (const char *s = std::getenv("RC_SWEEP_PART")) {
@@ -677,6 +772,23 @@ TEST_CASE("goldens: the sweep combos of Tracer.trace_pair") {
 					continue;
 				}
 				const std::optional<TracePair> pair = tracer.trace_pair(p, c, plan, Flags());
+				if (dump_list.count({it.key(), i})) {
+					ojson d;
+					d["group"] = it.key();
+					d["combo"] = i;
+					d["player"] = ojson::array({hex(p.x), hex(p.y)});
+					d["cursor"] = ojson::array({hex(c.x), hex(c.y)});
+					d["plan"] = g["plan"];
+					d["defs"] = dump_defs(defs);
+					if (pair) {
+						d["planned"] = dump_climb(pair->result.planned);
+						d["physical"] = dump_climb(pair->result.physical);
+					} else {
+						d["planned"] = nullptr;
+						d["physical"] = nullptr;
+					}
+					std::printf("DUMP\t%s\n", d.dump().c_str());
+				}
 				const std::string canon = pair_canon(pair, defs);
 				combos++;
 				const std::string key = it.key() + " combo " + std::to_string(i);
@@ -686,10 +798,11 @@ TEST_CASE("goldens: the sweep combos of Tracer.trace_pair") {
 				}
 				if (hk * 16 + 16 > hashes.size() || sha16(canon) != hashes.substr(hk * 16, 16)) {
 					mismatches++;
-					// RC_SWEEP_REBLESS=1: print what an approved B-item regenerates
-					// (group, hash slot, new hash, canon) for the golden's update
+					// RC_SWEEP_REBLESS=1: print what an approved behaviour change
+					// regenerates (group, hash slot, combo, new hash, the canon as a
+					// JSON string: it spans lines) for docs/research/apply_rebless.py
 					if (std::getenv("RC_SWEEP_REBLESS")) {
-						std::printf("REBLESS\t%s\t%zu\t%ld\t%s\t%s\n", it.key().c_str(), hk, i, sha16(canon).c_str(), canon.c_str());
+						std::printf("REBLESS\t%s\t%zu\t%ld\t%s\t%s\n", it.key().c_str(), hk, i, sha16(canon).c_str(), ojson(canon).dump().c_str());
 					}
 					if (mismatch_keys.size() < 12) {
 						mismatch_keys.push_back(key + " tiers " + std::to_string(pair ? pair->result.planned.limbs : -1) + "/" +
