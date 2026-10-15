@@ -2,7 +2,13 @@
 
 entry_symbol = "ricochet_library_init"
 compatibility_minimum = "4.7"
-reloadable = true
+; Not hot-reloadable: during the migration every rebuild changes the set of
+; registered classes (classes appear, N*-prefixed ones went away), and Godot's
+; GDExtension hot reload cannot swap a class set while scripts and scenes
+; reference the old one: the open editor reloaded a wholly different library on
+; 2026-10-15 and reset itself with errors. With reloadable = false the editor
+; asks for a restart instead. Set it back to true once the class set is stable.
+reloadable = false
 
 [libraries]
 

@@ -318,6 +318,7 @@ void BeamSolverEvent::set_beam(const Ref<HPBeam> &b) {
 			return;
 		}
 		e.beam = *bp;
+		e.beam_view = -1; // a replaced beam is its own object (GDScript identity)
 		beam_obj = b;
 	}, event);
 }

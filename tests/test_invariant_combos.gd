@@ -172,9 +172,6 @@ func test_sweep_surface_combos() -> void:
 		if not supported:
 			continue
 
-		var checker := InvariantChecker.new()
-		checker.setup(scene)
-
 		var runner := SweepRunner.new().configure(5, 10, 42)
 		if "room_rect" in scene:
 			var rect: Rect2 = scene.room_rect
@@ -183,27 +180,26 @@ func test_sweep_surface_combos() -> void:
 		var positions := runner.build_positions(poi)
 
 		var plans := _generate_combo_plans(scene, combo)
-
-		for plan in plans:
-			for pi in positions.size():
-				if not SweepRunner.in_shard(pi):
-					continue
-				var player_pos: Vector2 = positions[pi]
-				for cursor_pos in positions:
-					if player_pos == cursor_pos:
-						continue
-					var violations := checker.check_all(player_pos, cursor_pos, plan)
-					total_combos += 1
-					if violations.size() > 0:
-						for v: String in violations:
-							total_failures.append({
-								"scene": COMBO_BASE,
-								"combo": {"label": label, "lines": combo.lines, "circles": combo.circles},
-								"player_pos": player_pos,
-								"cursor_pos": cursor_pos,
-								"plan": [],
-								"violation": v,
-							})
+		total_combos += plans.size() * SweepRunner.combo_count(positions, true)
+		var failing := SweepRunner.sweep_native(scene, positions, plans, true)
+		# one combo through the live PathRenderer: the driver path the game runs
+		var checker := InvariantChecker.new()
+		checker.setup(scene)
+		if plans.size() > 0 and positions.size() > 1:
+			var live := checker.check_all(positions[0], positions[1], plans[0])
+			if live.size() > 0:
+				failing.append({"player_pos": positions[0], "cursor_pos": positions[1], "plan_index": 0,
+					"violations": live.map(func(v): return "LIVE " + v)})
+		for f in failing:
+			for v: String in f.violations:
+				total_failures.append({
+					"scene": COMBO_BASE,
+					"combo": {"label": label, "lines": combo.lines, "circles": combo.circles},
+					"player_pos": f.player_pos,
+					"cursor_pos": f.cursor_pos,
+					"plan": [],
+					"violation": v,
+				})
 
 	_save_violations(total_failures)
 	if total_failures.size() > 0:

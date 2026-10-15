@@ -8,6 +8,7 @@
 #include "gd_tracer.hpp"
 #include "gd_geom.hpp"
 #include "gd_visual.hpp"
+#include "gd_invariants.hpp"
 #include "rc/error.hpp"
 
 #include <gdextension_interface.h>
@@ -76,6 +77,9 @@ void initialize_ricochet_module(godot::ModuleInitializationLevel p_level) {
     GDREGISTER_CLASS(ArrowAdvanceResult);
     GDREGISTER_CLASS(ArrowAdvance);
     GDREGISTER_CLASS(SurfaceGeom);
+    // Stage 98: the invariant kernel and the native sweep
+    GDREGISTER_CLASS(InvariantKernel);
+    GDREGISTER_CLASS(SweepKernel);
 }
 
 void uninitialize_ricochet_module(godot::ModuleInitializationLevel p_level) {

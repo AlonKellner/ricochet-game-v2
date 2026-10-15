@@ -22,7 +22,7 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 95 | `ErrorEstimate` + `PrecisionLadder` | Done: flipped; identical on the corpus |
 | 96 | `TraceStep`/`TracePath` (float32), `Tracer` (`trace_pair`, `plan_refuses`, `to_path`) | Done: `BeamTracer` is an instance per owner; `Point`/`Direction`/`Ray`/`TraceHit`/`TraceStep`/`TracePath` native; 284,096 sweep combos identical; full suite green |
 | 97 | Visual/testing kernels: arc geometry, `VisualConverter`, `StepTreeMerge`, click geometry, arrow advance | Done: `GeneralizedCircle`, `Segment`, `VisualConverter`, `StepTreeMerge`, `ArrowAdvance`, `SurfaceGeom` native (float32 Vector2 semantics mirrored); `test_diff_visual.gd` identical on the sweep scenes and random inputs |
-| 98 | `InvariantChecker` kernel + native sweeps (shard by combo) | Planned |
+| 98 | `InvariantChecker` kernel + native sweeps (shard by combo) | Done: `rc/invariants.hpp` + `rc/sweep.hpp`; `InvariantKernel` / `SweepKernel` bindings; `InvariantChecker` is a thin driver; the plan sweeps run natively (one live combo per scene kept); `test_invariant_detects.gd`, `test_diff_invariants.gd` |
 | 99 | Delete the GDScript implementations, final names, source-scan tests rewritten | Planned |
 | 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Planned |
 | 88c | Native `infinity` event, ∞ plan item, reversed anchored orientation | Planned |
@@ -526,6 +526,66 @@ triples and three bounds; surface samples on 300 random inputs; and on the
 sweep scenes' traces (every 37th combo, `DIFF_STRIDE`) the display paths at
 two bounds, display ends, arc params, start directions, arrow flights in
 random increments, physical hits, merged and classified steps.
+
+## Stage 98: the invariant kernel and the native sweeps
+
+`rc/invariants.hpp` is `InvariantChecker.check_all` as a function of data: the
+display paths, the merged typed steps, the ladder's events (tier-agnostic
+`EvInfo` records: float64 values, beam identity by `beam_view`), the surfaces
+(points, carrier, "a trace may not cross it") and the F64 scene. A violation is
+the GDScript format string with its arguments; `InvariantKernel` renders it
+with Godot's `%` operator, so the messages are the GDScript checker's to the
+character (`%s` of a Vector2, a float, a bool or a nested Array included).
+The B4 carrier-distance formula of TRACE-ENDS is reproduced as it is.
+
+`rc/sweep.hpp` runs a whole sweep natively: trace pair, display paths
+(`prepare_for_display` on core paths), merged steps and `check_all` per
+combo, sharded by player index exactly as `SweepRunner.in_shard`. Positions
+stay in GDScript (`SweepRunner.build_positions`: Godot's RNG). GDScript side:
+`InvariantChecker` is a thin driver (positions the nodes, sets the plan, lets
+`PathRenderer` trace, hands the kernel what the renderer exposes, plus
+`surface_infos` with the per-flags "has effect"); `SweepRunner.sweep` and
+`sweep_native` call `SweepKernel`; the plan / projective / combo sweeps run
+natively and keep one combo per scene through the live renderer. The
+inversion-grid precision sweep stays live (its extra LONG-ARC-CHORD check reads
+the renderer's display paths). `check_S11` / `check_S12` (unused) are gone
+(A-list). The GDScript checker survives as `GdInvariantChecker`
+(`scripts/testing/gd_kernels/`) for the differential test.
+
+Tests: `tests/native/invariant_cases.gd` holds hand-corrupted traces, one or
+more per invariant, fed to a fake renderer; `tests/test_invariant_detects.gd`
+asserts the kernel trips each (and nothing on the clean one) and that the
+event checks catch an offset point, a rotated beam and an unapplied plan;
+`tests/native/test_diff_invariants.gd` asserts the GDScript checker, the
+driver and `SweepKernel` return identical strings on those cases, on 40
+random event walks with corruptions, and on every 41st combo of the sweep
+scenes (`DIFF_STRIDE`). Findings while matching: Godot 4.7's
+`Vector2.normalize` zeroes non-finite and zero-length vectors (now mirrored by
+`V2::normalized`; the goldens are unchanged), a hit without a `Segment` is a
+hit on no surface for VISUAL-ON-CARRIER, and two checkers on one scene without
+a GameManager each install their own plan (a harness pitfall, not a kernel
+difference). VIA_ON_ARC cannot be tripped by a consistent (start, via, end)
+triple: `arc_params` orients the arc so the via lies inside the span.
+
+**Gate:** `./run_tests_parallel.sh` 766 passing / 0 failing in 39 s (65 s before
+the native sweeps; about 5 minutes in GDScript); `make test-fast` 706 passing;
+ctest 50131 assertions.
+
+## Machine quirks: the open editor and the migration
+
+The Godot editor (launched from VSCode) stayed open through Stages 90-97. It
+does not rescan while unfocused; when it did, it found 44 changed scripts (two
+class flips) and a rebuilt `libricochet_gd` whose registered classes had all
+changed names (`NBeamSolver` -> `BeamSolver`, ...). With `reloadable = true`
+it hot-reloaded that library; a class-set swap is not something GDExtension
+hot reload supports ("cannot change parent type ... Restart Godot", "Some
+extensions need the editor to restart"), and the editor reset itself with
+errors. `ricochet.gdextension` now has `reloadable = false`: the editor asks
+for a restart when the library changes. Also, `godot --headless --import`
+(run by `make native`) rewrites `.godot/` while the editor has it open; run
+the suite with the editor closed, or restart the editor afterwards. The five
+`Godot-*.ips` crash reports of that night are headless test processes (the
+two aborts fixed in Stages 93 and 96), not the editor.
 
 ## B-list: behaviour changes awaiting approval (found during the port)
 

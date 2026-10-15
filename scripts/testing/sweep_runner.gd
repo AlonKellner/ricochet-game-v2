@@ -1,6 +1,10 @@
 class_name SweepRunner
 extends RefCounted
 
+# Positions (grid, fuzz, points of interest) of the invariant sweeps and the
+# sweep itself: SweepKernel checks every combo natively; the positions stay
+# here (Godot's RandomNumberGenerator).
+
 var _bounds_min := Vector2(0, 0)
 var _bounds_max := Vector2(1920, 1080)
 var _grid_size := 5
@@ -80,25 +84,15 @@ func sweep(scene: Node, custom_positions: Array[Vector2] = []) -> Dictionary:
 	all_custom.append_array(poi)
 	all_custom.append_array(custom_positions)
 
-	var checker := InvariantChecker.new()
-	checker.setup(scene)
-
 	var positions := build_positions(all_custom)
 	var total := positions.size() * positions.size()
 	var failures: Array[Dictionary] = []
-
-	for pi in positions.size():
-		if not in_shard(pi):
-			continue
-		var player_pos: Vector2 = positions[pi]
-		for cursor_pos in positions:
-			var violations := checker.check_all(player_pos, cursor_pos)
-			if violations.size() > 0:
-				failures.append({
-					"player_pos": player_pos,
-					"cursor_pos": cursor_pos,
-					"violations": violations,
-				})
+	for f in sweep_native(scene, positions, [[]], false):
+		failures.append({
+			"player_pos": f.player_pos,
+			"cursor_pos": f.cursor_pos,
+			"violations": f.violations,
+		})
 
 	return {
 		"total_combos": total,
@@ -107,6 +101,33 @@ func sweep(scene: Node, custom_positions: Array[Vector2] = []) -> Dictionary:
 		"fail_count": failures.size(),
 		"failures": failures,
 	}
+
+# The native sweep of one scene (SweepKernel, no scene tree in the loop):
+# every (player, cursor) combo of `positions` in this shard under each plan
+# (PlanEntry arrays), as PathRenderer + InvariantChecker.check_all would
+# check it. Returns the failing combos:
+# [{player_pos, cursor_pos, plan_index, violations: Array[String]}].
+static func sweep_native(scene: Node, positions: Array[Vector2], plans: Array, skip_equal: bool) -> Array[Dictionary]:
+	var renderer: Node = scene.get_node_or_null("PathRenderer")
+	var flags: Dictionary = renderer.get_flags() if renderer and renderer.has_method("get_flags") else {}
+	var surfaces: Array = scene.surfaces if "surfaces" in scene else []
+	var defs := SceneDefs.defs_from_surfaces(surfaces)
+	var infos := InvariantChecker.surface_infos(surfaces, flags)
+	var sh := shard()
+	var out: Array[Dictionary] = []
+	for raw in SweepKernel.run(defs, infos, PackedVector2Array(positions), plans, flags, sh.x, sh.y, skip_equal):
+		var violations: Array[String] = []
+		violations.assign(raw.violations)
+		out.append({"player_pos": raw.player, "cursor_pos": raw.cursor, "plan_index": raw.plan_index, "violations": violations})
+	return out
+
+# Combos of `positions` in this shard: the count the native sweep checks per plan.
+static func combo_count(positions: Array[Vector2], skip_equal: bool) -> int:
+	var n := 0
+	for pi in positions.size():
+		if in_shard(pi):
+			n += positions.size() - (1 if skip_equal else 0)
+	return n
 
 func _extract_points_of_interest(scene: Node) -> Array[Vector2]:
 	var points: Array[Vector2] = []

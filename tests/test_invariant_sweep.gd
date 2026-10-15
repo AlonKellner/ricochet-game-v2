@@ -66,34 +66,25 @@ func test_sweep_with_plans() -> void:
 		plans.append_array(SweepPlans.inversion_plans(scene))
 		if plans.is_empty():
 			continue
-		var checker := InvariantChecker.new()
-		checker.setup(scene)
-
 		var runner := SweepPlans.bounded_runner(scene, 5, 10, 42)
 		var poi := runner._extract_points_of_interest(scene)
 		var positions := runner.build_positions(poi)
-
-		for plan in plans:
-			for pi in positions.size():
-				if not SweepRunner.in_shard(pi):
-					continue
-				var player_pos: Vector2 = positions[pi]
-				for cursor_pos in positions:
-					if player_pos == cursor_pos:
-						continue
-					var violations := checker.check_all(player_pos, cursor_pos, plan)
-					if violations.size() > 0:
-						total_combos += 1
-						for v: String in violations:
-							total_failures.append({
-								"scene": scene_path,
-								"player_pos": player_pos,
-								"cursor_pos": cursor_pos,
-								"plan": SweepPlans.plan_to_data(plan),
-								"violation": v,
-							})
-					else:
-						total_combos += 1
+		total_combos += plans.size() * SweepRunner.combo_count(positions, true)
+		for f in SweepRunner.sweep_native(scene, positions, plans, true):
+			for v: String in f.violations:
+				total_failures.append({
+					"scene": scene_path,
+					"player_pos": f.player_pos,
+					"cursor_pos": f.cursor_pos,
+					"plan": SweepPlans.plan_to_data(plans[f.plan_index]),
+					"violation": v,
+				})
+		# one combo through the live PathRenderer: the driver path the game runs
+		var checker := InvariantChecker.new()
+		checker.setup(scene)
+		for v: String in checker.check_all(positions[0], positions[1], plans[0]):
+			total_failures.append({"scene": scene_path, "player_pos": positions[0], "cursor_pos": positions[1],
+				"plan": SweepPlans.plan_to_data(plans[0]), "violation": "LIVE " + v})
 
 	_save_violations(total_failures)
 	if total_failures.size() > 0:
@@ -156,22 +147,19 @@ func test_sweep_projective_plans() -> void:
 		await get_tree().process_frame
 		assert_gt(SweepPlans.projective_surfaces(scene).size(), 0, "%s has projective surfaces" % name)
 		var plans := SweepPlans.projective_plans(scene)
-		var checker := InvariantChecker.new()
-		checker.setup(scene)
 		var runner := SweepPlans.bounded_runner(scene, 4, 6, 87)
 		var positions := runner.build_positions()
-		for plan in plans:
-			for pi in positions.size():
-				if not SweepRunner.in_shard(pi):
-					continue
-				var player_pos: Vector2 = positions[pi]
-				for cursor_pos in positions:
-					if player_pos == cursor_pos:
-						continue
-					total_combos += 1
-					for v: String in checker.check_all(player_pos, cursor_pos, plan):
-						total_failures.append({"scene": scene_path, "player_pos": player_pos, "cursor_pos": cursor_pos,
-							"plan": SweepPlans.plan_to_data(plan), "violation": v})
+		total_combos += plans.size() * SweepRunner.combo_count(positions, true)
+		for f in SweepRunner.sweep_native(scene, positions, plans, true):
+			for v: String in f.violations:
+				total_failures.append({"scene": scene_path, "player_pos": f.player_pos, "cursor_pos": f.cursor_pos,
+					"plan": SweepPlans.plan_to_data(plans[f.plan_index]), "violation": v})
+		var checker := InvariantChecker.new()
+		checker.setup(scene)
+		for v: String in checker.check_all(positions[0], positions[1], plans[0]):
+			total_failures.append({"scene": scene_path, "player_pos": positions[0], "cursor_pos": positions[1],
+				"plan": SweepPlans.plan_to_data(plans[0]), "violation": "LIVE " + v})
+
 	_save_violations(total_failures)
 	if total_failures.size() > 0:
 		var report := "Projective plan sweep violations (%d):\n" % total_failures.size()

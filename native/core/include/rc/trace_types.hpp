@@ -34,14 +34,18 @@ struct V2 {
 	float cross(const V2 &o) const { return x * o.y - y * o.x; }
 	float length_squared() const { return x * x + y * y; }
 	float length() const { return std::sqrt(x * x + y * y); }
-	// Godot: l = x*x + y*y; if l != 0: l = sqrt(l); x /= l; y /= l
+	// Godot 4.7 Vector2::normalize: non-finite components -> (0, 0); zero length
+	// -> (0, 0); else divide by sqrt(x*x + y*y), all in float.
 	V2 normalized() const {
-		float l = x * x + y * y;
-		if (l != 0.0f) {
-			l = std::sqrt(l);
-			return V2{x / l, y / l};
+		if (!std::isfinite(x) || !std::isfinite(y)) {
+			return V2{};
 		}
-		return *this;
+		float l = x * x + y * y;
+		if (l == 0.0f) {
+			return V2{};
+		}
+		l = std::sqrt(l);
+		return V2{x / l, y / l};
 	}
 	float distance_squared_to(const V2 &o) const { return (x - o.x) * (x - o.x) + (y - o.y) * (y - o.y); }
 	float distance_to(const V2 &o) const { return std::sqrt((x - o.x) * (x - o.x) + (y - o.y) * (y - o.y)); }
