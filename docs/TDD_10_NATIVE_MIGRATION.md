@@ -23,7 +23,7 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 96 | `TraceStep`/`TracePath` (float32), `Tracer` (`trace_pair`, `plan_refuses`, `to_path`) | Done: `BeamTracer` is an instance per owner; `Point`/`Direction`/`Ray`/`TraceHit`/`TraceStep`/`TracePath` native; 284,096 sweep combos identical; full suite green |
 | 97 | Visual/testing kernels: arc geometry, `VisualConverter`, `StepTreeMerge`, click geometry, arrow advance | Done: `GeneralizedCircle`, `Segment`, `VisualConverter`, `StepTreeMerge`, `ArrowAdvance`, `SurfaceGeom` native (float32 Vector2 semantics mirrored); `test_diff_visual.gd` identical on the sweep scenes and random inputs |
 | 98 | `InvariantChecker` kernel + native sweeps (shard by combo) | Done: `rc/invariants.hpp` + `rc/sweep.hpp`; `InvariantKernel` / `SweepKernel` bindings; `InvariantChecker` is a thin driver; the plan sweeps run natively (one live combo per scene kept); `test_invariant_detects.gd`, `test_diff_invariants.gd` |
-| 99 | Delete the GDScript implementations, final names, source-scan tests rewritten | Planned |
+| 99 | Delete the GDScript implementations, final names, source-scan tests rewritten | Done: 25 GDScript implementation files, the Gd* test copies, the differential tests and `tools/dump_goldens.gd` deleted; `test_stage99_no_legacy.gd` scans for Gd* / N* / inner-class names and checks every registered class is a RefCounted; the goldens stay as pins |
 | 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Planned |
 | 88c | Native `infinity` event, ∞ plan item, reversed anchored orientation | Planned |
 | 88d | Edge click, hover band, plan chevrons, HUD, `level_bounds` | Planned |
@@ -570,6 +570,27 @@ triple: `arc_params` orients the arc so the via lies inside the span.
 **Gate:** `./run_tests_parallel.sh` 766 passing / 0 failing in 39 s (65 s before
 the native sweeps; about 5 minutes in GDScript); `make test-fast` 706 passing;
 ctest 50131 assertions.
+
+## Stage 99: the GDScript implementations are gone
+
+Deleted: `scripts/math/precision/` (15 files), the trace data classes
+(`point.gd`, `direction.gd`, `ray.gd`, `trace_hit.gd`, `trace_step.gd`,
+`trace_path.gd`), `segment.gd`, `generalized_circle.gd`, `step_tree_merge.gd`,
+`scripts/visual/visual_converter.gd`, `scripts/testing/gd_kernels/`, the six
+`tests/native/test_diff_*.gd` with `diff_helpers.gd`, and `tools/dump_goldens.gd`.
+`bench/goldens/*.json` stay as the regression pins `native/tests/test_goldens.cpp`
+replays (50131 assertions); they were produced by the GDScript stack at tag
+`pre-native` and are regenerated only by an approved B-item, by checking out
+that tag's dumper. `tests/test_stage99_no_legacy.gd` replaces the differential
+tests' role as the gate against drift back: deleted files stay deleted, no
+`Gd*` / `N*` / inner-class names in scripts, tests or tools, every registered
+extension class is a RefCounted and not a Node (the native-era
+`test_stage1_math_layer.gd`), and the goldens exist. Kept until their own
+B-items: `TestTrace` / `TraceMode` (B6) and `TraceHit.at_endpoint` /
+`blocked_*`.
+
+**Gate:** `./run_tests_parallel.sh` 734 passing / 0 failing in 11 s wall (the
+GDScript suite took about 5 minutes of wall time and 24 minutes of CPU).
 
 ## Machine quirks: the open editor and the migration
 
