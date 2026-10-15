@@ -1,0 +1,120 @@
+{
+ "planned": [
+  {
+   "kind": "hit",
+   "surface_id": 6,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "762.4654091708494424161542890473537124164",
+   "y": "564.9308183416988848323085780947074248327"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 11,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1000.000000000000000000000000000000000000",
+   "y": "709.7618164321964109908720322586169562272"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1100.000000000000000000000000000000000000",
+   "y": "770.7344089228071197509472380065597104235"
+  },
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1118.540649414062500000000000000000000000",
+   "y": "782.0391235351562500000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 3,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1213.601190711809124562002042387018962740",
+   "y": "840.0000000000000000000000000000000000000"
+  }
+ ],
+ "physical": [
+  {
+   "kind": "hit",
+   "surface_id": 6,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "762.4654091708494424161542890473537124164",
+   "y": "564.9308183416988848323085780947074248327"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 11,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1000.000000000000000000000000000000000000",
+   "y": "709.7618164321964109908720322586169562272"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1100.000000000000000000000000000000000000",
+   "y": "770.7344089228071197509472380065597104235"
+  },
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1118.540649414062500000000000000000000000",
+   "y": "782.0391235351562500000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 3,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1213.601190711809124562002042387018962740",
+   "y": "840.0000000000000000000000000000000000000"
+  }
+ ],
+ "planned_targets": [],
+ "physical_targets": [],
+ "name": "test_levels__ghost_room__03",
+ "dps": 120
+}

@@ -1,0 +1,54 @@
+{
+ "planned": [
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "759.0476074218750000000000000000000000000",
+   "y": "808.4281616210937500000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 3,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "764.4115055659103442361659532428852479935",
+   "y": "840.0000000000000000000000000000000000000"
+  }
+ ],
+ "physical": [
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "759.0476074218750000000000000000000000000",
+   "y": "808.4281616210937500000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 3,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "764.4115055659103442361659532428852479935",
+   "y": "840.0000000000000000000000000000000000000"
+  }
+ ],
+ "planned_targets": [],
+ "physical_targets": [],
+ "name": "test_levels__flag_switches__11",
+ "dps": 120
+}

@@ -161,15 +161,21 @@ PASS0 = {"type": "pass", "interactive": False}
 def build_surfaces(props):
     out = []
 
-    def add(s, e, via, left, right, full=False, is_target=False, player_solid=True, line=None, circle=None):
+    def add(s, e, via, left, right, full=False, is_target=False, player_solid=True, line=None, circle=None,
+            resolver=None, pre_transform=False):
         if line is None:
             line = False if full else derive_is_line(s, e, via)
-        out.append({
+        d = {
             "circle": circle,
             "id": len(out) + 1, "start": list(s), "end": list(e),
             "via": None if via is None else list(via), "full": full, "line": line,
             "left": left, "right": right, "is_target": is_target, "player_solid": player_solid,
-        })
+        }
+        if pre_transform:
+            d["pre_transform"] = True
+        if resolver is not None:
+            d["resolver"] = resolver
+        out.append(d)
 
     def flag(key):
         v = props.get(key)
@@ -248,10 +254,35 @@ def build_surfaces(props):
     for a in arcs("portal_arcs", 9):
         portal(v2(a[0], a[1]), v2(a[2], a[3]), v2(a[4], a[5]), a[6], (a[7], a[8]))
 
-    for v in [(0, 0, 1920, 0), (1920, 0, 1920, 1080), (1920, 1080, 0, 1080), (0, 1080, 0, 0)]:
+    # the level's edge walls along level_bounds (Stage 100)
+    bx, by, bw, bh = (f32(x) for x in (_nums(props["level_bounds"].split("(", 1)[1]) if "level_bounds" in props
+                                       else (0.0, 0.0, 1920.0, 1080.0)))
+    ex, ey = f32(bx + bw), f32(by + bh)
+    for v in [(bx, by, ex, by), (ex, by, ex, ey), (ex, ey, bx, ey), (bx, ey, bx, by)]:
         add(*seg_from_v4(v), PASS0, PASS0, player_solid=False)
+    # state flags (Stage 85) and ghost togglers (Stage 86), as LevelSettings builds them
+    key = props.get("state_key", '"open"').strip('"')
+    for v in lines("toggle_lines"):
+        tog = _cfg("pass", True, state={"key": key, "op": "toggle", "value": True})
+        add(*seg_from_v4(v), tog, tog, player_solid=False)
+    for v in lines("ghost_toggler_lines"):
+        g = _cfg("pass", True, state={"key": "ghost", "op": "toggle", "value": True})
+        add(*seg_from_v4(v), g, g, player_solid=False)
+    for v in lines("gate_lines"):
+        opn, block = _cfg("pass", False), _cfg("terminal", False)
+        add(*seg_from_v4(v), None, None, player_solid=False,
+            resolver={"key": key, "table": {"true": {"left": opn, "right": opn}, "DEFAULT": {"left": block, "right": block}}})
+    for v in lines("flag_mirror_lines"):
+        refl, off = _cfg("reflection", True), _cfg("pass", False)
+        add(*seg_from_v4(v), None, None, player_solid=False,
+            resolver={"key": key, "table": {"true": {"left": refl, "right": refl}, "DEFAULT": {"left": off, "right": off}}})
     for v in lines("passthrough_lines"):
         add(*seg_from_v4(v), PASS0, PASS0, player_solid=False)
+    # the pre-transform (Stage 101): full inversion circles, never hit
+    for a in arcs("pre_transform_inversions", 3):
+        s, e, v = full_circle_points(*a)
+        inv = _cfg("inversion", False)
+        add(s, e, v, inv, inv, full=True, player_solid=False, circle=full_circle_carrier(*a), pre_transform=True)
     return out
 
 

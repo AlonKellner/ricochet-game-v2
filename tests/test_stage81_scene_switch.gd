@@ -67,3 +67,15 @@ func test_scene_defs_match_dump():
 			continue
 		var defs: Array = SceneDefs.defs_from_surfaces(scene.surfaces)
 		assert_true(JSON.parse_string(JSON.stringify(defs, "", false, true)) == dump["surfaces"], fn)
+
+
+# Stage 103: every level has a dump (the oracle importer's round trip and the
+# scene corpus cover every scene the game ships).
+func test_every_level_has_a_dump():
+	for dir in ["res://scenes/test_levels", "res://scenes/playground"]:
+		for fn in DirAccess.open(dir).get_files():
+			if not fn.ends_with(".tscn"):
+				continue
+			var rel: String = (dir + "/" + fn).trim_prefix("res://scenes/").trim_suffix(".tscn").replace("/", "__")
+			assert_true(FileAccess.file_exists("res://bench/scenes/%s.surfaces.json" % rel),
+				"%s has a dump (godot --headless --path . -s res://scripts/testing/dump_scene_surfaces.gd)" % fn)

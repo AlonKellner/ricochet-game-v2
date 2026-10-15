@@ -346,6 +346,7 @@ TEST_CASE("goldens: every stage fixture, generic f64, the float64 walk with gain
 TEST_CASE("goldens: the corpus: float64 walks, the ladder, and 4 limbs") {
 	const ojson gold = load_json("bench/goldens/corpus.json");
 	int scenarios = 0;
+	int unpinned = 0;
 	for (const char *sub : {"", "stress", "scenes_corpus"}) {
 		const std::string dir = repo_root() + "/bench/" + (std::string(sub).empty() ? "" : std::string(sub) + "/") + "scenarios";
 		std::vector<std::string> names;
@@ -362,6 +363,13 @@ TEST_CASE("goldens: the corpus: float64 walks, the ladder, and 4 limbs") {
 				scn = ojson::parse(in);
 			}
 			const std::string key = std::string(std::string(sub).empty() ? "main" : sub) + "/" + name;
+			if (!gold.contains(key)) {
+				// a scenario added after tag pre-native (Stage 103: the scenes
+				// dumped since): no GDScript golden; the GUT corpus test checks it
+				// against the oracle
+				unpinned++;
+				continue;
+			}
 			const ojson &inp = gold[key]["inputs"];
 			const std::vector<SurfaceDef> defs = defs_of(scn["surfaces"], inp);
 			std::vector<PlanItem> plan;
@@ -414,7 +422,8 @@ TEST_CASE("goldens: the corpus: float64 walks, the ladder, and 4 limbs") {
 			scenarios++;
 		}
 	}
-	CHECK(scenarios == 549);
+	CHECK(scenarios == 549); // every pinned scenario was replayed
+	MESSAGE("corpus: " << scenarios << " pinned scenarios replayed, " << unpinned << " added since (oracle-checked in GUT)");
 }
 
 namespace {

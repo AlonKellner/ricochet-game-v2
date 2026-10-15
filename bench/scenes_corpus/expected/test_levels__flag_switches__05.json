@@ -1,0 +1,65 @@
+{
+ "planned": [
+  {
+   "kind": "hit",
+   "surface_id": 10,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1100.000000000000000000000000000000000000",
+   "y": "617.1209997337691067950183882869402785975"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 9,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "800.0000000000000000000000000000000000000",
+   "y": "567.2646182959520598747830133075630863701"
+  },
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "630.0721435546875000000000000000000000000",
+   "y": "539.0246582031250000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 4,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "560.0000000000000000000000000000000000000",
+   "y": "527.3795131456984223385947133240613325881"
+  }
+ ],
+ "physical": [
+  {
+   "kind": "hit",
+   "surface_id": 10,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1100.000000000000000000000000000000000000",
+   "y": "617.1209997337691067950183882869402785975"
+  }
+ ],
+ "planned_targets": [],
+ "physical_targets": [],
+ "name": "test_levels__flag_switches__05",
+ "dps": 120
+}
