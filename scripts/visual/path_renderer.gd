@@ -10,6 +10,14 @@ const DASH_OFF := 5.0
 const MAX_DASH_LEN := 4000.0
 var _draw_bounds: Rect2 = VisualConverter.DEFAULT_BOUNDS().grow(50.0)
 
+# Stage 100: the trace is recomputed only when one of its inputs changed
+# (positions, plan entries, the game state's flags, the surfaces).
+# `trace_version` counts the recomputations; a direct `_compute_trace()` call
+# always recomputes (the invariant checker and the tests rely on that).
+var trace_version := 0
+var _defs_cache := SceneDefsCache.new()
+var _last_inputs = null   # the inputs of the last computation (null: none yet)
+
 enum DisplayMode { MERGED, PHYSICAL, PLANNED }
 const DISPLAY_MODE_NAMES := ["MERGED", "PHYSICAL", "PLANNED"]
 
@@ -28,13 +36,36 @@ var last_beam_result: PrecisionLadderResult = null
 func _ready() -> void:
 	_player = get_node_or_null("../Player")
 	_cursor = get_node_or_null("../Cursor")
+	_draw_bounds = _level_bounds().grow(50.0)
 	z_index = 20
 
 func _process(_delta: float) -> void:
 	if not _player or not _cursor:
 		return
-	_compute_trace()
+	var inputs := _inputs()
+	if _last_inputs != null and inputs == _last_inputs:
+		return
+	_compute_from(inputs)
 	queue_redraw()
+
+# What the traces depend on: the positions, the plan entries (by value), the
+# flags (a copy: the state may be edited in place) and the surfaces (the defs
+# cache's version: the same array with the same count is the same scene).
+func _inputs() -> Array:
+	var entries: Array = []
+	var plan := _get_plan()
+	if plan:
+		for e in plan.entries:
+			entries.append([e.surface_id, e.side, e.click])
+	return [_player.global_position, _cursor.global_position, entries, get_flags().duplicate(true), _defs_cache.version_of(_get_surfaces())]
+
+# The level's bounds (the parent's `level_bounds`; the default 1920x1080
+# without one): the display clipping and the drawing bounds.
+func _level_bounds() -> Rect2:
+	var parent := get_parent()
+	if parent and "level_bounds" in parent:
+		return parent.level_bounds
+	return VisualConverter.DEFAULT_BOUNDS()
 
 func _compute_trace() -> void:
 	if not _player or not _cursor:
@@ -42,9 +73,13 @@ func _compute_trace() -> void:
 		_planned_path = null
 		_merged_steps = []
 		return
+	_compute_from(_inputs())
 
-	var player_pos := _player.global_position
-	var cursor_pos := _cursor.global_position
+func _compute_from(inputs: Array) -> void:
+	_last_inputs = inputs
+	trace_version += 1
+	var player_pos: Vector2 = inputs[0]
+	var cursor_pos: Vector2 = inputs[1]
 	if player_pos == cursor_pos:
 		_traced_path = null
 		_planned_path = null
@@ -57,10 +92,10 @@ func _compute_trace() -> void:
 	if plan and not plan.is_empty():
 		plan_entries = plan.entries
 
-	var bounds := VisualConverter.DEFAULT_BOUNDS()
+	var bounds := _level_bounds()
 	# The precision-converging beam solver; null only for player = cursor (no
 	# line, UX7).
-	var pair: BeamTracerPair = _tracer.trace_pair(SceneDefs.defs_from_surfaces(surfaces), player_pos, cursor_pos, plan_entries, get_flags(), SceneDefs.segments_by_id(surfaces))
+	var pair: BeamTracerPair = _tracer.trace_pair(_defs_cache.defs(surfaces), player_pos, cursor_pos, plan_entries, get_flags(), _defs_cache.segments(surfaces))
 	last_solver = "beam"
 	if pair == null:
 		last_beam_result = null
@@ -108,6 +143,7 @@ func _get_surfaces() -> Array:
 
 func cycle_display_mode() -> void:
 	display_mode = (display_mode + 1) % 3
+	queue_redraw()
 	print("[PathRenderer] Display mode: %s" % DISPLAY_MODE_NAMES[display_mode])
 	queue_redraw()
 

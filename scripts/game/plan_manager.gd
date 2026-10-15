@@ -14,19 +14,24 @@ class PlanEntry extends RefCounted:
 		click = p_click
 
 var entries: Array = []
+# Bumped by every change (the per-frame dirty keys compare it; Stage 100).
+var version := 0
 
 func add_entry(surface_id: int, side: Side.Value, click: Vector2 = Vector2(INF, INF)) -> void:
 	entries.append(PlanEntry.new(surface_id, side, click))
+	version += 1
 
 func remove_last_of(surface_id: int) -> void:
 	for i in range(entries.size() - 1, -1, -1):
 		var entry: PlanEntry = entries[i]
 		if entry.surface_id == surface_id:
 			entries.remove_at(i)
+			version += 1
 			return
 
 func clear() -> void:
 	entries.clear()
+	version += 1
 
 func is_empty() -> bool:
 	return entries.size() == 0
@@ -41,3 +46,4 @@ func restore_from(p_entries: Array) -> void:
 	entries.clear()
 	for entry in p_entries:
 		entries.append(PlanEntry.new(entry.surface_id, entry.side, entry.click))
+	version += 1

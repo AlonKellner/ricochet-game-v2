@@ -28,7 +28,7 @@ func setup(scene: Node) -> void:
 	elif _renderer and "plan_override" in _renderer:
 		_plan = PlanManager.new()
 		_renderer.plan_override = _plan
-	_defs_cache = []
+	_defs_cache = SceneDefsCache.new()
 	_scene_cache = null
 
 func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = []) -> Array[String]:
@@ -143,22 +143,18 @@ func _flags() -> Dictionary:
 func _beam_result():
 	return _renderer.last_beam_result if _renderer and "last_beam_result" in _renderer else null
 
-var _defs_cache: Array = []
+var _defs_cache := SceneDefsCache.new()
 var _scene_cache: BeamScene = null
-var _defs_src: Array = []
-var _defs_n := -1
+var _scene_version := -1
 
 # Scene defs of the checked scene, built once per surface set (the same
 # surfaces array with the same surfaces: sweeps never edit surfaces).
 func _defs() -> Array:
-	var surfaces := _surfaces()
-	if _scene_cache != null and is_same(surfaces, _defs_src) and surfaces.size() == _defs_n:
-		return _defs_cache
-	_defs_src = surfaces
-	_defs_n = surfaces.size()
-	_defs_cache = SceneDefs.defs_from_surfaces(surfaces)
-	_scene_cache = BeamScene.from_defs(NumCtx.f64(), _defs_cache)
-	return _defs_cache
+	var defs := _defs_cache.defs(_surfaces())
+	if _scene_cache == null or _defs_cache.version != _scene_version:
+		_scene_version = _defs_cache.version
+		_scene_cache = BeamScene.from_defs(NumCtx.f64(), defs)
+	return defs
 
 func _beam_scene() -> BeamScene:
 	_defs()

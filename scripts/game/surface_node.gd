@@ -30,9 +30,12 @@ var _plan_indices: Array[int] = []
 var _cached_left_outer: bool = true
 var _hover_overlays: Array = []
 var _plan_overlays: Array = []
+# The arc parameters of the surface's segment (immutable after setup), computed once.
+var _arc_cache: Dictionary = {}
 
 func setup(p_surface: Surface) -> void:
 	surface = p_surface
+	_arc_cache = {}
 	add_to_group("surface_nodes")   # redrawn when the game state changes
 	_cached_left_outer = _is_left_outer()
 	if surface.player_solid:
@@ -47,11 +50,16 @@ func clear_hover() -> void:
 		_hover_overlays.clear()
 		queue_redraw()
 
+# Unchanged overlays leave the node alone (no redraw; Stage 100).
 func set_hover_overlays(overlays: Array) -> void:
+	if ChevronOverlay.same_list(_hover_overlays, overlays):
+		return
 	_hover_overlays = overlays
 	queue_redraw()
 
 func set_plan_overlays(overlays: Array, indices: Array[int]) -> void:
+	if ChevronOverlay.same_list(_plan_overlays, overlays) and _plan_indices == indices:
+		return
 	_plan_overlays = overlays
 	_plan_indices = indices
 	queue_redraw()
@@ -238,7 +246,9 @@ func _draw_directed_chevrons(side: int, is_arc: bool, base_color: Color, dist: f
 			draw_polygon(chevron_vertices(tip, dir, CHEVRON_SIZE), colors)
 
 func _arc_params() -> Dictionary:
-	return VisualConverter.arc_params(surface.segment.start.coords, surface.segment.via.coords, surface.segment.end.coords)
+	if _arc_cache.is_empty():
+		_arc_cache = VisualConverter.arc_params(surface.segment.start.coords, surface.segment.via.coords, surface.segment.end.coords)
+	return _arc_cache
 
 func _is_left_outer() -> bool:
 	var carrier := surface.segment.get_carrier()

@@ -183,11 +183,13 @@ func _ready() -> void:
 		var result := RigidMotionEffect.create_portal_pair(seg, portal_arcs[i + 6],
 			Vector2(portal_arcs[i + 7], portal_arcs[i + 8]))
 		_add_portal_pair(seg, result)
+	# the level's edge walls (pass-through, not interactive), along level_bounds
+	var b := level_bounds
 	var screen_bounds: Array[Vector4] = [
-		Vector4(0, 0, 1920, 0),
-		Vector4(1920, 0, 1920, 1080),
-		Vector4(1920, 1080, 0, 1080),
-		Vector4(0, 1080, 0, 0),
+		Vector4(b.position.x, b.position.y, b.end.x, b.position.y),
+		Vector4(b.end.x, b.position.y, b.end.x, b.end.y),
+		Vector4(b.end.x, b.end.y, b.position.x, b.end.y),
+		Vector4(b.position.x, b.end.y, b.position.x, b.position.y),
 	]
 	for line_def in screen_bounds:
 		var config := SideConfig.new(null, false)

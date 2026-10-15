@@ -33,3 +33,19 @@ static func plan(p_side: int, p_has_outgoing: bool, p_outgoing_side: int,
 	o.outgoing_color = p_outgoing_color
 	o.gradient_color = p_gradient_color
 	return o
+
+# Value equality: the same chevrons in the same colours.
+func equals(o: ChevronOverlay) -> bool:
+	return o != null and side == o.side and has_incoming == o.has_incoming \
+		and has_outgoing == o.has_outgoing and outgoing_side == o.outgoing_side \
+		and incoming_color == o.incoming_color and outgoing_color == o.outgoing_color \
+		and gradient_color == o.gradient_color
+
+# Two overlay lists with equal overlays in the same order.
+static func same_list(a: Array, b: Array) -> bool:
+	if a.size() != b.size():
+		return false
+	for i in a.size():
+		if not a[i].equals(b[i]):
+			return false
+	return true
