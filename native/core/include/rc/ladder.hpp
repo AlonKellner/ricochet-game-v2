@@ -125,8 +125,12 @@ Sensitivity replay(const std::vector<Event<N>> &events, const Scene<Dual> &scene
 				const CN<Dual> h = db->at(Dual{tf, dt});
 				g = std::sqrt(h.re.d * h.re.d + h.im.d * h.im.d);
 				if (e.kind == EventKind::Hit && e.applied && !e.terminal && surf != nullptr) {
-					// FastSolver.apply_surf(db, tf, dt, surf): the hit point from the beam itself
-					db = effects::apply<Dual>(*db, Dual{tf, dt}, *surf, nullptr);
+					// the map the trace applied (the hit point from the beam itself): a
+					// projective's exit (B2, fixed in Stage 102: it used to get the
+					// surface's reflection / inversion map); else the surface's own map,
+					// which at a pop is the inverse (self-inverse sides; a portal pair)
+					db = e.projective ? effects::project<Dual>(*db, Dual{tf, dt}, *surf, e.left, nullptr)
+									  : effects::apply<Dual>(*db, Dual{tf, dt}, *surf, nullptr);
 				}
 			}
 		}

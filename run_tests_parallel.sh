@@ -19,6 +19,11 @@ if ! GODOT_BIN="$GODOT" make native; then
 	echo "!! native build failed (make native); not running the suite"
 	exit 1
 fi
+# the oracle (the spec the fixtures come from) and the fixture schema
+if ! make -s oracle-test; then
+	echo "!! oracle tests failed (make oracle-test)"
+	exit 1
+fi
 
 if [ -z "${JOBS:-}" ]; then
 	JOBS=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc 2>/dev/null || echo 4)
@@ -98,6 +103,12 @@ for log in "$LOGDIR"/*.log; do
 		echo "!! $label: scripts not loaded (parse errors), their tests did not run:"
 		echo "$skipped" | sed 's/^/   /'
 		grep -E "Parse Error" <<< "$clean" | sort -u | head -10 | sed 's/^/   /'
+		status=1
+	fi
+	# Stage 103: nothing may leak (side links hold no reference cycles)
+	if grep -qE "instances were leaked at exit|resources still in use at exit" <<< "$clean"; then
+		echo "!! $label: objects leaked at exit:"
+		grep -E "leaked at exit|still in use at exit" <<< "$clean" | sed 's/^/   /'
 		status=1
 	fi
 	if [ "${f:-0}" != "0" ] || grep -q "SCRIPT ERROR" <<< "$clean"; then

@@ -30,7 +30,7 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Full segments / unbounded tracing; wrap through infinity | Done |
 | Provenance (transform) stack with pop on re-hit | Done |
 | No surface filtering principle | Done |
-| Invariant sweep testing (event-based checks, all scenes) | Done |
+| Invariant sweep testing (event-based checks, all scenes) | Done: every level swept; plans on every planned scene incl. infinity plans (Stage 103); one known finding (K1, TDD_10) |
 | Compound transformative effect | Planned |
 | Visibility polygon (§15) | Planned |
 | State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Done |

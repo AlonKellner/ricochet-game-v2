@@ -4,7 +4,7 @@ CTEST ?= ctest
 # bounded parallelism: a bare `-j` lets Make start every godot-cpp compile at once
 JOBS ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
-.PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench \
+.PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test \
 	native native-debug native-asan ctest
 
 # ---------------------------------------------------------------- native (C++)
@@ -35,8 +35,15 @@ native-asan:
 ctest:
 	$(CTEST) --test-dir native/build --output-on-failure
 
+# ------------------------------------------------------------------ oracle
+# The mpmath oracle's own tests and the fixture schema (docs/research/oracle).
+ORACLE_PY := docs/research/.venv/bin/python
+oracle-test:
+	@if [ -x $(ORACLE_PY) ]; then $(ORACLE_PY) -m pytest -q docs/research/oracle; \
+	else echo "!! oracle tests skipped: no docs/research/.venv (python3 -m venv docs/research/.venv && docs/research/.venv/bin/pip install mpmath numpy pytest)"; fi
+
 # ------------------------------------------------------------------ GUT tests
-test: native
+test: native oracle-test
 	$(GODOT) --headless -s addons/gut/gut_cmdln.gd
 
 run:
@@ -61,7 +68,7 @@ FAST_TESTS := $(filter-out $(addprefix tests/,$(SWEEPS)),$(wildcard tests/test_*
 comma := ,
 empty :=
 space := $(empty) $(empty)
-test-fast: native ctest
+test-fast: native ctest oracle-test
 	$(GODOT) --headless -s addons/gut/gut_cmdln.gd -gconfig= \
 		-gtest=$(subst $(space),$(comma),$(addprefix res://,$(FAST_TESTS))) -gexit
 

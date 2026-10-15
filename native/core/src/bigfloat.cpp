@@ -10,19 +10,6 @@ namespace rc {
 
 namespace {
 
-// GDScript integer arithmetic wraps on overflow; signed overflow is undefined
-// in C++, so the few places that can wrap go through unsigned arithmetic.
-inline int64_t wrap_add(int64_t a, int64_t b) {
-	return int64_t(uint64_t(a) + uint64_t(b));
-}
-inline int64_t wrap_mul(int64_t a, int64_t b) {
-	return int64_t(uint64_t(a) * uint64_t(b));
-}
-// GDScript's `>>` on a negative int is arithmetic; so is C++20's on signed.
-inline int64_t sar(int64_t v, int bits) {
-	return v >> bits;
-}
-
 // Leading-digit integer parse of a decimal string: GDScript String.to_int()
 // (optional sign, digits; anything else stops the parse; no digits -> 0).
 int64_t to_int_prefix(const std::string &s) {
@@ -322,22 +309,26 @@ BigFloat BigFloat::mul(const BigFloat &o) const {
 	const Limbs &b = o.limbs;
 	const size_t na = a.size();
 	const size_t nb = b.size();
-	Limbs cols(na + nb, 0);
+	// column sums in 128 bits (B1, fixed in Stage 102): each product is below
+	// 2^56, so any realistic limb count (< 2^70 terms) cannot overflow; the
+	// GDScript original summed in int64 and wrapped above ~128 limbs per factor
+	__extension__ typedef __int128 i128;
+	std::vector<i128> acc(na + nb, 0);
 	for (size_t i = 0; i < na; i++) {
 		const int64_t ai = a[i];
 		if (ai == 0) {
 			continue;
 		}
 		for (size_t j = 0; j < nb; j++) {
-			// carry-free column sums: wraps like GDScript's int past ~2^63 (B1)
-			cols[i + j] = wrap_add(cols[i + j], wrap_mul(ai, b[j]));
+			acc[i + j] += i128(ai) * i128(b[j]);
 		}
 	}
-	int64_t carry = 0;
+	Limbs cols(na + nb, 0);
+	i128 carry = 0;
 	for (size_t k = 0; k < na + nb; k++) {
-		const int64_t s = wrap_add(cols[k], carry);
-		cols[k] = s & MASK;
-		carry = sar(s, BITS);
+		const i128 s = acc[k] + carry;
+		cols[k] = int64_t(s & i128(MASK));
+		carry = s >> BITS;
 	}
 	return normalize(cols, exp + o.exp, sign * o.sign, n);
 }

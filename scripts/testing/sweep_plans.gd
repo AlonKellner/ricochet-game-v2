@@ -117,6 +117,49 @@ static func projective_plans(scene: Node) -> Array:
 		plans.append([PlanManager.PlanEntry.new(projs[0].id, Side.Value.LEFT), PlanManager.PlanEntry.new(projs[1].id, Side.Value.LEFT)])
 	return plans
 
+# Stage 103: the playgrounds no other sweep plans on.
+static func playground_plan_scenes() -> Array[String]:
+	var out: Array[String] = []
+	for n in ["plannable_inversion", "portals", "two_sided", "pre_inverted"]:
+		out.append(PLAYGROUND_DIR + n + ".tscn")
+	return out
+
+# Portal plans: each portal side alone, and the first one twice (in, and out
+# through the pair: a pop).
+static func portal_plans(scene: Node) -> Array:
+	var portals := _sides(scene, func(e): return e is RigidMotionEffect)
+	var plans: Array = []
+	for m in portals:
+		var s: Surface = m.surface
+		if m.left:
+			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.LEFT)])
+		if m.right:
+			plans.append([PlanManager.PlanEntry.new(s.id, Side.Value.RIGHT)])
+	if portals.size() >= 1:
+		plans.append([_entry(portals[0]), _entry(portals[0])])
+	return plans
+
+# The plans of a scene's own surfaces: mirrors, inversions, portals, projectives.
+static func scene_plans(scene: Node) -> Array:
+	var plans: Array = []
+	plans.append_array(reflective_plans(scene))
+	plans.append_array(inversion_plans(scene))
+	plans.append_array(portal_plans(scene))
+	plans.append_array(projective_plans(scene))
+	return plans
+
+# Infinity plans (Stages 88, 101): infinity alone, twice, and before and
+# after the first one-entry plan of the scene's own surfaces.
+static func infinity_plans(scene: Node) -> Array:
+	var inf := func() -> PlanManager.PlanEntry: return PlanManager.PlanEntry.new(BeamSolver.INFINITY_ID, Side.Value.LEFT)
+	var plans: Array = [[inf.call()], [inf.call(), inf.call()]]
+	for p in scene_plans(scene):
+		if p.size() == 1:
+			plans.append([inf.call(), p[0]])
+			plans.append([p[0], inf.call()])
+			break
+	return plans
+
 # The precision sweep's plans on the inversion grid (surface ids, LEFT sides)
 static func precision_plan_ids() -> Array:
 	return [[7], [4, 5], [7, 4, 1], [5, 5], [1, 2, 3, 6], [7, 4, 1, 3, 6, 6, 6]]

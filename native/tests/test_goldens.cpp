@@ -346,6 +346,7 @@ TEST_CASE("goldens: every stage fixture, generic f64, the float64 walk with gain
 TEST_CASE("goldens: the corpus: float64 walks, the ladder, and 4 limbs") {
 	const ojson gold = load_json("bench/goldens/corpus.json");
 	int scenarios = 0;
+	int unpinned = 0;
 	for (const char *sub : {"", "stress", "scenes_corpus"}) {
 		const std::string dir = repo_root() + "/bench/" + (std::string(sub).empty() ? "" : std::string(sub) + "/") + "scenarios";
 		std::vector<std::string> names;
@@ -362,6 +363,13 @@ TEST_CASE("goldens: the corpus: float64 walks, the ladder, and 4 limbs") {
 				scn = ojson::parse(in);
 			}
 			const std::string key = std::string(std::string(sub).empty() ? "main" : sub) + "/" + name;
+			if (!gold.contains(key)) {
+				// a scenario added after tag pre-native (Stage 103: the scenes
+				// dumped since): no GDScript golden; the GUT corpus test checks it
+				// against the oracle
+				unpinned++;
+				continue;
+			}
 			const ojson &inp = gold[key]["inputs"];
 			const std::vector<SurfaceDef> defs = defs_of(scn["surfaces"], inp);
 			std::vector<PlanItem> plan;
@@ -414,7 +422,8 @@ TEST_CASE("goldens: the corpus: float64 walks, the ladder, and 4 limbs") {
 			scenarios++;
 		}
 	}
-	CHECK(scenarios == 549);
+	CHECK(scenarios == 549); // every pinned scenario was replayed
+	MESSAGE("corpus: " << scenarios << " pinned scenarios replayed, " << unpinned << " added since (oracle-checked in GUT)");
 }
 
 namespace {
@@ -663,6 +672,11 @@ TEST_CASE("goldens: the sweep combos of Tracer.trace_pair") {
 				}
 				if (hk * 16 + 16 > hashes.size() || sha16(canon) != hashes.substr(hk * 16, 16)) {
 					mismatches++;
+					// RC_SWEEP_REBLESS=1: print what an approved B-item regenerates
+					// (group, hash slot, new hash, canon) for the golden's update
+					if (std::getenv("RC_SWEEP_REBLESS")) {
+						std::printf("REBLESS\t%s\t%zu\t%ld\t%s\t%s\n", it.key().c_str(), hk, i, sha16(canon).c_str(), canon.c_str());
+					}
 					if (mismatch_keys.size() < 12) {
 						mismatch_keys.push_back(key + " tiers " + std::to_string(pair ? pair->result.planned.limbs : -1) + "/" +
 							std::to_string(pair ? pair->result.physical.limbs : -1));

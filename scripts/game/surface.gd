@@ -15,6 +15,11 @@ var player_solid: bool
 var pre_transform: bool = false
 var _left_link: SideLink = null
 var _right_link: SideLink = null
+# Derived overlay links per side, reused while the side's config is the same
+# object: {side: {"cfg": SideConfig, "link": SideLink, "pair": SideLink}}
+# (Stage 103: built once instead of every hover / overlay update; the entry
+# also keeps the pair's second link alive, which the first holds weakly)
+var _derived_links := {}
 var resolver: ConfigResolver
 
 func _init(p_segment: Segment, p_left: SideConfig, p_right: SideConfig, p_is_target: bool = false, p_player_solid: bool = true) -> void:
@@ -76,12 +81,17 @@ func overlay_link(side: Side.Value, game_state: GameState = null) -> SideLink:
 	var link := get_side_link(side)
 	if link != null:
 		return link
+	var cached: Dictionary = _derived_links.get(side, {})
+	if not cached.is_empty() and is_same(cached["cfg"], cfg):
+		return cached["link"]
 	link = SideLink.new()
 	link.surface = self
 	link.side = side
 	var e := cfg.effect
+	var pair: SideLink = null   # held here: `link` refers to it weakly
 	if e == null:
-		link.outgoing = _opposite_link(side, link)
+		pair = _opposite_link(side, link)
+		link.outgoing = pair
 	elif e.is_terminal():
 		link.outgoing = null
 	elif e.is_self_inverse():
@@ -89,7 +99,9 @@ func overlay_link(side: Side.Value, game_state: GameState = null) -> SideLink:
 	elif e.kind() == Effect.Kind.PROJECTIVE and e.get("_project_back"):
 		link.outgoing = link
 	else:
-		link.outgoing = _opposite_link(side, link)
+		pair = _opposite_link(side, link)
+		link.outgoing = pair
+	_derived_links[side] = {"cfg": cfg, "link": link, "pair": pair}
 	return link
 
 func _opposite_link(side: Side.Value, back: SideLink) -> SideLink:

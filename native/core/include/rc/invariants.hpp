@@ -620,12 +620,8 @@ inline Violations check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(const Input &in) {
 			}
 			if (!valid) {
 				for (const SurfaceInfo &s : *in.surfaces) {
-					const arc::GeneralizedCircle &g = s.carrier;
-					const double eval_val = g.evaluate(end_pos.x, end_pos.y);
-					// B4: the GDScript formula (not the carrier's gradient at the point); reproduced
-					const double grad_mag = std::sqrt(g.b * g.b + g.c * g.c + 4.0 * g.a * g.a * (double(end_pos.x) * double(end_pos.x) + double(end_pos.y) * double(end_pos.y)));
-					const double dist_to_carrier = std::fabs(eval_val) / gd_maxf(grad_mag, 1e-10);
-					if (dist_to_carrier < 2.0) {
+					// B4 (fixed, Stage 102): the carrier's gradient at the point
+					if (geometric_carrier_dist(end_pos, s.carrier) < 2.0) {
 						valid = true;
 						break;
 					}
@@ -893,24 +889,12 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 	if (solver.fixes_cursor(CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}}, in.plan, in.flags)) {
 		X = CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}};
 	}
+	// Stage 88/101: the plan's second realization (an infinity entry in its first
+	// epoch) is the same aim run the other way: the reference shot gets the
+	// infinity entry alone, a pure orientation (no effect), in every frame
+	std::vector<PlanItem> ref_plan;
 	if (solver.via_infinity(in.plan, in.flags)) {
-		const CN<F64> P{F64{double(in.player.x)}, F64{double(in.player.y)}};
-		const std::optional<CN<F64>> q0 = effects::scene_pre_q(sc);
-		if (q0) {
-			// Stage 101: in a pre-transform frame the second realization is the same
-			// circle through the player, the image and Q0 run the other way: the
-			// reference aims at a point of that reversed circle before Q0
-			const CN<F64> delta = P.sub(*q0);
-			const Beam<F64> direct = Beam<F64>::through(P, *X, &delta);
-			const Beam<F64> rev{direct.p, direct.tau.neg(), direct.kappa.neg()};
-			const F64 tq = rev.param_of(*q0);
-			const F64 t = tq.v > 0.0 ? F64{tq.v * 0.5} : F64{1.0};
-			X = rev.at(t);
-		} else {
-			// Stage 88: the second realization aims away from the image: the reference
-			// aims at the image's reflection through the player
-			X = CN<F64>{F64{2.0 * double(in.player.x) - X->fx()}, F64{2.0 * double(in.player.y) - X->fy()}};
-		}
+		ref_plan.push_back(PlanItem{INFINITY_ID, false, std::nullopt});
 	}
 	const V2 img = V2::of(X->fx(), X->fy());
 	if (!(std::isfinite(img.x) && std::isfinite(img.y)) || img == in.player) {
@@ -920,11 +904,11 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 	LadderContext ctx(*in.defs);
 	ctx.set_emit_infinity(in.emit_infinity);
 	Ladder ladder(ctx);
-	const LadderResult ref = ladder.solve_physical(double(in.player.x), double(in.player.y), X->fx(), X->fy(), {}, MAX_HITS, TRACE_TOL, in.flags);
+	const LadderResult ref = ladder.solve_physical(double(in.player.x), double(in.player.y), X->fx(), X->fy(), ref_plan, MAX_HITS, TRACE_TOL, in.flags);
 	// ErrorEstimate.physical_sensitivity's events (the float64 walk) and gains
 	Solver<Dual> fast(ctx.dual_scene(), &ctx.dual_cache());
 	const std::optional<Walk<Dual>> wq = fast.run(CN<Dual>{Dual{double(in.player.x), 0.0}, Dual{double(in.player.y), 0.0}},
-		CN<Dual>{Dual{X->fx(), 0.0}, Dual{X->fy(), 0.0}}, {}, Mode::Physical, MAX_HITS, in.flags);
+		CN<Dual>{Dual{X->fx(), 0.0}, Dual{X->fy(), 0.0}}, ref_plan, Mode::Physical, MAX_HITS, in.flags);
 	std::vector<double> hit_gain;
 	if (wq) {
 		const estimate::Sensitivity sens = estimate::collect(wq->events, wq->gains);
