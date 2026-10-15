@@ -28,11 +28,9 @@ beam for `docs/research/stage106_judge.py`, the independent judge of changed
 traces).
 
 **Known findings** (`KNOWN_FINDINGS` in `tests/test_invariant_sweep.gd`:
-reported, not failed; the sweep fails if one stops occurring): K3, a degenerate
-aim on `tangent_infinity.tscn` (the cursor the player's mirror image under the
-planned mirror: every direction solves the plan; native reflects at Q0 in
-place, the oracle picks the other arc). K1 was resolved by Stage 105, K2 by
-Stage 106 (docs/TDD_10_NATIVE_MIGRATION.md, "Known findings").
+reported, not failed; the sweep fails if one stops occurring): none. K1 was
+resolved by Stage 105, K2 and K3 by Stage 106 (docs/TDD_10_NATIVE_MIGRATION.md,
+"Known findings").
 
 The invariants are the checks of `rc/invariants.hpp` (`check_all`): UX7,
 PREVIEW-NOGAPS, S16, GREEN-FROM-PLAYER, ORIGIN-NOT-REHIT, SINGLE-DIVERGENCE,

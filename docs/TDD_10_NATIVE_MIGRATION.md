@@ -32,7 +32,7 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 102 | The B-list resolved | Done: B1, B2, B4, B12 fixed; B6 partial; B3, B11 closed; B5, B7, B8, B10, B13 kept (table at the end) |
 | 103 | Coverage extras: the oracle in the loop, every level dumped, sweeps for every scene and infinity plans, no leaks, property tests | Done; one known finding (K1) |
 | 104 | Housekeeping: merged branches deleted, docs | Done |
-| 106 | The departure point after a pop (resolves K2) | Done pending the re-bless of 1,795 sweep goldens (evidence: `docs/research/stage106_golden_diff.md`) and the user's interactive sign-off; the pop tags its point like a push, the departing root is identified structurally, the `REAPPLY-IN-PLACE` invariant; K3 found |
+| 106 | The departure point after a pop (resolves K2, then K3) | Done: 1,795 sweep goldens re-blessed with the judge's evidence (`docs/research/stage106_golden_diff.md`, user approval 2026-10-15); the pop tags its point like a push, the departing root is identified structurally, the `REAPPLY-IN-PLACE` invariant; the degenerate aim's convention (K3) unified; interactive checklist pending |
 | 105 | Exact tangency at the frame's infinity point (resolves K1) | Done pending the user's interactive sign-off: the pole record in the oracle and natively, the touch rule and the pinning at Q; DIRECTION-ONLY's exact reference; `tangent_infinity.tscn`; tests below |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests (ctest and
@@ -930,7 +930,7 @@ into `main` a second time here.
 |---|---|---|---|
 | K1 | On the portals playground the reflective arc (an inversion) moves the frame's infinity to its center, and the portal's −800 shift puts that point exactly on mirror 5 (x = 400). A vertical aim's image under the inversion is a circle tangent there to the vertical, i.e. to mirror 5. The tangency is exact by construction, but native decided it by rounding (two crossings, resolved differently at two precision tiers); the oracle (80 digits) saw no crossing, and its own answer changed with its precision (none at 80 digits, hits at 200 and 400). | `rc/solver.hpp` candidates | **Resolved** by Stage 105 (the touch rule at Q, exact) |
 | K2 | On `tangent_infinity.tscn`, plan [6/L] (the mirror through Q0), player (1160, 440) exactly on the inversion circle's top, cursor (760, 640), whose image under the plan is the circle's bottom: the walk inverts in at the image and out at the player's own point (a pop at a known point). The planned shot's physical trace then resumed the original beam past the image while DIRECTION-ONLY's reference (no plan, aimed at the image) looped back through it. The mechanism: a pop restored the pre-push known points without tagging the pop point as the departure point, so a known point there snapped the departing circle's other root onto itself; and a resumed beam excluded its departure root by exact equality against a recomputed root. | `rc/solver.hpp` apply (pop) and candidates | **Resolved** by Stage 106 (kept in Stage 105 for simplicity; the one-line fix tried then was right in intent and exposed the second defect) |
-| K3 | On `tangent_infinity.tscn`, plan [6/L] or [6/R], with the cursor the player's mirror image in the planned mirror (e.g. (835, 665) and (1085, 665) about x = 960): the aim image is the player itself, so every direction solves the plan (a degenerate aim). Native picks the arc through Q0 and reflects there, then re-reflects in place at Q0 (a zero-length loop caught by `REAPPLY-IN-PLACE`); the oracle picks the other arc (through (960, 790)) and loops normally. Pre-existing (identical in `main`), found by the Stage 105 Q0-aligned sweep positions. | `run_degenerate` / `_aim` (the aim when the image is the player) | Open: a `KNOWN_FINDINGS` entry (reported, not failed); the degenerate aim needs one convention in both implementations |
+| K3 | On `tangent_infinity.tscn`, plan [6/L] or [6/R], with the cursor the player's mirror image in the planned mirror (e.g. (835, 665) and (1085, 665) about x = 960): the aim image is the player itself, so every direction solves the plan (a degenerate aim). Native picks the arc through Q0 and reflects there, then re-reflects in place at Q0 (a zero-length loop caught by `REAPPLY-IN-PLACE`); the oracle picks the other arc (through (960, 790)) and loops normally. Pre-existing (identical in `main`), found by the Stage 105 Q0-aligned sweep positions. | `run_degenerate` (native built the circle *tangent* to the cursor direction at the player; the oracle's `beam_through` passes the cursor) | **Resolved** in Stage 106: both shoot the beam through the player and the cursor (the circle through them and Q0 in a pre-transform frame), GAME_SPEC 11.4 |
 
 **Gate (Stages 102-103, 2026-10-16):** `./run_tests_parallel.sh` 784 passing /
 0 failing in 15 s, no process leaks; `make oracle-test` 91 passing; `ctest`
@@ -1098,8 +1098,16 @@ at the other crossing still snapping it, a portal pop, all at 80 and 200 digits.
 exactly on circle mirrors (7,579 pops), the same decisions at every tier, no in-place re-apply.
 GUT `test_stage106_pop_departure.gd`: the fixtures through the bindings, K2 live on the playground
 (`check_all` and `DIRECTION-ONLY` clean; the planned shot is the shot aimed at the image),
-`circle_no_walls` with the cursor on the circle; `SweepPlans.on_surface_positions` (the four
-extreme points of every full circle) in the playground and infinity sweeps.
+`circle_no_walls` with the cursor on the circle, the K3 aim; `SweepPlans.on_surface_positions` (the
+four extreme points of every full circle) in the playground and infinity sweeps.
+
+**K3, found and fixed on the way.** The Q0-aligned sweep positions put the cursor at the player's
+mirror image in the planned mirror: the aim image is the player, every direction solves the plan.
+Native's `run_degenerate` built the circle tangent to the cursor direction at the player (through
+Q0), the oracle's `_aim` the circle through the player, the cursor and Q0: different circles, and
+native's went through Q0 first and re-reflected there in place. Now both pass the aim point (the
+image, else the cursor); `KNOWN_FINDINGS` is empty again. Tests: the oracle (the beam's circle and
+its first crossing, 80 and 200 digits), two fixtures at four tiers, the K3 combo live in GUT.
 
 **Interactive checklist (user sign-off):**
 1. `circle_no_walls`: put the cursor exactly on the circle's right point (1160, 540), the player

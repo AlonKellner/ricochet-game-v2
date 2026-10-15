@@ -307,5 +307,5 @@ TEST_CASE("Stage 106: the pop-departure fixtures match the oracle at f64, Dual, 
 		fixtures++;
 	}
 	CHECK(fixtures == int(fxs["fixtures"].size()));
-	CHECK(fixtures >= 9);
+	CHECK(fixtures >= 11);
 }

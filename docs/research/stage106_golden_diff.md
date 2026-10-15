@@ -98,9 +98,15 @@ in 29 (the fake near-duplicate root made a decision margin tiny), and 0 → 4 in
   tag (K2), 1,080 random walks with players and cursors exactly on circle mirrors (7,579 pops):
   identical decisions at every tier, no REAPPLY-IN-PLACE.
 - GUT: 794 passing / 0 failing (`test_stage106_pop_departure.gd`; the sweeps with the new
-  invariant and with on-surface positions; **K3** reported as a known finding: on
-  `tangent_infinity.tscn`, plan [6/L] or [6/R], the cursor the player's mirror image makes the
-  aim image the player (every direction solves the plan); native picks the arc through Q0 and
-  reflects there in place, the oracle picks the other arc; pre-existing, identical in `main`).
+  invariant and with on-surface positions). **K3**, found by the new invariant and fixed in the
+  same stage: on `tangent_infinity.tscn`, plan [6/L] or [6/R], the cursor the player's mirror image
+  makes the aim image the player (every direction solves the plan). Native built the circle tangent
+  to the cursor direction at the player; the oracle's `beam_through` passes the cursor: different
+  circles, native's through Q0 first, re-reflecting there in place. Both now shoot the beam through
+  the player and the aim point (the circle through them and Q0 in a pre-transform frame), with the
+  exact pole record from the cursor (exact data), so the tie at Q0 is pinned, not rounded. The
+  degenerate aim never occurs in the pinned sweeps (no pre-transform scene there; in the identity
+  frame both constructions are the same line): **0 golden changes**; two fixtures at four tiers,
+  the oracle at 80 and 200 digits, the combo live in GUT.
 - ctest: everything green except the six `sweeps.json` parts (the 1,795 combos above), pending the
   re-bless (`RC_SWEEP_REBLESS=1` → `apply_rebless.py`).

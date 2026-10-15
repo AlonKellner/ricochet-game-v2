@@ -1005,3 +1005,24 @@ def test_portal_pop_by_the_departure_rehit_is_unchanged():
     assert pops and pops[0].point == P((1200, 450))
     assert no_reapply_in_place(w)
     assert _at(200, lambda: hit_ids(T.trace_physical_direction(sc, (300, 450), mp.mpc(1, 0)))) == ids
+
+
+def test_k3_degenerate_aim_shoots_through_the_cursor():
+    # tangent_infinity.tscn: the cursor (1085, 665) is the player's (835, 665) mirror
+    # image in the planned mirror x = 960: the aim image is the player, every
+    # direction solves the plan. The convention (GAME_SPEC 11.4): straight at the
+    # cursor, i.e. in this pre-transform frame the circle through the player, the
+    # cursor and Q0 = (960, 540): center (960, 665), radius 125, run player -> cursor
+    dump = _json.load(open(os.path.join(_ROOT, "bench", "scenes", "playground__tangent_infinity.surfaces.json")))
+    sc = T.scene_from_json(dump["surfaces"])
+    w = T.physical(sc, (835, 665), (1085, 665), [(6, "LEFT")])
+    b0 = w.events[0].beam
+    assert b0.p == P((835, 665)) and abs(abs(b0.kappa) - mp.mpf(1) / 125) < mp.mpf(10) ** -60, b0
+    assert abs(b0.at(b0.param_of(P((1085, 665)))) - P((1085, 665))) < mp.mpf(10) ** -60
+    # the first crossing is the mirror's off-segment root (960, 790), not Q0
+    assert w.events[0].kind == "hit" and w.events[0].surface_id == 6 and w.events[0].point == P((960, 790)), kinds(w)
+    assert not w.events[0].applied
+    assert no_reapply_in_place(w)
+    pl = T.planned(sc, (835, 665), (1085, 665), [(6, "LEFT")])
+    assert "cursor" in kinds(pl) and no_reapply_in_place(pl), kinds(pl)
+    assert _at(200, lambda: hit_ids(T.physical(sc, (835, 665), (1085, 665), [(6, "LEFT")]))) == hit_ids(w)

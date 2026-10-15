@@ -125,6 +125,15 @@ def main():
         f = fixture("portal_pop_by_rehit_direction", surfs, (300.0, 450.0), direction=(1.0, 0.0))
     assert hits(f)[:3] == [(1, True), (3, True), (2, True)] and no_reapply_in_place(f), kinds(f)
     fx.append(f)
+    # (vi) K3: a degenerate aim: the cursor is the player's mirror image in the planned
+    # mirror (every direction solves the plan): straight at the cursor, the circle
+    # through the player, the cursor and Q0 (not the circle tangent to that direction)
+    for mode in ("planned", "physical"):
+        f = fixture("k3_degenerate_aim_through_the_cursor_" + mode, dump["surfaces"], (835.0, 665.0), plan=[(6, "LEFT")],
+                    mode=mode, cursor=(1085.0, 665.0))
+        assert f["expected"][0]["kind"] == "hit" and f["expected"][0]["surface_id"] == 6 and not f["expected"][0]["applied"], kinds(f)
+        assert no_reapply_in_place(f), kinds(f)
+        fx.append(f)
     out = os.path.join(ROOT, "bench", "fixtures", "stage106_pop_departure.json")
     json.dump({"dps": mp.mp.dps, "fixtures": fx}, open(out, "w"), indent=1)
     for f in fx:
