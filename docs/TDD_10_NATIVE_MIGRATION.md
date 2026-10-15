@@ -32,6 +32,7 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 102 | The B-list resolved | Done: B1, B2, B4, B12 fixed; B6 partial; B3, B11 closed; B5, B7, B8, B10, B13 kept (table at the end) |
 | 103 | Coverage extras: the oracle in the loop, every level dumped, sweeps for every scene and infinity plans, no leaks, property tests | Done; one known finding (K1) |
 | 104 | Housekeeping: merged branches deleted, docs | Done |
+| 105 | Exact tangency at the frame's infinity point (resolves K1) | Done pending the user's interactive sign-off: the pole record in the oracle and natively, the touch rule and the pinning at Q; DIRECTION-ONLY's exact reference; `tangent_infinity.tscn`; tests below |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests (ctest and
 the full GUT suite). The full suite must pass before proceeding to Stage N+1.
@@ -926,7 +927,8 @@ into `main` a second time here.
 
 | # | Finding | Where | Status |
 |---|---|---|---|
-| K1 | On the portals playground the reflective arc (an inversion) moves the frame's infinity to its center, and the portal's −800 shift puts that point exactly on mirror 5 (x = 400). A vertical aim's image under the inversion is a circle tangent there to the vertical, i.e. to mirror 5. The tangency is exact by construction, but native decides it by rounding (two crossings, resolved differently at two precision tiers); the oracle (80 digits) sees no crossing. DIRECTION-ONLY catches the tier difference on 4 sweep combos. Pre-existing, independent of the infinity work; it needs an exact tangency test for circle beams at the frame's infinity point (provenance: at Q the beam's tangent is the frame's image of the pre-image line's direction). | `rc/solver.hpp` candidates; `tests/test_invariant_sweep.gd` `KNOWN_FINDINGS` | Open: awaiting the user |
+| K1 | On the portals playground the reflective arc (an inversion) moves the frame's infinity to its center, and the portal's −800 shift puts that point exactly on mirror 5 (x = 400). A vertical aim's image under the inversion is a circle tangent there to the vertical, i.e. to mirror 5. The tangency is exact by construction, but native decided it by rounding (two crossings, resolved differently at two precision tiers); the oracle (80 digits) saw no crossing, and its own answer changed with its precision (none at 80 digits, hits at 200 and 400). | `rc/solver.hpp` candidates | **Resolved** by Stage 105 (the touch rule at Q, exact) |
+| K2 | On `tangent_infinity.tscn`, plan [6/L] (the mirror through Q0), player (1160, 440) exactly on the inversion circle's top, cursor (760, 640), whose image under the plan is the circle's bottom: the walk inverts in at the image and out at the player's own point (a pop at a known point). The planned shot's physical trace then resumes the original beam past the image while DIRECTION-ONLY's reference (no plan, aimed at the image) loops back through it ("hit 2 s=7 vs s=8"). A double coincidence of the player and the aim image on a surface, unrelated to Q; found while choosing the sweep's Q0-aligned positions, which now avoid surfaces. | `rc/solver.hpp` pop resumption at a known point | Open: awaiting the user |
 
 **Gate (Stages 102-103, 2026-10-16):** `./run_tests_parallel.sh` 784 passing /
 0 failing in 15 s, no process leaks; `make oracle-test` 91 passing; `ctest`
@@ -941,6 +943,111 @@ All local branches were merged into `main` and are deleted (the history lives
 in the merge commits; tag `pre-native` stays). `SWEEP_CONFIG.md` rewritten for
 the native sweeps. `project.godot`'s local main-scene change stays uncommitted,
 as the user asked.
+
+## Stage 105: exact tangency at the frame's infinity point (K1)
+
+The user chose the exact fix (2026-10-15, option 2 of the K1 options): a beam
+tangent to a carrier at the frame's infinity point `Q` touches it without
+crossing, decided exactly, the same in the oracle and at every tier.
+
+**The pole record.** Every beam of an epoch is the image `F(ℓ)` of a straight
+line under the frame's maps and passes `Q = F(∞)`; its direction there is the
+image of `ℓ`'s direction. Beside the approximate `Q` the walk keeps
+`{Q, D}` exactly (`Walk.pole` in `trace2.py`; `exact::ExactPole`,
+`Walk::pole`, `StackEntry::pole` natively): set from the pre-transform (the
+start record of a direction shot, `D ∝ conj(dir)·(P − Q0)²`, or of an aimed
+shot, `D ∝ conj(P − X0)·(X0 − Q0)·(P − Q0)` with the exact aim image) or by
+the first inversion of an exact straight beam (`Q` the center, `D` the line's
+direction); carried by reflections, inversions (`D' ∝ conj(D)·U²`) and
+translation portals; saved and restored on the stack; dropped by a rotated
+portal, a projective, an inversion about `Q` itself and the exact-data budget
+(zero low limbs are trimmed, so a record stays at a few limbs).
+
+**The rules** (`walk_from` / `candidates()`): a surface whose carrier passes
+`Q` and is tangent there is skipped (a touch is the whole intersection). A
+carrier through `Q` is crossed exactly there: its root nearest `Q` takes `Q`'s
+parameter, so simultaneous crossings at `Q` tie by id, then the passage of
+infinity (without this, the order of a transversal mirror's hit and the
+passage at `Q` was rounding's). When an effect fires at `Q` (a pinned
+crossing, or the departure re-hit of a beam that departed from `Q`), the beam
+departs from `Q`: other carriers through `Q` are crossed at the end of the
+loop, the departing carrier's root nearest `Q` is the departure, and the
+passage of infinity is not emitted at the departure point. Concurrent ties
+keep the pinned flag.
+
+**DIRECTION-ONLY** aimed its reference at the cursor's image mapped through
+the plan in float64: inverting in and out through the portals' arc landed a
+few ulps off the cursor, and the game's exact graze became a rounding
+decision in the reference (the remaining K1 sweep combos). It now takes the
+image from exact data where the plan's maps are exact, rounded once.
+
+**Tests.** Oracle (`test_trace2.py`, 108 with the suite): the transitions; the
+grazes after a pre-transform (mirror, circle), one ulp off (two crossings),
+the identity frame (an inversion center on a mirror), after a reflection,
+through K1's translation portal (the oracle's own answer changes with its
+precision without the rule), a rotated portal, pop and projective, a planned
+∞ entry at the grazed point, departing from `Q`; the record's direction is
+the beam's tangent at `Q` on random scenes. Fixtures
+(`gen_fixtures_stage105.py`, 14 in
+`bench/fixtures/stage105_tangent_at_infinity.json`, each asserting the rule
+fired). Native (`test_tangent_at_infinity.cpp`, `test_infinity.cpp`): the
+fixtures at float64, Dual, 4 and 64 limbs; the transitions against numerics;
+the start records against the initial beam's tangent; the record rides the
+beam (Q on it, D its tangent) on 300 random walks at float64 and 8 limbs;
+**tier independence** on 400 coincidence-rich walks (mirrors and pass lines
+along and across the axes through Q, circles tangent there, pre-transform or
+not): over the stretches where the frame is exact, float64, Dual, 4 and 64
+limbs make the same decisions, and no walk parts at `Q` (one of 400 parts at a
+tie away from `Q`, two carriers crossing where the beam passes: the precision
+ladder's business). GUT (`test_stage105_tangent_at_infinity.gd`): the
+fixtures through the bindings, K1 live (no violation, no hit on mirror 5,
+every tier agrees), the graze on the new playground (a touch; 4 px off, a
+crossing). `scenes/playground/tangent_infinity.tscn` (a pre-transform, a
+mirror through Q0, a mirror through Q0's image in an inversion circle) is in
+the playground and infinity sweeps with positions aligned with Q0
+(`SweepPlans.q0_positions`), dumped and in the corpus (396 scenarios).
+`KNOWN_FINDINGS` is empty. A pre-transform circle is no longer a segment for
+the no-intersections check.
+
+**Faster gates.** The ASan/UBSan run had grown to 39 minutes (12 alone; the
+rest was other jobs on the machine). Three changes: the ASan build is Debug at
+-O1 instead of -O0 (assertions kept); `rc_tests` is registered as several
+ctest entries (the sweep goldens replay in six parts through `RC_SWEEP_PART`,
+the tier-independence walks alone, every other case together) and the make
+targets run ctest with `-j`; `ASAN_SWEEP_STRIDE` can thin the replay but
+defaults to all of it. Release ctest: 30 s to 8.5 s. ASan/UBSan ctest, every
+combo replayed: 51 s (a from-scratch sanitizer build takes ~9 minutes, once
+per flag change). The ASan gate must still run alone.
+
+**Found on the way.** The sweep grid's float32 positions are symmetric about
+the room's center only to one ulp: with Q0 at the center they made grazes
+about 3e-5 px off exact, real double crossings too close for the display
+checks. The new playground's room is off-center for that reason. K2 (above)
+is another coincidence the Q0-aligned positions first landed on.
+
+**Gate (Stage 105, 2026-10-15):** `make oracle-test` 108 passing; `ctest`
+green (10 entries, 8.5 s), also under ASan/UBSan (`make native-asan`, 51 s); every golden unchanged (no re-bless);
+`./run_tests_parallel.sh` 789 passing / 0 failing in 18 s; `make bench`
+identical to the pre-native table; `frame_bench` (ms per frame, cursor orbit /
+plan orbit / player orbit): main 0.140 / 0.278 / 0.125 (recorded 0.121 /
+0.258 / 0.109), projective_arcs 0.172 / 0.305 / 0.217, pre_inverted 0.347 /
+0.732 / 0.139, portals 0.238 / 0.495 / 0.184, tangent_infinity 0.555 / 0.452 /
+0.985 (one 17 ms cursor-orbit frame); every phase within the 8 ms budget. The record's
+incidence tests have a float64 filter with a rigorous bound in front of the
+BigFloat evaluation (as the other exact predicates): the sweep goldens' 284,096
+combos take 22.0 s against 21.6 s on `main` (release, same machine, idle).
+
+**Interactive checklist (user sign-off):**
+1. `scenes/playground/tangent_infinity.tscn`, player at (760, 640): put the
+   cursor at (835, 665) (the arc's right end grazes the vertical mirror at the
+   circled cross Q0). The preview passes the cross without reflecting; nudging
+   the cursor a few pixels to either side reflects off the mirror near the
+   cross; the preview does not flicker while sweeping across the graze.
+2. The portals playground, K1's aim: player (1243.333, 690), cursor
+   (1243.333, 390), no plan and the arc twice ([8/L, 8/L]): no hit on mirror 5
+   (x = 400) where the arc's image touches it; the preview is steady.
+3. A quick look at `pre_inverted.tscn` and `portals.tscn` as usual: nothing
+   else changed.
 
 ## Machine quirks: the open editor and the migration
 

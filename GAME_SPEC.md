@@ -898,6 +898,8 @@ The walker visits the candidates **in this order, one event each**, until an eff
 |------|-----------|
 | Beam departing a surface | After applying at `h` on `S`, the new beam departs `S` at `h`. The departure root is excluded as an ordinary candidate and re-hit last, as an ordinary hit. No `skip_segment` and no epsilon. |
 | Exact line exactly tangent to a circle carrier | Touches without crossing: no event. |
+| Beam tangent to a carrier at the frame's infinity point `Q` (Stage 105) | Touches without crossing: no event. Decided exactly from provenance: beside `Q` the walk keeps an exact **pole record** (`Q` and the beam's direction there, §31.3), so a carrier through `Q` is tangent there exactly when its direction at `Q` is parallel to the record's. Where the frame is not exact data (a rotated portal, an aim image beyond the exact budget, a shot from a rounded direction) there is no record and the precision ladder decides, as for any near-tangency. |
+| Carriers through the frame's infinity point | Crossed exactly at `Q` (the root nearest `Q` takes `Q`'s parameter): simultaneous crossings there tie by id, then the passage of infinity. When the beam departs from `Q` (an effect fired at `Q`), another carrier through `Q` is crossed at the departure point at the end of the loop, and the departing carrier's root at `Q` is the departure. |
 | Concurrent line carriers | On an exact line, adjacent crossings of two line carriers that meet the line at one point (exact 3×3 determinant) share one parameter. The ID rule orders them. |
 | Inversion of a beam through the inversion center | Any beam through a known point that is exactly the center becomes an exactly straight beam. |
 | Player or cursor exactly at an inversion center (point at ∞ in the anchored construction) | Forward walk from the exact aim direction. If the aim image itself is at ∞, the walk goes straight at the cursor. |
@@ -1005,6 +1007,7 @@ The frame id of subsequent steps follows the stack (§10.7).
 - **Straight beam, `Q = ∞`:** passing `t = ∞` means the arrow travels to the viewport edge, leaves, and returns from the opposite edge (two escape steps, §12.3; the outgoing one carries `surface_id = INFINITY_ID`). If no effect fires on the whole loop, the trace still ends with an `escape` event.
 - **A finite `Q`** (every circle beam, after an inversion or in a pre-transform level; a straight beam through an inversion center): the arrow simply passes the point `Q`; the step ending there carries `surface_id = INFINITY_ID` and the next step continues from it. `t = ∞` of a circle beam (the antipode of `p`) is an ordinary point. If no effect fires on the whole circle, the trace ends back at the beam's start with an `origin` event. A straight beam with a finite `Q` passes the real `t = ∞` silently (its pre-image there is a finite point).
 - **Ties:** at one parameter the cursor comes first, then the hits by id, then the passage of infinity.
+- **A touch at `Q`** (Stage 105): a beam tangent to a surface's carrier at `Q` touches it without crossing (no event; §11.4). A pre-transform level with a mirror through `Q_0` makes such grazes reachable on purpose (`scenes/playground/tangent_infinity.tscn`).
 
 ### 12.6 Effect limit
 
@@ -2428,7 +2431,7 @@ The following invariants are tested by the sweep but not in the original specifi
 | `PHYSICAL_CONTINUITY` | Step endpoints connect seamlessly (end of step N = start of step N+1) |
 | `VIA_ON_ARC` | Step via points lie on the step's arc carrier |
 | `VISUAL_ON_PHYSICAL_CARRIER` | Visual segment points lie on the physical carrier |
-| `DIRECTION_ONLY` | The physical trace depends only on the aim direction: the planned shot's physical hits equal those of a converged shot without plan aimed at the cursor's image (bounded by tangent-linear sensitivity to that image's float64 rounding; projective plans skipped until Stage 87) |
+| `DIRECTION_ONLY` | The physical trace depends only on the aim direction: the planned shot's physical hits equal those of a converged shot without plan aimed at the cursor's image (computed from exact data and rounded once where the plan's maps are exact data, Stage 105; bounded by tangent-linear sensitivity to that image's float64 rounding; projective plans skipped until Stage 87) |
 | `NO_POST_CURSOR_DIVERGENCE` | A path fully aligned up to the cursor does not diverge after it |
 | `EFFECT_LAW` | Every applied effect maps its beam by its exact law (§10.8) |
 | `EVENT_ON_BEAM` | Every event point lies on its beam, and every hit on its surface's carrier |
@@ -2495,6 +2498,7 @@ Do not use `|x| < ε` for decisions that change topology (which hit wins, on-seg
 - **Exact predicates** (`Exact`) decide incidence (a known point exactly on a carrier), endpoint identity, tangency of an exact line to a circle, and concurrency of line carriers. A float64 evaluation with a certified error bound handles the cheap case, and exact BigFloat arithmetic handles the rest. The bound only selects the path; it never decides a result.
 - **Provenance** (known points, exact lines, the stack, §31.4) replaces coordinate comparisons. For example, a hit at a segment endpoint lying on an exact line *is* the endpoint.
 - **Rounding never decides an endpoint, an incidence, a tangency, or a root at the antipode** (`t = ∞` is exact).
+- **The pole record** (Stage 105): every beam of an epoch is the image `F(ℓ)` of a straight line under the frame's maps and passes `Q = F(∞)`, its direction there being the image of `ℓ`'s direction. Beside the approximate `Q` the walk keeps `{Q, D}` as exact homogeneous data: set by the pre-transform (the start record of a direction or aimed shot) or by the first inversion of an exact straight beam (`Q` the center, `D` the line's direction); carried through reflections (`Q` reflected, `D' ∝ M²·conj(D)`), inversions (`Q` inverted, `D' ∝ conj(D)·U²`, `U = Q − C`), translation portals (`Q + d`); saved and restored by the stack; dropped by a rotated portal, a projective, an inversion about `Q` itself (the beam becomes straight) or the exact-data budget. Incidence of a carrier with `Q` and tangency there are exact predicates on the record.
 - The remaining tier-precision decisions (on-segment cross-ratio, side, root order) have their **margins** checked against the estimated error. `PrecisionLadder` raises the precision until the trajectory is reliable (§31.5).
 - Zero-length steps are dropped by exact equality of endpoints (`start == end`) in `BeamTracer`.
 
