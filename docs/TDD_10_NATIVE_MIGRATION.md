@@ -27,8 +27,11 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Done: B9 approved 2026-10-15; the oracle's `EMIT_INFINITY = True`, `FeatureFlags.INFINITY_EVENT_DEFAULT = true`, every fixture and corpus regenerated (with the Stage 101 semantics); `docs/research/stage88b_fixture_diff.md` holds the final classification |
 | 88c | Native `infinity` event, ∞ plan item, reversed anchored orientation | Done behind `Scene::emit_infinity` (off by default: the goldens and fixtures stand); the 26 Stage 88 fixtures match at f64, Dual and 4 limbs; `test_infinity.cpp`, `test_stage88_infinity.gd` |
 | 88d | Edge click, hover band, plan chevrons, HUD, `level_bounds` | Done: `ClickDetector` edge band, `EdgeOverlayNode`, `GameManager`, `PlanHUD`; `test_stage88_infinity_ui.gd` with real input events and a sweep with ∞ plans; on since the flip |
-| 101 | Infinity as a point: the frame's image of infinity `Q = F(∞)`, passed by every beam; the on-screen marker; the pre-transform | Done: oracle (`Walk.Q`, `beam_through`, `pre_transform` surfaces), native (`Walk::Q`, `plan_pole`, `through_tangent`, `Scene::pre_surfaces`), game (`Surface.pre_transform`, `LevelSettings.pre_transform_inversions`, the circled-cross marker, `BeamTracer.infinity_point`), `scenes/playground/pre_inverted.tscn`; `test_infinity.cpp`, `test_stage101_infinity_point.gd`; user sign-off 2026-10-15 ("everything works") |
 | 100 | Performance pass: dirty flags, no per-frame defs, cached arc params | Done: static frames do no solver or draw work (`frame_bench.gd`: 6 µs vs 120-290 µs per frame); `test_stage100_dirty_flags.gd`; user sign-off 2026-10-15 ("works perfectly"; the edge is not yet plannable: 88d) |
+| 101 | Infinity as a point: the frame's image of infinity `Q = F(∞)`, passed by every beam; the on-screen marker; the pre-transform | Done: oracle (`Walk.Q`, `beam_through`, `pre_transform` surfaces), native (`Walk::Q`, `plan_pole`, `through_tangent`, `Scene::pre_surfaces`), game (`Surface.pre_transform`, `LevelSettings.pre_transform_inversions`, the circled-cross marker, `BeamTracer.infinity_point`), `scenes/playground/pre_inverted.tscn`; `test_infinity.cpp`, `test_stage101_infinity_point.gd`; user sign-off 2026-10-15 ("everything works") |
+| 102 | The B-list resolved | Done: B1, B2, B4, B12 fixed; B6 partial; B3, B11 closed; B5, B7, B8, B10, B13 kept (table at the end) |
+| 103 | Coverage extras: the oracle in the loop, every level dumped, sweeps for every scene and infinity plans, no leaks, property tests | Done; one known finding (K1) |
+| 104 | Housekeeping: merged branches deleted, docs | Done |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests (ctest and
 the full GUT suite). The full suite must pass before proceeding to Stage N+1.
@@ -883,6 +886,62 @@ not plannable in scenes with plannable surfaces, is the feature of Stages
 88c-d, not yet implemented; it is the next work. `native-migration` merged
 into `main` a second time here.
 
+## Stage 103: coverage extras
+
+- **The oracle in the loop.** `make oracle-test` (pytest over
+  `docs/research/oracle`: 91 tests, 0.3 s) runs before the GUT suite in `make
+  test`, `make test-fast` and both `run_tests` scripts; `test_fixture_schema.py`
+  pins the fixtures' shape (keys, event kinds and fields, the infinity entry and
+  event, a generator for every file).
+- **Every level dumped.** `tscn_import.py` builds everything `LevelSettings`
+  builds (level-bounds walls, togglers, ghost togglers, gates, flag mirrors,
+  the pre-transform); all 32 dumps round-trip; 36 new scene-corpus scenarios
+  (flag_switches, ghost_room, pre_inverted), oracle-checked in GUT; a GUT test
+  requires a dump for every level.
+- **Sweeps for every scene, and infinity plans** (`scripts/testing/SWEEP_CONFIG.md`):
+  the playgrounds no sweep planned on (plannable_inversion, portals,
+  two_sided, pre_inverted) with their own surfaces' plans, and [∞], [∞, ∞],
+  [∞, X], [X, ∞] on every planned scene. They found two things. (1) The
+  DIRECTION-ONLY reference for a plan's second realization (my Stage 101
+  construction from a point on the reversed circle) is ill-conditioned when the
+  circle is nearly straight; the reference now carries the plan [∞] itself.
+  (2) Known finding K1, below.
+- **No leaks.** Side links referred to their surfaces and partners strongly:
+  every mirror, portal pair and derived overlay link was a reference cycle, so
+  every level leaked its surfaces and the hover overlays leaked a pair per
+  update. `SideLink.surface` is weak, `SideLink.outgoing` strong unless it
+  closes a cycle; derived overlay links are cached per surface.
+  `tests/test_zz_leaks.gd` (every level played and freed: the object count
+  returns to the baseline) and `run_tests_parallel.sh` (fails on any
+  "leaked at exit") keep it so.
+- **Property tests** (`native/tests/test_props.cpp`): exact predicates vs a
+  64-limb reference on degenerate and 1-ulp-perturbed inputs, `param_of` ∘ `at`,
+  walker invariants and the float64 twin on 300 random scenes, plus the B1, B2
+  and B3 pins of Stage 102.
+- **Draw smoke: not done.** Headless Godot does not rasterize; pixel probes
+  would need a real renderer and be flaky. `frame_bench.gd` and the scene tests
+  run every `_draw` path.
+
+## Known findings
+
+| # | Finding | Where | Status |
+|---|---|---|---|
+| K1 | On the portals playground the reflective arc (an inversion) moves the frame's infinity to its center, and the portal's −800 shift puts that point exactly on mirror 5 (x = 400). A vertical aim's image under the inversion is a circle tangent there to the vertical, i.e. to mirror 5. The tangency is exact by construction, but native decides it by rounding (two crossings, resolved differently at two precision tiers); the oracle (80 digits) sees no crossing. DIRECTION-ONLY catches the tier difference on 4 sweep combos. Pre-existing, independent of the infinity work; it needs an exact tangency test for circle beams at the frame's infinity point (provenance: at Q the beam's tangent is the frame's image of the pre-image line's direction). | `rc/solver.hpp` candidates; `tests/test_invariant_sweep.gd` `KNOWN_FINDINGS` | Open: awaiting the user |
+
+**Gate (Stages 102-103, 2026-10-16):** `./run_tests_parallel.sh` 784 passing /
+0 failing in 15 s, no process leaks; `make oracle-test` 91 passing; `ctest`
+33 cases green, also under ASan/UBSan (560 s, no report); `make bench`
+identical to the pre-native table (ladder 161/161, beam_f64 physical 112/161,
+beam_big112 physical 160/161); the goldens identical except the one sweep
+combo B2 changed (re-blessed with its evidence).
+
+## Stage 104: housekeeping
+
+All local branches were merged into `main` and are deleted (the history lives
+in the merge commits; tag `pre-native` stays). `SWEEP_CONFIG.md` rewritten for
+the native sweeps. `project.godot`'s local main-scene change stays uncommitted,
+as the user asked.
+
 ## Machine quirks: the open editor and the migration
 
 The Godot editor (launched from VSCode) stayed open through Stages 90-97. It
@@ -899,12 +958,37 @@ the suite with the editor closed, or restart the editor afterwards. The five
 `Godot-*.ips` crash reports of that night are headless test processes (the
 two aborts fixed in Stages 93 and 96), not the editor.
 
-## B-list: behaviour changes awaiting approval (found during the port)
+**Agent worktrees inside the project** (Stage 101): a leftover worktree under
+`.claude/worktrees/` was a second copy of every script, and the editor's
+language server reported duplicate global classes. `.claude/.gdignore` keeps
+Godot out of that folder.
 
-| # | Change | Where | Evidence |
+**Stale objects after `git stash`** (Stage 102): make compares timestamps at
+one-second resolution, so a header rewritten by `git stash push/pop` within
+the same second as a build leaves objects compiled from the old header
+looking up to date, and a header-only template (the precision replay) kept
+its old instantiation in the release tests while the sanitizer build was
+right. After stash or checkout dances, delete the objects (`find native/build
+-name '*.o' -delete`) before trusting a test run.
+
+## B-list: resolved (Stage 102)
+
+Every behaviour-change candidate of the migration, with its outcome. The user
+asked for the simplest safe choice on each (2026-10-16): fix what is wrong and
+cheap, keep what is deliberate, close what is already done.
+
+| # | What it was | Outcome | Evidence |
 |---|---|---|---|
-| B1 | `BigFloat.mul` int64 column overflow above ~128 limbs per factor (reproduced natively) | `big_float.gd:251-256` | doctest with `__int128` reference |
-| B12 | `Exact.U` parsed two ulps below 2^-53 by Godot | `exact.gd:11` | `test_diff_beam_geom.gd` (`Exact.U` bits), `tools/dump_goldens.gd` hex inputs; native `exact.hpp` comment |
-| B9 | The `infinity` event counts toward MAX_HITS. **Approved and applied 2026-10-15** with the Stage 101 semantics (circle beams pass the frame's infinity too): 980 events inserted across the corpora, 222 traces at MAX_HITS cut earlier, only insertions and cuts; `FeatureFlags.INFINITY_EVENT_DEFAULT = true`, oracle `EMIT_INFINITY = True`; the native default stays off so the pre-native goldens keep pinning the legacy behaviour | oracle `trace2.py` | `docs/research/stage88b_fixture_diff.md` (final classification), `stage88b_classify.py`, `test_infinity.cpp` |
-| B5 | `PathRenderer` display bounds and `LevelSettings` edge walls from `level_bounds` instead of 1920x1080 literals (needed by 88d) | `path_renderer.gd`, `level_settings.gd` | **applied in Stage 100 with zero diff**: no `.tscn` sets `level_bounds`, the default equals `DEFAULT_BOUNDS`; `test_stage100_dirty_flags.gd` pins both; the user may veto |
-| B13 | A NaN replay gain poisons the envelope through `maxf` and jumps the ladder to the last tier | `error_estimate.gd:111`, `precision_ladder.gd` | sweep goldens `precision/no_plan` combos 4883, 4919 (`tiers_tried`) |
+| B1 | `BigFloat::mul` summed limb columns in int64 without carrying: wrapped above ~128 limbs per factor (the exact aim image runs to 320) | **Fixed**: columns accumulate in 128 bits (`bigfloat.cpp`) | `test_props.cpp`: the all-ones product identity at 4..320 limbs, a division round trip at 320 limbs; no golden changed |
+| B2 | The precision replay applied the carrier's reflection / inversion map at a projective hit (pops were already right: the pair's own map is the inverse) | **Fixed**: `effects::project<Dual>` at projective hits (`ladder.hpp`) | 549 corpus cases, 130 reaching a BigFloat tier: no tier or estimate changed; the 24 seeded direction walks of the fixtures: the replay reproduces the walk's gains through every projective (15 mismatches before, 4 after, all provenance points where the replay is larger); `make bench` unchanged |
+| B3 | `BigFloat::to_float` rounds twice; `approx()` assumes 2U | **Closed, no change**: the bound holds | `test_props.cpp`: 12,000 random values at 2..64 limbs within 2U |
+| B4 | TRACE-ENDS's fallback carrier distance used a line-only gradient formula | **Fixed**: `geometric_carrier_dist` (`invariants.hpp`) | every sweep stays violation-free |
+| B5 | Display bounds and edge walls from `level_bounds` | **Applied** in Stage 100 (zero diff), kept | Stage 100 |
+| B6 | `TraceHit.at_endpoint / blocked_* / is_fully_blocked()` never set; `TestTrace` / `TraceMode` | **Partial**: the dead hit fields removed from the binding; `TestTrace` and `TraceMode` kept (a thin helper and two constants) | suite green |
+| B7 | The fork tie-break distance is float32 | **Kept** (deliberate: the click is a float32 Vector2) | — |
+| B8 | `std::sort` of candidates; `0.866` in full-circle segment points | **Kept**: the comparator only ties identical candidates; 0.866 is scene data in every dump and fixture | — |
+| B9 | The `infinity` event counts toward MAX_HITS | **Approved and applied** 2026-10-15 (Stages 88b, 101) | `docs/research/stage88b_fixture_diff.md` |
+| B10 | `trace_pair`'s unsupported-scene branch; `is_target` never set | **Kept**: a cheap guard; targets are a game feature not built yet | — |
+| B11 | String cache keys | **Closed**: struct keys natively (`Tracer::CacheKey`, `SolveCache::ChainKey`) | — |
+| B12 | `exact::U` was Godot's parse, two ulps below 2^-53 | **Fixed**: `U = 2^-53` (`exact.hpp`) | the Exact goldens (results and `decided_by_filter`) unchanged |
+| B13 | A NaN tangent-linear gain jumps the ladder to the last tier | **Won't fix**: the climb is the conservative outcome (2 of 284,096 sweep combos) | sweep goldens |
