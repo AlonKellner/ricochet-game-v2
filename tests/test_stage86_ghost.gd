@@ -18,7 +18,7 @@ func before_all():
 
 func _walk(name: String, ctx: NumCtx) -> Array:
 	var fx: Dictionary = _fx[name]
-	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
+	var scene := Rules.scene_of(ctx, fx["surfaces"])
 	var player := ctx.cn(fx["player"][0], fx["player"][1])
 	var cursor = null if fx["cursor"] == null else ctx.cn(fx["cursor"][0], fx["cursor"][1])
 	var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
@@ -91,7 +91,7 @@ func test_fast_twin_ghost():
 	for name in _fx:
 		var fx: Dictionary = _fx[name]
 		var gen := _walk(name, ctx)
-		var sc := FastSolverScene.from_defs(fx["surfaces"])
+		var sc := Rules.fast_scene_of(fx["surfaces"])
 		var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
 		var plan := Rules.plan_of(fx["plan"])
 		var out

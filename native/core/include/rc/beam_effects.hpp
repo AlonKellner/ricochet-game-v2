@@ -259,6 +259,16 @@ std::optional<CN<N>> map_point(const std::optional<CN<N>> &z, const Surf<N> &sur
 	return Beam<N>::invert_point(*z, *seg.circ);
 }
 
+// Q0: the scene's pre-transform applied to infinity (nullopt = infinity).
+template <Num N>
+std::optional<CN<N>> scene_pre_q(const Scene<N> &sc) {
+	std::optional<CN<N>> q;
+	for (const auto &s : sc.pre_surfaces) {
+		q = map_point(q, *s, false);
+	}
+	return q;
+}
+
 // Pole chain state: P, Q (nullopt = infinity), delta = P - Q (tracked exactly).
 template <Num N>
 struct Poles {

@@ -35,7 +35,7 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Visibility polygon (§15) | Planned |
 | State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Done |
 | Ghost mode & toggler surfaces (Stage 86) | Done |
-| Plannable infinity — the ∞ plan entry, the `infinity` event (§4.2, §6.3, §12.5, §13.1; TDD_10 Stage 88) | Specified (oracle + fixtures, Stage 88a); implementation pending (Stages 88b–d) |
+| Plannable infinity — the ∞ plan entry, the `infinity` event (§4.2, §6.3, §12.5, §13.1; TDD_10 Stages 88, 101) | Done (B9 approved 2026-10-15): the frame's infinity `Q`, the edge or an on-screen point, plannable; the pre-transform (§9.5) |
 | Level editor | Planned |
 | Menus, HUD, save system | Planned |
 
@@ -233,7 +233,7 @@ The player builds a plan by clicking on **surface sides** in order. The plan is 
 - **Highlighting**: when the cursor hovers over a surface, the approachable side highlights to indicate it is clickable.
 - **Plan display**: planned surface sides are visually marked (e.g., numbered overlay, distinct color on the planned side).
 - **Preview**: the trajectory preview updates in real time as the plan and cursor change.
-- **Infinity entry** (Stage 88): clicking within the click tolerance **inside the level bounds' edge**, where no interactive surface wins, appends the entry **∞** (`INFINITY_ID = -3`, no side). It means "the beam wraps through the screen edge here" and selects the plan's second realization (§13.1). Hovering the edge band highlights it; planned ∞ entries are marked on the edge like planned sides. While the plan's simulated state is ghosted the entry is still allowed: a ghost arrow wraps.
+- **Infinity entry** (Stages 88, 101): the entry **∞** (`INFINITY_ID = -3`, no side) means "the beam passes the frame's infinity here" and selects the plan's second realization (§13.1). *Where* infinity is depends on the frame the plan has reached (§13.1: `Q = F(∞)`, the image of infinity under the plan's effects on the provenance stack, starting from the level's pre-transform, §9.5). When `Q` is the real infinity or lies off screen, clicking within the click tolerance **inside the level bounds' edge**, where no interactive surface wins, appends the entry; hovering the edge band highlights it and planned ∞ entries are marked on the edge where they were clicked. When `Q` is a point on screen (after an inversion, or in a level with a pre-transform), it is drawn as a **circled cross** and is plannable like any surface: the nearest within tolerance wins, planned entries are numbered at it (each at the point of its own frame). Hover and plan overlays of infinity use the surfaces' language (§4.3): a gradient band fading away from it and incoming / outgoing chevrons, one pair per side of the level bounds inside the edge, four radial pairs around the point. The player faces the preview's first step, so it faces the way the arrow will leave (toward or away from the cursor, along the frame's circles). While the plan's simulated state is ghosted the entry is still allowed: a ghost arrow wraps.
 - **Right-click removal**: right-clicking over a planned surface removes the **latest instance** of that surface from the plan (right-clicking the edge band removes the latest ∞ entry). Right-clicking over an unplanned surface or empty space **clears the entire plan**.
 - **Clear plan**: dedicated input (C) clears the plan without resetting level state or player position.
 - **Duplicate entries allowed**: a surface side may appear in the plan **multiple times**, including **consecutively** (e.g., plan a circle-inversion surface's left side twice to invert then un-invert). The player is free to construct any plan; the preview shows which entries are active.
@@ -392,7 +392,7 @@ Every transformative effect maps a generalized circle to a generalized circle. I
 
 ### 6.3 Lines through infinity
 
-The beam parameter is **projective**. From `t = 0` (at `p`) the beam runs forward through `t → +∞`, wraps to `t → −∞`, and returns towards `p`. A straight beam passes through the point at infinity. On a circle beam, `t = ∞` is the antipode of `p`, an ordinary finite point (an exact value in every precision tier). Candidate hits are ordered **from the current parameter** in this cyclic order, so a hit "beyond infinity" is simply a later candidate (§11.3). In the visual plane, wrapping through ∞ on a straight beam means leaving the screen and returning from the opposite side (§12.5). The wrap of a straight beam is itself an event, `infinity` (Stage 88): ordered between the candidates ahead (`t > t0`) and the wrapped ones, counted toward the hit limit like a pass, with no point. A circle beam never emits it (its `t = ∞` is a finite point).
+The beam parameter is **projective**. From `t = 0` (at `p`) the beam runs forward through `t → +∞`, wraps to `t → −∞`, and returns towards `p`. A straight beam passes through the point at infinity. On a circle beam, `t = ∞` is the antipode of `p`, an ordinary finite point (an exact value in every precision tier). Distinct from the parameter's `t = ∞` is **the frame's infinity** `Q = F(∞)` (§13.1): the image of the point at infinity under the effects applied so far. A beam is the image of a straight line, so it passes `Q`: at `t = ∞` when `Q` is the real infinity (a straight beam in the identity frame), at a finite parameter otherwise (every circle beam; a straight beam through an inversion center). That passage is the `infinity` event (§12.5). Candidate hits are ordered **from the current parameter** in this cyclic order, so a hit "beyond infinity" is simply a later candidate (§11.3). In the visual plane, wrapping through ∞ on a straight beam means leaving the screen and returning from the opposite side (§12.5). The wrap of a straight beam is itself an event, `infinity` (Stage 88): ordered between the candidates ahead (`t > t0`) and the wrapped ones, counted toward the hit limit like a pass, with no point. A circle beam never emits it (its `t = ∞` is a finite point).
 
 ### 6.4 Per-step frames → frame identity
 
@@ -626,6 +626,12 @@ Example: a breakable mirror uses `CategoricalResolver` with `state_key = "mirror
 **Missing key behavior:** if `state_key` is not in `game_state`, `CategoricalResolver` returns the config for a sentinel `DEFAULT` key in the table. If neither the actual value nor `DEFAULT` is in `config_table`, it falls back to the first entry in the table. This is flagged as a warning in debug builds.
 
 ---
+
+### 9.5 Pre-transform
+
+> **Status: implemented (Stage 101).**
+
+A level may start **after** a transform: `LevelData.pre_transform` is an ordered list of inversion circles (`LevelSettings.pre_transform_inversions`, `(cx, cy, r)` triples) that are never hit and never clickable. They are part of the surfaces list flagged `pre_transform` (so every consumer sees them, drawn as a faint circle, the "horizon"), and define the frame the shot starts in: `Q_0`, their composite image of the point at infinity. In that frame the arrow's natural paths are the images of straight lines, circles through `Q_0`: the initial beam is the oriented circle through the player, the aim point and `Q_0` (`P → X → Q_0`, or `P → Q_0 → X` with an ∞ entry first, §13.1); a direction shot starts along its direction on the circle through `Q_0`. Effects act on these beams by the ordinary beam maps; the frame's infinity moves with them (`Q_{j+1} = T_j(Q_j)`, restored by a pop, the real ∞ again after a projective, §12.5). `Q_0` on screen is the infinity marker (§4.2): planning it first disambiguates the short way round from the long way, which is what makes a pre-transformed level a puzzle. Demo: `scenes/playground/pre_inverted.tscn`.
 
 ## 10. Effect system
 
@@ -869,7 +875,7 @@ Event:
     on_segment:  bool
     rehit:       bool          # the departure point, re-hit after the full loop
     epoch:       int           # projectives start a new epoch
-    point:       CN            # null for escape, infinity, and a max at infinity
+    point:       CN            # null for escape, the real infinity, and a max at infinity; Q for a finite frame's infinity
     beam, t_from, t_to         # the arc leading to this event (t_to null = infinity)
     margin:      float         # px gap to the nearest competing decision (precision control)
 ```
@@ -995,8 +1001,10 @@ The frame id of subsequent steps follows the stack (§10.7).
 
 ### 12.5 Beyond-infinity in the visual frame
 
-- **Straight beam:** passing `t = ∞` means the arrow travels to the viewport edge, leaves, and returns from the opposite edge (two escape steps, §12.3). The passage is an `infinity` event (Stage 88): it counts toward the hit limit; a trace cut by the limit there ends with a `max` event at infinity (drawn up to the edge). The event is **applied** when the next plan entry is ∞ (the entry is consumed, in both modes); otherwise it passes. If no effect fires on the whole loop, the trace still ends with an `escape` event.
-- **Circle beam** (e.g. after an inversion): `t = ∞` is the antipode of `p`, a finite point that the arrow simply passes. If no effect fires on the whole circle, the trace ends back at the beam's start with an `origin` event.
+- **The frame's infinity** `Q = F(∞)` (§6.3, §13.1) is passed exactly once per loop of a beam; the passage is the `infinity` event (Stages 88, 101): it counts toward the hit limit; a trace cut by the limit there ends with a `max` event at `Q` (surface id `INFINITY_ID`; no point when `Q` is the real infinity). The event is **applied** when the next plan entry is ∞ (the entry is consumed, in both modes); otherwise it **passes**. An unplanned passage is **not a divergence**; an ∞ entry that is not reached when another entry fires is one, like any unmet entry (§14.2).
+- **Straight beam, `Q = ∞`:** passing `t = ∞` means the arrow travels to the viewport edge, leaves, and returns from the opposite edge (two escape steps, §12.3; the outgoing one carries `surface_id = INFINITY_ID`). If no effect fires on the whole loop, the trace still ends with an `escape` event.
+- **A finite `Q`** (every circle beam, after an inversion or in a pre-transform level; a straight beam through an inversion center): the arrow simply passes the point `Q`; the step ending there carries `surface_id = INFINITY_ID` and the next step continues from it. `t = ∞` of a circle beam (the antipode of `p`) is an ordinary point. If no effect fires on the whole circle, the trace ends back at the beam's start with an `origin` event. A straight beam with a finite `Q` passes the real `t = ∞` silently (its pre-image there is a finite point).
+- **Ties:** at one parameter the cursor comes first, then the hits by id, then the passage of infinity.
 
 ### 12.6 Effect limit
 
@@ -1032,7 +1040,7 @@ B_j = circle through  P_j = F_j(player),  X_j = F_j(F_K⁻¹(cursor)),  Q_j = F_
 - **Poles:** the poles `P_j` and `Q_j` are mapped forward through the point maps of the effects (`BeamEffects.map_pole`). The difference `P − Q` is carried by **exact Möbius difference formulas**, so it does not cancel catastrophically.
 - **Image chain:** `X_j` is mapped backward from the cursor (`BeamEffects.map_point`) and memoized per stack frame, so a pop returns exactly the earlier image.
 - **Points at infinity** are allowed. If the construction degenerates (player or cursor exactly at an inversion center), see §11.4.
-- **Two realizations** (Stage 88): path order is preserved by every effect, so the orientation of the whole first epoch is fixed by `B_0`'s aim: toward `X_0` (`P → X → Q`, the direct realization), or away from it, reaching `X_0` through ∞ (`P → Q → X`). An ∞ plan entry in the first epoch (before its first projective) selects the second: every `B_j` of that epoch is built `through(P, Q, X)` instead. In a later epoch the projective's exit already fixes the orientation (§13.3), so an ∞ entry there is only matched by the walker. The ∞ entry must sit where the wrap happens; the visual wrap occurs on leg `j` only when `B_j` is straight, so an ∞ entry right after an inversion is unrealizable and the plan shows as invalid (§13.5). *Oracle:* `trace2.via_infinity`, fixtures `bench/fixtures/stage88_infinity.json`.
+- **Two realizations** (Stages 88, 101): path order is preserved by every effect, so the orientation of the whole first epoch is fixed by `B_0`'s aim: toward `X_0` (`P → X → Q`, the direct realization), or away from it, reaching `X_0` through `Q_0` (`P → Q → X`: the long way round). An ∞ plan entry in the first epoch (before its first projective) selects the second: every `B_j` of that epoch is built `through(P, Q, X)` instead. In a later epoch the projective's exit already fixes the orientation (§13.3), so an ∞ entry there is only matched by the walker. The ∞ entry must sit where the beam of its frame passes that frame's infinity `Q_j = F_j(∞)` (§12.5): the real infinity on a straight beam, the inversion's center image on a circle beam. Whether an ∞ entry at a given plan position is met depends on the geometry (the passage of `Q_j` may come after the cursor); an unmet entry shows as invalid (§13.5). With a pre-transform (§9.5) `Q_0` is finite and `B_0` is already a circle through it. *Oracle:* `trace2.via_infinity`, `beam_through`; fixtures `bench/fixtures/stage88_infinity.json`, `stage101_infinity_point.json`.
 
 Each `B_j` is built **independently** (`BeamSolver.AnchorChain`). It is swapped in when plan entry `j` fires on the anchored path (§12.1), so planned-path errors never accumulate along the plan. A mirror-only plan (line reflections and translation-only portals) has an exact rational aim image. `B_0` is then an **exact line** (§31.4).
 

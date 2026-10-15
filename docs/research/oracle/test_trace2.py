@@ -26,11 +26,17 @@ def hits(walk):
     return [(e.surface_id, e.applied, e.terminal) for e in walk.events if e.kind == "hit"]
 
 
+def without_infinity(walk):
+    """The events of a walk minus the infinity events (Stage 88 inserts them
+    at every wrap: the pre-Stage-88 indices of a trace)."""
+    return [e for e in walk.events if e.kind != "infinity"]
+
+
 def test_mirror_reflects_by_angle_law():
     # vertical two-sided mirror x=100; beam from (0,0) at 45° down-right
     m = line(1, (100, -500), (100, 500), REFL, REFL)
     w = T.trace_physical_direction([m], (0, 0), mp.mpc(1, 1))
-    ev = w.events
+    ev = without_infinity(w)
     assert ev[0].surface_id == 1 and ev[0].applied
     assert abs(ev[0].point - mp.mpc(100, 100)) < mp.mpf(10) ** -40
     # the reflected line wraps through infinity and re-hits the mirror from the
@@ -161,7 +167,7 @@ def test_portal_pop_via_departure_rehit():
     # pair (re-hit) -> pop: the original beam resumes at the source hit point
     src, tgt = portal_pair(1, (100, -10), (100, 10), 0.0, (300, 0))
     w = T.trace_physical_direction([src, tgt], (0, 0), mp.mpc(1, 0.0625))
-    ev = w.events
+    ev = without_infinity(w)
     got = [(e.surface_id, e.applied, e.on_segment, e.rehit) for e in ev[:4]]
     assert got == [(1, True, True, False), (1, False, False, False), (2, True, True, True), (2, False, False, False)], got
     assert abs(ev[0].point - mp.mpc(100, 6.25)) < mp.mpf(10) ** -40
@@ -175,10 +181,11 @@ def test_portal_rotation():
     import math
     src, tgt = portal_pair(1, (100, -500), (100, 500), math.pi / 2, (0, 0))
     w = T.trace_physical_direction([src, tgt], (0, 0), mp.mpc(1, 0.25))
-    e0 = w.events[0]
+    ev = without_infinity(w)
+    e0 = ev[0]
     assert e0.surface_id == 1 and e0.applied
     # the exit beam is the rotated beam: its point is T(h) = i h
-    e1 = w.events[1]
+    e1 = ev[1]
     assert e1.kind in ("hit", "escape", "max")
 
 
@@ -346,12 +353,14 @@ def kinds(walk):
     return [e.kind for e in walk.events]
 
 
-def test_infinity_off_by_default_emits_no_infinity_events():
-    assert T.EMIT_INFINITY is False
+def test_infinity_on_by_default_and_off_reproduces_the_legacy_trace():
+    assert T.EMIT_INFINITY is True          # Stage 88b (B9 approved)
     p = line(1, (50, -500), (50, 500), PASS, PASS)
     w = T.trace_physical_direction([p], (0, 0), mp.mpc(1, 0))
-    assert "infinity" not in kinds(w)
-    assert kinds(w) == ["hit", "escape"]
+    assert kinds(w) == ["hit", "infinity", "escape"]
+    with emit_infinity(False):
+        w = T.trace_physical_direction([p], (0, 0), mp.mpc(1, 0))
+        assert kinds(w) == ["hit", "escape"]
 
 
 def test_infinity_event_between_ahead_and_wrapped_crossings():
@@ -471,15 +480,98 @@ def test_mirror_then_infinity_wraps_after_the_reflection():
         assert all("cursor" not in k for k in other), other
 
 
-def test_infinity_after_inversion_is_unrealizable():
-    inv = {"type": "inversion", "interactive": True}
-    c = T.surface_from_json({"id": 1, "line": False, "start": [700, 0], "end": [400, -150], "via": [400, 150],
-                             "full": True, "circle": {"center": [500, 0], "radius": 200}, "left": inv, "right": inv})
+INV_CIRCLE = {"id": 1, "line": False, "start": [700, 0], "end": [400, -150], "via": [400, 150],
+              "full": True, "circle": {"center": [500, 0], "radius": 200},
+              "left": {"type": "inversion", "interactive": True}, "right": {"type": "inversion", "interactive": True}}
+
+
+def test_infinity_after_inversion_is_the_center_passage():
+    # Stage 101: after an inversion the frame's infinity is the center; the
+    # circle beam passes it (an infinity event with that point). With the
+    # cursor outside the circle the center comes after the cursor: the entry
+    # stays unmet (the cursor is not reached on the plan); with the cursor
+    # inside, the reversed epoch passes the center first: the long way round
+    c = T.surface_from_json(INV_CIRCLE)
     with emit_infinity():
-        for side in ("LEFT", "RIGHT"):
-            w = T.planned([c], (0, 0), (900, 60), [(1, side), (T.INFINITY_ID, "")])
-            assert "cursor" not in kinds(w)
-            assert not any(e.kind == "infinity" and e.applied for e in w.events)
+        for cursor in ((900, 60), (600, 30)):
+            reached = []
+            for side in ("LEFT", "RIGHT"):
+                w = T.planned([c], (0, 0), cursor, [(1, side), (T.INFINITY_ID, "")])
+                ks = kinds(w)
+                # every finite infinity passage of the inverted frame is the center
+                inf = [e for e in w.events if e.kind == "infinity" and e.point is not None]
+                assert inf and all(abs(e.point - mp.mpc(500, 0)) < mp.mpf(10) ** -40 for e in inf)
+                if "cursor" in ks:
+                    reached.append(side)
+                    i_inf = next(i for i, e in enumerate(w.events) if e.kind == "infinity" and e.applied)
+                    assert i_inf < ks.index("cursor"), "the entry is consumed before the cursor"
+            assert reached, "one side reaches the cursor through the center"
+
+
+# ---------------------------------------------------------------- Stage 101: the pre-transform
+
+PRE = {"id": 9, "line": False, "start": [700, 0], "end": [400, -150], "via": [400, 150],
+       "full": True, "circle": {"center": [500, 0], "radius": 200},
+       "left": {"type": "inversion", "interactive": False}, "right": {"type": "inversion", "interactive": False},
+       "pre_transform": True}
+
+
+def test_pre_transform_moves_infinity_to_the_center():
+    sc = T.scene_from_json([PRE])
+    assert T.hittable(sc) == []
+    assert T.pre_q(sc) == mp.mpc(500, 0)
+    # a direction through Q0: a straight beam passing the center at a finite t
+    w = T.trace_physical_direction(sc, (0, 0), mp.mpc(1, 0))
+    assert kinds(w) == ["infinity", "escape"]
+    assert abs(w.events[0].point - mp.mpc(500, 0)) < mp.mpf(10) ** -40
+    assert abs(w.events[0].t - 500) < mp.mpf(10) ** -40
+    # any other direction: a circle through Q0 that passes it and returns
+    w = T.trace_physical_direction(sc, (0, 0), mp.mpc(1, 0.5))
+    assert kinds(w) == ["infinity", "origin"]
+    assert w.events[0].beam.kappa != 0
+
+
+def test_pre_transform_two_realizations():
+    sc = T.scene_from_json([PRE])
+    direct = T.planned(sc, (0, 0), (300, 100), [])
+    assert kinds(direct) == ["cursor", "infinity", "origin"]
+    assert not direct.events[1].applied
+    long_way = T.planned(sc, (0, 0), (300, 100), [(T.INFINITY_ID, "")])
+    assert kinds(long_way) == ["infinity", "cursor", "origin"]
+    assert long_way.events[0].applied
+    # the same circle, run the other way
+    assert abs(direct.events[0].beam.kappa + long_way.events[0].beam.kappa) < mp.mpf(10) ** -40
+    phys = T.physical(sc, (0, 0), (300, 100), [(T.INFINITY_ID, "")])
+    assert kinds(phys) == ["infinity", "cursor", "origin"]
+
+
+def test_pre_transform_mirror_moves_q():
+    m = line(1, (400, -300), (400, 300), REFL, REFL)
+    sc = T.scene_from_json([PRE]) + [m]
+    w = T.trace_physical_direction(sc, (0, 0), mp.mpc(1, 0.3))
+    ks = kinds(w)
+    assert ks[0] == "hit" and w.events[0].applied
+    i = ks.index("infinity")
+    # Q after the reflection: the mirror image of the center, (300, 0)
+    assert abs(w.events[i].point - mp.mpc(300, 0)) < mp.mpf(10) ** -40
+
+
+def test_pre_transform_cursor_at_q_is_a_straight_shot():
+    # the aim point at the frame's infinity: the line through both; the cursor
+    # comes first at the tie, the passage after it
+    sc = T.scene_from_json([PRE])
+    w = T.planned(sc, (0, 0), (500, 0), [])
+    assert kinds(w) == ["cursor", "infinity", "escape"]
+    assert w.events[0].beam.kappa == 0
+
+
+def test_pre_transform_player_at_q_is_a_straight_shot():
+    sc = T.scene_from_json([PRE])
+    w = T.trace_physical_direction(sc, (500, 0), mp.mpc(1, 0))
+    assert kinds(w) == ["escape"]
+    # planned from Q: the straight line to the cursor; infinity first never passes Q (it is the start)
+    assert kinds(T.planned(sc, (500, 0), (300, 100), [])) == ["cursor", "escape"]
+    assert "cursor" not in kinds(T.planned(sc, (500, 0), (300, 100), [(T.INFINITY_ID, "")]))
 
 
 def test_projective_exit_away_reaches_cursor_through_infinity():

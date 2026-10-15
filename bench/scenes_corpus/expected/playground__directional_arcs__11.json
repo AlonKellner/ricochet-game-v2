@@ -56,6 +56,15 @@
    "y": "1080.000000000000000000000000000000000000"
   },
   {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
+  },
+  {
    "kind": "hit",
    "surface_id": 10,
    "side": "LEFT",
@@ -155,6 +164,15 @@
    "y": "427.5653514653663085193407900003939314836"
   },
   {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
+  },
+  {
    "kind": "hit",
    "surface_id": 8,
    "side": "LEFT",
@@ -230,6 +248,15 @@
    "rehit": false,
    "x": "1920.000000000000000000000000000000000000",
    "y": "427.5653514653663085193407900003939314836"
+  },
+  {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
   },
   {
    "kind": "hit",
@@ -320,39 +347,6 @@
    "y": "427.5653514653663085193407900003939314836"
   },
   {
-   "kind": "hit",
-   "surface_id": 10,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "9.913835302014254778414158421213060729780e-119",
-   "y": "427.5653514653663085193407900003939314836"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 8,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1920.000000000000000000000000000000000000",
-   "y": "427.5653514653663085193407900003939314836"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 2,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1360.000000000000000000000000000000000000",
-   "y": "427.5653514653663085193407900003939314836"
-  },
-  {
    "kind": "max",
    "surface_id": -1,
    "side": "",
@@ -360,7 +354,7 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "1199.289726602974357736930937229957514192",
+   "x": "9.913835302014254778414158421213060729780e-119",
    "y": "427.5653514653663085193407900003939314836"
   }
  ],

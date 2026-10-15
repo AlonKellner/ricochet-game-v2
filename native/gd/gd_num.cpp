@@ -271,8 +271,9 @@ void CN::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_re"), &CN::get_re);
 	ClassDB::bind_method(D_METHOD("get_im"), &CN::get_im);
 	ClassDB::bind_method(D_METHOD("limbs"), &CN::limbs);
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "re", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num"), "", "get_re");
-	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "im", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num"), "", "get_im");
+	// (EDITOR, not STORAGE: a default instance's value wrappers are not cached as "default values")
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "re", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num", godot::PROPERTY_USAGE_NONE), "", "get_re");
+	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "im", godot::PROPERTY_HINT_RESOURCE_TYPE, "Num", godot::PROPERTY_USAGE_NONE), "", "get_im");
 }
 
 Ref<CN> CN::wrap(CNV v) {

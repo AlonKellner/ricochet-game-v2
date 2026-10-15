@@ -37,6 +37,7 @@ func _ready() -> void:
 	_player = get_node_or_null("../Player")
 	_cursor = get_node_or_null("../Cursor")
 	_draw_bounds = _level_bounds().grow(50.0)
+	_tracer.set_emit_infinity(FeatureFlags.infinity_event())
 	z_index = 20
 
 func _process(_delta: float) -> void:

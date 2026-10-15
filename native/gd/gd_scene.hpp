@@ -79,6 +79,9 @@ public:
 
 	static godot::Ref<BeamScene> from_defs(const godot::Ref<NumCtx> &ctx, const godot::Array &defs);
 	static bool supported(const godot::Array &defs);
+	// Stage 88: straight beams emit the `infinity` event (off: the pre-Stage-88 traces)
+	void set_emit_infinity(bool on);
+	bool get_emit_infinity() const;
 	godot::Array get_surfaces() const { return surfaces_; }
 	godot::Dictionary get_by_id() const { return by_id_; }
 	int get_limbs() const { return limbs; }

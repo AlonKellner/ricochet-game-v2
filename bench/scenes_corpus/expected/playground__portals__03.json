@@ -91,6 +91,17 @@
    "y": "783.2508893246534990897291406950272515500"
   },
   {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1200.000000000000000000000000000000000000",
+   "y": "681.6666666666666666666666666666666666667"
+  },
+  {
    "kind": "hit",
    "surface_id": 9,
    "side": "RIGHT",

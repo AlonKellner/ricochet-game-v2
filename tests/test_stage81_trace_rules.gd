@@ -26,10 +26,22 @@ static func plan_of(j: Array) -> Array:
 			null if c == null else Vector2(c[0], c[1])))
 	return out
 
+# A fixture's scene at `ctx`, with the game's infinity switch (the fixtures
+# are the oracle's traces under FeatureFlags.infinity_event()).
+static func scene_of(ctx: NumCtx, defs: Array) -> BeamScene:
+	var s := BeamScene.from_defs(ctx, defs)
+	s.emit_infinity = FeatureFlags.infinity_event()
+	return s
+
+static func fast_scene_of(defs: Array) -> FastSolverScene:
+	var s := FastSolverScene.from_defs(defs)
+	s.scene.emit_infinity = FeatureFlags.infinity_event()
+	return s
+
 # Walk a fixture with the generic solver at `ctx`.
 func _walk(name: String, ctx: NumCtx) -> Array:
 	var fx: Dictionary = _fx[name]
-	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
+	var scene := scene_of(ctx, fx["surfaces"])
 	var player := ctx.cn(fx["player"][0], fx["player"][1])
 	var cursor = null if fx["cursor"] == null else ctx.cn(fx["cursor"][0], fx["cursor"][1])
 	var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
@@ -111,7 +123,8 @@ func test_zero_length_rule_same_in_planned():
 func test_departure_rehit_is_ordinary_hit():
 	_check_fixture("departure_rehit_straight")
 	_check_fixture("departure_rehit_off_segment_planned")
-	var ev := _walk("departure_rehit_straight", NumCtx.f64())
+	# (the wrap's infinity events aside: the pre-Stage-88 indices)
+	var ev := _walk("departure_rehit_straight", NumCtx.f64()).filter(func(e): return e.kind != "infinity")
 	if ev.size() > 1:
 		assert_true(ev[1].rehit, "second event is the departure re-hit")
 
@@ -143,7 +156,7 @@ func test_targets_recorded_on_segment():
 	_check_fixture("target_recorded_on_segment")
 	var fx: Dictionary = _fx["target_recorded_on_segment"]
 	var ctx := NumCtx.f64()
-	var scene := BeamScene.from_defs(ctx, fx["surfaces"])
+	var scene := scene_of(ctx, fx["surfaces"])
 	var ev := BeamSolver.trace_direction(ctx, scene, ctx.cn(fx["player"][0], fx["player"][1]),
 		ctx.cn(fx["direction"][0], fx["direction"][1]), [], null, BeamSolver.PHYSICAL)
 	assert_eq(BeamSolver.targets_of(scene, ev), fx["targets"].map(func(x): return int(x)), "on-segment target hits")
@@ -159,7 +172,7 @@ func test_fast_twin_trace_rules():
 			continue
 		var gen := _walk(name, ctx)
 		assert_eq(gen.size(), fx["expected"].size(), "%s: generic walk matches the oracle length" % name)
-		var fsc := FastSolverScene.from_defs(fx["surfaces"])
+		var fsc := fast_scene_of(fx["surfaces"])
 		var mode: int = BeamSolver.PHYSICAL if fx["mode"] == "physical" else BeamSolver.PLANNED
 		var cur = null if fx["cursor"] == null else PackedFloat64Array(fx["cursor"])
 		var out := FastSolver.trace_direction(fsc, PackedFloat64Array(fx["player"]), PackedFloat64Array(fx["direction"]),
@@ -196,7 +209,7 @@ func test_planned_reflection_chain_reaches_cursor():
 			var se := load_corpus(name)
 			var scn: Dictionary = se[0]
 			var res := PrecisionLadder.solve(scn["surfaces"], scn["player"], scn["cursor"], plan_of(scn["plan"]),
-				32, 32, CORPUS_TOL)
+				32, 32, CORPUS_TOL, false, null, {}, FeatureFlags.infinity_event())
 			_check(res.planned, se[1]["planned"], name + " planned", CORPUS_TOL)
 			for e in res.planned:
 				if e.kind == "cursor":
@@ -214,7 +227,7 @@ func test_scene_corpus_matches_oracle():
 		var se := load_corpus(name)
 		var scn: Dictionary = se[0]
 		var res := PrecisionLadder.solve(scn["surfaces"], scn["player"], scn["cursor"], plan_of(scn["plan"]),
-			32, 32, CORPUS_TOL)
+			32, 32, CORPUS_TOL, false, null, {}, FeatureFlags.infinity_event())
 		if not _check(res.planned, se[1]["planned"], name + " planned", CORPUS_TOL):
 			bad += 1
 		if not _check(res.physical, se[1]["physical"], name + " physical", CORPUS_TOL):

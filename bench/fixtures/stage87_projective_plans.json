@@ -7589,6 +7589,17 @@
      "flags": {}
     },
     {
+     "kind": "infinity",
+     "surface_id": -3,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "state": false,
+     "flags": {}
+    },
+    {
      "kind": "hit",
      "surface_id": 15,
      "side": "LEFT",

@@ -103,14 +103,30 @@ realizations: the aim toward the aim image X_0 (the direct one), and the aim
 away from it, reaching X_0 through infinity. An infinity entry in the plan's
 first epoch (before its first projective) selects the second; in a later
 epoch the projective's exit already fixes the orientation, so the entry is
-only matched. With EMIT_INFINITY, a straight beam passing t = inf (the visual
-wrap: out through one screen edge, back in through the opposite one) emits an
-"infinity" event, ordered between the crossings ahead (t > t0) and the wrapped
-ones (t <= t0), counted toward MAX_HITS like a pass; a trace cut by MAX_HITS
-there ends with a "max" event at infinity (no point). The event is applied
+only matched. With EMIT_INFINITY, a beam passing the current frame's image
+of infinity Q = F(inf) emits an "infinity" event, counted toward MAX_HITS like
+a pass. On a straight beam with Q = inf that is the passage of t = inf (the
+visual wrap: out through one screen edge, back in through the opposite one),
+ordered between the crossings ahead (t > t0) and the wrapped ones (t <= t0); a
+trace cut by MAX_HITS there ends with a "max" event at infinity (no point).
+When the frame has moved infinity to a finite point Q (after an inversion, or
+in a scene with a pre-transform, below), the beam passes Q at a finite
+parameter: the event carries the point Q and is ordered like any crossing (at
+a tie after the cursor and the hits). Q is tracked along the walk: the
+pre-transform's image of inf at the start, mapped forward by every applied
+effect, restored by a pop, inf again after a projective. The event is applied
 (consumes the entry) when the next plan entry is the infinity entry, in both
-modes; otherwise it passes. Circle beams never emit it (their t = inf is the
-finite antipode).
+modes; otherwise it passes -- an unplanned passage is not a divergence, while
+an infinity entry that is not reached when another entry fires is one, like
+any unmet entry.
+
+Pre-transform (Stage 101): a scene may carry surfaces flagged "pre_transform"
+(full inversion circles, never hit). They define the frame the shot starts in:
+Q0 = the composite image of inf, and every beam of the first epoch is the
+image of a straight line under that frame -- a circle through Q0. The initial
+beam is the oriented circle through the player, the aim point and Q0 (P -> X
+-> Q0, or P -> Q0 -> X with an infinity entry in the first epoch: the long way
+round); a direction trace starts along its direction on the circle through Q0.
 
 Ghost mode (Stage 86): the reserved flag "ghost". While it is true every side
 resolves to a pass -- mirrors, inversions, portals, projectives, terminals and
@@ -143,7 +159,7 @@ INFINITY_ID = -3        # plan entry / event id of the point at infinity (Stage 
 # Stage 88: emit the "infinity" event at the wrap of a straight beam. Off until
 # Stage 88b regenerates the fixtures (the shipped solver does not emit it yet);
 # gen_fixtures_stage88 turns it on.
-EMIT_INFINITY = False
+EMIT_INFINITY = True
 
 
 # ---------------------------------------------------------------- scene
@@ -185,6 +201,7 @@ class Surface:
     right: dict | None
     is_target: bool = False
     resolver: dict | None = None
+    pre_transform: bool = False    # Stage 101: part of the scene's pre-transform, never hit
 
     def cfg(self, side, flags=None):
         """The side config under the flags (ghost: everything but a ghost
@@ -253,11 +270,56 @@ def surface_from_json(d):
             for cfg in (entry.get("left"), entry.get("right")):
                 assert cfg is None or cfg.get("type", "pass") in ("pass", "terminal", "reflection", "inversion"), \
                     "categorical sides: pass / terminal / reflection / inversion (portals, projectives are fixed)"
-    return Surface(sid, seg, d.get("left"), d.get("right"), bool(d.get("is_target")), res)
+    return Surface(sid, seg, d.get("left"), d.get("right"), bool(d.get("is_target")), res,
+                   bool(d.get("pre_transform")))
 
 
 def scene_from_json(surfaces):
     return [surface_from_json(d) for d in surfaces]
+
+
+def hittable(surfaces):
+    """The surfaces a beam can meet (the pre-transform's are not)."""
+    return [s for s in surfaces if not s.pre_transform]
+
+
+def pre_q(surfaces):
+    """Q0: the scene's pre-transform applied to infinity (None = infinity)."""
+    q = None
+    for s in surfaces:
+        if s.pre_transform:
+            q = map_point(q, s)
+    return q
+
+
+def beam_through(p, x, q):
+    """The oriented circle through p -> x -> q anchored at p (q None: the
+    straight beam from p toward x). HPBeam.through."""
+    a = x - p
+    if q is None or q == x or q == p:
+        # (the aim point or the player at the frame's infinity: the line through them)
+        return Beam(p, a / abs(a), mp.mpf(0))
+    b = q - p
+    # g = |a|^2 J(b) - |b|^2 J(a), J = rotate by -90 deg; tau = -i unit(g)
+    g = abs(a) ** 2 * (-1j * b) - abs(b) ** 2 * (-1j * a)
+    tau = -1j * g
+    tau = tau / abs(tau)
+    kap = 2 * cross(a, b) / (abs(a) * abs(b) * abs(b - a))
+    return Beam(p, tau, kap)
+
+
+def beam_through_tangent(p, tau, q):
+    """The beam from p along the unit tangent tau whose circle passes q (q
+    None: the straight beam): kappa = 2 cross(tau, q - p) / |q - p|^2."""
+    if q is None or q == p:
+        return Beam(p, tau, mp.mpf(0))     # (the player at Q: a straight beam, Q at its start)
+    w = q - p
+    return Beam(p, tau, 2 * cross(tau, w) / abs(w) ** 2)
+
+
+def reversed_beam(b):
+    """The same circle run the other way round."""
+    return Beam(b.p, -b.tau, -b.kappa)
 
 
 def circle_of(seg: Seg):
@@ -386,6 +448,7 @@ class StackEntry:
     line: object = None
     pop_id: int = None          # the surface whose hit pops this entry (sid, or a portal's pair)
     etype: str = None           # the effect pushed (a pop needs the same effect)
+    q: object = None            # the frame's image of infinity before the push (restored by the pop)
 
 
 @dataclass
@@ -410,6 +473,7 @@ class Walk:
     flags_before: dict = field(default_factory=dict)   # flags the current event resolved under
     proj_hits: dict = field(default_factory=dict)      # projective entry index -> (H, exact exit line or None)
     on_plan: bool = True                               # on the planned beams: every projective fired at its H
+    Q: object = None                                   # the current frame's image of infinity (None = inf)
     # (transformative entries are maps of the whole plane: whichever crossing
     # fires them, the next beam is the planned one -- with the plan matched)
 
@@ -599,10 +663,19 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 best = min(idx, key=lambda i: abs(beam.at(cands[i][3]) - kp))
                 cands[best] = (sort_key(kt, t0), 1, s.id, kt, False)
                 snapped[(s.id, kt)] = kp
-        if EMIT_INFINITY and beam.kappa == 0:
-            # the wrap through infinity: after every crossing ahead (t > t0),
-            # before the wrapped ones (no root of a straight beam is at inf)
-            cands.append(((0, mp.inf), 3, INFINITY_ID, mp.inf, False))
+        if EMIT_INFINITY:
+            if walk.Q is None:
+                if beam.kappa == 0:
+                    # the wrap through infinity: after every crossing ahead (t > t0),
+                    # before the wrapped ones (no root of a straight beam is at inf)
+                    cands.append(((0, mp.inf), 3, INFINITY_ID, mp.inf, False))
+            else:
+                # the frame's image of infinity is a finite point on this beam:
+                # an ordinary crossing (not at the departure point)
+                tq = beam.param_of(walk.Q)
+                if tq != t0:
+                    cands.append((sort_key(tq, t0), 3, INFINITY_ID, tq, False))
+                    snapped[(INFINITY_ID, tq)] = walk.Q
         cands.sort(key=lambda c: (c[0], c[1], c[2]))
         if walk.line is not None:
             cands = _concurrent_ties(walk, cands)
@@ -616,14 +689,15 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             ci += 1
             walk.count += 1
             if sid == INFINITY_ID:
+                q_pt = snapped.get((INFINITY_ID, t))   # None: the real infinity
                 if walk.count > MAX_HITS:
-                    walk.events.append(Event("max", INFINITY_ID, t=t, beam=beam))
+                    walk.events.append(Event("max", INFINITY_ID, point=q_pt, t=t, beam=beam))
                     walk.done = True
                     return
                 consumed = walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index][0] == INFINITY_ID
                 if consumed:
                     walk.plan_index += 1
-                walk.events.append(Event("infinity", INFINITY_ID, applied=consumed, t=t, beam=beam,
+                walk.events.append(Event("infinity", INFINITY_ID, applied=consumed, point=q_pt, t=t, beam=beam,
                                          flags=walk.flags))
                 if consumed:
                     _late_cursor(walk, beam, cands, ci, key, t0)
@@ -755,6 +829,7 @@ def _project(walk: Walk, beam, t, surf: Surface, side, pt, pt_exact):
     exit = axis * sgn
     nb = Beam(pt, exit / abs(exit), mp.mpf(0))
     walk.stack = []
+    walk.Q = None
     walk.known = [(pt, mp.mpf(0), surf.id)] if pt_exact else []
     walk.line = None
     if pt_exact:
@@ -817,11 +892,13 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
             t_res = top.t_hit if dh < do else top.other
         walk.known = top.known
         walk.line = top.line
+        walk.Q = top.q
         return top.beam, top.sid, t_res, False
     other = _other_root(beam, surf, t, fresh, depart, t0, pt)
     portal = surf.portal()
     pop_id = portal[2] if portal is not None else surf.id
-    walk.stack.append(StackEntry(beam, surf.id, t, other, walk.known, walk.line, pop_id, map_kind(surf, etype)))
+    walk.stack.append(StackEntry(beam, surf.id, t, other, walk.known, walk.line, pop_id, map_kind(surf, etype), walk.Q))
+    walk.Q = map_point(walk.Q, surf)
     nb = apply_effect(beam, t, surf, etype, pt)
     old_known = walk.known
     if portal is not None:
@@ -1072,15 +1149,25 @@ def trace_physical_direction(surfaces, player, direction, plan=(), cursor=None, 
 
 
 def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="direction", flags=None,
-                         extra_known=(), proj_hits=None):
+                         extra_known=(), proj_hits=None, beam=None):
     """line: the initial beam's exact implicit line; "direction": `direction`
-    is exact data; None: not exact."""
-    walk = Walk(surfaces, list(plan), cursor, mode, PHYSICAL)
+    is exact data; None: not exact. beam: the initial beam itself (a scene
+    with a pre-transform: the circle through Q0); else the straight beam
+    along `direction`, or the circle through Q0 tangent to it."""
+    walk = Walk(hittable(surfaces), list(plan), cursor, mode, PHYSICAL)
     walk.flags = dict(flags or {})
     walk.flags_before = walk.flags
     walk.proj_hits = proj_hits or {}
+    walk.Q = pre_q(surfaces)
     p0 = P(player)
-    b0 = Beam(p0, direction / abs(direction), mp.mpf(0))
+    if beam is not None:
+        b0 = beam
+    elif walk.Q is None:
+        b0 = Beam(p0, direction / abs(direction), mp.mpf(0))
+    else:
+        b0 = beam_through_tangent(p0, direction / abs(direction), walk.Q)
+    if b0.kappa != 0:
+        line = None             # a circle beam has no exact line
     walk.known = [(p0, mp.mpf(0), None)]
     walk.known += [(k, b0.param_of(k), None) for k in extra_known if k != p0]
     walk.line = line_from_dir(p0, direction) if line == "direction" else line
@@ -1259,21 +1346,30 @@ def _aim(surfaces, player, cursor, plan, flags=None, hints=None):
     away = via_infinity(surfaces, plan, flags)
     d = exact_direction(surfaces, plan, player, cursor, flags, hints)
     if d is None:
-        d0 = P(cursor) - P(player)
-        return (-d0 if away else d0), "direction", []
-    known = [P(cursor)] if plan and fixes_cursor(surfaces, cursor, plan, flags) else []
-    return (-d if away else d), initial_line(surfaces, player, cursor, plan, flags), known
+        d = P(cursor) - P(player)
+        line, known = "direction", []
+    else:
+        line = initial_line(surfaces, player, cursor, plan, flags)
+        known = [P(cursor)] if plan and fixes_cursor(surfaces, cursor, plan, flags) else []
+    q0 = pre_q(surfaces)
+    if q0 is None:
+        return (-d if away else d), line, known, None
+    # a pre-transform: the circle through the player, the aim point and Q0
+    b = beam_through(P(player), P(player) + d, q0)
+    return d, None, known, (reversed_beam(b) if away else b)
 
 
 def planned(surfaces, player, cursor, plan, flags=None, hints=None):
     """Planned trace = forward PLANNED-mode walk of the exact aim direction.
     hints: plan entry index -> the point the player clicked (settles forks)."""
-    d, line, known = _aim(surfaces, player, cursor, plan, flags, hints)
+    d, line, known, beam = _aim(surfaces, player, cursor, plan, flags, hints)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
-                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints))
+                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
+                                beam=beam)
 
 
 def physical(surfaces, player, cursor, plan, flags=None, hints=None):
-    d, line, known = _aim(surfaces, player, cursor, plan, flags, hints)
+    d, line, known, beam = _aim(surfaces, player, cursor, plan, flags, hints)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PHYSICAL, line=line, flags=flags,
-                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints))
+                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
+                                beam=beam)

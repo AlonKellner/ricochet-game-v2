@@ -53,3 +53,6 @@ native/build*/
 shadow_mismatches.json
 # Claude Code agent worktrees
 .claude/worktrees/
+
+# Claude Code agent worktrees (whole repo copies; Godot must not scan them: .claude/.gdignore)
+.claude/worktrees/

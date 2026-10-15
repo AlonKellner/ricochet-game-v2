@@ -9,6 +9,10 @@ var _left_config: SideConfig
 var _right_config: SideConfig
 var is_target: bool
 var player_solid: bool
+# Stage 101: part of the scene's pre-transform (a full inversion circle the
+# shot starts "after"): never hit, never clickable, not drawn as a surface; it
+# moves infinity before the shot
+var pre_transform: bool = false
 var _left_link: SideLink = null
 var _right_link: SideLink = null
 var resolver: ConfigResolver
@@ -42,6 +46,15 @@ func _auto_link(side: Side.Value, config: SideConfig) -> void:
 		return
 	if config.effect != null and config.effect.is_self_inverse():
 		set_side_link(side, SideLink.from_self(self, side))
+
+# A pre-transform inversion circle (Stage 101, GAME_SPEC 9.5).
+static func pre_transform_circle(center: Vector2, radius: float) -> Surface:
+	var carrier := GeneralizedCircle.from_circle(center, radius)
+	var inv := CircleInversionEffect.new(carrier)
+	var cfg := SideConfig.new(inv, false)
+	var s := Surface.new(Segment.full_from_carrier(carrier), cfg, cfg, false, false)
+	s.pre_transform = true
+	return s
 
 # A surface whose side configs depend on the game state (a categorical
 # resolver). Self-links are for fixed sides only.
