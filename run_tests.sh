@@ -8,5 +8,6 @@ cd "$(dirname "$0")"
 
 # fail fast: without native/bin/ the tests/native/ files cannot pass
 GODOT_BIN="$GODOT" make native
+make -s oracle-test
 
 "$GODOT" --headless -s addons/gut/gut_cmdln.gd "$@"

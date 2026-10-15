@@ -19,6 +19,11 @@ if ! GODOT_BIN="$GODOT" make native; then
 	echo "!! native build failed (make native); not running the suite"
 	exit 1
 fi
+# the oracle (the spec the fixtures come from) and the fixture schema
+if ! make -s oracle-test; then
+	echo "!! oracle tests failed (make oracle-test)"
+	exit 1
+fi
 
 if [ -z "${JOBS:-}" ]; then
 	JOBS=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc 2>/dev/null || echo 4)
