@@ -34,6 +34,7 @@ const BEAM_SCENES := [
 	"res://scenes/playground/directional_arcs.tscn",
 	"res://scenes/playground/directional_lines.tscn",
 	"res://scenes/playground/pre_inverted.tscn",    # Stage 101: a pre-transform
+	"res://scenes/playground/tangent_infinity.tscn", # Stage 105: surfaces through Q0
 ]
 
 func _solver_for(path: String) -> String:

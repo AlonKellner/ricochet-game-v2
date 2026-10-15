@@ -63,6 +63,38 @@ bool on_line_h(const Line3 &L, const Point3 &X);
 bool tangent_zero(const Line3 &L, const Point3 &C, const BigFloat &rw2);
 Line3 reflect_line(const Line3 &L, double sx, double sy, double ex, double ey);
 
+// ---- the exact pole (Stage 105)
+// Every beam of an epoch is the image F(l) of a straight line l under the
+// frame's maps; it passes Q = F(inf), its direction there the image of l's
+// direction. The pole record keeps both exactly: Q homogeneous (w > 0), D
+// a direction at any nonzero real scale (unoriented). A beam tangent to a
+// carrier at Q is then a touch, decided without rounding.
+struct ExactPole {
+	Point3 Q;
+	BigFloat dx, dy;
+};
+// The record after a map (nullopt: the direction degenerated, or Q went to
+// infinity for pole_invert).
+std::optional<ExactPole> pole_reflect(const ExactPole &p, double sx, double sy, double ex, double ey);
+std::optional<ExactPole> pole_invert(const ExactPole &p, const Point3 &C, const BigFloat &rw2);
+ExactPole pole_translate(const ExactPole &p, double dx, double dy);
+// A straight beam on the exact line L (Q at infinity) inverted in the circle
+// centered at C: Q becomes C, the direction there L's.
+std::optional<ExactPole> pole_from_line(const Line3 &L, const Point3 &C);
+// A pre-transform frame's start: Q0, and the initial beam's direction at Q0
+// for a direction shot (the circle through Q0 tangent to (dx, dy) at P) or an
+// aimed shot (the circle through P, X, Q0).
+std::optional<ExactPole> pole_start_direction(double px, double py, double dx, double dy, const Point3 &Q0);
+std::optional<ExactPole> pole_start_aimed(double px, double py, const Point3 &X, const Point3 &Q0);
+// Exact: the carrier passes Q.
+bool pole_on_line(const ExactPole &p, double sx, double sy, double ex, double ey);
+bool pole_on_circle(const ExactPole &p, const Point3 &C, const BigFloat &rw2);
+// Exact: the carrier passes Q and is tangent there to the beam.
+bool pole_tangent_line(const ExactPole &p, double sx, double sy, double ex, double ey);
+bool pole_tangent_circle(const ExactPole &p, const Point3 &C, const BigFloat &rw2);
+// The largest limb count of the record (the exact-data budget).
+int pole_limbs(const ExactPole &p);
+
 // An exact line carried lazily: float64 coefficients with rigorous bounds,
 // the exact coefficients computed only when a float filter cannot decide. A
 // derived line (reflected / translated) keeps its parent and mirror; a line

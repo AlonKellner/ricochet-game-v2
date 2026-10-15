@@ -1,5 +1,6 @@
 #include "rc/exact.hpp"
 
+#include <algorithm>
 #include <cmath>
 #include <cstdlib>
 
@@ -158,6 +159,164 @@ std::optional<Point3> invert_point_h(const Point3 &X, const Point3 &C, const Big
 		out = {out[0].neg(), out[1].neg(), out[2].neg()};
 	}
 	return out;
+}
+
+// ---------------------------------------------------------------- the exact pole
+
+namespace {
+
+// complex product / conjugate on exact pairs
+struct C2 {
+	BigFloat re, im;
+};
+C2 cmul(const C2 &a, const C2 &b) {
+	return {sub(mul(a.re, b.re), mul(a.im, b.im)), add(mul(a.re, b.im), mul(a.im, b.re))};
+}
+C2 conj(const C2 &a) {
+	return {a.re, a.im.neg()};
+}
+// The same value without its zero low limbs (exact multiplication allocates
+// the sum of both factors' limbs; small integers carry many zero limbs), so
+// the record grows with its significant bits only.
+BigFloat trim(BigFloat b) {
+	size_t z = 0;
+	while (z + 2 < b.limbs.size() && b.limbs[z] == 0) {
+		z++;
+	}
+	if (z > 0 && !b.is_zero()) {
+		b.limbs.erase(b.limbs.begin(), b.limbs.begin() + long(z));
+		b.exp += int64_t(BigFloat::BITS) * int64_t(z);
+	}
+	return b;
+}
+std::optional<ExactPole> pole_ok(const Point3 &Q, const C2 &D) {
+	if (D.re.is_zero() && D.im.is_zero()) {
+		return std::nullopt;
+	}
+	return ExactPole{{trim(Q[0]), trim(Q[1]), trim(Q[2])}, trim(D.re), trim(D.im)};
+}
+// Q - C up to the positive factor Qw Cw
+C2 rel(const Point3 &Q, const Point3 &C) {
+	return {sub(mul(Q[0], C[2]), mul(C[0], Q[2])), sub(mul(Q[1], C[2]), mul(C[1], Q[2]))};
+}
+// a float point minus a homogeneous point, up to the positive factor w
+C2 rel_f(double px, double py, const Point3 &X) {
+	return {sub(mul(of(px), X[2]), X[0]), sub(mul(of(py), X[2]), X[1])};
+}
+
+} // namespace
+
+std::optional<ExactPole> pole_reflect(const ExactPole &p, double sx, double sy, double ex, double ey) {
+	const C2 M{sub(of(ex), of(sx)), sub(of(ey), of(sy))};
+	return pole_ok(reflect_point_h(p.Q, sx, sy, ex, ey), cmul(cmul(M, M), conj(C2{p.dx, p.dy})));
+}
+
+std::optional<ExactPole> pole_invert(const ExactPole &p, const Point3 &C, const BigFloat &rw2) {
+	const std::optional<Point3> Q = invert_point_h(p.Q, C, rw2);
+	if (!Q) {
+		return std::nullopt; // Q was the center: it goes to infinity
+	}
+	const C2 Uq = rel(p.Q, C);
+	// the inversion's differential: t -> -conj(t) (Q - C)^2 / |Q - C|^4
+	return pole_ok(*Q, cmul(conj(C2{p.dx, p.dy}), cmul(Uq, Uq)));
+}
+
+ExactPole pole_translate(const ExactPole &p, double dx, double dy) {
+	return ExactPole{{trim(add(p.Q[0], mul(of(dx), p.Q[2]))), trim(add(p.Q[1], mul(of(dy), p.Q[2]))), p.Q[2]}, p.dx, p.dy};
+}
+
+std::optional<ExactPole> pole_from_line(const Line3 &L, const Point3 &C) {
+	return pole_ok(C, C2{L[1], L[0].neg()});
+}
+
+std::optional<ExactPole> pole_start_direction(double px, double py, double dx, double dy, const Point3 &Q0) {
+	// invert about Q0: the circle becomes a line parallel to its tangent at Q0,
+	// in the direction the differential at P gives d: conj(d) (P - Q0)^2
+	const C2 W = rel_f(px, py, Q0);
+	return pole_ok(Q0, cmul(conj(C2{of(dx), of(dy)}), cmul(W, W)));
+}
+
+std::optional<ExactPole> pole_start_aimed(double px, double py, const Point3 &X, const Point3 &Q0) {
+	// conj(P - X) (X - Q0) (P - Q0)
+	const C2 PX = rel_f(px, py, X);
+	const C2 XQ = rel(X, Q0);
+	const C2 PQ = rel_f(px, py, Q0);
+	return pole_ok(Q0, cmul(conj(PX), cmul(XQ, PQ)));
+}
+
+namespace {
+
+// A BigFloat as a float64 with a rigorous bound (to_float is within 2U of the
+// value, Stage 102 B3; 3U of the result covers the difference). nullopt where
+// float64 cannot bound it (overflow, the subnormal range).
+std::optional<EB> eb_of(const BigFloat &x) {
+	const double v = x.to_float();
+	if (!std::isfinite(v) || (v != 0.0 && std::fabs(v) < 1e-280)) {
+		return std::nullopt;
+	}
+	return EB{v, 3.0 * U * std::fabs(v)};
+}
+
+// The filter: certainly non-zero (the bound only selects the cheap path)
+bool certainly_nonzero(const EB &x) {
+	return std::isfinite(x.v) && std::isfinite(x.e) && std::fabs(x.v) > x.e;
+}
+
+} // namespace
+
+bool pole_on_line(const ExactPole &p, double sx, double sy, double ex, double ey) {
+	// filter: (e - s) x (Q - s w), homogeneous
+	const std::optional<EB> qx = eb_of(p.Q[0]), qy = eb_of(p.Q[1]), qw = eb_of(p.Q[2]);
+	if (qx && qy && qw) {
+		const EB dx = esub(EB{ex, 0.0}, EB{sx, 0.0}), dy = esub(EB{ey, 0.0}, EB{sy, 0.0});
+		const EB rx = esub(*qx, emul(EB{sx, 0.0}, *qw)), ry = esub(*qy, emul(EB{sy, 0.0}, *qw));
+		if (certainly_nonzero(esub(emul(dx, ry), emul(dy, rx)))) {
+			return false;
+		}
+	}
+	return on_line_h(line_through(sx, sy, ex, ey), p.Q);
+}
+
+bool pole_on_circle(const ExactPole &p, const Point3 &C, const BigFloat &rw2) {
+	// filter: |Qx Cw - Cx Qw|^2 + |Qy Cw - Cy Qw|^2 - rw2 Qw^2
+	{
+		const std::optional<EB> qx = eb_of(p.Q[0]), qy = eb_of(p.Q[1]), qw = eb_of(p.Q[2]);
+		const std::optional<EB> cx = eb_of(C[0]), cy = eb_of(C[1]), cw = eb_of(C[2]), r2 = eb_of(rw2);
+		if (qx && qy && qw && cx && cy && cw && r2) {
+			const EB ux = esub(emul(*qx, *cw), emul(*cx, *qw)), uy = esub(emul(*qy, *cw), emul(*cy, *qw));
+			if (certainly_nonzero(esub(eadd(emul(ux, ux), emul(uy, uy)), emul(*r2, emul(*qw, *qw))))) {
+				return false;
+			}
+		}
+	}
+	const C2 Uq = rel(p.Q, C);
+	// |Q - C|^2 = r^2: |Uq|^2 = rw2 Qw^2 (rw2 = r^2 Cw^2)
+	return sub(add(mul(Uq.re, Uq.re), mul(Uq.im, Uq.im)), mul(rw2, mul(p.Q[2], p.Q[2]))).is_zero();
+}
+
+bool pole_tangent_line(const ExactPole &p, double sx, double sy, double ex, double ey) {
+	if (!pole_on_line(p, sx, sy, ex, ey)) {
+		return false;
+	}
+	const BigFloat mx = sub(of(ex), of(sx));
+	const BigFloat my = sub(of(ey), of(sy));
+	return sub(mul(p.dx, my), mul(p.dy, mx)).is_zero();
+}
+
+bool pole_tangent_circle(const ExactPole &p, const Point3 &C, const BigFloat &rw2) {
+	if (!pole_on_circle(p, C, rw2)) {
+		return false;
+	}
+	const C2 Uq = rel(p.Q, C);
+	return add(mul(p.dx, Uq.re), mul(p.dy, Uq.im)).is_zero();
+}
+
+int pole_limbs(const ExactPole &p) {
+	int n = 0;
+	for (const BigFloat *b : {&p.Q[0], &p.Q[1], &p.Q[2], &p.dx, &p.dy}) {
+		n = std::max(n, int(b->limbs.size()));
+	}
+	return n;
 }
 
 Line3 line_through_h(double px, double py, const Point3 &X) {

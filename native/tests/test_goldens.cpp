@@ -615,6 +615,17 @@ TEST_CASE("goldens: the sweep combos of Tracer.trace_pair") {
 	if (const char *s = std::getenv("RC_SWEEP_STRIDE")) {
 		extra_stride = std::max(1, std::atoi(s));
 	}
+	// RC_SWEEP_PART=k/n: replay every n-th of the selected combos, from the k-th
+	// (ctest runs the parts as separate entries, in parallel)
+	long part_k = 0;
+	long part_n = 1;
+	if (const char *s = std::getenv("RC_SWEEP_PART")) {
+		if (std::sscanf(s, "%ld/%ld", &part_k, &part_n) != 2 || part_n < 1 || part_k < 0 || part_k >= part_n) {
+			part_k = 0;
+			part_n = 1;
+		}
+	}
+	long selected = 0;
 	int groups = 0;
 	int skipped = 0;
 	long combos = 0;
@@ -660,6 +671,9 @@ TEST_CASE("goldens: the sweep combos of Tracer.trace_pair") {
 				}
 				const size_t hk = k++;
 				if ((i / stride) % extra_stride != 0) {
+					continue;
+				}
+				if (selected++ % part_n != part_k) {
 					continue;
 				}
 				const std::optional<TracePair> pair = tracer.trace_pair(p, c, plan, Flags());

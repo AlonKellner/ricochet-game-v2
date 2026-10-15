@@ -886,6 +886,19 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 		}
 		scale = gd_maxf(scale, V2::of(X->fx(), X->fy()).length());
 	}
+	// Stage 105: the image from exact data where it is exact, rounded once (the
+	// float64 chain above rounds every map: inverting in then out through an arc
+	// lands a few ulps off the cursor, and an exact graze of the game's aim
+	// becomes a rounding decision in the reference)
+	if (const std::optional<exact::Point3> Xh = solver.exact_image_h(CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}}, in.plan,
+			EXACT_IMAGE_LIMBS, in.flags)) {
+		if ((*Xh)[2].sign != 0) {
+			const auto round = [](const BigFloat &a, const BigFloat &w) {
+				return a.with_limbs(std::max(a.precision_limbs(), 4)).div(w).to_float();
+			};
+			X = CN<F64>{F64{round((*Xh)[0], (*Xh)[2])}, F64{round((*Xh)[1], (*Xh)[2])}};
+		}
+	}
 	if (solver.fixes_cursor(CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}}, in.plan, in.flags)) {
 		X = CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}};
 	}

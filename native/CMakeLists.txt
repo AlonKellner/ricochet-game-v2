@@ -107,7 +107,18 @@ if(RC_BUILD_TESTS)
     get_filename_component(RC_REPO_ROOT "${CMAKE_SOURCE_DIR}/.." ABSOLUTE)
     target_compile_definitions(rc_tests PRIVATE "RC_REPO_ROOT=\"${RC_REPO_ROOT}\"")
     rc_apply_flags(rc_tests NO_CONVERSION)
-    add_test(NAME rc_tests COMMAND rc_tests)
+    # One binary, several ctest entries so `ctest -j` spreads the work over the
+    # cores: the sweep goldens replay in RC_SWEEP_PARTS parts (RC_SWEEP_PART),
+    # the Stage 105 tier-independence walks alone, every other case together.
+    set(RC_SWEEP_PARTS 6 CACHE STRING "ctest entries the sweep goldens replay is split into")
+    set(RC_HEAVY_CASES "goldens: the sweep combos*,Stage 105: on coincidence*")
+    add_test(NAME rc_tests COMMAND rc_tests "--test-case-exclude=${RC_HEAVY_CASES}")
+    add_test(NAME rc_tests_tier_independence COMMAND rc_tests "--test-case=Stage 105: on coincidence*")
+    math(EXPR RC_SWEEP_LAST "${RC_SWEEP_PARTS} - 1")
+    foreach(part RANGE ${RC_SWEEP_LAST})
+        add_test(NAME rc_tests_sweep_goldens_${part} COMMAND rc_tests "--test-case=goldens: the sweep combos*")
+        set_tests_properties(rc_tests_sweep_goldens_${part} PROPERTIES ENVIRONMENT "RC_SWEEP_PART=${part}/${RC_SWEEP_PARTS}")
+    endforeach()
 
     # ricochet_core must stay Godot-free: fails if any file under core/ names godot-cpp.
     add_test(NAME rc_core_no_godot

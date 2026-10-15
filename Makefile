@@ -25,15 +25,22 @@ native-debug:
 
 # ASan+UBSan build of everything (godot-cpp included), ctest run in place. Its
 # library goes to native/build-asan/bin so it never replaces the loadable one.
+# Debug (assertions on) at -O1: the sanitizers catch the same errors many times
+# faster than at -O0 (the whole ctest, every sweep combo included, in ~1 min
+# instead of ~10-40). The ctest entries run in parallel; ASAN_SWEEP_STRIDE=n
+# replays one sweep combo in n for a quicker look. Run it alone: other jobs on
+# the machine multiply its wall time.
+ASAN_SWEEP_STRIDE ?= 1
 native-asan:
 	$(CMAKE) -S native -B native/build-asan -DCMAKE_BUILD_TYPE=Debug \
+		-DCMAKE_CXX_FLAGS_DEBUG="-g -O1" -DCMAKE_C_FLAGS_DEBUG="-g -O1" \
 		-DRC_SANITIZE=address,undefined \
 		-DRC_EXTENSION_OUTPUT_DIR=$(CURDIR)/native/build-asan/bin
 	$(CMAKE) --build native/build-asan -j $(JOBS)
-	$(CTEST) --test-dir native/build-asan --output-on-failure
+	RC_SWEEP_STRIDE=$(ASAN_SWEEP_STRIDE) $(CTEST) --test-dir native/build-asan -j $(JOBS) --output-on-failure
 
 ctest:
-	$(CTEST) --test-dir native/build --output-on-failure
+	$(CTEST) --test-dir native/build -j $(JOBS) --output-on-failure
 
 # ------------------------------------------------------------------ oracle
 # The mpmath oracle's own tests and the fixture schema (docs/research/oracle).

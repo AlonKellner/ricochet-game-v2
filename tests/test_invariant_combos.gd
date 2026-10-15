@@ -98,6 +98,8 @@ static func _check_no_intersections(surfaces: Array, verbose: bool = false) -> A
 		for j in range(i + 1, surfaces.size()):
 			var s1: Surface = surfaces[i]
 			var s2: Surface = surfaces[j]
+			if s1.pre_transform or s2.pre_transform:
+				continue   # a pre-transform circle is not a surface (never hit, not drawn)
 			if _segments_intersect(s1.segment, s2.segment):
 				var msg := "Segments %d and %d intersect" % [s1.id, s2.id]
 				if verbose:
