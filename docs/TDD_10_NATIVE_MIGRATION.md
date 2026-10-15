@@ -27,7 +27,7 @@ Background: `docs/TDD_09_PRECISION_INTEGRATION.md` (the solver being ported),
 | 88b | Regenerate fixtures with `EMIT_INFINITY`; user approves the diff | Done: B9 approved 2026-10-15; the oracle's `EMIT_INFINITY = True`, `FeatureFlags.INFINITY_EVENT_DEFAULT = true`, every fixture and corpus regenerated (with the Stage 101 semantics); `docs/research/stage88b_fixture_diff.md` holds the final classification |
 | 88c | Native `infinity` event, ∞ plan item, reversed anchored orientation | Done behind `Scene::emit_infinity` (off by default: the goldens and fixtures stand); the 26 Stage 88 fixtures match at f64, Dual and 4 limbs; `test_infinity.cpp`, `test_stage88_infinity.gd` |
 | 88d | Edge click, hover band, plan chevrons, HUD, `level_bounds` | Done: `ClickDetector` edge band, `EdgeOverlayNode`, `GameManager`, `PlanHUD`; `test_stage88_infinity_ui.gd` with real input events and a sweep with ∞ plans; on since the flip |
-| 101 | Infinity as a point: the frame's image of infinity `Q = F(∞)`, passed by every beam; the on-screen marker; the pre-transform | Done: oracle (`Walk.Q`, `beam_through`, `pre_transform` surfaces), native (`Walk::Q`, `plan_pole`, `through_tangent`, `Scene::pre_surfaces`), game (`Surface.pre_transform`, `LevelSettings.pre_transform_inversions`, the circled-cross marker, `BeamTracer.infinity_point`), `scenes/playground/pre_inverted.tscn`; `test_infinity.cpp`, `test_stage101_infinity_point.gd`; **interactive sign-off pending** |
+| 101 | Infinity as a point: the frame's image of infinity `Q = F(∞)`, passed by every beam; the on-screen marker; the pre-transform | Done: oracle (`Walk.Q`, `beam_through`, `pre_transform` surfaces), native (`Walk::Q`, `plan_pole`, `through_tangent`, `Scene::pre_surfaces`), game (`Surface.pre_transform`, `LevelSettings.pre_transform_inversions`, the circled-cross marker, `BeamTracer.infinity_point`), `scenes/playground/pre_inverted.tscn`; `test_infinity.cpp`, `test_stage101_infinity_point.gd`; user sign-off 2026-10-15 ("everything works") |
 | 100 | Performance pass: dirty flags, no per-frame defs, cached arc params | Done: static frames do no solver or draw work (`frame_bench.gd`: 6 µs vs 120-290 µs per frame); `test_stage100_dirty_flags.gd`; user sign-off 2026-10-15 ("works perfectly"; the edge is not yet plannable: 88d) |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests (ctest and
@@ -791,6 +791,10 @@ regenerated corpus.
   one is an object; the value-wrapper properties (`CN.re/im`, `HPBeam.p/tau/
   kappa`, `HPBeamCircle.c/r/r2`, `BeamGeomSeg.s/e`, `BeamSceneSurf.seg/alpha/
   dvec`) now declare `PROPERTY_USAGE_NONE` (still readable, no cached default).
+
+**Sign-off (2026-10-15):** the user played the pre-inverted and main scenes
+after the follow-ups: "everything works". `native/stage-88-infinity` merged
+into `native-migration` and `main`.
 
 **Interactive checklist (user sign-off):**
 1. `pre_inverted.tscn`: the faint circle is the pre-transform; the circled
