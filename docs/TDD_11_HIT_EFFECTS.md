@@ -164,18 +164,19 @@ Separately, the user asked for two crossing mechanisms. They make crossing surfa
 
 On `scenes/stage107/hit_effects.tscn` (open it in the editor and run the scene). The player starts at (300, 500).
 
-The level contains:
+Every spawn is centred on the hit point, except host A, which keeps an offset as the example (`SpawnTemplate.offset`). The level contains:
 - **The column x = 600, one host per required mode:**
-  - A: beam tangent.
-  - B: beam normal.
-  - C: carrier tangent, on a terminal host.
-- **Arc D (bottom left):** carrier normal, spawns an inversion circle. It is a reflective host.
-- **Portal E (x = 1000 to 1300, top):** spawns a one-sided mirror, mirrored by the side hit.
-- **F1 / F2 (x = 1100):** share a channel. They spawn a block circle 150 px to the right.
-- **G (x = 1100, bottom):** target + toggle `open` + spawn.
-- **H (x = 1350):** blocks while closed, and spawns while `open`.
+  - A: beam tangent, a mirror along the shot, offset 100–220 px ahead.
+  - B: beam normal, a mirror across the shot.
+  - C: carrier tangent, on a terminal host, a mirror along the host.
+- **Arc D (bottom left):** carrier normal, spawns an inversion circle at the hit. It is a reflective host.
+- **Portal E (x = 1000 to 1300, top):** spawns a one-sided mirror across the shot, mirrored by the side hit.
+- **F1 / F2 (x = 1100):** share a channel and spawn a block circle at the hit.
+- **G (x = 1100, bottom):** target + toggle `open` + spawn (a mirror along the host).
+- **H (x = 1350):** blocks while closed, and spawns while `open` (a mirror across the reflected direction).
 - **The floor line (y = 850):** resets A–D in the shot.
 - **The right line (x = 1600, y 200–450):** resets E–H at landing (deferred). Shots below it miss it.
+
 1. **Preview.** The ghost outline shows where the surface will spawn, for each orientation mode, and moves with the aim.
 2. **Spawn.** Shooting through a pass spawner makes the surface appear when the arrow lands. The arrow itself ignored it, even when the new surface lies across its path.
 3. **Next shot.** The next shot interacts with the spawned surface: it reflects, blocks or teleports as configured. A spawned mirror can be planned.

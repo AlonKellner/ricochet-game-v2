@@ -28,9 +28,8 @@ interactive = true
 
 [sub_resource type="Resource" id="Resource_jxfho"]
 script = ExtResource("2_52dkw")
-start = Vector2(100, 0)
-end = Vector2(220, 0)
-via = Vector2(160, 0)
+start = Vector2(-60, 0)
+end = Vector2(60, 0)
 left = SubResource("Resource_a2h5l")
 right = SubResource("Resource_6l311")
 
@@ -38,6 +37,7 @@ right = SubResource("Resource_6l311")
 script = ExtResource("3_87b4r")
 surface = SubResource("Resource_jxfho")
 orientation = 0
+offset = Vector2(160, 0)
 
 [sub_resource type="Resource" id="Resource_r8dun"]
 script = ExtResource("4_6puvy")
@@ -73,9 +73,8 @@ interactive = true
 
 [sub_resource type="Resource" id="Resource_llvva"]
 script = ExtResource("2_52dkw")
-start = Vector2(-60, -150)
-end = Vector2(60, -150)
-via = Vector2(0, -150)
+start = Vector2(-60, 0)
+end = Vector2(60, 0)
 left = SubResource("Resource_l700r")
 right = SubResource("Resource_dgdl1")
 
@@ -118,9 +117,8 @@ interactive = true
 
 [sub_resource type="Resource" id="Resource_kii2f"]
 script = ExtResource("2_52dkw")
-start = Vector2(-50, -120)
-end = Vector2(50, -120)
-via = Vector2(0, -120)
+start = Vector2(-50, 0)
+end = Vector2(50, 0)
 left = SubResource("Resource_paki1")
 right = SubResource("Resource_ws6hf")
 
@@ -166,7 +164,6 @@ interactive = true
 [sub_resource type="Resource" id="Resource_i4l13"]
 script = ExtResource("2_52dkw")
 full_circle = true
-center = Vector2(120, 0)
 radius = 30.0
 left = SubResource("Resource_vhtbs")
 right = SubResource("Resource_dtp41")
@@ -209,9 +206,8 @@ script = ExtResource("4_6puvy")
 
 [sub_resource type="Resource" id="Resource_txvby"]
 script = ExtResource("2_52dkw")
-start = Vector2(80, -40)
-end = Vector2(80, 40)
-via = Vector2(80, 0)
+start = Vector2(0, -40)
+end = Vector2(0, 40)
 left = SubResource("Resource_4nskw")
 right = SubResource("Resource_jsmkb")
 
@@ -259,7 +255,6 @@ effect = {
 [sub_resource type="Resource" id="Resource_budq5"]
 script = ExtResource("2_52dkw")
 full_circle = true
-center = Vector2(150, 0)
 radius = 25.0
 left = SubResource("Resource_uwf86")
 right = SubResource("Resource_foyj7")
@@ -311,9 +306,8 @@ interactive = true
 
 [sub_resource type="Resource" id="Resource_41kf8"]
 script = ExtResource("2_52dkw")
-start = Vector2(60, -50)
-end = Vector2(60, 50)
-via = Vector2(60, 0)
+start = Vector2(0, -50)
+end = Vector2(0, 50)
 left = SubResource("Resource_4vmex")
 right = SubResource("Resource_xomoj")
 
@@ -363,9 +357,8 @@ interactive = true
 
 [sub_resource type="Resource" id="Resource_3twpm"]
 script = ExtResource("2_52dkw")
-start = Vector2(100, -40)
-end = Vector2(100, 40)
-via = Vector2(100, 0)
+start = Vector2(0, -40)
+end = Vector2(0, 40)
 left = SubResource("Resource_l1v7x")
 right = SubResource("Resource_wetb0")
 
@@ -441,7 +434,7 @@ via = Vector2(1600, 325)
 left = SubResource("Resource_s71ww")
 right = SubResource("Resource_s71ww")
 
-[node name="Main" type="Node2D" unique_id=2019373828]
+[node name="Main" type="Node2D" unique_id=1323598189]
 script = ExtResource("1_2ehg7")
 room_rect = Rect2(200, 100, 1500, 800)
 inversion_left_arcs = PackedFloat64Array()
@@ -460,29 +453,29 @@ portal_arcs = PackedFloat64Array()
 pre_transform_inversions = PackedFloat64Array()
 surface_specs = Array[ExtResource("2_52dkw")]([SubResource("Resource_xpvyj"), SubResource("Resource_ip061"), SubResource("Resource_wrab3"), SubResource("Resource_s6qop"), SubResource("Resource_6fv06"), SubResource("Resource_0prht"), SubResource("Resource_nwq5k"), SubResource("Resource_1rsed"), SubResource("Resource_ptxj7"), SubResource("Resource_40l3r"), SubResource("Resource_d80e5")])
 
-[node name="Background" type="ColorRect" parent="." unique_id=1021937397]
+[node name="Background" type="ColorRect" parent="." unique_id=83136726]
 offset_right = 1920.0
 offset_bottom = 1080.0
 color = Color(0.1, 0.1, 0.1, 1)
 
-[node name="Player" type="CharacterBody2D" parent="." unique_id=1352577629 instance=ExtResource("5_oxxex")]
+[node name="Player" type="CharacterBody2D" parent="." unique_id=1312389928 instance=ExtResource("5_oxxex")]
 position = Vector2(300, 500)
 script = ExtResource("6_7wofs")
 
-[node name="Cursor" type="Node2D" parent="." unique_id=307239414]
+[node name="Cursor" type="Node2D" parent="." unique_id=1856242619]
 script = ExtResource("7_fjdol")
 
-[node name="PathRenderer" type="Node2D" parent="." unique_id=10822052]
+[node name="PathRenderer" type="Node2D" parent="." unique_id=489587166]
 script = ExtResource("8_0ijrt")
 
-[node name="ArrowAnimator" type="Node2D" parent="." unique_id=61731843]
+[node name="ArrowAnimator" type="Node2D" parent="." unique_id=1834127130]
 z_index = 30
 script = ExtResource("9_egic3")
 
-[node name="GameManager" type="Node" parent="." unique_id=910146702]
+[node name="GameManager" type="Node" parent="." unique_id=1745407022]
 script = ExtResource("10_ia5x6")
 
-[node name="PlanHUD" type="Control" parent="." unique_id=1773992187]
+[node name="PlanHUD" type="Control" parent="." unique_id=260768973]
 layout_mode = 3
 anchors_preset = 0
 script = ExtResource("11_bxyph")

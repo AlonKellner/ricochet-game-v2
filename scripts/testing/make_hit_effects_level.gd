@@ -25,33 +25,36 @@ func _two(s: SideSpec, a: Vector2, b: Vector2) -> SurfaceSpec:
 
 func _specs() -> Array[SurfaceSpec]:
 	var out: Array[SurfaceSpec] = []
-	# the four required modes, on the column x = 600 (each its own channel)
-	out.append(_two(_side("pass", true, [_spawn("a", SpawnTemplate.make(_mirror(Vector2(100, 0), Vector2(220, 0)), M.BEAM_TANGENT))]),
+	# the four required modes, on the column x = 600 (each its own channel).
+	# Every spawn is centred on the hit point, except A: the example of an
+	# offset (its mirror lands 100-220 px ahead along the shot).
+	out.append(_two(_side("pass", true, [_spawn("a", SpawnTemplate.make(_mirror(Vector2(-60, 0), Vector2(60, 0)), M.BEAM_TANGENT, false,
+		Vector2(160, 0)))]),
 		Vector2(600, 150), Vector2(600, 290)))
-	out.append(_two(_side("pass", true, [_spawn("b", SpawnTemplate.make(_mirror(Vector2(-60, -150), Vector2(60, -150)), M.BEAM_NORMAL))]),
+	out.append(_two(_side("pass", true, [_spawn("b", SpawnTemplate.make(_mirror(Vector2(-60, 0), Vector2(60, 0)), M.BEAM_NORMAL))]),
 		Vector2(600, 320), Vector2(600, 460)))
-	out.append(_two(_side("terminal", true, [_spawn("c", SpawnTemplate.make(_mirror(Vector2(-50, -120), Vector2(50, -120)), M.CARRIER_TANGENT))]),
+	out.append(_two(_side("terminal", true, [_spawn("c", SpawnTemplate.make(_mirror(Vector2(-50, 0), Vector2(50, 0)), M.CARRIER_TANGENT))]),
 		Vector2(600, 490), Vector2(600, 630)))
-	var inv := SurfaceSpec.circle(Vector2(120, 0), 30.0, _side("inversion", true), _side("inversion", true))
+	var inv := SurfaceSpec.circle(Vector2(0, 0), 30.0, _side("inversion", true), _side("inversion", true))
 	var d := _side("reflection", true, [_spawn("d", SpawnTemplate.make(inv, M.CARRIER_NORMAL))])
 	out.append(SurfaceSpec.arc(Vector2(370, 750), Vector2(530, 750), Vector2(450, 670), d, d))
 	# a portal host (to x = 1300) spawning a one-sided mirror, mirrored by the side hit
-	var one_sided := SurfaceSpec.line(Vector2(80, -40), Vector2(80, 40), _side("reflection", true), _side())
+	var one_sided := SurfaceSpec.line(Vector2(0, -40), Vector2(0, 40), _side("reflection", true), _side())
 	var e := _side("portal", true, [_spawn("e", SpawnTemplate.make(one_sided, M.BEAM_TANGENT, true))], {"theta": 0.0, "d": [300.0, 0.0]})
 	out.append(_two(e, Vector2(1000, 150), Vector2(1000, 300)))
-	# two hosts sharing the channel f: a block circle 150 to the right of the hit
-	var block := SurfaceSpec.circle(Vector2(150, 0), 25.0, _side("terminal"), _side("terminal"))
+	# two hosts sharing the channel f: a block circle at the hit
+	var block := SurfaceSpec.circle(Vector2(0, 0), 25.0, _side("terminal"), _side("terminal"))
 	var f := _side("pass", true, [_spawn("f", SpawnTemplate.make(block, M.WORLD))])
 	out.append(_two(f, Vector2(1100, 350), Vector2(1100, 450)))
 	out.append(_two(f, Vector2(1100, 480), Vector2(1100, 580)))
 	# one side, three hit effects: a target, a toggle of "open", a spawn
 	var g := _side("pass", true, [{"kind": "target"}, {"kind": "state", "key": "open", "op": "toggle", "value": true},
-		_spawn("g", SpawnTemplate.make(_mirror(Vector2(60, -50), Vector2(60, 50)), M.CARRIER_NORMAL))])
+		_spawn("g", SpawnTemplate.make(_mirror(Vector2(0, -50), Vector2(0, 50)), M.CARRIER_NORMAL))])
 	out.append(_two(g, Vector2(1100, 620), Vector2(1100, 760)))
 	# a categorical host: while "open" it is a pass that spawns, else a block
 	var h := SurfaceSpec.line(Vector2(1350, 400), Vector2(1350, 600), null, null)
 	h.resolver_key = "open"
-	var hh := _side("pass", true, [_spawn("h", SpawnTemplate.make(_mirror(Vector2(100, -40), Vector2(100, 40)), M.BEAM_REFLECTED))])
+	var hh := _side("pass", true, [_spawn("h", SpawnTemplate.make(_mirror(Vector2(0, -40), Vector2(0, 40)), M.BEAM_REFLECTED))])
 	h.resolver_table = {"true": [hh, hh], "DEFAULT": [_side("terminal"), _side("terminal")]}
 	out.append(h)
 	# resets: in the shot (a, b, c, d) and deferred to landing (e, f, g, h)

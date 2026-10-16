@@ -807,7 +807,7 @@ The sequence:
 
 #### 10.6.1 Spawn placement
 
-A `SpawnTemplate` is a surface description (geometry plus both sides) in a **local frame**, plus an orientation mode. At the firing hit:
+A `SpawnTemplate` is a surface description (geometry plus both sides) in a **local frame**, plus an orientation mode and an optional `offset`. The surface is authored centred on the local origin, which lands on the hit point. `offset` (in the frame's axes, default none) moves it away deliberately. At the firing hit:
 - **origin:** the hit point.
 - **u (the first local axis):** chosen by the mode.
 - **v (the second axis):** `u` rotated by +90°, i.e. `(x, y) → (−y, x)`, flipped on a RIGHT-side hit if `mirror_with_side` is set.

@@ -94,3 +94,13 @@ func test_stage107_rotated_line_template_stays_a_line():
 	p.effect = {"type": "portal", "theta": 0.7, "d": [300.5, -20.25]}
 	var pair := SurfaceSpec.line(Vector2(10, 3), Vector2(91, 57), p, p).build()
 	assert_true(pair[1].segment.is_line(), "a rotated portal's image of a line is a line")
+
+# A template is centred on the hit point by default; `offset` (in the frame's
+# axes) moves it deliberately.
+func test_stage107_template_offset_is_in_the_frame_axes():
+	var line := SurfaceSpec.line(Vector2(-20, 0), Vector2(20, 0), _side("terminal"), _side("terminal"))
+	var f := SpawnFrame.frame(M.BEAM_TANGENT, Vector2(100, 50), Vector2(0, 1), Vector2(1, 0), false, false)
+	var centred := SpawnTemplate.make(line, M.BEAM_TANGENT).place(f)
+	assert_eq([centred.start, centred.end], [Vector2(100, 30), Vector2(100, 70)], "centred on the hit point")
+	var ahead := SpawnTemplate.make(line, M.BEAM_TANGENT, false, Vector2(50, 10)).place(f)
+	assert_eq([ahead.start, ahead.end], [Vector2(90, 80), Vector2(90, 120)], "50 along u (the beam), 10 along v")
