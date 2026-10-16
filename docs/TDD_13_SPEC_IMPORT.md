@@ -14,7 +14,7 @@ Background: TDD_11 (Stage 107) and TDD_12 (Stage 108). Before this stage, their 
 | Phase | Topic | Status |
 |-------|-------|--------|
 | 109.1 | `tscn_import.py`: Godot's sub-resource syntax, and `SurfaceSpec.build` / `SceneDefs` replicated | Done |
-| 109.2 | `hit_effects.tscn` and `crossings.tscn` moved to `scenes/test_levels/`: dumps, parity pin (additive), corpus (24 scenarios), sweeps | Done (K6 found and fixed) |
+| 109.2 | `hit_effects.tscn` and `crossings.tscn` moved to `scenes/test_levels/`: dumps, parity pin (additive), corpus (24 scenarios), sweeps | Done (K6 found and fixed); merged 2026-10-16 |
 
 ## What Is Introduced
 
