@@ -141,15 +141,10 @@ Native: `test_hit_effects.cpp`. It runs the 11 oracle fixtures at f64, Dual, 4 a
 
 ## Known findings
 
-**K4 (pre-existing, found in 107.1, open).** This is a Dual-tier asymmetry.
-- **Trigger:** on a physical path with a plan, an unplanned hit that only *writes* (a pass with a state change, reached after the plan is exhausted and before the cursor) diverges from the plan.
-- **What differs:**
-  - **Dual:** `Backend<Dual>::seed` returns a new beam, so the walker restarts the loop. The cursor candidate, listed while the beam was still on plan, is lost.
-  - **f64 and the oracle:** `seed` returns the same beam, so the cursor is kept.
-- **Cause:** independent of Stage 107. A single legacy `state` gives the same result.
-- **Impact:** the game's f64 path matches the oracle. The Dual tier is the ladder's derivative tier, so the impact there is at most extra climbing.
-- **Coverage:** pinned in `test_hit_effects.cpp` (`multi_state_planned_physical` at Dual), so a fix shows up there.
-- **Decision:** left for the user, not fixed inside this stage.
+**K4 (pre-existing, found in 107.1, fixed with the user's approval on 2026-10-16).**
+- **The bug:** at the Dual tier, a divergence that seeds the beam restarted the loop, and the recomputed candidates no longer listed the cursor, because the beam was now off plan. f64 and the oracle kept the cursor listed at the loop's start.
+- **The fix:** a seed changes derivatives only, so it must not change a decision. The restarted loop recomputes its candidates on the seeded beam, so their derivatives are kept, and keeps a cursor the loop still listed (`candidates(..., keep_cursor)`).
+- **Evidence:** all 178 oracle fixtures give identical results at Dual and f64. The goldens are byte-identical, and ctest, ASan and the full suite pass. The pin in `test_hit_effects.cpp` is now a plain Dual check.
 
 **K5 (pre-existing, found in 107.4, open).** This is a tracer display bug.
 - **Trigger:** another surface's carrier passes through a portal end's departure point.
@@ -167,7 +162,7 @@ Native: `test_hit_effects.cpp`. It runs the 11 oracle fixtures at f64, Dual, 4 a
 
 | # | Change | Evidence | Status |
 |---|---|---|---|
-| H1 | Targets register by the side firing rule (fully blocked, not ghosted) instead of any on-segment hit. | Every shipped level, every surface treated as a target, players and cursors on a 5x5 grid plus every segment endpoint: 275,767 hit records, 151,513 on segment. Of those, 15,020 are on segment but do not fire (a junction that does not fully block, e.g. an aim exactly at a room corner; the sample is biased toward endpoints on purpose) and 1,713 are ghosted passes (the old rule counted a ghost passing a target). The game never read `targets_hit` before Stage 107, so nothing observable changes today. The alternative is a `TargetHit` keeping the on-segment rule (an exception to the one firing rule). | Pending the user's choice |
+| H1 | Targets register by the side firing rule (fully blocked, not ghosted) instead of any on-segment hit. **Approved 2026-10-16.** | Every shipped level, every surface treated as a target, players and cursors on a 5x5 grid plus every segment endpoint: 275,767 hit records, 151,513 on segment. Of those, 15,020 are on segment but do not fire (a junction that does not fully block, e.g. an aim exactly at a room corner; the sample is biased toward endpoints on purpose) and 1,713 are ghosted passes (the old rule counted a ghost passing a target). The game never read `targets_hit` before Stage 107, so nothing observable changes today. The alternative is a `TargetHit` keeping the on-segment rule (an exception to the one firing rule). | Approved |
 
 ## Interactive User Tests
 

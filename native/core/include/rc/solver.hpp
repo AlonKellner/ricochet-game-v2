@@ -1333,7 +1333,9 @@ private:
 	}
 
 	// Candidates in walk order: [t, surf (nullptr = cursor), rehit, exact point].
-	std::vector<Candidate<N>> candidates(Walk<N> &w, const Beam<N> &beam, int depart, bool fresh, const N &t0) const {
+	// keep_cursor (K4): a restart after a derivative-only seed keeps the cursor
+	// candidate the loop listed (the oracle lists it once per loop).
+	std::vector<Candidate<N>> candidates(Walk<N> &w, const Beam<N> &beam, int depart, bool fresh, const N &t0, bool keep_cursor = false) const {
 		std::vector<Candidate<N>> cands;
 		for (const auto &sp : w.scene->surfaces) {
 			const Surf<N> &s = *sp;
@@ -1380,7 +1382,7 @@ private:
 		}
 		bool cursor_now = false;
 		// the cursor is on the beam only on the planned path
-		if (!w.cursor_done && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.cursor && w.on_plan) {
+		if (!w.cursor_done && w.cursor && (keep_cursor || (w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan))) {
 			N tc = Backend<N>::param_of(beam, *w.cursor);
 			const int ki = known_index(w.known, *w.cursor);
 			// the cursor exactly at the departure point is reached immediately
@@ -1726,13 +1728,15 @@ private:
 		size_t skip = 0; // candidates already processed (in-place reseed)
 		N t_prev = t0;
 		bool fired_state = false; // a state change in the current loop
+		bool keep_cursor = false; // K4: the seed restart keeps the listed cursor
 		while (!w.done) {
 			if (w.record_poles) {
 				w.pole_trace.emplace_back(beam, w.pole);
 				w.exact_trace.push_back(w.Q ? w.pole.has_value() : w.line != nullptr);
 				w.known_trace.push_back(w.known);
 			}
-			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0);
+			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0, keep_cursor);
+			keep_cursor = false;
 			std::vector<double> gp = gaps(*beam, cands);
 			std::optional<Next> next;
 			bool restart = false;
@@ -1875,6 +1879,10 @@ private:
 						if (sb != beam) {
 							beam = sb;
 							skip = ci + 1;
+							// K4: the recomputed loop keeps a cursor this loop still lists
+							for (size_t k = ci + 1; k < cands.size(); k++) {
+								keep_cursor = keep_cursor || (cands[k].surf == nullptr && !cands[k].inf);
+							}
 							restart = true;
 							break;
 						}

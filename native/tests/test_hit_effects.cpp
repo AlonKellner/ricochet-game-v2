@@ -50,15 +50,7 @@ TEST_CASE("hit effects: the Stage 107 fixtures match the oracle at f64, Dual, 4 
 		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
 		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
 		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
-		if (name == "multi_state_planned_physical") {
-			// K4 (TDD_11, pre-existing, independent of Stage 107: the same with one
-			// legacy "state"): at Dual a divergence that seeds the beam restarts the
-			// loop and drops the cursor candidate listed before it; f64 and the
-			// oracle keep it. Pinned so a fix shows up here.
-			CHECK(diff_against_oracle(rd, fx["expected"]).rfind("count 4 vs oracle 5", 0) == 0);
-		} else {
-			CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
-		}
+		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
 		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
 		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
 		const auto r64l = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
