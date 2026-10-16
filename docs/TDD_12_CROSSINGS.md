@@ -11,7 +11,7 @@ Specification: GAME_SPEC §9.7 and §10.6.3. Background: TDD_11 (hit effects, sp
 | 108.0 | Spec, this document, the design decision (below) | Done |
 | 108.1 | Solver: a plan entry may name a piece (its span), oracle first | Done (oracle, native, bindings, ASan) |
 | 108.2 | Game: crossings (math), the piece builder, piece-level clicks, hover and plans | Done |
-| 108.3 | Spawn trimming (`SpawnTemplate.trim`), preview | Planned |
+| 108.3 | Spawn trimming (`SpawnTemplate.trim`), preview | Done |
 | 108.4 | Levels: the no-crossing guard lifted, a crossing level, interactive tests | Planned |
 
 **Workflow:**
@@ -61,7 +61,7 @@ The user chose **pieces in the game layer**. The solver traces whole design surf
 
 ### 108.3 Spawn trimming
 - `SpawnTemplate.trim` (default true).
-- `LandingFold.place` splits the placed spec against the surfaces present under the landed flags (`Crossings`), and keeps the piece containing the midpoint. For a full circle it keeps the arc nearest the hit point.
+- `LandingFold.place` splits the placed spec against the surfaces present under the landed flags (`Crossings`), and keeps the piece containing the midpoint. For a full circle it keeps the longest arc (a spawned circle is centred on the hit point by default, so "nearest the hit" is undefined).
 - The preview uses the same function.
 
 ### 108.4 Levels

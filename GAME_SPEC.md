@@ -881,7 +881,7 @@ State changes are applied sequentially along the trace. If multiple hits write t
 
 > **Status: planned (Stage 108).**
 
-A spawned surface is **trimmed** when it lands (`SpawnTemplate.trim`, on by default). The placed surface is split by its proper crossings with every surface present under the landed flags: level surfaces and walls, other channels' groups, present hosts. Only the piece containing the placed surface's **midpoint** (its via point) is kept; for a full circle, the arc nearest the hit point is kept. The kept piece becomes the spawned surface. A spawned surface therefore never crosses what is there when it lands. Something that appears later (a reset restoring a host) is split against it into pieces by §9.7. The preview shows the trimmed surface (the same function).
+A spawned surface is **trimmed** when it lands (`SpawnTemplate.trim`, on by default). The placed surface is split by its proper crossings with every surface present under the landed flags: level surfaces and walls, other channels' groups, present hosts. Only the piece containing the placed surface's **midpoint** (its via point) is kept. A full circle has no midpoint, and a spawned circle is centred on the hit point by default, so every point of it is equally near; it keeps its **longest arc**. The kept piece becomes the spawned surface. A spawned surface therefore never crosses what is there when it lands. Something that appears later (a reset restoring a host) is split against it into pieces by §9.7. The preview shows the trimmed surface (the same function).
 
 ### 10.7 Provenance stack and frame identity by effect type
 
