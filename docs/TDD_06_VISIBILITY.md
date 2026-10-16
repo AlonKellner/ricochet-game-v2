@@ -4,18 +4,18 @@
 
 **Implementation order note:** Stage numbers (34a--38) are preserved from the original TDD_04 for traceability. These stages are implemented AFTER TDD_05's planned future stages (70--78: rigid motion, projective effects, compound effects). This matches GAME_SPEC §28: "Phase 7 (visibility) requires Phase 6 (all effects)." The visibility system must handle arc carriers from circle inversion, transformed surfaces from rigid motion, and frame resets from projective effects.
 
-> **Status: PLANNED** — All stages in this document depend on unimplemented prerequisites (rigid motion, projective effects) from TDD_05 stages 70--78.
+> **Status: HISTORY — superseded by [TDD_14_VISIBILITY.md](TDD_14_VISIBILITY.md) (Stage 110).** Stages 34a–38 were never implemented. They were written for the frame-based solver deleted in Stage 84 (`MobiusTransform`, `see_through`, obstruction sorting, the parallel-source mode). Stage 110 built the visibility region on the beam solver: casts are pair traces, the region is the non-divergence set by construction, and the invariant VISIBILITY-EQUALS-NON-DIVERGENCE pins it. The text below is kept for its history and its references.
 
 ### Stage Status
 
 | Stage | Topic | Status |
 |-------|-------|--------|
-| 34a | Visibility Infrastructure | Todo |
-| 34b | Visibility Rendering and Edge Cases | Todo |
-| 35 | Visibility with Obstructing Surfaces | Todo |
-| 36 | Visibility Predicts Non-Divergence (No Plan) | Todo |
-| 37 | Visibility After Planned Reflection | Todo |
-| 38 | Multi-Step Visibility | Todo |
+| 34a | Visibility Infrastructure | Superseded (Stage 110) |
+| 34b | Visibility Rendering and Edge Cases | Superseded (Stage 110) |
+| 35 | Visibility with Obstructing Surfaces | Superseded (Stage 110) |
+| 36 | Visibility Predicts Non-Divergence (No Plan) | Superseded (Stage 110) |
+| 37 | Visibility After Planned Reflection | Superseded (Stage 110) |
+| 38 | Multi-Step Visibility | Superseded (Stage 110) |
 
 **Regression Test Policy:** After implementing Stage N, run ALL tests from Stages 1 through N. The full test suite must pass before proceeding to Stage N+1. No exceptions.
 

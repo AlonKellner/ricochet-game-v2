@@ -1480,6 +1480,8 @@ These tests verify effect combinations beyond those covered by the worked exampl
 | State changes visible | UX10 | Stage 57+ | Stage 57+ | Stage 65 | Not yet introduced |
 | Empty plan = fire straight | UX11 | Stage 5 | Stage 15 | Stage 65 | Tested |
 
+> **Stage 110 note:** the visibility rows here (S13–S15, UX1, UX2) describe the legacy design, which was never built. Stage 110 built the region on the beam solver; they are tested as VIS-SIMPLE, VIS-EDGE-ON-GEOMETRY, VIS-DISJOINT and VISIBILITY-EQUALS-NON-DIVERGENCE (docs/TDD_14_VISIBILITY.md).
+
 ---
 
 ## Appendix B: Projected Cumulative Test Count (All Stages in This Document)

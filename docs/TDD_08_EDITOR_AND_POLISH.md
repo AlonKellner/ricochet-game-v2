@@ -499,6 +499,8 @@ Stage 64 (test levels exist with known-good configurations), Stage 60 (all game 
 
 ### Unit Tests Added
 
+> **Stage 110 note:** the visibility rows here (S13–S15, UX1, UX2) describe the legacy design, which was never built. Stage 110 built the region on the beam solver; they are tested as VIS-SIMPLE, VIS-EDGE-ON-GEOMETRY, VIS-DISJOINT and VISIBILITY-EQUALS-NON-DIVERGENCE (docs/TDD_14_VISIBILITY.md).
+
 1. **`test_stage65_sweep_s16_1_two_mirror`**: Run full 160,000-combination sweep on `test_s16_1_two_mirror.tres`. All 29 invariants checked at every combination. Expected: zero failures. Validates: all invariants hold at scale for simple reflection.
 2. **`test_stage65_sweep_s16_2_circle_inversion`**: Full sweep on `test_s16_2_circle_inversion.tres`. Expected: zero failures. Validates: all invariants for inversion geometry.
 3. **`test_stage65_sweep_s16_3_divergence`**: Full sweep on `test_s16_3_divergence.tres`. Expected: zero failures. Validates: all invariants including divergence-related (S4, UX1, UX2).
@@ -573,6 +575,8 @@ This stage validates ALL 29 invariants at scale. Every invariant transitions to 
 | UX9 | Block stops arrow | Sweep: block surfaces terminate trace | Fully testable |
 | UX10 | State changes visible during flight | Sweep: state-change level verified | Fully testable |
 | UX11 | Empty plan = fire straight | Sweep: empty plan produces straight line | Fully testable |
+
+> **Stage 110 note:** the visibility rows here (S13–S15, UX1, UX2) describe the legacy design, which was never built. Stage 110 built the region on the beam solver; they are tested as VIS-SIMPLE, VIS-EDGE-ON-GEOMETRY, VIS-DISJOINT and VISIBILITY-EQUALS-NON-DIVERGENCE (docs/TDD_14_VISIBILITY.md).
 
 ### Regression Checklist
 
