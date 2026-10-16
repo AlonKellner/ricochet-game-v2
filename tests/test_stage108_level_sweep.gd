@@ -1,17 +1,17 @@
 extends GutTest
 
-# Stage 108: the invariant sweep of the crossing level -- crossing design
-# surfaces as built, and after a trimmed spawn landed. A sweep file:
+# Stage 108: the invariant sweep of the crossing level after a trimmed spawn
+# landed; as built it is one of the test levels test_invariant_sweep.gd sweeps. A sweep file:
 # run_tests_parallel.sh shards it (SWEEP_SHARD); test-fast skips it.
 
-const LEVEL := "res://scenes/stage108/crossings.tscn"
+const LEVEL := "res://scenes/test_levels/crossings.tscn"
 
 func test_stage108_level_invariant_sweep():
 	Surface.reset_id_counter()
 	var scene: Node = load(LEVEL).instantiate()
 	add_child_autofree(scene)
 	await get_tree().process_frame
-	_report(SweepRunner.new().configure(3, 4, 208).sweep(scene), "as built")
+	# as built: test_invariant_sweep.gd sweeps every test level (Stage 109)
 	var gm = scene.get_node("GameManager")
 	scene.get_node("Player").global_position = Vector2(300, 800)
 	scene.get_node("Cursor").global_position = Vector2(400, 800)

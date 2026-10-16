@@ -1,10 +1,11 @@
 extends GutTest
 
-# Stage 107: the invariant sweep of the interactive level -- as built and after
-# spawns landed (presence-gated groups and spent hosts in the scene). A sweep
+# Stage 107: the invariant sweep of the interactive level after spawns landed
+# (presence-gated groups and spent hosts in the scene); as built it is one of
+# the test levels test_invariant_sweep.gd sweeps. A sweep
 # file: run_tests_parallel.sh shards it (SWEEP_SHARD); test-fast skips it.
 
-const LEVEL := "res://scenes/stage107/hit_effects.tscn"
+const LEVEL := "res://scenes/test_levels/hit_effects.tscn"
 
 func _level() -> Node:
 	Surface.reset_id_counter()
@@ -24,9 +25,7 @@ func _shoot(scene: Node, player: Vector2, cursor: Vector2) -> void:
 func test_stage107_level_invariant_sweep():
 	var scene := _level()
 	await get_tree().process_frame
-	var runner := SweepRunner.new().configure(3, 4, 107)
-	var result: Dictionary = runner.sweep(scene)
-	_report(result, "as built")
+	# as built: test_invariant_sweep.gd sweeps every test level (Stage 109)
 	# spawn into a, b, c and f, then sweep the changed world
 	_shoot(scene, Vector2(300, 220), Vector2(400, 220))
 	_shoot(scene, Vector2(300, 390), Vector2(400, 390))
