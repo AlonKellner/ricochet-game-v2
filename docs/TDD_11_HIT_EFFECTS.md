@@ -167,7 +167,7 @@ Native: `test_hit_effects.cpp`. It runs the 11 oracle fixtures at f64, Dual, 4 a
 
 | # | Change | Evidence | Status |
 |---|---|---|---|
-| H1 | Targets register by the side firing rule (fully blocked) instead of any on-segment hit. They differ only at a shared endpoint that does not fully block. | To collect: the sweep scenes with targets marked, counting differing combos | Pending |
+| H1 | Targets register by the side firing rule (fully blocked, not ghosted) instead of any on-segment hit. | Every shipped level, every surface treated as a target, players and cursors on a 5x5 grid plus every segment endpoint: 275,767 hit records, 151,513 on segment. Of those, 15,020 are on segment but do not fire (a junction that does not fully block, e.g. an aim exactly at a room corner; the sample is biased toward endpoints on purpose) and 1,713 are ghosted passes (the old rule counted a ghost passing a target). The game never read `targets_hit` before Stage 107, so nothing observable changes today. The alternative is a `TargetHit` keeping the on-segment rule (an exception to the one firing rule). | Pending the user's choice |
 
 ## Interactive User Tests
 
@@ -202,4 +202,21 @@ The level contains:
 
 ## Files Modified
 
-To be filled per phase.
+- **Spec and docs:** `GAME_SPEC.md` (§9.1, §9.6, §10.6, §24.2, the status table), this document.
+- **Oracle:** `docs/research/oracle/trace2.py` (state lists, presence, `Event.fired`), `test_trace2.py`, `gen_fixtures_stage107.py` (new), `gen_fixtures_stage85.py` (an `event_extra` hook), `tscn_import.py` (`states`).
+- **Native:**
+  - `core/include/rc/{scene,flags,solver,tracer,trace_types}.hpp`
+  - `gd/{gd_common,gd_scene,gd_solver,gd_tracer}.{hpp,cpp}`
+  - `tests/test_hit_effects.cpp` (new), `tests/support/{json_defs,oracle_fixtures}.hpp`, `tests/test_infinity.cpp`
+- **Math:** `scripts/math/effects/effect_spec.gd` (new); `to_spec()` on every effect; `scripts/math/spawn_frame.gd` (new).
+- **Game:**
+  - `scripts/game/hit_effects/` (new: `HitEffect`, `StateChangeHit`, `TargetHit`, `ResetHit`, `SpawnHit`, `SpawnTemplate`, `Channel`, `HitEffectSpec`)
+  - `presence_cond.gd`, `side_spec.gd`, `surface_spec.gd`, `landing_fold.gd`, `world.gd`, `spawn_preview_node.gd` (new)
+  - `side_config.gd`, `surface.gd`, `scene_defs.gd`, `scene_defs_cache.gd`, `level_settings.gd`, `game_manager.gd`, `checkpoint.gd`, `plan_manager.gd`, `surface_node.gd`
+- **Visual:** `scripts/visual/path_renderer.gd` (`last_pair`).
+- **Levels:**
+  - `scenes/stage107/hit_effects.tscn` and its generator `scripts/testing/make_hit_effects_level.gd`
+  - `bench/scenes/` (the two toggler dumps: `state` → `states`)
+  - `bench/fixtures/stage107_hit_effects.json`, `tests/data/stage107_level_defs.json`
+- **Tests:** `tests/test_stage107_*.gd` (12 files); the ports in `test_stage55_chevron_overlays.gd`, `test_stage85_state_changes.gd`, `test_stage86_ghost.gd`.
+- **Runners:** `run_tests_parallel.sh` and `Makefile`. The level sweep is a sharded sweep file, which adds about 8 s of wall time to the parallel suite (17 s → 25 s).
