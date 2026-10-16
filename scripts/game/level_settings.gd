@@ -47,11 +47,15 @@ var surfaces: Array[Surface] = []
 # Stage 107: the surfaces over time (spawned groups join and leave); `surfaces`
 # is always world.surfaces once the level is built
 var world: World = null
-var _nodes := {}   # surface id -> its SurfaceNode
+# Stage 108: one SurfaceNode per piece (GAME_SPEC 9.7); a surface without
+# crossings keeps its single node, named as before
+var _nodes := {}    # surface id -> Array[SurfaceNode]
+var _prefix := {}   # surface id -> its node name prefix (no entry: not drawn)
 
 func _ready() -> void:
 	if build_room:
-		surfaces = RoomBuilder.add_room_to_scene(self, room_rect)
+		for wall in RoomBuilder.create_room_surfaces(room_rect):
+			_add_surface(wall, "Surface")
 	for line_def in block_lines:
 		var surf := RoomBuilder.create_block_surface(
 			Vector2(line_def.x, line_def.y),
@@ -82,14 +86,17 @@ func _ready() -> void:
 		var pre := Surface.pre_transform_circle(Vector2(pre_transform_inversions[i], pre_transform_inversions[i + 1]),
 			pre_transform_inversions[i + 2])
 		_add_surface(pre, "PreTransform")
+	world = World.new(surfaces)
+	surfaces = world.surfaces
+	_sync_nodes()
+	if not world.pieces().portal_crossings.is_empty():
+		push_error("crossing a portal (not split, GAME_SPEC 9.7): " + ", ".join(world.pieces().portal_crossings))
 	# the level bounds' edge: hover band and planned infinity entries (Stage 88)
 	var edge := Node2D.new()
 	edge.set_script(load("res://scripts/game/edge_overlay_node.gd"))
 	edge.name = "EdgeOverlay"
 	add_child(edge)
 	edge.setup(level_bounds)
-	world = World.new(surfaces)
-	surfaces = world.surfaces
 	# the spawn preview (Stage 107) where something can spawn
 	if surface_specs.any(func(s: SurfaceSpec): return not s.spawn_channels().is_empty()):
 		var preview := SpawnPreviewNode.new()
@@ -98,28 +105,60 @@ func _ready() -> void:
 
 func _add_surface(surf: Surface, prefix: String) -> void:
 	surfaces.append(surf)
-	_add_node(surf, prefix)
+	_prefix[surf.id] = prefix
 
-func _add_node(surf: Surface, prefix: String) -> void:
-	var node := Node2D.new()
-	node.set_script(load("res://scripts/game/surface_node.gd"))
-	node.name = "%s_%d" % [prefix, surf.id]
-	add_child(node)
-	node.setup(surf)
-	_nodes[surf.id] = node
+# The nodes follow the world's pieces: a surface whose pieces changed (a
+# crossing came or went) gets new nodes, one that left the world loses them.
+func _sync_nodes() -> void:
+	var pieces := world.pieces()
+	var live := {}
+	for s: Surface in world.surfaces:
+		if not _prefix.has(s.id):
+			continue
+		live[s.id] = true
+		var want: Array = pieces.of(s)
+		var have: Array = _nodes.get(s.id, [])
+		if _same_pieces(have, want):
+			continue
+		_free_nodes(s.id)
+		var made: Array = []
+		for p: Pieces.Piece in want:
+			var node := Node2D.new()
+			node.set_script(load("res://scripts/game/surface_node.gd"))
+			node.name = "%s_%d" % [_prefix[s.id], s.id] if p.index < 0 else "%s_%d_p%d" % [_prefix[s.id], s.id, p.index]
+			add_child(node)
+			node.setup(s, p)
+			made.append(node)
+		_nodes[s.id] = made
+	for id in _nodes.keys():
+		if not live.has(id):
+			_free_nodes(id)
+
+static func _same_pieces(have: Array, want: Array) -> bool:
+	if have.size() != want.size():
+		return false
+	for i in have.size():
+		var p: Pieces.Piece = want[i]
+		if have[i].piece_index != p.index or have[i].segment.start.coords != p.segment.start.coords \
+				or have[i].segment.end.coords != p.segment.end.coords:
+			return false
+	return true
+
+func _free_nodes(id: int) -> void:
+	for node: Node in _nodes.get(id, []):
+		remove_child(node)
+		node.queue_free()
+	_nodes.erase(id)
 
 # A structural change of the world (World.land / restore): spawned surfaces
-# get nodes, dropped ones lose theirs; `surfaces` is the world's new array.
+# get nodes, dropped ones lose theirs, pieces follow; `surfaces` is the
+# world's new array.
 func apply_world_change(change: Dictionary) -> void:
-	for s: Surface in change["removed"]:
-		var node: Node = _nodes.get(s.id)
-		if node != null:
-			_nodes.erase(s.id)
-			remove_child(node)
-			node.queue_free()
 	for s: Surface in change["added"]:
-		_add_node(s, "Spawned")
+		if not _prefix.has(s.id):
+			_prefix[s.id] = "Spawned"
 	surfaces = world.surfaces
+	_sync_nodes()
 
 # A spec's surfaces: one, or a portal's pair.
 func _add_spec(spec: SurfaceSpec, prefix: String) -> void:

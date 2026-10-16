@@ -23,6 +23,15 @@ class Piece extends RefCounted:
 		return t >= 0.0 and t <= Crossings.span(segment)
 
 var _by_id := {}                     # design surface id -> Array[Piece]
+
+# Whether a point lies in a piece's span (a plan entry's) on its surface's carrier.
+static func span_contains(surface: Surface, span: PackedFloat64Array, p: Vector2) -> bool:
+	if surface == null or not p.is_finite():
+		return false
+	var seg := Segment.with_carrier(Vector2(span[0], span[1]), Vector2(span[2], span[3]), Vector2(span[4], span[5]),
+		surface.segment.get_carrier())
+	var t := Crossings.param(seg, p)
+	return t >= 0.0 and t <= Crossings.span(seg)
 var crossings: Array[Vector2] = []   # every crossing point (drawn as ticks)
 var portal_crossings: Array[String] = []   # validation: a design surface crossing a portal
 

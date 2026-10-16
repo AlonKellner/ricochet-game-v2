@@ -92,9 +92,13 @@ func _update_hover() -> void:
 		var surf: Surface = result.surface
 		var side: Side.Value = result.side
 		var overlays := ChevronOverlayBuilder.build_hover_overlays(surf, side, game_state)
+		var hovered_piece: int = result["piece"].index if result.get("piece") != null else -1
 		for child in _level_settings.get_children():
 			if child.has_method("set_hover_overlays") and "surface" in child:
 				var child_overlays: Array = overlays.get(child.surface.id, [])
+				# the hovered surface's overlays go to the hovered piece (Stage 108)
+				if child.surface == surf and hovered_piece >= 0 and child.piece_index != hovered_piece:
+					continue
 				if not child_overlays.is_empty():
 					child.set_hover_overlays(child_overlays)
 					if child.surface == surf:
@@ -112,8 +116,9 @@ func _edge() -> Node2D:
 # What the cursor is over: a surface side, the infinity point or edge, or nothing.
 func _detect_click() -> Dictionary:
 	var surfaces := _get_surfaces()
+	var world: World = _world()
 	return click_detector.detect_click(_cursor.global_position, surfaces, game_state, _plan_accepts.bind(surfaces),
-		_level_bounds(), FeatureFlags.infinity_event(), _infinity_point())
+		_level_bounds(), FeatureFlags.infinity_event(), _infinity_point(), world.pieces() if world != null else null)
 
 # Where the next infinity entry would be passed (Stage 101): the frame's image
 # of infinity after the current plan, a Vector2 when finite, null for infinity.
@@ -221,7 +226,7 @@ func _handle_plan_click(is_right_click: bool) -> void:
 			else:
 				plan.clear()
 		else:
-			plan.add_entry(sid, result.get("side", Side.Value.LEFT), _cursor.global_position)
+			plan.add_entry(sid, result.get("side", Side.Value.LEFT), _cursor.global_position, result.get("piece"))
 
 	_refresh_ui()
 
@@ -391,9 +396,12 @@ func _update_surface_overlays(force: bool = false) -> void:
 		if child.has_method("set_plan_overlays") and "surface" in child:
 			var plan_indices: Array[int] = []
 			for i in plan.entries.size():
-				if plan.entries[i].surface_id == child.surface.id:
+				var en: PlanManager.PlanEntry = plan.entries[i]
+				if en.surface_id == child.surface.id and ChevronOverlay.for_piece(en.piece, child.piece_index):
 					plan_indices.append(i + 1)
-			child.set_plan_overlays(overlays.get(child.surface.id, []), plan_indices)
+			var mine: Array = overlays.get(child.surface.id, []).filter(
+				func(ov: ChevronOverlay) -> bool: return ChevronOverlay.for_piece(ov.piece, child.piece_index))
+			child.set_plan_overlays(mine, plan_indices)
 	if _edge():
 		# the infinity entries: the k-th one is met when the physical trace wraps k
 		# times (its solver events: the display path clips the wrap to the edge)

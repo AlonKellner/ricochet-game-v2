@@ -26,5 +26,5 @@ func _init(
 static func _copy_entries(entries: Array) -> Array:
 	var result: Array = []
 	for entry in entries:
-		result.append(PlanManager.PlanEntry.new(entry.surface_id, entry.side, entry.click))
+		result.append(entry.copy())
 	return result

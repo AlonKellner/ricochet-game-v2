@@ -7,18 +7,29 @@ class PlanEntry extends RefCounted:
 	# where the player clicked the surface (INF: unknown); settles a fork of
 	# the planned path at a circle projective (the hit point nearer the click)
 	var click: Vector2 = Vector2(INF, INF)
+	# Stage 108: the piece planned (GAME_SPEC 9.7): its index (-1: the whole
+	# surface) and its span on the surface's carrier (the solver matches hits
+	# inside it only; null: the whole surface)
+	var piece := -1
+	var span = null
 
-	func _init(p_surface_id: int, p_side: Side.Value, p_click: Vector2 = Vector2(INF, INF)) -> void:
+	func _init(p_surface_id: int, p_side: Side.Value, p_click: Vector2 = Vector2(INF, INF), p_piece := -1, p_span = null) -> void:
 		surface_id = p_surface_id
 		side = p_side
 		click = p_click
+		piece = p_piece
+		span = p_span
+
+	func copy() -> PlanEntry:
+		return PlanEntry.new(surface_id, side, click, piece, span)
 
 var entries: Array = []
 # Bumped by every change (the per-frame dirty keys compare it; Stage 100).
 var version := 0
 
-func add_entry(surface_id: int, side: Side.Value, click: Vector2 = Vector2(INF, INF)) -> void:
-	entries.append(PlanEntry.new(surface_id, side, click))
+func add_entry(surface_id: int, side: Side.Value, click: Vector2 = Vector2(INF, INF), piece: Pieces.Piece = null) -> void:
+	entries.append(PlanEntry.new(surface_id, side, click, piece.index if piece != null else -1,
+		piece.span if piece != null else null))
 	version += 1
 
 func remove_last_of(surface_id: int) -> void:
@@ -53,5 +64,5 @@ func has_surface(surface_id: int) -> bool:
 func restore_from(p_entries: Array) -> void:
 	entries.clear()
 	for entry in p_entries:
-		entries.append(PlanEntry.new(entry.surface_id, entry.side, entry.click))
+		entries.append(entry.copy())
 	version += 1
