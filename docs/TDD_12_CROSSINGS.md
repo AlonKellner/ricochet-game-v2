@@ -9,7 +9,7 @@ Specification: GAME_SPEC §9.7 and §10.6.3. Background: TDD_11 (hit effects, sp
 | Phase | Topic | Status |
 |-------|-------|--------|
 | 108.0 | Spec, this document, the design decision (below) | Done |
-| 108.1 | Solver: a plan entry may name a piece (its span), oracle first | Done (oracle, native, bindings; ASan still to run) |
+| 108.1 | Solver: a plan entry may name a piece (its span), oracle first | Done (oracle, native, bindings, ASan) |
 | 108.2 | Game: crossings (math), the piece builder, piece-level clicks, hover and plans | Planned |
 | 108.3 | Spawn trimming (`SpawnTemplate.trim`), preview | Planned |
 | 108.4 | Levels: the no-crossing guard lifted, a crossing level, interactive tests | Planned |

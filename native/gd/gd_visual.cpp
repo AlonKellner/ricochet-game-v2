@@ -109,6 +109,7 @@ void Segment::_bind_methods() {
 	ClassDB::bind_static_method("Segment", D_METHOD("from_coords", "s", "e", "v"), &Segment::from_coords);
 	ClassDB::bind_static_method("Segment", D_METHOD("full_from_carrier", "carrier"), &Segment::full_from_carrier);
 	ClassDB::bind_static_method("Segment", D_METHOD("straight", "s", "e", "v"), &Segment::straight);
+	ClassDB::bind_static_method("Segment", D_METHOD("with_carrier", "s", "e", "v", "carrier"), &Segment::with_carrier);
 	ClassDB::bind_static_method("Segment", D_METHOD("derive_carrier", "start", "end", "via"), &Segment::derive_carrier);
 	ClassDB::bind_method(D_METHOD("get_start"), &Segment::get_start);
 	ClassDB::bind_method(D_METHOD("set_start", "p"), &Segment::set_start);
@@ -156,6 +157,13 @@ Ref<Segment> Segment::full_from_carrier(const Ref<GeneralizedCircle> &carrier) {
 Ref<Segment> Segment::straight(const Vector2 &s, const Vector2 &e, const Vector2 &v) {
 	Ref<Segment> seg = make(Point::at(s), Point::at(e), Point::at(v));
 	seg->carrier = GeneralizedCircle::wrap(rc::arc::straight_carrier(to_v2(s), to_v2(e)));
+	return seg;
+}
+// Stage 108: a piece -- its span (s, e, v) on its design surface's carrier,
+// kept exactly (the rounded crossing ends are not exactly on it).
+Ref<Segment> Segment::with_carrier(const Vector2 &s, const Vector2 &e, const Vector2 &v, const Ref<GeneralizedCircle> &carrier) {
+	Ref<Segment> seg = make(Point::at(s), Point::at(e), Point::at(v));
+	seg->carrier = carrier;
 	return seg;
 }
 Ref<GeneralizedCircle> Segment::derive_carrier(const Vector2 &s, const Vector2 &e, const Vector2 &v) {
