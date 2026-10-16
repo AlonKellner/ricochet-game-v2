@@ -33,7 +33,12 @@ Rules (TDD_09 "Target architecture" + "Legacy quirks"):
   or at an endpoint where blocked sides (incl. other segments sharing the
   exact endpoint = junction) cover both sides. Blockage is per hit point.
   terminal -> trace ends; reflection/inversion -> beam map; pass -> nothing.
-  Plan bookkeeping by surface id only.
+  Plan bookkeeping by surface id: an event that changes the frame (an
+  applied transformative / projective, or a state change that changes the
+  flags) advances the plan or marks it unmatched; an event where the planned
+  walk consumes the next entry without a frame change (a pass side, a
+  terminal off its segment, a write of a flag's current value) is consumed
+  too (B1, Stage 110): both walks reach the cursor together.
 - PLANNED: the next plan entry fires when id AND side match, even off-segment;
   everything else passes (terminals included).
 - Beams: reflection in a line: tau' = u^2 conj(tau_h), kappa' = -kappa;
@@ -875,8 +880,17 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 do = physical_decision(walk, surf, side, full_block)
                 fires_state = bool(changes) and full_block
                 fired = full_block and not ghosted
-                if do in TRANSFORMATIVE or do in PROJECTIVE or fires_state:
+                # B1 (Stage 110): what counts is the frame the event leaves -- the beam
+                # and the flags. A state change that rewrites the flags as they are
+                # changes no frame.
+                changes_flags = fires_state and apply_states(walk.flags, changes) != walk.flags
+                if do in TRANSFORMATIVE or do in PROJECTIVE or changes_flags:
                     _plan_bookkeeping(walk, sid, pt)
+                elif do is None and _quiet_entry(walk, surf, sid, side, pt):
+                    # the planned walk consumes this entry without a frame change (a
+                    # pass side, a terminal crossed off its segment, a write of the
+                    # current value): so does the physical one, at the same event
+                    walk.plan_index += 1
             elif walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side):
                 # a planned piece (Stage 108): a hit outside its span is off its segment
                 on_seg = on_seg and in_planned_span(walk, walk.plan_index, pt)
@@ -1012,6 +1026,21 @@ def in_planned_span(walk: Walk, i, pt):
     """Stage 108: plan entry i names a piece -- pt must lie in its span."""
     span = walk.plan_spans[i] if walk.plan_spans is not None and i < len(walk.plan_spans) else None
     return span is None or on_segment(span, pt)
+
+
+def _quiet_entry(walk: Walk, surf: Surface, sid, side, pt):
+    """B1 (Stage 110): the next plan entry is (sid, side) at pt, and the planned
+    walk consumes it there without changing the frame: its effect is not
+    transformative or projective, and its state changes leave the flags as
+    they are."""
+    if walk.plan_index >= len(walk.plan) or walk.plan[walk.plan_index] != (sid, side):
+        return False
+    if not in_planned_span(walk, walk.plan_index, pt):
+        return False
+    eff = surf.effect(side, walk.flags)
+    if eff in TRANSFORMATIVE or eff in PROJECTIVE:
+        return False
+    return apply_states(walk.flags, surf.state_changes(side, walk.flags)) == walk.flags
 
 
 def _plan_bookkeeping(walk: Walk, sid, pt):

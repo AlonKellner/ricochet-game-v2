@@ -1874,11 +1874,20 @@ private:
 					do_ = phys_do;
 					fires_state = phys_state;
 					fired = fb && !ghosted;
-					if (w.anchored && !(phys_do == plan_do && phys_state == plan_state && (phys_do != EffectType::Pass || phys_state || !plan_match))) {
+					// B1 (Stage 110): what counts is the frame each walk leaves -- the beam
+					// and the flags. A write of the value a flag already has changes no frame.
+					const Flags phys_after = phys_state ? w.flags.applied(changes) : w.flags;
+					const Flags plan_after = plan_state ? w.flags.applied(changes) : w.flags;
+					if (w.anchored && !(phys_do == plan_do && phys_after == plan_after)) {
 						diverged = true;
 					}
-					if (is_transformative(do_) || is_projective(do_) || fires_state) {
+					if (is_transformative(do_) || is_projective(do_) || !(phys_after == w.flags)) {
 						plan_bookkeeping(w, surf->id, pt);
+					} else if (do_ == EffectType::Pass && plan_match && plan_do == EffectType::Pass && plan_after == w.flags) {
+						// the planned walk consumes this entry without a frame change (a pass
+						// side, a terminal crossed off its segment, a write of the current
+						// value): so does the physical one, at the same event
+						w.plan_index++;
 					}
 				} else {
 					if (plan_match) {
