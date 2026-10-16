@@ -9,3 +9,6 @@ func get_display_name() -> String:
 
 func get_display_color() -> Color:
 	return Color.RED
+
+func to_spec() -> Dictionary:
+	return {"type": "terminal"}

@@ -29,7 +29,7 @@ if [ -z "${JOBS:-}" ]; then
 	JOBS=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 fi
 
-SWEEPS=(test_invariant_sweep.gd test_invariant_combos.gd test_precision_invariant_sweep.gd)
+SWEEPS=(test_invariant_sweep.gd test_invariant_combos.gd test_precision_invariant_sweep.gd test_stage107_level_sweep.gd)
 
 LOGDIR=$(mktemp -d "${TMPDIR:-/tmp}/ricochet_tests.XXXXXX")
 rm -f violations.*.shard*.json

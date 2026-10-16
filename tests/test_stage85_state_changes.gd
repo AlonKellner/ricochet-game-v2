@@ -175,7 +175,7 @@ func test_state_change_starts_new_frame():
 	var tog: Surface = null
 	for s: Surface in scene.surfaces:
 		var c: SideConfig = s.active_side_config(Side.Value.LEFT, GameState.new())
-		if c != null and c.state_change != null:
+		if c != null and not c.hit_effects.is_empty():
 			tog = s
 	assert_not_null(tog)
 	var player := Vector2(700, 520)

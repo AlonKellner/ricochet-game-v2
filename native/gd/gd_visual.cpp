@@ -108,6 +108,7 @@ void Segment::_bind_methods() {
 	ClassDB::bind_static_method("Segment", D_METHOD("make", "start", "end", "via"), &Segment::make);
 	ClassDB::bind_static_method("Segment", D_METHOD("from_coords", "s", "e", "v"), &Segment::from_coords);
 	ClassDB::bind_static_method("Segment", D_METHOD("full_from_carrier", "carrier"), &Segment::full_from_carrier);
+	ClassDB::bind_static_method("Segment", D_METHOD("straight", "s", "e", "v"), &Segment::straight);
 	ClassDB::bind_static_method("Segment", D_METHOD("derive_carrier", "start", "end", "via"), &Segment::derive_carrier);
 	ClassDB::bind_method(D_METHOD("get_start"), &Segment::get_start);
 	ClassDB::bind_method(D_METHOD("set_start", "p"), &Segment::set_start);
@@ -149,6 +150,13 @@ Ref<Segment> Segment::full_from_carrier(const Ref<GeneralizedCircle> &carrier) {
 	s->full = true;
 	s->carrier = carrier; // the same object (Segment.full_from_carrier keeps it)
 	return s;
+}
+// Stage 107: a line segment whose carrier is exactly the line through s and
+// e (v is kept as the segment's data point: display, labels).
+Ref<Segment> Segment::straight(const Vector2 &s, const Vector2 &e, const Vector2 &v) {
+	Ref<Segment> seg = make(Point::at(s), Point::at(e), Point::at(v));
+	seg->carrier = GeneralizedCircle::wrap(rc::arc::straight_carrier(to_v2(s), to_v2(e)));
+	return seg;
 }
 Ref<GeneralizedCircle> Segment::derive_carrier(const Vector2 &s, const Vector2 &e, const Vector2 &v) {
 	return GeneralizedCircle::wrap(rc::arc::derive_carrier(to_v2(s), to_v2(e), to_v2(v)));

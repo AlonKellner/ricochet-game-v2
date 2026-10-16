@@ -5,6 +5,7 @@
 // by inserted infinity events and the earlier MAX_HITS cut they cause; with it
 // off (the default) the goldens test replays the older fixtures unchanged.
 #include "goldens.hpp"
+#include "oracle_fixtures.hpp"
 
 #include <doctest/doctest.h>
 
@@ -14,73 +15,6 @@ using namespace rc;
 using namespace rc::test;
 
 namespace {
-
-template <Num N>
-std::vector<Event<N>> walk_infinity_fixture(const ojson &fx, const std::vector<SurfaceDef> &defs, const N &like, bool emit) {
-	Scene<N> scene = Scene<N>::from_defs(defs, like);
-	scene.emit_infinity = emit;
-	SolveCache<N> cache;
-	Solver<N> solver(scene, &cache);
-	const CN<N> player{like.like(fx["player"][0].get<double>()), like.like(fx["player"][1].get<double>())};
-	std::optional<CN<N>> cursor;
-	if (!fx["cursor"].is_null()) {
-		cursor = CN<N>{like.like(fx["cursor"][0].get<double>()), like.like(fx["cursor"][1].get<double>())};
-	}
-	const Mode mode = fx["mode"].get<std::string>() == "physical" ? Mode::Physical : Mode::Planned;
-	const std::vector<PlanItem> plan = plan_from_json(fx["plan"]);
-	const Flags flags = fx.contains("flags") && !fx["flags"].is_null() ? flags_from_json(fx["flags"]) : Flags();
-	if (!fx["direction"].is_null()) {
-		Walk<N> w = solver.run_direction(player, CN<N>{like.like(fx["direction"][0].get<double>()), like.like(fx["direction"][1].get<double>())},
-			plan, cursor, mode, MAX_HITS, flags);
-		return w.events;
-	}
-	std::optional<Walk<N>> w = solver.run(player, *cursor, plan, mode, MAX_HITS, flags);
-	return w ? w->events : std::vector<Event<N>>{};
-}
-
-// The oracle's event record compared field by field (points within 1e-9 px,
-// as the GUT fixture tests compare).
-template <Num N>
-std::string diff_against_oracle(const std::vector<Event<N>> &events, const ojson &expected) {
-	if (events.size() != expected.size()) {
-		std::string got;
-		for (const Event<N> &e : events) {
-			got += std::string(event_kind_name(e.kind)) + " ";
-		}
-		return "count " + std::to_string(events.size()) + " vs oracle " + std::to_string(expected.size()) + " (" + got + ")";
-	}
-	for (size_t i = 0; i < events.size(); i++) {
-		const Event<N> &e = events[i];
-		const ojson &x = expected[i];
-		const std::string side = e.kind == EventKind::Hit ? (e.left ? "LEFT" : "RIGHT") : "";
-		if (std::string(event_kind_name(e.kind)) != x["kind"].get<std::string>() || e.surface_id != x["surface_id"].get<int>()
-				|| side != x["side"].get<std::string>() || e.applied != x["applied"].get<bool>() || e.terminal != x["terminal"].get<bool>()
-				|| e.on_segment != x["on_segment"].get<bool>() || e.rehit != x["rehit"].get<bool>()) {
-			return "event " + std::to_string(i) + ": " + event_kind_name(e.kind) + " s=" + std::to_string(e.surface_id) + " " + side
-				+ (e.applied ? " applied" : "") + " vs oracle " + x["kind"].get<std::string>() + " s=" + std::to_string(x["surface_id"].get<int>())
-				+ " " + x["side"].get<std::string>() + (x["applied"].get<bool>() ? " applied" : "");
-		}
-		if (x.contains("state") && e.state != x["state"].get<bool>()) {
-			return "event " + std::to_string(i) + ": state";
-		}
-		if (x.contains("flags") && !x["flags"].is_null() && e.flags.canonical_key() != flags_from_json(x["flags"]).canonical_key()) {
-			return "event " + std::to_string(i) + ": flags " + e.flags.canonical_key();
-		}
-		if (x.contains("x")) {
-			if (!e.point) {
-				return "event " + std::to_string(i) + ": no point, oracle has one";
-			}
-			const double dx = e.point->fx() - std::stod(x["x"].get<std::string>());
-			const double dy = e.point->fy() - std::stod(x["y"].get<std::string>());
-			if (std::sqrt(dx * dx + dy * dy) > 1e-9) {
-				return "event " + std::to_string(i) + ": point off by " + std::to_string(std::sqrt(dx * dx + dy * dy));
-			}
-		} else if (e.point && e.kind != EventKind::Hit) {
-			return "event " + std::to_string(i) + ": a point where the oracle has none";
-		}
-	}
-	return "";
-}
 
 // An encoded event with its t_from blanked (the arc after an infinity event
 // starts at infinity instead of at the previous point) and its kind kept.
@@ -110,11 +44,11 @@ TEST_CASE("infinity: the Stage 88 fixtures match the oracle at f64, Dual and 4 l
 	for (const ojson &fx : fxs["fixtures"]) {
 		const std::string name = fx["name"].get<std::string>();
 		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
-		const auto r64 = walk_infinity_fixture<F64>(fx, defs, F64{1}, true);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
 		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
-		const auto rd = walk_infinity_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
 		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
-		const auto rb = walk_infinity_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
 		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
 		for (const Event<F64> &e : r64) {
 			if (e.kind == EventKind::Infinity) {
@@ -148,11 +82,11 @@ TEST_CASE("infinity: the Stage 101 fixtures (infinity as a point, the pre-transf
 		for (const SurfaceDef &d : defs) {
 			pre_scenes += d.pre_transform ? 1 : 0;
 		}
-		const auto r64 = walk_infinity_fixture<F64>(fx, defs, F64{1}, true);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
 		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
-		const auto rd = walk_infinity_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
 		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
-		const auto rb = walk_infinity_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
 		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
 		for (const Event<F64> &e : r64) {
 			if ((e.kind == EventKind::Infinity || e.kind == EventKind::Max) && e.surface_id == INFINITY_ID && e.point) {
@@ -172,7 +106,7 @@ TEST_CASE("infinity: with the switch off the Stage 88 and 101 scenes never emit 
 		const ojson fxs = load_json(f);
 		for (const ojson &fx : fxs["fixtures"]) {
 			const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
-			for (const Event<F64> &e : walk_infinity_fixture<F64>(fx, defs, F64{1}, false)) {
+			for (const Event<F64> &e : walk_oracle_fixture<F64>(fx, defs, F64{1}, false)) {
 				CHECK(e.kind != EventKind::Infinity);
 				CHECK(e.surface_id != INFINITY_ID);
 			}
@@ -276,13 +210,13 @@ TEST_CASE("Stage 105: the tangency-at-infinity fixtures match the oracle at f64,
 	for (const ojson &fx : fxs["fixtures"]) {
 		const std::string name = fx["name"].get<std::string>();
 		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
-		const auto r64 = walk_infinity_fixture<F64>(fx, defs, F64{1}, true);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
 		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
-		const auto rd = walk_infinity_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
 		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
-		const auto r4 = walk_infinity_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		const auto r4 = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
 		CHECK_MESSAGE(diff_against_oracle(r4, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(r4, fx["expected"])));
-		const auto r64l = walk_infinity_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
+		const auto r64l = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
 		CHECK_MESSAGE(diff_against_oracle(r64l, fx["expected"]) == "", (name + " big64: " + diff_against_oracle(r64l, fx["expected"])));
 		fixtures++;
 	}
@@ -296,13 +230,13 @@ TEST_CASE("Stage 106: the pop-departure fixtures match the oracle at f64, Dual, 
 	for (const ojson &fx : fxs["fixtures"]) {
 		const std::string name = fx["name"].get<std::string>();
 		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
-		const auto r64 = walk_infinity_fixture<F64>(fx, defs, F64{1}, true);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
 		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
-		const auto rd = walk_infinity_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
 		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
-		const auto r4 = walk_infinity_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		const auto r4 = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
 		CHECK_MESSAGE(diff_against_oracle(r4, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(r4, fx["expected"])));
-		const auto r64l = walk_infinity_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
+		const auto r64l = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
 		CHECK_MESSAGE(diff_against_oracle(r64l, fx["expected"]) == "", (name + " big64: " + diff_against_oracle(r64l, fx["expected"])));
 		fixtures++;
 	}

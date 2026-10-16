@@ -4,8 +4,10 @@ extends RefCounted
 # The beam solver's scene defs and the id -> Segment map of a surfaces array,
 # built once per array instead of once per frame (Stage 100). The key is the
 # Array object itself and its size: scenes append their surfaces in _ready and
-# never edit a Surface afterwards, so the same array with the same count means
-# the same defs. `version` counts the rebuilds (the dirty keys use it).
+# never edit a Surface afterwards, and a structural change (a spawn landing, a
+# group leaving, undo; Stage 107) replaces the array (World.surfaces), so the
+# same array with the same count means the same defs. `version` counts the
+# rebuilds (the dirty keys use it).
 
 var version := 0
 var _src: Array = []

@@ -301,20 +301,24 @@
    "left": {
     "interactive": true,
     "type": "pass",
-    "state": {
-     "key": "ghost",
-     "op": "toggle",
-     "value": true
-    }
+    "states": [
+     {
+      "key": "ghost",
+      "op": "toggle",
+      "value": true
+     }
+    ]
    },
    "right": {
     "interactive": true,
     "type": "pass",
-    "state": {
-     "key": "ghost",
-     "op": "toggle",
-     "value": true
-    }
+    "states": [
+     {
+      "key": "ghost",
+      "op": "toggle",
+      "value": true
+     }
+    ]
    },
    "is_target": false,
    "player_solid": false
@@ -339,20 +343,24 @@
    "left": {
     "interactive": true,
     "type": "pass",
-    "state": {
-     "key": "ghost",
-     "op": "toggle",
-     "value": true
-    }
+    "states": [
+     {
+      "key": "ghost",
+      "op": "toggle",
+      "value": true
+     }
+    ]
    },
    "right": {
     "interactive": true,
     "type": "pass",
-    "state": {
-     "key": "ghost",
-     "op": "toggle",
-     "value": true
-    }
+    "states": [
+     {
+      "key": "ghost",
+      "op": "toggle",
+      "value": true
+     }
+    ]
    },
    "is_target": false,
    "player_solid": false

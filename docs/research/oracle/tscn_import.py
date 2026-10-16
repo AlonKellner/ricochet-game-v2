@@ -263,10 +263,10 @@ def build_surfaces(props):
     # state flags (Stage 85) and ghost togglers (Stage 86), as LevelSettings builds them
     key = props.get("state_key", '"open"').strip('"')
     for v in lines("toggle_lines"):
-        tog = _cfg("pass", True, state={"key": key, "op": "toggle", "value": True})
+        tog = _cfg("pass", True, states=[{"key": key, "op": "toggle", "value": True}])
         add(*seg_from_v4(v), tog, tog, player_solid=False)
     for v in lines("ghost_toggler_lines"):
-        g = _cfg("pass", True, state={"key": "ghost", "op": "toggle", "value": True})
+        g = _cfg("pass", True, states=[{"key": "ghost", "op": "toggle", "value": True}])
         add(*seg_from_v4(v), g, g, player_solid=False)
     for v in lines("gate_lines"):
         opn, block = _cfg("pass", False), _cfg("terminal", False)

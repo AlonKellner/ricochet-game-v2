@@ -22,3 +22,8 @@ func get_display_name() -> String:
 
 func get_display_color() -> Color:
 	return Color.GRAY
+
+# Data form (the scene-def side config minus `interactive` and the hit axis);
+# EffectSpec.build is the inverse. The base is the pass.
+func to_spec() -> Dictionary:
+	return {"type": "pass"}

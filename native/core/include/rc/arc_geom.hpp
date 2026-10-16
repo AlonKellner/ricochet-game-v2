@@ -38,6 +38,25 @@ inline std::array<double, 4> homogeneous_row(const V2 &p) {
 	return {x * x + y * y, x, y, 1.0};
 }
 
+// Stage 107: the line through start and end, exactly (a = 0): derive_carrier's
+// formula on the exact (float64) midpoint, so its orientation and scale are
+// the three-point carrier's of a collinear via. Float32 points mapped by a
+// rotation are almost never exactly collinear; a straight segment must not
+// become a huge arc.
+inline GeneralizedCircle straight_carrier(const V2 &p_start, const V2 &p_end) {
+	const double sx = p_start.x, sy = p_start.y, ex = p_end.x, ey = p_end.y;
+	const double mx = (sx + ex) / 2.0, my = (sy + ey) / 2.0;
+	const std::array<double, 4> r1{sx * sx + sy * sy, sx, sy, 1.0};
+	const std::array<double, 4> r2{mx * mx + my * my, mx, my, 1.0};
+	const std::array<double, 4> r3{ex * ex + ey * ey, ex, ey, 1.0};
+	GeneralizedCircle g;
+	g.a = 0.0;
+	g.b = -det3x3(r1[0], r1[2], r1[3], r2[0], r2[2], r2[3], r3[0], r3[2], r3[3]);
+	g.c = det3x3(r1[0], r1[1], r1[3], r2[0], r2[1], r2[3], r3[0], r3[1], r3[3]);
+	g.d = -det3x3(r1[0], r1[1], r1[2], r2[0], r2[1], r2[2], r3[0], r3[1], r3[2]);
+	return g;
+}
+
 // Segment.derive_carrier(start, end, via)
 inline GeneralizedCircle derive_carrier(const V2 &p_start, const V2 &p_end, const V2 &p_via) {
 	const auto r1 = homogeneous_row(p_start);

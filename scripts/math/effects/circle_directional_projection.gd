@@ -16,3 +16,6 @@ func get_display_name() -> String:
 
 func get_display_color() -> Color:
 	return Color(1.0, 0.4, 0.1) if _project_back else Color(1.0, 0.8, 0.2)
+
+func to_spec() -> Dictionary:
+	return {"type": "circle_directional_projection", "back": _project_back, "normal": [_normal.x, _normal.y]}

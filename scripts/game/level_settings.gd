@@ -39,8 +39,15 @@ extends Node2D
 # starts "after": the arrow's natural paths are circles through their image of
 # infinity, which is drawn and plannable like a surface when on screen.
 @export var pre_transform_inversions: PackedFloat64Array = PackedFloat64Array()
+# Stage 107: surfaces as data -- any carrier, path effect, hit effects and
+# presence (SurfaceSpec), built after the legacy arrays.
+@export var surface_specs: Array[SurfaceSpec] = []
 
 var surfaces: Array[Surface] = []
+# Stage 107: the surfaces over time (spawned groups join and leave); `surfaces`
+# is always world.surfaces once the level is built
+var world: World = null
+var _nodes := {}   # surface id -> its SurfaceNode
 
 func _ready() -> void:
 	if build_room:
@@ -51,142 +58,10 @@ func _ready() -> void:
 			Vector2(line_def.z, line_def.w),
 			Vector2((line_def.x + line_def.z) / 2.0, (line_def.y + line_def.w) / 2.0))
 		_add_surface(surf, "Block")
-	for line_def in mirror_lines:
-		var seg := _seg_from_v4(line_def)
-		var reflection := ReflectionEffect.new(seg.get_carrier())
-		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(null, false), false, false)
-		_add_surface(surf, "Mirror")
-	for line_def in mirror_right_lines:
-		var seg := _seg_from_v4(line_def)
-		var reflection := ReflectionEffect.new(seg.get_carrier())
-		var surf := Surface.new(seg, SideConfig.new(null, false), SideConfig.new(reflection, true), false, false)
-		_add_surface(surf, "MirrorR")
-	for line_def in mirror_both_lines:
-		var seg := _seg_from_v4(line_def)
-		var reflection := ReflectionEffect.new(seg.get_carrier())
-		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(reflection, true), false, false)
-		_add_surface(surf, "MirrorB")
-	for i in range(0, inversion_left_arcs.size(), 6):
-		var seg := Segment.from_coords(
-			Vector2(inversion_left_arcs[i], inversion_left_arcs[i + 1]),
-			Vector2(inversion_left_arcs[i + 2], inversion_left_arcs[i + 3]),
-			Vector2(inversion_left_arcs[i + 4], inversion_left_arcs[i + 5]))
-		var inversion := CircleInversionEffect.new(seg.get_carrier())
-		var surf := Surface.new(seg, SideConfig.new(inversion, true), SideConfig.new(null, false), false, true)
-		_add_surface(surf, "Inversion")
-	for i in range(0, full_inversion_arcs.size(), 3):
-		var center := Vector2(full_inversion_arcs[i], full_inversion_arcs[i + 1])
-		var r := full_inversion_arcs[i + 2]
-		var carrier := GeneralizedCircle.from_circle(center, r)
-		var seg2 := Segment.full_from_carrier(carrier)
-		var inv := CircleInversionEffect.new(carrier)
-		var surf2 := Surface.new(seg2, SideConfig.new(inv, true), SideConfig.new(inv, true), false, true)
-		_add_surface(surf2, "FullInversion")
-	for i in range(0, semi_reflective_arcs.size(), 6):
-		var seg := Segment.from_coords(
-			Vector2(semi_reflective_arcs[i], semi_reflective_arcs[i + 1]),
-			Vector2(semi_reflective_arcs[i + 2], semi_reflective_arcs[i + 3]),
-			Vector2(semi_reflective_arcs[i + 4], semi_reflective_arcs[i + 5]))
-		var reflection := ReflectionEffect.new(seg.get_carrier())
-		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(null, false), false, false)
-		_add_surface(surf, "SemiReflArc")
-	for i in range(0, reflective_arcs.size(), 6):
-		var seg := Segment.from_coords(
-			Vector2(reflective_arcs[i], reflective_arcs[i + 1]),
-			Vector2(reflective_arcs[i + 2], reflective_arcs[i + 3]),
-			Vector2(reflective_arcs[i + 4], reflective_arcs[i + 5]))
-		var reflection := ReflectionEffect.new(seg.get_carrier())
-		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(reflection, true), false, false)
-		_add_surface(surf, "ReflArc")
-	for i in range(0, full_reflective_arcs.size(), 3):
-		var center := Vector2(full_reflective_arcs[i], full_reflective_arcs[i + 1])
-		var r := full_reflective_arcs[i + 2]
-		var carrier := GeneralizedCircle.from_circle(center, r)
-		var seg := Segment.full_from_carrier(carrier)
-		var reflection := ReflectionEffect.new(carrier)
-		var surf := Surface.new(seg, SideConfig.new(reflection, true), SideConfig.new(reflection, true), false, false)
-		_add_surface(surf, "FullReflArc")
-	for line_def in normal_projection_lines:
-		var seg := _seg_from_v4(line_def)
-		var projection := LineNormalProjection.new()
-		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
-		_add_surface(surf, "Projection")
-	for line_def in normal_projection_back_lines:
-		var seg := _seg_from_v4(line_def)
-		var projection := LineNormalProjection.new(true)
-		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
-		_add_surface(surf, "ProjectionBack")
-	for i in range(0, normal_projection_arcs.size(), 6):
-		var seg := Segment.from_coords(
-			Vector2(normal_projection_arcs[i], normal_projection_arcs[i + 1]),
-			Vector2(normal_projection_arcs[i + 2], normal_projection_arcs[i + 3]),
-			Vector2(normal_projection_arcs[i + 4], normal_projection_arcs[i + 5]))
-		var projection := CircleNormalProjection.new()
-		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
-		_add_surface(surf, "CircleProjection")
-	for i in range(0, normal_projection_back_arcs.size(), 6):
-		var seg := Segment.from_coords(
-			Vector2(normal_projection_back_arcs[i], normal_projection_back_arcs[i + 1]),
-			Vector2(normal_projection_back_arcs[i + 2], normal_projection_back_arcs[i + 3]),
-			Vector2(normal_projection_back_arcs[i + 4], normal_projection_back_arcs[i + 5]))
-		var projection := CircleNormalProjection.new(true)
-		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
-		_add_surface(surf, "CircleProjectionBack")
-	for i in range(0, circle_directional_arcs.size(), 8):
-		var seg := Segment.from_coords(
-			Vector2(circle_directional_arcs[i], circle_directional_arcs[i + 1]),
-			Vector2(circle_directional_arcs[i + 2], circle_directional_arcs[i + 3]),
-			Vector2(circle_directional_arcs[i + 4], circle_directional_arcs[i + 5]))
-		var normal := Vector2(circle_directional_arcs[i + 6], circle_directional_arcs[i + 7])
-		var projection := CircleDirectionalProjection.new(normal)
-		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
-		_add_surface(surf, "CircleDir")
-	for i in range(0, circle_directional_back_arcs.size(), 8):
-		var seg := Segment.from_coords(
-			Vector2(circle_directional_back_arcs[i], circle_directional_back_arcs[i + 1]),
-			Vector2(circle_directional_back_arcs[i + 2], circle_directional_back_arcs[i + 3]),
-			Vector2(circle_directional_back_arcs[i + 4], circle_directional_back_arcs[i + 5]))
-		var normal := Vector2(circle_directional_back_arcs[i + 6], circle_directional_back_arcs[i + 7])
-		var projection := CircleDirectionalProjection.new(normal, true)
-		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
-		_add_surface(surf, "CircleDirBack")
-	for i in range(0, directional_projection_lines.size(), 6):
-		var seg := Segment.from_coords(
-			Vector2(directional_projection_lines[i], directional_projection_lines[i + 1]),
-			Vector2(directional_projection_lines[i + 2], directional_projection_lines[i + 3]),
-			Vector2((directional_projection_lines[i] + directional_projection_lines[i + 2]) / 2.0,
-				(directional_projection_lines[i + 1] + directional_projection_lines[i + 3]) / 2.0))
-		var normal := Vector2(directional_projection_lines[i + 4], directional_projection_lines[i + 5])
-		var projection := LineDirectionalProjection.new(normal)
-		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
-		_add_surface(surf, "LineDir")
-	for i in range(0, directional_projection_back_lines.size(), 6):
-		var seg := Segment.from_coords(
-			Vector2(directional_projection_back_lines[i], directional_projection_back_lines[i + 1]),
-			Vector2(directional_projection_back_lines[i + 2], directional_projection_back_lines[i + 3]),
-			Vector2((directional_projection_back_lines[i] + directional_projection_back_lines[i + 2]) / 2.0,
-				(directional_projection_back_lines[i + 1] + directional_projection_back_lines[i + 3]) / 2.0))
-		var normal := Vector2(directional_projection_back_lines[i + 4], directional_projection_back_lines[i + 5])
-		var projection := LineDirectionalProjection.new(normal, true)
-		var surf := Surface.new(seg, SideConfig.new(projection, true), SideConfig.new(projection, true), false, false)
-		_add_surface(surf, "LineDirBack")
-	for i in range(0, portal_lines.size(), 7):
-		var seg := Segment.from_coords(
-			Vector2(portal_lines[i], portal_lines[i + 1]),
-			Vector2(portal_lines[i + 2], portal_lines[i + 3]),
-			Vector2((portal_lines[i] + portal_lines[i + 2]) / 2.0,
-				(portal_lines[i + 1] + portal_lines[i + 3]) / 2.0))
-		var result := RigidMotionEffect.create_portal_pair(seg, portal_lines[i + 4],
-			Vector2(portal_lines[i + 5], portal_lines[i + 6]))
-		_add_portal_pair(seg, result)
-	for i in range(0, portal_arcs.size(), 9):
-		var seg := Segment.from_coords(
-			Vector2(portal_arcs[i], portal_arcs[i + 1]),
-			Vector2(portal_arcs[i + 2], portal_arcs[i + 3]),
-			Vector2(portal_arcs[i + 4], portal_arcs[i + 5]))
-		var result := RigidMotionEffect.create_portal_pair(seg, portal_arcs[i + 6],
-			Vector2(portal_arcs[i + 7], portal_arcs[i + 8]))
-		_add_portal_pair(seg, result)
+	# every legacy array is a row of surface specs (Stage 107), in the legacy
+	# order (the ids follow it)
+	for row in _specs_before_edge():
+		_add_spec(row[1], row[0])
 	# the level's edge walls (pass-through, not interactive), along level_bounds
 	var b := level_bounds
 	var screen_bounds: Array[Vector4] = [
@@ -199,27 +74,10 @@ func _ready() -> void:
 		var config := SideConfig.new(null, false)
 		var surf := Surface.new(_seg_from_v4(line_def), config, config, false, false)
 		surfaces.append(surf)
-	for line_def in toggle_lines:
-		var tog := SideConfig.new(null, true, StateChange.new(state_key, StateChange.Op.TOGGLE))
-		_add_surface(Surface.new(_seg_from_v4(line_def), tog, tog, false, false), "Toggle")
-	for line_def in ghost_toggler_lines:
-		var g := SideConfig.new(null, true, StateChange.new(BeamScene.GHOST(), StateChange.Op.TOGGLE))
-		_add_surface(Surface.new(_seg_from_v4(line_def), g, g, false, false), "GhostToggle")
-	for line_def in gate_lines:
-		var block := SideConfig.new(TerminalEffect.new(), false)
-		var open := SideConfig.new(null, false)
-		var gate := CategoricalResolver.new(state_key, {"true": [open, open], "DEFAULT": [block, block]})
-		_add_surface(Surface.with_resolver(_seg_from_v4(line_def), gate, false, false), "Gate")
-	for line_def in flag_mirror_lines:
-		var seg := _seg_from_v4(line_def)
-		var refl := SideConfig.new(ReflectionEffect.new(seg.get_carrier()), true)
-		var off := SideConfig.new(null, false)
-		var fm := CategoricalResolver.new(state_key, {"true": [refl, refl], "DEFAULT": [off, off]})
-		_add_surface(Surface.with_resolver(seg, fm, false, false), "FlagMirror")
-	for line_def in passthrough_lines:
-		var config := SideConfig.new(null, false)
-		var surf := Surface.new(_seg_from_v4(line_def), config, config, false, false)
-		_add_surface(surf, "PassThrough")
+	for row in _specs_after_edge():
+		_add_spec(row[1], row[0])
+	for spec in surface_specs:
+		_add_spec(spec, "Spec")
 	for i in range(0, pre_transform_inversions.size(), 3):
 		var pre := Surface.pre_transform_circle(Vector2(pre_transform_inversions[i], pre_transform_inversions[i + 1]),
 			pre_transform_inversions[i + 2])
@@ -230,28 +88,149 @@ func _ready() -> void:
 	edge.name = "EdgeOverlay"
 	add_child(edge)
 	edge.setup(level_bounds)
+	world = World.new(surfaces)
+	surfaces = world.surfaces
+	# the spawn preview (Stage 107) where something can spawn
+	if surface_specs.any(func(s: SurfaceSpec): return not s.spawn_channels().is_empty()):
+		var preview := SpawnPreviewNode.new()
+		preview.name = "SpawnPreview"
+		add_child(preview)
 
 func _add_surface(surf: Surface, prefix: String) -> void:
 	surfaces.append(surf)
+	_add_node(surf, prefix)
+
+func _add_node(surf: Surface, prefix: String) -> void:
 	var node := Node2D.new()
 	node.set_script(load("res://scripts/game/surface_node.gd"))
 	node.name = "%s_%d" % [prefix, surf.id]
 	add_child(node)
 	node.setup(surf)
+	_nodes[surf.id] = node
 
-func _add_portal_pair(source_seg: Segment, result: Dictionary) -> void:
-	var src_cfg := SideConfig.new(result.source_effect, true)
-	var src_surf := Surface.new(source_seg, src_cfg, src_cfg, false, false)
-	_add_surface(src_surf, "PortalSrc")
-	var tgt_cfg := SideConfig.new(result.target_effect, true)
-	var tgt_surf := Surface.new(result.target_segment, tgt_cfg, tgt_cfg, false, false)
-	_add_surface(tgt_surf, "PortalTgt")
-	var link_l := SideLink.from_pair(src_surf, Side.Value.LEFT, tgt_surf, Side.Value.RIGHT)
-	src_surf.set_side_link(Side.Value.LEFT, link_l)
-	tgt_surf.set_side_link(Side.Value.RIGHT, link_l.outgoing)
-	var link_r := SideLink.from_pair(src_surf, Side.Value.RIGHT, tgt_surf, Side.Value.LEFT)
-	src_surf.set_side_link(Side.Value.RIGHT, link_r)
-	tgt_surf.set_side_link(Side.Value.LEFT, link_r.outgoing)
+# A structural change of the world (World.land / restore): spawned surfaces
+# get nodes, dropped ones lose theirs; `surfaces` is the world's new array.
+func apply_world_change(change: Dictionary) -> void:
+	for s: Surface in change["removed"]:
+		var node: Node = _nodes.get(s.id)
+		if node != null:
+			_nodes.erase(s.id)
+			remove_child(node)
+			node.queue_free()
+	for s: Surface in change["added"]:
+		_add_node(s, "Spawned")
+	surfaces = world.surfaces
+
+# A spec's surfaces: one, or a portal's pair.
+func _add_spec(spec: SurfaceSpec, prefix: String) -> void:
+	var errors := spec.validate()
+	if not errors.is_empty():
+		assert(false, "%s: %s" % [prefix, ", ".join(errors)])
+		push_error("%s: %s" % [prefix, ", ".join(errors)])
+		return
+	var built := spec.build()
+	if built.size() == 2:
+		_add_surface(built[0], "PortalSrc")
+		_add_surface(built[1], "PortalTgt")
+	else:
+		_add_surface(built[0], prefix)
+
+static func _side(type := "pass", interactive := false, params := {}, hits: Array = []) -> SideSpec:
+	var e := {"type": type}
+	e.merge(params)
+	return SideSpec.make(e, interactive, hits)
+
+static func _a(v: Vector4) -> Vector2:
+	return Vector2(v.x, v.y)
+
+static func _b(v: Vector4) -> Vector2:
+	return Vector2(v.z, v.w)
+
+# Six floats: start, end, via.
+static func _arc6(arr: PackedFloat64Array, i: int, l: SideSpec, r: SideSpec, solid := false) -> SurfaceSpec:
+	return SurfaceSpec.arc(Vector2(arr[i], arr[i + 1]), Vector2(arr[i + 2], arr[i + 3]), Vector2(arr[i + 4], arr[i + 5]), l, r, solid)
+
+# Four floats: start, end; via at their midpoint (taken in float64).
+static func _line4(arr: PackedFloat64Array, i: int, l: SideSpec, r: SideSpec) -> SurfaceSpec:
+	return SurfaceSpec.arc(Vector2(arr[i], arr[i + 1]), Vector2(arr[i + 2], arr[i + 3]),
+		Vector2((arr[i] + arr[i + 2]) / 2.0, (arr[i + 1] + arr[i + 3]) / 2.0), l, r)
+
+# Three floats: a full circle (center, radius).
+static func _circle3(arr: PackedFloat64Array, i: int, l: SideSpec, r: SideSpec, solid := false) -> SurfaceSpec:
+	return SurfaceSpec.circle(Vector2(arr[i], arr[i + 1]), arr[i + 2], l, r, solid)
+
+# The legacy arrays before the edge walls: [prefix, spec] in build order.
+func _specs_before_edge() -> Array:
+	var out := []
+	var off := _side()
+	var refl := _side("reflection", true)
+	var inv := _side("inversion", true)
+	for v in mirror_lines:
+		out.append(["Mirror", SurfaceSpec.line(_a(v), _b(v), refl, off)])
+	for v in mirror_right_lines:
+		out.append(["MirrorR", SurfaceSpec.line(_a(v), _b(v), off, refl)])
+	for v in mirror_both_lines:
+		out.append(["MirrorB", SurfaceSpec.line(_a(v), _b(v), refl, refl)])
+	for i in range(0, inversion_left_arcs.size(), 6):
+		out.append(["Inversion", _arc6(inversion_left_arcs, i, inv, off, true)])
+	for i in range(0, full_inversion_arcs.size(), 3):
+		out.append(["FullInversion", _circle3(full_inversion_arcs, i, inv, inv, true)])
+	for i in range(0, semi_reflective_arcs.size(), 6):
+		out.append(["SemiReflArc", _arc6(semi_reflective_arcs, i, refl, off)])
+	for i in range(0, reflective_arcs.size(), 6):
+		out.append(["ReflArc", _arc6(reflective_arcs, i, refl, refl)])
+	for i in range(0, full_reflective_arcs.size(), 3):
+		out.append(["FullReflArc", _circle3(full_reflective_arcs, i, refl, refl)])
+	for back in [false, true]:
+		var lnp := _side("line_normal_projection", true, {"back": back})
+		for v in (normal_projection_back_lines if back else normal_projection_lines):
+			out.append(["ProjectionBack" if back else "Projection", SurfaceSpec.line(_a(v), _b(v), lnp, lnp)])
+	for back in [false, true]:
+		var cnp := _side("circle_normal_projection", true, {"back": back})
+		var arr := normal_projection_back_arcs if back else normal_projection_arcs
+		for i in range(0, arr.size(), 6):
+			out.append(["CircleProjectionBack" if back else "CircleProjection", _arc6(arr, i, cnp, cnp)])
+	for back in [false, true]:
+		var arr := circle_directional_back_arcs if back else circle_directional_arcs
+		for i in range(0, arr.size(), 8):
+			var cd := _side("circle_directional_projection", true, {"back": back, "normal": [arr[i + 6], arr[i + 7]]})
+			out.append(["CircleDirBack" if back else "CircleDir", _arc6(arr, i, cd, cd)])
+	for back in [false, true]:
+		var arr := directional_projection_back_lines if back else directional_projection_lines
+		for i in range(0, arr.size(), 6):
+			var ld := _side("line_directional_projection", true, {"back": back, "normal": [arr[i + 4], arr[i + 5]]})
+			out.append(["LineDirBack" if back else "LineDir", _line4(arr, i, ld, ld)])
+	for i in range(0, portal_lines.size(), 7):
+		var pl := _side("portal", true, {"theta": portal_lines[i + 4], "d": [portal_lines[i + 5], portal_lines[i + 6]]})
+		out.append(["Portal", _line4(portal_lines, i, pl, pl)])
+	for i in range(0, portal_arcs.size(), 9):
+		var pa := _side("portal", true, {"theta": portal_arcs[i + 6], "d": [portal_arcs[i + 7], portal_arcs[i + 8]]})
+		out.append(["Portal", _arc6(portal_arcs, i, pa, pa)])
+	return out
+
+# The legacy arrays after the edge walls (state flags, Stages 85-86).
+func _specs_after_edge() -> Array:
+	var out := []
+	var off := _side()
+	var tog := _side("pass", true, {}, [{"kind": "state", "key": state_key, "op": "toggle", "value": true}])
+	var ghost := _side("pass", true, {}, [{"kind": "state", "key": BeamScene.GHOST(), "op": "toggle", "value": true}])
+	for v in toggle_lines:
+		out.append(["Toggle", SurfaceSpec.line(_a(v), _b(v), tog, tog)])
+	for v in ghost_toggler_lines:
+		out.append(["GhostToggle", SurfaceSpec.line(_a(v), _b(v), ghost, ghost)])
+	for v in gate_lines:
+		var gate := SurfaceSpec.line(_a(v), _b(v), null, null)
+		gate.resolver_key = state_key
+		gate.resolver_table = {"true": [off, off], "DEFAULT": [_side("terminal"), _side("terminal")]}
+		out.append(["Gate", gate])
+	for v in flag_mirror_lines:
+		var fm := SurfaceSpec.line(_a(v), _b(v), null, null)
+		fm.resolver_key = state_key
+		fm.resolver_table = {"true": [_side("reflection", true), _side("reflection", true)], "DEFAULT": [off, off]}
+		out.append(["FlagMirror", fm])
+	for v in passthrough_lines:
+		out.append(["PassThrough", SurfaceSpec.line(_a(v), _b(v), off, off)])
+	return out
 
 static func _seg_from_v4(v: Vector4) -> Segment:
 	return Segment.from_coords(

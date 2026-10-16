@@ -1026,3 +1026,50 @@ def test_k3_degenerate_aim_shoots_through_the_cursor():
     pl = T.planned(sc, (835, 665), (1085, 665), [(6, "LEFT")])
     assert "cursor" in kinds(pl) and no_reapply_in_place(pl), kinds(pl)
     assert _at(200, lambda: hit_ids(T.physical(sc, (835, 665), (1085, 665), [(6, "LEFT")]))) == hit_ids(w)
+
+
+# ---------------------------------------------------------------- Stage 107: state lists, presence
+
+def test_side_states_reads_the_list_and_the_legacy_single_change():
+    a = {"key": "a", "op": "set", "value": 1}
+    b = {"key": "b", "op": "toggle", "value": True}
+    assert T.side_states(None) == []
+    assert T.side_states({"type": "pass"}) == []
+    assert T.side_states({"type": "pass", "state": a}) == [a]
+    assert T.side_states({"type": "pass", "states": [a, b]}) == [a, b]
+    assert T.apply_states({}, [a, b]) == {"a": 1, "b": True}
+
+
+def test_ghost_toggler_is_any_write_of_ghost():
+    g = {"key": "ghost", "op": "toggle", "value": True}
+    assert T.is_ghost_toggler({"type": "pass", "states": [{"key": "x", "op": "set", "value": 1}, g]})
+    assert not T.is_ghost_toggler({"type": "pass", "states": [{"key": "x", "op": "set", "value": 1}]})
+
+
+def test_presence_conditions_are_anded_and_default_is_a_missing_key():
+    pres = [{"key": "c", "values": ["DEFAULT", "armed"]}, {"key": "d", "values": ["true"]}]
+    assert not T.present(pres, {})
+    assert T.present(pres, {"d": True})
+    assert T.present(pres, {"c": "armed", "d": True})
+    assert not T.present(pres, {"c": "pending", "d": True})
+    assert T.present(None, {}) and T.present([], {"c": 1})
+
+
+def test_absent_surface_is_no_crossing_and_counts_no_hit():
+    mirror = T.surface_from_json({"id": 1, "line": True, "start": [100, -500], "end": [100, 500], "via": [100, 0],
+                                  "full": False, "left": REFL, "right": REFL,
+                                  "presence": [{"key": "m", "values": ["true"]}]})
+    wall = line(2, (300, -500), (300, 500), TERM, TERM)
+    w = T.trace_physical_direction([mirror, wall], (0, 0), mp.mpc(1, 0))
+    assert hits(w) == [(2, True, True)]
+    w = T.trace_physical_direction([mirror, wall], (0, 0), mp.mpc(1, 0), flags={"m": True})
+    assert hits(w)[0] == (1, True, False)
+
+
+def test_plan_effects_skip_an_absent_entry_and_its_writes():
+    s = T.surface_from_json({"id": 1, "line": True, "start": [100, -500], "end": [100, 500], "via": [100, 0],
+                             "full": False, "left": dict(REFL, states=[{"key": "k", "op": "set", "value": 2}]),
+                             "right": REFL, "presence": [{"key": "m", "values": ["true"]}]})
+    assert T.plan_resolved([s], [(1, T.LEFT)], {}) == [(None, {})]
+    assert T.plan_resolved([s], [(1, T.LEFT), (1, T.LEFT)], {"m": True}) == [
+        ("reflection", {"m": True}), ("reflection", {"m": True, "k": 2})]

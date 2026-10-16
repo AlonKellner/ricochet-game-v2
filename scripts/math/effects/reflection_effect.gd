@@ -12,3 +12,6 @@ func get_display_name() -> String:
 
 func get_display_color() -> Color:
 	return Color.BLUE
+
+func to_spec() -> Dictionary:
+	return {"type": "reflection"}

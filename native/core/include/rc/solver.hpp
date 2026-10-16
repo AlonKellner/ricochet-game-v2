@@ -82,6 +82,7 @@ struct Event {
 	double margin = INF_D;  // px gap to the nearest competing decision
 	bool seeded = false;    // lies on the sensitive forward continuation
 	bool state = false;     // the side's state change fired
+	bool fired = false;     // Stage 107: the side fired, ghost aside (its hit effects fire)
 	Flags flags;            // the trace's flags after this event (hits)
 	bool anchored = false;  // cursor: reached on the anchored path
 	int beam_view = -1;     // identity of the beam as the events see it (Backend::views_per_run)
@@ -370,14 +371,13 @@ public:
 		std::vector<EffectType> out;
 		for (const PlanItem &item : plan) {
 			const Surf<N> *surf = scene_.find(item.surface_id);
-			if (surf == nullptr) {
+			if (surf == nullptr || !surf->present(f)) {
+				// absent (Stage 107): no effect, no state change
 				out.push_back(EffectType::Pass);
 				continue;
 			}
 			out.push_back(surf->effect(item.left, f));
-			if (const StateChangeDef *ch = surf->state_change(item.left, f)) {
-				f = f.applied(*ch);
-			}
+			f = f.applied(surf->state_changes(item.left, f));
 		}
 		return out;
 	}
@@ -439,12 +439,10 @@ public:
 		Flags f = flags;
 		for (const PlanItem &item : plan) {
 			const Surf<N> *surf = scene_.find(item.surface_id);
-			if (surf == nullptr) {
+			if (surf == nullptr || !surf->present(f)) {
 				continue;
 			}
-			if (const StateChangeDef *ch = surf->state_change(item.left, f)) {
-				f = f.applied(*ch);
-			}
+			f = f.applied(surf->state_changes(item.left, f));
 		}
 		return f;
 	}
@@ -1335,7 +1333,9 @@ private:
 	}
 
 	// Candidates in walk order: [t, surf (nullptr = cursor), rehit, exact point].
-	std::vector<Candidate<N>> candidates(Walk<N> &w, const Beam<N> &beam, int depart, bool fresh, const N &t0) const {
+	// keep_cursor (K4): a restart after a derivative-only seed keeps the cursor
+	// candidate the loop listed (the oracle lists it once per loop).
+	std::vector<Candidate<N>> candidates(Walk<N> &w, const Beam<N> &beam, int depart, bool fresh, const N &t0, bool keep_cursor = false) const {
 		std::vector<Candidate<N>> cands;
 		for (const auto &sp : w.scene->surfaces) {
 			const Surf<N> &s = *sp;
@@ -1382,7 +1382,7 @@ private:
 		}
 		bool cursor_now = false;
 		// the cursor is on the beam only on the planned path
-		if (!w.cursor_done && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.cursor && w.on_plan) {
+		if (!w.cursor_done && w.cursor && (keep_cursor || (w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan))) {
 			N tc = Backend<N>::param_of(beam, *w.cursor);
 			const int ki = known_index(w.known, *w.cursor);
 			// the cursor exactly at the departure point is reached immediately
@@ -1598,7 +1598,8 @@ private:
 	}
 
 	// Blocked sides at an exact endpoint, incl. other segments sharing it.
-	static bool full_block(const Scene<N> &scene, const Surf<N> &surf, const CN<N> &pt, const CN<N> &tang, bool on_seg) {
+	static bool full_block(const Scene<N> &scene, const Surf<N> &surf, const CN<N> &pt, const CN<N> &tang, bool on_seg,
+			const Flags &flags) {
 		if (!on_seg) {
 			return false;
 		}
@@ -1608,6 +1609,9 @@ private:
 		bool bl = false;
 		bool br = false;
 		for (const auto &s : scene.surfaces) {
+			if (!s->present(flags)) {
+				continue; // an absent surface blocks no junction (Stage 107)
+			}
 			const int which = geom::endpoint_at(s->seg, pt);
 			if (which == 0) {
 				continue;
@@ -1628,11 +1632,11 @@ private:
 
 	// [point, on_segment, side LEFT, fully blocked] of the hit at t on surf.
 	static Classified classify(const Scene<N> &scene, const Beam<N> &beam, const N &t, const Surf<N> &surf, bool at_origin,
-			const std::optional<CN<N>> &known_pt) {
+			const std::optional<CN<N>> &known_pt, const Flags &flags) {
 		const CN<N> pt = known_pt ? *known_pt : (at_origin ? beam.p : beam.at(t));
 		const CN<N> tang = beam.tangent_at(t);
 		const bool on_seg = geom::on_segment(surf.seg, pt);
-		return Classified{pt, on_seg, geom::side_left(surf.seg, pt, tang), full_block(scene, surf, pt, tang, on_seg)};
+		return Classified{pt, on_seg, geom::side_left(surf.seg, pt, tang), full_block(scene, surf, pt, tang, on_seg, flags)};
 	}
 
 	static void plan_bookkeeping(Walk<N> &w, int sid) {
@@ -1724,13 +1728,15 @@ private:
 		size_t skip = 0; // candidates already processed (in-place reseed)
 		N t_prev = t0;
 		bool fired_state = false; // a state change in the current loop
+		bool keep_cursor = false; // K4: the seed restart keeps the listed cursor
 		while (!w.done) {
 			if (w.record_poles) {
 				w.pole_trace.emplace_back(beam, w.pole);
 				w.exact_trace.push_back(w.Q ? w.pole.has_value() : w.line != nullptr);
 				w.known_trace.push_back(w.known);
 			}
-			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0);
+			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0, keep_cursor);
+			keep_cursor = false;
 			std::vector<double> gp = gaps(*beam, cands);
 			std::optional<Next> next;
 			bool restart = false;
@@ -1741,6 +1747,10 @@ private:
 				const N t = cand.t;
 				const Surf<N> *surf = cand.surf;
 				const bool rehit = cand.rehit;
+				if (surf != nullptr && !cand.inf && !surf->present(w.flags)) {
+					ci++; // absent under the current flags (Stage 107): no crossing at all
+					continue;
+				}
 				w.count++;
 				if (w.count > w.max_events) {
 					// cut at the next crossing: drawn up to it, no effect (at the
@@ -1801,25 +1811,29 @@ private:
 					ci++;
 					continue;
 				}
-				const Classified cl = classify(*w.scene, *beam, t, *surf, rehit && fresh, cand.pt);
+				const Classified cl = classify(*w.scene, *beam, t, *surf, rehit && fresh, cand.pt, w.flags);
 				const CN<N> pt = cl.pt;
 				const bool on_seg = cl.on_seg;
 				const bool left = cl.left;
 				const bool fb = cl.full_block;
 				const EffectType eff = surf->effect(left, w.flags);
-				const StateChangeDef *change = surf->state_change(left, w.flags);
+				const std::vector<StateChangeDef> &changes = surf->state_changes(left, w.flags);
+				const bool has_change = !changes.empty();
 				const bool plan_match = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].surface_id == surf->id
 					&& w.plan[size_t(w.plan_index)].left == left;
 				const EffectType plan_do = (plan_match && (is_transformative(eff) || is_projective(eff))) ? eff : EffectType::Pass;
 				const EffectType phys_do = fb ? eff : EffectType::Pass;
-				const bool plan_state = plan_match && change != nullptr;
-				const bool phys_state = fb && change != nullptr;
+				const bool plan_state = plan_match && has_change;
+				const bool phys_state = fb && has_change;
 				EffectType do_ = EffectType::Pass;
 				bool fires_state = false;
 				bool diverged = false;
+				const bool ghosted = surf->ghosted(left, w.flags);
+				bool fired = false;
 				if (w.mode == Mode::Physical) {
 					do_ = phys_do;
 					fires_state = phys_state;
+					fired = fb && !ghosted;
 					if (w.anchored && !(phys_do == plan_do && phys_state == plan_state && (phys_do != EffectType::Pass || phys_state || !plan_match))) {
 						diverged = true;
 					}
@@ -1832,15 +1846,17 @@ private:
 					}
 					do_ = plan_do;
 					fires_state = plan_state;
+					fired = plan_match && !ghosted;
 				}
 				if (fires_state) {
-					w.flags = w.flags.applied(*change);
+					w.flags = w.flags.applied(changes);
 					fired_state = true;
 				}
 				Event<N> &e = emit(w, EventKind::Hit, beam, t_prev, t, gp[ci]);
 				e.surface_id = surf->id;
 				e.left = left;
 				e.state = fires_state;
+				e.fired = fired;
 				e.flags = w.flags;
 				e.applied = do_ != EffectType::Pass;
 				e.terminal = do_ == EffectType::Terminal;
@@ -1863,6 +1879,10 @@ private:
 						if (sb != beam) {
 							beam = sb;
 							skip = ci + 1;
+							// K4: the recomputed loop keeps a cursor this loop still lists
+							for (size_t k = ci + 1; k < cands.size(); k++) {
+								keep_cursor = keep_cursor || (cands[k].surf == nullptr && !cands[k].inf);
+							}
 							restart = true;
 							break;
 						}

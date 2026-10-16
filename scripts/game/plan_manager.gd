@@ -29,6 +29,14 @@ func remove_last_of(surface_id: int) -> void:
 			version += 1
 			return
 
+# Drops every entry whose surface id fails `keep` (surfaces that left the
+# world, Stage 107); the infinity entry stays.
+func retain(keep: Callable) -> void:
+	var kept := entries.filter(func(e: PlanEntry): return e.surface_id == BeamSolver.INFINITY_ID or keep.call(e.surface_id))
+	if kept.size() != entries.size():
+		entries = kept
+		version += 1
+
 func clear() -> void:
 	entries.clear()
 	version += 1

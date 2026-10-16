@@ -74,19 +74,24 @@ godot::String BeamSceneSurf::effect(bool left, const godot::Dictionary &flags) c
 	const rc::Flags f = flags_from_dict(flags);
 	return visit([&](const auto &s) { return effect_name(s.effect(left, f)); });
 }
-Variant BeamSceneSurf::state_change(bool left, const godot::Dictionary &flags) const {
+// The side's state changes under the flags, in order (Stage 107: a list).
+godot::Array BeamSceneSurf::state_changes(bool left, const godot::Dictionary &flags) const {
 	const rc::Flags f = flags_from_dict(flags);
-	return visit([&](const auto &s) -> Variant {
-		const rc::StateChangeDef *ch = s.state_change(left, f);
-		if (ch == nullptr) {
-			return Variant();
+	return visit([&](const auto &s) {
+		godot::Array out;
+		for (const rc::StateChangeDef &ch : s.state_changes(left, f)) {
+			godot::Dictionary d;
+			d["key"] = to_gd(ch.key);
+			d["op"] = ch.toggle ? "toggle" : "set";
+			d["value"] = flag_to_variant(ch.value);
+			out.push_back(d);
 		}
-		godot::Dictionary d;
-		d["key"] = to_gd(ch->key);
-		d["op"] = ch->toggle ? "toggle" : "set";
-		d["value"] = flag_to_variant(ch->value);
-		return d;
+		return out;
 	});
+}
+bool BeamSceneSurf::present(const godot::Dictionary &flags) const {
+	const rc::Flags f = flags_from_dict(flags);
+	return visit([&](const auto &s) { return s.present(f); });
 }
 bool BeamSceneSurf::ghosted(bool left, const godot::Dictionary &flags) const {
 	const rc::Flags f = flags_from_dict(flags);
@@ -131,7 +136,8 @@ void BeamSceneSurf::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_seg"), &BeamSceneSurf::get_seg);
 	ADD_PROPERTY(PropertyInfo(Variant::OBJECT, "seg", godot::PROPERTY_HINT_RESOURCE_TYPE, "BeamGeomSeg", godot::PROPERTY_USAGE_NONE), "", "get_seg");
 	ClassDB::bind_method(D_METHOD("effect", "left", "flags"), &BeamSceneSurf::effect, DEFVAL(godot::Dictionary()));
-	ClassDB::bind_method(D_METHOD("state_change", "left", "flags"), &BeamSceneSurf::state_change, DEFVAL(godot::Dictionary()));
+	ClassDB::bind_method(D_METHOD("state_changes", "left", "flags"), &BeamSceneSurf::state_changes, DEFVAL(godot::Dictionary()));
+	ClassDB::bind_method(D_METHOD("present", "flags"), &BeamSceneSurf::present, DEFVAL(godot::Dictionary()));
 	ClassDB::bind_method(D_METHOD("ghosted", "left", "flags"), &BeamSceneSurf::ghosted);
 }
 

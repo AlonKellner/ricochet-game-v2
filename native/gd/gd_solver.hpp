@@ -92,6 +92,7 @@ public:
 	double get_margin() const;
 	bool get_seeded() const;
 	bool get_state() const;
+	bool get_fired() const;
 	godot::Dictionary get_flags() const;
 	bool get_anchored() const;
 	int get_beam_view() const;

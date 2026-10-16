@@ -61,7 +61,8 @@ public:
 	godot::Ref<CN> get_dvec() const;
 	godot::Ref<BeamGeomSeg> get_seg() const; // gd_geom.cpp
 	godot::String effect(bool left, const godot::Dictionary &flags = godot::Dictionary()) const;
-	godot::Variant state_change(bool left, const godot::Dictionary &flags = godot::Dictionary()) const;
+	godot::Array state_changes(bool left, const godot::Dictionary &flags = godot::Dictionary()) const;
+	bool present(const godot::Dictionary &flags = godot::Dictionary()) const;
 	bool ghosted(bool left, const godot::Dictionary &flags) const;
 };
 

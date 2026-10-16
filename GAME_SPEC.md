@@ -35,6 +35,7 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Visibility polygon (§15) | Planned |
 | State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Done |
 | Ghost mode & toggler surfaces (Stage 86) | Done |
+| Hit effects as a second axis: any number per side (state change, target, spawn, reset), presence (§9.1, §9.6, §10.6; TDD_11 Stage 107) | Planned |
 | Plannable infinity — the ∞ plan entry, the `infinity` event (§4.2, §6.3, §12.5, §13.1; TDD_10 Stages 88, 101) | Done (B9 approved 2026-10-15): the frame's infinity `Q`, the edge or an on-screen point, plannable; the pre-transform (§9.5) |
 | Level editor | Planned |
 | Menus, HUD, save system | Planned |
@@ -543,15 +544,18 @@ Surface:
     left:         SideConfig     # effect for the left side
     right:        SideConfig     # effect for the right side
     resolver:     ConfigResolver  # default: FixedResolver
-    is_target:    bool           # true if this is a goal surface
+    presence:     Array[PresenceCond]  # flag-gated existence, AND of conditions; empty = always (§9.6)
+    is_target:    bool           # derived: a side carries a TargetHit (§10.6)
     player_solid: bool           # true = player collides with this surface (default true)
 
 SideConfig:
-    effect:       TransformativeEffect | ProjectiveEffect | TerminalEffect | null
-    state_change: StateChange | null
+    effect:       TransformativeEffect | ProjectiveEffect | TerminalEffect | null   # the PATH axis: exactly one
+    hit_effects:  Array[HitEffect]   # the HIT axis: ordered, any number, any mix (§10.6)
     interactive:  bool    # can the player add this side to the plan?
                           # default: true for transformative/projective, false for terminal, false for null
 ```
+
+A side has effects on **two orthogonal axes** (Stage 107). Its **path effect** acts on the beam: exactly one per side, `null` being the pass. Its **hit effects** act on everything but the beam's geometry, such as flags, targets and the world's surfaces, and a side may carry any number of them. Any path effect combines with any list of hit effects.
 
 # player_solid affects ONLY CharacterBody2D collision. Arrow tracing and visibility always interact with all surfaces regardless.
 
@@ -561,7 +565,7 @@ Surface segments are defined and stored in **visual (world) coordinates**. The b
 
 Terminal sides default to `interactive = false` but can be explicitly set to `interactive = true` by the level designer to allow planning shots that intentionally hit block surfaces (e.g., to trigger state changes).
 
-Pass-through (null effect) sides must have `interactive = false`. A null-effect side has nothing to plan for — making it interactive would create entries that are always processed as pass-through. This is enforced at load time.
+Pass-through (null effect) sides without hit effects must have `interactive = false`. Such a side has nothing to plan for — making it interactive would create entries that are always processed as pass-through. This is enforced at load time.
 
 *(Principle 3: geometry and behavior stay separate.)*
 
@@ -632,6 +636,28 @@ Example: a breakable mirror uses `CategoricalResolver` with `state_key = "mirror
 > **Status: implemented (Stage 101).**
 
 A level may start **after** a transform: `LevelData.pre_transform` is an ordered list of inversion circles (`LevelSettings.pre_transform_inversions`, `(cx, cy, r)` triples) that are never hit and never clickable. They are part of the surfaces list flagged `pre_transform` (so every consumer sees them, drawn as a faint circle, the "horizon"), and define the frame the shot starts in: `Q_0`, their composite image of the point at infinity. In that frame the arrow's natural paths are the images of straight lines, circles through `Q_0`: the initial beam is the oriented circle through the player, the aim point and `Q_0` (`P → X → Q_0`, or `P → Q_0 → X` with an ∞ entry first, §13.1); a direction shot starts along its direction on the circle through `Q_0`. Effects act on these beams by the ordinary beam maps; the frame's infinity moves with them (`Q_{j+1} = T_j(Q_j)`, restored by a pop, the real ∞ again after a projective, §12.5). `Q_0` on screen is the infinity marker (§4.2): planning it first disambiguates the short way round from the long way, which is what makes a pre-transformed level a puzzle. Demo: `scenes/playground/pre_inverted.tscn`.
+
+### 9.6 Presence
+
+> **Status: planned (Stage 107, `docs/TDD_11_HIT_EFFECTS.md`).**
+
+A surface may exist only under some game state. `Surface.presence` is a list of conditions that are **all** required (AND). Each condition names one flag and the set of its values (their `flag_key` spellings, §9.4) under which the surface exists. The token `DEFAULT` matches a missing key. An empty list means the surface always exists. The def form is `presence: [{key, values: [...]}]`.
+
+```
+PresenceCond:
+    key:    String
+    values: Array[String]   # flag_key spellings; "DEFAULT" = the key is missing
+```
+
+Presence differs from a pass. A pass side is still hit: it produces events and step boundaries, and fires its hit effects. An **absent** surface does not exist for the solver:
+- It has no candidates.
+- It plays no part in endpoint blocking (§11).
+- It cannot be clicked into a plan.
+- It is drawn as a faint dashed outline.
+
+Presence is evaluated under the walk's **current** flags, so a surface can vanish or appear mid-shot when a hit effect writes its key (§10.6). The planned path evaluates presence under the plan's simulated flags (§13.7). A plan entry on a surface that is absent at that point is not reached, and the preview shows this (principle 13).
+
+Presence is orthogonal to the resolver. The resolver chooses *how* a present surface behaves, presence chooses *whether* it is there, and both may read flags. Unlike categorical sides, presence works with every path effect, portals and projectives included (a portal pair shares one presence).
 
 ## 10. Effect system
 
@@ -727,23 +753,79 @@ All produce an outgoing **straight beam** in visual space, determined solely by 
 
 Stops the beam. No outgoing beam, no stack change. A trace cut by the **32-event limit** (§12.6) ends similarly. It ends with a "max" event at the next crossing, drawn up to that crossing with no effect.
 
-### 10.6 State changes
+### 10.6 Hit effects (state changes, targets, spawn, reset)
 
-> **Status: implemented (Stage 85).** `StateChange` has two ops, `SET` and `TOGGLE`; a toggle of a missing key counts the key as false.
+> **Status:** state changes are implemented (Stage 85). The general hit-effect model is planned for Stage 107 (`docs/TDD_11_HIT_EFFECTS.md`).
+> - **StateChange:** `StateChange` has two ops, `SET` and `TOGGLE`; a toggle of a missing key counts the key as false.
 > - **Firing:** a change fires when its side fires. In PHYSICAL that is a fully blocked hit; in PLANNED it is the consumed plan entry.
-> - **Order:** the side's config is resolved before its own change is applied.
+> - **Order:** the side's config is resolved before its own changes are applied.
 > - **Promotion:** the physical trace's final flags become the game state when the arrow lands. Undo restores the checkpoint's flags.
 > - **Pops** restore beams, never flags.
 
-Orthogonal to the three effect categories. Any surface side may carry an optional state change.
+Hit effects are the second axis of a side (§9.1), orthogonal to the path effect. A side carries an ordered list of them, of any kinds and any length. *(Principle 10.)*
 
 ```
-StateChange:
-    key:   StringName
-    value: Variant
+HitEffect:
+    deferred: bool      # per instance: apply at landing instead of in the shot (only if it has an in-shot form)
+
+StateChangeHit(key, op, value)    # in shot: the flag write
+TargetHit                         # in shot: SET "target:<surface id>" = true
+ResetHit(channels)                # in shot: SET "chan:<c>" = "armed" for each channel
+SpawnHit(channel, template)       # in shot: SET "chan:<c>" = "pending" (consumes the host);
+                                  # at landing, always: place the template at the firing hit
 ```
 
-A surface can have a transformative effect AND a state change on the same side. *(Principle 10.)*
+**Timing.**
+- **IN_SHOT is the default.** A hit effect is applied *in the shot* (the solver sees it) whenever it has an elegant in-shot form, which is a flag write. Flags drive resolvers (§9.4) and presence (§9.6), so an in-shot write can change the rest of the same shot.
+- **ON_LANDING** is used only for what has no in-shot form. Today that is one thing: placing a spawned surface, whose geometry comes from the shot itself. Letting the shot see a surface it creates would make the path depend on itself.
+- **Deferral is per instance.** Any in-shot effect may be marked `deferred`: it then fires by the same rule but applies only when the arrow lands. The reverse is not possible in general.
+
+**Firing.** One rule applies to every hit effect, whatever its timing: it fires when its side fires.
+- **PHYSICAL:** a fully blocked hit.
+- **PLANNED:** the consumed plan entry.
+- **Ghost:** suppressed while the side is ghosted.
+
+The side's config, including its hit-effect list, is the one resolved under the flags *at that hit*. A side's effects apply in list order, and along the trace the last writer wins. Landing-time parts replay the physical trace's firings in order, after the final flags are known, with the same ordering and the same resolved configs (taken from the trace's provenance, never re-derived; principle 5).
+
+**Targets.** A `TargetHit` writes `target:<id>`. `targets_hit` and the win check (§3.2) read these flags, and they are promoted, checkpointed and undone like any flag. *(Stage 107 moves target registration from "any on-segment hit" (§24.2) to the side firing rule. The two differ only at a shared endpoint that does not fully block.)*
+
+**Spawn and reset (channels).** A channel `c` is the flag `chan:<c>`, which takes one of these values:
+- missing or `"armed"`;
+- `"pending"`, while a spawn awaits landing;
+- `"g<N>"`, while the N-th spawned group exists.
+
+Presence (§9.6) reads it:
+- **Hosts.** The surfaces carrying a `SpawnHit` on `c` exist while `c` is armed. A host spawning into several channels needs them all armed.
+- **The spawned group of generation N** (one surface, or a portal pair) exists while `c = "g<N>"`.
+
+The sequence:
+1. A firing `SpawnHit` sets `c` to `"pending"`. The hosts vanish for the rest of the shot (or at landing, if deferred). A host only exists, and so only fires, while its channel is armed, so no group of that channel exists at that point.
+2. A firing `ResetHit` sets its channels to `"armed"`. Groups vanish and hosts reappear in the same shot.
+3. **At landing,** a channel still `"pending"` gets generation `N + 1`: the template is placed at the hit that last fired its `SpawnHit` (§10.6.1), and `c` is set to `"g<N+1>"`. A spawn cancelled by a reset in the same shot never lands.
+
+**The spawned surface never takes part in the shot that created it.** It is an ordinary surface from the next shot on: plannable, and carrying any path and hit effects except `SpawnHit` (no nesting). Plan entries on surfaces that left the world are dropped when the arrow lands. Undo and reset restore the flags and the world together.
+
+#### 10.6.1 Spawn placement
+
+A `SpawnTemplate` is a surface description (geometry plus both sides) in a **local frame**, plus an orientation mode and an optional `offset`. The surface is authored centred on the local origin, which lands on the hit point. `offset` (in the frame's axes, default none) moves it away deliberately. At the firing hit:
+- **origin:** the hit point.
+- **u (the first local axis):** chosen by the mode.
+- **v (the second axis):** `u` rotated by +90°, i.e. `(x, y) → (−y, x)`, flipped on a RIGHT-side hit if `mirror_with_side` is set.
+
+| Mode | u |
+|---|---|
+| `BEAM_TANGENT` | the incoming beam's travel direction at the hit |
+| `BEAM_NORMAL` | the incoming travel direction rotated by +90°, `(x, y) → (−y, x)` |
+| `CARRIER_TANGENT` | the host carrier's tangent at the hit, oriented along the segment (start → via → end; a full circle by the same three points) |
+| `CARRIER_NORMAL` | the host carrier's normal at the hit, pointing toward the side the beam came from |
+| `BEAM_REFLECTED` | the incoming direction mirrored in the carrier tangent |
+| `WORLD` | +x (position only) |
+
+The incoming direction is the solver's own: the beam's unit travel tangent at the hit, which the trace records for every hit event (`TracePath.hits`). It is exact on arcs, and it is still there when the step leading to the hit has zero length.
+
+Placement is plain float64 arithmetic on the solver's outputs. The template's points map through the frame, and a portal template's displacement rotates with the frame.
+
+#### 10.6.2 State changes
 
 State changes can write to **any** key in the game state dictionary, not just the surface's own `state_key`. This enables inter-surface mechanics: surface A's hit can modify surface B's behavior by writing to B's state key.
 
@@ -755,7 +837,7 @@ State changes are applied sequentially along the trace. If multiple hits write t
 
 `ghost` is a reserved flag that lasts **one shot**: every trace starts with it false, and the game never keeps it.
 
-- **Togglers:** a ghost toggler is a side whose state change toggles `ghost`. Its effect is a pass, it is plannable, and the level export is `ghost_toggler_lines`.
+- **Togglers:** a ghost toggler is a side whose state changes include a write to `ghost`. Its effect is a pass, it is plannable, and the level export is `ghost_toggler_lines`.
 - **While ghosted, everything else passes.** Every other side resolves to a pass, together with its state change: mirrors, inversions, portals, projectives, terminals and room walls. A ghost arrow therefore crosses everything, can leave through a wall, and wraps through infinity, since a straight beam is a projective line.
 - **Materializing:** the arrow materializes at the next toggler hit, or at the same toggler one loop later. A loop around the beam that changed the state is walked again; a loop that changed nothing ends the trace as usual. MAX_HITS bounds both.
 - **Drawing:** ghost steps (`TraceStep.ghost`) are drawn paler and translucent, and ghost togglers have their own colour.
@@ -2095,6 +2177,8 @@ Default `draw_arc()` point_count: **64 per full circle**, scaled by arc span (e.
 The default target type is a **surface** the arrow must contact during the physical trace. A surface with `is_target = true` is a goal surface.
 
 ### 24.2 Hit detection
+
+> **Stage 107 (planned):** a target is a side's `TargetHit` hit effect (§10.6). It registers when its side *fires*, which is a fully blocked hit. That is the same as the on-segment rule below except at a shared endpoint that does not fully block. The registration is the flag `target:<id>`. The rest of this section describes the pre-Stage-107 rule.
 
 A target is hit if the physical trace produces an **on-segment** hit event on a surface with `is_target == true` (off-segment carrier crossings are events too, §11.5, but do not count). The target hit is registered at the moment of contact (when the hit event is produced), **regardless of the surface's effect**:
 

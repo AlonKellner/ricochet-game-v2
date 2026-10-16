@@ -13,3 +13,6 @@ func get_display_name() -> String:
 
 func get_display_color() -> Color:
 	return Color.PURPLE
+
+func to_spec() -> Dictionary:
+	return {"type": "inversion"}

@@ -32,8 +32,15 @@ func get_display_color() -> Color:
 # The pair A -> B (theta, d) and B -> A (-theta, -e^{-iθ} d); B's segment is
 # T(A's segment), point by point.
 static func create_portal_pair(source_seg: Segment, theta: float, d: Vector2) -> Dictionary:
-	var target_seg := Segment.from_coords(apply_motion(source_seg.start.coords, theta, d),
-		apply_motion(source_seg.end.coords, theta, d), apply_motion(source_seg.via.coords, theta, d))
+	# a line's image is a line, exactly (rotated float32 points are almost
+	# never exactly collinear: Segment.straight)
+	var target_seg: Segment
+	if source_seg.is_line() and not source_seg.full:
+		target_seg = Segment.straight(apply_motion(source_seg.start.coords, theta, d), apply_motion(source_seg.end.coords, theta, d),
+			apply_motion(source_seg.via.coords, theta, d))
+	else:
+		target_seg = Segment.from_coords(apply_motion(source_seg.start.coords, theta, d),
+			apply_motion(source_seg.end.coords, theta, d), apply_motion(source_seg.via.coords, theta, d))
 	target_seg.full = source_seg.full
 	var eff_a := RigidMotionEffect.new(theta, d, source_seg.get_carrier())
 	var eff_b := RigidMotionEffect.new(-theta, -apply_motion(d, -theta, Vector2.ZERO), target_seg.get_carrier())
@@ -44,3 +51,6 @@ static func create_portal_pair(source_seg: Segment, theta: float, d: Vector2) ->
 		target_effect = eff_b,
 		target_segment = target_seg,
 	}
+
+func to_spec() -> Dictionary:
+	return {"type": "portal", "theta": _theta, "d": [_d.x, _d.y]}

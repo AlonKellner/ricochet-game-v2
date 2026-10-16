@@ -52,16 +52,27 @@ double num_at(const godot::Variant &arr, int64_t i) {
 	return double(a[i]);
 }
 
-std::optional<rc::StateChangeDef> state_from(const godot::Dictionary &cfg) {
-	if (!cfg.has("state") || cfg["state"].get_type() == godot::Variant::NIL) {
-		return std::nullopt;
-	}
-	const godot::Dictionary st = cfg["state"];
+rc::StateChangeDef state_change_from(const godot::Dictionary &st) {
 	rc::StateChangeDef s;
 	s.key = to_std(godot::String(st["key"]));
 	s.toggle = godot::String(st.get("op", "set")) == godot::String("toggle");
 	s.value = st.has("value") ? flag_from_variant(st["value"]) : rc::FlagValue(true);
 	return s;
+}
+
+// The side's state changes (Stage 107: "states", a list; the legacy single
+// "state" is a one-element list).
+std::vector<rc::StateChangeDef> states_from(const godot::Dictionary &cfg) {
+	std::vector<rc::StateChangeDef> out;
+	if (cfg.has("states") && cfg["states"].get_type() != godot::Variant::NIL) {
+		const godot::Array arr = cfg["states"];
+		for (int64_t i = 0; i < arr.size(); i++) {
+			out.push_back(state_change_from(arr[i]));
+		}
+	} else if (cfg.has("state") && cfg["state"].get_type() != godot::Variant::NIL) {
+		out.push_back(state_change_from(cfg["state"]));
+	}
+	return out;
 }
 
 std::optional<rc::SideDef> side_from(const godot::Variant &v) {
@@ -88,7 +99,7 @@ std::optional<rc::SideDef> side_from(const godot::Variant &v) {
 	if (cfg.has("pair") && cfg["pair"].get_type() != godot::Variant::NIL) {
 		s.pair = int(int64_t(cfg["pair"]));
 	}
-	s.state = state_from(cfg);
+	s.states = states_from(cfg);
 	return s;
 }
 
@@ -124,6 +135,19 @@ std::vector<rc::SurfaceDef> defs_from_array(const godot::Array &defs) {
 		s.right = side_from(d.get("right", godot::Variant()));
 		s.is_target = bool(d.get("is_target", false));
 		s.pre_transform = bool(d.get("pre_transform", false));
+		if (d.has("presence") && d["presence"].get_type() != godot::Variant::NIL) {
+			const godot::Array pres = d["presence"];
+			for (int64_t k = 0; k < pres.size(); k++) {
+				const godot::Dictionary c = pres[k];
+				rc::PresenceCond pc;
+				pc.key = to_std(godot::String(c["key"]));
+				const godot::Array vals = c["values"];
+				for (int64_t v = 0; v < vals.size(); v++) {
+					pc.values.push_back(to_std(godot::String(vals[v])));
+				}
+				s.presence.push_back(std::move(pc));
+			}
+		}
 		if (d.has("resolver") && d["resolver"].get_type() != godot::Variant::NIL) {
 			const godot::Dictionary r = d["resolver"];
 			rc::ResolverDef rd;

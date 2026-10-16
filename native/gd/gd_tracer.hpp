@@ -174,6 +174,9 @@ protected:
 public:
 	godot::Array steps;
 	godot::Dictionary targets_hit; // surface id -> true
+	// Stage 107: every hit event, in order: {surface_id, side, on_segment,
+	// fired, state, point, tangent, flags_before, step_index}
+	godot::Array hits;
 	int cursor_index = -1;
 	int hit_count = 0;
 
@@ -184,6 +187,7 @@ public:
 	void set_steps(const godot::Array &v) { steps = v; }
 	godot::Dictionary get_targets_hit() const { return targets_hit; }
 	void set_targets_hit(const godot::Dictionary &v) { targets_hit = v; }
+	godot::Array get_hits() const { return hits; }
 	int get_cursor_index() const { return cursor_index; }
 	void set_cursor_index(int v) { cursor_index = v; }
 	int get_hit_count() const { return hit_count; }
