@@ -450,7 +450,7 @@ TEST_CASE("goldens: the corpus: float64 walks, the ladder, and 4 limbs") {
 			const std::vector<SurfaceDef> defs = defs_of(scn["surfaces"], inp);
 			std::vector<PlanItem> plan;
 			for (const ojson &e : scn["plan"]) {
-				plan.push_back(PlanItem{e["surface_id"].get<int>(), e["side"].get<std::string>() == "LEFT", std::nullopt});
+				plan.push_back(PlanItem{e["surface_id"].get<int>(), e["side"].get<std::string>() == "LEFT", std::nullopt, std::nullopt});
 			}
 			const double px = fh(inp["player"][0]), py = fh(inp["player"][1]), cx = fh(inp["cursor"][0]), cy = fh(inp["cursor"][1]);
 			{
@@ -522,7 +522,7 @@ void check_chain(const ojson &scn, const ojson &inputs, const ojson &want, const
 	const std::vector<SurfaceDef> defs = defs_of(scn["surfaces"], inputs);
 	std::vector<PlanItem> plan;
 	for (const ojson &e : scn["plan"]) {
-		plan.push_back(PlanItem{e["surface_id"].get<int>(), e["side"].get<std::string>() == "LEFT", std::nullopt});
+		plan.push_back(PlanItem{e["surface_id"].get<int>(), e["side"].get<std::string>() == "LEFT", std::nullopt, std::nullopt});
 	}
 	Scene<N> sc = Scene<N>::from_defs(defs, like);
 	Solver<N> sv(sc, nullptr);
@@ -750,7 +750,7 @@ TEST_CASE("goldens: the sweep combos of Tracer.trace_pair") {
 		}
 		std::vector<PlanItem> plan;
 		for (const ojson &e : g["plan"]) {
-			plan.push_back(PlanItem{e["surface_id"].get<int>(), e["side"].get<std::string>() == "LEFT", std::nullopt});
+			plan.push_back(PlanItem{e["surface_id"].get<int>(), e["side"].get<std::string>() == "LEFT", std::nullopt, std::nullopt});
 		}
 		const int stride = g["stride"].get<int>();
 		const bool skip_equal = g["skip_equal"].get<bool>();

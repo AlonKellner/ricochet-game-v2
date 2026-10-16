@@ -909,7 +909,7 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 	// infinity entry alone, a pure orientation (no effect), in every frame
 	std::vector<PlanItem> ref_plan;
 	if (solver.via_infinity(in.plan, in.flags)) {
-		ref_plan.push_back(PlanItem{INFINITY_ID, false, std::nullopt});
+		ref_plan.push_back(PlanItem{INFINITY_ID, false, std::nullopt, std::nullopt});
 	}
 	const V2 img = V2::of(X->fx(), X->fy());
 	if (!(std::isfinite(img.x) && std::isfinite(img.y)) || img == in.player) {

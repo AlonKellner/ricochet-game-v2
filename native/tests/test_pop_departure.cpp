@@ -97,7 +97,7 @@ std::optional<Walk<N>> run(const std::vector<SurfaceDef> &defs, const N &like, d
 
 TEST_CASE("Stage 106: a pop at the player's point tags it as the departure point (K2)") {
 	const std::vector<SurfaceDef> defs = scene_dump("playground__tangent_infinity");
-	const std::vector<PlanItem> mirror_q0 = {PlanItem{6, true, std::nullopt}};
+	const std::vector<PlanItem> mirror_q0 = {PlanItem{6, true, std::nullopt, std::nullopt}};
 	// the player (1160, 440) on the inversion circle 8, the aim image under the
 	// mirror plan at its bottom (1160, 640): in at the image, out at the player
 	const std::optional<Walk<F64>> w = run<F64>(defs, F64{1}, 1160, 440, 760, 640, mirror_q0, Mode::Physical, true);
@@ -161,7 +161,7 @@ TEST_CASE("Stage 106: pops at known points on random scenes: every tier agrees, 
 		if (qx == P[0] && qy == P[1]) {
 			continue;
 		}
-		const std::vector<std::vector<PlanItem>> plans = {{}, {PlanItem{1, true, std::nullopt}}};
+		const std::vector<std::vector<PlanItem>> plans = {{}, {PlanItem{1, true, std::nullopt, std::nullopt}}};
 		for (const auto &plan : plans) {
 			for (Mode mode : {Mode::Planned, Mode::Physical}) {
 				const auto a = run<F64>(defs, F64{1}, P[0], P[1], qx, qy, plan, mode);

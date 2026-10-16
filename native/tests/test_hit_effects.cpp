@@ -99,11 +99,11 @@ TEST_CASE("hit effects: planning skips an absent entry and refuses to add one") 
 	const Scene<F64> sc = Scene<F64>::from_defs(defs, F64{1});
 	const Solver<F64> solver(sc, nullptr);
 	// the group is absent at the start: no effect, no write
-	const std::vector<PlanItem> plan{PlanItem{2, true, std::nullopt}};
+	const std::vector<PlanItem> plan{PlanItem{2, true, std::nullopt, std::nullopt}};
 	CHECK(solver.plan_effects(plan, Flags()) == std::vector<EffectType>{EffectType::Pass});
 	CHECK(solver.plan_flags(plan, Flags()).canonical_key() == Flags().canonical_key());
 	// the host consumes itself: an entry on it after itself is absent
-	const std::vector<PlanItem> twice{PlanItem{1, true, std::nullopt}, PlanItem{1, true, std::nullopt}};
+	const std::vector<PlanItem> twice{PlanItem{1, true, std::nullopt, std::nullopt}, PlanItem{1, true, std::nullopt, std::nullopt}};
 	Flags after;
 	after.set("chan:c", std::string("pending"));
 	CHECK(solver.plan_flags(twice, Flags()).canonical_key() == after.canonical_key());
@@ -112,7 +112,7 @@ TEST_CASE("hit effects: planning skips an absent entry and refuses to add one") 
 	tr.set_defs(defs);
 	CHECK(tr.plan_refuses({}, 2, true, Flags()));
 	CHECK(!tr.plan_refuses({}, 1, true, Flags()));
-	CHECK(tr.plan_refuses({PlanItem{1, true, std::nullopt}}, 1, true, Flags()));
+	CHECK(tr.plan_refuses({PlanItem{1, true, std::nullopt, std::nullopt}}, 1, true, Flags()));
 }
 
 TEST_CASE("hit effects: the trace records every hit event's provenance") {
