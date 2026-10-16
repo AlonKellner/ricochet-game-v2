@@ -46,7 +46,8 @@ def circle(sid, center, radius, left=None, right=None):
             "circle": {"center": [cx, cy], "radius": radius}, "left": left, "right": right}
 
 
-def fixture(name, surfs, player, plan=(), mode="physical", direction=None, cursor=None, flags=None):
+def fixture(name, surfs, player, plan=(), mode="physical", direction=None, cursor=None, flags=None, event_extra=None):
+    """event_extra(o, e): adds fields to each event's record (later stages)."""
     sc = T.scene_from_json(surfs)
     # plan entries: (surface id, side) or (surface id, side, click point)
     hints = {i: p[2] for i, p in enumerate(plan) if len(p) > 2}
@@ -65,6 +66,8 @@ def fixture(name, surfs, player, plan=(), mode="physical", direction=None, curso
         o = ev_json(e)
         o["state"] = bool(e.state)
         o["flags"] = dict(e.flags) if e.flags is not None else None
+        if event_extra is not None:
+            event_extra(o, e)
         expected.append(o)
     return {"name": name, "surfaces": surfs, "player": list(player),
             "direction": None if direction is None else list(direction),

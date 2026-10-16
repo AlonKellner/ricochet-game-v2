@@ -9,7 +9,7 @@ Specification: GAME_SPEC §9.1, §9.6 (presence) and §10.6 (hit effects, spawn 
 | Phase | Topic | Status |
 |-------|-------|--------|
 | 107.0 | Spec (§9.6, §10.6), this document, the level-defs parity pin | Done |
-| 107.1 | Native + oracle: N1 a list of state changes per side, N2 presence, N3 hit provenance on trace steps | Planned |
+| 107.1 | Native + oracle: N1 a list of state changes per side, N2 presence, N3 hit provenance (`Event.fired`, `TracePath.hits`) | Done (K4 found on the way, pre-existing) |
 | 107.2 | Game layer: `HitEffect` classes, `EffectSpec` / `SideSpec` / `SurfaceSpec`, `level_settings` desugared | Planned |
 | 107.3 | Landing: `SpawnFrame`, `SpawnTemplate`, `LandingFold`, `World`, game-manager wiring, checkpoints | Planned |
 | 107.4 | Visuals (hit-effect markers, absent outlines, spawn preview), `hit_effects.tscn`, interactive tests | Planned |
@@ -81,10 +81,12 @@ The oracle (`docs/research/oracle/trace2.py`) is the specification: it changes f
 - **N2: presence.**
   - The def gets `presence: [{key, values}]`.
   - An absent surface (under the walk's current flags) has no candidates, takes no part in endpoint blocking, and is refused by planning.
-- **N3: provenance on trace steps.**
-  - `TraceStep.state_fired` comes from `Event::state`.
-  - `TracePath.frame_flags(frame_id)` returns the flags of a step's frame, i.e. the flags *before* the hit that ends the step.
-  - The landing fold reads these and never re-derives what the solver decided.
+- **N3: hit provenance, recorded per hit event.** The tracer does not emit zero-length steps, so a per-step field could miss a hit. Each hit event therefore gets its own record.
+  - `Event.fired` (oracle and native): the side fired. That means PHYSICAL fully blocked, or PLANNED the consumed entry, and not ghosted. It differs from `state`, which is false for a side with no in-shot writes.
+  - `TracePath.hits`: one record per hit event, in order. It is `{surface_id, side, on_segment, fired, state, point, tangent, flags_before, step_index}`.
+    - `tangent` is the beam's unit travel direction at the hit, from the exact beam.
+    - `flags_before` are the flags the side was resolved under.
+  - The landing fold reads these and never re-derives what the solver decided. Spawn placement uses `tangent`, so there is no reconstruction from step geometry and no zero-length fallback.
 
 ### 107.2 Game layer (no behaviour change)
 
@@ -115,15 +117,15 @@ The oracle (`docs/research/oracle/trace2.py`) is the specification: it changes f
 | `test_stage107_level_parity.gd` | Every level's scene defs are bit-identical through the refactor (`tests/data/stage107_level_defs.json`, `DefsCanon`) |
 | `test_stage107_multi_state.gd` | Two writes on one side, their order, ghost in a list, a planned multi-write entry |
 | `test_stage107_presence.gd` | Vanishing and appearing mid-shot, endpoint blocking, plan refusal, a portal pair's presence |
-| `test_stage107_provenance.gd` | `state_fired` and `frame_flags` on gate, ghost and categorical scenes |
+| `test_stage107_provenance.gd` | `TracePath.hits` on presence, ghost and categorical scenes; `plan_refuses` on absent surfaces |
 | `test_stage107_hit_effects.gd` | Spec round trips, the in-shot/deferred compile, spawn's landing part |
 | `test_stage107_surface_spec.gd` | Round trips for every kind, carrier validation, transforms |
-| `test_stage107_spawn_frame.gd` | Every mode on line and arc hosts and steps, sign conventions, the zero-length fallback, exact placement |
+| `test_stage107_spawn_frame.gd` | Every mode on line and arc hosts, sign conventions, exact placement |
 | `test_stage107_landing_fold.gd` | Spawn, re-hit, in-shot and deferred reset, respawn in one shot, shared channels, ghost, categorical resolution, order, purity |
 | `test_stage107_world.gd` | Same-shot isolation, the next shot interacts, path effects plus spawn, undo/reset, plan pruning, cache invalidation, targets |
 | `test_stage107_spawn_preview.gd` | PREVIEW-EQUALS-LANDING over a grid; the preview never writes |
 
-Native: doctest cases for N1–N3 against the oracle. Oracle: pytest cases for N1 and N2.
+Native: `test_hit_effects.cpp`. It runs the 11 oracle fixtures at f64, Dual, 4 and 64 limbs (Dual minus K4), plus unit cases for list order, ghost, presence, planning and `plan_refuses`, and the hit records through `Tracer`. Oracle: `gen_fixtures_stage107.py` (asserted generation) and 5 pytest cases. Every older fixture regenerates byte-identical. `tests/support/oracle_fixtures.hpp` now holds the fixture walker shared with `test_infinity.cpp`.
 
 ## Invariants
 
@@ -131,6 +133,18 @@ Native: doctest cases for N1–N3 against the oracle. Oracle: pytest cases for N
 - **PREVIEW-EQUALS-LANDING:** the preview's predicted groups are bit-equal to what landing creates from the fired trace.
 - **WORLD-ROUNDTRIP:** `restore(snapshot())` gives the same surfaces (same instances, same ids) and the same flags.
 - **Level parity:** the shipped levels' defs do not change in 107.2.
+
+## Known findings
+
+**K4 (pre-existing, found in 107.1, open).** This is a Dual-tier asymmetry.
+- **Trigger:** on a physical path with a plan, an unplanned hit that only *writes* (a pass with a state change, reached after the plan is exhausted and before the cursor) diverges from the plan.
+- **What differs:**
+  - **Dual:** `Backend<Dual>::seed` returns a new beam, so the walker restarts the loop. The cursor candidate, listed while the beam was still on plan, is lost.
+  - **f64 and the oracle:** `seed` returns the same beam, so the cursor is kept.
+- **Cause:** independent of Stage 107. A single legacy `state` gives the same result.
+- **Impact:** the game's f64 path matches the oracle. The Dual tier is the ladder's derivative tier, so the impact there is at most extra climbing.
+- **Coverage:** pinned in `test_hit_effects.cpp` (`multi_state_planned_physical` at Dual), so a fix shows up there.
+- **Decision:** left for the user, not fixed inside this stage.
 
 ## B-list (behaviour changes for approval)
 

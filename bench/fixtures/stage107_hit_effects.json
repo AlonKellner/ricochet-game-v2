@@ -186,7 +186,8 @@
      "flags": {
       "a": true,
       "b": 7
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -202,7 +203,8 @@
      "flags": {
       "a": true,
       "b": 7
-     }
+     },
+     "fired": true
     }
    ],
    "targets": []
@@ -441,7 +443,8 @@
      "state": true,
      "flags": {
       "k": false
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -457,7 +460,8 @@
      "flags": {
       "k": false,
       "j": "y"
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -473,7 +477,8 @@
      "flags": {
       "k": false,
       "j": "y"
-     }
+     },
+     "fired": true
     }
    ],
    "targets": []
@@ -765,7 +770,8 @@
      "flags": {
       "n": 1,
       "ghost": true
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -781,7 +787,8 @@
      "flags": {
       "n": 1,
       "ghost": true
-     }
+     },
+     "fired": false
     },
     {
      "kind": "hit",
@@ -797,7 +804,8 @@
      "flags": {
       "n": 1,
       "ghost": false
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -813,7 +821,8 @@
      "flags": {
       "n": 1,
       "ghost": false
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -829,7 +838,8 @@
      "flags": {
       "n": 1,
       "ghost": true
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -845,7 +855,8 @@
      "flags": {
       "n": 1,
       "ghost": true
-     }
+     },
+     "fired": false
     },
     {
      "kind": "hit",
@@ -861,7 +872,8 @@
      "flags": {
       "n": 1,
       "ghost": false
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -877,7 +889,8 @@
      "flags": {
       "n": 1,
       "ghost": false
-     }
+     },
+     "fired": true
     }
    ],
    "targets": []
@@ -1121,7 +1134,8 @@
      "flags": {
       "a": true,
       "b": 1
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -1137,7 +1151,8 @@
      "flags": {
       "a": true,
       "b": 1
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -1153,7 +1168,8 @@
      "flags": {
       "a": true,
       "b": 1
-     }
+     },
+     "fired": false
     },
     {
      "kind": "cursor",
@@ -1166,7 +1182,8 @@
      "x": "200.0000000000000000000000000000000000000",
      "y": "150.0000000000000000000000000000000000000",
      "state": false,
-     "flags": null
+     "flags": null,
+     "fired": false
     },
     {
      "kind": "hit",
@@ -1182,7 +1199,8 @@
      "flags": {
       "a": true,
       "b": 1
-     }
+     },
+     "fired": true
     }
    ],
    "targets": []
@@ -1426,7 +1444,8 @@
      "flags": {
       "a": true,
       "b": 1
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -1442,7 +1461,8 @@
      "flags": {
       "a": true,
       "b": 1
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -1458,7 +1478,8 @@
      "flags": {
       "a": true,
       "b": 1
-     }
+     },
+     "fired": true
     },
     {
      "kind": "cursor",
@@ -1471,7 +1492,8 @@
      "x": "200.0000000000000000000000000000000000000",
      "y": "150.0000000000000000000000000000000000000",
      "state": false,
-     "flags": null
+     "flags": null,
+     "fired": false
     },
     {
      "kind": "hit",
@@ -1487,7 +1509,8 @@
      "flags": {
       "a": true,
       "b": 1
-     }
+     },
+     "fired": true
     }
    ],
    "targets": []
@@ -1744,7 +1767,8 @@
      "state": true,
      "flags": {
       "chan:c": "pending"
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -1759,7 +1783,8 @@
      "state": false,
      "flags": {
       "chan:c": "pending"
-     }
+     },
+     "fired": true
     }
    ],
    "targets": []
@@ -2018,7 +2043,8 @@
      "state": false,
      "flags": {
       "chan:c": "pending"
-     }
+     },
+     "fired": true
     }
    ],
    "targets": []
@@ -2282,7 +2308,8 @@
      "state": true,
      "flags": {
       "chan:c": "armed"
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -2297,7 +2324,8 @@
      "state": true,
      "flags": {
       "chan:c": "pending"
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -2312,7 +2340,8 @@
      "state": false,
      "flags": {
       "chan:c": "pending"
-     }
+     },
+     "fired": true
     }
    ],
    "targets": []
@@ -2513,7 +2542,8 @@
      "state": false,
      "flags": {
       "b": true
-     }
+     },
+     "fired": true
     },
     {
      "kind": "hit",
@@ -2528,7 +2558,8 @@
      "state": false,
      "flags": {
       "b": true
-     }
+     },
+     "fired": true
     }
    ],
    "targets": []
@@ -2725,7 +2756,8 @@
      "x": "500.0000000000000000000000000000000000000",
      "y": "0.0",
      "state": false,
-     "flags": {}
+     "flags": {},
+     "fired": false
     },
     {
      "kind": "hit",
@@ -2738,7 +2770,8 @@
      "x": "1000.000000000000000000000000000000000000",
      "y": "0.0",
      "state": false,
-     "flags": {}
+     "flags": {},
+     "fired": true
     }
    ],
    "targets": []
@@ -2914,7 +2947,8 @@
      "x": "766.6666666666666666666666666666666666667",
      "y": "1000.000000000000000000000000000000000000",
      "state": false,
-     "flags": {}
+     "flags": {},
+     "fired": false
     },
     {
      "kind": "hit",
@@ -2927,7 +2961,8 @@
      "x": "1000.000000000000000000000000000000000000",
      "y": "1350.000000000000000000000000000000000000",
      "state": false,
-     "flags": {}
+     "flags": {},
+     "fired": false
     },
     {
      "kind": "infinity",
@@ -2938,7 +2973,8 @@
      "on_segment": false,
      "rehit": false,
      "state": false,
-     "flags": {}
+     "flags": {},
+     "fired": false
     },
     {
      "kind": "hit",
@@ -2951,7 +2987,8 @@
      "x": "-1000.000000000000000000000000000000000000",
      "y": "-1650.000000000000000000000000000000000000",
      "state": false,
-     "flags": {}
+     "flags": {},
+     "fired": false
     },
     {
      "kind": "hit",
@@ -2964,7 +3001,8 @@
      "x": "-566.6666666666666666666666666666666666667",
      "y": "-1000.000000000000000000000000000000000000",
      "state": false,
-     "flags": {}
+     "flags": {},
+     "fired": false
     },
     {
      "kind": "escape",
@@ -2975,7 +3013,8 @@
      "on_segment": false,
      "rehit": false,
      "state": false,
-     "flags": null
+     "flags": null,
+     "fired": false
     }
    ],
    "targets": []

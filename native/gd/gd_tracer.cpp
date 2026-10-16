@@ -305,6 +305,8 @@ void TracePath::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_hit_count", "v"), &TracePath::set_hit_count);
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "steps"), "set_steps", "get_steps");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "targets_hit"), "set_targets_hit", "get_targets_hit");
+	ClassDB::bind_method(D_METHOD("get_hits"), &TracePath::get_hits);
+	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "hits"), "", "get_hits");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "cursor_index"), "set_cursor_index", "get_cursor_index");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "hit_count"), "set_hit_count", "get_hit_count");
 	ClassDB::bind_method(D_METHOD("physical_hits"), &TracePath::physical_hits);
@@ -339,6 +341,19 @@ Ref<TracePath> TracePath::wrap(const rc::TracePath &p, const Dictionary &segment
 	}
 	for (int id : p.targets_hit) {
 		o->targets_hit[id] = true;
+	}
+	for (const rc::HitRecord &h : p.hits) {
+		Dictionary d;
+		d["surface_id"] = h.surface_id;
+		d["side"] = int(h.side);
+		d["on_segment"] = h.on_segment;
+		d["fired"] = h.fired;
+		d["state"] = h.state;
+		d["point"] = Vector2(h.point.x, h.point.y);
+		d["tangent"] = Vector2(h.tangent.x, h.tangent.y);
+		d["flags_before"] = flags_to_dict(h.flags_before);
+		d["step_index"] = h.step_index;
+		o->hits.push_back(d);
 	}
 	o->cursor_index = p.cursor_index;
 	o->hit_count = p.hit_count;
@@ -475,6 +490,7 @@ rc::Event<rc::Dual> dual_of(const rc::Event<rc::F64> &e) {
 	d.margin = e.margin;
 	d.seeded = e.seeded;
 	d.state = e.state;
+	d.fired = e.fired;
 	d.flags = e.flags;
 	d.anchored = e.anchored;
 	d.beam_view = e.beam_view;

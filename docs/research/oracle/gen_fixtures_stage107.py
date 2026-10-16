@@ -15,7 +15,8 @@ import mpmath as mp
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from gen_fixtures_stage81 import REFL, TERM, line, room  # noqa: E402
-from gen_fixtures_stage85 import categorical, fixture, kinds  # noqa: E402
+from gen_fixtures_stage85 import categorical, kinds  # noqa: E402
+from gen_fixtures_stage85 import fixture as fixture85  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 
@@ -34,6 +35,15 @@ def set_(key, value):
 
 def tog(key):
     return {"key": key, "op": "toggle", "value": True}
+
+
+def fired(o, e):
+    """Each event's `fired` bit (Stage 107: the side fired, ghost aside)."""
+    o["fired"] = bool(e.fired)
+
+
+def fixture(*args, **kw):
+    return fixture85(*args, event_extra=fired, **kw)
 
 
 def present_when(surf, *conds):
@@ -81,6 +91,7 @@ def main():
     ks = kinds(f)
     assert [k[1] for k in ks[:4]] == [1, 2, 3, 4] and not ks[1][3] and ks[3][3], ks
     assert ks[0][4] and ks[2][4], ks
+    assert [e["fired"] for e in f["expected"][:4]] == [True, False, True, True], f["expected"][:4]
     fx.append(f)
 
     # N1: planned -- a consumed entry applies all its writes; the next entry is
@@ -136,6 +147,7 @@ def main():
         f = fixture(name, [upper, lower] + walls, (100.0, 0.0), direction=(1.0, 0.0), flags=flags)
         first = f["expected"][0]
         assert first["kind"] == "hit" and first["applied"] == (name == "presence_junction_both"), kinds(f)
+        assert first["fired"] == (name == "presence_junction_both"), first
         fx.append(f)
 
     # N2: a plan entry on an absent surface is never consumed (no effect, no

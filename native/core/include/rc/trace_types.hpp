@@ -6,6 +6,8 @@
 // unfused float math: verified on this build).
 #pragma once
 
+#include "rc/flags.hpp"
+
 #include <cmath>
 #include <limits>
 #include <optional>
@@ -182,8 +184,24 @@ struct TraceStep {
 	}
 };
 
+// Stage 107: the provenance of one hit event (zero-length steps are not
+// emitted, so hits are recorded per event, not per step): what the solver
+// decided there, for the hit effects applied when the arrow lands.
+struct HitRecord {
+	int surface_id = -1;
+	Side side = Side::Left;
+	bool on_segment = false;
+	bool fired = false;      // the side fired, ghost aside (GAME_SPEC 10.6)
+	bool state = false;      // its in-shot state changes were applied
+	V2 point;                // the hit point
+	V2 tangent;              // the beam's unit travel direction at the hit (exact beam, rounded)
+	Flags flags_before;      // the trace's flags before the hit (the side was resolved under them)
+	int step_index = -1;     // the last step emitted up to the hit (-1: none yet)
+};
+
 struct TracePath {
 	std::vector<TraceStep> steps;
+	std::vector<HitRecord> hits; // Stage 107: every hit event, in order
 	std::vector<int> targets_hit; // surface ids, in first-hit order
 	int cursor_index = -1;
 	int hit_count = 0;

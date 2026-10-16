@@ -25,9 +25,13 @@ inline std::optional<SideDef> side_from_json(const ojson &j) {
 	if (j.contains("theta")) s.theta = j["theta"].get<double>();
 	if (j.contains("d")) { s.dx = j["d"][0].get<double>(); s.dy = j["d"][1].get<double>(); }
 	if (j.contains("pair") && !j["pair"].is_null()) s.pair = j["pair"].get<int>();
-	if (j.contains("state") && !j["state"].is_null()) {
-		const ojson &st = j["state"];
-		s.state = StateChangeDef{st["key"].get<std::string>(), st.value("op", std::string("set")) == "toggle", flag_from_json(st["value"])};
+	auto change = [](const ojson &st) {
+		return StateChangeDef{st["key"].get<std::string>(), st.value("op", std::string("set")) == "toggle", flag_from_json(st["value"])};
+	};
+	if (j.contains("states") && !j["states"].is_null()) {
+		for (const ojson &st : j["states"]) s.states.push_back(change(st));
+	} else if (j.contains("state") && !j["state"].is_null()) {
+		s.states.push_back(change(j["state"]));
 	}
 	return s;
 }
@@ -46,6 +50,8 @@ inline std::vector<SurfaceDef> defs_from_json(const ojson &arr) {
 		s.right = side_from_json(d.contains("right") ? d["right"] : ojson());
 		s.is_target = d.value("is_target", false);
 		s.pre_transform = d.value("pre_transform", false);
+		if (d.contains("presence") && !d["presence"].is_null())
+			for (const ojson &c : d["presence"]) s.presence.push_back(PresenceCond{c["key"].get<std::string>(), c["values"].get<std::vector<std::string>>()});
 		if (d.contains("resolver") && !d["resolver"].is_null()) {
 			ResolverDef r; r.key = d["resolver"]["key"].get<std::string>();
 			for (auto it = d["resolver"]["table"].begin(); it != d["resolver"]["table"].end(); ++it)
@@ -91,7 +97,7 @@ inline std::vector<SurfaceDef> defs_from_json_hex(const ojson &arr, const ojson 
 			if (hh.contains("normal")) { sd->nx = from_hex_str(hh["normal"][0]); sd->ny = from_hex_str(hh["normal"][1]); }
 			if (hh.contains("theta")) sd->theta = from_hex_str(hh["theta"]);
 			if (hh.contains("d")) { sd->dx = from_hex_str(hh["d"][0]); sd->dy = from_hex_str(hh["d"][1]); }
-			if (hh.contains("state_value") && sd->state) sd->state->value = from_hex_str(hh["state_value"]);
+			if (hh.contains("state_value") && !sd->states.empty()) sd->states.front().value = from_hex_str(hh["state_value"]);
 		}
 	}
 	return out;

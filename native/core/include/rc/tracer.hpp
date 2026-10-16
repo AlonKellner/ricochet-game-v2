@@ -54,7 +54,8 @@ public:
 
 	// Whether planning `surface_id`'s side after `plan` is refused: inside a
 	// ghost stretch of the plan only ghost togglers can be planned (GAME_SPEC
-	// 10.6). The plan starts solid: ghost is per shot.
+	// 10.6), and an absent surface cannot be planned (9.6). The plan starts
+	// solid: ghost is per shot.
 	bool plan_refuses(const std::vector<PlanItem> &plan, int surface_id, bool left, const Flags &flags) {
 		if (!ctx_) {
 			return false;
@@ -67,7 +68,8 @@ public:
 		Flags start = flags;
 		start.erase(GHOST);
 		Solver<Dual> solver(scene, nullptr);
-		return surf->ghosted(left, solver.plan_flags(plan, start));
+		const Flags after = solver.plan_flags(plan, start);
+		return !surf->present(after) || surf->ghosted(left, after);
 	}
 
 	// Planned + physical traces, or nullopt if the scene is not supported or the
@@ -165,6 +167,7 @@ public:
 		const std::string init_flags = flags.canonical_key();
 		std::string cur_flags = init_flags;
 		bool ghost = flags.is_true(GHOST);
+		Flags before = flags; // the flags before the next hit (Stage 107)
 		const Scene<Dual> &scene = ctx_->dual_scene();
 		for (size_t i = 0; i < events.size(); i++) {
 			const Event<N> &e = events[i];
@@ -220,6 +223,30 @@ public:
 						&& std::find(path.targets_hit.begin(), path.targets_hit.end(), surf->id) == path.targets_hit.end()) {
 					path.targets_hit.push_back(surf->id);
 				}
+			}
+			if (e.kind == EventKind::Hit) {
+				HitRecord h;
+				h.surface_id = e.surface_id;
+				h.side = e.left ? Side::Left : Side::Right;
+				h.on_segment = e.on_segment;
+				h.fired = e.fired;
+				h.state = e.state;
+				if (e.point) {
+					h.point = V2::of(e.point->fx(), e.point->fy());
+				}
+				if (e.t_to) {
+					const auto tg = e.beam->tangent_at(*e.t_to);
+					const double tx = tg.re.to_float();
+					const double ty = tg.im.to_float();
+					const double len = std::sqrt(tx * tx + ty * ty);
+					if (len > 0.0) {
+						h.tangent = V2::of(tx / len, ty / len);
+					}
+				}
+				h.flags_before = before;
+				h.step_index = int(path.steps.size()) - 1;
+				path.hits.push_back(std::move(h));
+				before = e.flags;
 			}
 			if (e.kind == EventKind::Infinity && appended) {
 				// the outgoing half of the wrap carries the infinity id: plan

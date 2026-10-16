@@ -821,10 +821,7 @@ A `SpawnTemplate` is a surface description (geometry plus both sides) in a **loc
 | `BEAM_REFLECTED` | the incoming direction mirrored in the carrier tangent |
 | `WORLD` | +x (position only) |
 
-The incoming direction is read from the trace step that ends at the hit:
-- **line step:** `end − start`;
-- **arc step:** the tangent at `end` of the circle through `start`, `via` and `end`, in travel direction;
-- **zero-length step:** the last non-degenerate step's.
+The incoming direction is the solver's own: the beam's unit travel tangent at the hit, which the trace records for every hit event (`TracePath.hits`). It is exact on arcs, and it is still there when the step leading to the hit has zero length.
 
 Placement is plain float64 arithmetic on the solver's outputs. The template's points map through the frame, and a portal template's displacement rotates with the frame.
 

@@ -12,6 +12,7 @@
 #include <array>
 #include <cmath>
 #include <map>
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -51,8 +52,16 @@ struct SideDef {
 	double nx = 0.0, ny = 0.0;
 	double theta = 0.0, dx = 0.0, dy = 0.0; // portal
 	int pair = -1;                          // portal: the paired surface id (-1: none)
-	std::optional<StateChangeDef> state;
+	std::vector<StateChangeDef> states;     // Stage 107: the side's state changes, in order
 	bool operator==(const SideDef &) const = default;
+};
+
+// Stage 107: a presence condition {key, values}: the surface exists while
+// flag_key(flags[key]) is one of `values` ("DEFAULT" = the key is missing).
+struct PresenceCond {
+	std::string key;
+	std::vector<std::string> values;
+	bool operator==(const PresenceCond &) const = default;
 };
 
 // A categorical resolver: {key, table: flag_key -> {left, right}} in table order.
@@ -76,6 +85,8 @@ struct SurfaceDef {
 	std::optional<SideDef> right;
 	bool is_target = false;
 	std::optional<ResolverDef> resolver;
+	// Stage 107: flag-gated existence, all conditions required (empty: always)
+	std::vector<PresenceCond> presence;
 	// Stage 101: part of the scene's pre-transform (a full inversion circle,
 	// never hit): it moves infinity before the shot
 	bool pre_transform = false;
@@ -107,17 +118,31 @@ struct Surf {
 	bool has_v = false;
 	double vx = 0, vy = 0;
 	bool full = false;
-	// state changes per side, and the categorical table
-	// (flag_key -> [left_type, right_type, left_state, right_state], in table order)
-	std::optional<StateChangeDef> left_state;
-	std::optional<StateChangeDef> right_state;
+	// state changes per side (in order, Stage 107), and the categorical table
+	// (flag_key -> [left_type, right_type, left_states, right_states], in table order)
+	std::vector<StateChangeDef> left_states;
+	std::vector<StateChangeDef> right_states;
 	std::string state_key;
 	struct TableEntry {
 		EffectType left_type;
 		EffectType right_type;
-		std::optional<StateChangeDef> left_state;
-		std::optional<StateChangeDef> right_state;
+		std::vector<StateChangeDef> left_states;
+		std::vector<StateChangeDef> right_states;
 	};
+	// Stage 107: presence conditions (all required; empty: always present)
+	std::vector<PresenceCond> presence;
+
+	// Whether the surface exists under the flags (GAME_SPEC 9.6).
+	bool present(const Flags &flags) const {
+		for (const PresenceCond &c : presence) {
+			const FlagValue *v = flags.get(c.key);
+			const std::string k = v ? flag_key(*v) : std::string("DEFAULT");
+			if (std::find(c.values.begin(), c.values.end(), k) == c.values.end()) {
+				return false;
+			}
+		}
+		return true;
+	}
 	std::vector<std::pair<std::string, TableEntry>> table;
 
 	// the table entry under the flags (flag_key; "DEFAULT", then the first entry), nullptr for a fixed surface
@@ -151,29 +176,30 @@ struct Surf {
 		return left ? left_type : right_type;
 	}
 
-	const std::optional<StateChangeDef> &base_state(bool left, const Flags &flags) const {
+	const std::vector<StateChangeDef> &base_states(bool left, const Flags &flags) const {
 		if (const TableEntry *e = entry(flags)) {
-			return left ? e->left_state : e->right_state;
+			return left ? e->left_states : e->right_states;
 		}
-		return left ? left_state : right_state;
+		return left ? left_states : right_states;
 	}
 
-	const StateChangeDef *state_change(bool left, const Flags &flags = Flags()) const {
+	// The side's state changes under the flags, in order (none while ghosted).
+	const std::vector<StateChangeDef> &state_changes(bool left, const Flags &flags = Flags()) const {
+		static const std::vector<StateChangeDef> none;
 		if (ghosted(left, flags)) {
-			return nullptr;
+			return none;
 		}
-		const auto &s = base_state(left, flags);
-		return s ? &*s : nullptr;
+		return base_states(left, flags);
 	}
 
 	// Ghost mode (GAME_SPEC 10.6): while the "ghost" flag is true every side
-	// but a ghost toggler (its state change writes "ghost") is a pass.
+	// but a ghost toggler (one of its state changes writes "ghost") is a pass.
 	bool ghosted(bool left, const Flags &flags) const {
 		if (!flags.is_true(GHOST)) {
 			return false;
 		}
-		const auto &ch = base_state(left, flags);
-		return !ch || ch->key != GHOST;
+		const auto &chs = base_states(left, flags);
+		return std::none_of(chs.begin(), chs.end(), [](const StateChangeDef &c) { return c.key == GHOST; });
 	}
 
 	const Projective &proj(bool left) const { return left ? left_proj : right_proj; }
@@ -284,8 +310,10 @@ Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like)
 		}
 		s->left_type = d.left ? d.left->type : EffectType::Pass;
 		s->right_type = d.right ? d.right->type : EffectType::Pass;
-		s->left_state = d.left ? d.left->state : std::nullopt;
-		s->right_state = d.right ? d.right->state : std::nullopt;
+		s->left_states = d.left ? d.left->states : std::vector<StateChangeDef>();
+		s->right_states = d.right ? d.right->states : std::vector<StateChangeDef>();
+		s->presence = d.presence;
+		RC_ASSERT(d.presence.empty() || !d.pre_transform, "a pre-transform surface is always present");
 		if (d.resolver) {
 			s->state_key = d.resolver->key;
 			for (const auto &row : d.resolver->table) {
@@ -294,7 +322,8 @@ Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like)
 				RC_ASSERT(is_categorical_type(l ? l->type : EffectType::Pass) && is_categorical_type(r ? r->type : EffectType::Pass),
 					"categorical sides: pass / terminal / reflection / inversion");
 				s->table.emplace_back(row.first, typename Surf<N>::TableEntry{l ? l->type : EffectType::Pass,
-					r ? r->type : EffectType::Pass, l ? l->state : std::nullopt, r ? r->state : std::nullopt});
+					r ? r->type : EffectType::Pass, l ? l->states : std::vector<StateChangeDef>(),
+					r ? r->states : std::vector<StateChangeDef>()});
 			}
 		}
 		for (int side = 0; side < 2; side++) {

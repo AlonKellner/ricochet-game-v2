@@ -45,6 +45,14 @@ public:
 	// The flags after a state change (a new object; toggle stores the negation
 	// of the current truth value, a missing key being false).
 	Flags applied(const StateChangeDef &change) const;
+	// Stage 107: a side's state changes, in order (last writer wins)
+	Flags applied(const std::vector<StateChangeDef> &changes) const {
+		Flags f = *this;
+		for (const StateChangeDef &c : changes) {
+			f = f.applied(c);
+		}
+		return f;
+	}
 	// flags.get(key) == true: the value is the bool true.
 	bool is_true(const std::string &key) const;
 	// Canonical form: sorted keys, "k=v" joined by ",", JSON spelling (BeamTracer._flags_key).

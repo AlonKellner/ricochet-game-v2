@@ -102,6 +102,9 @@ Hit effects and presence (Stage 107, GAME_SPEC 9.6 / 10.6):
   single "state" is read as a one-element list). They fire together, by the
   rule above, and apply in list order (last writer wins).
 - A side is a ghost toggler when any of its state changes writes "ghost".
+- A hit event records whether its side FIRED (`fired`): the state-change rule
+  (PHYSICAL: fully blocked; PLANNED: the consumed entry), not ghosted. The
+  side's hit effects fire exactly then, in shot or at landing.
 - A surface may carry "presence": [{"key", "values": [flag_key...]}], all
   required ("DEFAULT" matches a missing key). An absent surface does not exist
   for the walk: its crossings are skipped when reached (presence is read under
@@ -270,6 +273,10 @@ class Surface:
         else:
             entry = next(iter(table.values()))
         return entry.get("left") if side == LEFT else entry.get("right")
+
+    def ghosted(self, side, flags=None):
+        """Ghost mode: the side is a pass (it is not a ghost toggler)."""
+        return (flags or {}).get(GHOST) is True and not is_ghost_toggler(self._base_cfg(side, flags))
 
     def effect(self, side, flags=None):
         cfg = self.cfg(side, flags)
@@ -483,6 +490,7 @@ class Event:
     rehit: bool = False
     state: bool = False         # the side's state change fired
     flags: dict = None          # flags after the event
+    fired: bool = False         # Stage 107: the side fired (its hit effects fire), ghost aside
 
 
 @dataclass
@@ -816,9 +824,12 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             do = None
             changes = surf.state_changes(side, walk.flags)
             fires_state = False
+            ghosted = surf.ghosted(side, walk.flags)
+            fired = False
             if walk.mode == PHYSICAL:
                 do = physical_decision(walk, surf, side, full_block)
                 fires_state = bool(changes) and full_block
+                fired = full_block and not ghosted
                 if do in TRANSFORMATIVE or do in PROJECTIVE or fires_state:
                     _plan_bookkeeping(walk, sid)
             elif walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side):
@@ -826,12 +837,13 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 eff = surf.effect(side, walk.flags)
                 do = eff if (eff in TRANSFORMATIVE or eff in PROJECTIVE) else None
                 fires_state = bool(changes)
+                fired = not ghosted
             walk.flags_before = walk.flags
             if fires_state:
                 walk.flags = apply_states(walk.flags, changes)
                 fired_state = True
             ev = Event("hit", sid, side, do is not None, do == "terminal", on_seg, pt, t, beam, rehit,
-                       fires_state, walk.flags)
+                       fires_state, walk.flags, fired)
             walk.events.append(ev)
             if do == "terminal":
                 walk.done = True
