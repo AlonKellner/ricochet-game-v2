@@ -78,6 +78,10 @@ func _draw() -> void:
 	# the configs under the current game state (categorical surfaces)
 	var gm := get_node_or_null("../GameManager")
 	var state: GameState = gm.game_state if gm != null and "game_state" in gm else GameState.new()
+	if not surface.present(state.flags):
+		# absent (Stage 107, GAME_SPEC 9.6): a spent host or a group not current
+		SpawnPreviewNode.dashed(self, surface.segment, ABSENT_COLOR, 1.5)
+		return
 	var left_config := surface.active_side_config(Side.Value.LEFT, state)
 	var right_config := surface.active_side_config(Side.Value.RIGHT, state)
 	var left_color := _effect_color(left_config)
@@ -136,6 +140,8 @@ func _draw() -> void:
 	for ov in _hover_overlays:
 		_draw_overlay(ov, is_arc)
 
+	_draw_hit_markers(left_config, right_config)
+
 	if _plan_indices.size() > 0:
 		var mid := surface.segment.via.coords
 		var label_text := ""
@@ -144,6 +150,63 @@ func _draw() -> void:
 				label_text += ","
 			label_text += str(idx)
 		draw_string(ThemeDB.fallback_font, mid + Vector2(-5, -10), label_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.WHITE)
+
+const ABSENT_COLOR := Color(0.6, 0.6, 0.6, 0.35)
+const MARKER_SIZE := 5.0
+const MARKER_SPACING := 14.0
+const TARGET_COLOR := Color(1.0, 0.85, 0.3)
+const SPAWN_COLOR := Color(0.6, 0.95, 1.0)
+const RESET_COLOR := Color(1.0, 0.55, 0.85)
+
+# One marker per hit effect (Stage 107), beside the segment's via point on
+# its side: a target ring, a spawn plus, a reset cross, a state-change
+# diamond (a pass side's own state changes are its toggler colour already).
+# A deferred effect is drawn hollow-centred (a dot in the middle).
+func _draw_hit_markers(left_config: SideConfig, right_config: SideConfig) -> void:
+	var via := surface.segment.via.coords
+	var tangent := _marker_tangent(via)
+	for side in [Side.Value.LEFT, Side.Value.RIGHT]:
+		var cfg: SideConfig = left_config if side == Side.Value.LEFT else right_config
+		if cfg == null:
+			continue
+		var marks: Array[HitEffect] = []
+		for h in cfg.hit_effects:
+			if h is StateChangeHit and cfg.effect == null:
+				continue
+			marks.append(h)
+		var normal := _marker_normal(side, via) * (MARKER_SIZE + 6.0)
+		for i in marks.size():
+			var at := via + normal + tangent * MARKER_SPACING * (i - (marks.size() - 1) / 2.0)
+			_draw_marker(marks[i], at)
+
+func _draw_marker(h: HitEffect, at: Vector2) -> void:
+	var s := MARKER_SIZE
+	if h is TargetHit:
+		draw_arc(at, s, 0, TAU, 16, TARGET_COLOR, 1.5)
+		draw_circle(at, 1.5, TARGET_COLOR)
+	elif h is SpawnHit:
+		draw_line(at - Vector2(s, 0), at + Vector2(s, 0), SPAWN_COLOR, 2.0)
+		draw_line(at - Vector2(0, s), at + Vector2(0, s), SPAWN_COLOR, 2.0)
+	elif h is ResetHit:
+		draw_line(at - Vector2(s, s), at + Vector2(s, s), RESET_COLOR, 2.0)
+		draw_line(at - Vector2(s, -s), at + Vector2(s, -s), RESET_COLOR, 2.0)
+	else:
+		draw_colored_polygon(PackedVector2Array([at + Vector2(0, -s), at + Vector2(s, 0), at + Vector2(0, s), at + Vector2(-s, 0)]),
+			FLAG_TOGGLER_COLOR)
+	if h.deferred:
+		draw_circle(at, 2.0, Color(0.1, 0.1, 0.1))
+
+# The unit tangent of the segment at a point on it (for the marker row).
+func _marker_tangent(at: Vector2) -> Vector2:
+	if surface.segment.is_line():
+		return (surface.segment.end.coords - surface.segment.start.coords).normalized()
+	return SpawnFrame.rot90(at - surface.segment.get_carrier().center()).normalized()
+
+# The unit normal toward a side, at a point on the segment.
+func _marker_normal(side: Side.Value, at: Vector2) -> Vector2:
+	var n := SpawnFrame.rot90(_marker_tangent(at))
+	var probe := at + n
+	return n if surface.segment.determine_side(probe) == side else -n
 
 func _draw_surface_arc(color: Color, width: float) -> void:
 	if surface.segment.full:

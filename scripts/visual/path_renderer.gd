@@ -32,6 +32,9 @@ var last_solver := ""
 # Plan source when the scene has no GameManager (invariant sweeps).
 var plan_override: PlanManager = null
 var last_beam_result: PrecisionLadderResult = null
+# Stage 107: the last pair as traced (the raw physical path and the final
+# flags): the spawn preview folds it exactly as the landing will.
+var last_pair: BeamTracerPair = null
 
 func _ready() -> void:
 	_player = get_node_or_null("../Player")
@@ -85,6 +88,7 @@ func _compute_from(inputs: Array) -> void:
 		_traced_path = null
 		_planned_path = null
 		_merged_steps = []
+		last_pair = null
 		return
 
 	var surfaces := _get_surfaces()
@@ -98,6 +102,7 @@ func _compute_from(inputs: Array) -> void:
 	# line, UX7).
 	var pair: BeamTracerPair = _tracer.trace_pair(_defs_cache.defs(surfaces), player_pos, cursor_pos, plan_entries, get_flags(), _defs_cache.segments(surfaces))
 	last_solver = "beam"
+	last_pair = pair
 	if pair == null:
 		last_beam_result = null
 		_traced_path = null

@@ -90,6 +90,11 @@ func _ready() -> void:
 	edge.setup(level_bounds)
 	world = World.new(surfaces)
 	surfaces = world.surfaces
+	# the spawn preview (Stage 107) where something can spawn
+	if surface_specs.any(func(s: SurfaceSpec): return not s.spawn_channels().is_empty()):
+		var preview := SpawnPreviewNode.new()
+		preview.name = "SpawnPreview"
+		add_child(preview)
 
 func _add_surface(surf: Surface, prefix: String) -> void:
 	surfaces.append(surf)
