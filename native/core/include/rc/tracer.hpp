@@ -123,6 +123,35 @@ public:
 		return pair;
 	}
 
+	// Stage 110: one cast of the visibility region -- the ladder's planned and
+	// physical events for a float64 player and cursor, as trace_pair solves them
+	// (ghost erased, the same tolerance), without the display conversion or the
+	// cache; nullopt where trace_pair returns none.
+	std::optional<LadderResult> solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags) {
+		if (!ctx_ || !scene_supported(defs_) || (px == cx && py == cy)) {
+			return std::nullopt;
+		}
+		flags.erase(GHOST);
+		Ladder ladder(*ctx_, clock_);
+		LadderResult res = ladder.solve(px, py, cx, cy, plan, MAX_HITS, MAX_HITS, TRACE_TOL, false, flags);
+		if (res.planned.empty() || res.physical.empty() || !finite(res.planned) || !finite(res.physical)) {
+			return std::nullopt;
+		}
+		return res;
+	}
+
+	// Stage 110: a cast's two paths, as trace_pair converts them (one frame-id
+	// map, the physical walk first), without the shared-trajectory shortcut.
+	std::pair<TracePath, TracePath> cast_paths(const LadderResult &res, double px, double py, double cx, double cy, Flags flags) const {
+		flags.erase(GHOST);
+		const V2 player = V2::of(px, py);
+		const Ray aim{player, player, V2::of(cx, cy)};
+		std::map<std::string, int> frames;
+		TracePath physical = to_path(res.physical, frames, aim, flags);
+		TracePath planned = to_path(res.planned, frames, aim, flags);
+		return {std::move(planned), std::move(physical)};
+	}
+
 	// Stage 101: where the next infinity entry of `plan` would be passed: the
 	// frame's image of infinity after the plan (nullopt = infinity: the edge).
 	std::optional<V2> infinity_point(const std::vector<PlanItem> &plan, const Flags &flags) {
@@ -265,6 +294,7 @@ public:
 			if (e.kind == EventKind::Cursor) {
 				path.cursor_index = int(path.steps.size());
 			}
+			path.event_steps.push_back(int(path.steps.size()));
 			if (e.kind == EventKind::Max) {
 				path.truncated = true;
 				break;
