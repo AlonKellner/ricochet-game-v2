@@ -55,3 +55,52 @@ TEST_CASE("crossings: the tracer's cache tells plans apart by their pieces") {
 	CHECK(a->planned.steps.front().hit_on_segment);
 	CHECK(!b->planned.steps.front().hit_on_segment);   // not the cached trace of the upper piece
 }
+
+namespace {
+SurfaceDef pass_line(int id, double sx, double sy, double ex, double ey) {
+	SurfaceDef d;
+	d.id = id;
+	d.line = true;
+	d.sx = sx;
+	d.sy = sy;
+	d.ex = ex;
+	d.ey = ey;
+	d.vx = (sx + ex) / 2;
+	d.vy = (sy + ey) / 2;
+	d.left = SideDef{};
+	d.right = SideDef{};
+	return d;
+}
+
+template <Num N>
+std::vector<int> first_hits(const std::vector<SurfaceDef> &defs, const N &like) {
+	Scene<N> sc = Scene<N>::from_defs(defs, like);
+	Solver<N> sv(sc, nullptr);
+	const Walk<N> w = sv.run_direction(CN<N>{like.like(310.37), like.like(211.9)}, CN<N>{like.like(1.0), like.like(0.2117)}, {},
+		std::nullopt, Mode::Physical, MAX_HITS, Flags());
+	std::vector<int> ids;
+	std::optional<N> t;
+	for (const Event<N> &e : w.events) {
+		if (e.kind == EventKind::Hit && ids.size() < 3) {
+			if (t) {
+				CHECK(e.t_to->cmp(*t) == 0); // one parameter: an exact tie
+			}
+			t = e.t_to;
+			ids.push_back(e.surface_id);
+		}
+	}
+	return ids;
+}
+} // namespace
+
+TEST_CASE("K6: surfaces on one carrier share their crossings and tie by id, at every tier") {
+	const std::vector<SurfaceDef> defs{pass_line(5, 1100, 350, 1100, 450), pass_line(3, 1100, 620, 1100, 760),
+		pass_line(9, 1100, -50, 1100, 100)};
+	const Scene<F64> sc = Scene<F64>::from_defs(defs, F64{1});
+	for (const auto &s : sc.surfaces) {
+		CHECK(s->carrier_rep == 5);
+	}
+	CHECK(first_hits<F64>(defs, F64{1}) == std::vector<int>{3, 5, 9});
+	CHECK(first_hits<Dual>(defs, Dual{1, 0}) == std::vector<int>{3, 5, 9});
+	CHECK(first_hits<BigFloat>(defs, BigFloat::from_int(1, 4)) == std::vector<int>{3, 5, 9});
+}

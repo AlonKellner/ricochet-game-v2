@@ -1340,6 +1340,9 @@ private:
 	// candidate the loop listed (the oracle lists it once per loop).
 	std::vector<Candidate<N>> candidates(Walk<N> &w, const Beam<N> &beam, int depart, bool fresh, const N &t0, bool keep_cursor = false) const {
 		std::vector<Candidate<N>> cands;
+		std::vector<std::pair<int, std::vector<N>>> shared; // K6: carrier rep -> its roots this loop
+		const Surf<N> *dep_surf = depart >= 0 ? w.scene->find(depart) : nullptr;
+		const int dep_rep = dep_surf != nullptr ? dep_surf->carrier_rep : -1;
 		for (const auto &sp : w.scene->surfaces) {
 			const Surf<N> &s = *sp;
 			if (w.pole && pole_tangent(w, s)) {
@@ -1348,10 +1351,22 @@ private:
 			if (w.line && !s.line && tangent(w, s)) {
 				continue; // a tangent touch is not a crossing (exact)
 			}
+			// K6 (Stage 109): surfaces on one carrier share its roots (computed once
+			// per loop -- on the departing member's own segment when the beam
+			// departs that carrier), so simultaneous crossings tie exactly
+			auto found = std::find_if(shared.begin(), shared.end(), [&](const auto &e) { return e.first == s.carrier_rep; });
+			if (found != shared.end()) {
+				for (const N &t : found->second) {
+					cands.push_back(Candidate<N>{t, &s, false, std::nullopt, -1});
+				}
+				continue;
+			}
+			const bool departing = dep_rep >= 0 && dep_rep == s.carrier_rep;
+			const Surf<N> &src = departing ? *w.scene->find(depart) : s;
 			std::vector<N> rs;
 			if (fresh) {
-				rs = geom::hits(beam, s.seg, depart == s.id);
-				if (depart == s.id) {
+				rs = geom::hits(beam, src.seg, departing);
+				if (departing) {
 					std::vector<N> f;
 					for (const N &t : rs) {
 						if (!t.is_zero()) {
@@ -1361,8 +1376,8 @@ private:
 					rs = f;
 				}
 			} else {
-				rs = geom::hits(beam, s.seg, false);
-				if (depart == s.id && !rs.empty()) {
+				rs = geom::hits(beam, src.seg, false);
+				if (departing && !rs.empty()) {
 					// a resumed beam departs this carrier at t0: its root nearest t0
 					// is the departure (identified, not compared for equality: the
 					// roots are recomputed on the restored beam and can land an ulp
@@ -1382,6 +1397,7 @@ private:
 			for (const N &t : rs) {
 				cands.push_back(Candidate<N>{t, &s, false, std::nullopt, -1});
 			}
+			shared.emplace_back(s.carrier_rep, std::move(rs));
 		}
 		bool cursor_now = false;
 		// the cursor is on the beam only on the planned path

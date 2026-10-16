@@ -14,7 +14,7 @@ Background: TDD_11 (Stage 107) and TDD_12 (Stage 108). Before this stage, their 
 | Phase | Topic | Status |
 |-------|-------|--------|
 | 109.1 | `tscn_import.py`: Godot's sub-resource syntax, and `SurfaceSpec.build` / `SceneDefs` replicated | Done |
-| 109.2 | `hit_effects.tscn` and `crossings.tscn` moved to `scenes/test_levels/`: dumps, parity pin (additive), corpus (24 scenarios), sweeps | Done (K6 found, pending the user's decision) |
+| 109.2 | `hit_effects.tscn` and `crossings.tscn` moved to `scenes/test_levels/`: dumps, parity pin (additive), corpus (24 scenarios), sweeps | Done (K6 found and fixed) |
 
 ## What Is Introduced
 
@@ -40,14 +40,14 @@ The existing dumps were not regenerated. Re-dumping them only reorders keys: sin
 
 ## Known findings
 
-**K6 (pre-existing, found in 109.2, open).** Surfaces sharing one carrier are crossed at one point, but each surface's root is computed from its own defining points.
-- **In the oracle**, the roots come out equal (at 120 digits, with integer data), so the lower id comes first.
-- **Natively, in float64**, they are an ulp apart and may come in either order.
-- **Seen in:** `test_levels__hit_effects__09`, where hosts F1 and G lie on the line x = 1100.
-- **Effect:** physically harmless (the extra event is an off-segment pass), but the event order differs between the tiers.
-- **Pinned in** `test_stage81_trace_rules.gd` (`K6_PINNED`).
-- **Proposed fix (oracle, then native):** recognise coincident carriers exactly.
-  - lines: both of one segment's defining points lie on the other's line (`orient_zero`);
-  - circles: the same exact circle.
-  - Their crossings are then computed once and shared, so they get identical parameters, and the tie is broken by id as the spec already says (§9.3).
-- **Needs** the user's approval and a golden diff, because levels with collinear surfaces could change.
+**K6 (pre-existing, found in 109.2, fixed with the user's approval on 2026-10-16).**
+- **The bug:** surfaces sharing one carrier are crossed at one point, but each surface's root was computed from its own defining points. In the oracle they came out equal (at 120 digits, with integer data); natively, in float64, they were an ulp apart and came in either order.
+- **The fix (oracle, then native):** surfaces on exactly the same carrier are grouped by the exact predicates (`same_carrier` / `carrier_groups`: lines by `orient_zero`; circles by `incircle_zero` / `on_circle_zero`, or an equal centre and radius).
+  - Each loop computes a group's roots once and shares them. They are computed on the departing member's own segment when the beam departs that carrier, so a lone surface is computed exactly as before.
+  - Simultaneous crossings therefore tie exactly, and the id breaks the tie (GAME_SPEC 9.3).
+- **Evidence:**
+  - every oracle fixture regenerates byte-identical;
+  - all 284,096 pinned sweep traces and every golden file are unchanged, and ctest and ASan pass;
+  - the scene corpus changed only for `hit_effects`. Before the fix its generator had rejected two draws as unstable (this tie); now they are stable, so its scenarios from 06 on are a new, fully matching set;
+  - all 420 corpus scenarios match the oracle.
+- **Tests:** oracle `test_trace2.py` (three collinear surfaces tie by id; circle groups) and native `test_crossings.cpp` (the same at f64, Dual and 4 limbs). The pin is removed.

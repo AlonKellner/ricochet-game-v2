@@ -1073,3 +1073,28 @@ def test_plan_effects_skip_an_absent_entry_and_its_writes():
     assert T.plan_resolved([s], [(1, T.LEFT)], {}) == [(None, {})]
     assert T.plan_resolved([s], [(1, T.LEFT), (1, T.LEFT)], {"m": True}) == [
         ("reflection", {"m": True}), ("reflection", {"m": True, "k": 2})]
+
+
+# ---------------------------------------------------------------- K6 (Stage 109): one carrier, shared crossings
+
+def test_surfaces_on_one_carrier_share_their_crossings():
+    # three segments on the line x = 1100 (different spans, so different
+    # defining points); a beam crossing it meets them at one parameter
+    a = line(5, (1100, 350), (1100, 450), PASS, PASS)
+    b = line(3, (1100, 620), (1100, 760), PASS, PASS)
+    c = line(9, (1100, -50), (1100, 100), PASS, PASS)
+    assert T.carrier_groups([a, b, c]) == {5: 5, 3: 5, 9: 5}
+    w = T.trace_physical_direction([a, b, c], (310.37, 211.9), mp.mpc(1, 0.2117))
+    hs = [e for e in w.events if e.kind == "hit"][:3]
+    assert len({e.t for e in hs}) == 1, [e.t for e in hs]
+    assert [e.surface_id for e in hs] == [3, 5, 9], "a tie: by id"
+
+
+def test_one_circle_carrier_groups_arcs():
+    full = T.surface_from_json({"id": 1, "line": False, "start": [600, 0], "end": [450, -86.6], "via": [450, 86.6],
+                                "full": True, "circle": {"center": [500, 0], "radius": 100}, "left": REFL, "right": REFL})
+    arc = T.surface_from_json({"id": 2, "line": False, "start": [600, 0], "end": [400, 0], "via": [500, 100],
+                               "full": False, "left": REFL, "right": REFL})
+    other = T.surface_from_json({"id": 3, "line": False, "start": [610, 0], "end": [410, 0], "via": [510, 100],
+                                 "full": False, "left": REFL, "right": REFL})
+    assert T.carrier_groups([full, arc, other]) == {1: 1, 2: 1, 3: 3}

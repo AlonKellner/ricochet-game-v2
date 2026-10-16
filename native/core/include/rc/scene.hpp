@@ -131,6 +131,8 @@ struct Surf {
 	};
 	// Stage 107: presence conditions (all required; empty: always present)
 	std::vector<PresenceCond> presence;
+	// K6 (Stage 109): the lowest id of the surfaces on exactly this carrier
+	int carrier_rep = 0;
 
 	// Whether the surface exists under the flags (GAME_SPEC 9.6).
 	bool present(const Flags &flags) const {
@@ -263,6 +265,9 @@ bool scene_supported(const std::vector<SurfaceDef> &defs);
 // ---------------------------------------------------------------- construction
 
 template <Num N>
+bool same_carrier(const Surf<N> &a, const Surf<N> &b);
+
+template <Num N>
 Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like) {
 	Scene sc;
 	for (const SurfaceDef &d : defs) {
@@ -358,7 +363,44 @@ Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like)
 		sc.by_id[s->id] = s.get();
 		sc.surfaces.push_back(std::move(s));
 	}
+	// K6: surfaces on exactly the same carrier share their crossings
+	for (size_t i = 0; i < sc.surfaces.size(); i++) {
+		Surf<N> &s = *sc.surfaces[i];
+		s.carrier_rep = s.id;
+		for (size_t j = 0; j < i; j++) {
+			if (same_carrier(*sc.surfaces[j], s)) {
+				s.carrier_rep = sc.surfaces[j]->carrier_rep;
+				break;
+			}
+		}
+	}
 	return sc;
+}
+
+// Exact: two surfaces lie on one carrier (K6, Stage 109) -- by the exact
+// predicates on their raw float64 data.
+template <Num N>
+bool same_carrier(const Surf<N> &a, const Surf<N> &b) {
+	if (a.line != b.line) {
+		return false;
+	}
+	if (a.line) {
+		return exact::orient_zero(a.sx, a.sy, a.ex, a.ey, b.sx, b.sy) && exact::orient_zero(a.sx, a.sy, a.ex, a.ey, b.ex, b.ey);
+	}
+	if (a.full && b.full) {
+		return a.cx == b.cx && a.cy == b.cy && a.r == b.r;
+	}
+	const Surf<N> &arc = a.full ? b : a;   // an arc's three defining points ...
+	const Surf<N> &other = a.full ? a : b; // ... on the other's circle
+	const std::array<std::array<double, 2>, 3> pts{{{arc.sx, arc.sy}, {arc.vx, arc.vy}, {arc.ex, arc.ey}}};
+	for (const auto &p : pts) {
+		const bool on = other.full ? exact::on_circle_zero(other.cx, other.cy, other.r, p[0], p[1])
+								   : exact::incircle_zero(other.sx, other.sy, other.vx, other.vy, other.ex, other.ey, p[0], p[1]);
+		if (!on) {
+			return false;
+		}
+	}
+	return true;
 }
 
 } // namespace rc
