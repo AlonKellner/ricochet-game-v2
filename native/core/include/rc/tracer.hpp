@@ -202,6 +202,9 @@ public:
 				path.steps.push_back(std::move(s));
 				appended = true;
 			}
+			// K5: a teleport's mark waits for the next drawn step (an event at the
+			// departure point, e.g. a carrier crossing there, draws nothing)
+			gap = gap_pending;
 			if (e.kind == EventKind::Hit && e.applied && !e.terminal) {
 				if (e.projective) {
 					stack.clear();
@@ -210,7 +213,7 @@ public:
 				} else {
 					stack.push_back(e.surface_id);
 				}
-				gap = e.teleport;
+				gap = gap || e.teleport;
 			}
 			if (e.kind == EventKind::Hit && appended) {
 				TraceStep &last = path.steps.back();

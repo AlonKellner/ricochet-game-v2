@@ -146,17 +146,13 @@ Native: `test_hit_effects.cpp`. It runs the 11 oracle fixtures at f64, Dual, 4 a
 - **The fix:** a seed changes derivatives only, so it must not change a decision. The restarted loop recomputes its candidates on the seeded beam, so their derivatives are kept, and keeps a cursor the loop still listed (`candidates(..., keep_cursor)`).
 - **Evidence:** all 178 oracle fixtures give identical results at Dual and f64. The goldens are byte-identical, and ctest, ASan and the full suite pass. The pin in `test_hit_effects.cpp` is now a plain Dual check.
 
-**K5 (pre-existing, found in 107.4, open).** This is a tracer display bug.
-- **Trigger:** another surface's carrier passes through a portal end's departure point.
-- **What happens:**
-  1. The first event after the teleport is an off-segment crossing of that carrier, at the same point.
-  2. Its step is zero-length, so it is not emitted.
-  3. The pending `after_portal` mark goes with it: `to_path_events` resets `gap` per event.
-  4. The next drawn step looks like a jump, and NOGAPS / PHYSICAL-CONTINUITY report it.
-- **Cause:** independent of Stage 107. `test_stage107_k5_pinned_portal_departure_on_a_carrier` reproduces it with `portal_lines` plus `passthrough_lines` alone.
-- **Why it matters now:** spawned surfaces can create the coincidence in play. In the level, a spawned mirror's carrier at y = 220 met a teleport.
-- **Proposed fix:** keep an unconsumed `gap_pending` for the next emitted step (`gap = gap_pending || e.teleport`). It changes `after_portal` on such steps only, so it needs the user's approval, with a golden diff as evidence.
-- **Coverage:** pinned in the level sweep (only that signature is tolerated, and it is counted) and by the minimal reproduction.
+**K5 (pre-existing, found in 107.4, fixed with the user's approval on 2026-10-16).**
+- **The bug:** a carrier through a portal end's departure point (another surface's line or circle beyond its segment, not a crossing of segments) made the first event after a teleport zero-length. `to_path_events` reset its `gap` per event, so the step after the teleport lost its `after_portal` mark, and NOGAPS / PHYSICAL-CONTINUITY reported a gap.
+- **The fix:** an unconsumed mark waits for the next drawn step (`gap = gap_pending`, then `gap || e.teleport`).
+- **Evidence:** all 284,096 pinned sweep traces replay byte-identical (`step_canon` includes `after_portal`), and every golden file is unchanged.
+- **Tests:** the minimal reproduction (legacy `portal_lines` and `passthrough_lines`) now asserts the mark. The level sweep tolerates nothing, and its after-spawns case contains the original y = 220 coincidence.
+
+Separately, the user asked for two crossing mechanisms. They make crossing surfaces designable, which levels forbid today, and keep spawned surfaces from creating crossings. They are Stage 108.
 
 ## B-list (behaviour changes for approval)
 

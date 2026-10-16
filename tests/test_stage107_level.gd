@@ -64,8 +64,8 @@ func test_stage107_level_scripted_interactions():
 	assert_true(scene.world.group_of("a").is_empty())
 	assert_true(_at(scene, Vector2(600, 150)).present(gm.game_state.flags))
 
-# K5 without any Stage 107 feature: the legacy portal_lines and a pass line
-# whose carrier runs through the portal image's departure point.
+# K5 (fixed) without any Stage 107 feature: the legacy portal_lines and a pass
+# line whose carrier runs through the portal image's departure point.
 func test_stage107_k5_pinned_portal_departure_on_a_carrier():
 	Surface.reset_id_counter()
 	var level := Node2D.new()
@@ -84,4 +84,4 @@ func test_stage107_k5_pinned_portal_departure_on_a_carrier():
 			break
 	assert_gt(after, 0, "the beam teleported to the image")
 	if after > 0:
-		assert_false(steps[after].after_portal, "K5: the step after the teleport lost its after_portal mark (pinned; flip when fixed)")
+		assert_true(steps[after].after_portal, "K5 (fixed): the step after the teleport keeps its after_portal mark")
