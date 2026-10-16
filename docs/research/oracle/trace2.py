@@ -97,6 +97,18 @@ State flags (Stage 85, GAME_SPEC 9.4 / 10.6 / 13.7):
   pops it only when the same effect fires again (an involution undone);
   flags are never restored by a pop.
 
+Hit effects and presence (Stage 107, GAME_SPEC 9.6 / 10.6):
+- A side config carries a LIST of state changes, "states": [...] (the legacy
+  single "state" is read as a one-element list). They fire together, by the
+  rule above, and apply in list order (last writer wins).
+- A side is a ghost toggler when any of its state changes writes "ghost".
+- A surface may carry "presence": [{"key", "values": [flag_key...]}], all
+  required ("DEFAULT" matches a missing key). An absent surface does not exist
+  for the walk: its crossings are skipped when reached (presence is read under
+  the current flags, so a surface can vanish or appear mid-loop), it blocks no
+  junction, and a plan entry on it resolves to nothing (no effect, no state
+  change) and is never consumed.
+
 Infinity (Stage 88): a plan entry INFINITY_ID (the player clicked the screen
 edge) means "the beam wraps through infinity here". Every plan has two
 realizations: the aim toward the aim image X_0 (the direct one), and the aim
@@ -167,9 +179,31 @@ EMIT_INFINITY = True
 GHOST = "ghost"
 
 
+def side_states(cfg):
+    """A side config's state changes, in order (Stage 107: "states"; the
+    legacy single "state" is a one-element list)."""
+    if cfg is None:
+        return []
+    if cfg.get("states") is not None:
+        return list(cfg["states"])
+    return [cfg["state"]] if cfg.get("state") is not None else []
+
+
 def is_ghost_toggler(cfg):
-    """A side config whose state change writes the ghost flag."""
-    return cfg is not None and (cfg.get("state") or {}).get("key") == GHOST
+    """A side config with a state change that writes the ghost flag."""
+    return any(ch.get("key") == GHOST for ch in side_states(cfg))
+
+
+def present(presence, flags):
+    """Whether a surface with these presence conditions exists under the
+    flags (Stage 107): every condition's values hold flag_key of its key's
+    value ("DEFAULT" for a missing key)."""
+    for cond in presence or ():
+        k = cond["key"]
+        v = flag_key(flags[k]) if flags is not None and k in flags else "DEFAULT"
+        if v not in cond["values"]:
+            return False
+    return True
 
 
 def flag_key(v):
@@ -193,6 +227,13 @@ def apply_state(flags, change):
     return out
 
 
+def apply_states(flags, changes):
+    """flags after a side's state changes, in order."""
+    for ch in changes:
+        flags = apply_state(flags, ch)
+    return flags
+
+
 @dataclass
 class Surface:
     id: int
@@ -202,6 +243,10 @@ class Surface:
     is_target: bool = False
     resolver: dict | None = None
     pre_transform: bool = False    # Stage 101: part of the scene's pre-transform, never hit
+    presence: list | None = None   # Stage 107: [{key, values}], all required; None = always
+
+    def present(self, flags=None):
+        return present(self.presence, flags)
 
     def cfg(self, side, flags=None):
         """The side config under the flags (ghost: everything but a ghost
@@ -232,9 +277,9 @@ class Surface:
             return None
         return cfg["type"]
 
-    def state_change(self, side, flags=None):
-        cfg = self.cfg(side, flags)
-        return None if cfg is None else cfg.get("state")
+    def state_changes(self, side, flags=None):
+        """The side's state changes under the flags, in order (Stage 107)."""
+        return side_states(self.cfg(side, flags))
 
     def portal(self):
         """(a, d, pair id) of a portal surface, else None."""
@@ -270,8 +315,10 @@ def surface_from_json(d):
             for cfg in (entry.get("left"), entry.get("right")):
                 assert cfg is None or cfg.get("type", "pass") in ("pass", "terminal", "reflection", "inversion"), \
                     "categorical sides: pass / terminal / reflection / inversion (portals, projectives are fixed)"
+    presence = d.get("presence") or None
+    assert presence is None or not d.get("pre_transform"), "a pre-transform surface is always present"
     return Surface(sid, seg, d.get("left"), d.get("right"), bool(d.get("is_target")), res,
-                   bool(d.get("pre_transform")))
+                   bool(d.get("pre_transform")), presence)
 
 
 def scene_from_json(surfaces):
@@ -595,6 +642,8 @@ def _junction_blocked(walk: Walk, surf: Surface, pt, direction):
     """Blocked sides at an exact endpoint, incl. other segments sharing it."""
     bl = br = False
     for s in walk.surfaces:
+        if not s.present(walk.flags):
+            continue        # an absent surface blocks no junction (Stage 107)
         for which, ep in ((1, s.seg.S), (2, s.seg.E)):
             if s.seg.full or ep != pt:
                 continue
@@ -724,6 +773,8 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
         while ci < len(cands):
             key, _, sid, t, rehit = cands[ci]
             ci += 1
+            if sid in by_id and not by_id[sid].present(walk.flags):
+                continue        # absent under the current flags (Stage 107): no crossing at all
             walk.count += 1
             if sid == INFINITY_ID:
                 q_pt = snapped.get((INFINITY_ID, t))   # None: the real infinity
@@ -763,21 +814,21 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             if surf.is_target and on_seg:
                 walk.targets.add(sid)
             do = None
-            change = surf.state_change(side, walk.flags)
+            changes = surf.state_changes(side, walk.flags)
             fires_state = False
             if walk.mode == PHYSICAL:
                 do = physical_decision(walk, surf, side, full_block)
-                fires_state = change is not None and full_block
+                fires_state = bool(changes) and full_block
                 if do in TRANSFORMATIVE or do in PROJECTIVE or fires_state:
                     _plan_bookkeeping(walk, sid)
             elif walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side):
                 walk.plan_index += 1
                 eff = surf.effect(side, walk.flags)
                 do = eff if (eff in TRANSFORMATIVE or eff in PROJECTIVE) else None
-                fires_state = change is not None
+                fires_state = bool(changes)
             walk.flags_before = walk.flags
             if fires_state:
-                walk.flags = apply_state(walk.flags, change)
+                walk.flags = apply_states(walk.flags, changes)
                 fired_state = True
             ev = Event("hit", sid, side, do is not None, do == "terminal", on_seg, pt, t, beam, rehit,
                        fires_state, walk.flags)
@@ -1220,13 +1271,11 @@ def plan_resolved(surfaces, plan, flags=None):
     out = []
     for sid, side in plan:
         surf = by_id.get(sid)
-        if surf is None:
+        if surf is None or not surf.present(f):
             out.append((None, f))
             continue
         out.append((surf.effect(side, f), f))
-        ch = surf.state_change(side, f)
-        if ch is not None:
-            f = apply_state(f, ch)
+        f = apply_states(f, surf.state_changes(side, f))
     return out
 
 
@@ -1327,13 +1376,11 @@ def plan_effects(surfaces, plan, flags=None):
     out = []
     for sid, side in plan:
         surf = by_id.get(sid)
-        if surf is None:
+        if surf is None or not surf.present(f):
             out.append(None)
             continue
         out.append(surf.effect(side, f))
-        ch = surf.state_change(side, f)
-        if ch is not None:
-            f = apply_state(f, ch)
+        f = apply_states(f, surf.state_changes(side, f))
     return out
 
 
