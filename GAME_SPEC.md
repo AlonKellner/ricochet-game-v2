@@ -35,8 +35,8 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Visibility polygon (§15) | Planned |
 | State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Done |
 | Ghost mode & toggler surfaces (Stage 86) | Done |
-| Hit effects as a second axis: any number per side (state change, target, spawn, reset), presence (§9.1, §9.6, §10.6; TDD_11 Stage 107) | Done pending the user's interactive sign-off |
-| Crossing surfaces: design surfaces split into pieces at crossings; spawned surfaces trimmed (§9.7, §10.6.3; TDD_12 Stage 108) | Done pending the user's interactive sign-off |
+| Hit effects as a second axis: any number per side (state change, target, spawn, reset), presence (§9.1, §9.6, §10.6; TDD_11 Stage 107) | Done (user sign-off 2026-10-16) |
+| Crossing surfaces: design surfaces split into pieces at crossings; spawned surfaces trimmed (§9.7, §10.6.3; TDD_12 Stage 108) | Done (user sign-off 2026-10-16) |
 | Plannable infinity — the ∞ plan entry, the `infinity` event (§4.2, §6.3, §12.5, §13.1; TDD_10 Stages 88, 101) | Done (B9 approved 2026-10-15): the frame's infinity `Q`, the edge or an on-screen point, plannable; the pre-transform (§9.5) |
 | Level editor | Planned |
 | Menus, HUD, save system | Planned |
@@ -640,7 +640,7 @@ A level may start **after** a transform: `LevelData.pre_transform` is an ordered
 
 ### 9.6 Presence
 
-> **Status: planned (Stage 107, `docs/TDD_11_HIT_EFFECTS.md`).**
+> **Status: implemented (Stage 107, `docs/TDD_11_HIT_EFFECTS.md`).**
 
 A surface may exist only under some game state. `Surface.presence` is a list of conditions that are **all** required (AND). Each condition names one flag and the set of its values (their `flag_key` spellings, §9.4) under which the surface exists. The token `DEFAULT` matches a missing key. An empty list means the surface always exists. The def form is `presence: [{key, values: [...]}]`.
 
@@ -662,7 +662,7 @@ Presence is orthogonal to the resolver. The resolver chooses *how* a present sur
 
 ### 9.7 Design surfaces and pieces (crossings)
 
-> **Status: planned (Stage 108, `docs/TDD_12_CROSSINGS.md`).**
+> **Status: implemented (Stage 108, `docs/TDD_12_CROSSINGS.md`).**
 
 Levels are designed with **design surfaces**, which may cross each other. The player plans and clicks **pieces**: the design surfaces split at every crossing, so that no two pieces cross.
 
@@ -789,7 +789,7 @@ Stops the beam. No outgoing beam, no stack change. A trace cut by the **32-event
 
 ### 10.6 Hit effects (state changes, targets, spawn, reset)
 
-> **Status:** state changes are implemented (Stage 85). The general hit-effect model is planned for Stage 107 (`docs/TDD_11_HIT_EFFECTS.md`).
+> **Status:** implemented (state changes: Stage 85; the general hit-effect model: Stage 107, `docs/TDD_11_HIT_EFFECTS.md`).
 > - **StateChange:** `StateChange` has two ops, `SET` and `TOGGLE`; a toggle of a missing key counts the key as false.
 > - **Firing:** a change fires when its side fires. In PHYSICAL that is a fully blocked hit; in PLANNED it is the consumed plan entry.
 > - **Order:** the side's config is resolved before its own changes are applied.
@@ -879,7 +879,7 @@ State changes are applied sequentially along the trace. If multiple hits write t
 
 #### 10.6.3 Spawn trimming
 
-> **Status: planned (Stage 108).**
+> **Status: implemented (Stage 108).**
 
 A spawned surface is **trimmed** when it lands (`SpawnTemplate.trim`, on by default). The placed surface is split by its proper crossings with every surface present under the landed flags: level surfaces and walls, other channels' groups, present hosts. Only the piece containing the placed surface's **midpoint** (its via point) is kept. A full circle has no midpoint, and a spawned circle is centred on the hit point by default, so every point of it is equally near; it keeps its **longest arc**. The kept piece becomes the spawned surface. A spawned surface therefore never crosses what is there when it lands. Something that appears later (a reset restoring a host) is split against it into pieces by §9.7. The preview shows the trimmed surface (the same function).
 
@@ -2218,7 +2218,7 @@ The default target type is a **surface** the arrow must contact during the physi
 
 ### 24.2 Hit detection
 
-> **Stage 107 (planned):** a target is a side's `TargetHit` hit effect (§10.6). It registers when its side *fires*, which is a fully blocked hit. That is the same as the on-segment rule below except at a shared endpoint that does not fully block. The registration is the flag `target:<id>`. The rest of this section describes the pre-Stage-107 rule.
+> **Stage 107:** a target is a side's `TargetHit` hit effect (§10.6). It registers when its side *fires*, which is a fully blocked hit. That is the same as the on-segment rule below except at a shared endpoint that does not fully block. The registration is the flag `target:<id>`. The rest of this section describes the pre-Stage-107 rule.
 
 A target is hit if the physical trace produces an **on-segment** hit event on a surface with `is_target == true` (off-segment carrier crossings are events too, §11.5, but do not count). The target hit is registered at the moment of contact (when the hit event is produced), **regardless of the surface's effect**:
 
