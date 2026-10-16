@@ -1,0 +1,2108 @@
+{
+ "dps": 80,
+ "fixtures": [
+  {
+   "name": "piece_planned_reached_planned",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      500,
+      -300
+     ],
+     "end": [
+      500,
+      300
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      400,
+      0
+     ],
+     "end": [
+      600,
+      0
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    -200.0
+   ],
+   "direction": null,
+   "cursor": [
+    200.0,
+    -100.0
+   ],
+   "plan": [
+    {
+     "surface_id": 1,
+     "side": "RIGHT",
+     "span": {
+      "start": [
+       500,
+       -300
+      ],
+      "end": [
+       500,
+       0
+      ],
+      "via": [
+       500.0,
+       -150.0
+      ]
+     }
+    }
+   ],
+   "mode": "planned",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "500.0000000000000000000000000000000000000",
+     "y": "-142.8571428571428571428571428571428571429",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "cursor",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "200.0000000000000000000000000000000000000",
+     "y": "-100.0000000000000000000000000000000000000",
+     "state": false,
+     "flags": null
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "LEFT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "-500.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 93,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-1000.000000000000000000000000000000000000",
+     "y": "71.42857142857142857142857142857142857143",
+     "state": false,
+     "flags": {}
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "piece_planned_reached_physical",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      500,
+      -300
+     ],
+     "end": [
+      500,
+      300
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      400,
+      0
+     ],
+     "end": [
+      600,
+      0
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    -200.0
+   ],
+   "direction": null,
+   "cursor": [
+    200.0,
+    -100.0
+   ],
+   "plan": [
+    {
+     "surface_id": 1,
+     "side": "RIGHT",
+     "span": {
+      "start": [
+       500,
+       -300
+      ],
+      "end": [
+       500,
+       0
+      ],
+      "via": [
+       500.0,
+       -150.0
+      ]
+     }
+    }
+   ],
+   "mode": "physical",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "500.0000000000000000000000000000000000000",
+     "y": "-142.8571428571428571428571428571428571429",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "cursor",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "200.0000000000000000000000000000000000000",
+     "y": "-100.0000000000000000000000000000000000000",
+     "state": false,
+     "flags": null
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "LEFT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "-500.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 93,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-1000.000000000000000000000000000000000000",
+     "y": "71.42857142857142857142857142857142857143",
+     "state": false,
+     "flags": {}
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "piece_planned_other_piece_planned",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      500,
+      -300
+     ],
+     "end": [
+      500,
+      300
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      400,
+      0
+     ],
+     "end": [
+      600,
+      0
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    -200.0
+   ],
+   "direction": null,
+   "cursor": [
+    200.0,
+    -100.0
+   ],
+   "plan": [
+    {
+     "surface_id": 1,
+     "side": "RIGHT",
+     "span": {
+      "start": [
+       500,
+       0
+      ],
+      "end": [
+       500,
+       300
+      ],
+      "via": [
+       500.0,
+       150.0
+      ]
+     }
+    }
+   ],
+   "mode": "planned",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "500.0000000000000000000000000000000000000",
+     "y": "-142.8571428571428571428571428571428571429",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "cursor",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "200.0000000000000000000000000000000000000",
+     "y": "-100.0000000000000000000000000000000000000",
+     "state": false,
+     "flags": null
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "LEFT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "-500.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 93,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-1000.000000000000000000000000000000000000",
+     "y": "71.42857142857142857142857142857142857143",
+     "state": false,
+     "flags": {}
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "piece_planned_other_piece_physical",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      500,
+      -300
+     ],
+     "end": [
+      500,
+      300
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      400,
+      0
+     ],
+     "end": [
+      600,
+      0
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    -200.0
+   ],
+   "direction": null,
+   "cursor": [
+    200.0,
+    -100.0
+   ],
+   "plan": [
+    {
+     "surface_id": 1,
+     "side": "RIGHT",
+     "span": {
+      "start": [
+       500,
+       0
+      ],
+      "end": [
+       500,
+       300
+      ],
+      "via": [
+       500.0,
+       150.0
+      ]
+     }
+    }
+   ],
+   "mode": "physical",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "500.0000000000000000000000000000000000000",
+     "y": "-142.8571428571428571428571428571428571429",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "LEFT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "-500.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 93,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-1000.000000000000000000000000000000000000",
+     "y": "71.42857142857142857142857142857142857143",
+     "state": false,
+     "flags": {}
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "piece_unspecified_matches_whole",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      500,
+      -300
+     ],
+     "end": [
+      500,
+      300
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      400,
+      0
+     ],
+     "end": [
+      600,
+      0
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    -200.0
+   ],
+   "direction": null,
+   "cursor": [
+    200.0,
+    -100.0
+   ],
+   "plan": [
+    {
+     "surface_id": 1,
+     "side": "RIGHT"
+    }
+   ],
+   "mode": "physical",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "500.0000000000000000000000000000000000000",
+     "y": "-142.8571428571428571428571428571428571429",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "cursor",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "200.0000000000000000000000000000000000000",
+     "y": "-100.0000000000000000000000000000000000000",
+     "state": false,
+     "flags": null
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "LEFT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "-500.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 93,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-1000.000000000000000000000000000000000000",
+     "y": "71.42857142857142857142857142857142857143",
+     "state": false,
+     "flags": {}
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "circle_piece_reached_planned",
+   "surfaces": [
+    {
+     "id": 3,
+     "line": false,
+     "start": [
+      600.0,
+      0.0
+     ],
+     "end": [
+      450.0,
+      -75.0
+     ],
+     "via": [
+      450.0,
+      75.0
+     ],
+     "full": true,
+     "circle": {
+      "center": [
+       500.0,
+       0.0
+      ],
+      "radius": 100.0
+     },
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     }
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    30.0
+   ],
+   "direction": null,
+   "cursor": [
+    150.0,
+    200.0
+   ],
+   "plan": [
+    {
+     "surface_id": 3,
+     "side": "LEFT",
+     "span": {
+      "start": [
+       500,
+       100
+      ],
+      "end": [
+       500,
+       -100
+      ],
+      "via": [
+       400,
+       0
+      ]
+     }
+    }
+   ],
+   "mode": "planned",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 3,
+     "side": "LEFT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "401.2747229046096465229367399850688473213",
+     "y": "15.91601905120727262189523369988499290978",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "cursor",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "150.0000000000000000000000000000000000000",
+     "y": "200.0000000000000000000000000000000000000",
+     "state": false,
+     "flags": null
+    },
+    {
+     "kind": "hit",
+     "surface_id": 3,
+     "side": "LEFT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "599.7795531874457713992621692992056371032",
+     "y": "6.636321700586884670359695337638760867126",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 91,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "1000.000000000000000000000000000000000000",
+     "y": "-12.07317073170731707317073170731707317073",
+     "state": false,
+     "flags": {}
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "circle_piece_reached_physical",
+   "surfaces": [
+    {
+     "id": 3,
+     "line": false,
+     "start": [
+      600.0,
+      0.0
+     ],
+     "end": [
+      450.0,
+      -75.0
+     ],
+     "via": [
+      450.0,
+      75.0
+     ],
+     "full": true,
+     "circle": {
+      "center": [
+       500.0,
+       0.0
+      ],
+      "radius": 100.0
+     },
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     }
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    30.0
+   ],
+   "direction": null,
+   "cursor": [
+    150.0,
+    200.0
+   ],
+   "plan": [
+    {
+     "surface_id": 3,
+     "side": "LEFT",
+     "span": {
+      "start": [
+       500,
+       100
+      ],
+      "end": [
+       500,
+       -100
+      ],
+      "via": [
+       400,
+       0
+      ]
+     }
+    }
+   ],
+   "mode": "physical",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 3,
+     "side": "LEFT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "401.2747229046096465229367399850688473213",
+     "y": "15.91601905120727262189523369988499290978",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "cursor",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "150.0000000000000000000000000000000000000",
+     "y": "200.0000000000000000000000000000000000000",
+     "state": false,
+     "flags": null
+    },
+    {
+     "kind": "hit",
+     "surface_id": 3,
+     "side": "LEFT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "599.7795531874457713992621692992056371032",
+     "y": "6.636321700586884670359695337638760867126",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 91,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "1000.000000000000000000000000000000000000",
+     "y": "-12.07317073170731707317073170731707317073",
+     "state": false,
+     "flags": {}
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "circle_piece_other_planned",
+   "surfaces": [
+    {
+     "id": 3,
+     "line": false,
+     "start": [
+      600.0,
+      0.0
+     ],
+     "end": [
+      450.0,
+      -75.0
+     ],
+     "via": [
+      450.0,
+      75.0
+     ],
+     "full": true,
+     "circle": {
+      "center": [
+       500.0,
+       0.0
+      ],
+      "radius": 100.0
+     },
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     }
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    30.0
+   ],
+   "direction": null,
+   "cursor": [
+    150.0,
+    200.0
+   ],
+   "plan": [
+    {
+     "surface_id": 3,
+     "side": "LEFT",
+     "span": {
+      "start": [
+       500,
+       -100
+      ],
+      "end": [
+       500,
+       100
+      ],
+      "via": [
+       600,
+       0
+      ]
+     }
+    }
+   ],
+   "mode": "planned",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 3,
+     "side": "LEFT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "401.2747229046096465229367399850688473213",
+     "y": "15.91601905120727262189523369988499290978",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "cursor",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "150.0000000000000000000000000000000000000",
+     "y": "200.0000000000000000000000000000000000000",
+     "state": false,
+     "flags": null
+    },
+    {
+     "kind": "hit",
+     "surface_id": 3,
+     "side": "LEFT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "599.7795531874457713992621692992056371032",
+     "y": "6.636321700586884670359695337638760867126",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 91,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "1000.000000000000000000000000000000000000",
+     "y": "-12.07317073170731707317073170731707317073",
+     "state": false,
+     "flags": {}
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "circle_piece_other_physical",
+   "surfaces": [
+    {
+     "id": 3,
+     "line": false,
+     "start": [
+      600.0,
+      0.0
+     ],
+     "end": [
+      450.0,
+      -75.0
+     ],
+     "via": [
+      450.0,
+      75.0
+     ],
+     "full": true,
+     "circle": {
+      "center": [
+       500.0,
+       0.0
+      ],
+      "radius": 100.0
+     },
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     }
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    30.0
+   ],
+   "direction": null,
+   "cursor": [
+    150.0,
+    200.0
+   ],
+   "plan": [
+    {
+     "surface_id": 3,
+     "side": "LEFT",
+     "span": {
+      "start": [
+       500,
+       -100
+      ],
+      "end": [
+       500,
+       100
+      ],
+      "via": [
+       600,
+       0
+      ]
+     }
+    }
+   ],
+   "mode": "physical",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 3,
+     "side": "LEFT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "401.2747229046096465229367399850688473213",
+     "y": "15.91601905120727262189523369988499290978",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 3,
+     "side": "LEFT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "599.7795531874457713992621692992056371032",
+     "y": "6.636321700586884670359695337638760867126",
+     "state": false,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 91,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "1000.000000000000000000000000000000000000",
+     "y": "-12.07317073170731707317073170731707317073",
+     "state": false,
+     "flags": {}
+    }
+   ],
+   "targets": []
+  }
+ ]
+}
