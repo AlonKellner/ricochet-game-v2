@@ -44,3 +44,6 @@ static func create_portal_pair(source_seg: Segment, theta: float, d: Vector2) ->
 		target_effect = eff_b,
 		target_segment = target_seg,
 	}
+
+func to_spec() -> Dictionary:
+	return {"type": "portal", "theta": _theta, "d": [_d.x, _d.y]}

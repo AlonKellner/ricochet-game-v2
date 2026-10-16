@@ -10,7 +10,7 @@ Specification: GAME_SPEC §9.1, §9.6 (presence) and §10.6 (hit effects, spawn 
 |-------|-------|--------|
 | 107.0 | Spec (§9.6, §10.6), this document, the level-defs parity pin | Done |
 | 107.1 | Native + oracle: N1 a list of state changes per side, N2 presence, N3 hit provenance (`Event.fired`, `TracePath.hits`) | Done (K4 found on the way, pre-existing) |
-| 107.2 | Game layer: `HitEffect` classes, `EffectSpec` / `SideSpec` / `SurfaceSpec`, `level_settings` desugared | Planned |
+| 107.2 | Game layer: `HitEffect` classes, `EffectSpec` / `SideSpec` / `SurfaceSpec`, `level_settings` desugared | Done: every level bit-identical (parity pin), level_settings 259 -> 210 lines, any combination via `surface_specs` |
 | 107.3 | Landing: `SpawnFrame`, `SpawnTemplate`, `LandingFold`, `World`, game-manager wiring, checkpoints | Planned |
 | 107.4 | Visuals (hit-effect markers, absent outlines, spawn preview), `hit_effects.tscn`, interactive tests | Planned |
 
@@ -93,7 +93,7 @@ The oracle (`docs/research/oracle/trace2.py`) is the specification: it changes f
 - **`scripts/game/hit_effects/`:** `HitEffect`, `StateChangeHit`, `TargetHit`, `ResetHit`, `SpawnHit`, `SpawnTemplate`.
 - **`SideConfig.hit_effects`** replaces `state_change`. `Surface.is_target` is derived from `TargetHit`.
 - **`scripts/math/effects/effect_spec.gd`:** the registry of path effects keyed by def `type`, with each one's carrier requirement and builder. `Effect.to_spec()` replaces the `if/elif` chain.
-- **`SideSpec` / `SurfaceSpec`:** Resources with `build()` / `from_surface()` / `transformed()`.
+- **`SideSpec` / `SurfaceSpec`:** Resources with `build()` / `of()` / `mapped()`.
 - **`level_settings.gd`:** the legacy arrays become table rows that build `SurfaceSpec`s. The new `surface_specs` export allows any combination.
 
 ### 107.3 Landing

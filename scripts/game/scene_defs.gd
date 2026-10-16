@@ -72,36 +72,9 @@ static func describe_resolver(r: ConfigResolver, host_id: int = -1):
 static func describe_config(cfg: SideConfig, host_id: int = -1):
 	if cfg == null:
 		return null
-	var e: Effect = cfg.effect
-	var d := {"interactive": cfg.interactive}
-	if e == null:
-		d["type"] = "pass"
-	elif e is TerminalEffect:
-		d["type"] = "terminal"
-	elif e is CircleInversionEffect:
-		d["type"] = "inversion"
-	elif e is ReflectionEffect:
-		d["type"] = "reflection"
-	elif e is RigidMotionEffect:
-		d["type"] = "portal"
-		d["theta"] = e._theta
-		d["d"] = [e._d.x, e._d.y]
-	elif e is LineNormalProjection:
-		d["type"] = "line_normal_projection"
-		d["back"] = e._project_back
-	elif e is CircleNormalProjection:
-		d["type"] = "circle_normal_projection"
-		d["back"] = e._project_back
-	elif e is LineDirectionalProjection:
-		d["type"] = "line_directional_projection"
-		d["back"] = e._project_back
-		d["normal"] = [e._normal.x, e._normal.y]
-	elif e is CircleDirectionalProjection:
-		d["type"] = "circle_directional_projection"
-		d["back"] = e._project_back
-		d["normal"] = [e._normal.x, e._normal.y]
-	else:
-		d["type"] = "unknown:" + str(e.get_script().get_global_name())
+	# the path axis: the effect's own data form (EffectSpec is its inverse)
+	var d: Dictionary = cfg.effect.to_spec() if cfg.effect != null else {"type": "pass"}
+	d["interactive"] = cfg.interactive
 	# the hit axis: the in-shot flag writes, in order (GAME_SPEC 10.6)
 	var writes := cfg.in_shot_writes(host_id)
 	if not writes.is_empty():
