@@ -250,6 +250,9 @@ void BeamSolverPlanItem::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "surface_id"), "set_surface_id", "get_surface_id");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "left"), "set_left", "get_left");
 	ADD_PROPERTY(PropertyInfo(Variant::NIL, "hint", godot::PROPERTY_HINT_NONE, "", godot::PROPERTY_USAGE_DEFAULT | godot::PROPERTY_USAGE_NIL_IS_VARIANT), "set_hint", "get_hint");
+	ClassDB::bind_method(D_METHOD("get_span"), &BeamSolverPlanItem::get_span);
+	ClassDB::bind_method(D_METHOD("set_span", "v"), &BeamSolverPlanItem::set_span);
+	ADD_PROPERTY(PropertyInfo(Variant::NIL, "span", godot::PROPERTY_HINT_NONE, "", godot::PROPERTY_USAGE_DEFAULT | godot::PROPERTY_USAGE_NIL_IS_VARIANT), "set_span", "get_span");
 }
 
 Ref<BeamSolverPlanItem> BeamSolverPlanItem::make(int sid, bool p_left, const Variant &p_hint) {

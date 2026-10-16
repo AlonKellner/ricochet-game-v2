@@ -105,6 +105,10 @@ Hit effects and presence (Stage 107, GAME_SPEC 9.6 / 10.6):
 - A hit event records whether its side FIRED (`fired`): the state-change rule
   (PHYSICAL: fully blocked; PLANNED: the consumed entry), not ghosted. The
   side's hit effects fire exactly then, in shot or at landing.
+- Stage 108 (GAME_SPEC 9.7): a plan entry may name a PIECE of its surface --
+  a span {start, end, via} on the surface's carrier. PHYSICAL: a firing hit
+  matches the entry only inside the span (else the paths diverge); PLANNED:
+  the entry is consumed as before, its event on-segment only inside the span.
 - A surface may carry "presence": [{"key", "values": [flag_key...]}], all
   required ("DEFAULT" matches a missing key). An absent surface does not exist
   for the walk: its crossings are skipped when reached (presence is read under
@@ -519,6 +523,7 @@ class Walk:
     line: object = None                         # exact implicit line (a, b, c) of the current beam, or None
     plan_index: int = 0
     plan_matched: bool = True
+    plan_spans: list = None   # Stage 108: per entry, a piece's span (Seg) or None (the whole surface)
     cursor_done: bool = False
     count: int = 0
     events: list = field(default_factory=list)
@@ -831,8 +836,10 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 fires_state = bool(changes) and full_block
                 fired = full_block and not ghosted
                 if do in TRANSFORMATIVE or do in PROJECTIVE or fires_state:
-                    _plan_bookkeeping(walk, sid)
+                    _plan_bookkeeping(walk, sid, pt)
             elif walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side):
+                # a planned piece (Stage 108): a hit outside its span is off its segment
+                on_seg = on_seg and in_planned_span(walk, walk.plan_index, pt)
                 walk.plan_index += 1
                 eff = surf.effect(side, walk.flags)
                 do = eff if (eff in TRANSFORMATIVE or eff in PROJECTIVE) else None
@@ -961,9 +968,15 @@ def _project(walk: Walk, beam, t, surf: Surface, side, pt, pt_exact):
     return nb
 
 
-def _plan_bookkeeping(walk: Walk, sid):
+def in_planned_span(walk: Walk, i, pt):
+    """Stage 108: plan entry i names a piece -- pt must lie in its span."""
+    span = walk.plan_spans[i] if walk.plan_spans is not None and i < len(walk.plan_spans) else None
+    return span is None or on_segment(span, pt)
+
+
+def _plan_bookkeeping(walk: Walk, sid, pt):
     if walk.plan_index < len(walk.plan):
-        if sid == walk.plan[walk.plan_index][0]:
+        if sid == walk.plan[walk.plan_index][0] and in_planned_span(walk, walk.plan_index, pt):
             walk.plan_index += 1
         else:
             walk.plan_matched = False
@@ -1402,12 +1415,13 @@ def trace_physical_direction(surfaces, player, direction, plan=(), cursor=None, 
 
 
 def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="direction", flags=None,
-                         extra_known=(), proj_hits=None, beam=None, exact_aim=None):
+                         extra_known=(), proj_hits=None, beam=None, exact_aim=None, spans=None):
     """line: the initial beam's exact implicit line; "direction": `direction`
     is exact data; None: not exact. beam: the initial beam itself (a scene
     with a pre-transform: the circle through Q0); else the straight beam
     along `direction`, or the circle through Q0 tangent to it."""
     walk = Walk(hittable(surfaces), list(plan), cursor, mode, PHYSICAL)
+    walk.plan_spans = spans
     walk.flags = dict(flags or {})
     walk.flags_before = walk.flags
     walk.proj_hits = proj_hits or {}
@@ -1629,17 +1643,25 @@ def _aim(surfaces, player, cursor, plan, flags=None, hints=None):
     return d, None, known, (reversed_beam(b) if away else b), xe
 
 
-def planned(surfaces, player, cursor, plan, flags=None, hints=None):
+def plan_spans_of(spans):
+    """Plan entries' piece spans ({start, end, via} or None) as segments."""
+    if spans is None:
+        return None
+    # on_segment reads only the span's three points (the carrier is the surface's)
+    return [None if sp is None else Seg(-1, P(sp["start"]), P(sp["end"]), P(sp["via"])) for sp in spans]
+
+
+def planned(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
     """Planned trace = forward PLANNED-mode walk of the exact aim direction.
     hints: plan entry index -> the point the player clicked (settles forks)."""
     d, line, known, beam, xe = _aim(surfaces, player, cursor, plan, flags, hints)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
                                 extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
-                                beam=beam, exact_aim=xe)
+                                beam=beam, exact_aim=xe, spans=plan_spans_of(spans))
 
 
-def physical(surfaces, player, cursor, plan, flags=None, hints=None):
+def physical(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
     d, line, known, beam, xe = _aim(surfaces, player, cursor, plan, flags, hints)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PHYSICAL, line=line, flags=flags,
                                 extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
-                                beam=beam, exact_aim=xe)
+                                beam=beam, exact_aim=xe, spans=plan_spans_of(spans))

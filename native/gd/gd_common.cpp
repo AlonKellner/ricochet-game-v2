@@ -193,6 +193,14 @@ std::vector<rc::PlanItem> plan_from_items(const godot::Array &items) {
 				p.hint = rc::effects::F32Point{float(c.x), float(c.y)};
 			}
 		}
+		// Stage 108: a piece's span [sx, sy, ex, ey, vx, vy] (PackedFloat64Array), else none
+		const godot::Variant span = obj->get("span");
+		if (span.get_type() == godot::Variant::PACKED_FLOAT64_ARRAY) {
+			const godot::PackedFloat64Array a = span;
+			if (a.size() == 6) {
+				p.span = std::array<double, 6>{a[0], a[1], a[2], a[3], a[4], a[5]};
+			}
+		}
 		out.push_back(p);
 	}
 	return out;

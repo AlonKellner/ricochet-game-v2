@@ -34,7 +34,7 @@ static func fold(hits: Array, by_id: Dictionary, final_flags: Dictionary, genera
 			if eff is SpawnHit:
 				spawns[eff.channel] = [host, h, eff]
 	var gens := generations.duplicate()
-	var placed: Array = []
+	var landing: Array[String] = []
 	var channels := spawns.keys()
 	channels.sort()
 	for ch: String in channels:
@@ -43,11 +43,67 @@ static func fold(hits: Array, by_id: Dictionary, final_flags: Dictionary, genera
 		var n: int = int(gens.get(ch, 0)) + 1
 		gens[ch] = n
 		flags[Channel.key(ch)] = Channel.generation_value(n)
+		landing.append(ch)
+	# trimming (Stage 108, GAME_SPEC 10.6.3) cuts against what is present once
+	# the shot has landed: the world's present surfaces, then the groups this
+	# landing placed before (so two new spawns never cross either)
+	var cutters: Array[Segment] = []
+	for s: Surface in by_id.values():
+		if not s.pre_transform and s.present(flags):
+			cutters.append(s.segment)
+	var placed: Array = []
+	for ch in landing:
 		var rec: Array = spawns[ch]
 		var spec := place(rec[2].template, rec[0], rec[1])
-		spec.presence.append(Channel.group_presence(ch, n).to_def())
-		placed.append({"channel": ch, "generation": n, "spec": spec})
+		if rec[2].template.trim:
+			spec = trim(spec, cutters)
+		spec.presence.append(Channel.group_presence(ch, gens[ch]).to_def())
+		cutters.append(spec.segment())
+		placed.append({"channel": ch, "generation": gens[ch], "spec": spec})
 	return {"flags": flags, "placed": placed, "generations": gens}
+
+# A placed surface trimmed to the piece of it that contains its midpoint (its
+# via point; a full circle has none -- and a spawned circle is centred on the
+# hit point, all of it equally near -- so it keeps its longest arc), split by
+# its proper crossings with `cutters` (GAME_SPEC 10.6.3). No crossing: as it is.
+static func trim(spec: SurfaceSpec, cutters: Array[Segment]) -> SurfaceSpec:
+	if spec.is_portal():
+		return spec   # a portal pair is not split (GAME_SPEC 9.7)
+	var seg := spec.segment()
+	var cuts: Array = []
+	for c in cutters:
+		for x in Crossings.of(seg, c):
+			cuts.append([x["ta"], x["point"]])
+	if cuts.is_empty() or (seg.full and cuts.size() < 2):
+		return spec
+	cuts.sort_custom(func(x, y): return x[0] < y[0])
+	var carrier := seg.get_carrier()
+	var a := seg.start.coords
+	var b := seg.end.coords
+	if seg.full:
+		# the longest arc between consecutive cuts (cyclic)
+		var best := -1.0
+		for i in cuts.size():
+			var t0: float = cuts[i][0]
+			var t1: float = cuts[(i + 1) % cuts.size()][0] + (TAU if i + 1 == cuts.size() else 0.0)
+			if t1 - t0 > best:
+				best = t1 - t0
+				a = cuts[i][1]
+				b = cuts[(i + 1) % cuts.size()][1]
+	else:
+		var keep_t := Crossings.param(seg, seg.via.coords)
+		for x in cuts:
+			if x[0] <= keep_t:
+				a = x[1]
+			elif b == seg.end.coords:
+				b = x[1]
+	var out := spec.mapped(Transform2D.IDENTITY)
+	out.full_circle = false
+	out.start = a
+	out.end = b
+	out.via = Pieces._between(seg, carrier, a, b)
+	out.straight = carrier.is_line()
+	return out
 
 # A template placed at a hit on its host (GAME_SPEC 10.6.1).
 static func place(template: SpawnTemplate, host: Surface, hit: Dictionary) -> SurfaceSpec:

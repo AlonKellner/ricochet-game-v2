@@ -327,6 +327,7 @@ Dictionary TracePath::physical_hits() const {
 		h["side"] = s->hit_side;
 		h["on_segment"] = s->hit_on_segment;
 		h["has_continuation"] = i < steps.size() - 1;
+		h["point"] = s->end; // Stage 108: where (a planned piece checks it)
 		Array list = result[s->surface_id];
 		list.push_back(h);
 	}

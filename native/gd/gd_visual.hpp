@@ -59,6 +59,8 @@ public:
 	static godot::Ref<Segment> from_coords(const godot::Vector2 &s, const godot::Vector2 &e, const godot::Vector2 &v);
 	static godot::Ref<Segment> full_from_carrier(const godot::Ref<GeneralizedCircle> &carrier);
 	static godot::Ref<Segment> straight(const godot::Vector2 &s, const godot::Vector2 &e, const godot::Vector2 &v);
+	static godot::Ref<Segment> with_carrier(const godot::Vector2 &s, const godot::Vector2 &e, const godot::Vector2 &v,
+			const godot::Ref<GeneralizedCircle> &carrier);
 	static godot::Ref<GeneralizedCircle> derive_carrier(const godot::Vector2 &s, const godot::Vector2 &e, const godot::Vector2 &v);
 
 	rc::arc::SegGeom geom() const; // coordinates + the cached carrier

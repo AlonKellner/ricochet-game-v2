@@ -23,6 +23,17 @@ func _init(p_static: Array[Surface] = []) -> void:
 func initial_snapshot() -> Dictionary:
 	return _initial
 
+# The plannable pieces of the current surfaces (GAME_SPEC 9.7), built once per
+# surfaces array.
+var _pieces: Pieces = null
+var _pieces_of: Array = []
+
+func pieces() -> Pieces:
+	if _pieces == null or not is_same(_pieces_of, surfaces):
+		_pieces = Pieces.build(surfaces)
+		_pieces_of = surfaces
+	return _pieces
+
 func by_id() -> Dictionary:
 	var out := {}
 	for s in surfaces:

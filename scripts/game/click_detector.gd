@@ -13,31 +13,38 @@ var _last_cycle_index := -1
 # point on screen (`infinity_point`, Stage 101) it is clickable like a surface
 # (the nearest wins: {"infinity": true, "point": q, ...}); otherwise a cursor
 # within the tolerance inside the bounds' edge where no surface wins is it.
+# pieces (Stage 108, GAME_SPEC 9.7): when given, the click picks a piece of
+# its surface ({"piece": Pieces.Piece}); a surface without crossings is its
+# own single piece.
 func detect_click(cursor_pos: Vector2, surfaces: Array, game_state: GameState = null, accept: Callable = Callable(),
-		level_bounds: Rect2 = Rect2(), allow_infinity: bool = false, infinity_point = null) -> Dictionary:
+		level_bounds: Rect2 = Rect2(), allow_infinity: bool = false, infinity_point = null, pieces: Pieces = null) -> Dictionary:
 	var state := game_state if game_state != null else GameState.new()
 	var best_surface: Surface = null
 	var best_side: Side.Value = Side.Value.LEFT
 	var best_dist := INF
+	var best_piece = null
 
 	for surf in surfaces:
 		if surf.pre_transform:
 			continue
-		var dist := _distance_to_segment(cursor_pos, surf.segment)
-		if dist > CLICK_TOLERANCE:
-			continue
+		for p in (pieces.of(surf) if pieces != null else [null]):
+			var seg: Segment = p.segment if p != null else surf.segment
+			var dist := _distance_to_segment(cursor_pos, seg)
+			if dist > CLICK_TOLERANCE:
+				continue
 
-		var side: Side.Value = surf.segment.determine_side(cursor_pos)
-		var config: SideConfig = surf.active_side_config(side, state)
-		if config == null or not config.interactive:
-			continue
-		if accept.is_valid() and not accept.call(surf, side):
-			continue
+			var side: Side.Value = seg.determine_side(cursor_pos)
+			var config: SideConfig = surf.active_side_config(side, state)
+			if config == null or not config.interactive:
+				continue
+			if accept.is_valid() and not accept.call(surf, side):
+				continue
 
-		if dist < best_dist:
-			best_dist = dist
-			best_surface = surf
-			best_side = side
+			if dist < best_dist:
+				best_dist = dist
+				best_surface = surf
+				best_side = side
+				best_piece = p
 
 	if allow_infinity:
 		var on_screen := infinity_point is Vector2 and (not level_bounds.has_area() or level_bounds.has_point(infinity_point))
@@ -52,7 +59,10 @@ func detect_click(cursor_pos: Vector2, surfaces: Array, game_state: GameState = 
 	if best_surface == null:
 		return {}
 
-	return {"surface": best_surface, "side": best_side, "distance": best_dist}
+	var out := {"surface": best_surface, "side": best_side, "distance": best_dist}
+	if best_piece != null:
+		out["piece"] = best_piece
+	return out
 
 # Distance from `p` to the nearest edge of `b`, negative outside it.
 static func edge_distance(p: Vector2, b: Rect2) -> float:

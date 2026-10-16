@@ -11,6 +11,9 @@ extends Resource
 @export var orientation: SpawnFrame.Mode = SpawnFrame.Mode.CARRIER_TANGENT
 @export var mirror_with_side := false
 @export var offset := Vector2.ZERO
+# Stage 108 (GAME_SPEC 10.6.3): trimmed to the piece containing its midpoint,
+# split by what is present when it lands -- a spawned surface never crosses it
+@export var trim := true
 
 static func make(p_surface: SurfaceSpec, p_orientation: SpawnFrame.Mode, p_mirror := false, p_offset := Vector2.ZERO) -> SpawnTemplate:
 	var t := SpawnTemplate.new()

@@ -109,12 +109,17 @@ static func _check_no_intersections(surfaces: Array, verbose: bool = false) -> A
 				violations.append(msg)
 	return violations
 
-# --- No-intersection guard test ---
+# --- No piece crossings (Stage 108, GAME_SPEC 9.7) ---
+# Design surfaces may cross; their pieces may not: pieces of different design
+# surfaces meet only at shared ends (NO-PIECE-CROSSINGS).
 
-func test_no_intersecting_segments() -> void:
+func test_no_piece_crossings() -> void:
 	var all_scenes: Array[String] = []
 	all_scenes.append_array(SweepPlans.discover_scenes(TEST_LEVELS_DIR, ["combo_base.tscn"]))
 	all_scenes.append_array(SweepPlans.discover_scenes(PLAYGROUND_DIR, ["combo_base.tscn"]))
+	for dir in ["res://scenes/stage107/", "res://scenes/stage108/"]:
+		if DirAccess.dir_exists_absolute(dir):
+			all_scenes.append_array(SweepPlans.discover_scenes(dir, []))
 	assert_gt(all_scenes.size(), 0, "Should find scenes")
 
 	var all_violations: Array[String] = []
@@ -125,18 +130,26 @@ func test_no_intersecting_segments() -> void:
 		scene.gravity = Vector2.ZERO
 		add_child_autofree(scene)
 
-		if "surfaces" in scene:
-			var violations := _check_no_intersections(scene.surfaces)
-			for v in violations:
-				all_violations.append("[%s] %s" % [scene_path.get_file(), v])
+		if "world" in scene and scene.world != null:
+			var pieces: Pieces = scene.world.pieces()
+			var segs: Array = []
+			for s in scene.surfaces:
+				if s.pre_transform:
+					continue
+				for p: Pieces.Piece in pieces.of(s):
+					segs.append([s, p.segment])
+			for i in segs.size():
+				for j in range(i + 1, segs.size()):
+					if segs[i][0] != segs[j][0] and _segments_intersect(segs[i][1], segs[j][1]):
+						all_violations.append("[%s] pieces of %d and %d cross" % [scene_path.get_file(), segs[i][0].id, segs[j][0].id])
 
 	if all_violations.size() > 0:
-		var report := "Intersecting segments found (%d):\n" % all_violations.size()
+		var report := "Crossing pieces found (%d):\n" % all_violations.size()
 		for v in all_violations:
 			report += "  %s\n" % v
 		fail_test(report)
 	else:
-		pass_test("No intersecting segments in %d scenes" % all_scenes.size())
+		pass_test("No crossing pieces in %d scenes" % all_scenes.size())
 
 # --- Combo scene building ---
 

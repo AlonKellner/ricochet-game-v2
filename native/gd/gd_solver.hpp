@@ -46,6 +46,7 @@ public:
 	int surface_id = 0;
 	bool left = true;
 	godot::Variant hint; // Vector2 or null
+	godot::Variant span; // Stage 108: a piece's span (PackedFloat64Array [sx, sy, ex, ey, vx, vy]) or null
 
 	static godot::Ref<BeamSolverPlanItem> make(int sid, bool p_left, const godot::Variant &p_hint = godot::Variant());
 	int get_surface_id() const { return surface_id; }
@@ -54,6 +55,8 @@ public:
 	void set_left(bool v) { left = v; }
 	godot::Variant get_hint() const { return hint; }
 	void set_hint(const godot::Variant &v) { hint = v; }
+	godot::Variant get_span() const { return span; }
+	void set_span(const godot::Variant &v) { span = v; }
 };
 
 class BeamSolverEvent : public godot::RefCounted {

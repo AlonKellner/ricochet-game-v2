@@ -22,8 +22,13 @@ static func plan_of(j: Array) -> Array:
 	var out: Array = []
 	for e in j:
 		var c = e.get("click")
-		out.append(BeamSolverPlanItem.make(int(e["surface_id"]), e["side"] == "LEFT",
-			null if c == null else Vector2(c[0], c[1])))
+		var item := BeamSolverPlanItem.make(int(e["surface_id"]), e["side"] == "LEFT",
+			null if c == null else Vector2(c[0], c[1]))
+		var sp = e.get("span")
+		if sp != null:
+			# Stage 108: the entry names a piece
+			item.span = PackedFloat64Array([sp["start"][0], sp["start"][1], sp["end"][0], sp["end"][1], sp["via"][0], sp["via"][1]])
+		out.append(item)
 	return out
 
 # A fixture's scene at `ctx`, with the game's infinity switch (the fixtures

@@ -55,6 +55,9 @@ struct PlanItem {
 	int surface_id = 0;
 	bool left = true;
 	std::optional<effects::F32Point> hint; // where the player clicked (settles a fork)
+	// Stage 108 (GAME_SPEC 9.7): a piece of the surface -- its span (start x, y,
+	// end x, y, via x, y) on the surface's carrier; nullopt = the whole surface
+	std::optional<std::array<double, 6>> span;
 	// the infinity entry (no side): the beam wraps through infinity here
 	bool is_infinity() const { return surface_id == INFINITY_ID; }
 };
@@ -1639,9 +1642,22 @@ private:
 		return Classified{pt, on_seg, geom::side_left(surf.seg, pt, tang), full_block(scene, surf, pt, tang, on_seg, flags)};
 	}
 
-	static void plan_bookkeeping(Walk<N> &w, int sid) {
+	// Stage 108: a plan item naming a piece accepts only points inside its span.
+	static bool in_span(const PlanItem &item, const CN<N> &pt) {
+		if (!item.span) {
+			return true;
+		}
+		const std::array<double, 6> &a = *item.span;
+		Seg<N> sg;
+		sg.s = CN<N>{pt.re.like(a[0]), pt.re.like(a[1])};
+		sg.e = CN<N>{pt.re.like(a[2]), pt.re.like(a[3])};
+		sg.v = CN<N>{pt.re.like(a[4]), pt.re.like(a[5])};
+		return geom::on_segment(sg, pt);
+	}
+
+	static void plan_bookkeeping(Walk<N> &w, int sid, const CN<N> &pt) {
 		if (w.plan_index < int(w.plan.size())) {
-			if (sid == w.plan[size_t(w.plan_index)].surface_id) {
+			if (sid == w.plan[size_t(w.plan_index)].surface_id && in_span(w.plan[size_t(w.plan_index)], pt)) {
 				w.plan_index++;
 			} else {
 				w.plan_matched = false;
@@ -1813,14 +1829,22 @@ private:
 				}
 				const Classified cl = classify(*w.scene, *beam, t, *surf, rehit && fresh, cand.pt, w.flags);
 				const CN<N> pt = cl.pt;
-				const bool on_seg = cl.on_seg;
+				bool on_seg = cl.on_seg;
 				const bool left = cl.left;
 				const bool fb = cl.full_block;
 				const EffectType eff = surf->effect(left, w.flags);
 				const std::vector<StateChangeDef> &changes = surf->state_changes(left, w.flags);
 				const bool has_change = !changes.empty();
-				const bool plan_match = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].surface_id == surf->id
+				const bool plan_hit = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].surface_id == surf->id
 					&& w.plan[size_t(w.plan_index)].left == left;
+				// Stage 108: a planned piece -- physically, only a hit inside its span is
+				// the planned one; on the planned path the entry is consumed as before
+				// and its hit is off its segment outside the span
+				const bool in_piece = plan_hit && in_span(w.plan[size_t(w.plan_index)], pt);
+				const bool plan_match = w.mode == Mode::Physical ? in_piece : plan_hit;
+				if (w.mode != Mode::Physical && plan_hit && !in_piece) {
+					on_seg = false;
+				}
 				const EffectType plan_do = (plan_match && (is_transformative(eff) || is_projective(eff))) ? eff : EffectType::Pass;
 				const EffectType phys_do = fb ? eff : EffectType::Pass;
 				const bool plan_state = plan_match && has_change;
@@ -1838,7 +1862,7 @@ private:
 						diverged = true;
 					}
 					if (is_transformative(do_) || is_projective(do_) || fires_state) {
-						plan_bookkeeping(w, surf->id);
+						plan_bookkeeping(w, surf->id, pt);
 					}
 				} else {
 					if (plan_match) {

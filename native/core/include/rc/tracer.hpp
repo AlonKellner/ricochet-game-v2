@@ -299,6 +299,14 @@ private:
 				std::snprintf(buf, sizeof buf, "@%a,%a", double(p.hint->x), double(p.hint->y));
 				k += buf;
 			}
+			if (p.span) {
+				// Stage 108: a piece's span changes the trace (the anchor chain does not)
+				for (const double v : *p.span) {
+					char buf[32];
+					std::snprintf(buf, sizeof buf, "|%a", v);
+					k += buf;
+				}
+			}
 			k += ";";
 		}
 		return k;

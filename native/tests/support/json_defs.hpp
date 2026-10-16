@@ -67,6 +67,11 @@ inline std::vector<PlanItem> plan_from_json(const ojson &arr) {
 	for (const ojson &e : arr) {
 		PlanItem p; p.surface_id = e["surface_id"].get<int>(); p.left = e["side"].get<std::string>() == "LEFT";
 		if (e.contains("click") && !e["click"].is_null()) p.hint = effects::F32Point{float(e["click"][0].get<double>()), float(e["click"][1].get<double>())};
+		if (e.contains("span") && !e["span"].is_null()) {
+			const ojson &sp = e["span"];
+			p.span = std::array<double, 6>{sp["start"][0].get<double>(), sp["start"][1].get<double>(), sp["end"][0].get<double>(),
+				sp["end"][1].get<double>(), sp["via"][0].get<double>(), sp["via"][1].get<double>()};
+		}
 		out.push_back(p);
 	}
 	return out;
