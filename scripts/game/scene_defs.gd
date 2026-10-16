@@ -45,28 +45,31 @@ static func describe_surface(s: Surface) -> Dictionary:
 		"via": _v(s.segment.via.coords),
 		"full": s.segment.full,
 		"line": carrier.is_line(),
-		"left": null if s.resolver is CategoricalResolver else describe_config(s.active_side_config(Side.Value.LEFT, state)),
-		"right": null if s.resolver is CategoricalResolver else describe_config(s.active_side_config(Side.Value.RIGHT, state)),
+		"left": null if s.resolver is CategoricalResolver else describe_config(s.active_side_config(Side.Value.LEFT, state), s.id),
+		"right": null if s.resolver is CategoricalResolver else describe_config(s.active_side_config(Side.Value.RIGHT, state), s.id),
 		"is_target": s.is_target,
 		"player_solid": s.player_solid,
 	}
 	if s.pre_transform:
 		out["pre_transform"] = true
+	if not s.presence.is_empty():
+		out["presence"] = s.presence.map(func(c: PresenceCond): return c.to_def())
 	if s.resolver is CategoricalResolver:
-		out["resolver"] = describe_resolver(s.resolver)
+		out["resolver"] = describe_resolver(s.resolver, s.id)
 	return out
 
 # A categorical resolver as scene defs: {key, table: {flag_key: {left, right}}}
 # (null for a fixed surface).
-static func describe_resolver(r: ConfigResolver):
+static func describe_resolver(r: ConfigResolver, host_id: int = -1):
 	if not (r is CategoricalResolver):
 		return null
 	var table := {}
 	for k in r.table:
-		table[k] = {"left": describe_config(r.table[k][0]), "right": describe_config(r.table[k][1])}
+		table[k] = {"left": describe_config(r.table[k][0], host_id), "right": describe_config(r.table[k][1], host_id)}
 	return {"key": r.state_key, "table": table}
 
-static func describe_config(cfg: SideConfig):
+# host_id: the surface carrying the side (a TargetHit writes its id).
+static func describe_config(cfg: SideConfig, host_id: int = -1):
 	if cfg == null:
 		return null
 	var e: Effect = cfg.effect
@@ -99,8 +102,10 @@ static func describe_config(cfg: SideConfig):
 		d["normal"] = [e._normal.x, e._normal.y]
 	else:
 		d["type"] = "unknown:" + str(e.get_script().get_global_name())
-	if cfg.state_change != null:
-		d["state"] = cfg.state_change.to_def()
+	# the hit axis: the in-shot flag writes, in order (GAME_SPEC 10.6)
+	var writes := cfg.in_shot_writes(host_id)
+	if not writes.is_empty():
+		d["states"] = writes.map(func(w: StateChange): return w.to_def())
 	return d
 
 # The game Segment of each surface, by id (TraceHit.segment).

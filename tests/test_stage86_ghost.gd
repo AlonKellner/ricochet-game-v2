@@ -120,8 +120,8 @@ func test_ghost_steps_flagged():
 	assert_true(path.steps[1].with_type(StepTypes.Type.ALIGNED).ghost)
 
 func test_ghost_toggler_rendering():
-	var tog := SideConfig.new(null, true, StateChange.new("ghost", StateChange.Op.TOGGLE))
-	var flag := SideConfig.new(null, true, StateChange.new("open", StateChange.Op.TOGGLE))
+	var tog := SideConfig.new(null, true, [StateChangeHit.new("ghost", StateChange.Op.TOGGLE)])
+	var flag := SideConfig.new(null, true, [StateChangeHit.new("open", StateChange.Op.TOGGLE)])
 	assert_eq(SurfaceNode.config_color(tog), SurfaceNode.GHOST_TOGGLER_COLOR)
 	assert_eq(SurfaceNode.config_color(flag), SurfaceNode.FLAG_TOGGLER_COLOR)
 	assert_ne(SurfaceNode.GHOST_TOGGLER_COLOR, SurfaceNode.PASSTHROUGH_COLOR)
@@ -245,7 +245,7 @@ func test_click_and_hover_refuse_inside_ghost_stretch():
 # A click within reach of both a refused side and a toggler takes the toggler.
 func test_click_near_refused_side_takes_toggler():
 	Surface.reset_id_counter()
-	var tog := SideConfig.new(null, true, StateChange.new("ghost", StateChange.Op.TOGGLE))
+	var tog := SideConfig.new(null, true, [StateChangeHit.new("ghost", StateChange.Op.TOGGLE)])
 	var seg2 := Segment.from_coords(Vector2(10, -100), Vector2(10, 100), Vector2(10, 0))
 	var mir := SideConfig.new(ReflectionEffect.new(seg2.get_carrier()), true)
 	var s1 := Surface.new(Segment.from_coords(Vector2(0, -100), Vector2(0, 100), Vector2(0, 0)), tog, tog, false, false)

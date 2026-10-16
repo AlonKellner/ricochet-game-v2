@@ -7,8 +7,16 @@ var id: int
 var segment: Segment
 var _left_config: SideConfig
 var _right_config: SideConfig
-var is_target: bool
+# A target carries a TargetHit on a side (GAME_SPEC 10.6, 24); derived.
+var is_target: bool:
+	get:
+		for cfg in all_side_configs():
+			if cfg != null and cfg.first_hit(TargetHit) != null:
+				return true
+		return false
 var player_solid: bool
+# Stage 107: flag-gated existence, all required (GAME_SPEC 9.6); empty = always
+var presence: Array[PresenceCond] = []
 # Stage 101: part of the scene's pre-transform (a full inversion circle the
 # shot starts "after"): never hit, never clickable, not drawn as a surface; it
 # moves infinity before the shot
@@ -26,16 +34,39 @@ func _init(p_segment: Segment, p_left: SideConfig, p_right: SideConfig, p_is_tar
 	id = _next_id
 	_next_id += 1
 	segment = p_segment
+	if p_is_target:
+		p_left = _target_config(p_left)
+		p_right = _target_config(p_right)
 	_left_config = p_left
 	_right_config = p_right
 	resolver = FixedResolver.new(p_left, p_right)
-	is_target = p_is_target
 	player_solid = p_player_solid
 	_auto_link(Side.Value.LEFT, _left_config)
 	_auto_link(Side.Value.RIGHT, _right_config)
 
 func active_side_config(side: Side.Value, game_state: GameState) -> SideConfig:
 	return resolver.resolve(side, game_state)
+
+# Whether the surface exists under the flags (GAME_SPEC 9.6).
+func present(flags: Dictionary) -> bool:
+	return PresenceCond.all_hold(presence, flags)
+
+# Every side config the resolver can return (both sides; every table entry).
+func all_side_configs() -> Array[SideConfig]:
+	var out: Array[SideConfig] = []
+	if resolver is CategoricalResolver:
+		for k in resolver.table:
+			out.append(resolver.table[k][0])
+			out.append(resolver.table[k][1])
+	elif resolver is FixedResolver:
+		out.append(resolver.left)
+		out.append(resolver.right)
+	return out
+
+# A side config with a TargetHit (a pass side gets one too: a target
+# registers whatever its effect, GAME_SPEC 24.2).
+static func _target_config(cfg: SideConfig) -> SideConfig:
+	return (cfg if cfg != null else SideConfig.new()).with_hits([TargetHit.new()])
 
 func get_side_link(side: Side.Value) -> SideLink:
 	return _left_link if side == Side.Value.LEFT else _right_link
@@ -64,7 +95,10 @@ static func pre_transform_circle(center: Vector2, radius: float) -> Surface:
 # A surface whose side configs depend on the game state (a categorical
 # resolver). Self-links are for fixed sides only.
 static func with_resolver(p_segment: Segment, p_resolver: ConfigResolver, p_is_target: bool = false, p_player_solid: bool = true) -> Surface:
-	var s := Surface.new(p_segment, null, null, p_is_target, p_player_solid)
+	var s := Surface.new(p_segment, null, null, false, p_player_solid)
+	if p_is_target and p_resolver is CategoricalResolver:
+		for k in p_resolver.table:
+			p_resolver.table[k] = [_target_config(p_resolver.table[k][0]), _target_config(p_resolver.table[k][1])]
 	s.resolver = p_resolver
 	return s
 

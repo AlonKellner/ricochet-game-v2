@@ -431,7 +431,7 @@ func test_hover_projective_back_exits_same_side() -> void:
 
 func test_hover_toggler_passes_through() -> void:
 	var seg := Segment.from_coords(Vector2(400, 0), Vector2(400, 600), Vector2(400, 300))
-	var cfg := SideConfig.new(null, true, StateChange.new("ghost", StateChange.Op.TOGGLE))
+	var cfg := SideConfig.new(null, true, [StateChangeHit.new("ghost", StateChange.Op.TOGGLE)])
 	var surf := Surface.new(seg, cfg, cfg)
 	var ov := ChevronOverlayBuilder.build_hover_overlays(surf, Side.Value.LEFT)
 	assert_eq(_outgoing_sides(ov, surf.id), [Side.Value.RIGHT], "a toggler is passed through")

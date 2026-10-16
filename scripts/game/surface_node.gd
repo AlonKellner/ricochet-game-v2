@@ -10,13 +10,13 @@ const PASSTHROUGH_COLOR := Color.GRAY
 const GHOST_TOGGLER_COLOR := Color(0.75, 0.95, 1.0)
 const FLAG_TOGGLER_COLOR := Color(1.0, 0.85, 0.2)
 
-# A side's colour: its effect's, or a toggler's (a pass with a state change).
+# A side's colour: its effect's, or a toggler's (a pass with hit effects).
 static func config_color(config: SideConfig) -> Color:
 	if config == null:
 		return PASSTHROUGH_COLOR
 	if config.effect == null:
-		if config.state_change != null:
-			return GHOST_TOGGLER_COLOR if config.state_change.key == BeamScene.GHOST() else FLAG_TOGGLER_COLOR
+		if not config.hit_effects.is_empty():
+			return GHOST_TOGGLER_COLOR if config.writes_key(BeamScene.GHOST(), -1) else FLAG_TOGGLER_COLOR
 		return PASSTHROUGH_COLOR
 	return config.effect.get_display_color()
 

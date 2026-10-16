@@ -245,20 +245,24 @@
    "left": {
     "interactive": true,
     "type": "pass",
-    "state": {
-     "key": "open",
-     "op": "toggle",
-     "value": true
-    }
+    "states": [
+     {
+      "key": "open",
+      "op": "toggle",
+      "value": true
+     }
+    ]
    },
    "right": {
     "interactive": true,
     "type": "pass",
-    "state": {
-     "key": "open",
-     "op": "toggle",
-     "value": true
-    }
+    "states": [
+     {
+      "key": "open",
+      "op": "toggle",
+      "value": true
+     }
+    ]
    },
    "is_target": false,
    "player_solid": false
