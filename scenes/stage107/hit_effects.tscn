@@ -436,12 +436,12 @@ interactive = true
 [sub_resource type="Resource" id="Resource_d80e5"]
 script = ExtResource("2_52dkw")
 start = Vector2(1600, 200)
-end = Vector2(1600, 800)
-via = Vector2(1600, 500)
+end = Vector2(1600, 450)
+via = Vector2(1600, 325)
 left = SubResource("Resource_s71ww")
 right = SubResource("Resource_s71ww")
 
-[node name="Main" type="Node2D" unique_id=1289842740]
+[node name="Main" type="Node2D" unique_id=2019373828]
 script = ExtResource("1_2ehg7")
 room_rect = Rect2(200, 100, 1500, 800)
 inversion_left_arcs = PackedFloat64Array()
@@ -460,29 +460,29 @@ portal_arcs = PackedFloat64Array()
 pre_transform_inversions = PackedFloat64Array()
 surface_specs = Array[ExtResource("2_52dkw")]([SubResource("Resource_xpvyj"), SubResource("Resource_ip061"), SubResource("Resource_wrab3"), SubResource("Resource_s6qop"), SubResource("Resource_6fv06"), SubResource("Resource_0prht"), SubResource("Resource_nwq5k"), SubResource("Resource_1rsed"), SubResource("Resource_ptxj7"), SubResource("Resource_40l3r"), SubResource("Resource_d80e5")])
 
-[node name="Background" type="ColorRect" parent="." unique_id=944452593]
+[node name="Background" type="ColorRect" parent="." unique_id=1021937397]
 offset_right = 1920.0
 offset_bottom = 1080.0
 color = Color(0.1, 0.1, 0.1, 1)
 
-[node name="Player" type="CharacterBody2D" parent="." unique_id=1755095222 instance=ExtResource("5_oxxex")]
+[node name="Player" type="CharacterBody2D" parent="." unique_id=1352577629 instance=ExtResource("5_oxxex")]
 position = Vector2(300, 500)
 script = ExtResource("6_7wofs")
 
-[node name="Cursor" type="Node2D" parent="." unique_id=370565728]
+[node name="Cursor" type="Node2D" parent="." unique_id=307239414]
 script = ExtResource("7_fjdol")
 
-[node name="PathRenderer" type="Node2D" parent="." unique_id=437596939]
+[node name="PathRenderer" type="Node2D" parent="." unique_id=10822052]
 script = ExtResource("8_0ijrt")
 
-[node name="ArrowAnimator" type="Node2D" parent="." unique_id=1193366819]
+[node name="ArrowAnimator" type="Node2D" parent="." unique_id=61731843]
 z_index = 30
 script = ExtResource("9_egic3")
 
-[node name="GameManager" type="Node" parent="." unique_id=1313917907]
+[node name="GameManager" type="Node" parent="." unique_id=910146702]
 script = ExtResource("10_ia5x6")
 
-[node name="PlanHUD" type="Control" parent="." unique_id=888810378]
+[node name="PlanHUD" type="Control" parent="." unique_id=1773992187]
 layout_mode = 3
 anchors_preset = 0
 script = ExtResource("11_bxyph")

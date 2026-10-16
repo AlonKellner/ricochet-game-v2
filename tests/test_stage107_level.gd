@@ -56,8 +56,7 @@ func test_stage107_level_scripted_interactions():
 	_shoot(scene, Vector2(800, 690), Vector2(900, 690))
 	assert_true(gm.targets_hit.has(_at(scene, Vector2(1100, 620)).id), "the target registered")
 	assert_eq(gm.game_state.flags.get("open"), true, "the toggle")
-	assert_false(scene.world.group_of("g").is_empty() and gm.game_state.flags.get("chan:g") != "armed",
-		"spawned (or reset at landing by the deferred reset on the far wall)")
+	assert_eq(scene.world.group_of("g").size(), 1, "and the spawn (the shot passes under the deferred reset)")
 	assert_eq(gate.active_side_config(Side.Value.LEFT, gm.game_state).hit_effects.size(), 1, "the gate is now a spawning pass")
 	# the in-shot reset along the floor re-arms a: the mirror goes, host A is back
 	_shoot(scene, Vector2(350, 800), Vector2(450, 900))

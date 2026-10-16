@@ -184,7 +184,7 @@ The level contains:
 - **G (x = 1100, bottom):** target + toggle `open` + spawn.
 - **H (x = 1350):** blocks while closed, and spawns while `open`.
 - **The floor line (y = 850):** resets A–D in the shot.
-- **The right line (x = 1600):** resets E–H at landing (deferred).
+- **The right line (x = 1600, y 200–450):** resets E–H at landing (deferred). Shots below it miss it.
 1. **Preview.** The ghost outline shows where the surface will spawn, for each orientation mode, and moves with the aim.
 2. **Spawn.** Shooting through a pass spawner makes the surface appear when the arrow lands. The arrow itself ignored it, even when the new surface lies across its path.
 3. **Next shot.** The next shot interacts with the spawned surface: it reflects, blocks or teleports as configured. A spawned mirror can be planned.

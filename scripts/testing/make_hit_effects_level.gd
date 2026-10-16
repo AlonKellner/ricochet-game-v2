@@ -58,7 +58,7 @@ func _specs() -> Array[SurfaceSpec]:
 	var r1 := _side("pass", true, [{"kind": "reset", "channels": ["a", "b", "c", "d"], "deferred": false}])
 	out.append(_two(r1, Vector2(300, 850), Vector2(900, 850)))
 	var r2 := _side("pass", true, [{"kind": "reset", "channels": ["e", "f", "g", "h"], "deferred": true}])
-	out.append(_two(r2, Vector2(1600, 200), Vector2(1600, 800)))
+	out.append(_two(r2, Vector2(1600, 200), Vector2(1600, 450)))
 	return out
 
 func _init() -> void:
