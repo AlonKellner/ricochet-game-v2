@@ -21,6 +21,7 @@ var game_state := GameState.new()
 var targets_hit: Dictionary = {}
 var _checkpoints := CheckpointStack.new()
 var _pending_flags = null   # the fired shot's final flags, promoted when it lands
+var _pending_path: TracePath = null   # the fired shot's physical trace (its hit records land, Stage 107)
 var _hovered_node: Node2D = null
 var _hover_partner_node: Node2D = null
 # Stage 100: the per-frame work runs only when its inputs changed
@@ -244,6 +245,7 @@ func _try_fire() -> void:
 		return
 	path = pair.physical
 	_pending_flags = pair.final_flags
+	_pending_path = pair.physical
 
 	if _path_renderer:
 		_path_renderer.modulate.a = 0.25
@@ -267,13 +269,50 @@ func _on_flight_completed() -> void:
 	# trace's final flags become the game state (the checkpoint pushed at
 	# fire time keeps the previous one for undo)
 	if _pending_flags != null:
-		var kept: Dictionary = _pending_flags.duplicate(true)
+		# the hit effects' landing parts (Stage 107): deferred writes, spawns
+		var kept: Dictionary = _land(_pending_path, _pending_flags)
 		kept.erase(BeamScene.GHOST())   # ghost is per shot
 		game_state = GameState.new(kept)
+		targets_hit = targets_of(kept)
 		_pending_flags = null
+		_pending_path = null
+		_prune_plan()
 		_on_state_changed()
+		_refresh_ui()
 	if _path_renderer:
 		_path_renderer.modulate.a = 1.0
+
+# The world after a shot lands (GAME_SPEC 10.6): the landing fold over the
+# shot's hit records, applied to the world; the flags to promote.
+func _land(path: TracePath, flags: Dictionary) -> Dictionary:
+	var world: World = _world()
+	if world == null or path == null:
+		return flags.duplicate(true)
+	var landing := LandingFold.fold(path.hits, world.by_id(), flags, world.generations)
+	_level_settings.apply_world_change(world.land(landing))
+	return landing["flags"]
+
+func _world() -> World:
+	if _level_settings and "world" in _level_settings:
+		return _level_settings.world
+	return null
+
+# The targets registered in the flags (TargetHit writes "target:<id>").
+static func targets_of(flags: Dictionary) -> Dictionary:
+	var out := {}
+	for k in flags:
+		if String(k).begins_with(TargetHit.PREFIX) and flags[k] == true:
+			out[int(String(k).substr(TargetHit.PREFIX.length()))] = true
+	return out
+
+# Plan entries on surfaces no longer in the world, or absent under the game
+# state, are dropped (GAME_SPEC 10.6).
+func _prune_plan() -> void:
+	var world: World = _world()
+	if world == null:
+		return
+	var by_id := world.by_id()
+	plan.retain(func(id: int) -> bool: return by_id.has(id) and by_id[id].present(game_state.flags))
 
 func _try_undo() -> void:
 	var data := _checkpoints.pop()
@@ -290,13 +329,20 @@ func _try_reset() -> void:
 func _capture_checkpoint() -> CheckpointData:
 	var pos := _player.global_position if _player else Vector2.ZERO
 	var vel := _player.velocity if _player else Vector2.ZERO
-	return CheckpointData.new(pos, vel, game_state, plan.entries, targets_hit)
+	var world: World = _world()
+	return CheckpointData.new(pos, vel, game_state, plan.entries, targets_hit, world.snapshot() if world != null else null)
 
 func _restore_checkpoint(data: CheckpointData) -> void:
 	if _player:
 		_player.global_position = data.player_position
 		_player.velocity = data.player_velocity
 	game_state = data.game_state.copy()
+	var world: World = _world()
+	if world != null:
+		# a checkpoint taken before the level built its world (the initial one:
+		# children are ready before their parent) is the world as built
+		var snap: Dictionary = data.world_state if data.world_state != null else world.initial_snapshot()
+		_level_settings.apply_world_change(world.restore(snap))
 	_on_state_changed()
 	plan.restore_from(data.plan_entries)
 	targets_hit = data.targets_hit.duplicate()

@@ -44,6 +44,10 @@ extends Node2D
 @export var surface_specs: Array[SurfaceSpec] = []
 
 var surfaces: Array[Surface] = []
+# Stage 107: the surfaces over time (spawned groups join and leave); `surfaces`
+# is always world.surfaces once the level is built
+var world: World = null
+var _nodes := {}   # surface id -> its SurfaceNode
 
 func _ready() -> void:
 	if build_room:
@@ -84,14 +88,33 @@ func _ready() -> void:
 	edge.name = "EdgeOverlay"
 	add_child(edge)
 	edge.setup(level_bounds)
+	world = World.new(surfaces)
+	surfaces = world.surfaces
 
 func _add_surface(surf: Surface, prefix: String) -> void:
 	surfaces.append(surf)
+	_add_node(surf, prefix)
+
+func _add_node(surf: Surface, prefix: String) -> void:
 	var node := Node2D.new()
 	node.set_script(load("res://scripts/game/surface_node.gd"))
 	node.name = "%s_%d" % [prefix, surf.id]
 	add_child(node)
 	node.setup(surf)
+	_nodes[surf.id] = node
+
+# A structural change of the world (World.land / restore): spawned surfaces
+# get nodes, dropped ones lose theirs; `surfaces` is the world's new array.
+func apply_world_change(change: Dictionary) -> void:
+	for s: Surface in change["removed"]:
+		var node: Node = _nodes.get(s.id)
+		if node != null:
+			_nodes.erase(s.id)
+			remove_child(node)
+			node.queue_free()
+	for s: Surface in change["added"]:
+		_add_node(s, "Spawned")
+	surfaces = world.surfaces
 
 # A spec's surfaces: one, or a portal's pair.
 func _add_spec(spec: SurfaceSpec, prefix: String) -> void:

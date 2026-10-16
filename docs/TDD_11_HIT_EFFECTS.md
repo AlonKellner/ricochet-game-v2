@@ -11,7 +11,7 @@ Specification: GAME_SPEC §9.1, §9.6 (presence) and §10.6 (hit effects, spawn 
 | 107.0 | Spec (§9.6, §10.6), this document, the level-defs parity pin | Done |
 | 107.1 | Native + oracle: N1 a list of state changes per side, N2 presence, N3 hit provenance (`Event.fired`, `TracePath.hits`) | Done (K4 found on the way, pre-existing) |
 | 107.2 | Game layer: `HitEffect` classes, `EffectSpec` / `SideSpec` / `SurfaceSpec`, `level_settings` desugared | Done: every level bit-identical (parity pin), level_settings 259 -> 210 lines, any combination via `surface_specs` |
-| 107.3 | Landing: `SpawnFrame`, `SpawnTemplate`, `LandingFold`, `World`, game-manager wiring, checkpoints | Planned |
+| 107.3 | Landing: `SpawnFrame`, `SpawnTemplate`, `LandingFold`, `World`, game-manager wiring, checkpoints | Done |
 | 107.4 | Visuals (hit-effect markers, absent outlines, spawn preview), `hit_effects.tscn`, interactive tests | Planned |
 
 **Regression Test Policy:** as in TDD_10. Before every commit:

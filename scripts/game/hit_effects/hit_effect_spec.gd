@@ -14,6 +14,8 @@ static func build(spec: Dictionary) -> HitEffect:
 			return TargetHit.new(deferred)
 		"reset":
 			return ResetHit.new(PackedStringArray(spec.get("channels", [])), deferred)
+		"spawn":
+			return SpawnHit.new(spec.get("channel", ""), spec.get("template"), deferred)
 	push_error("HitEffectSpec.build: unknown hit effect kind '%s'" % spec.get("kind", ""))
 	return null
 

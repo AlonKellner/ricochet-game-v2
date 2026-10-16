@@ -80,8 +80,25 @@ func build() -> Array[Surface]:
 		var r := right.build(seg.get_carrier()) if right != null else null
 		out = [Surface.new(seg, l, r, false, player_solid)]
 	var conds := presence_conds()
+	# a host exists while every channel it spawns into is armed (GAME_SPEC 10.6)
+	for ch in spawn_channels():
+		conds.append(Channel.host_presence(ch))
 	for s in out:
 		s.presence.assign(conds)
+	return out
+
+# The channels the surface's sides spawn into (every table entry included).
+func spawn_channels() -> PackedStringArray:
+	var out := PackedStringArray()
+	var sides: Array = [left, right]
+	for k in resolver_table:
+		sides.append_array(resolver_table[k])
+	for s: SideSpec in sides:
+		if s == null:
+			continue
+		for h in s.hits:
+			if h.get("kind", "") == "spawn" and not out.has(h["channel"]):
+				out.append(h["channel"])
 	return out
 
 # A portal (GAME_SPEC 10.2): the pair A -> B and its inverse, linked side to side.

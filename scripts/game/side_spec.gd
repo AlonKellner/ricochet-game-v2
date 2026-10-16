@@ -31,6 +31,13 @@ func validate(carrier_is_line: bool) -> Array[String]:
 	for h in hits:
 		if HitEffectSpec.build(h) == null:
 			out.append("unknown hit effect %s" % str(h))
+		elif h.get("kind", "") == "spawn":
+			if String(h.get("channel", "")).is_empty():
+				out.append("a spawn needs a channel")
+			if h.get("template") == null:
+				out.append("a spawn needs a template")
+			else:
+				out.append_array(h["template"].validate())
 	if effect.get("type", "pass") == "pass" and hits.is_empty() and interactive:
 		out.append("a pass side without hit effects has nothing to plan (GAME_SPEC 9.1)")
 	return out

@@ -810,13 +810,13 @@ The sequence:
 A `SpawnTemplate` is a surface description (geometry plus both sides) in a **local frame**, plus an orientation mode. At the firing hit:
 - **origin:** the hit point.
 - **u (the first local axis):** chosen by the mode.
-- **v (the second axis):** `u` rotated by +90°, flipped on a RIGHT-side hit if `mirror_with_side` is set.
+- **v (the second axis):** `u` rotated by +90°, i.e. `(x, y) → (−y, x)`, flipped on a RIGHT-side hit if `mirror_with_side` is set.
 
 | Mode | u |
 |---|---|
 | `BEAM_TANGENT` | the incoming beam's travel direction at the hit |
-| `BEAM_NORMAL` | the incoming travel direction rotated by +90° |
-| `CARRIER_TANGENT` | the host carrier's tangent at the hit, oriented start → end along the segment (counter-clockwise on screen for a full circle) |
+| `BEAM_NORMAL` | the incoming travel direction rotated by +90°, `(x, y) → (−y, x)` |
+| `CARRIER_TANGENT` | the host carrier's tangent at the hit, oriented along the segment (start → via → end; a full circle by the same three points) |
 | `CARRIER_NORMAL` | the host carrier's normal at the hit, pointing toward the side the beam came from |
 | `BEAM_REFLECTED` | the incoming direction mirrored in the carrier tangent |
 | `WORLD` | +x (position only) |
