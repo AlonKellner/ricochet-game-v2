@@ -1,10 +1,10 @@
 extends GutTest
 
-# Stage 108: the interactive crossing level (scenes/stage108/crossings.tscn,
+# Stage 108: the interactive crossing level (scenes/test_levels/crossings.tscn,
 # made by scripts/testing/make_crossings_level.gd) -- the pieces it builds,
 # a planned piece, a trimmed spawn (its sweep: test_stage108_level_sweep.gd).
 
-const LEVEL := "res://scenes/stage108/crossings.tscn"
+const LEVEL := "res://scenes/test_levels/crossings.tscn"
 
 func _level() -> Node:
 	Surface.reset_id_counter()

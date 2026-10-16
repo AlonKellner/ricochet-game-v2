@@ -117,9 +117,6 @@ func test_no_piece_crossings() -> void:
 	var all_scenes: Array[String] = []
 	all_scenes.append_array(SweepPlans.discover_scenes(TEST_LEVELS_DIR, ["combo_base.tscn"]))
 	all_scenes.append_array(SweepPlans.discover_scenes(PLAYGROUND_DIR, ["combo_base.tscn"]))
-	for dir in ["res://scenes/stage107/", "res://scenes/stage108/"]:
-		if DirAccess.dir_exists_absolute(dir):
-			all_scenes.append_array(SweepPlans.discover_scenes(dir, []))
 	assert_gt(all_scenes.size(), 0, "Should find scenes")
 
 	var all_violations: Array[String] = []

@@ -6,7 +6,7 @@ planned and physical traces (trace2 semantics), verified stable at double
 precision.
 
 Usage:
-  docs/research/.venv/bin/python docs/research/oracle/gen_scene_corpus.py [--per-scene N] [--seed S]
+  docs/research/.venv/bin/python docs/research/oracle/gen_scene_corpus.py [--per-scene N] [--seed S] [--scenes NAME...]
 Writes bench/scenes_corpus/{scenarios,expected}/<scene>__NN.json.
 """
 import argparse
@@ -99,6 +99,8 @@ def main():
     ap.add_argument("--per-scene", type=int, default=12)
     ap.add_argument("--seed", type=int, default=81)
     ap.add_argument("--dps", type=int, default=120)
+    ap.add_argument("--scenes", nargs="*", default=None,
+                    help="only these dumps (names like test_levels__crossings); the others' files stay as they are")
     args = ap.parse_args()
     mp.mp.dps = args.dps
     rng = random.Random(args.seed)
@@ -109,6 +111,8 @@ def main():
         dj = json.load(open(dump))
         surfs = dj["surfaces"]
         name = os.path.basename(dump).replace(".surfaces.json", "")
+        if args.scenes is not None and name not in args.scenes:
+            continue
         if not surfs or not scene_ok(surfs):
             continue
         pl_choices = plannable(surfs)

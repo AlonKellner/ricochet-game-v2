@@ -13,6 +13,7 @@ order (portal pairs: source then target), screen bounds, pass-through lines.
 from __future__ import annotations
 
 import math
+import os
 import re
 
 import numpy as np
@@ -158,11 +159,11 @@ def _cfg(t, interactive, **kw):
 PASS0 = {"type": "pass", "interactive": False}
 
 
-def build_surfaces(props):
+def build_surfaces(props, subs=None):
     out = []
 
     def add(s, e, via, left, right, full=False, is_target=False, player_solid=True, line=None, circle=None,
-            resolver=None, pre_transform=False):
+            resolver=None, pre_transform=False, presence=None):
         if line is None:
             line = False if full else derive_is_line(s, e, via)
         d = {
@@ -173,6 +174,8 @@ def build_surfaces(props):
         }
         if pre_transform:
             d["pre_transform"] = True
+        if presence:
+            d["presence"] = presence
         if resolver is not None:
             d["resolver"] = resolver
         out.append(d)
@@ -278,6 +281,10 @@ def build_surfaces(props):
             resolver={"key": key, "table": {"true": {"left": refl, "right": refl}, "DEFAULT": {"left": off, "right": off}}})
     for v in lines("passthrough_lines"):
         add(*seg_from_v4(v), PASS0, PASS0, player_solid=False)
+    # surfaces as data (Stage 107): LevelSettings.surface_specs
+    if "surface_specs" in props and subs is not None:
+        for ref in _parse_value(props["surface_specs"]):
+            build_spec(subs, _res(subs, ref), add, lambda: len(out) + 1)
     # the pre-transform (Stage 101): full inversion circles, never hit
     for a in arcs("pre_transform_inversions", 3):
         s, e, v = full_circle_points(*a)
@@ -291,4 +298,253 @@ def import_scene(path):
         text = f.read()
     if "level_settings.gd" not in text:
         return None
-    return build_surfaces(parse_root_properties(text))
+    return build_surfaces(parse_root_properties(text), _resources(text))
+
+
+# ---------------------------------------------------------------- surface specs (Stage 107, 108)
+#
+# LevelSettings.surface_specs: SurfaceSpec / SideSpec / SpawnTemplate
+# resources stored as [sub_resource] blocks. Replicates SurfaceSpec.build and
+# SceneDefs.describe_surface (hit effects compiled to in-shot writes, presence,
+# hosts' channel presence, portal pairs).
+
+class _VariantParser:
+    """Godot's text Variant syntax: dicts, arrays, typed arrays, constructors
+    (Vector2, SubResource, ExtResource, Packed*), strings, numbers, booleans."""
+
+    def __init__(self, text):
+        self.s = text
+        self.i = 0
+
+    def _ws(self):
+        while self.i < len(self.s) and self.s[self.i] in " \t\r\n,":
+            self.i += 1
+
+    def value(self):
+        self._ws()
+        c = self.s[self.i]
+        if c == "{":
+            self.i += 1
+            out = {}
+            while True:
+                self._ws()
+                if self.s[self.i] == "}":
+                    self.i += 1
+                    return out
+                k = self.value()
+                self._ws()
+                assert self.s[self.i] == ":", self.s[self.i:self.i + 20]
+                self.i += 1
+                out[k] = self.value()
+        if c == "[":
+            self.i += 1
+            out = []
+            while True:
+                self._ws()
+                if self.s[self.i] == "]":
+                    self.i += 1
+                    return out
+                out.append(self.value())
+        if c == '"':
+            j = self.i + 1
+            buf = []
+            while self.s[j] != '"':
+                if self.s[j] == "\\":
+                    j += 1
+                buf.append(self.s[j])
+                j += 1
+            self.i = j + 1
+            return "".join(buf)
+        m = re.match(_NUM, self.s[self.i:])
+        if m and (c.isdigit() or c in "-+."):
+            self.i += m.end()
+            t = m.group(0)
+            return float(t) if any(ch in t for ch in ".eE") else int(t)
+        m = re.match(r"[A-Za-z_][A-Za-z_0-9]*", self.s[self.i:])
+        name = m.group(0)
+        self.i += m.end()
+        if name in ("true", "false"):
+            return name == "true"
+        if name == "null":
+            return None
+        self._ws()
+        if name == "Array" and self.s[self.i] == "[":
+            self.i += 1
+            self.value()          # the element type
+            self._ws()
+            assert self.s[self.i] == "]"
+            self.i += 1
+            self._ws()
+        if self.s[self.i] != "(":
+            return ("Type", name)   # a bare type name (Array[Dictionary])
+        self.i += 1
+        args = []
+        while True:
+            self._ws()
+            if self.s[self.i] == ")":
+                self.i += 1
+                break
+            args.append(self.value())
+        if name == "Array":
+            return args[0] if args else []
+        if name == "Vector2":
+            return (f32(args[0]), f32(args[1]))
+        if name in ("SubResource", "ExtResource"):
+            return (name, args[0])
+        return (name, args)
+
+
+def _parse_value(text):
+    return _VariantParser(text).value()
+
+
+def _sections(text):
+    """[(header, {property: raw value text})] in file order."""
+    out = []
+    head, props, key, buf = None, {}, None, []
+
+    def flush():
+        if key is not None:
+            props[key] = "\n".join(buf)
+
+    for line in text.splitlines():
+        if line.startswith("["):
+            flush()
+            if head is not None:
+                out.append((head, props))
+            head, props, key, buf = line, {}, None, []
+            continue
+        m = re.match(r"^([A-Za-z_][A-Za-z_0-9/]*) = (.*)$", line)
+        if m:
+            flush()
+            key, buf = m.group(1), [m.group(2)]
+        elif key is not None:
+            buf.append(line)
+    flush()
+    if head is not None:
+        out.append((head, props))
+    return out
+
+
+def _resources(text):
+    """id -> (script basename, {property: parsed value}) of every sub_resource."""
+    ext = {}
+    subs = {}
+    for head, props in _sections(text):
+        m = re.match(r'\[ext_resource [^\]]*path="([^"]+)"[^\]]*id="([^"]+)"', head)
+        if m:
+            ext[m.group(2)] = m.group(1)
+            continue
+        m = re.match(r'\[sub_resource [^\]]*id="([^"]+)"', head)
+        if m:
+            vals = {k: _parse_value(v) for k, v in props.items()}
+            script = vals.pop("script", None)
+            subs[m.group(1)] = (os.path.basename(ext.get(script[1], "")) if script else "", vals)
+    return subs
+
+
+SPEC_DEFAULTS = {
+    "surface_spec.gd": {"start": (0.0, 0.0), "end": (0.0, 0.0), "via": (0.0, 0.0), "full_circle": False,
+                        "straight": False, "center": (0.0, 0.0), "radius": 0.0, "left": None, "right": None,
+                        "resolver_key": "", "resolver_table": {}, "presence": [], "player_solid": False},
+    "side_spec.gd": {"effect": {"type": "pass"}, "hits": [], "interactive": False},
+}
+
+
+def _res(subs, ref):
+    """The properties of a SubResource reference, defaults filled in."""
+    if ref is None:
+        return None
+    script, vals = subs[ref[1]]
+    out = dict(SPEC_DEFAULTS.get(script, {}))
+    out.update(vals)
+    return out
+
+
+def _effect_def(e, pair=None, theta=None, d=None):
+    t = e.get("type", "pass")
+    if t in ("pass", "terminal", "reflection", "inversion"):
+        return {"type": t}
+    if t in ("line_normal_projection", "circle_normal_projection"):
+        return {"type": t, "back": bool(e.get("back", False))}
+    if t in ("line_directional_projection", "circle_directional_projection"):
+        n = e["normal"]
+        return {"type": t, "back": bool(e.get("back", False)), "normal": list(v2_normalized(v2(n[0], n[1])))}
+    assert t == "portal"
+    return {"type": "portal", "theta": theta, "d": d, "pair": pair}
+
+
+def _writes(hits, host_id):
+    """A side's in-shot writes, in order (HitEffect.in_shot_writes)."""
+    out = []
+    for h in hits:
+        if h.get("deferred", False):
+            continue
+        k = h.get("kind")
+        if k == "state":
+            tog = h.get("op", "set") == "toggle"
+            out.append({"key": h["key"], "op": "toggle" if tog else "set", "value": True if tog else h.get("value", True)})
+        elif k == "target":
+            out.append({"key": "target:%d" % host_id, "op": "set", "value": True})
+        elif k == "reset":
+            out += [{"key": "chan:" + c, "op": "set", "value": "armed"} for c in h.get("channels", [])]
+        elif k == "spawn":
+            out.append({"key": "chan:" + h["channel"], "op": "set", "value": "pending"})
+    return out
+
+
+def _side_def(subs, side, host_id, **portal):
+    if side is None:
+        return None
+    d = _effect_def(side["effect"], **portal)
+    d["interactive"] = bool(side["interactive"])
+    w = _writes(side["hits"], host_id)
+    if w:
+        d["states"] = w
+    return d
+
+
+def build_spec(subs, spec, add, next_id):
+    """The defs of one SurfaceSpec (two for a portal), through add(...)."""
+    sides = [spec["left"], spec["right"]] + [r for pair in spec["resolver_table"].values() for r in pair]
+    sides = [_res(subs, r) for r in sides]
+    channels = []
+    for sd in sides:
+        for h in (sd["hits"] if sd else []):
+            if h.get("kind") == "spawn" and h["channel"] not in channels:
+                channels.append(h["channel"])
+    presence = [{"key": c["key"], "values": list(c["values"])} for c in spec["presence"]]
+    presence += [{"key": "chan:" + c, "values": ["DEFAULT", "armed"]} for c in channels]
+    targets = any(h.get("kind") == "target" for sd in sides if sd for h in sd["hits"])
+    if spec["full_circle"]:
+        c, r = spec["center"], spec["radius"]
+        s, e, v = full_circle_points(c[0], c[1], r)
+        geo = dict(s=s, e=e, via=v, full=True, circle=full_circle_carrier(c[0], c[1], r))
+    else:
+        s, e, v = spec["start"], spec["end"], spec["via"]
+        geo = dict(s=s, e=e, via=v, line=True if spec["straight"] else None)
+    left, right = _res(subs, spec["left"]), _res(subs, spec["right"])
+    hid = next_id()
+    extra = dict(player_solid=bool(spec["player_solid"]), is_target=targets, presence=presence or None)
+    if left is not None and left["effect"].get("type") == "portal":
+        e0 = left["effect"]
+        theta, dd = float(e0["theta"]), e0["d"]
+        apply, inv_d = portal_transform(theta, (dd[0], dd[1]))
+        ps = dict(pair=hid + 1, theta=theta, d=[f32(dd[0]), f32(dd[1])])
+        add(geo["s"], geo["e"], geo["via"], _side_def(subs, left, hid, **ps), _side_def(subs, right or left, hid, **ps),
+            **{k: geo[k] for k in geo if k not in ("s", "e", "via")}, **extra)
+        pt = dict(pair=hid, theta=-theta, d=list(inv_d))
+        add(apply(geo["s"]), apply(geo["e"]), apply(geo["via"]), _side_def(subs, left, hid + 1, **pt),
+            _side_def(subs, right or left, hid + 1, **pt), line=True if derive_is_line(geo["s"], geo["e"], geo["via"]) else None,
+            **extra)
+        return
+    resolver = None
+    if spec["resolver_table"]:
+        resolver = {"key": spec["resolver_key"], "table": {
+            k: {"left": _side_def(subs, _res(subs, pair[0]), hid), "right": _side_def(subs, _res(subs, pair[1]), hid)}
+            for k, pair in spec["resolver_table"].items()}}
+        add(geo["s"], geo["e"], geo["via"], None, None, resolver=resolver,
+            **{k: geo[k] for k in geo if k not in ("s", "e", "via")}, **extra)
+        return
+    add(geo["s"], geo["e"], geo["via"], _side_def(subs, left, hid), _side_def(subs, right, hid),
+        **{k: geo[k] for k in geo if k not in ("s", "e", "via")}, **extra)

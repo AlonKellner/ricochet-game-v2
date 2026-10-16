@@ -4,9 +4,9 @@ extends SceneTree
 # placement mode, a portal host, a shared channel, a combined side, a
 # categorical host, an in-shot and a deferred reset) from surface specs.
 #   godot --headless --path . -s res://scripts/testing/make_hit_effects_level.gd
-# Writes res://scenes/stage107/hit_effects.tscn.
+# Writes res://scenes/test_levels/hit_effects.tscn.
 
-const OUT := "res://scenes/stage107/hit_effects.tscn"
+const OUT := "res://scenes/test_levels/hit_effects.tscn"
 const M := SpawnFrame.Mode
 
 func _side(type := "pass", interactive := false, hits: Array = [], params := {}) -> SideSpec:

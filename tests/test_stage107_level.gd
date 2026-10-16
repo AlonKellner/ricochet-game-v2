@@ -1,11 +1,11 @@
 extends GutTest
 
-# Stage 107: the interactive level (scenes/stage107/hit_effects.tscn, made by
+# Stage 107: the interactive level (scenes/test_levels/hit_effects.tscn, made by
 # scripts/testing/make_hit_effects_level.gd) loads, builds every spec, plays
 # its scripted interactions, and passes the invariant sweep -- as built and
 # after spawns landed (presence-gated groups and spent hosts in the scene).
 
-const LEVEL := "res://scenes/stage107/hit_effects.tscn"
+const LEVEL := "res://scenes/test_levels/hit_effects.tscn"
 
 func _level() -> Node:
 	Surface.reset_id_counter()

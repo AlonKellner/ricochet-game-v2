@@ -3,9 +3,9 @@ extends SceneTree
 # Headless: writes the Stage 108 interactive level (crossing design surfaces
 # and their pieces, a spawner whose spawns get trimmed) from surface specs.
 #   godot --headless --path . -s res://scripts/testing/make_crossings_level.gd
-# Writes res://scenes/stage108/crossings.tscn.
+# Writes res://scenes/test_levels/crossings.tscn.
 
-const OUT := "res://scenes/stage108/crossings.tscn"
+const OUT := "res://scenes/test_levels/crossings.tscn"
 const M := SpawnFrame.Mode
 
 func _side(type := "pass", interactive := false, hits: Array = []) -> SideSpec:

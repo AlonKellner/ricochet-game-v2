@@ -1,0 +1,98 @@
+{
+ "planned": [
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "986.5678100585937500000000000000000000000",
+   "y": "667.5486450195312500000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 13,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1000.000000000000000000000000000000000000",
+   "y": "706.7980481471722516588496875617288411599"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 19,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1049.007517668789162030206348160800551820",
+   "y": "850.0000000000000000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 3,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1066.118847868797686326883859260729134043",
+   "y": "900.0000000000000000000000000000000000000"
+  }
+ ],
+ "physical": [
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "986.5678100585937500000000000000000000000",
+   "y": "667.5486450195312500000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 13,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1000.000000000000000000000000000000000000",
+   "y": "706.7980481471722516588496875617288411599"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 19,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1049.007517668789162030206348160800551820",
+   "y": "850.0000000000000000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 3,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1066.118847868797686326883859260729134043",
+   "y": "900.0000000000000000000000000000000000000"
+  }
+ ],
+ "planned_targets": [],
+ "physical_targets": [],
+ "name": "test_levels__hit_effects__10",
+ "dps": 120
+}

@@ -109,6 +109,9 @@ Hit effects and presence (Stage 107, GAME_SPEC 9.6 / 10.6):
   a span {start, end, via} on the surface's carrier. PHYSICAL: a firing hit
   matches the entry only inside the span (else the paths diverge); PLANNED:
   the entry is consumed as before, its event on-segment only inside the span.
+- Surfaces on exactly the same carrier (K6, Stage 109) are crossed at the same
+  points: their roots are computed once per loop and shared, so simultaneous
+  crossings tie exactly and the id breaks the tie (GAME_SPEC 9.3).
 - A surface may carry "presence": [{"key", "values": [flag_key...]}], all
   required ("DEFAULT" matches a missing key). An absent surface does not exist
   for the walk: its crossings are skipped when reached (presence is read under
@@ -336,6 +339,28 @@ def scene_from_json(surfaces):
     return [surface_from_json(d) for d in surfaces]
 
 
+def same_carrier(a: Surface, b: Surface):
+    """Exact: two surfaces lie on one carrier (K6, Stage 109)."""
+    sa, sb = a.seg, b.seg
+    if sa.kind != sb.kind:
+        return False
+    if sa.kind == "line":
+        S, E = FC(sa.S), FC(sa.E)
+        D = _sub(E, S)
+        return _cross(D, _sub(FC(sb.S), S)) == 0 and _cross(D, _sub(FC(sb.E), S)) == 0
+    n1x, n1y, w1, r1 = _center_h(sa)
+    n2x, n2y, w2, r2 = _center_h(sb)
+    return n1x * w2 == n2x * w1 and n1y * w2 == n2y * w1 and r1 == r2
+
+
+def carrier_groups(surfaces):
+    """surface id -> the first (lowest) id of the surfaces on exactly its carrier."""
+    out = {}
+    for i, s in enumerate(surfaces):
+        out[s.id] = next((r.id for r in surfaces[:i] if same_carrier(r, s)), s.id)
+    return out
+
+
 def hittable(surfaces):
     """The surfaces a beam can meet (the pre-transform's are not)."""
     return [s for s in surfaces if not s.pre_transform]
@@ -524,6 +549,7 @@ class Walk:
     plan_index: int = 0
     plan_matched: bool = True
     plan_spans: list = None   # Stage 108: per entry, a piece's span (Seg) or None (the whole surface)
+    carrier_groups: dict = None   # K6: surface id -> the lowest id on exactly the same carrier
     cursor_done: bool = False
     count: int = 0
     events: list = field(default_factory=list)
@@ -699,22 +725,36 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
         if POLE_HOOK is not None:
             POLE_HOOK(walk, beam)       # tests: the record beside each beam
         cands = []
+        # surfaces on one carrier (exactly) are crossed at the same points: their
+        # roots are computed once per loop and shared (K6, Stage 109) -- on the
+        # departing member's own segment when the beam departs that carrier
+        if walk.carrier_groups is None:
+            walk.carrier_groups = carrier_groups(walk.surfaces)
+        groups = walk.carrier_groups
+        dep_key = groups.get(depart) if depart is not None else None
+        shared = {}
         for s in walk.surfaces:
             if walk.line is not None and s.seg.kind != "line" and _tangent(walk.line, s.seg):
                 continue        # a tangent touch is not a crossing (exact)
             if walk.pole is not None and _pole_tangent(walk.pole, s.seg):
                 continue        # tangent at the frame's infinity point (exact, Stage 105)
-            if fresh:
-                rs = roots(beam, s, depart == s.id)
-                rs = [t for t in rs if t != 0] if depart == s.id else [t for t in rs]
-            else:
-                rs = roots(beam, s, False)
-                if depart == s.id and rs:
-                    # a resumed beam departs this carrier at t0: its root nearest t0
-                    # is the departure (identified, not compared for equality: the
-                    # roots are recomputed on the restored beam and can land an ulp
-                    # off t0; Stage 106)
-                    rs.remove(min(rs, key=lambda t: abs(t - t0)))
+            key = groups[s.id]
+            if key not in shared:
+                departing = dep_key == key
+                src = by_id[depart] if departing else s
+                if fresh:
+                    rs = roots(beam, src, departing)
+                    rs = [t for t in rs if t != 0] if departing else [t for t in rs]
+                else:
+                    rs = roots(beam, src, False)
+                    if departing and rs:
+                        # a resumed beam departs this carrier at t0: its root nearest t0
+                        # is the departure (identified, not compared for equality: the
+                        # roots are recomputed on the restored beam and can land an ulp
+                        # off t0; Stage 106)
+                        rs.remove(min(rs, key=lambda t: abs(t - t0)))
+                shared[key] = rs
+            rs = shared[key]
             for t in rs:
                 cands.append((sort_key(t, t0), 1, s.id, t, False))
         # the cursor is on the beam only on the planned path (its final
