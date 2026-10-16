@@ -266,6 +266,7 @@ public:
 				path.cursor_index = int(path.steps.size());
 			}
 			if (e.kind == EventKind::Max) {
+				path.truncated = true;
 				break;
 			}
 		}

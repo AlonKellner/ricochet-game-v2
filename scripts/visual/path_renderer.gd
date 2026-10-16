@@ -178,6 +178,39 @@ func _draw_merged() -> void:
 		_draw_step(ms, ghost_color(col) if ms.ghost else col, not StepTypes.is_solid(ms.type))
 
 	_draw_endpoint_circles(_merged_steps, func(s: TraceStep) -> Color: return StepTypes.color(s.type))
+	for m in truncation_markers():
+		_draw_stop_marker(m["point"] - global_position, m["color"])
+
+# GAME_SPEC 12.6: where a path is cut by the event limit, a stop marker at its
+# last point, in the colour the merged view draws the step ending there. The
+# cursor is not reached on a cut path, so the shot is not a valid aim there
+# (B2, Stage 110): [{point, color}], at most one per path.
+func truncation_markers() -> Array:
+	var out: Array = []
+	for path: TracePath in [_traced_path, _planned_path]:
+		if path == null or not path.truncated or path.steps.is_empty():
+			continue
+		var end: Vector2 = path.steps[path.steps.size() - 1].end
+		if out.any(func(m): return m["point"] == end):
+			continue
+		var col := Color.WHITE
+		for ms: TraceStep in _merged_steps:
+			if ms.end == end:
+				col = StepTypes.color(ms.type)
+		out.append({"point": end, "color": col})
+	return out
+
+const STOP_MARKER_RADIUS := 7.0
+
+func _draw_stop_marker(at: Vector2, col: Color) -> void:
+	if not _draw_bounds.has_point(at):
+		return
+	var pts := PackedVector2Array()
+	for k in 9:
+		# an octagon (a stop sign), flat on top: vertices at 22.5 + 45 k degrees
+		pts.append(at + Vector2.from_angle(PI / 8.0 + k * PI / 4.0) * STOP_MARKER_RADIUS)
+	draw_polyline(pts, col, LINE_WIDTH)
+	draw_line(at + Vector2(-0.5, 0) * STOP_MARKER_RADIUS, at + Vector2(0.5, 0) * STOP_MARKER_RADIUS, col, LINE_WIDTH)
 
 func _draw_raw_trace(path: TracePath, base_color: Color, label_prefix: String) -> void:
 	if path == null or path.steps.size() == 0:

@@ -179,6 +179,7 @@ public:
 	godot::Array hits;
 	int cursor_index = -1;
 	int hit_count = 0;
+	bool truncated = false; // cut by the event limit (GAME_SPEC 12.6)
 
 	static godot::Ref<TracePath> wrap(const rc::TracePath &p, const godot::Dictionary &segments, RayCache &rays);
 	// PathRenderer.build_physical_hits: surface id -> [{side, on_segment, has_continuation}]
@@ -192,6 +193,8 @@ public:
 	void set_cursor_index(int v) { cursor_index = v; }
 	int get_hit_count() const { return hit_count; }
 	void set_hit_count(int v) { hit_count = v; }
+	bool get_truncated() const { return truncated; }
+	void set_truncated(bool v) { truncated = v; }
 };
 
 class BeamTracerPair : public godot::RefCounted {

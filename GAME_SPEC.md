@@ -1140,7 +1140,7 @@ Maximum **32 events** per trace (`BeamSolver.MAX_HITS = 32`). **Every event coun
 
 A trace cut by the limit ends with a `max` event at the next crossing, drawn up to it with no effect. This prevents infinite loops from any source, including overlapping pass-through surfaces.
 
-When the limit is reached, the preview shows a truncation marker (small stop icon) at the final hit point. During arrow flight, the arrow stops with a distinct visual cue (flash/fade).
+When the limit is reached, the preview shows a truncation marker (small stop icon) at the final hit point *(implemented, Stage 110: `TracePath.truncated`, `PathRenderer.truncation_markers`)*. The cursor of a cut path is not reached, so it is not a valid aim and lies outside the visibility region (§15). During arrow flight, the arrow stops with a distinct visual cue (flash/fade) *(not yet implemented)*.
 
 ---
 

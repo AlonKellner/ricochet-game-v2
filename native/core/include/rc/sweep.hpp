@@ -68,6 +68,7 @@ inline TracePath prepare_for_display(const TracePath &path, const Rect2f &bounds
 	TracePath result;
 	result.targets_hit = path.targets_hit;
 	result.cursor_index = plan.cursor_index;
+	result.truncated = path.truncated;
 	for (const arc::Piece &p : plan.pieces) {
 		const TraceStep &src = path.steps[size_t(p.src)];
 		switch (p.kind) {

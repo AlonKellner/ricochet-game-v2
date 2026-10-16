@@ -67,6 +67,7 @@ rc::TracePath core_path_of(const Ref<TracePath> &path) {
 	}
 	p.cursor_index = path->cursor_index;
 	p.hit_count = path->hit_count;
+	p.truncated = path->truncated;
 	const Array keys = path->targets_hit.keys();
 	for (int64_t i = 0; i < keys.size(); i++) {
 		p.targets_hit.push_back(int(int64_t(keys[i])));

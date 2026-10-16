@@ -205,6 +205,7 @@ struct TracePath {
 	std::vector<int> targets_hit; // surface ids, in first-hit order
 	int cursor_index = -1;
 	int hit_count = 0;
+	bool truncated = false; // cut by the event limit: it ends with a max event (GAME_SPEC 12.6)
 };
 
 } // namespace rc

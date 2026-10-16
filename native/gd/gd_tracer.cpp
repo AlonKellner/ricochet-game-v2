@@ -303,12 +303,15 @@ void TracePath::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_cursor_index", "v"), &TracePath::set_cursor_index);
 	ClassDB::bind_method(D_METHOD("get_hit_count"), &TracePath::get_hit_count);
 	ClassDB::bind_method(D_METHOD("set_hit_count", "v"), &TracePath::set_hit_count);
+	ClassDB::bind_method(D_METHOD("get_truncated"), &TracePath::get_truncated);
+	ClassDB::bind_method(D_METHOD("set_truncated", "v"), &TracePath::set_truncated);
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "steps"), "set_steps", "get_steps");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "targets_hit"), "set_targets_hit", "get_targets_hit");
 	ClassDB::bind_method(D_METHOD("get_hits"), &TracePath::get_hits);
 	ADD_PROPERTY(PropertyInfo(Variant::ARRAY, "hits"), "", "get_hits");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "cursor_index"), "set_cursor_index", "get_cursor_index");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "hit_count"), "set_hit_count", "get_hit_count");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "truncated"), "set_truncated", "get_truncated");
 	ClassDB::bind_method(D_METHOD("physical_hits"), &TracePath::physical_hits);
 }
 
@@ -358,6 +361,7 @@ Ref<TracePath> TracePath::wrap(const rc::TracePath &p, const Dictionary &segment
 	}
 	o->cursor_index = p.cursor_index;
 	o->hit_count = p.hit_count;
+	o->truncated = p.truncated;
 	return o;
 }
 
@@ -432,6 +436,7 @@ Ref<BeamTracerPair> BeamTracer::trace_pair(const Array &defs, const Vector2 &pla
 		o->planned->targets_hit = o->physical->targets_hit.duplicate();
 		o->planned->cursor_index = o->physical->cursor_index;
 		o->planned->hit_count = o->physical->hit_count;
+		o->planned->truncated = o->physical->truncated;
 	} else {
 		o->planned = TracePath::wrap(pair->planned, segments, rays);
 	}
