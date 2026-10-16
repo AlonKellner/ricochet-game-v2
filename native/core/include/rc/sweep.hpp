@@ -122,8 +122,11 @@ struct Combo {
 };
 
 // One checked combo: what PathRenderer._compute_trace + InvariantChecker.check_all do.
+// visibility: the player's region (Stage 110), pinned against this cursor;
+// pin_only: that check alone (the visibility sweep).
 inline inv::Violations check_combo(Tracer &tracer, const Scene<F64> &scene, const std::vector<SurfaceDef> &defs, const std::vector<inv::SurfaceInfo> &surfaces,
-		const V2 &player, const V2 &cursor, const std::vector<PlanItem> &plan, const Flags &flags, const Rect2f &bounds) {
+		const V2 &player, const V2 &cursor, const std::vector<PlanItem> &plan, const Flags &flags, const Rect2f &bounds,
+		const vis::Result *visibility = nullptr, bool pin_only = false) {
 	inv::Input in;
 	in.player = player;
 	in.cursor = cursor;
@@ -159,6 +162,11 @@ inline inv::Violations check_combo(Tracer &tracer, const Scene<F64> &scene, cons
 		in.planned_events = &planned_events;
 		in.physical_events = &physical_events;
 	}
+	if (pin_only) {
+		return visibility == nullptr || player == cursor || !pair ? inv::Violations{}
+			: inv::check_VISIBILITY_EQUALS_NON_DIVERGENCE(*visibility, cursor, &disp_planned, &typed);
+	}
+	in.visibility = visibility;
 	return inv::check_all(in);
 }
 
@@ -166,7 +174,7 @@ inline inv::Violations check_combo(Tracer &tracer, const Scene<F64> &scene, cons
 // player indices with index % shard_n == shard_i (SweepRunner.in_shard).
 inline std::vector<Combo> run(const std::vector<SurfaceDef> &defs, const std::vector<inv::SurfaceInfo> &surfaces, const std::vector<V2> &positions,
 		const std::vector<std::vector<PlanItem>> &plans, const Flags &flags, int shard_i, int shard_n, bool skip_equal, bool only_failures,
-		bool emit_infinity = false) {
+		bool emit_infinity = false, bool visibility = false) {
 	std::vector<Combo> out;
 	Tracer tracer;
 	tracer.set_emit_infinity(emit_infinity);
@@ -179,11 +187,25 @@ inline std::vector<Combo> run(const std::vector<SurfaceDef> &defs, const std::ve
 			if (shard_n > 1 && int(pi) % shard_n != shard_i) {
 				continue;
 			}
+			// Stage 110: the visibility sweep -- the player's region, its structure
+			// (reported at the player), then the pin at every cursor
+			std::optional<vis::Result> region;
+			if (visibility) {
+				const vis::Pt P{positions[pi].x, positions[pi].y};
+				const vis::Rect vb{bounds.position.x, bounds.position.y, bounds.end().x, bounds.end().y};
+				region = vis::compute(tracer, P, plans[pli], flags, vb);
+				inv::VisInput vin{&*region, &tracer, P, plans[pli], flags, vb};
+				inv::Violations vs = inv::check_visibility(vin);
+				if (!vs.empty() || !only_failures) {
+					out.push_back(Combo{int(pli), positions[pi], positions[pi], std::move(vs)});
+				}
+			}
 			for (const V2 &cursor : positions) {
 				if (skip_equal && positions[pi] == cursor) {
 					continue;
 				}
-				inv::Violations vs = check_combo(tracer, scene, defs, surfaces, positions[pi], cursor, plans[pli], flags, bounds);
+				inv::Violations vs = check_combo(tracer, scene, defs, surfaces, positions[pi], cursor, plans[pli], flags, bounds,
+					region ? &*region : nullptr, visibility);
 				if (!vs.empty() || !only_failures) {
 					out.push_back(Combo{int(pli), positions[pi], cursor, std::move(vs)});
 				}

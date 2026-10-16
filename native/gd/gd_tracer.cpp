@@ -1,4 +1,5 @@
 #include "gd_tracer.hpp"
+#include "gd_visibility.hpp"
 
 #include "rc/error.hpp"
 
@@ -388,6 +389,7 @@ void BeamTracer::_bind_methods() {
 			DEFVAL(Dictionary()), DEFVAL(Dictionary()));
 	ClassDB::bind_method(D_METHOD("plan_refuses", "defs", "plan_entries", "surface_id", "left", "flags"), &BeamTracer::plan_refuses, DEFVAL(Dictionary()));
 	ClassDB::bind_method(D_METHOD("clear_cache"), &BeamTracer::clear_cache);
+	ClassDB::bind_method(D_METHOD("visibility", "defs", "player", "plan_entries", "flags", "bounds"), &BeamTracer::visibility);
 	ClassDB::bind_method(D_METHOD("infinity_point", "defs", "plan_entries", "flags"), &BeamTracer::infinity_point, DEFVAL(Dictionary()));
 	ClassDB::bind_method(D_METHOD("set_emit_infinity", "on"), &BeamTracer::set_emit_infinity);
 	ClassDB::bind_method(D_METHOD("get_emit_infinity"), &BeamTracer::get_emit_infinity);
@@ -442,6 +444,19 @@ Ref<BeamTracerPair> BeamTracer::trace_pair(const Array &defs, const Vector2 &pla
 	}
 	o->result = PrecisionLadderResult::wrap(pair->result);
 	o->final_flags = flags_to_dict(pair->final_flags);
+	return o;
+}
+
+Ref<godot::RefCounted> BeamTracer::visibility(const Array &defs, const Vector2 &player, const Array &plan_entries, const Dictionary &flags,
+		const godot::Rect2 &bounds) {
+	tracer.set_defs(defs_from_array(defs));
+	Ref<VisibilityRegion> o;
+	o.instantiate();
+	o->tracer = Ref<BeamTracer>(this);
+	o->plan = plan_from_items(plan_entries);
+	o->flags = flags_from_dict(flags);
+	o->bounds = rc::vis::Rect{bounds.position.x, bounds.position.y, bounds.position.x + bounds.size.x, bounds.position.y + bounds.size.y};
+	o->region = rc::vis::compute(tracer, rc::vis::Pt{player.x, player.y}, o->plan, o->flags, o->bounds);
 	return o;
 }
 

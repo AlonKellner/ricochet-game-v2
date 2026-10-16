@@ -236,6 +236,9 @@ public:
 	bool plan_refuses(const godot::Array &defs, const godot::Array &plan_entries, int surface_id, bool left,
 			const godot::Dictionary &flags = godot::Dictionary());
 	void clear_cache() { tracer.clear_cache(); }
+	// Stage 110: the visibility region of the plan for the player (bounds: the level's)
+	godot::Ref<godot::RefCounted> visibility(const godot::Array &defs, const godot::Vector2 &player, const godot::Array &plan_entries,
+			const godot::Dictionary &flags, const godot::Rect2 &bounds);
 	// Stage 101: where the next infinity entry would be passed (Vector2), or null for infinity (the edge)
 	godot::Variant infinity_point(const godot::Array &defs, const godot::Array &plan_entries, const godot::Dictionary &flags = godot::Dictionary());
 	// Stage 88: the `infinity` event and the infinity plan entry (off: the pre-Stage-88 traces)

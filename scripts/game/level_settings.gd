@@ -97,6 +97,11 @@ func _ready() -> void:
 	edge.name = "EdgeOverlay"
 	add_child(edge)
 	edge.setup(level_bounds)
+	# the visibility region (Stage 110) under the preview
+	if get_node_or_null("PathRenderer") != null:
+		var vis := VisibilityRenderer.new()
+		vis.name = "VisibilityRenderer"
+		add_child(vis)
 	# the spawn preview (Stage 107) where something can spawn
 	if surface_specs.any(func(s: SurfaceSpec): return not s.spawn_channels().is_empty()):
 		var preview := SpawnPreviewNode.new()

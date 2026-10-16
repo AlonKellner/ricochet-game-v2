@@ -31,6 +31,7 @@ var _phase := -1
 var _frame := 0
 var _times: Array[float] = []
 var _version_start := 0
+var _vis_start := 0   # Stage 110: the visibility renderer's recomputations at the phase's start
 var _rows: Array = []
 var _failed := false
 var _base_player := Vector2.ZERO
@@ -108,6 +109,7 @@ func _process(_delta: float) -> bool:
 		_gm.plan.clear()
 	_phases[_phase]["setup"].call()
 	_version_start = _renderer.trace_version
+	_vis_start = _vis_version()
 	return false
 
 # ---------------------------------------------------------------- phases
@@ -158,6 +160,10 @@ func _hover_near_surface() -> void:
 func _surfaces() -> Array:
 	return _scene.surfaces if "surfaces" in _scene else []
 
+func _vis_version() -> int:
+	var vis := _scene.get_node_or_null("VisibilityRenderer")
+	return vis.visibility_version if vis != null else 0
+
 # ---------------------------------------------------------------- report
 
 func _finish_phase() -> void:
@@ -172,24 +178,29 @@ func _finish_phase() -> void:
 	sorted.sort()
 	var p95: float = sorted[mini(sorted.size() - 1, int(sorted.size() * 0.95))] if sorted.size() > 0 else 0.0
 	var recomputes: int = _renderer.trace_version - _version_start
+	var vis_recomputes: int = _vis_version() - _vis_start
 	var ok := true
-	# the setup frame may recompute once; a static phase never again
+	# the setup frame may recompute once; a static phase never again (the
+	# visibility region: neither in a static phase nor while only the cursor moves)
 	if ph["static"] and recomputes > 1:
+		ok = false
+	if (ph["static"] or ph["name"] == "cursor_orbit") and vis_recomputes > 1:
 		ok = false
 	if mean > BUDGET_MS:
 		ok = false
 	_failed = _failed or not ok
 	_rows.append({"name": ph["name"], "mean": mean, "p95": p95, "max": mx, "recomputes": recomputes,
-		"frames": _times.size(), "ok": ok})
+		"vis": vis_recomputes, "frames": _times.size(), "ok": ok})
 
 func _report() -> void:
 	print("")
-	print("%-14s %8s %8s %8s %11s %s" % ["phase", "mean_ms", "p95_ms", "max_ms", "recomputes", ""])
+	print("%-14s %8s %8s %8s %11s %8s %s" % ["phase", "mean_ms", "p95_ms", "max_ms", "recomputes", "regions", ""])
 	for r in _rows:
-		print("%-14s %8.3f %8.3f %8.3f %6d/%-4d %s" % [r["name"], r["mean"], r["p95"], r["max"], r["recomputes"], r["frames"], "" if r["ok"] else "FAIL"])
+		print("%-14s %8.3f %8.3f %8.3f %6d/%-4d %8d %s" % [r["name"], r["mean"], r["p95"], r["max"], r["recomputes"], r["frames"], r["vis"],
+			"" if r["ok"] else "FAIL"])
 	print("")
 	if _failed:
-		print("frame_bench: FAIL (a static phase recomputed the trace, or a mean frame exceeded %.1f ms)" % BUDGET_MS)
+		print("frame_bench: FAIL (a static phase recomputed the trace or the region, or a mean frame exceeded %.1f ms)" % BUDGET_MS)
 	else:
 		print("frame_bench: ok (budget %.1f ms per frame)" % BUDGET_MS)
 	# a clean exit: drop the scene and the callables into this tree

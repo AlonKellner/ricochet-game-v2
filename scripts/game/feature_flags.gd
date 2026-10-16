@@ -18,3 +18,14 @@ static func infinity_event() -> bool:
 	if infinity_event_override != null:
 		return infinity_event_override
 	return INFINITY_EVENT_DEFAULT
+
+# VISIBILITY (Stage 110): the visibility region under the preview (GAME_SPEC 15);
+# V toggles it in the game.
+const VISIBILITY_DEFAULT := true
+
+static var visibility_override = null   # null: the default; a bool: forced
+
+static func visibility() -> bool:
+	if visibility_override != null:
+		return visibility_override
+	return VISIBILITY_DEFAULT

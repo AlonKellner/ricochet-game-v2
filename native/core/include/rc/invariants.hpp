@@ -16,6 +16,7 @@
 #include "rc/trace_types.hpp"
 #include "rc/tracer.hpp"
 #include "rc/visual.hpp"
+#include "rc/visibility.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -160,6 +161,7 @@ struct Input {
 	bool plan_applied = false;                // a plan was set on the renderer
 	Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
 	bool emit_infinity = false;               // Stage 88: the renderer's tracer emitted infinity events
+	const vis::Result *visibility = nullptr;  // Stage 110: the player's visibility region (null: not checked)
 };
 
 inline Beam<F64> f64_beam(const EvInfo &e) {
@@ -1097,6 +1099,10 @@ inline Violations check_REAPPLY_IN_PLACE(const Input &in) {
 	return out;
 }
 
+// Stage 110 (rc/visibility_checks.hpp)
+inline Violations check_VISIBILITY_EQUALS_NON_DIVERGENCE(const vis::Result &r, const V2 &cursor, const TracePath *planned,
+		const std::vector<TraceStep> *typed);
+
 // InvariantChecker.check_all, in its order
 inline Violations check_all(const Input &in) {
 	Violations out;
@@ -1127,8 +1133,13 @@ inline Violations check_all(const Input &in) {
 	if (in.plan_applied) {
 		add(check_DIRECTION_ONLY(in));
 	}
+	if (in.visibility != nullptr && in.player != in.cursor) {
+		add(check_VISIBILITY_EQUALS_NON_DIVERGENCE(*in.visibility, in.cursor, in.planned, in.typed));
+	}
 	return out;
 }
 
 } // namespace inv
 } // namespace rc
+
+#include "rc/visibility_checks.hpp"

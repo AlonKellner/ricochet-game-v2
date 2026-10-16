@@ -1,4 +1,5 @@
 #include "gd_invariants.hpp"
+#include "gd_visibility.hpp"
 
 #include "rc/error.hpp"
 
@@ -145,6 +146,8 @@ Array render_violations(const rc::inv::Violations &vs) {
 // ---------------------------------------------------------------- InvariantKernel
 
 void InvariantKernel::_bind_methods() {
+	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_visibility_pin", "region", "cursor", "planned", "typed"),
+			&InvariantKernel::check_visibility_pin);
 	ClassDB::bind_static_method("InvariantKernel",
 			D_METHOD("check_all", "player", "cursor", "physical", "planned", "typed", "result", "surfaces", "defs", "flags", "plan_entries", "has_renderer", "plan_applied", "emit_infinity"),
 			&InvariantKernel::check_all, DEFVAL(false));
@@ -269,15 +272,26 @@ Array InvariantKernel::extract_trace_geometry(const Ref<TracePath> &path) {
 	return out;
 }
 
+Array InvariantKernel::check_visibility_pin(const Ref<RefCounted> &region, const Vector2 &cursor, const Ref<TracePath> &planned, const Array &typed) {
+	const VisibilityRegion *r = Object::cast_to<VisibilityRegion>(region.ptr());
+	if (r == nullptr || planned.is_null()) {
+		return Array();
+	}
+	const rc::TracePath pl = core_path_of(planned);
+	const std::vector<rc::TraceStep> ty = core_steps_of(typed);
+	return render_violations(rc::inv::check_VISIBILITY_EQUALS_NON_DIVERGENCE(r->region, to_v2(cursor), &pl, &ty));
+}
+
 // ---------------------------------------------------------------- SweepKernel
 
 void SweepKernel::_bind_methods() {
-	ClassDB::bind_static_method("SweepKernel", D_METHOD("run", "defs", "surfaces", "positions", "plans", "flags", "shard_i", "shard_n", "skip_equal", "emit_infinity"),
-			&SweepKernel::run, DEFVAL(false));
+	ClassDB::bind_static_method("SweepKernel",
+			D_METHOD("run", "defs", "surfaces", "positions", "plans", "flags", "shard_i", "shard_n", "skip_equal", "emit_infinity", "visibility"),
+			&SweepKernel::run, DEFVAL(false), DEFVAL(false));
 }
 
 Array SweepKernel::run(const Array &defs, const Array &surfaces, const PackedVector2Array &positions, const Array &plans, const Dictionary &flags, int shard_i,
-		int shard_n, bool skip_equal, bool emit_infinity) {
+		int shard_n, bool skip_equal, bool emit_infinity, bool visibility) {
 	const std::vector<rc::SurfaceDef> d = defs_from_array(defs);
 	const std::vector<rc::inv::SurfaceInfo> infos = surface_infos_of(surfaces);
 	std::vector<rc::V2> pos;
@@ -288,7 +302,8 @@ Array SweepKernel::run(const Array &defs, const Array &surfaces, const PackedVec
 	for (int64_t i = 0; i < plans.size(); i++) {
 		pls.push_back(plan_from_items(plans[i]));
 	}
-	const std::vector<rc::sweep::Combo> combos = rc::sweep::run(d, infos, pos, pls, flags_from_dict(flags), shard_i, shard_n, skip_equal, true, emit_infinity);
+	const std::vector<rc::sweep::Combo> combos = rc::sweep::run(d, infos, pos, pls, flags_from_dict(flags), shard_i, shard_n, skip_equal, true, emit_infinity,
+		visibility);
 	Array out;
 	for (const rc::sweep::Combo &c : combos) {
 		Dictionary e;

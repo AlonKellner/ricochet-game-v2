@@ -111,9 +111,11 @@ if(RC_BUILD_TESTS)
     # cores: the sweep goldens replay in RC_SWEEP_PARTS parts (RC_SWEEP_PART),
     # the Stage 105 tier-independence walks alone, every other case together.
     set(RC_SWEEP_PARTS 6 CACHE STRING "ctest entries the sweep goldens replay is split into")
-    set(RC_HEAVY_CASES "goldens: the sweep combos*,Stage 105: on coincidence*")
+    set(RC_HEAVY_CASES "goldens: the sweep combos*,Stage 105: on coincidence*,visibility:*")
     add_test(NAME rc_tests COMMAND rc_tests "--test-case-exclude=${RC_HEAVY_CASES}")
     add_test(NAME rc_tests_tier_independence COMMAND rc_tests "--test-case=Stage 105: on coincidence*")
+    # Stage 110: the visibility region against its definition on the shipped levels
+    add_test(NAME rc_tests_visibility COMMAND rc_tests "--test-case=visibility:*")
     math(EXPR RC_SWEEP_LAST "${RC_SWEEP_PARTS} - 1")
     foreach(part RANGE ${RC_SWEEP_LAST})
         add_test(NAME rc_tests_sweep_goldens_${part} COMMAND rc_tests "--test-case=goldens: the sweep combos*")
