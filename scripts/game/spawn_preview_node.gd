@@ -11,6 +11,7 @@ extends Node2D
 const GHOST_COLOR := Color(0.6, 0.95, 1.0, 0.8)
 const VANISH_COLOR := Color(1.0, 0.35, 0.3, 0.7)
 const DASH := 8.0
+const MAX_DASHES := 256   # a canvas item holds a bounded number of draw commands
 const WIDTH := 2.0
 
 var _renderer: Node2D
@@ -74,6 +75,9 @@ static func dashed(ci: CanvasItem, seg: Segment, color: Color, width: float) -> 
 	var carrier := seg.get_carrier()
 	var c := carrier.center()
 	var r := carrier.radius()
+	if r > VisualConverter.MAX_ARC_RADIUS() and not seg.full:
+		ci.draw_dashed_line(seg.start.coords, seg.end.coords, color, width, DASH)   # visually straight
+		return
 	var a0 := 0.0
 	var span := TAU
 	if not seg.full:
@@ -81,7 +85,7 @@ static func dashed(ci: CanvasItem, seg: Segment, color: Color, width: float) -> 
 		var am := wrapf((seg.via.coords - c).angle() - a0, 0.0, TAU)
 		var a1 := wrapf((seg.end.coords - c).angle() - a0, 0.0, TAU)
 		span = a1 if am < a1 else a1 - TAU
-	var n := maxi(8, int(absf(span) * r / DASH))
+	var n := clampi(int(absf(span) * r / DASH), 8, MAX_DASHES)
 	for i in range(0, n, 2):
 		var t0 := a0 + span * i / n
 		var t1 := a0 + span * (i + 1) / n

@@ -72,3 +72,25 @@ func test_stage107_landing_places_at_the_hit_on_an_arc_host():
 	var spec := LandingFold.place(t, host, {"point": Vector2(0, 10), "tangent": Vector2(0, -1), "side": Side.Value.LEFT})
 	assert_almost_eq(spec.start, Vector2(-5, 10), Vector2(1e-4, 1e-4))
 	assert_almost_eq(spec.end, Vector2(-15, 10), Vector2(1e-4, 1e-4))
+
+# A line placed at an arbitrary angle stays an exact line: rotated float32
+# points are almost never exactly collinear, and a three-point segment would
+# become a huge arc (the solver would see a circle; the preview's dashes
+# overflowed the canvas). Regression for the user's report on hit_effects.tscn.
+func test_stage107_rotated_line_template_stays_a_line():
+	var t := SpawnTemplate.make(SurfaceSpec.line(Vector2(100, -40), Vector2(100, 40), _side("reflection", true), _side("reflection", true)),
+		M.BEAM_TANGENT)
+	for angle in [0.3, 1.234567, 2.9, -0.71]:
+		var beam := Vector2.from_angle(angle)
+		var f := SpawnFrame.frame(M.BEAM_TANGENT, Vector2(503.37, 271.91), beam, Vector2(0, 1), false, false)
+		var placed := t.place(f)
+		assert_true(placed.straight, "marked straight")
+		var seg := placed.segment()
+		assert_true(seg.is_line(), "an exact line at %s rad" % angle)
+		Surface.reset_id_counter()
+		var d := SceneDefs.describe_surface(placed.build()[0])
+		assert_true(d["line"], "the solver sees a line")
+	var p := _side("portal", true)
+	p.effect = {"type": "portal", "theta": 0.7, "d": [300.5, -20.25]}
+	var pair := SurfaceSpec.line(Vector2(10, 3), Vector2(91, 57), p, p).build()
+	assert_true(pair[1].segment.is_line(), "a rotated portal's image of a line is a line")

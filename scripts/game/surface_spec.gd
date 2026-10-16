@@ -12,6 +12,9 @@ extends Resource
 @export var end := Vector2.ZERO
 @export var via := Vector2.ZERO
 @export var full_circle := false
+# An exact line through start and end (Segment.straight): set for lines mapped
+# by a frame, whose rotated float32 points are almost never exactly collinear.
+@export var straight := false
 @export var center := Vector2.ZERO
 @export var radius := 0.0
 @export var left: SideSpec
@@ -52,6 +55,8 @@ static func circle(c: Vector2, r: float, p_left: SideSpec, p_right: SideSpec, p_
 func segment() -> Segment:
 	if full_circle:
 		return Segment.full_from_carrier(GeneralizedCircle.from_circle(center, radius))
+	if straight:
+		return Segment.straight(start, end, via)
 	return Segment.from_coords(start, end, via)
 
 func is_portal() -> bool:
@@ -149,6 +154,7 @@ func validate() -> Array[String]:
 func mapped(xf: Transform2D) -> SurfaceSpec:
 	var o := SurfaceSpec.new()
 	o.full_circle = full_circle
+	o.straight = not full_circle and (straight or segment().is_line())
 	o.start = xf * start
 	o.end = xf * end
 	o.via = xf * via
