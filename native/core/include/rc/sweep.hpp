@@ -68,6 +68,7 @@ inline TracePath prepare_for_display(const TracePath &path, const Rect2f &bounds
 	TracePath result;
 	result.targets_hit = path.targets_hit;
 	result.cursor_index = plan.cursor_index;
+	result.truncated = path.truncated;
 	for (const arc::Piece &p : plan.pieces) {
 		const TraceStep &src = path.steps[size_t(p.src)];
 		switch (p.kind) {
@@ -121,8 +122,11 @@ struct Combo {
 };
 
 // One checked combo: what PathRenderer._compute_trace + InvariantChecker.check_all do.
+// visibility: the player's region (Stage 110), pinned against this cursor;
+// pin_only: that check alone (the visibility sweep).
 inline inv::Violations check_combo(Tracer &tracer, const Scene<F64> &scene, const std::vector<SurfaceDef> &defs, const std::vector<inv::SurfaceInfo> &surfaces,
-		const V2 &player, const V2 &cursor, const std::vector<PlanItem> &plan, const Flags &flags, const Rect2f &bounds) {
+		const V2 &player, const V2 &cursor, const std::vector<PlanItem> &plan, const Flags &flags, const Rect2f &bounds,
+		const vis::Result *visibility = nullptr, bool pin_only = false) {
 	inv::Input in;
 	in.player = player;
 	in.cursor = cursor;
@@ -157,15 +161,64 @@ inline inv::Violations check_combo(Tracer &tracer, const Scene<F64> &scene, cons
 		physical_events = inv::ev_infos(pair->result.physical);
 		in.planned_events = &planned_events;
 		in.physical_events = &physical_events;
+		in.cursor_point_agrees = pair->cursor_point_agrees;
 	}
+	if (pin_only) {
+		return visibility == nullptr || player == cursor || !pair ? inv::Violations{}
+			: inv::check_VISIBILITY_EQUALS_NON_DIVERGENCE(*visibility, cursor, &disp_planned, &typed, pair->cursor_point_agrees);
+	}
+	in.visibility = visibility;
 	return inv::check_all(in);
 }
 
 // Every combo of positions x positions under every plan; shard_n > 1 keeps the
 // player indices with index % shard_n == shard_i (SweepRunner.in_shard).
+// Stage 110: cursors on the planned surfaces' carriers (lines, and a portal's
+// pair) beyond their segments -- where a walk departs from a planned surface
+// crossed off its segment (B4) -- at S + k (E - S), k in {-1, -1/2, -1/8, 9/8,
+// 3/2, 2}, kept when exact in float32 (a cursor is a float32 point) and inside
+// the bounds grown by 50. Ordinary sweep cursors almost never land there.
+inline std::vector<V2> carrier_extension_cursors(const std::vector<SurfaceDef> &defs, const std::vector<PlanItem> &plan, const Rect2f &bounds) {
+	std::vector<int> ids;
+	for (const PlanItem &item : plan) {
+		if (item.is_infinity()) {
+			continue;
+		}
+		ids.push_back(item.surface_id);
+		for (const SurfaceDef &d : defs) {
+			if (d.id != item.surface_id) {
+				continue;
+			}
+			for (const std::optional<SideDef> &side : {d.left, d.right}) {
+				if (side && side->pair >= 0) {
+					ids.push_back(side->pair);
+				}
+			}
+		}
+	}
+	std::vector<V2> out;
+	const Rect2f g = bounds.grow(50.0f);
+	for (int id : ids) {
+		for (const SurfaceDef &d : defs) {
+			if (d.id != id || !d.line || d.full) {
+				continue;
+			}
+			for (const double k : {-1.0, -0.5, -0.125, 1.125, 1.5, 2.0}) {
+				const double x = d.sx + k * (d.ex - d.sx);
+				const double y = d.sy + k * (d.ey - d.sy);
+				const V2 c{float(x), float(y)};
+				if (double(c.x) == x && double(c.y) == y && g.has_point(c) && std::find(out.begin(), out.end(), c) == out.end()) {
+					out.push_back(c);
+				}
+			}
+		}
+	}
+	return out;
+}
+
 inline std::vector<Combo> run(const std::vector<SurfaceDef> &defs, const std::vector<inv::SurfaceInfo> &surfaces, const std::vector<V2> &positions,
 		const std::vector<std::vector<PlanItem>> &plans, const Flags &flags, int shard_i, int shard_n, bool skip_equal, bool only_failures,
-		bool emit_infinity = false) {
+		bool emit_infinity = false, bool visibility = false, bool carrier_cursors = false) {
 	std::vector<Combo> out;
 	Tracer tracer;
 	tracer.set_emit_infinity(emit_infinity);
@@ -174,15 +227,37 @@ inline std::vector<Combo> run(const std::vector<SurfaceDef> &defs, const std::ve
 	scene.emit_infinity = emit_infinity;
 	const Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
 	for (size_t pli = 0; pli < plans.size(); pli++) {
+		std::vector<V2> cursors = positions;
+		if (carrier_cursors) {
+			for (const V2 &c : carrier_extension_cursors(defs, plans[pli], bounds)) {
+				if (std::find(cursors.begin(), cursors.end(), c) == cursors.end()) {
+					cursors.push_back(c);
+				}
+			}
+		}
 		for (size_t pi = 0; pi < positions.size(); pi++) {
 			if (shard_n > 1 && int(pi) % shard_n != shard_i) {
 				continue;
 			}
-			for (const V2 &cursor : positions) {
+			// Stage 110: the visibility sweep -- the player's region, its structure
+			// (reported at the player), then the pin at every cursor
+			std::optional<vis::Result> region;
+			if (visibility) {
+				const vis::Pt P{positions[pi].x, positions[pi].y};
+				const vis::Rect vb{bounds.position.x, bounds.position.y, bounds.end().x, bounds.end().y};
+				region = vis::compute(tracer, P, plans[pli], flags, vb);
+				inv::VisInput vin{&*region, &tracer, P, plans[pli], flags, vb};
+				inv::Violations vs = inv::check_visibility(vin);
+				if (!vs.empty() || !only_failures) {
+					out.push_back(Combo{int(pli), positions[pi], positions[pi], std::move(vs)});
+				}
+			}
+			for (const V2 &cursor : cursors) {
 				if (skip_equal && positions[pi] == cursor) {
 					continue;
 				}
-				inv::Violations vs = check_combo(tracer, scene, defs, surfaces, positions[pi], cursor, plans[pli], flags, bounds);
+				inv::Violations vs = check_combo(tracer, scene, defs, surfaces, positions[pi], cursor, plans[pli], flags, bounds,
+					region ? &*region : nullptr, visibility);
 				if (!vs.empty() || !only_failures) {
 					out.push_back(Combo{int(pli), positions[pi], cursor, std::move(vs)});
 				}

@@ -6,7 +6,7 @@ extends GutTest
 # TraceStep has no "frame" (the legacy Mobius frame; removed in Stage 84).
 const STEP_FIELDS := ["start", "end", "via", "frame_id", "hit", "ray", "is_arc_step", "type",
 	"surface_id", "hit_side", "hit_on_segment", "after_portal", "est_error", "precision_bits"]
-const PATH_FIELDS := ["steps", "targets_hit", "cursor_index", "hit_count"]
+const PATH_FIELDS := ["steps", "targets_hit", "cursor_index", "hit_count", "truncated"]
 const HIT_FIELDS := ["t", "point", "segment", "side", "on_segment"]
 
 func test_trace_step_fields_and_aliases():

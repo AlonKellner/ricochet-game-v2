@@ -69,7 +69,7 @@ test-stage:
 
 # ctest plus every non-sweep GUT file in one process (the sweeps are the slow
 # tests; run_tests_parallel.sh shards them).
-SWEEPS := test_invariant_sweep.gd test_invariant_combos.gd test_precision_invariant_sweep.gd test_stage107_level_sweep.gd test_stage108_level_sweep.gd
+SWEEPS := test_invariant_sweep.gd test_invariant_combos.gd test_precision_invariant_sweep.gd test_stage107_level_sweep.gd test_stage108_level_sweep.gd test_visibility_sweep.gd
 FAST_TESTS := $(filter-out $(addprefix tests/,$(SWEEPS)),$(wildcard tests/test_*.gd)) \
 	$(wildcard tests/native/test_*.gd)
 comma := ,

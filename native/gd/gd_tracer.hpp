@@ -179,6 +179,7 @@ public:
 	godot::Array hits;
 	int cursor_index = -1;
 	int hit_count = 0;
+	bool truncated = false; // cut by the event limit (GAME_SPEC 12.6)
 
 	static godot::Ref<TracePath> wrap(const rc::TracePath &p, const godot::Dictionary &segments, RayCache &rays);
 	// PathRenderer.build_physical_hits: surface id -> [{side, on_segment, has_continuation}]
@@ -192,6 +193,8 @@ public:
 	void set_cursor_index(int v) { cursor_index = v; }
 	int get_hit_count() const { return hit_count; }
 	void set_hit_count(int v) { hit_count = v; }
+	bool get_truncated() const { return truncated; }
+	void set_truncated(bool v) { truncated = v; }
 };
 
 class BeamTracerPair : public godot::RefCounted {
@@ -205,11 +208,13 @@ public:
 	godot::Ref<TracePath> physical;
 	godot::Ref<PrecisionLadderResult> result;
 	godot::Dictionary final_flags;
+	bool cursor_point_agrees = true; // Stage 110, B4: both walks leave the cursor's point in one frame
 
 	godot::Ref<TracePath> get_planned() const { return planned; }
 	godot::Ref<TracePath> get_physical() const { return physical; }
 	godot::Ref<PrecisionLadderResult> get_result() const { return result; }
 	godot::Dictionary get_final_flags() const { return final_flags; }
+	bool get_cursor_point_agrees() const { return cursor_point_agrees; }
 };
 
 class BeamTracer : public godot::RefCounted {
@@ -233,6 +238,9 @@ public:
 	bool plan_refuses(const godot::Array &defs, const godot::Array &plan_entries, int surface_id, bool left,
 			const godot::Dictionary &flags = godot::Dictionary());
 	void clear_cache() { tracer.clear_cache(); }
+	// Stage 110: the visibility region of the plan for the player (bounds: the level's)
+	godot::Ref<godot::RefCounted> visibility(const godot::Array &defs, const godot::Vector2 &player, const godot::Array &plan_entries,
+			const godot::Dictionary &flags, const godot::Rect2 &bounds);
 	// Stage 101: where the next infinity entry would be passed (Vector2), or null for infinity (the edge)
 	godot::Variant infinity_point(const godot::Array &defs, const godot::Array &plan_entries, const godot::Dictionary &flags = godot::Dictionary());
 	// Stage 88: the `infinity` event and the infinity plan entry (off: the pre-Stage-88 traces)

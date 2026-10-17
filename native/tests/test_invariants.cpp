@@ -128,3 +128,32 @@ TEST_CASE("invariants: display paths and merged steps of a core path") {
 	CHECK(merged[0].type == StepType::Aligned);
 	CHECK(merged[1].type == StepType::AlignedPostPlanned);
 }
+
+TEST_CASE("invariants: NO-POST-CURSOR-DIVERGENCE reads the cursor from the planned path (Stage 110)") {
+	// aligned to the cursor, then diverging exactly at it (a planned surface
+	// crossed off its segment at the cursor): the old check read the first
+	// diverged step as one before the cursor, and passed it
+	TracePath planned;
+	planned.steps = {step(V2{100, 100}, V2{300, 100}, false), step(V2{300, 100}, V2{300, 900}, false)};
+	planned.cursor_index = 1;
+	TracePath physical;
+	physical.steps = {step(V2{100, 100}, V2{300, 100}, false), step(V2{300, 100}, V2{1920, 100}, true)};
+	const std::vector<TraceStep> typed = {planned.steps[0].with_type(StepType::Aligned), planned.steps[1].with_type(StepType::DivergedPostPlanned),
+		physical.steps[1].with_type(StepType::DivergedPhysical)};
+	Input in;
+	in.has_renderer = true;
+	in.player = V2{100, 100};
+	in.cursor = V2{300, 100};
+	in.physical = &physical;
+	in.planned = &planned;
+	in.typed = &typed;
+	CHECK(kinds(check_NO_POST_CURSOR_DIVERGENCE(in)) == std::vector<std::string>{"NO-POST-CURSOR-DIVERGENCE"});
+	// not visible at its own point (B4): no claim
+	in.cursor_point_agrees = false;
+	CHECK(check_NO_POST_CURSOR_DIVERGENCE(in).empty());
+	// aligned after the cursor too: clean
+	in.cursor_point_agrees = true;
+	const std::vector<TraceStep> aligned = {planned.steps[0].with_type(StepType::Aligned), planned.steps[1].with_type(StepType::AlignedPostPlanned)};
+	in.typed = &aligned;
+	CHECK(check_NO_POST_CURSOR_DIVERGENCE(in).empty());
+}

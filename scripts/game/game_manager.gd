@@ -184,6 +184,11 @@ func _input(event: InputEvent) -> void:
 				_level_settings.gravity = Vector2(0, 980)
 		return
 
+	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_V:
+		# the visibility region on / off (Stage 110)
+		FeatureFlags.visibility_override = not FeatureFlags.visibility()
+		return
+
 	if event is InputEventKey and event.pressed and event.physical_keycode == KEY_Z:
 		_try_undo()
 		return

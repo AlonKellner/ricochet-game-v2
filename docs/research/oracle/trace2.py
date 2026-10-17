@@ -33,7 +33,12 @@ Rules (TDD_09 "Target architecture" + "Legacy quirks"):
   or at an endpoint where blocked sides (incl. other segments sharing the
   exact endpoint = junction) cover both sides. Blockage is per hit point.
   terminal -> trace ends; reflection/inversion -> beam map; pass -> nothing.
-  Plan bookkeeping by surface id only.
+  Plan bookkeeping by surface id: an event that changes the frame (an
+  applied transformative / projective, or a state change that changes the
+  flags) advances the plan or marks it unmatched; an event where the planned
+  walk consumes the next entry without a frame change (a pass side, a
+  terminal off its segment, a write of a flag's current value) is consumed
+  too (B1, Stage 110): both walks reach the cursor together.
 - PLANNED: the next plan entry fires when id AND side match, even off-segment;
   everything else passes (terminals included).
 - Beams: reflection in a line: tau' = u^2 conj(tau_h), kappa' = -kappa;
@@ -520,6 +525,8 @@ class Event:
     state: bool = False         # the side's state change fired
     flags: dict = None          # flags after the event
     fired: bool = False         # Stage 107: the side fired (its hit effects fire), ghost aside
+    popped: bool = False        # the applied effect popped the transform stack (Stage 110: frames)
+    projective: bool = False    # the applied effect was projective (a new epoch, the stack cleared)
 
 
 @dataclass
@@ -571,6 +578,27 @@ class Walk:
     depart_q: bool = False
     # (transformative entries are maps of the whole plane: whichever crossing
     # fires them, the next beam is the planned one -- with the plan matched)
+    # B5 (Stage 110): the point being crossed (a run of tied candidates), with
+    # the planned walk's shadow over it -- see _Point
+    point: object = None
+
+
+@dataclass
+class _Point:
+    """B5 (Stage 110): the physical walk at one point -- a run of candidates
+    with one sort key (surfaces on one carrier share their crossings, K6; ties
+    and snaps give one parameter). The plan is matched by the frame the walk
+    leaves the point in, whatever the order of the surfaces there: `flags` and
+    `index` are the planned walk's (its shadow) over the point's candidates; a
+    physical flag change out of plan leaves the point `pending` until the
+    shadow's flags equal the walk's (the walk then takes the shadow's plan
+    index), and a point closed pending unmatches the plan."""
+    key: tuple
+    rehit: bool
+    flags: dict
+    index: int
+    broke: bool = False      # the shadow consumed a transformative or projective entry
+    pending: bool = False
 
 
 # ---------------------------------------------------------------- exact data
@@ -826,7 +854,20 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
         while ci < len(cands):
             key, _, sid, t, rehit = cands[ci]
             ci += 1
+            if walk.mode == PHYSICAL:
+                # B5: the point this candidate is at
+                if walk.point is not None and (walk.point.key != key or walk.point.rehit != rehit):
+                    _point_close(walk)
+                if walk.point is None and sid != -1 and walk.plan_matched and walk.on_plan and not walk.cursor_done:
+                    _point_open(walk, key, rehit)
             if sid in by_id and not by_id[sid].present(walk.flags):
+                p = walk.point
+                if p is not None and by_id[sid].present(p.flags):
+                    # absent for the walk, present for the planned shadow (B5)
+                    pt, _on, side, _fb = classify(walk, beam, t, by_id[sid], point=snapped.get((sid, t)))
+                    _point_step(walk, by_id[sid], sid, side, pt)
+                    if _point_sync(walk):
+                        _late_cursor(walk, beam, cands, ci, key, t0)
                 continue        # absent under the current flags (Stage 107): no crossing at all
             walk.count += 1
             if sid == INFINITY_ID:
@@ -840,6 +881,9 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     walk.plan_index += 1
                 walk.events.append(Event("infinity", INFINITY_ID, applied=consumed, point=q_pt, t=t, beam=beam,
                                          flags=walk.flags))
+                if walk.mode == PHYSICAL:
+                    _point_step(walk, None, INFINITY_ID, None, None)
+                    consumed = _point_sync(walk) or consumed
                 if consumed:
                     _late_cursor(walk, beam, cands, ci, key, t0)
                 continue
@@ -875,8 +919,20 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 do = physical_decision(walk, surf, side, full_block)
                 fires_state = bool(changes) and full_block
                 fired = full_block and not ghosted
-                if do in TRANSFORMATIVE or do in PROJECTIVE or fires_state:
+                # B1 (Stage 110): what counts is the frame the event leaves -- the beam
+                # and the flags. A state change that rewrites the flags as they are
+                # changes no frame.
+                changes_flags = fires_state and apply_states(walk.flags, changes) != walk.flags
+                if do in TRANSFORMATIVE or do in PROJECTIVE:
                     _plan_bookkeeping(walk, sid, pt)
+                elif changes_flags:
+                    # B5: a flag change keeps the beam -- matched by the point's frame
+                    _plan_bookkeeping(walk, sid, pt, defer=walk.point)
+                elif do is None and _quiet_entry(walk, surf, sid, side, pt):
+                    # the planned walk consumes this entry without a frame change (a
+                    # pass side, a terminal crossed off its segment, a write of the
+                    # current value): so does the physical one, at the same event
+                    walk.plan_index += 1
             elif walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side):
                 # a planned piece (Stage 108): a hit outside its span is off its segment
                 on_seg = on_seg and in_planned_span(walk, walk.plan_index, pt)
@@ -892,17 +948,26 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             ev = Event("hit", sid, side, do is not None, do == "terminal", on_seg, pt, t, beam, rehit,
                        fires_state, walk.flags, fired)
             walk.events.append(ev)
+            if walk.mode == PHYSICAL and walk.point is not None:
+                if do in TRANSFORMATIVE or do in PROJECTIVE:
+                    _point_close(walk)
+                else:
+                    _point_step(walk, surf, sid, side, pt)
+                    _point_sync(walk)
             if do == "terminal":
                 walk.done = True
                 return
             if do in TRANSFORMATIVE:
+                depth = len(walk.stack)
                 beam, depart, t0, fresh = _apply(walk, beam, t, surf, do, depart, fresh, t0, rehit, pt, pt_exact)
+                ev.popped = len(walk.stack) < depth
                 # the beam departs from Q: an effect fired at Q (a pinned crossing,
                 # or the departure re-hit when the beam had departed from Q)
                 walk.depart_q = walk.pole is not None and ((sid, t) in pinned or (rehit and walk.depart_q))
                 applied = True
                 break
             if do in PROJECTIVE:
+                ev.projective = True
                 # on the planned path at its back-propagated hit point (the
                 # crossing nearest H): the exit is exact data when the target
                 # behind it is (projective_hits)
@@ -927,6 +992,8 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 applied = True
                 break
             _late_cursor(walk, beam, cands, ci, key, t0)
+        if walk.mode == PHYSICAL:
+            _point_close(walk)
         if not applied and fired_state:
             # no effect, but the loop changed the state: the next loop on the
             # same beam differs (e.g. a ghost toggler re-hit) -- walk it again
@@ -950,7 +1017,8 @@ def _late_cursor(walk: Walk, beam, cands, ci, key, t0):
     infinity entry): the cursor is on this same beam -- a candidate if it lies
     ahead (inserted in order among the remaining candidates)."""
     if not walk.cursor_done and walk.cursor is not None and walk.plan_index >= len(walk.plan) and walk.on_plan \
-            and walk.plan_matched and not any(c[1] == 0 for c in cands):
+            and walk.plan_matched and not (walk.point is not None and walk.point.pending) \
+            and not any(c[1] == 0 for c in cands):
         tc = beam.param_of(walk.cursor)
         kc = sort_key(tc, t0)
         if kc >= key:
@@ -1014,16 +1082,78 @@ def in_planned_span(walk: Walk, i, pt):
     return span is None or on_segment(span, pt)
 
 
-def _plan_bookkeeping(walk: Walk, sid, pt):
-    if walk.plan_index < len(walk.plan):
-        if sid == walk.plan[walk.plan_index][0] and in_planned_span(walk, walk.plan_index, pt):
-            walk.plan_index += 1
-        else:
-            walk.plan_matched = False
-    else:
+def _quiet_entry(walk: Walk, surf: Surface, sid, side, pt):
+    """B1 (Stage 110): the next plan entry is (sid, side) at pt, and the planned
+    walk consumes it there without changing the frame: its effect is not
+    transformative or projective, and its state changes leave the flags as
+    they are."""
+    if walk.plan_index >= len(walk.plan) or walk.plan[walk.plan_index] != (sid, side):
+        return False
+    if not in_planned_span(walk, walk.plan_index, pt):
+        return False
+    eff = surf.effect(side, walk.flags)
+    if eff in TRANSFORMATIVE or eff in PROJECTIVE:
+        return False
+    return apply_states(walk.flags, surf.state_changes(side, walk.flags)) == walk.flags
+
+
+def _plan_bookkeeping(walk: Walk, sid, pt, defer=None):
+    """defer: the point (B5) when the event keeps the beam and only changes the
+    flags -- a mismatch then waits for the point's frame (_point_sync)."""
+    if walk.plan_index < len(walk.plan) and sid == walk.plan[walk.plan_index][0] \
+            and in_planned_span(walk, walk.plan_index, pt):
+        walk.plan_index += 1
+        return
+    if defer is not None:
+        defer.pending = True
+        return
+    walk.plan_matched = False
+    walk.on_plan = False      # a surface fired out of plan: off the planned beams
+
+
+def _point_open(walk: Walk, key, rehit):
+    walk.point = _Point(key, rehit, dict(walk.flags), walk.plan_index)
+
+
+def _point_close(walk: Walk):
+    p = walk.point
+    walk.point = None
+    if p is not None and p.pending:
         walk.plan_matched = False
-    if not walk.plan_matched:
-        walk.on_plan = False      # a surface fired out of plan: off the planned beams
+        walk.on_plan = False
+
+
+def _point_step(walk: Walk, surf, sid, side, pt):
+    """The planned walk's decision at this candidate, on the shadow: the next
+    entry is consumed (its state changes applied under the shadow's flags);
+    a transformative or projective entry ends the shadow."""
+    p = walk.point
+    if p is None or p.broke or p.index >= len(walk.plan):
+        return
+    if sid == INFINITY_ID:
+        if walk.plan[p.index][0] == INFINITY_ID:
+            p.index += 1
+        return
+    if walk.plan[p.index] != (sid, side) or not in_planned_span(walk, p.index, pt):
+        return
+    eff = surf.effect(side, p.flags)
+    if eff in TRANSFORMATIVE or eff in PROJECTIVE:
+        p.broke = True
+        return
+    p.flags = apply_states(p.flags, surf.state_changes(side, p.flags))
+    p.index += 1
+
+
+def _point_sync(walk: Walk):
+    """A pending point resolves when the walk is in the shadow's frame."""
+    p = walk.point
+    if p is not None and p.pending and not p.broke and p.flags == walk.flags:
+        walk.plan_index = p.index
+        p.pending = False
+        if B5_HOOK is not None:
+            B5_HOOK(walk)
+        return True
+    return False
 
 
 def _other_root(beam, surf: Surface, t, fresh, depart, t0, pt):
@@ -1184,6 +1314,7 @@ def _portal_known(walk, surf, pt, pt_exact, old_known, nb):
 
 WALK_SURFACES = []
 POLE_HOOK = None    # tests only: called with (walk, beam) at every loop of a beam
+B5_HOOK = None      # tests and measurements only: called with (walk) at every B5 rescue
 
 
 def _is_center(k, seg):

@@ -277,6 +277,7 @@ Ref<TracePath> VisualConverter::prepare_for_display(const Ref<TracePath> &path, 
 	const rc::arc::DisplayPlan plan = rc::arc::prepare_for_display(geoms, path->cursor_index, to_rect(bounds), carrier_lookup(surfaces));
 	result->targets_hit = path->targets_hit; // the same Dictionary (shared, as in GDScript)
 	result->cursor_index = plan.cursor_index;
+	result->truncated = path->truncated;
 	for (const rc::arc::Piece &p : plan.pieces) {
 		const Ref<TraceStep> &src = steps[size_t(p.src)];
 		switch (p.kind) {

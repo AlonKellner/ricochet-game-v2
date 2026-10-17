@@ -9,6 +9,7 @@
 #include "gd_geom.hpp"
 #include "gd_visual.hpp"
 #include "gd_invariants.hpp"
+#include "gd_visibility.hpp"
 #include "rc/error.hpp"
 
 #include <gdextension_interface.h>
@@ -69,6 +70,7 @@ void initialize_ricochet_module(godot::ModuleInitializationLevel p_level) {
     GDREGISTER_CLASS(TracePath);
     GDREGISTER_CLASS(BeamTracerPair);
     GDREGISTER_CLASS(BeamTracer);
+    GDREGISTER_CLASS(VisibilityRegion);
     // Stage 97: visual / testing kernels
     GDREGISTER_CLASS(GeneralizedCircle);
     GDREGISTER_CLASS(Segment);

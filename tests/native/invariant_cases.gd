@@ -134,6 +134,13 @@ static func cases() -> Array[Dictionary]:
 		"typed": typed(post_steps, [A, AP]) + typed([step(Vector2(300, 100), Vector2(300, 900), false)], [StepTypes.Type.DIVERGED_POST_PLANNED]),
 		"surfaces": wall, "expect": ["NO-POST-CURSOR-DIVERGENCE"]})
 
+	# NO-POST-CURSOR-DIVERGENCE (Stage 110): aligned to the cursor, diverging right
+	# at it -- the old check read the first diverged step as one before the cursor
+	out.append({"name": "divergence_at_cursor", "player": player, "cursor": cursor, "physical": post, "planned": post,
+		"typed": typed([post_steps[0]], [A]) + typed([step(Vector2(300, 100), Vector2(300, 900), false)], [StepTypes.Type.DIVERGED_POST_PLANNED])
+			+ typed([post_steps[1]], [StepTypes.Type.DIVERGED_PHYSICAL]),
+		"surfaces": wall, "expect": ["NO-POST-CURSOR-DIVERGENCE"]})
+
 	# SOLID-PATH-TO-CURSOR: the first solid step does not start at the player
 	var off_steps := [step(Vector2(120, 100), Vector2(1800, 100), true, wall[0].id)]
 	var off := path(off_steps, 1)

@@ -32,7 +32,7 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | No surface filtering principle | Done |
 | Invariant sweep testing (event-based checks, all scenes) | Done: every level swept; plans on every planned scene incl. infinity plans (Stage 103); one known finding (K1, TDD_10) |
 | Compound transformative effect | Planned |
-| Visibility polygon (§15) | Planned |
+| Visibility polygon (§15) | Done for every plan without projective entries (Stage 110) |
 | State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Done |
 | Ghost mode & toggler surfaces (Stage 86) | Done |
 | Hit effects as a second axis: any number per side (state change, target, spawn, reset), presence (§9.1, §9.6, §10.6; TDD_11 Stage 107) | Done (user sign-off 2026-10-16) |
@@ -1034,9 +1034,7 @@ All roots on the unbounded carrier (full line or full circle) are events, whethe
 
 ### 11.6 See-through parameter
 
-*(Not yet implemented — specified for the visibility system §15.)*
-
-A `see_through: Set[Surface]` option will make the listed surfaces transparent, so the beam passes them without recording a hit. It is used by the visibility system (§15) for truncating boundaries. It is distinct from the departure rule (§11.4).
+*(Retired, Stage 110.)* The legacy visibility design needed surfaces made transparent for truncating boundaries. The visibility region on the beam solver (§15) casts ordinary pair traces instead, so the solver has no such option.
 
 ---
 
@@ -1140,7 +1138,7 @@ Maximum **32 events** per trace (`BeamSolver.MAX_HITS = 32`). **Every event coun
 
 A trace cut by the limit ends with a `max` event at the next crossing, drawn up to it with no effect. This prevents infinite loops from any source, including overlapping pass-through surfaces.
 
-When the limit is reached, the preview shows a truncation marker (small stop icon) at the final hit point. During arrow flight, the arrow stops with a distinct visual cue (flash/fade).
+When the limit is reached, the preview shows a truncation marker (small stop icon) at the final hit point *(implemented, Stage 110: `TracePath.truncated`, `PathRenderer.truncation_markers`)*. The cursor of a cut path is not reached, so it is not a valid aim and lies outside the visibility region (§15). During arrow flight, the arrow stops with a distinct visual cue (flash/fade) *(not yet implemented)*.
 
 ---
 
@@ -1304,7 +1302,7 @@ Hit-point computation uses a **unified hitpoint model**: both modes intersect th
 
 | Mode | Effect application rule | When it runs |
 |------|------------------------|-------------|
-| **PHYSICAL** | An effect fires ONLY on a **fully blocked** hit: an on-segment interior point, or an exact endpoint whose blocked sides (including other segments sharing that endpoint) cover both sides. A terminal ends the trace. Everything else is a pass-through (no effect, no stack change). Plan bookkeeping is by surface ID only: an applied transformative or projective effect advances the plan if it is the next entry's surface, and otherwise marks the plan unmatched. | Origin to terminal/escape/limit. |
+| **PHYSICAL** | An effect fires ONLY on a **fully blocked** hit: an on-segment interior point, or an exact endpoint whose blocked sides (including other segments sharing that endpoint) cover both sides. A terminal ends the trace. Everything else is a pass-through (no effect, no stack change). Plan bookkeeping is by surface ID: an event that changes the frame (an applied transformative or projective effect, or a state change that changes the flags) advances the plan if it is the next entry's surface, and otherwise marks the plan unmatched. An event at which the planned walk consumes the next entry without changing the frame (a pass side, a terminal crossed off its segment, a write of the value a flag already has) is consumed here too (B1, Stage 110). At a point where several surfaces are crossed together (one carrier, K6), an out-of-plan event that only changes the flags is matched by the frame: if the walk leaves the point in the flags the planned walk leaves it in, the planned entries there count as consumed, whatever the order of the surfaces (B5, Stage 110). | Origin to terminal/escape/limit. |
 | **PLANNED** | The next plan entry fires when surface ID **and** side match, even off-segment. Only transformative entries change the beam. Projective entries are applied too (Stage 87). Terminal entries are consumed without effect. Everything else passes, terminals included. After the cursor, the trace continues with PHYSICAL rules. | Origin to terminal/escape/limit. |
 
 Neither mode stops at the cursor. The cursor is a **virtual hitpoint** (§12.1) that competes with carrier intersections in projective order. It is a candidate only once the plan is complete and matched. `cursor_index` is the step index where the cursor falls.
@@ -1451,213 +1449,70 @@ There is no separate post-cursor computation. Both traces run the full path from
 
 ## 15. Visibility
 
-> **Status: PLANNED** — The visibility system is not yet implemented. The design below is the intended specification for future development. It was written against the deleted frame-based solver, so its pseudocode still uses that vocabulary: `current_frame`, `MobiusTransform`, `cache.apply`, `get_mobius`, `find_all_hits` in a transformed frame. Those must be re-expressed on the beam solver: casts are beams in visual space, effects are beam/point maps (§10.8), and the provenance stack replaces frames (§10.7). The game-design requirements stay as written: same scene, same state, same rules as trajectory, and Principle 14.
+> **Status: implemented (Stage 110, `docs/TDD_14_VISIBILITY.md`)** for every plan without projective entries; for a plan through a projective surface the region is not drawn yet. The native construction is `rc/visibility.hpp`, its invariants `rc/visibility_checks.hpp`, the drawing `scripts/visual/visibility_renderer.gd`.
 
-### 15.1 Purpose
+### 15.1 Purpose and definition
 
-The visibility system highlights the **set of cursor positions that will not cause divergence** for the current plan. It answers: "if I place my cursor here, will the planned path and the physical path agree?" The highlighted region is exactly the set of valid aim positions. *(Principle 14: visibility shares the world.)*
+The visibility region highlights the **set of cursor positions that will not cause divergence** for the current plan: if the cursor is placed there, the planned and the physical paths agree up to it. *(Principle 14: visibility shares the world.)*
 
-### 15.2 Computation
+**Definition.** A cursor is in the region iff (V1) the preview's planned path reaches it, (V2) every merged step before it is ALIGNED (§14.2: the same frame ids, epoch, stack and flags), and (V3) both walks leave the cursor's own point in the same frame. V1 and V2 are what the preview shows: an all-green solid path from the player to the cursor. V3 counts the decisions made exactly at the cursor, which fall between the last step before it and the first after it (B4, Stage 110). When the physical walk has no event at the cursor's point, it passes the point in the frame it had. The region never depends on the cursor, only on the player, the plan (with its clicks and pieces), the game state's flags and the surfaces.
+- A cursor that the trace never reaches (cut by the event limit, §12.6) is **outside**.
+- A cursor on the player (no aim), on the player's image `P_K` or on the frame's infinity `Q_K` is **not classified**: the aim degenerates there (§11.4).
+- A cursor exactly where the last entry is crossed off its segment is **outside**: the planned walk applies the entry there and the physical one passes, so they leave the point in different frames (V3). Before B4 these departure points formed thin lines along the planned carrier.
+- The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4), and on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor).
 
-The visibility algorithm reuses the **same ray casting code** as the physical trace (§12.1). Instead of casting toward one cursor, it casts toward every **point of interest** — surface endpoints, tangent points, and other threshold positions — where the casting result changes. This aligns the visibility output with its purpose: showing where the plan does not diverge from the physical path.
+### 15.2 Members
 
-The algorithm is a **loop** — one iteration for the initial view (no plan surface yet), then one iteration per planned surface. Every iteration runs the same core casting step.
+Every cursor whose aim at the player has the direction `d` lies on one beam of the plan's final frame: the circle through the player's image `P_K = F_K(player)`, the cursor and the frame's infinity `Q_K = F_K(∞)` (§13.1), run the way the plan's realization runs. It is a line when `Q_K` is infinity. This beam is the **member** of `d`. Every point of the plane lies on one member, on the arc from `P_K` to `Q_K` that `d` **owns** (the other arc belongs to the opposite direction).
 
-```
-func compute_visibility(origin, plan, scene, game_state) → VisibilityResult:
-    current_origin = origin
-    current_frame = MobiusTransform.IDENTITY
-    truncating_segments = []  # empty = full 360° cone (first iteration)
-    regions = null
-    
-    # Iteration 0: initial visibility (full 360°).
-    # Iterations 1..N: one per planned surface.
-    for step_index in range(len(plan) + 1):
-        
-        # --- Core casting step (identical every iteration) ---
-        
-        # Transform all surfaces into the current frame.
-        frame_surfaces = transform_all(scene.surfaces, current_frame.inverse())
-        
-        # Collect points of interest from ALL surfaces in the current frame.
-        points_of_interest = []
-        for surface in frame_surfaces:
-            seg = surface.segment
-            points_of_interest.append(seg.start)
-            points_of_interest.append(seg.end)
-            carrier = derive_carrier(seg)
-            if not carrier.is_line():
-                for tp in compute_tangent_points(current_origin, carrier):
-                    if arc_contains(seg, tp):
-                        points_of_interest.append(tp)
-        
-        # If truncating, add truncating segment endpoints and filter
-        # to only directions within the truncated cone.
-        if truncating_segments:
-            for ts in truncating_segments:
-                points_of_interest.append(ts.start)
-                points_of_interest.append(ts.end)
-            points_of_interest = filter_to_cone(
-                points_of_interest, current_origin, truncating_segments)
-        
-        # Cast rays toward each point of interest.
-        # Uses the SAME find_all_hits as physical tracing (§12.1).
-        cast_results = []
-        for poi in points_of_interest:
-            ray = Ray(current_origin, Direction(current_origin, poi))
-            hit = find_all_hits(ray, frame_surfaces,
-                                     see_through=truncating_segments)
-            obstruction = determine_obstruction_side(hit, poi)
-            cast_results.append(CastResult(poi, hit, obstruction))
-        
-        # Sort by radial ordering (§15.5).
-        cast_results.sort(key=radial_order_key(current_origin))
-        
-        # Build visibility regions from sorted cast results.
-        regions = build_regions_from_casts(cast_results, current_origin)
-        
-        # --- Propagation to next plan step ---
-        
-        if step_index >= len(plan):
-            break
-        
-        entry = plan[step_index]
-        lit_segments = intersect_regions_with_surface(regions, entry.surface)
-        if not lit_segments:
-            continue  # planned surface not reachable
-        
-        side_config = entry.surface.active_side_config(entry.side, game_state)
-        
-        if side_config.effect != null and side_config.effect.is_transformative():
-            M = side_config.effect.get_mobius()
-            current_frame = current_frame.compose(M)
-            current_origin = cache.apply(current_origin, M.inverse())
-            truncating_segments = lit_segments
-        
-        elif side_config.effect != null and side_config.effect.is_projective():
-            current_frame = MobiusTransform.IDENTITY
-            if side_config.effect is CircleNormalProjection:
-                # Point source shifts to the circle center.
-                current_origin = derive_carrier(entry.surface.segment).center()
-                truncating_segments = lit_segments
-            else:
-                # Line normal or semi-circle directional: parallel ray source.
-                current_origin = null  # signals parallel-source mode
-                current_direction = side_config.effect.get_outgoing_direction()
-                truncating_segments = lit_segments
-        
-        elif side_config.effect != null and side_config.effect.is_terminal():
-            regions = []
-            break
-    
-    return VisibilityResult(regions)
-```
+On its member, the visible cursors form intervals of the walk:
+- from the departure point of the last plan entry (the player, for an empty plan; `Q_K` after an infinity entry);
+- to the first event at which the physical walk changes the frame (the **stop**: an applied effect, or a state change that changes the flags), or to the last event the hit budget leaves for a cursor (the 32nd non-cursor event, §12.6), or round the whole loop;
+- inside the owned arc.
 
-The core casting step is identical in every iteration — only `current_origin`, `current_frame`, and `truncating_segments` change. Iteration 0 (empty truncating_segments = full 360°) is the first pass of the same loop. This ensures initial visibility and all propagation steps use the **same code path**.
+Ties are the solver's: the cursor comes before a crossing at its own parameter, so a stop is visible.
 
-**Tangent point computation:** two tangent points from external point P to circle (C, r) exist when |P - C| > r. The tangent points T satisfy |T - C| = r and cross(T - P, T - C) = 0. Tangent points are filtered to the segment's arc bounds using the cross-product containment test (§11.1).
+### 15.3 Construction
 
-**Obstruction side determination:** each cast result records whether the hit creates a CW, CCW, or both-sided obstruction. This is the same CW/CCW logic described in §15.5.
+The region is built from **casts**: ordinary pair traces (`Tracer::solve`, the same ladder as the preview) whose cursor lies on a member, read by their events. Nothing is re-derived: the departure point, the stop and the budget are the solver's events.
 
-**Parallel-source mode** (after line-normal or semi-circle-directional projection):
+1. **Critical members.** A walk's shape can change only where its member passes:
+   - a segment endpoint;
+   - a tangency to a carrier;
+   - a proper crossing of two segments (§9.7);
+   - a planned piece's end;
+   - the tangency at a finite `Q` of a carrier through it (§11.4);
+   - for a finite `Q_K`, the line through `P_K` and `Q_K`.
+
+   These points, in every frame of the plan, are mapped to the final frame. Each bounds two members, one each way along its line, since a walk passes the point after its wrap too. With no plan in the direct realization, the second way is not needed. The axes keep every gap below a quarter turn. Members are ordered by a pseudo-angle of `d`, a monotone key against the fixed reference +x with no trigonometry (§31.2).
+2. **Cells.** Each member is cast, and so are its two sides (±ε), and each gap between members is cast in its middle. Where a gap's casts disagree on the walk's shape, it is bisected and a member is inserted at the switch. A cell is a curvilinear quadrilateral: its two side members, the carrier arc its stops lie on, and the carrier arc its departures lie on. Its corners are where each side member crosses those carriers. Every cell that shares a corner computes it the same way, so shared corners are equal.
+3. **Clipping.** A cell through infinity runs outside the clip rectangle. Every cell is cut by the rectangle (which holds the level bounds grown by 50 and every finite corner), walking its boundary the way the cells wind. Each reflection or inversion of the final frame reverses that way, and so does the realization through infinity.
+4. **Regions.** Adjacent cells merge: shared member pieces cancel, and so do carrier pieces shared by two layers of one walk. What remains is chained into simple loops. A loop through one vertex twice (a pinched region) is cut there.
+
+### 15.4 Regions and membership
 
 ```
-func cast_parallel_source(direction, lit_segments, scene, game_state):
-    # Cast parallel rays from the lit sub-segment in the fixed direction.
-    # Each ray originates from a different point on the lit segment.
-    
-    # Collect relevant points of interest: surface endpoints/tangents
-    # that are ahead of the lit sub-segment in the outgoing direction.
-    pois = []
-    for surface in scene.surfaces:
-        for p in [surface.segment.start, surface.segment.end]:
-            for lit_seg in lit_segments:
-                proj = project_point_onto_segment_along_direction(p, lit_seg, direction)
-                if proj is not null:
-                    pois.append({source: proj, target: p})
-    
-    # Sort by position along the lit sub-segment (linear ordering).
-    pois.sort(key=lambda p: parameter_along_segment(p.source, lit_segments))
-    
-    # Cast one ray per POI from its source point in the fixed direction.
-    cast_results = []
-    for poi in pois:
-        ray = Ray(poi.source, Direction(poi.source, poi.source + direction))
-        hit = find_all_hits(ray, scene.surfaces, see_through=lit_segments)
-        obstruction = determine_obstruction_linear(hit, poi)
-        cast_results.append(CastResult(poi.target, hit, obstruction))
-    
-    # Build regions from linearly-ordered results (same logic, linear not radial).
-    return build_regions_from_casts(cast_results, null)
+VisibilityRegion:
+    loops:    closed loops of edges (member arcs, carrier arcs, the clip rectangle)
+    whiskers: the region's 1D parts (no area; see 15.1)
+    cells:    the cells (a partition of the region; the checks read them)
+    fill:     one triangle mesh of the cells, tessellated conformingly -- what is drawn
+    contains(c) -> Inside | Outside | Unclassified
 ```
 
-`determine_obstruction_linear` is the linear analogue of `determine_obstruction_side` — instead of CW/CCW, it determines whether the hit obstructs "above" or "below" the parallel ray (relative to the segment's traversal direction). The region-building logic is identical.
+`contains` is the even-odd rule over the loops. It is half-open at the test ray's height (arcs are cut into pieces monotone in y). A point on a boundary edge takes the edge's flag:
+- **stop and departure arcs** are inclusive;
+- **a member piece** is inclusive where that member's own cast sees it.
 
-### 15.3 Visibility helper function specifications
+A vertex at a member's own point of interest takes the solver's answer for a cursor exactly there. Cursors outside the level bounds grown by 50 are not classified.
 
-**`build_regions_from_casts(cast_results, origin):`**
+### 15.5 Ordering
 
-```
-func build_regions_from_casts(cast_results, origin):
-    regions = []
-    current_boundary = []
-    prev_nearest = null
-    
-    for cr in cast_results:
-        nearest = cr.hit.surface if cr.hit else null
-        
-        # Emit visibility point at this angle.
-        if nearest == null:
-            current_boundary.append(cr.poi)     # unobstructed — extend to POI
-        else:
-            current_boundary.append(cr.hit.point)  # nearest surface intersection
-        
-        # Region break: if this hit fully obstructs (both CW and CCW).
-        if cr.obstruction == BOTH:
-            if current_boundary:
-                regions.append(GeneralizedPolygon(current_boundary))
-                current_boundary = []
-        
-        prev_nearest = nearest
-    
-    if current_boundary:
-        regions.append(GeneralizedPolygon(current_boundary))
-    
-    return regions
-```
+Members are ordered by their direction's pseudo-angle against +x, a real key and a strict order. All geometric decisions inside the solver remain cross-product signs (§31.2). The region's own geometry (circle centres, crossings with the clip rectangle) is computed in float64 from each carrier's canonical data, so equal inputs give equal points.
 
-**`filter_to_cone(points, origin, truncating_segments):`** Keep only points whose direction from `origin` falls within the angular span defined by the truncating segments. Test: a point P is within the cone if, for at least one truncating segment, P is "between" the segment's endpoints when viewed from origin (using cross-product sign: `cross(seg.start - origin, P - origin)` and `cross(P - origin, seg.end - origin)` both ≥ 0, or both ≤ 0 depending on winding).
+### 15.6 Consistency and invariants
 
-**`determine_obstruction_side(hit, poi):`** Examine the hit surface's segment orientation relative to the ray from origin through poi. If the segment extends clockwise from the poi (cross-product of ray direction × segment direction > 0): obstructs CW. If counterclockwise: obstructs CCW. If poi is an interior hit (not an endpoint): obstructs both.
-
-**`intersect_regions_with_surface(regions, surface):`** For each region, find which portion of the surface lies inside the region. Cast rays from origin through the surface's start, end, and via points. For each ray, if the earliest hit IS the surface (not a closer obstruction), that point is illuminated. The illuminated sub-segment is the continuous portion of the surface between illuminated points.
-
-**`see_through` parameter in `find_all_hits`:** *(Not yet implemented — specified for the visibility system §15.)* Surfaces in the `see_through` set will be treated as transparent — rays pass through them without recording a hit. This is distinct from the departure rule (the departure point is re-hit last, §11.4). Both can be active simultaneously.
-
-### 15.4 Multiple regions
-
-The visibility result is a **set of zero or more polygons**. Obstructions, surface geometry, and plan effects can split the light cone into disconnected regions at any step.
-
-```
-VisibilityResult:
-    regions: Array[GeneralizedPolygon]
-```
-
-### 15.5 Radial ordering
-
-At each step of the light-cone computation, event points (surface endpoints and tangent points) are sorted radially. The ordering hierarchy:
-
-1. **Obstruction side provenance (CW/CCW)** — primary key. When a ray reaches a point of interest, it gains an obstruction on the CW side, CCW side, or both:
-   - **Hit point** (mid-segment): obstructs both sides.
-   - **Segment endpoint**: obstructs one side based on the surface's orientation (left-extending → CCW, right-extending → CW). Corners where surfaces meet may obstruct both.
-2. **Cross-product sign** against a fixed reference direction — secondary key for angular position.
-3. **Provenance ID / surface ID** — final tie-break.
-
-This radial ordering is the **single source of truth** for all angular sorting in the game — visibility, shadow boundaries, and any other radial-ordering logic.
-
-### 15.6 Consistency
-
-Visibility uses the **same intersection pipeline**, **same effects**, and **same scene state** as trajectory. *(Principle 14.)* That means the same beam-solver geometry (`BeamGeom`, §11), the same effect maps (§10.8), and the same game state. If a surface is broken in the game state, it is broken for visibility too.
+Visibility uses the **same casts**, the same scene defs, the same flags and the same ladder as the preview. *(Principle 14.)* `VISIBILITY-EQUALS-NON-DIVERGENCE` pins the region against the preview cursor by cursor (§29.3, UX1 and UX2). The structure invariants VIS-* hold for every region: valid, non-overlapping polygons, and every edge either a member (a beam through the player's image) or a piece of a surface's carrier. The oracle (`docs/research/oracle/visibility.py`) states the definition at 50 digits and labels cursors that the native region and traces must match.
 
 ---
 
@@ -2015,11 +1870,11 @@ ricochet-game-v2/
 │   │   │   ├── beam_tracer.gd             # adapter: events → TracePath / TraceStep
 │   │   │   ├── beam_scene.gd, beam_effects.gd, beam_geom.gd, hp_beam.gd, exact.gd
 │   │   │   └── num_ctx.gd, f64_num.gd, dual_num.gd, big_float.gd, cn.gd
-│   │   └── visibility.gd                  # (planned)
+│   │   └── (visibility: native, rc/visibility.hpp, Stage 110)
 │   ├── visual/
 │   │   ├── visual_converter.gd
 │   │   ├── path_renderer.gd
-│   │   └── visibility_renderer.gd         # (planned)
+│   │   └── visibility_renderer.gd         # the visibility region's fill (Stage 110)
 │   ├── game/
 │   │   ├── game_manager.gd, player.gd, cursor.gd, arrow_animator.gd
 │   │   ├── surface.gd, surface_node.gd, side_config.gd, side_link.gd, room_builder.gd
@@ -2407,7 +2262,7 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 **Deliverable:** all effect types work. Mixed plans with transformative and projective surfaces produce correct previews.
 
-### Phase 7: Visibility system *(Planned)*
+### Phase 7: Visibility system *(Done, Stage 110; projective plans pending)*
 - Visibility polygon computation (multiple regions).
 - Rendering visibility regions.
 - Consistency with trajectory (same pipeline, same scene state).
@@ -2483,9 +2338,9 @@ Invariants are split into two tiers: **user experience invariants** (observable 
 
 #### Tier 1: User experience invariants
 
-**UX1. Visibility predicts non-divergence.** *(PLANNED — depends on visibility system §15.)* If the cursor lies within a visibility region, the planned and physical paths agree up to the cursor (no divergence).
+**UX1. Visibility predicts non-divergence.** If the cursor lies within a visibility region, the planned and physical paths agree up to the cursor (no divergence). **Tested as:** `VISIBILITY_EQUALS_NON_DIVERGENCE` (`false visible`).
 
-**UX2. Divergence implies outside visibility.** *(PLANNED — depends on visibility system §15.)* If the planned and physical paths diverge, the cursor is outside all visibility regions. (Contrapositive of UX1.)
+**UX2. Divergence implies outside visibility.** If the planned and physical paths diverge, or the cursor is not reached, the cursor is outside every visibility region. The converse also holds: a cursor reached with aligned paths is inside (§15.1). **Tested as:** `VISIBILITY_EQUALS_NON_DIVERGENCE` (`false shadow`).
 
 **UX3. Physical preview matches arrow flight.** The non-red sections of the preview (ALIGNED + ALIGNED_POST_PLANNED + DIVERGED_PHYSICAL) exactly match the arrow's actual flight path when fired. Same hit points, same surfaces, same order. *(Principle 2.)* **Tested as:** `PHYSICAL_PREVIEW_MATCH`.
 
@@ -2531,11 +2386,11 @@ Invariants are split into two tiers: **user experience invariants** (observable 
 
 **S12. Side determination consistent.** LEFT/RIGHT at every hit matches the cross-product formula (§9.2). *(§9.2.)* **Tested as:** `ON_SEGMENT_CONSISTENCY`.
 
-**S13. Visibility: no self-intersection.** *(PLANNED — depends on visibility system §15.)* Region boundaries do not self-intersect.
+**S13. Visibility: no self-intersection.** Region boundaries do not self-intersect. **Tested as:** `VIS_SIMPLE`, `VIS_CLOSED`.
 
-**S14. Visibility: edges on geometry.** *(PLANNED — depends on visibility system §15.)* Every polygon edge lies on a surface carrier or a ray from the origin.
+**S14. Visibility: edges on geometry.** Every polygon edge lies on a surface carrier (on its segment where the walk fires there, and at a departure whose entry transforms; a pass or state entry is consumed anywhere on its carrier, B1), on a member (a beam through the player's image `P_K` and the frame's infinity `Q_K`: a ray from `P_K` when `Q_K` is infinity), or on the clip rectangle. **Tested as:** `VIS_EDGE_ON_GEOMETRY`, `VIS_VERTEX_PROVENANCE`, `VIS_SHADOW_ANCHORED`.
 
-**S15. Visibility: non-overlapping.** *(PLANNED — depends on visibility system §15.)* Distinct regions do not overlap.
+**S15. Visibility: non-overlapping.** Distinct regions do not overlap, and their boundaries share no edge piece. **Tested as:** `VIS_DISJOINT`, `VIS_ORIENTED`.
 
 **S16. No NaN/Inf in output.** No NaN/Inf in any coordinate field (except the `Vector2(INF, INF)` escape sentinel). *(§31.)* **Tested as:** `S16`.
 
@@ -2556,11 +2411,22 @@ The following invariants are tested by the sweep but not in the original specifi
 | `VIA_ON_ARC` | Step via points lie on the step's arc carrier |
 | `VISUAL_ON_PHYSICAL_CARRIER` | Visual segment points lie on the physical carrier |
 | `DIRECTION_ONLY` | The physical trace depends only on the aim direction: the planned shot's physical hits equal those of a converged shot without plan aimed at the cursor's image (computed from exact data and rounded once where the plan's maps are exact data, Stage 105; bounded by tangent-linear sensitivity to that image's float64 rounding; projective plans skipped until Stage 87) |
-| `NO_POST_CURSOR_DIVERGENCE` | A path fully aligned up to the cursor does not diverge after it |
+| `NO_POST_CURSOR_DIVERGENCE` | A path fully aligned up to the cursor does not diverge after it. The cursor is the planned display path's `cursor_index` (a divergence exactly at the cursor is after it); the check holds only when both walks leave the cursor's point in one frame (§15.1 V3), and the shorter of two truncated paths is not read past its end (Stage 110) |
 | `EFFECT_LAW` | Every applied effect maps its beam by its exact law (§10.8) |
 | `EVENT_ON_BEAM` | Every event point lies on its beam, and every hit on its surface's carrier |
 | `REAPPLY_IN_PLACE` | No zero-length loop: an applied hit, then only cursor / infinity events at the same point, then an applied hit on the same surface at the same point never happens (a teleport moves the beam: a round trip through a portal pair may re-hit the same portal at the same point) (§11.4, Stage 106) |
 | `BEAM_ORDER` | Consecutive events on one beam chain their parameters in walk order |
+| `VIS_FINITE` | Every point of a visibility region is finite |
+| `VIS_NO_BLOCKER_INSIDE` | No region lies inside a two-sided blocking surface (not planned, not through a pole) |
+| `VIS_SOURCE_ON_BOUNDARY` | The last entry's departure points belong to the region |
+| `VIS_STAR` | Each cell's middle member lies in the region over its visible intervals |
+| `VIS_CELL_CONSTANT` | A cast inside a cell has the cell's walk shape (no critical direction missed) |
+| `VIS_ITERATION_CHAIN` | The departure points lie in the region of the plan without its last entry |
+| `VIS_BOUNDARY_DECIDED` | At every exact point of interest (an endpoint, a piece's end) the region decides as the solver |
+| `VIS_CONTAINS_MATCHES_POLYGON` | The merged loops and the cells agree away from the boundary |
+| `VIS_DRAWN_MATCHES` | The drawn fill (one mesh of the cells) covers a point once where the region contains it and never elsewhere; its area is the cells' (Stage 110, F8) |
+| `VIS_DETERMINISTIC` | The same inputs give the same region (S3) |
+| `VIS_REGULAR` | The region has area wherever it is: its only 1D parts are an arc of a member tangent at a frame's finite infinity point (`Q_j`) to a carrier through it and a piece of the last planned terminal's segment; no loop doubles back on itself (B4, Stage 110) |
 
 *Retired with the legacy frames (Stage 83):* `SHARED_RAY`, `RAY_ALIGNMENT`, `ARC_MIDPOINT_ALIGNMENT`, `POST_INVERSION_ARC`, `PARAMETER_MONOTONICITY`, `BACK_TRANSFORM_ALIGNMENT`, `S18_FRAME_DETERMINANT`.
 
@@ -2581,7 +2447,7 @@ Screenshot comparison for known test scenes at known positions. Catches renderin
 Preview must update **every frame at 60fps** (~16.6ms per frame). Target: preview computation (planning + physical trace + visibility + visual conversion) should complete in under **5ms** on a mid-range CPU, leaving ~11ms for rendering and input processing. The preview computation includes:
 - Planning algorithm.
 - Physical trace (up to 32 steps).
-- Visibility computation.
+- Visibility computation. *(Stage 110: recomputed only when the player, the plan, the flags or the surfaces change, never for the cursor; a region costs about 6 ms with no plan and 15–27 ms with a one-entry plan on `main.tscn`, more than this budget, so it is computed on a worker thread and the frame stays within budget -- docs/TDD_14_VISIBILITY.md, "Performance".)*
 - Math→visual conversion.
 - Draw calls.
 
@@ -2774,4 +2640,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.11.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.19.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -46,7 +46,7 @@ const NATIVE_CLASSES := [
 	"ErrorEstimate", "ErrorEstimateSensitivity", "PrecisionLadder", "PrecisionLadderResult",
 	"Point", "Direction", "Ray", "TraceHit", "TraceStep", "TracePath", "BeamTracer", "BeamTracerPair",
 	"GeneralizedCircle", "Segment", "VisualConverter", "StepTreeMerge", "ArrowAdvance", "ArrowAdvanceResult", "SurfaceGeom",
-	"InvariantKernel", "SweepKernel",
+	"InvariantKernel", "SweepKernel", "VisibilityRegion",
 ]
 
 # whole-identifier patterns that must not appear in code (comments stripped)

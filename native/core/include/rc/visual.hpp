@@ -319,10 +319,14 @@ inline DisplayPlan prepare_for_display(const std::vector<StepGeom> &steps, int c
 			}
 			continue;
 		}
+		// a half of a wrap that is zero-length on the bounds' edge is not drawn:
+		// the cursor index counts drawn steps (B3, Stage 110)
 		if (end_inf && !start_inf && !via_inf) {
 			const V2 clip = clip_to_bounds(step.start, step_via.normalized(), bounds);
 			if (clip != step.start || !step.has_hit) {
 				piece(Piece::Clipped, step.start, clip, step.has_hit, (step.start + clip) / 2.0f, true);
+			} else if (si < cursor_index) {
+				cursor_shift -= 1;
 			}
 			continue;
 		}
@@ -330,6 +334,8 @@ inline DisplayPlan prepare_for_display(const std::vector<StepGeom> &steps, int c
 			const V2 clip = clip_to_bounds(step.end, step_via.normalized(), bounds);
 			if (clip != step.end || !step.has_hit) {
 				piece(Piece::Clipped, clip, step.end, step.has_hit, (clip + step.end) / 2.0f, true);
+			} else if (si < cursor_index) {
+				cursor_shift -= 1;
 			}
 			continue;
 		}

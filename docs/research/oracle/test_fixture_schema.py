@@ -19,6 +19,7 @@ INFINITY_ID = -3
 NOT_TRACES = {
     "bigfloat_cases.json",   # BigFloat arithmetic cases (precision research, read by precision_microbench.gd)
     "stage80_geometry.json",  # beam/segment intersection cases (gen_fixtures_stage80.py)
+    "stage110_visibility.json",  # visibility labels (gen_fixtures_stage110_visibility.py), checked below
 }
 FIXTURE_KEYS = {"name", "surfaces", "player", "direction", "cursor", "plan", "mode", "expected", "targets"}
 EVENT_KINDS = {"hit", "cursor", "origin", "escape", "max", "infinity"}
@@ -77,3 +78,16 @@ def test_trace_fixture_schema(name):
                 assert "x" not in e, where + ": an escape has no point"
             if e["kind"] == "cursor":
                 assert "x" in e, where
+
+
+def test_visibility_labels_schema():
+    """Stage 110: cases of {name, scene, player, plan, cursors: [[x, y, visible]]}."""
+    d = json.load(open(os.path.join(FIXTURES, "stage110_visibility.json")))
+    assert set(d) == {"dps", "cases"}
+    assert d["cases"]
+    for c in d["cases"]:
+        assert set(c) == {"name", "scene", "player", "plan", "cursors"}, c["name"]
+        assert os.path.exists(os.path.join(ROOT, "bench", "scenes", c["scene"] + ".surfaces.json")), c["scene"]
+        for p in c["plan"]:
+            assert {"surface_id", "side"} == set(p), c["name"]
+        assert c["cursors"] and all(len(x) == 3 and isinstance(x[2], bool) for x in c["cursors"]), c["name"]

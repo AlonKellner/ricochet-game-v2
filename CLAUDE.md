@@ -2,8 +2,8 @@
 
 ## Stack
 
-- **Engine**: Godot 4.7+ (GDScript only)
-- **Testing**: GUT 9.6.0 (Godot Unit Test)
+- **Engine**: Godot 4.7+ (GDScript glue over a native C++ core, GDExtension)
+- **Testing**: GUT 9.6.0 (Godot Unit Test); doctest/ctest for the native core; pytest for the mpmath oracle
 - **IDE**: VSCode
 
 ## Architecture
@@ -11,9 +11,10 @@
 Three-layer architecture with strict dependency direction: Math -> Visual -> Game.
 
 - `scripts/math/` — Geometric primitives and algorithms. **Zero Godot dependencies beyond Vector2.** Classes must extend `RefCounted`, `Object`, or have no `extends`. Never `Node`, `Node2D`, `Control`, or any scene-tree type.
-- `scripts/math/effects/` — Effect definitions (reflection, inversion, rigid motion, projective): kind, self-inverse, display. The beam maps are in `precision/beam_effects.gd`.
-- `scripts/math/precision/` — The trajectory solver, the only solver. `BeamSolver` is the rule walker (spec: `docs/research/oracle/trace2.py`). `FastSolver` is its bit-identical f64 twin. `PrecisionLadder` adds dynamic precision and `ErrorEstimate` the error envelopes. `BeamTracer` turns events into `TracePath`/`TraceStep`. `Exact` and `BigFloat` provide the exact predicates and arithmetic. Decisions use provenance and exact predicates, never epsilons.
-- `scripts/visual/` — Rendering via `_draw()` and `queue_redraw()`.
+- `scripts/math/effects/` — Effect definitions (reflection, inversion, rigid motion, projective): kind, self-inverse, display. The beam maps are native (`rc/beam_effects.hpp`).
+- `native/core/include/rc/` — The native core, header-only C++. The trajectory solver is the only solver: `solver.hpp` is the rule walker (spec: `docs/research/oracle/trace2.py`), `ladder.hpp` the dynamic precision, `tracer.hpp` turns events into `TracePath`/`TraceStep`, `exact.hpp` and `bigfloat.hpp` the exact predicates and arithmetic. Decisions use provenance and exact predicates, never epsilons. `invariants.hpp` and `sweep.hpp` are the invariant kernel; `visibility.hpp` and `visibility_checks.hpp` the visibility region and its invariants.
+- `native/gd/` — The GDExtension bindings (`BeamTracer`, `BeamSolver`, `InvariantKernel`, `SweepKernel`, `VisibilityRegion`, ...).
+- `scripts/visual/` — Rendering via `_draw()` and `queue_redraw()` (the visibility fill: `visibility_renderer.gd`).
 - `scripts/game/` — Scene-dependent game logic (player, surfaces, game manager).
 - `scripts/editor/` — Level editor scripts.
 
@@ -31,6 +32,11 @@ godot --headless -s addons/gut/gut_cmdln.gd
 
 # Run specific stage
 make test-stage STAGE=3
+
+# The native core: build (JOBS=4), ctest, ASan (run alone), the oracle
+make native JOBS=4 && make ctest
+make native-asan
+make oracle-test
 ```
 
 - Test files: `tests/test_stage{N}_{topic}.gd`
@@ -65,4 +71,5 @@ Each stage follows the feedback loop protocol:
 ## Key References
 
 - `GAME_SPEC.md` — Single source of truth for game design (25 core principles in section 2)
-- `docs/TDD_01_FOUNDATION.md` through `docs/TDD_08_EDITOR_AND_POLISH.md` — Stage-by-stage implementation guide
+- `docs/TDD_01_FOUNDATION.md` through `docs/TDD_08_EDITOR_AND_POLISH.md` — Stage-by-stage implementation guide (TDD_06 is history)
+- `docs/TDD_09_PRECISION_INTEGRATION.md` through `docs/TDD_14_VISIBILITY.md` — The beam solver, the native core, hit effects, crossings, spec import, visibility
