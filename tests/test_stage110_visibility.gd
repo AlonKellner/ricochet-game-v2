@@ -171,3 +171,23 @@ func test_the_renderer_draws_one_triangle_array():
 					n += 1
 			assert_eq(n, 1 if m == 1 else 0, "the fill at %s" % p)
 	assert_eq(vis.region.check(), [], "the structure checks hold (VIS-DRAWN-MATCHES included)")
+
+# B3: the display drops the zero-length incoming half of a wrap on the bounds'
+# edge (directional_arcs, plan [infinity]); its cursor index counts drawn steps
+func test_the_display_cursor_index_counts_drawn_steps():
+	Surface.reset_id_counter()
+	var scene: Node = load("res://scenes/playground/directional_arcs.tscn").instantiate()
+	add_child_autofree(scene)
+	await get_tree().process_frame
+	var tracer := BeamTracer.new()
+	tracer.set_emit_infinity(true)
+	var plan := [PlanManager.PlanEntry.new(BeamSolver.INFINITY_ID, Side.Value.LEFT)]
+	var cursor := Vector2(1360, 300)
+	var pair := tracer.trace_pair(SceneDefs.defs_from_surfaces(scene.surfaces), Vector2(500, 300), cursor, plan, {},
+		SceneDefs.segments_by_id(scene.surfaces))
+	assert_not_null(pair, "a trace")
+	var display := VisualConverter.prepare_for_display(pair.planned, VisualConverter.DEFAULT_BOUNDS(), [])
+	assert_gt(display.cursor_index, 0, "the cursor is reached")
+	assert_lte(display.cursor_index, display.steps.size(), "the index counts drawn steps")
+	if display.cursor_index > 0 and display.cursor_index <= display.steps.size():
+		assert_eq(display.steps[display.cursor_index - 1].end, cursor, "the step before the index ends at the cursor")

@@ -27,10 +27,7 @@ inline bool preview_visible(const TracePath &planned, const std::vector<TraceSte
 	if (planned.cursor_index < 0 || !cursor_point_agrees) {
 		return false; // (V1; V3: both walks leave the cursor's own point in one frame, B4)
 	}
-	// the display may drop a zero-length piece before the cursor without moving
-	// its index (the incoming half of a wrap on the bounds' edge): every drawn
-	// step before the cursor counts
-	const int ci = std::min(planned.cursor_index, int(planned.steps.size()));
+	const int ci = planned.cursor_index;
 	if (int(typed.size()) < ci) {
 		return false;
 	}

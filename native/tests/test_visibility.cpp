@@ -971,6 +971,27 @@ TEST_CASE("visibility: VIS-REGULAR allows a member tangent at Q and a planned te
 	CHECK(count_kind(inv::check_visibility(in2), "VIS-REGULAR") == 0);
 }
 
+TEST_CASE("visibility: the display's cursor index counts drawn steps (B3)") {
+	// directional_arcs, plan [infinity]: the walk wraps through infinity on the
+	// bounds' edge, and the wrap's incoming half is zero-length there and not
+	// drawn; the cursor index used to keep counting it (one past the steps)
+	Tracer t;
+	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/playground__directional_arcs.surfaces.json");
+	t.set_emit_infinity(true);
+	t.set_defs(defs_from_json(d["surfaces"]));
+	const std::vector<PlanItem> inf{PlanItem{INFINITY_ID, true, std::nullopt, std::nullopt}};
+	const V2 cursor{1360, 300};
+	const std::optional<TracePair> pair = t.trace_pair(V2{500, 300}, cursor, inf, Flags());
+	REQUIRE(pair.has_value());
+	const Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
+	const std::vector<inv::SurfaceInfo> none;
+	const TracePath dl = sweep::prepare_for_display(pair->planned, bounds, none);
+	REQUIRE(dl.cursor_index > 0);
+	REQUIRE(dl.cursor_index <= int(dl.steps.size()));
+	CHECK(dl.steps[size_t(dl.cursor_index) - 1].end == cursor);
+	CHECK(defined_visible(t, V2{500, 300}, cursor, inf, Flags()) == std::optional<bool>(true));
+}
+
 TEST_CASE("visibility: the drawn fill covers the region once (F8)") {
 	// pre_inverted, empty plan, the user's player (float32): a member nearly
 	// tangent to surface 4's carrier made the tessellated hole cross itself, and

@@ -457,7 +457,7 @@ inline Violations check_NO_POST_CURSOR_DIVERGENCE(const Input &in) {
 		|| !in.cursor_point_agrees) {
 		return out; // no cursor reached, or not visible at its own point: no claim
 	}
-	const size_t ci = std::min(size_t(in.planned->cursor_index), in.planned->steps.size());
+	const size_t ci = size_t(in.planned->cursor_index);
 	const std::vector<TraceStep> &ty = *in.typed;
 	if (ty.size() < ci) {
 		return out;

@@ -182,9 +182,7 @@ static func preview_visible(renderer: Node) -> bool:
 	if renderer.last_pair != null and not renderer.last_pair.cursor_point_agrees:
 		return false
 	var merged: Array = renderer._merged_steps
-	# the display may drop a zero-length piece before the cursor without moving
-	# its index: every drawn step before the cursor counts (inv::preview_visible)
-	var ci: int = mini(planned.cursor_index, planned.steps.size())
+	var ci: int = planned.cursor_index
 	if merged.size() < ci:
 		return false
 	for i in ci:
