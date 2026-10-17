@@ -88,7 +88,7 @@ func _sweep(scenes: Array[String], plans_of: Callable, seed: int, label: String)
 		positions.append_array(SweepPlans.q0_positions(scene))
 		positions.append_array(SweepPlans.on_surface_positions(scene))
 		combos += plans.size() * SweepRunner.combo_count(positions, true)
-		for f in SweepRunner.sweep_native(scene, positions, plans, true, null, true):
+		for f in SweepRunner.sweep_native(scene, positions, plans, true, null, true, true):
 			for v: String in f.violations:
 				var entry := {"scene": scene_path, "player_pos": f.player_pos, "cursor_pos": f.cursor_pos,
 					"plan": SweepPlans.plan_to_data(plans[f.plan_index]), "violation": v}

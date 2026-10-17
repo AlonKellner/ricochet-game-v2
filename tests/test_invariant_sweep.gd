@@ -149,8 +149,15 @@ func test_sweep_infinity_plans() -> void:
 # Known findings (docs/TDD_10_NATIVE_MIGRATION.md, "Known findings"): a
 # violation matching one is reported, not failed; a finding that no longer
 # occurs fails the sweep so the list stays true.
-# (K1, K2 and K3 were resolved by Stages 105 and 106: none are open.)
-const KNOWN_FINDINGS := []
+# (K1, K2 and K3 were resolved by Stages 105 and 106.)
+# K9 (Stage 110, docs/TDD_14_VISIBILITY.md): found by the cursors on the planned
+# carriers beyond their segments -- a cursor exactly on the last planned
+# surface's carrier far off its segment, in a pre-transform level with three
+# entries, the first applied by the planned walk off its segment.
+const KNOWN_FINDINGS := [
+	{"id": "K9", "scene": "res://scenes/playground/pre_inverted.tscn", "plan": "[2/L,3/L,4/R]", "prefix": "DIRECTION-ONLY"},
+	{"id": "K9", "scene": "res://scenes/playground/pre_inverted.tscn", "plan": "[2/L,3/L,4/R]", "prefix": "PHYSICS-COMPLIANCE"},
+]
 
 static func _known(f: Dictionary, plan_str: String) -> String:
 	for k in KNOWN_FINDINGS:
@@ -177,7 +184,8 @@ func _sweep_scenes(scenes: Array[String], plans_of: Callable, seed: int, label: 
 		positions.append_array(SweepPlans.q0_positions(scene)) # Stage 105: exact grazes at Q0
 		positions.append_array(SweepPlans.on_surface_positions(scene)) # Stage 106: pops at known points
 		total_combos += plans.size() * SweepRunner.combo_count(positions, true)
-		for f in SweepRunner.sweep_native(scene, positions, plans, true):
+		# (Stage 110: and cursors on the planned carriers beyond their segments)
+		for f in SweepRunner.sweep_native(scene, positions, plans, true, null, false, true):
 			for v: String in f.violations:
 				total_failures.append({"scene": scene_path, "player_pos": f.player_pos, "cursor_pos": f.cursor_pos,
 					"plan": SweepPlans.plan_to_data(plans[f.plan_index]), "violation": v})

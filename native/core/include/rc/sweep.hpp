@@ -173,9 +173,52 @@ inline inv::Violations check_combo(Tracer &tracer, const Scene<F64> &scene, cons
 
 // Every combo of positions x positions under every plan; shard_n > 1 keeps the
 // player indices with index % shard_n == shard_i (SweepRunner.in_shard).
+// Stage 110: cursors on the planned surfaces' carriers (lines, and a portal's
+// pair) beyond their segments -- where a walk departs from a planned surface
+// crossed off its segment (B4) -- at S + k (E - S), k in {-1, -1/2, -1/8, 9/8,
+// 3/2, 2}, kept when exact in float32 (a cursor is a float32 point) and inside
+// the bounds grown by 50. Ordinary sweep cursors almost never land there.
+inline std::vector<V2> carrier_extension_cursors(const std::vector<SurfaceDef> &defs, const std::vector<PlanItem> &plan, const Rect2f &bounds) {
+	std::vector<int> ids;
+	for (const PlanItem &item : plan) {
+		if (item.is_infinity()) {
+			continue;
+		}
+		ids.push_back(item.surface_id);
+		for (const SurfaceDef &d : defs) {
+			if (d.id != item.surface_id) {
+				continue;
+			}
+			for (const std::optional<SideDef> &side : {d.left, d.right}) {
+				if (side && side->pair >= 0) {
+					ids.push_back(side->pair);
+				}
+			}
+		}
+	}
+	std::vector<V2> out;
+	const Rect2f g = bounds.grow(50.0f);
+	for (int id : ids) {
+		for (const SurfaceDef &d : defs) {
+			if (d.id != id || !d.line || d.full) {
+				continue;
+			}
+			for (const double k : {-1.0, -0.5, -0.125, 1.125, 1.5, 2.0}) {
+				const double x = d.sx + k * (d.ex - d.sx);
+				const double y = d.sy + k * (d.ey - d.sy);
+				const V2 c{float(x), float(y)};
+				if (double(c.x) == x && double(c.y) == y && g.has_point(c) && std::find(out.begin(), out.end(), c) == out.end()) {
+					out.push_back(c);
+				}
+			}
+		}
+	}
+	return out;
+}
+
 inline std::vector<Combo> run(const std::vector<SurfaceDef> &defs, const std::vector<inv::SurfaceInfo> &surfaces, const std::vector<V2> &positions,
 		const std::vector<std::vector<PlanItem>> &plans, const Flags &flags, int shard_i, int shard_n, bool skip_equal, bool only_failures,
-		bool emit_infinity = false, bool visibility = false) {
+		bool emit_infinity = false, bool visibility = false, bool carrier_cursors = false) {
 	std::vector<Combo> out;
 	Tracer tracer;
 	tracer.set_emit_infinity(emit_infinity);
@@ -184,6 +227,14 @@ inline std::vector<Combo> run(const std::vector<SurfaceDef> &defs, const std::ve
 	scene.emit_infinity = emit_infinity;
 	const Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
 	for (size_t pli = 0; pli < plans.size(); pli++) {
+		std::vector<V2> cursors = positions;
+		if (carrier_cursors) {
+			for (const V2 &c : carrier_extension_cursors(defs, plans[pli], bounds)) {
+				if (std::find(cursors.begin(), cursors.end(), c) == cursors.end()) {
+					cursors.push_back(c);
+				}
+			}
+		}
 		for (size_t pi = 0; pi < positions.size(); pi++) {
 			if (shard_n > 1 && int(pi) % shard_n != shard_i) {
 				continue;
@@ -201,7 +252,7 @@ inline std::vector<Combo> run(const std::vector<SurfaceDef> &defs, const std::ve
 					out.push_back(Combo{int(pli), positions[pi], positions[pi], std::move(vs)});
 				}
 			}
-			for (const V2 &cursor : positions) {
+			for (const V2 &cursor : cursors) {
 				if (skip_equal && positions[pi] == cursor) {
 					continue;
 				}

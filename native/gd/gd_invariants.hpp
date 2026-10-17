@@ -24,7 +24,7 @@ public:
 	static godot::Array check_all(const godot::Vector2 &player, const godot::Vector2 &cursor, const godot::Ref<TracePath> &physical,
 			const godot::Ref<TracePath> &planned, const godot::Array &typed, const godot::Ref<PrecisionLadderResult> &result,
 			const godot::Array &surfaces, const godot::Array &defs, const godot::Dictionary &flags, const godot::Array &plan_entries,
-			bool has_renderer, bool plan_applied, bool emit_infinity = false);
+			bool has_renderer, bool plan_applied, bool emit_infinity = false, bool cursor_point_agrees = true);
 	// Stage 110: VISIBILITY-EQUALS-NON-DIVERGENCE at the cursor (region: a VisibilityRegion)
 	static godot::Array check_visibility_pin(const godot::Ref<godot::RefCounted> &region, const godot::Vector2 &cursor,
 			const godot::Ref<TracePath> &planned, const godot::Array &typed, bool cursor_point_agrees = true);
@@ -51,7 +51,7 @@ public:
 	// plans: [[PlanEntry, ...], ...]; returns the failing combos:
 	// [{plan_index, player, cursor, violations: [String]}]
 	static godot::Array run(const godot::Array &defs, const godot::Array &surfaces, const godot::PackedVector2Array &positions, const godot::Array &plans,
-			const godot::Dictionary &flags, int shard_i, int shard_n, bool skip_equal, bool emit_infinity = false, bool visibility = false);
+			const godot::Dictionary &flags, int shard_i, int shard_n, bool skip_equal, bool emit_infinity = false, bool visibility = false, bool carrier_cursors = false);
 };
 
 // shared converters (gd_invariants.cpp)

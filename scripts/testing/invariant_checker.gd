@@ -43,7 +43,8 @@ func check_all(player_pos: Vector2, cursor_pos: Vector2, plan_entries: Array = [
 		_renderer._compute_trace()
 	var out: Array[String] = []
 	out.assign(InvariantKernel.check_all(player_pos, cursor_pos, _traced_path(), _planned_path(), _typed_steps(), _beam_result(),
-		surface_infos(_surfaces(), _flags()), _defs(), _flags(), plan_entries, _renderer != null, plan_applied, FeatureFlags.infinity_event()))
+		surface_infos(_surfaces(), _flags()), _defs(), _flags(), plan_entries, _renderer != null, plan_applied, FeatureFlags.infinity_event(),
+		_renderer == null or _renderer.last_pair == null or _renderer.last_pair.cursor_point_agrees))
 	return out
 
 # DIRECTION-ONLY alone, for the traces the renderer computes for these

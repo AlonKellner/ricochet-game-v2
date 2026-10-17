@@ -110,8 +110,10 @@ func sweep(scene: Node, custom_positions: Array[Vector2] = []) -> Dictionary:
 # visibility (Stage 110): each player's visibility region, its structure
 # checks (reported with the cursor at the player) and the region against the
 # preview at every cursor -- that pin alone, the other invariants not.
+# carrier_cursors (Stage 110): also cursors on the planned surfaces' carriers
+# beyond their segments (where a walk departs off the segment, B4).
 static func sweep_native(scene: Node, positions: Array[Vector2], plans: Array, skip_equal: bool, emit_infinity = null,
-		visibility := false) -> Array[Dictionary]:
+		visibility := false, carrier_cursors := false) -> Array[Dictionary]:
 	var emit: bool = FeatureFlags.infinity_event() if emit_infinity == null else emit_infinity
 	var renderer: Node = scene.get_node_or_null("PathRenderer")
 	var flags: Dictionary = renderer.get_flags() if renderer and renderer.has_method("get_flags") else {}
@@ -120,7 +122,7 @@ static func sweep_native(scene: Node, positions: Array[Vector2], plans: Array, s
 	var infos := InvariantChecker.surface_infos(surfaces, flags)
 	var sh := shard()
 	var out: Array[Dictionary] = []
-	for raw in SweepKernel.run(defs, infos, PackedVector2Array(positions), plans, flags, sh.x, sh.y, skip_equal, emit, visibility):
+	for raw in SweepKernel.run(defs, infos, PackedVector2Array(positions), plans, flags, sh.x, sh.y, skip_equal, emit, visibility, carrier_cursors):
 		var violations: Array[String] = []
 		violations.assign(raw.violations)
 		out.append({"player_pos": raw.player, "cursor_pos": raw.cursor, "plan_index": raw.plan_index, "violations": violations})

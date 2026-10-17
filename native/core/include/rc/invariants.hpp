@@ -446,28 +446,36 @@ inline Violations check_SINGLE_DIVERGENCE(const Input &in) {
 	return out;
 }
 
+// Aligned up to the cursor, aligned after it: once both walks reach the cursor
+// in one frame and leave its point in one frame (B4), the plan is spent and they
+// walk on together. The cursor is the planned path's cursor_index (Stage 110):
+// inferring it from the first ALIGNED_POST step read a divergence exactly at
+// the cursor as one before it, and passed it.
 inline Violations check_NO_POST_CURSOR_DIVERGENCE(const Input &in) {
 	Violations out;
-	if (!in.has_renderer || in.player == in.cursor || in.typed == nullptr || in.typed->empty()) {
+	if (!in.has_renderer || in.player == in.cursor || in.typed == nullptr || in.typed->empty() || in.planned == nullptr || in.planned->cursor_index < 0
+		|| !in.cursor_point_agrees) {
+		return out; // no cursor reached, or not visible at its own point: no claim
+	}
+	const size_t ci = std::min(size_t(in.planned->cursor_index), in.planned->steps.size());
+	const std::vector<TraceStep> &ty = *in.typed;
+	if (ty.size() < ci) {
 		return out;
 	}
-	bool all_pre_cursor_aligned = true;
-	bool past_cursor = false;
-	for (size_t i = 0; i < in.typed->size(); i++) {
-		const StepType t = (*in.typed)[i].type;
-		if (t == StepType::Aligned) {
-			continue;
+	for (size_t i = 0; i < ci; i++) {
+		if (ty[i].type != StepType::Aligned) {
+			return out; // diverged before the cursor: SINGLE-DIVERGENCE's matter
 		}
-		if (t == StepType::AlignedPostPlanned) {
-			past_cursor = true;
-			continue;
-		}
-		if (!past_cursor) {
-			all_pre_cursor_aligned = false;
-			break;
-		}
-		if (all_pre_cursor_aligned) {
-			out.push_back(v("NO-POST-CURSOR-DIVERGENCE: step %d type=%d diverges after fully-aligned path to cursor", I(int64_t(i)), I(int(t))));
+	}
+	// a path cut by the event limit ends where it ends: the longer one's tail is not a divergence
+	size_t end = ty.size();
+	const bool truncated = in.planned->truncated || (in.physical != nullptr && in.physical->truncated);
+	if (truncated && in.physical != nullptr) {
+		end = std::min(end, std::min(in.planned->steps.size(), in.physical->steps.size()));
+	}
+	for (size_t i = ci; i < end; i++) {
+		if (ty[i].type != StepType::AlignedPostPlanned) {
+			out.push_back(v("NO-POST-CURSOR-DIVERGENCE: step %d type=%d diverges after fully-aligned path to cursor", I(int64_t(i)), I(int(ty[i].type))));
 			break;
 		}
 	}
