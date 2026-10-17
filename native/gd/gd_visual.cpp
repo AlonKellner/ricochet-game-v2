@@ -206,7 +206,68 @@ void VisualConverter::_bind_methods() {
 	ClassDB::bind_static_method("VisualConverter", D_METHOD("clip_to_bounds", "origin", "dir", "bounds"), &VisualConverter::clip_to_bounds);
 	ClassDB::bind_static_method("VisualConverter", D_METHOD("is_arc", "start", "via", "end_v"), &VisualConverter::is_arc);
 	ClassDB::bind_static_method("VisualConverter", D_METHOD("arc_params", "start", "via", "end_v"), &VisualConverter::arc_params);
+	ClassDB::bind_static_method("VisualConverter",
+		D_METHOD("dash_arc", "center", "radius", "start_angle", "end_angle", "point_count", "dash_on", "dash_off", "max_len"), &VisualConverter::dash_arc);
+	ClassDB::bind_static_method("VisualConverter", D_METHOD("dash_line", "from", "to", "dash_on", "dash_off", "max_len"), &VisualConverter::dash_line);
 	BIND_CONSTANT(POINTS_PER_FULL_CIRCLE);
+}
+
+PackedVector2Array VisualConverter::dash_arc(const Vector2 &center, double radius, double start_angle, double end_angle, int point_count,
+		double dash_on, double dash_off, double max_len) {
+	PackedVector2Array pts;
+	const double span = end_angle - start_angle;
+	const double total_len = std::min(radius * std::abs(span), max_len);
+	if (total_len == 0.0 || !(dash_on > 0.0) || !(dash_off >= 0.0)) {
+		return pts;
+	}
+	const double cx = center.x;
+	const double cy = center.y;
+	double drawn = 0.0;
+	bool on = true;
+	while (drawn < total_len) {
+		const double seg_len = std::min(on ? dash_on : dash_off, total_len - drawn);
+		if (on) {
+			const double a0 = start_angle + (drawn / total_len) * span;
+			const double a1 = start_angle + ((drawn + seg_len) / total_len) * span;
+			const int seg_points = std::max(2, int(point_count * seg_len / total_len));
+			Vector2 prev(float(cx + std::cos(a0) * radius), float(cy + std::sin(a0) * radius));
+			for (int k = 1; k < seg_points; k++) {
+				const double th = a0 + (k / (seg_points - 1.0)) * (a1 - a0);
+				const Vector2 q(float(cx + std::cos(th) * radius), float(cy + std::sin(th) * radius));
+				pts.push_back(prev);
+				pts.push_back(q);
+				prev = q;
+			}
+		}
+		drawn += seg_len;
+		on = !on;
+	}
+	return pts;
+}
+
+PackedVector2Array VisualConverter::dash_line(const Vector2 &from, const Vector2 &to, double dash_on, double dash_off, double max_len) {
+	PackedVector2Array pts;
+	const double dx = double(to.x) - double(from.x);
+	const double dy = double(to.y) - double(from.y);
+	const double total_len = std::min(std::sqrt(dx * dx + dy * dy), max_len);
+	if (total_len == 0.0 || !(dash_on > 0.0) || !(dash_off >= 0.0)) {
+		return pts;
+	}
+	// (as the GDScript original: the direction over the capped length)
+	const double ux = dx / total_len;
+	const double uy = dy / total_len;
+	double drawn = 0.0;
+	bool on = true;
+	while (drawn < total_len) {
+		const double seg_len = std::min(on ? dash_on : dash_off, total_len - drawn);
+		if (on) {
+			pts.push_back(Vector2(float(from.x + ux * drawn), float(from.y + uy * drawn)));
+			pts.push_back(Vector2(float(from.x + ux * (drawn + seg_len)), float(from.y + uy * (drawn + seg_len))));
+		}
+		drawn += seg_len;
+		on = !on;
+	}
+	return pts;
 }
 
 namespace {

@@ -9,7 +9,7 @@
 | P1 | The exact-image cache key (a 6-decimal cursor key: a bug) | Done: no region or golden changed |
 | P2 | The ladder: BigFloat only where an exact decision needs it | Done: P2a (BigFloat arithmetic, bit-identical), P2b (exact circles: double roots, circular concurrency) |
 | P3 | The region build: cast reuse, cheaper casts, the fill | P3a done (parallel casts) |
-| P4 | The frame path: defs handle, lean trace results, overlay keys | Not started |
+| P4 | The frame path: defs handle, lean trace results, overlay keys | P4a done (native dashes, lazy hit records) |
 | P6 | Docs | Not started |
 
 **Rules:** every phase is behaviour-neutral. Traces, regions and goldens stay bit-identical. A changed golden is a behaviour change, brought to the user with evidence. Coverage stays as it is: trims of duplicated checks come only as a separate proposal with numbers (user, 2026-10-17).
@@ -171,4 +171,37 @@ The p95 on inversion_grid plans is still about twice the budget. The longest sin
 **What remains** are near-concurrencies: a beam within less than one float64 ulp of a corner, not through it. The ladder's margins are float64 distances, so the two hits round to one point at every tier. Only the 64-limb walk orders them correctly; that climb is right and stays.
 
 **Note:** the oracle's generators do not reproduce 344 committed fixture and corpus files byte for byte, under either oracle (format or library drift, not a behaviour change). They were not re-committed.
+
+## P4a: the frame path
+
+**Survey:** temporary timers on inversion_grid, plan_orbit, per redraw or recompute:
+
+| Part | Cost |
+|---|---|
+| PathRenderer `_draw` | 0.69–0.77 ms |
+| `trace_pair` | 0.45 ms |
+| merge plus hits | 0.055 ms |
+| the two `prepare_for_display` calls | 0.045 ms |
+| GameManager `_process` | 0.025 ms |
+
+Of the draw, the dashed arcs were 58% and the dashed lines 13%: GDScript loops computing up to 267 dashes per step, with sin and cos per point. Batching their draw calls in GDScript gained nothing.
+
+A cached `trace_pair`, with no solve, still cost 189 µs: about 34 µs converting the defs, the rest wrapping steps, hits and the hit Dictionaries into Godot objects.
+
+**Changes:**
+- `VisualConverter.dash_arc` and `dash_line` compute a dashed step's segments natively, the same dashes (each arc dash the points `draw_arc` takes for it). The renderer draws them in one `draw_multiline` per step.
+- `TracePath.hits` (the Stage 107 records, a Dictionary per hit) is made from the native records on first read; the preview never reads them. A cached `trace_pair` went from 189 to 141 µs.
+
+**Main-thread frame on inversion_grid:**
+
+| Phase | Mean before | Mean after | Max after |
+|---|---|---|---|
+| cursor_orbit | 0.66 ms | 0.51 ms | 6.9 ms |
+| plan_orbit | 1.65 ms | 1.20–1.27 ms | 4.8–5.1 ms |
+| player_orbit | 1.78 ms | 1.15–1.23 ms | 7.4 ms |
+
+**What is left:**
+- **Spikes:** the maxima are the preview's own trace when the cursor is near a tie and the ladder climbs (`trace_pair` max 6.7 ms against 0.42 ms mean).
+- **Per recompute:** about 0.1 ms of step wrapping and 0.03 ms of defs conversion.
+- **Gates:** 231 s for a change outside the core headers (ASan 108 s); a core header change rebuilds both trees (about 290–340 s).
 

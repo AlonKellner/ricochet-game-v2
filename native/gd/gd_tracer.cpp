@@ -338,6 +338,27 @@ Dictionary TracePath::physical_hits() const {
 	return result;
 }
 
+Array TracePath::get_hits() const {
+	if (hits_pending) {
+		hits_pending = false;
+		for (const rc::HitRecord &h : native_hits) {
+			Dictionary d;
+			d["surface_id"] = h.surface_id;
+			d["side"] = int(h.side);
+			d["on_segment"] = h.on_segment;
+			d["fired"] = h.fired;
+			d["state"] = h.state;
+			d["point"] = Vector2(h.point.x, h.point.y);
+			d["tangent"] = Vector2(h.tangent.x, h.tangent.y);
+			d["flags_before"] = flags_to_dict(h.flags_before);
+			d["step_index"] = h.step_index;
+			hits.push_back(d);
+		}
+		native_hits.clear();
+	}
+	return hits;
+}
+
 Ref<TracePath> TracePath::wrap(const rc::TracePath &p, const Dictionary &segments, RayCache &rays) {
 	Ref<TracePath> o;
 	o.instantiate();
@@ -347,19 +368,8 @@ Ref<TracePath> TracePath::wrap(const rc::TracePath &p, const Dictionary &segment
 	for (int id : p.targets_hit) {
 		o->targets_hit[id] = true;
 	}
-	for (const rc::HitRecord &h : p.hits) {
-		Dictionary d;
-		d["surface_id"] = h.surface_id;
-		d["side"] = int(h.side);
-		d["on_segment"] = h.on_segment;
-		d["fired"] = h.fired;
-		d["state"] = h.state;
-		d["point"] = Vector2(h.point.x, h.point.y);
-		d["tangent"] = Vector2(h.tangent.x, h.tangent.y);
-		d["flags_before"] = flags_to_dict(h.flags_before);
-		d["step_index"] = h.step_index;
-		o->hits.push_back(d);
-	}
+	o->native_hits = p.hits;
+	o->hits_pending = !p.hits.empty();
 	o->cursor_index = p.cursor_index;
 	o->hit_count = p.hit_count;
 	o->truncated = p.truncated;

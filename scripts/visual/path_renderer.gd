@@ -271,39 +271,17 @@ func _draw_step(step: TraceStep, col: Color, dashed: bool) -> void:
 		else:
 			draw_line(from, to, col, LINE_WIDTH)
 
+# One draw call per dashed step (Perf P4): the dashes' segments, computed
+# natively (VisualConverter.dash_arc / dash_line), in one multiline.
 func _draw_dashed_arc(center: Vector2, radius: float, start_angle: float, end_angle: float, point_count: int, col: Color) -> void:
-	var span := end_angle - start_angle
-	var total_len := minf(radius * absf(span), 4000.0)
-	if total_len == 0.0:
-		return
-	var drawn := 0.0
-	var on := true
-	while drawn < total_len:
-		var seg_len := DASH_ON if on else DASH_OFF
-		seg_len = minf(seg_len, total_len - drawn)
-		if on:
-			var a0 := start_angle + (drawn / total_len) * span
-			var a1 := start_angle + ((drawn + seg_len) / total_len) * span
-			var seg_points := maxi(2, int(point_count * seg_len / total_len))
-			draw_arc(center, radius, a0, a1, seg_points, col, LINE_WIDTH)
-		drawn += seg_len
-		on = not on
+	var pts := VisualConverter.dash_arc(center, radius, start_angle, end_angle, point_count, DASH_ON, DASH_OFF, 4000.0)
+	if pts.size() > 0:
+		draw_multiline(pts, col, LINE_WIDTH)
 
 func _draw_dashed(from: Vector2, to: Vector2, col: Color) -> void:
-	var dir := to - from
-	var total_len := minf(dir.length(), MAX_DASH_LEN)
-	if total_len == 0.0:
-		return
-	var unit := dir / total_len
-	var drawn := 0.0
-	var on := true
-	while drawn < total_len:
-		var seg_len := DASH_ON if on else DASH_OFF
-		seg_len = minf(seg_len, total_len - drawn)
-		if on:
-			draw_line(from + unit * drawn, from + unit * (drawn + seg_len), col, LINE_WIDTH)
-		drawn += seg_len
-		on = not on
+	var pts := VisualConverter.dash_line(from, to, DASH_ON, DASH_OFF, MAX_DASH_LEN)
+	if pts.size() > 0:
+		draw_multiline(pts, col, LINE_WIDTH)
 
 func has_line() -> bool:
 	return _merged_steps.size() > 0
