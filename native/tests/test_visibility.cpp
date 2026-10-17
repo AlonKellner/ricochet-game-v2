@@ -433,21 +433,44 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 			}
 		}
 	}
+	if (std::getenv("RC_VIS_POLYS")) {
+		// RC_VIS_POLYS=1: every cell's drawn polygon (what VisibilityRegion.cell_polygons hands the renderer)
+		for (size_t ci = 0; ci < r.cells.size(); ci++) {
+			for (const auto &l : r.cells[ci].loops) {
+				const std::vector<vis::Pt> poly = vis::clip_polygon(vis::polyline(l), r.domain);
+				std::printf("poly cell %zu: %zu points, area %.3f:", ci, poly.size(), vis::signed_area(poly));
+				for (const auto &q : poly) std::printf(" (%.3f,%.3f)", q.x, q.y);
+				std::printf("\n");
+			}
+		}
+	}
 	if (const char *near = std::getenv("RC_VIS_NEAR")) {
 		vis::Pt c;
 		std::sscanf(near, "%lf,%lf", &c.x, &c.y);
 		std::printf("contains(%.3f,%.3f) = %d, margin %.3g\n", c.x, c.y, int(vis::contains(r, c)), vis::margin(r, c));
 		{
+			// the definition at this cursor, the preview's steps and the cursor-relative invariants
 			const std::optional<bool> dv = defined_visible(t, V2{float(P.x), float(P.y)}, V2{float(c.x), float(c.y)}, plan, Flags());
 			std::printf("defined visible: %s\n", dv ? (*dv ? "yes" : "no") : "unclassified");
-			if (const std::optional<TracePair> pair = t.trace_pair(V2{float(P.x), float(P.y)}, V2{float(c.x), float(c.y)}, plan, Flags())) {
-				for (const char *which : {"planned", "physical"}) {
-					const TracePath tp = sweep::prepare_for_display(std::string(which) == "planned" ? pair->planned : pair->physical,
-						Rect2f::of(0, 0, 1920, 1080), std::vector<inv::SurfaceInfo>{});
-					std::printf("%s steps %zu cursor_index %d:", which, tp.steps.size(), tp.cursor_index);
-					for (const TraceStep &st : tp.steps) std::printf(" [(%g,%g)->(%g,%g) f%d]", st.start.x, st.start.y, st.end.x, st.end.y, st.frame_id);
+			if (const std::optional<TracePair> pr = t.trace_pair(V2{float(P.x), float(P.y)}, V2{float(c.x), float(c.y)}, plan, Flags())) {
+				const std::vector<inv::SurfaceInfo> none;
+				const TracePath dp = sweep::prepare_for_display(pr->physical, Rect2f::of(0, 0, 1920, 1080), none);
+				const TracePath dl = sweep::prepare_for_display(pr->planned, Rect2f::of(0, 0, 1920, 1080), none);
+				const std::vector<TraceStep> ty = sweep::merge(dl.steps, dp.steps, dl.cursor_index);
+				for (const auto &[which, tp] : {std::pair<const char *, const TracePath *>{"planned", &dl}, {"physical", &dp}}) {
+					std::printf("%s steps %zu cursor_index %d:", which, tp->steps.size(), tp->cursor_index);
+					for (const TraceStep &st : tp->steps) std::printf(" [(%g,%g)->(%g,%g) f%d]", st.start.x, st.start.y, st.end.x, st.end.y, st.frame_id);
 					std::printf("\n");
 				}
+				inv::Input in;
+				in.has_renderer = true;
+				in.player = V2{float(P.x), float(P.y)};
+				in.cursor = V2{float(c.x), float(c.y)};
+				in.typed = &ty;
+				in.physical = &dp;
+				in.planned = &dl;
+				for (const inv::Violation &vi : inv::check_NO_POST_CURSOR_DIVERGENCE(in)) std::printf("invariant: %s\n", render(vi).c_str());
+				for (const inv::Violation &vi : inv::check_PHYSICAL_PREVIEW_MATCH(in)) std::printf("invariant: %s\n", render(vi).c_str());
 			}
 		}
 		for (size_t li = 0; li < r.loops.size(); li++) {
