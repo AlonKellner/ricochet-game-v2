@@ -15,6 +15,8 @@
 #include <cstdlib>
 #include <filesystem>
 #include <fstream>
+#include <functional>
+#include <set>
 
 using namespace rc;
 
@@ -1014,6 +1016,155 @@ TEST_CASE("visibility: the member tangent at Q is cast exactly both ways (K8)") 
 	CHECK(exact_other == 1);
 	CHECK(vis::contains(r, vis::Pt{800, 420}) == vis::Membership::Inside);
 	CHECK(defined_visible(t, V2{760, 440}, V2{800, 420}, inf, Flags()) == std::optional<bool>(true));
+}
+
+namespace {
+// The kinds a check run reports (the prefix before ':' or ' (').
+std::set<std::string> kinds_of(const inv::Violations &vs) {
+	std::set<std::string> out;
+	for (const inv::Violation &v : vs) {
+		const std::string m = render(v);
+		out.insert(m.substr(0, m.find_first_of(":( ")));
+	}
+	return out;
+}
+std::string joined(const std::set<std::string> &ks) {
+	std::string s;
+	for (const std::string &k : ks) s += (s.empty() ? "" : ", ") + k;
+	return s;
+}
+} // namespace
+
+// Each region check catches what it names (F7): a valid region, corrupted one
+// way per check, trips that check. The others a corruption trips too are its
+// consequences, listed per case (VIS-DETERMINISTIC sees every change to the
+// loops or cells: the corrupted region is not what the inputs compute); none
+// beyond them fires. VIS-REGULAR has its own cases above.
+TEST_CASE("visibility: every region check detects its corruption") {
+	Tracer t;
+	const std::vector<PlanItem> plan{PlanItem{4, true, std::nullopt, std::nullopt}};
+	const vis::Pt player{960, 827.999};
+	const vis::Result base = region_of(t, "test_levels__three_mirrors", plan, player);
+	REQUIRE(base.supported);
+	REQUIRE(base.loops.size() == 1);
+	REQUIRE(base.loops[0].edges.size() > 4);
+	REQUIRE(base.loops[0].edges[1].kind == vis::EdgeKind::Member);
+	REQUIRE(base.loops[0].edges[2].kind == vis::EdgeKind::Bounds);
+	REQUIRE(base.loops[0].edges[4].kind == vis::EdgeKind::Carrier);
+	REQUIRE(base.loops[0].edges[4].surface != 1);
+	auto fired = [&](const vis::Result &r) {
+		inv::VisInput in{&r, &t, player, plan, Flags(), vis::Rect{0, 0, 1920, 1080}};
+		return kinds_of(inv::check_visibility(in));
+	};
+	CHECK(fired(base).empty());
+	auto reverse_loop = [](std::vector<vis::Edge> &l) {
+		std::reverse(l.begin(), l.end());
+		for (vis::Edge &e : l) std::swap(e.a, e.b);
+	};
+	struct Case {
+		const char *what;
+		std::set<std::string> targets;
+		std::set<std::string> consequences;
+		std::function<void(vis::Result &)> corrupt;
+	};
+	const std::string C = "VIS-CONTAINS-MATCHES-POLYGON", D = "VIS-DRAWN-MATCHES", DET = "VIS-DETERMINISTIC";
+	const std::vector<Case> cases = {
+		{"a loop with an edge missing", {"VIS-CLOSED"}, {C, D, DET, "VIS-NO-BLOCKER-INSIDE", "VIS-STAR"},
+			[](vis::Result &r) { r.loops[0].edges.erase(r.loops[0].edges.begin() + 2); }},
+		{"a cell wound the other way", {"VIS-ORIENTED"}, {}, [&](vis::Result &r) {
+			 for (auto &l : r.cells[0].loops) reverse_loop(l);
+		 }},
+		{"a cell twice", {"VIS-DISJOINT"}, {D, DET}, [](vis::Result &r) { r.cells.push_back(r.cells[0]); }},
+		{"a whisker to infinity", {"VIS-FINITE"}, {"VIS-REGULAR"}, [](vis::Result &r) {
+			 vis::Edge w = r.loops[0].edges[4];
+			 w.b = vis::Pt{vis::INF, vis::INF};
+			 r.whiskers.push_back(w);
+		 }},
+		{"an edge on the wrong carrier", {"VIS-EDGE-ON-GEOMETRY"}, {}, [](vis::Result &r) { r.loops[0].edges[4].surface = 1; }},
+		{"a shadow edge ending on no carrier", {"VIS-VERTEX-PROVENANCE", "VIS-SHADOW-ANCHORED"}, {"VIS-EDGE-ON-GEOMETRY", C, D, DET, "VIS-STAR"},
+			[](vis::Result &r) {
+				auto &es = r.loops[0].edges;
+				const vis::Pt m = es[1].via; // on member 1's edge, away from every carrier
+				es[1].b = m;
+				es[2].a = m;
+			}},
+		{"the whole clip rectangle", {"VIS-NO-BLOCKER-INSIDE"}, {"VIS-BOUNDARY-DECIDED", C, D, DET, "VIS-ORIENTED"}, [](vis::Result &r) {
+			 const vis::Rect &c = r.clip;
+			 const vis::Pt q[4] = {{c.x0, c.y0}, {c.x1, c.y0}, {c.x1, c.y1}, {c.x0, c.y1}};
+			 vis::Loop l;
+			 for (int k = 0; k < 4; k++) {
+				 vis::Edge e;
+				 e.kind = vis::EdgeKind::Bounds;
+				 e.a = q[k];
+				 e.b = q[(k + 1) % 4];
+				 e.via = (e.a + e.b) * 0.5;
+				 l.edges.push_back(e);
+			 }
+			 l.area = vis::loop_area(l.edges);
+			 r.loops = {l};
+		 }},
+		{"no loops for the cells", {"VIS-SOURCE-ON-BOUNDARY"}, {"VIS-BOUNDARY-DECIDED", C, D, DET, "VIS-ORIENTED", "VIS-STAR"},
+			[](vis::Result &r) { r.loops.clear(); }},
+		{"a cell's middle member elsewhere", {"VIS-STAR"}, {}, [](vis::Result &r) { r.cells[0].mid_beam = r.members[0].beam; }},
+		{"a cell's middle cast of another shape", {"VIS-CELL-CONSTANT"}, {}, [](vis::Result &r) { r.cells[0].mid.iv.push_back(r.cells[0].mid.iv[0]); }},
+		{"an exact point decided the other way", {"VIS-BOUNDARY-DECIDED"}, {}, [](vis::Result &r) {
+			 for (vis::Member &m : r.members) {
+				 if (m.exact && m.crit.valid && vis::contains(r, m.cursor) != vis::Membership::Unclassified) {
+					 m.crit.cursor_ok = !m.crit.cursor_ok;
+					 return;
+				 }
+			 }
+			 FAIL("no exact member");
+		 }},
+		{"a cell missing", {C, D}, {DET}, [](vis::Result &r) { r.cells.erase(r.cells.begin()); }},
+		{"an inclusive flag flipped", {DET}, {}, [](vis::Result &r) { r.loops[0].edges[0].inclusive = !r.loops[0].edges[0].inclusive; }},
+		{"a departure the empty plan cannot reach", {"VIS-ITERATION-CHAIN"}, {"VIS-EDGE-ON-GEOMETRY", "VIS-SOURCE-ON-BOUNDARY"}, [](vis::Result &r) {
+			 // (800, 120): on mirror 4's carrier, outside the empty plan's region
+			 for (auto &l : r.cells[0].loops) {
+				 for (vis::Edge &e : l) {
+					 if (e.kind == vis::EdgeKind::Carrier && e.role == vis::End::Near) {
+						 e.via = vis::Pt{800, 120};
+						 return;
+					 }
+				 }
+			 }
+			 FAIL("no departure edge");
+		 }},
+	};
+	for (const Case &c : cases) {
+		vis::Result r = base;
+		c.corrupt(r);
+		const std::set<std::string> got = fired(r);
+		for (const std::string &k : c.targets) {
+			const std::string msg = std::string(c.what) + ": " + k + " missed (got " + joined(got) + ")";
+			CHECK_MESSAGE(got.count(k) == 1, msg);
+		}
+		for (const std::string &k : got) {
+			const std::string msg = std::string(c.what) + ": " + k + " fired too";
+			CHECK_MESSAGE((c.targets.count(k) + c.consequences.count(k)) == 1, msg);
+		}
+	}
+}
+
+TEST_CASE("visibility: VISIBILITY-EQUALS-NON-DIVERGENCE detects a region that disagrees with the preview") {
+	Tracer t;
+	const std::vector<PlanItem> plan{PlanItem{4, true, std::nullopt, std::nullopt}};
+	const vis::Pt player{960, 827.999};
+	vis::Result r = region_of(t, "test_levels__three_mirrors", plan, player);
+	REQUIRE(r.supported);
+	REQUIRE(!r.cells.empty());
+	const vis::Pt c = r.cells[0].inside;
+	const std::optional<TracePair> pair = t.trace_pair(V2{float(player.x), float(player.y)}, V2{float(c.x), float(c.y)}, plan, Flags());
+	REQUIRE(pair.has_value());
+	const Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
+	const std::vector<inv::SurfaceInfo> none;
+	const TracePath dp = sweep::prepare_for_display(pair->physical, bounds, none);
+	const TracePath dl = sweep::prepare_for_display(pair->planned, bounds, none);
+	const std::vector<TraceStep> typed = sweep::merge(dl.steps, dp.steps, dl.cursor_index);
+	const V2 cur{float(c.x), float(c.y)};
+	CHECK(inv::check_VISIBILITY_EQUALS_NON_DIVERGENCE(r, cur, &dl, &typed, pair->cursor_point_agrees).empty());
+	r.loops.clear(); // the region excludes it; the preview still shows it
+	CHECK(count_kind(inv::check_VISIBILITY_EQUALS_NON_DIVERGENCE(r, cur, &dl, &typed, pair->cursor_point_agrees), "VISIBILITY-EQUALS-NON-DIVERGENCE") == 1);
 }
 
 TEST_CASE("visibility: the drawn fill covers the region once (F8)") {

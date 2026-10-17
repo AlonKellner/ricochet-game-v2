@@ -14,6 +14,7 @@ Specification: GAME_SPEC §15 (rewritten in this stage), §29.3. Background: TDD
 | 110.3 | Invariants: the pin and the structure checks; native tests, oracle labels | Done |
 | 110.4 | Bindings, `VisibilityRenderer`, the level hook, the V toggle, the GUT sweep | Done; user sign-off pending |
 | 110.5 | Projective plan entries | Not started: the region is not drawn for such plans |
+| 110.6 | Follow-up: B3, B4, B5; the region drawn as one mesh; K8; VIS-REGULAR, VIS-DRAWN-MATCHES, the cursor-reading NO-POST check, carrier cursors in the sweeps, a detection case per region check | Done; user sign-off pending |
 
 **Workflow:** branch `stage110-visibility`, small green commits. Before every commit: the full GUT suite (`./run_tests_parallel.sh`), ctest in RelWithDebInfo and under ASan (`make native-asan`, run alone), `make oracle-test`, and `git diff --stat bench/goldens` empty.
 
@@ -70,8 +71,8 @@ Per region (`inv::check_visibility`):
 |---|---|
 | `native/tests/test_quiet_entries.cpp`, `tests/test_stage110_quiet_entries.gd` | B1 and B5 at every tier and through the preview; B5 on `hit_effects.tscn` |
 | `tests/test_stage110_truncation.gd` | B2: `TracePath.truncated`, the stop marker |
-| `native/tests/test_visibility.cpp` | The oracle's labels; the pin on every test level and on the levels' plans; every structure check. `RC_VIS_FULL=1` runs every player and plan (minutes). Skipped debug cases draw one region to a PNG (`RC_VIS_SCENE`, `RC_VIS_PLAN`, `RC_VIS_PLAYER`, `RC_VIS_PNG`) and pin it on a grid (`RC_VIS_PIN=<step>`). Under the sanitizers a third of the levels is sampled |
-| `tests/test_stage110_visibility.gd` | The binding on hand-checked rooms, the pin there, the renderer's recompute-on-change |
+| `native/tests/test_visibility.cpp` | The oracle's labels; the pin on every test level and on the levels' plans; every structure check, and a corruption per check that trips it (with only its listed consequences); VIS-REGULAR's allowed and flagged parts; the drawn fill (one cover, no seams); B3's display cursor index; K8's exact member cursor. `RC_VIS_FULL=1` runs every player and plan (minutes). Skipped debug cases draw one region to a PNG (`RC_VIS_SCENE`, `RC_VIS_PLAN`, `RC_VIS_PLAYER`, `RC_VIS_PNG`) and pin it on a grid (`RC_VIS_PIN=<step>`). Under the sanitizers a third of the levels is sampled |
+| `tests/test_stage110_visibility.gd` | The binding on hand-checked rooms, the pin there, the renderer's recompute-on-change and its one triangle array, B3 through the binding |
 | `tests/test_visibility_sweep.gd` | The sharded sweep: every test level and playground (no plan), the plan scenes' mirror and inversion plans, the playgrounds' plans, infinity plans |
 | `docs/research/oracle/test_fixture_schema.py` | The labels' schema |
 
@@ -125,6 +126,8 @@ The region is recomputed only when its inputs change, on a worker thread. The cu
 8. **Truncation:** between two facing mirrors (`parallel_mirrors.tscn`) a trapped shot shows the stop marker at the cut.
 9. **No thin lines** (B4): with a planned mirror (`three_mirrors.tscn`, plan [4 L, 6 R]) walking the player shows no lines along the mirror's carrier beyond its ends, and nothing flickers.
 10. **No seams** (F8): on `pre_inverted.tscn`, `tangent_infinity.tscn` and `plannable_inversion.tscn` the fill shows no hairlines between shapes.
+11. **No overlap** (F8): on `pre_inverted.tscn`, empty plan, the player near (1277, 387): no thin triangle drawn twice (darker) in the fill.
+12. **Tangent member** (K8): on `tangent_infinity.tscn` with the ∞ plan and the player at (760, 440), the cursor at (800, 420) shows an aligned preview, and the region's thin arc through it from `Q` to the player is drawn.
 
 ## Regression Checklist
 

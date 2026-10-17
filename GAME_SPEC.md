@@ -2411,7 +2411,7 @@ The following invariants are tested by the sweep but not in the original specifi
 | `VIA_ON_ARC` | Step via points lie on the step's arc carrier |
 | `VISUAL_ON_PHYSICAL_CARRIER` | Visual segment points lie on the physical carrier |
 | `DIRECTION_ONLY` | The physical trace depends only on the aim direction: the planned shot's physical hits equal those of a converged shot without plan aimed at the cursor's image (computed from exact data and rounded once where the plan's maps are exact data, Stage 105; bounded by tangent-linear sensitivity to that image's float64 rounding; projective plans skipped until Stage 87) |
-| `NO_POST_CURSOR_DIVERGENCE` | A path fully aligned up to the cursor does not diverge after it |
+| `NO_POST_CURSOR_DIVERGENCE` | A path fully aligned up to the cursor does not diverge after it. The cursor is the planned display path's `cursor_index` (a divergence exactly at the cursor is after it); the check holds only when both walks leave the cursor's point in one frame (§15.1 V3), and the shorter of two truncated paths is not read past its end (Stage 110) |
 | `EFFECT_LAW` | Every applied effect maps its beam by its exact law (§10.8) |
 | `EVENT_ON_BEAM` | Every event point lies on its beam, and every hit on its surface's carrier |
 | `REAPPLY_IN_PLACE` | No zero-length loop: an applied hit, then only cursor / infinity events at the same point, then an applied hit on the same surface at the same point never happens (a teleport moves the beam: a round trip through a portal pair may re-hit the same portal at the same point) (§11.4, Stage 106) |
@@ -2640,4 +2640,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.18.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.19.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
