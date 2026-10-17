@@ -46,3 +46,25 @@ func test_planned_terminal_crossed_off_segment_reaches_the_cursor():
 	var block := H.wall_between(Vector2(300, 400), Vector2(300, 550))
 	var surfaces := [block] + _room()
 	_assert_agree(surfaces, block, Vector2(100, 300), Vector2(600, 250), "terminal off segment")
+
+# Stage 110, B5: on test_levels/hit_effects, surfaces 15, 16 and 17 share the
+# carrier x = 1100. Aiming through surface 16's carrier off its segment, the
+# physical walk fires surface 15 there, which writes what the planned entry 16
+# writes: it leaves the point in the planned frame, so the entry counts as
+# consumed (match by frame). Both paths reach the cursor, and nothing after the
+# cursor is drawn diverged (oracle: gen_fixtures_stage110_frames.py).
+func test_a_co_carrier_write_of_the_planned_value_matches_the_entry():
+	Surface.reset_id_counter()
+	var scene: Node = load("res://scenes/test_levels/hit_effects.tscn").instantiate()
+	add_child_autofree(scene)
+	await get_tree().process_frame
+	var surfaces: Array = scene.surfaces
+	var plan := [PlanManager.PlanEntry.new(16, Side.Value.RIGHT)]
+	var pair := TestTrace.trace_pair(surfaces, Vector2(960, 540), Vector2(1260, 324), plan)
+	assert_not_null(pair)
+	assert_true(pair.physical.cursor_index >= 0, "the physical path reaches the cursor")
+	assert_eq(pair.planned.cursor_index, pair.physical.cursor_index)
+	var merged := StepTreeMerge.merge(pair.planned.steps, pair.physical.steps, pair.planned.cursor_index)
+	for i in merged.size():
+		var t: int = merged[i].type
+		assert_true(t == StepTypes.Type.ALIGNED or t == StepTypes.Type.ALIGNED_POST_PLANNED, "merged step %d is aligned (type %d)" % [i, t])

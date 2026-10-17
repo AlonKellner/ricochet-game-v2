@@ -1098,3 +1098,66 @@ def test_one_circle_carrier_groups_arcs():
     other = T.surface_from_json({"id": 3, "line": False, "start": [610, 0], "end": [410, 0], "via": [510, 100],
                                  "full": False, "left": REFL, "right": REFL})
     assert T.carrier_groups([full, arc, other]) == {1: 1, 2: 1, 3: 3}
+
+
+# ---------------------------------------------------------------- B5 (Stage 110)
+# Surfaces on one carrier are crossed at one point (K6): the plan entry there is
+# matched by the frame the physical walk leaves the point in.
+
+def _writes(key, value):
+    return {"type": "pass", "interactive": True, "states": [{"key": key, "op": "set", "value": value}]}
+
+
+def _b5_scene(lower, upper):
+    """x = 300: lower (0..100) is crossed by the shot (100, 0) -> (500, 100) at
+    y = 50; upper (200..400) is on the same carrier, off the shot."""
+    walls = [line(10 + i, a, b, PASS, PASS) for i, (a, b) in enumerate(
+        [((-1000, -1000), (1000, -1000)), ((1000, -1000), (1000, 1000)), ((1000, 1000), (-1000, 1000)), ((-1000, 1000), (-1000, -1000))])]
+    return [line(1, (300, 0), (300, 100), lower, lower), line(2, (300, 200), (300, 400), upper, upper)] + walls
+
+
+def _rescues(fn):
+    count = []
+    T.B5_HOOK = lambda w: count.append(1)
+    try:
+        return fn(), len(count)
+    finally:
+        T.B5_HOOK = None
+
+
+def _side(surfaces, sid):
+    w = T.trace_physical_direction([line(sid, (300, 0), (300, 100), PASS, PASS)], (100, 0), mp.mpc(400, 100))
+    return next(e.side for e in w.events if e.kind == "hit" and e.surface_id == sid)
+
+
+def test_b5_an_unplanned_write_of_the_planned_value_matches_the_entry():
+    s = _b5_scene(_writes("f", "p"), _writes("f", "p"))
+    plan = [(2, _side(s, 2))]
+    w, n = _rescues(lambda: T.physical(s, (100, 0), (500, 100), plan))
+    assert any(e.kind == "cursor" for e in w.events), [e.kind for e in w.events]
+    assert n == 1
+
+
+def test_b5_a_different_value_does_not_match():
+    s = _b5_scene(_writes("f", "q"), _writes("f", "p"))
+    plan = [(2, _side(s, 2))]
+    w, n = _rescues(lambda: T.physical(s, (100, 0), (500, 100), plan))
+    assert not any(e.kind == "cursor" for e in w.events)
+    assert n == 0
+
+
+def test_b5_a_piece_whose_span_excludes_the_point_does_not_match():
+    s = _b5_scene(_writes("f", "p"), _writes("f", "p"))
+    plan = [(2, _side(s, 2))]
+    span = {"start": [300, 300], "end": [300, 400], "via": [300, 350]}
+    w, n = _rescues(lambda: T.physical(s, (100, 0), (500, 100), plan, spans=[span]))
+    assert not any(e.kind == "cursor" for e in w.events)
+    assert n == 0
+
+
+def test_b5_a_reflection_is_never_matched_by_frame():
+    s = _b5_scene(REFL, REFL)
+    plan = [(2, _side(s, 2))]
+    w, n = _rescues(lambda: T.physical(s, (100, 0), (150, 100), plan))
+    assert not any(e.kind == "cursor" for e in w.events)
+    assert n == 0

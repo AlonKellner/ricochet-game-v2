@@ -237,6 +237,25 @@ struct AnchorChain {
 	std::map<int, std::shared_ptr<const exact::Line>> exit_lines; // projective entry index -> exact exit line
 };
 
+// B5 (Stage 110): the physical walk at one point -- a run of candidates with one
+// parameter (surfaces on one carrier share their crossings, K6; ties and snaps
+// give one parameter). The plan is matched by the frame the walk leaves the
+// point in, whatever the order of the surfaces there: `flags` and `index` are
+// the planned walk's (its shadow) over the point's candidates; a physical flag
+// change out of plan leaves the point `pending` until the shadow's flags equal
+// the walk's (the walk then takes the shadow's plan index); a point closed
+// pending unmatches the plan. (trace2.py: _Point.)
+template <Num N>
+struct PointGroup {
+	N t;
+	bool rehit = false;
+	bool wrap = false;     // the wrap through the real infinity: a point of its own
+	Flags flags;
+	int index = 0;
+	bool broke = false;    // the shadow consumed a transformative or projective entry
+	bool pending = false;
+};
+
 template <Num N>
 struct Walk {
 	const Scene<N> *scene = nullptr;
@@ -291,6 +310,7 @@ struct Walk {
 	int hp_view = -1;
 	int view_count = 0;
 	std::map<const Beam<N> *, int> beam_views;
+	std::optional<PointGroup<N>> point; // B5: the point being crossed (physical walk)
 };
 
 // Caches owned by the caller (one per solve / tracer): the anchored chain of
@@ -1401,7 +1421,7 @@ private:
 		}
 		bool cursor_now = false;
 		// the cursor is on the beam only on the planned path
-		if (!w.cursor_done && w.cursor && (keep_cursor || (w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan))) {
+		if (!w.cursor_done && w.cursor && (keep_cursor || (w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan && !(w.point && w.point->pending)))) {
 			N tc = Backend<N>::param_of(beam, *w.cursor);
 			const int ki = known_index(w.known, *w.cursor);
 			// the cursor exactly at the departure point is reached immediately
@@ -1671,19 +1691,64 @@ private:
 		return geom::on_segment(sg, pt);
 	}
 
-	static void plan_bookkeeping(Walk<N> &w, int sid, const CN<N> &pt) {
-		if (w.plan_index < int(w.plan.size())) {
-			if (sid == w.plan[size_t(w.plan_index)].surface_id && in_span(w.plan[size_t(w.plan_index)], pt)) {
-				w.plan_index++;
-			} else {
-				w.plan_matched = false;
-			}
-		} else {
+	// defer (B5): the event keeps the beam and only changes the flags -- a
+	// mismatch then waits for the point's frame (point_sync).
+	static void plan_bookkeeping(Walk<N> &w, int sid, const CN<N> &pt, bool defer = false) {
+		if (w.plan_index < int(w.plan.size()) && sid == w.plan[size_t(w.plan_index)].surface_id && in_span(w.plan[size_t(w.plan_index)], pt)) {
+			w.plan_index++;
+			return;
+		}
+		if (defer && w.point) {
+			w.point->pending = true;
+			return;
+		}
+		w.plan_matched = false;
+		w.on_plan = false; // a surface fired out of plan: off the planned beams
+	}
+
+	static void point_close(Walk<N> &w) {
+		if (w.point && w.point->pending) {
 			w.plan_matched = false;
+			w.on_plan = false;
 		}
-		if (!w.plan_matched) {
-			w.on_plan = false; // a surface fired out of plan: off the planned beams
+		w.point.reset();
+	}
+
+	// The planned walk's decision at this candidate, on the shadow: the next
+	// entry is consumed (its state changes applied under the shadow's flags); a
+	// transformative or projective entry ends the shadow.
+	static void point_step(Walk<N> &w, const Surf<N> *surf, bool inf, bool left, const CN<N> &pt) {
+		if (!w.point || w.point->broke || w.point->index >= int(w.plan.size())) {
+			return;
 		}
+		PointGroup<N> &p = *w.point;
+		const PlanItem &item = w.plan[size_t(p.index)];
+		if (inf) {
+			if (item.is_infinity()) {
+				p.index++;
+			}
+			return;
+		}
+		if (item.is_infinity() || item.surface_id != surf->id || item.left != left || !in_span(item, pt)) {
+			return;
+		}
+		const EffectType eff = surf->effect(left, p.flags);
+		if (is_transformative(eff) || is_projective(eff)) {
+			p.broke = true;
+			return;
+		}
+		p.flags = p.flags.applied(surf->state_changes(left, p.flags));
+		p.index++;
+	}
+
+	// A pending point resolves when the walk is in the shadow's frame.
+	static bool point_sync(Walk<N> &w) {
+		if (w.point && w.point->pending && !w.point->broke && w.point->flags == w.flags) {
+			w.plan_index = w.point->index;
+			w.point->pending = false;
+			return true;
+		}
+		return false;
 	}
 
 	static Event<N> &emit(Walk<N> &w, EventKind kind, const BeamPtr<N> &beam, const N &t_from, const std::optional<N> &t_to, double margin) {
@@ -1779,7 +1844,25 @@ private:
 				const N t = cand.t;
 				const Surf<N> *surf = cand.surf;
 				const bool rehit = cand.rehit;
+				if (w.mode == Mode::Physical) {
+					// B5: the point this candidate is at
+					const bool wrap = cand.inf && !cand.pt;
+					if (w.point && (wrap || w.point->wrap || cand.t.cmp(w.point->t) != 0 || cand.rehit != w.point->rehit)) {
+						point_close(w);
+					}
+					if (!w.point && (surf != nullptr || cand.inf) && w.plan_matched && w.on_plan && !w.cursor_done) {
+						w.point = PointGroup<N>{t, rehit, wrap, w.flags, w.plan_index, false, false};
+					}
+				}
 				if (surf != nullptr && !cand.inf && !surf->present(w.flags)) {
+					if (w.point && surf->present(w.point->flags)) {
+						// absent for the walk, present for the planned shadow (B5)
+						const Classified ca = classify(*w.scene, *beam, t, *surf, rehit && fresh, cand.pt, w.flags);
+						point_step(w, surf, false, ca.left, ca.pt);
+						if (point_sync(w)) {
+							late_cursor(w, *beam, cands, gp, ci, t, t0);
+						}
+					}
 					ci++; // absent under the current flags (Stage 107): no crossing at all
 					continue;
 				}
@@ -1804,7 +1887,7 @@ private:
 				if (cand.inf) {
 					// the wrap through infinity (Stage 88): consumes the infinity
 					// entry when it is next in the plan, in both modes
-					const bool consumed = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].is_infinity();
+					bool consumed = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].is_infinity();
 					if (consumed) {
 						w.plan_index++;
 					}
@@ -1816,6 +1899,10 @@ private:
 					ie.applied = consumed;
 					ie.flags = w.flags;
 					t_prev = t;
+					if (w.mode == Mode::Physical) {
+						point_step(w, nullptr, true, false, beam->p);
+						consumed = point_sync(w) || consumed;
+					}
 					if (consumed) {
 						late_cursor(w, *beam, cands, gp, ci, t, t0);
 					}
@@ -1881,8 +1968,11 @@ private:
 					if (w.anchored && !(phys_do == plan_do && phys_after == plan_after)) {
 						diverged = true;
 					}
-					if (is_transformative(do_) || is_projective(do_) || !(phys_after == w.flags)) {
+					if (is_transformative(do_) || is_projective(do_)) {
 						plan_bookkeeping(w, surf->id, pt);
+					} else if (!(phys_after == w.flags)) {
+						// B5: a flag change keeps the beam -- matched by the point's frame
+						plan_bookkeeping(w, surf->id, pt, true);
 					} else if (do_ == EffectType::Pass && plan_match && plan_do == EffectType::Pass && plan_after == w.flags) {
 						// the planned walk consumes this entry without a frame change (a pass
 						// side, a terminal crossed off its segment, a write of the current
@@ -1915,6 +2005,14 @@ private:
 					e.point = pt;
 				}
 				t_prev = t;
+				if (w.mode == Mode::Physical && w.point) {
+					if (is_transformative(do_) || is_projective(do_)) {
+						point_close(w);
+					} else {
+						point_step(w, surf, false, left, pt);
+						point_sync(w);
+					}
+				}
 				if (do_ == EffectType::Terminal) {
 					w.done = true;
 					return;
@@ -1968,7 +2066,10 @@ private:
 				ci++;
 			}
 			if (restart) {
-				continue;
+				continue; // (a seed restart continues the same point)
+			}
+			if (w.mode == Mode::Physical) {
+				point_close(w);
 			}
 			if (!next && fired_state) {
 				// no effect, but the loop changed the state: walk the same beam again
@@ -2003,7 +2104,7 @@ private:
 	// candidate if it lies ahead, inserted in order among the remaining ones.
 	static void late_cursor(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands, std::vector<double> &gp, size_t ci,
 			const N &t, const N &t0) {
-		if (!w.cursor_done && w.cursor && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan
+		if (!w.cursor_done && w.cursor && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan && !(w.point && w.point->pending)
 				&& std::none_of(cands.begin(), cands.end(), [](const Candidate<N> &c) { return c.surf == nullptr && !c.inf; })) {
 			const N tc = Backend<N>::param_of(beam, *w.cursor);
 			if (!before(tc, t, t0)) {

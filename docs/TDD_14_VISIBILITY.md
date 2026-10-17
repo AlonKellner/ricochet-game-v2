@@ -64,7 +64,7 @@ Per region (`inv::check_visibility`):
 
 | File | Covers |
 |---|---|
-| `native/tests/test_quiet_entries.cpp`, `tests/test_stage110_quiet_entries.gd` | B1 at every tier and through the preview |
+| `native/tests/test_quiet_entries.cpp`, `tests/test_stage110_quiet_entries.gd` | B1 and B5 at every tier and through the preview; B5 on `hit_effects.tscn` |
 | `tests/test_stage110_truncation.gd` | B2: `TracePath.truncated`, the stop marker |
 | `native/tests/test_visibility.cpp` | The oracle's labels; the pin on every test level and on the levels' plans; every structure check. `RC_VIS_FULL=1` runs every player and plan (minutes). Skipped debug cases draw one region to a PNG (`RC_VIS_SCENE`, `RC_VIS_PLAN`, `RC_VIS_PLAYER`, `RC_VIS_PNG`) and pin it on a grid (`RC_VIS_PIN=<step>`). Under the sanitizers a third of the levels is sampled |
 | `tests/test_stage110_visibility.gd` | The binding on hand-checked rooms, the pin there, the renderer's recompute-on-change |
@@ -77,6 +77,7 @@ Per region (`inv::check_visibility`):
 |---|---|---|---|
 | B1 | A planned entry the planned walk consumes without changing the frame (a pass side, a terminal crossed off its segment, a write of a flag's current value) is consumed by the physical walk at the same event; divergence is judged by the frame each walk leaves. | Every oracle fixture regenerates identically; the 284,096 pinned sweep traces and every golden replay byte-identical; the new fixtures fail without the fix at every tier. | Done (user: "resolve B1") |
 | B2 | A path cut by the event limit draws the spec's stop marker at its end (§12.6) instead of a plain green path that stops short. | Goldens unchanged (the flag is not in the canon). | Done (user: "resolve B2") |
+| B5 | Surfaces on one carrier are crossed at one point (K6). When the physical walk fires an unplanned surface there that writes what the planned entry writes (`test_levels/hit_effects.tscn`: 15 fires, 16 is planned), it leaves the point in the planned frame: the entry counts as consumed (match by frame, through a shadow of the planned walk over the point). Before, the physical walk unmatched its plan, emitted no cursor event, and the steps after the cursor paired off by one and showed red. | Oracle first (`trace2.py` `_Point`); `gen_fixtures_stage110_frames.py`: 8 rescues and 3 controls, the 8 failing at every tier before the native change; every other fixture, corpus and golden byte-identical (no rescue fires on any of them). | Done (user: "match by frame") |
 | B3 | Observed, not changed: the display drops the zero-length incoming half of a wrap that lies on the bounds' edge without lowering `cursor_index` (`arc::prepare_for_display`), so the index can exceed the drawn steps by one and a step after the cursor is drawn as pre-cursor. The definition counts every drawn step before the cursor (the index capped at the steps drawn), which is what the preview shows. | `playground/directional_arcs.tscn`, plan ∞, player (500, 300), cursor (1360, 300). | For the user to decide |
 
 ## Known findings
