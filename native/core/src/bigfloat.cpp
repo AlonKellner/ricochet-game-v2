@@ -471,27 +471,24 @@ BigFloat BigFloat::normalize(const Limbs &arr, int64_t e, int s, int n) {
 	if (top < 0) {
 		return zero(n);
 	}
-	// bit length of top limb
-	int64_t t = arr[size_t(top)];
-	int bl = 0;
-	while (t > 0) {
-		bl += 1;
-		t >>= 1;
-	}
+	// bit length of top limb (a positive limb below 2^BITS)
+	const int bl = 64 - __builtin_clzll(uint64_t(arr[size_t(top)]));
 	const int lshift = BITS - bl; // shift left so top limb has bit BITS-1 set
 	BigFloat r;
 	r.sign = s;
 	r.limbs.assign(size_t(n), 0);
-	// result limb k (0..n-1) takes source position top - (n-1) + k, shifted
-	for (int64_t k = 0; k < n; k++) {
+	// result limb k (0..n-1) takes source position top - (n-1) + k, shifted;
+	// the positions below 0 are zero (Perf P2: start at the first one that is not)
+	const int64_t k0 = std::max<int64_t>(0, (n - 1) - top);
+	int64_t *out = r.limbs.data();
+	const int64_t *in = arr.data();
+	for (int64_t k = k0; k < n; k++) {
 		const int64_t src = top - (n - 1) + k;
-		const int64_t cur = src >= 0 ? arr[size_t(src)] : 0;
-		const int64_t below = src - 1 >= 0 ? arr[size_t(src - 1)] : 0;
-		int64_t v = cur << lshift;
-		if (lshift > 0) {
-			v |= below >> (BITS - lshift);
+		int64_t v = in[src] << lshift;
+		if (lshift > 0 && src >= 1) {
+			v |= in[src - 1] >> (BITS - lshift);
 		}
-		r.limbs[size_t(k)] = v & MASK;
+		out[k] = v & MASK;
 	}
 	r.exp = e + BITS * (top - (n - 1)) - lshift;
 	return r;
