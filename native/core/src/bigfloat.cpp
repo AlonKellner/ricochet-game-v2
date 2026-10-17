@@ -309,11 +309,34 @@ BigFloat BigFloat::mul(const BigFloat &o) const {
 	const Limbs &b = o.limbs;
 	const size_t na = a.size();
 	const size_t nb = b.size();
-	// column sums in 128 bits (B1, fixed in Stage 102): each product is below
-	// 2^56, so any realistic limb count (< 2^70 terms) cannot overflow; the
-	// GDScript original summed in int64 and wrapped above ~128 limbs per factor
+	// the column sums, then one carry pass, into a per-thread buffer (Perf P2:
+	// no allocation but the result's). Each product is below 2^56, so a column
+	// of fewer than 128 products fits in int64; longer ones sum in 128 bits (B1,
+	// fixed in Stage 102: the GDScript original wrapped above ~128 limbs).
+	thread_local Limbs cols;
+	cols.assign(na + nb, 0);
+	if (std::min(na, nb) < 128) {
+		for (size_t i = 0; i < na; i++) {
+			const int64_t ai = a[i];
+			if (ai == 0) {
+				continue;
+			}
+			int64_t *c = cols.data() + i;
+			for (size_t j = 0; j < nb; j++) {
+				c[j] += ai * b[j];
+			}
+		}
+		int64_t carry = 0;
+		for (size_t k = 0; k < na + nb; k++) {
+			const int64_t v = cols[k] + carry; // < 2^63: a column plus a carry below 2^36
+			cols[k] = v & MASK;
+			carry = v >> BITS;
+		}
+		return normalize(cols, exp + o.exp, sign * o.sign, n);
+	}
 	__extension__ typedef __int128 i128;
-	std::vector<i128> acc(na + nb, 0);
+	thread_local std::vector<i128> acc;
+	acc.assign(na + nb, 0);
 	for (size_t i = 0; i < na; i++) {
 		const int64_t ai = a[i];
 		if (ai == 0) {
@@ -323,12 +346,11 @@ BigFloat BigFloat::mul(const BigFloat &o) const {
 			acc[i + j] += i128(ai) * i128(b[j]);
 		}
 	}
-	Limbs cols(na + nb, 0);
 	i128 carry = 0;
 	for (size_t k = 0; k < na + nb; k++) {
-		const i128 s = acc[k] + carry;
-		cols[k] = int64_t(s & i128(MASK));
-		carry = s >> BITS;
+		const i128 v = acc[k] + carry;
+		cols[k] = int64_t(v & i128(MASK));
+		carry = v >> BITS;
 	}
 	return normalize(cols, exp + o.exp, sign * o.sign, n);
 }

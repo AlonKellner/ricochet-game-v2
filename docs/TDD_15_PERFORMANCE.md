@@ -7,7 +7,7 @@
 | P0 | Benches: the region build per scene and plan, the ladder's census, the worker's region time in the frame bench | Done |
 | P5 | Gate turnaround: scheduling, sharding, the ctest split, `make gates` | Done: about 9 min to 4.5 min |
 | P1 | The exact-image cache key (a 6-decimal cursor key: a bug) | Done: no region or golden changed |
-| P2 | The ladder: BigFloat only where an exact decision needs it | Not started |
+| P2 | The ladder: BigFloat only where an exact decision needs it | P2a done (BigFloat arithmetic, bit-identical); P2b proposed |
 | P3 | The region build: cast reuse, cheaper casts, the fill | Not started |
 | P4 | The frame path: defs handle, lean trace results, overlay keys | Not started |
 | P6 | Docs | Not started |
@@ -109,4 +109,21 @@ The rest is the region's cost: the GUT visibility shards and the ASan visibility
 So the bug touched only region casts.
 
 **Effect:** none observed. The new `visibility digest` (a skipped doctest that hashes every region on the shipped levels, 264 regions, exact bits; `--no-skip`) is unchanged: `21dafb508ef1834b`. The goldens are byte-identical. The digest is the reference that P2–P4 must keep.
+
+## P2a: cheaper BigFloat, bit-identical
+
+- **`BigFloat::mul`** sums its columns in int64 when both factors have fewer than 128 limbs. Each 28-bit product is below 2^56, so a column of at most 127 products plus a carry stays below 2^63. Longer factors keep the 128-bit sums of B1. The columns live in a per-thread buffer, so only the result allocates.
+- **`BigFloat::Limbs`** is a `SmallVec<int64_t, 8>` (`rc/small_vec.hpp`): up to 8 limbs inline. The tier-4 values and the exact predicates' values (2 to 8 limbs) no longer allocate. Malloc and free were about 30% of the BigFloat profile.
+
+**inversion_grid** (`visibility bench`):
+
+| Plan | Median before | Median after | p95 before | p95 after | BigFloat time before | BigFloat time after (12 regions) |
+|---|---|---|---|---|---|---|
+| none | 24.3 ms | 17.7 ms | 60.4 | 35.5 | 172 ms | 92 ms |
+| [1 L] | 297 ms | 220 ms | 459 | 325 | 2.29 s | 1.54 s |
+| [4 R] | 365 ms | 264 ms | 475 | 348 | 2.69 s | 1.85 s |
+
+The digest is unchanged (`21dafb508ef1834b`), the goldens are byte-identical, and the GUT gate went from 124 s to 96 s.
+
+**What is left in BigFloat (P2b, a behaviour change to propose):** by cost, the walks that climb every tier to 64 limbs. On inversion_grid there are 33–52 per 12 regions; a walk's cost grows roughly as limbs², so they are about 85% of the BigFloat time. A temporary log of their declined decisions shows every one is a hit with a margin of exactly 0 on a bounds edge (surfaces 10–13): a double root, a beam exactly tangent to the edge, both roots of one surface at one point. The margin stays 0 at every tier, so the climb never converges and the 64-limb walk is used unconverged. In the golden sweeps, 652 of 468,727 walks climb and 311 reach 64 limbs.
 
