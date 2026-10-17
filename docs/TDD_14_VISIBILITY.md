@@ -12,9 +12,9 @@ Specification: GAME_SPEC §15 (rewritten in this stage), §29.3. Background: TDD
 | 110.1 | B2: a path cut by the event limit shows the stop marker | Done |
 | 110.2 | Native region: members, casts, cells, clipping, regions, `contains` | Done |
 | 110.3 | Invariants: the pin and the structure checks; native tests, oracle labels | Done |
-| 110.4 | Bindings, `VisibilityRenderer`, the level hook, the V toggle, the GUT sweep | Done; user sign-off pending |
+| 110.4 | Bindings, `VisibilityRenderer`, the level hook, the V toggle, the GUT sweep | Done; signed off (user, 2026-10-17) |
 | 110.5 | Projective plan entries | Not started: the region is not drawn for such plans |
-| 110.6 | Follow-up: B3, B4, B5; the region drawn as one mesh; K8; VIS-REGULAR, VIS-DRAWN-MATCHES, the cursor-reading NO-POST check, carrier cursors in the sweeps, a detection case per region check | Done; user sign-off pending |
+| 110.6 | Follow-up: B3, B4, B5; the region drawn as one mesh; K8; VIS-REGULAR, VIS-DRAWN-MATCHES, the cursor-reading NO-POST check, carrier cursors in the sweeps, a detection case per region check | Done; signed off (user, 2026-10-17) |
 
 **Workflow:** branch `stage110-visibility`, small green commits. Before every commit: the full GUT suite (`./run_tests_parallel.sh`), ctest in RelWithDebInfo and under ASan (`make native-asan`, run alone), `make oracle-test`, and `git diff --stat bench/goldens` empty.
 
