@@ -77,6 +77,9 @@ run_job() {
 }
 export -f run_job
 export GODOT LOGDIR
+# the processes are the parallelism: one cast thread per region build in each
+# (Perf P3: 12 processes x 8 threads oversubscribed the cores, 96 s -> 116 s)
+export RC_VIS_THREADS="${RC_VIS_THREADS:-1}"
 
 start=$(date +%s)
 echo "Running $(wc -l < "$LOGDIR/jobs.txt" | tr -d ' ') jobs on $JOBS processes (logs: $LOGDIR)"

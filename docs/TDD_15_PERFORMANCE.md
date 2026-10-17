@@ -8,7 +8,7 @@
 | P5 | Gate turnaround: scheduling, sharding, the ctest split, `make gates` | Done: about 9 min to 4.5 min |
 | P1 | The exact-image cache key (a 6-decimal cursor key: a bug) | Done: no region or golden changed |
 | P2 | The ladder: BigFloat only where an exact decision needs it | P2a done (BigFloat arithmetic, bit-identical); P2b proposed |
-| P3 | The region build: cast reuse, cheaper casts, the fill | Not started |
+| P3 | The region build: cast reuse, cheaper casts, the fill | P3a done (parallel casts) |
 | P4 | The frame path: defs handle, lean trace results, overlay keys | Not started |
 | P6 | Docs | Not started |
 
@@ -126,4 +126,25 @@ So the bug touched only region casts.
 The digest is unchanged (`21dafb508ef1834b`), the goldens are byte-identical, and the GUT gate went from 124 s to 96 s.
 
 **What is left in BigFloat (P2b, a behaviour change to propose):** by cost, the walks that climb every tier to 64 limbs. On inversion_grid there are 33–52 per 12 regions; a walk's cost grows roughly as limbs², so they are about 85% of the BigFloat time. A temporary log of their declined decisions shows every one is a hit with a margin of exactly 0 on a bounds edge (surfaces 10–13): a double root, a beam exactly tangent to the edge, both roots of one surface at one point. The margin stays 0 at every tier, so the climb never converges and the 64-limb walk is used unconverged. In the golden sweeps, 652 of 468,727 walks climb and 311 reach 64 limbs.
+
+## P3a: parallel casts
+
+The members' own and side casts (`cast_members`), and the gaps' first middle casts (`build_cells`, keyed by direction so the loop takes each where it would cast), run in parallel batches (`Builder::cast_batch`).
+- Each thread casts with a helper tracer of the caller's (`Tracer::helper`): the same defs and switches, its own solve caches (pure memos), kept across builds.
+- Results land by index. The region is the casts made in order: the digest is the same with `RC_VIS_THREADS=1` and with 8.
+- **Threads:** `RC_VIS_THREADS`, else every core up to 8. `run_tests_parallel.sh` sets 1: its processes are the parallelism, and 12 processes × 8 threads made the GUT gate slower (96 s to 116 s; 88 s with 1 thread).
+
+**`visibility bench`:**
+
+| Scene, plan | Median before (P2a) | Median after | p95 before | p95 after |
+|---|---|---|---|---|
+| inversion_grid, none | 17.7 ms | 6.3 ms | 35.5 | 13.7 |
+| inversion_grid, [1 L] | 220 ms | 62.7 ms | 325 | 116 |
+| inversion_grid, [4 R] | 264 ms | 69.3 ms | 348 | 91 |
+| main, none | 2.4 ms (P0) | 0.9 ms | 9.0 | 2.6 |
+| main, [5 L] | 17.8 ms (P0) | 5.5 ms | 33.5 | 11.1 |
+
+**`frame-bench`, inversion_grid:** player_orbit finishes 56 regions in 250 frames (14 before), at a 10 ms p95.
+
+The p95 on inversion_grid plans is still about twice the budget. The longest single cast bounds a batch: a walk that climbs to 64 limbs (P2b).
 
