@@ -26,6 +26,7 @@
 
 #include "rc/beam_geom.hpp"
 #include "rc/earcut.hpp"
+#include "rc/exact.hpp"
 #include "rc/solver.hpp"
 #include "rc/tracer.hpp"
 
@@ -746,7 +747,8 @@ private:
 		return true;
 	}
 
-	void add_poi(std::vector<Member> &out, const CN<F64> &z, size_t j, const std::string &why, int tangent_sid = -1, bool exact = false) {
+	void add_poi(std::vector<Member> &out, const CN<F64> &z, size_t j, const std::string &why, int tangent_sid = -1, bool exact = false,
+			const std::optional<Pt> &other = std::nullopt) {
 		const std::optional<CN<F64>> c = forward(std::optional<CN<F64>>(z), j, K);
 		const std::optional<CN<F64>> X0 = backward(std::optional<CN<F64>>(z), j);
 		if (!c || !X0) {
@@ -777,12 +779,19 @@ private:
 		if (K == 0 && !via_) {
 			return;
 		}
-		// its cursor: the point mirrored through the player when that is exact,
-		// an aim point's image otherwise
+		// its cursor: the point mirrored through the player when that is exact, a
+		// frame-j point exactly on the member's other arc when the caller has one
+		// (K8: a rounded aim crosses a carrier the member only touches), an aim
+		// point's image otherwise
 		Member o;
 		o.dir = *d * -1.0;
 		o.why = m.why + ", the other way";
-		if (K == 0 && !q0_) {
+		const std::optional<CN<F64>> exact_c = other ? forward(std::optional<CN<F64>>(cn_of(*other)), j, K) : std::nullopt;
+		if (exact_c && pt_of(*exact_c).finite()) {
+			o.cursor = pt_of(*exact_c);
+			o.poi = true;
+			o.why += " (exact)";
+		} else if (K == 0 && !q0_) {
 			o.cursor = res_.player * 2.0 - cp;
 			o.poi = true;
 		} else if (const std::optional<Pt> oc = cursor_for(o.dir)) {
@@ -888,6 +897,53 @@ private:
 		return o;
 	}
 
+	// A point exactly on that member's other arc (from A to B, missing `t`, the
+	// point tangent_at_pole returned): A mirrored in the diameter across the
+	// axis B - C, kept only when it lies on the arc and an exact test puts it on
+	// the circle through A and B tangent to the carrier at B (K8: rational data,
+	// an axis-parallel axis). nullopt otherwise.
+	static std::optional<Pt> tangent_at_pole_other(const Pt &A, const Pt &B, const Surf<F64> &s, const Pt &t) {
+		const Pt C = (B + t) * 0.5;
+		const Pt u = unit(B - C);
+		if (!u.finite()) {
+			return std::nullopt;
+		}
+		const Pt X = A - u * (2.0 * dot(A - C, u));
+		if (!X.finite() || X == A || X == B) {
+			return std::nullopt;
+		}
+		const double sx = cross(B - A, X - A);
+		const double st = cross(B - A, t - A);
+		if (!(sx * st < 0.0)) {
+			return std::nullopt; // on t's arc (A past the diameter): no simple exact point
+		}
+		using namespace exact;
+		BigFloat nx, ny;
+		if (s.line) {
+			if (!orient_zero(s.sx, s.sy, s.ex, s.ey, B.x, B.y)) {
+				return std::nullopt;
+			}
+			nx = sub(of(s.sy), of(s.ey));
+			ny = sub(of(s.ex), of(s.sx));
+		} else {
+			if (!on_circle_zero(s.cx, s.cy, s.r, B.x, B.y)) {
+				return std::nullopt;
+			}
+			nx = sub(of(B.x), of(s.cx));
+			ny = sub(of(B.y), of(s.cy));
+		}
+		// with a = A - B and x = X - B: the circle through B, A and X is tangent
+		// to the carrier at B iff |a|^2 (n . x) = |x|^2 (n . a)
+		const BigFloat ax = sub(of(A.x), of(B.x)), ay = sub(of(A.y), of(B.y));
+		const BigFloat xx = sub(of(X.x), of(B.x)), xy = sub(of(X.y), of(B.y));
+		const BigFloat la = add(mul(ax, ax), mul(ay, ay)), lx = add(mul(xx, xx), mul(xy, xy));
+		const BigFloat na = add(mul(nx, ax), mul(ny, ay)), nxx = add(mul(nx, xx), mul(ny, xy));
+		if (na.is_zero() || !sub(mul(la, nxx), mul(lx, na)).is_zero()) {
+			return std::nullopt;
+		}
+		return X;
+	}
+
 	// Proper crossings of two segments (interior to both, transversal).
 	static std::vector<Pt> carrier_points(const Surf<F64> &a, const Surf<F64> &b) {
 		std::vector<Pt> pts;
@@ -973,7 +1029,7 @@ private:
 				if (B) {
 					if (const std::optional<Pt> t = tangent_at_pole(A, *B, s)) {
 						const size_t before = pois.size();
-						add_poi(pois, cn_of(*t), j, "tangency at Q to " + std::to_string(s.id));
+						add_poi(pois, cn_of(*t), j, "tangency at Q to " + std::to_string(s.id), -1, false, tangent_at_pole_other(A, *B, s, *t));
 						for (size_t q = before; q < pois.size(); q++) {
 							pois[q].tangent_pole = true; // (the other way round too: the same circle)
 							if (j == K || carrier_fixed(s.id, j)) {

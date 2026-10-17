@@ -19,10 +19,6 @@ const KNOWN_FINDINGS := [
 	# ends its lap: whether the solver reaches it at once or only after the loop
 	# varies along the carrier with no change in the casts (a measure-zero set).
 	{"id": "K7", "prefix": "VISIBILITY-EQUALS-NON-DIVERGENCE (on a planned carrier)"},
-	# K8: a cursor exactly on a critical member (the member tangent at Q to a
-	# carrier through Q, the other way round): the member's own cast is built from
-	# a rounded direction, so it crosses where the exact cursor touches.
-	{"id": "K8", "prefix": "VISIBILITY-EQUALS-NON-DIVERGENCE (on a critical member)"},
 ]
 
 func test_visibility_empty_plan_on_every_level() -> void:

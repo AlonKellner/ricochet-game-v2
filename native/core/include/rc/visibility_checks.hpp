@@ -40,25 +40,13 @@ inline bool preview_visible(const TracePath &planned, const std::vector<TraceSte
 }
 
 // Where a disagreement is a known finding (docs/TDD_14_VISIBILITY.md): a cursor
-// exactly on a planned carrier (K7: a departure point or a lap's end) or exactly
-// on a critical member (K8). Empty elsewhere.
+// exactly on a planned carrier (K7: a departure point or a lap's end). Empty
+// elsewhere. (K8, a cursor on a critical member, was fixed by exact cursors.)
 inline std::string pin_tag(const vis::Result &r, const vis::Pt &c) {
 	const double tol = 1e-9 * std::max({1.0, std::abs(c.x), std::abs(c.y)});
 	for (const vis::Result::Carrier &cr : r.plan_carriers) {
 		if (cr.dist(c) <= tol) {
 			return "on a planned carrier";
-		}
-	}
-	for (const vis::Member &mb : r.members) {
-		if (!mb.poi) {
-			continue;
-		}
-		const vis::Pt P = vis::pt_of(mb.beam.p);
-		const vis::Pt t = vis::pt_of(mb.beam.tau);
-		const double k = mb.beam.kappa.v;
-		const double d = k == 0.0 ? std::abs(vis::cross(t, c - P)) : std::abs(vis::norm(c - (P + vis::perp(t) * (1.0 / k))) - 1.0 / std::abs(k));
-		if (d <= tol) {
-			return "on a critical member";
 		}
 	}
 	return "";

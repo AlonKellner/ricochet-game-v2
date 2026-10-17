@@ -992,6 +992,30 @@ TEST_CASE("visibility: the display's cursor index counts drawn steps (B3)") {
 	CHECK(defined_visible(t, V2{500, 300}, cursor, inf, Flags()) == std::optional<bool>(true));
 }
 
+TEST_CASE("visibility: the member tangent at Q is cast exactly both ways (K8)") {
+	// tangent_infinity, plan [infinity], player (760, 440): the member through
+	// the player tangent at Q = (960, 540) to surface 6 is the circle centred at
+	// (835, 540), radius 125; (800, 420) lies exactly on its other arc. A rounded
+	// aim for the other way crosses surface 6 at Q, so its cast died and the
+	// region excluded the cursor the preview shows.
+	Tracer t;
+	const std::vector<PlanItem> inf{PlanItem{INFINITY_ID, true, std::nullopt, std::nullopt}};
+	const vis::Result r = region_of(t, "playground__tangent_infinity", inf, vis::Pt{760, 440});
+	REQUIRE(r.supported);
+	int exact_other = 0;
+	for (const vis::Member &m : r.members) {
+		if (m.tangent_q_sid == 6 && m.why.find("the other way (exact)") != std::string::npos) {
+			exact_other++;
+			CHECK(m.cursor.x == 910.0);
+			CHECK(m.cursor.y == 440.0);
+			CHECK(m.crit.cursor_ok);
+		}
+	}
+	CHECK(exact_other == 1);
+	CHECK(vis::contains(r, vis::Pt{800, 420}) == vis::Membership::Inside);
+	CHECK(defined_visible(t, V2{760, 440}, V2{800, 420}, inf, Flags()) == std::optional<bool>(true));
+}
+
 TEST_CASE("visibility: the drawn fill covers the region once (F8)") {
 	// pre_inverted, empty plan, the user's player (float32): a member nearly
 	// tangent to surface 4's carrier made the tessellated hole cross itself, and
