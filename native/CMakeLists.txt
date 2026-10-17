@@ -111,11 +111,30 @@ if(RC_BUILD_TESTS)
     # cores: the sweep goldens replay in RC_SWEEP_PARTS parts (RC_SWEEP_PART),
     # the Stage 105 tier-independence walks alone, every other case together.
     set(RC_SWEEP_PARTS 6 CACHE STRING "ctest entries the sweep goldens replay is split into")
-    set(RC_HEAVY_CASES "goldens: the sweep combos*,Stage 105: on coincidence*,visibility:*")
+    set(RC_HEAVY_CASES "goldens: the sweep combos*,Stage 105: on coincidence*,Stage 106: pops at known points*,visibility:*")
     add_test(NAME rc_tests COMMAND rc_tests "--test-case-exclude=${RC_HEAVY_CASES}")
     add_test(NAME rc_tests_tier_independence COMMAND rc_tests "--test-case=Stage 105: on coincidence*")
-    # Stage 110: the visibility region against its definition on the shipped levels
-    add_test(NAME rc_tests_visibility COMMAND rc_tests "--test-case=visibility:*")
+    add_test(NAME rc_tests_pop_tiers COMMAND rc_tests "--test-case=Stage 106: pops at known points*")
+    # Stage 110: the visibility region against its definition on the shipped
+    # levels. The two level loops (the plans' pin, the structure checks) run in
+    # RC_VIS_PARTS parts over the level files (RC_VIS_PART); the rest together.
+    set(RC_VIS_PARTS 6 CACHE STRING "ctest entries the visibility level loops are split into")
+    set(RC_VIS_LEVEL_CASES "visibility: plans' regions*,visibility: the regions' structure checks*")
+    # the slower single cases alone (each runs check_visibility on a costly region)
+    set(RC_VIS_ALONE "visibility: VIS-REGULAR allows*" "visibility: the region and the traces agree with the oracle's labels*")
+    set(RC_VIS_EXCLUDE "${RC_VIS_LEVEL_CASES}")
+    set(i 0)
+    foreach(c IN LISTS RC_VIS_ALONE)
+        add_test(NAME rc_tests_visibility_alone_${i} COMMAND rc_tests "--test-case=${c}")
+        string(APPEND RC_VIS_EXCLUDE ",${c}")
+        math(EXPR i "${i} + 1")
+    endforeach()
+    add_test(NAME rc_tests_visibility COMMAND rc_tests "--test-case=visibility:*" "--test-case-exclude=${RC_VIS_EXCLUDE}")
+    math(EXPR RC_VIS_LAST "${RC_VIS_PARTS} - 1")
+    foreach(part RANGE ${RC_VIS_LAST})
+        add_test(NAME rc_tests_visibility_levels_${part} COMMAND rc_tests "--test-case=${RC_VIS_LEVEL_CASES}")
+        set_tests_properties(rc_tests_visibility_levels_${part} PROPERTIES ENVIRONMENT "RC_VIS_PART=${part}/${RC_VIS_PARTS}")
+    endforeach()
     math(EXPR RC_SWEEP_LAST "${RC_SWEEP_PARTS} - 1")
     foreach(part RANGE ${RC_SWEEP_LAST})
         add_test(NAME rc_tests_sweep_goldens_${part} COMMAND rc_tests "--test-case=goldens: the sweep combos*")

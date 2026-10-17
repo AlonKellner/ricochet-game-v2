@@ -5,7 +5,7 @@
 | Phase | Topic | Status |
 |-------|-------|--------|
 | P0 | Benches: the region build per scene and plan, the ladder's census, the worker's region time in the frame bench | Done |
-| P5 | Gate turnaround: scheduling, sharding, the ctest split, build caching, `make gates` | Not started |
+| P5 | Gate turnaround: scheduling, sharding, the ctest split, `make gates` | Done: about 9 min to 4.5 min |
 | P1 | The exact-image cache key (a 6-decimal cursor key: a bug) | Not started |
 | P2 | The ladder: BigFloat only where an exact decision needs it | Not started |
 | P3 | The region build: cast reuse, cheaper casts, the fill | Not started |
@@ -67,3 +67,30 @@ A profile of the native visibility sweep (`sample`) puts about 90% in `Ladder::r
 - **ASan, 3.5 min:** visibility 177 s, `rc_tests` 107 s.
 
 **Found:** `Solver::exact_image_cached` keys on `std::to_string(cursor)` (6 decimals). See P1.
+
+## P5: the gates
+
+**Changes:**
+- **`make gates`** (`gates.sh`): the native build, oracle, ctest, GUT, ASan and the goldens diff, in order. Every gate runs even after a failure, and one timed summary is printed.
+- **`run_tests_parallel.sh`:**
+  - jobs start longest first: the visibility sweep, then the other files, then the shorter sweeps;
+  - the visibility sweep runs in 2 × JOBS shards;
+  - JOBS defaults to every core (the efficiency cores help: 133 s to 112 s);
+  - `SKIP_ORACLE=1` skips its inner oracle run (`gates.sh` runs it once).
+- **ctest entries:**
+  - the visibility level loops (the plans' pin, the structure checks) run in `RC_VIS_PARTS` = 6 parts, taking every 6th region (`RC_VIS_PART`, `VisPart` in `test_visibility.cpp`). One costly level spreads too; a split by file left one 90 s part;
+  - the slower single cases (VIS-REGULAR's allowance case, the oracle labels, the Stage 106 random scenes) have entries of their own;
+  - `ctest -j` uses every core (`CTEST_JOBS`). `JOBS` still bounds compiles.
+- **Kept as is:** the headless `godot --import` after every `make native` (2 s). There is no ccache on the machine; it would help only rebuilds.
+
+**Result:**
+
+| Gate | Before | After |
+|---|---|---|
+| ctest | 126 s | 39 s |
+| GUT | 150 s | 124 s |
+| ASan (build included) | 268 s | 98 s |
+| Total | about 9 min | 271 s |
+
+The rest is the region's cost: the GUT visibility shards and the ASan visibility cases (VIS-REGULAR's allowance case alone, 79 s under ASan). P2 and P3 attack it.
+

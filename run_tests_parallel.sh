@@ -9,6 +9,10 @@
 #
 #   ./run_tests_parallel.sh            # JOBS = performance cores
 #   JOBS=4 ./run_tests_parallel.sh
+#   SKIP_ORACLE=1 ./run_tests_parallel.sh   # the oracle runs elsewhere (make gates)
+#
+# Jobs start longest first (the visibility sweep, in 2 x JOBS shards so its
+# tail balances), then the shorter sweeps, then the other files.
 set -uo pipefail
 
 GODOT="${GODOT_BIN:-godot}"
@@ -20,16 +24,21 @@ if ! GODOT_BIN="$GODOT" make native; then
 	exit 1
 fi
 # the oracle (the spec the fixtures come from) and the fixture schema
-if ! make -s oracle-test; then
+if [ -z "${SKIP_ORACLE:-}" ] && ! make -s oracle-test; then
 	echo "!! oracle tests failed (make oracle-test)"
 	exit 1
 fi
 
 if [ -z "${JOBS:-}" ]; then
-	JOBS=$(sysctl -n hw.perflevel0.physicalcpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+	JOBS=$(sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 fi
 
-SWEEPS=(test_invariant_sweep.gd test_invariant_combos.gd test_precision_invariant_sweep.gd test_stage107_level_sweep.gd test_stage108_level_sweep.gd test_visibility_sweep.gd)
+# longest first (measured, Stage 110: visibility ~100 s per shard of 6, the rest <= 13 s)
+SWEEPS=(test_visibility_sweep.gd test_invariant_sweep.gd test_stage107_level_sweep.gd test_invariant_combos.gd test_precision_invariant_sweep.gd test_stage108_level_sweep.gd)
+# shards per sweep: the visibility sweep twice as many as processes
+shards_of() {
+	if [ "$1" = test_visibility_sweep.gd ]; then echo $((2 * JOBS)); else echo "$JOBS"; fi
+}
 
 LOGDIR=$(mktemp -d "${TMPDIR:-/tmp}/ricochet_tests.XXXXXX")
 rm -f violations.*.shard*.json
@@ -49,11 +58,13 @@ for f in tests/test_*.gd tests/native/test_*.gd; do
 done
 {
 	for f in "${SWEEPS[@]}"; do
-		for ((i = 0; i < JOBS; i++)); do
-			echo "${f%.gd}.shard$i|$i/$JOBS|res://tests/$f"
+		n=$(shards_of "$f")
+		for ((i = 0; i < n; i++)); do
+			echo "${f%.gd}.shard$i|$i/$n|res://tests/$f"
 		done
+		# the other files (~13 s) right after the longest sweep
+		[ "$f" = test_visibility_sweep.gd ] && echo "others||$OTHERS"
 	done
-	echo "others||$OTHERS"
 } > "$LOGDIR/jobs.txt"
 
 # $1: the job's line number in jobs.txt (xargs -I limits the length of a

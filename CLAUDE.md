@@ -21,10 +21,13 @@ Three-layer architecture with strict dependency direction: Math -> Visual -> Gam
 ## Testing
 
 ```bash
+# Every gate before a commit (native build, oracle, ctest, GUT, ASan, goldens), timed summary
+make gates
+
 # Run all tests headlessly
 ./run_tests.sh
 
-# Same suite, sweeps sharded over parallel processes (about 5 min instead of 27)
+# Same suite, sweeps sharded over parallel processes (about 2 min instead of 27)
 ./run_tests_parallel.sh
 
 # Or directly

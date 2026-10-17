@@ -42,6 +42,24 @@ constexpr size_t FILE_STRIDE = 1;
 #endif
 bool sampled_out(size_t file_index) { return !full() && file_index % FILE_STRIDE != 0; }
 
+// RC_VIS_PART=k/n (ctest's rc_tests_visibility_levels_k): a level loop takes
+// every n-th of its regions from the k-th on, so one costly level spreads over
+// the cores too. Unset: every region.
+struct VisPart {
+	size_t k = 0;
+	size_t n = 1;
+	size_t next = 0;
+	VisPart() {
+		if (const char *p = std::getenv("RC_VIS_PART")) {
+			if (std::sscanf(p, "%zu/%zu", &k, &n) != 2 || n == 0) {
+				k = 0;
+				n = 1;
+			}
+		}
+	}
+	bool take() { return next++ % n == k; }
+};
+
 ojson load_dump(const std::string &path) {
 	std::ifstream is(path);
 	return ojson::parse(is);
@@ -267,6 +285,7 @@ TEST_CASE("visibility: plans' regions are the non-divergence set on the shipped 
 	int regions = 0;
 	int unsupported = 0;
 	int notes = 0;
+	VisPart part;
 	for (size_t fi = 0; fi < files.size(); fi++) {
 		if (sampled_out(fi)) {
 			continue;
@@ -296,6 +315,9 @@ TEST_CASE("visibility: plans' regions are the non-divergence set on the shipped 
 			}
 			const std::vector<V2> players = full() ? std::vector<V2>{V2{960, 540}, V2{500, 300}} : std::vector<V2>{V2{500, 300}};
 			for (const V2 player : players) {
+				if (!part.take()) {
+					continue;
+				}
 				const vis::Result r = vis::compute(t, vis::Pt{player.x, player.y}, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
 				if (!r.supported) {
 					unsupported++;
@@ -763,6 +785,7 @@ TEST_CASE("visibility: the regions' structure checks hold on the shipped levels"
 	std::map<std::string, std::string> per_region; // label -> kinds
 	std::vector<std::string> samples;
 	int regions = 0;
+	VisPart part;
 	for (size_t fi = 0; fi < files.size(); fi++) {
 		if (sampled_out(fi)) {
 			continue;
@@ -780,6 +803,9 @@ TEST_CASE("visibility: the regions' structure checks hold on the shipped levels"
 			plans.push_back(lp[i]);
 		}
 		for (const std::vector<PlanItem> &plan : plans) {
+			if (!part.take()) {
+				continue;
+			}
 			const vis::Pt player{500, 300};
 			const vis::Result r = vis::compute(t, player, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
 			if (!r.supported) {
