@@ -152,11 +152,27 @@ Ref<TraceHit> TraceHit::make(double p_t, const Vector2 &p_point, const Variant &
 	Ref<TraceHit> h;
 	h.instantiate();
 	h->t = p_t;
-	h->point = Point::at(p_point);
+	h->point_coords = p_point;
+	h->has_point = true;
 	h->segment = p_segment;
 	h->side = p_side;
 	h->on_segment = p_on_segment;
 	return h;
+}
+
+Ref<Point> TraceHit::get_point() const {
+	if (point.is_null() && has_point) {
+		point = Point::at(point_coords);
+	}
+	return point;
+}
+
+void TraceHit::set_point(const Ref<Point> &v) {
+	point = v;
+	has_point = v.is_valid();
+	if (has_point) {
+		point_coords = v->coords;
+	}
 }
 
 Ref<TraceHit> TraceHit::wrap(const rc::TraceHit &h, const Dictionary &segments) {
@@ -168,7 +184,7 @@ Ref<TraceHit> TraceHit::wrap(const rc::TraceHit &h, const Dictionary &segments) 
 rc::TraceHit TraceHit::to_rc() const {
 	rc::TraceHit h;
 	h.t = t;
-	h.point = point.is_valid() ? to_v2(point->coords) : rc::V2{};
+	h.point = point.is_valid() ? to_v2(point->coords) : (has_point ? to_v2(point_coords) : rc::V2{});
 	h.surface_id = surface_id;
 	h.side = rc::Side(side);
 	h.on_segment = on_segment;
@@ -338,6 +354,27 @@ Dictionary TracePath::physical_hits() const {
 	return result;
 }
 
+Array TracePath::get_hits() const {
+	if (hits_pending) {
+		hits_pending = false;
+		for (const rc::HitRecord &h : native_hits) {
+			Dictionary d;
+			d["surface_id"] = h.surface_id;
+			d["side"] = int(h.side);
+			d["on_segment"] = h.on_segment;
+			d["fired"] = h.fired;
+			d["state"] = h.state;
+			d["point"] = Vector2(h.point.x, h.point.y);
+			d["tangent"] = Vector2(h.tangent.x, h.tangent.y);
+			d["flags_before"] = flags_to_dict(h.flags_before);
+			d["step_index"] = h.step_index;
+			hits.push_back(d);
+		}
+		native_hits.clear();
+	}
+	return hits;
+}
+
 Ref<TracePath> TracePath::wrap(const rc::TracePath &p, const Dictionary &segments, RayCache &rays) {
 	Ref<TracePath> o;
 	o.instantiate();
@@ -347,19 +384,8 @@ Ref<TracePath> TracePath::wrap(const rc::TracePath &p, const Dictionary &segment
 	for (int id : p.targets_hit) {
 		o->targets_hit[id] = true;
 	}
-	for (const rc::HitRecord &h : p.hits) {
-		Dictionary d;
-		d["surface_id"] = h.surface_id;
-		d["side"] = int(h.side);
-		d["on_segment"] = h.on_segment;
-		d["fired"] = h.fired;
-		d["state"] = h.state;
-		d["point"] = Vector2(h.point.x, h.point.y);
-		d["tangent"] = Vector2(h.tangent.x, h.tangent.y);
-		d["flags_before"] = flags_to_dict(h.flags_before);
-		d["step_index"] = h.step_index;
-		o->hits.push_back(d);
-	}
+	o->native_hits = p.hits;
+	o->hits_pending = !p.hits.empty();
 	o->cursor_index = p.cursor_index;
 	o->hit_count = p.hit_count;
 	o->truncated = p.truncated;
@@ -393,6 +419,9 @@ void BeamTracer::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("clear_cache"), &BeamTracer::clear_cache);
 	ClassDB::bind_method(D_METHOD("visibility", "defs", "player", "plan_entries", "flags", "bounds"), &BeamTracer::visibility);
 	ClassDB::bind_method(D_METHOD("infinity_point", "defs", "plan_entries", "flags"), &BeamTracer::infinity_point, DEFVAL(Dictionary()));
+	ClassDB::bind_method(D_METHOD("set_defs_key", "key"), &BeamTracer::set_defs_key);
+	ClassDB::bind_method(D_METHOD("get_defs_key"), &BeamTracer::get_defs_key);
+	ADD_PROPERTY(PropertyInfo(Variant::INT, "defs_key"), "set_defs_key", "get_defs_key");
 	ClassDB::bind_method(D_METHOD("set_emit_infinity", "on"), &BeamTracer::set_emit_infinity);
 	ClassDB::bind_method(D_METHOD("get_emit_infinity"), &BeamTracer::get_emit_infinity);
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "emit_infinity"), "set_emit_infinity", "get_emit_infinity");
@@ -417,14 +446,22 @@ Array BeamTracer::plan_items(const Array &plan_entries) {
 }
 
 Variant BeamTracer::infinity_point(const Array &defs, const Array &plan_entries, const Dictionary &flags) {
-	tracer.set_defs(defs_from_array(defs));
+	use_defs(defs);
 	const std::optional<rc::V2> q = tracer.infinity_point(plan_from_items(plan_entries), flags_from_dict(flags));
 	return q ? Variant(Vector2(q->x, q->y)) : Variant();
 }
 
+void BeamTracer::use_defs(const Array &defs) {
+	if (defs_key >= 0 && defs_key == converted_key) {
+		return;
+	}
+	tracer.set_defs(defs_from_array(defs));
+	converted_key = defs_key;
+}
+
 Ref<BeamTracerPair> BeamTracer::trace_pair(const Array &defs, const Vector2 &player, const Vector2 &cursor, const Array &plan_entries,
 		const Dictionary &flags, const Dictionary &segments) {
-	tracer.set_defs(defs_from_array(defs));
+	use_defs(defs);
 	const std::optional<rc::TracePair> pair = tracer.trace_pair(to_v2(player), to_v2(cursor), plan_from_items(plan_entries), flags_from_dict(flags));
 	if (!pair) {
 		return Ref<BeamTracerPair>();
@@ -452,7 +489,7 @@ Ref<BeamTracerPair> BeamTracer::trace_pair(const Array &defs, const Vector2 &pla
 
 Ref<godot::RefCounted> BeamTracer::visibility(const Array &defs, const Vector2 &player, const Array &plan_entries, const Dictionary &flags,
 		const godot::Rect2 &bounds) {
-	tracer.set_defs(defs_from_array(defs));
+	use_defs(defs);
 	Ref<VisibilityRegion> o;
 	o.instantiate();
 	o->tracer = Ref<BeamTracer>(this);
@@ -464,7 +501,7 @@ Ref<godot::RefCounted> BeamTracer::visibility(const Array &defs, const Vector2 &
 }
 
 bool BeamTracer::plan_refuses(const Array &defs, const Array &plan_entries, int surface_id, bool left, const Dictionary &flags) {
-	tracer.set_defs(defs_from_array(defs));
+	use_defs(defs);
 	return tracer.plan_refuses(plan_from_items(plan_entries), surface_id, left, flags_from_dict(flags));
 }
 

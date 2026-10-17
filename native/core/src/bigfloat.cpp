@@ -309,11 +309,34 @@ BigFloat BigFloat::mul(const BigFloat &o) const {
 	const Limbs &b = o.limbs;
 	const size_t na = a.size();
 	const size_t nb = b.size();
-	// column sums in 128 bits (B1, fixed in Stage 102): each product is below
-	// 2^56, so any realistic limb count (< 2^70 terms) cannot overflow; the
-	// GDScript original summed in int64 and wrapped above ~128 limbs per factor
+	// the column sums, then one carry pass, into a per-thread buffer (Perf P2:
+	// no allocation but the result's). Each product is below 2^56, so a column
+	// of fewer than 128 products fits in int64; longer ones sum in 128 bits (B1,
+	// fixed in Stage 102: the GDScript original wrapped above ~128 limbs).
+	thread_local Limbs cols;
+	cols.assign(na + nb, 0);
+	if (std::min(na, nb) < 128) {
+		for (size_t i = 0; i < na; i++) {
+			const int64_t ai = a[i];
+			if (ai == 0) {
+				continue;
+			}
+			int64_t *c = cols.data() + i;
+			for (size_t j = 0; j < nb; j++) {
+				c[j] += ai * b[j];
+			}
+		}
+		int64_t carry = 0;
+		for (size_t k = 0; k < na + nb; k++) {
+			const int64_t v = cols[k] + carry; // < 2^63: a column plus a carry below 2^36
+			cols[k] = v & MASK;
+			carry = v >> BITS;
+		}
+		return normalize(cols, exp + o.exp, sign * o.sign, n);
+	}
 	__extension__ typedef __int128 i128;
-	std::vector<i128> acc(na + nb, 0);
+	thread_local std::vector<i128> acc;
+	acc.assign(na + nb, 0);
 	for (size_t i = 0; i < na; i++) {
 		const int64_t ai = a[i];
 		if (ai == 0) {
@@ -323,12 +346,11 @@ BigFloat BigFloat::mul(const BigFloat &o) const {
 			acc[i + j] += i128(ai) * i128(b[j]);
 		}
 	}
-	Limbs cols(na + nb, 0);
 	i128 carry = 0;
 	for (size_t k = 0; k < na + nb; k++) {
-		const i128 s = acc[k] + carry;
-		cols[k] = int64_t(s & i128(MASK));
-		carry = s >> BITS;
+		const i128 v = acc[k] + carry;
+		cols[k] = int64_t(v & i128(MASK));
+		carry = v >> BITS;
 	}
 	return normalize(cols, exp + o.exp, sign * o.sign, n);
 }
@@ -449,27 +471,24 @@ BigFloat BigFloat::normalize(const Limbs &arr, int64_t e, int s, int n) {
 	if (top < 0) {
 		return zero(n);
 	}
-	// bit length of top limb
-	int64_t t = arr[size_t(top)];
-	int bl = 0;
-	while (t > 0) {
-		bl += 1;
-		t >>= 1;
-	}
+	// bit length of top limb (a positive limb below 2^BITS)
+	const int bl = 64 - __builtin_clzll(uint64_t(arr[size_t(top)]));
 	const int lshift = BITS - bl; // shift left so top limb has bit BITS-1 set
 	BigFloat r;
 	r.sign = s;
 	r.limbs.assign(size_t(n), 0);
-	// result limb k (0..n-1) takes source position top - (n-1) + k, shifted
-	for (int64_t k = 0; k < n; k++) {
+	// result limb k (0..n-1) takes source position top - (n-1) + k, shifted;
+	// the positions below 0 are zero (Perf P2: start at the first one that is not)
+	const int64_t k0 = std::max<int64_t>(0, (n - 1) - top);
+	int64_t *out = r.limbs.data();
+	const int64_t *in = arr.data();
+	for (int64_t k = k0; k < n; k++) {
 		const int64_t src = top - (n - 1) + k;
-		const int64_t cur = src >= 0 ? arr[size_t(src)] : 0;
-		const int64_t below = src - 1 >= 0 ? arr[size_t(src - 1)] : 0;
-		int64_t v = cur << lshift;
-		if (lshift > 0) {
-			v |= below >> (BITS - lshift);
+		int64_t v = in[src] << lshift;
+		if (lshift > 0 && src >= 1) {
+			v |= in[src - 1] >> (BITS - lshift);
 		}
-		r.limbs[size_t(k)] = v & MASK;
+		out[k] = v & MASK;
 	}
 	r.exp = e + BITS * (top - (n - 1)) - lshift;
 	return r;

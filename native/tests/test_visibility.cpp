@@ -9,6 +9,7 @@
 
 #include <doctest/doctest.h>
 
+#include <bit>
 #include <cctype>
 #include <chrono>
 #include <cstdio>
@@ -41,6 +42,24 @@ constexpr size_t FILE_STRIDE = 3;
 constexpr size_t FILE_STRIDE = 1;
 #endif
 bool sampled_out(size_t file_index) { return !full() && file_index % FILE_STRIDE != 0; }
+
+// RC_VIS_PART=k/n (ctest's rc_tests_visibility_levels_k): a level loop takes
+// every n-th of its regions from the k-th on, so one costly level spreads over
+// the cores too. Unset: every region.
+struct VisPart {
+	size_t k = 0;
+	size_t n = 1;
+	size_t next = 0;
+	VisPart() {
+		if (const char *p = std::getenv("RC_VIS_PART")) {
+			if (std::sscanf(p, "%zu/%zu", &k, &n) != 2 || n == 0) {
+				k = 0;
+				n = 1;
+			}
+		}
+	}
+	bool take() { return next++ % n == k; }
+};
 
 ojson load_dump(const std::string &path) {
 	std::ifstream is(path);
@@ -267,6 +286,7 @@ TEST_CASE("visibility: plans' regions are the non-divergence set on the shipped 
 	int regions = 0;
 	int unsupported = 0;
 	int notes = 0;
+	VisPart part;
 	for (size_t fi = 0; fi < files.size(); fi++) {
 		if (sampled_out(fi)) {
 			continue;
@@ -296,6 +316,9 @@ TEST_CASE("visibility: plans' regions are the non-divergence set on the shipped 
 			}
 			const std::vector<V2> players = full() ? std::vector<V2>{V2{960, 540}, V2{500, 300}} : std::vector<V2>{V2{500, 300}};
 			for (const V2 player : players) {
+				if (!part.take()) {
+					continue;
+				}
 				const vis::Result r = vis::compute(t, vis::Pt{player.x, player.y}, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
 				if (!r.supported) {
 					unsupported++;
@@ -763,6 +786,7 @@ TEST_CASE("visibility: the regions' structure checks hold on the shipped levels"
 	std::map<std::string, std::string> per_region; // label -> kinds
 	std::vector<std::string> samples;
 	int regions = 0;
+	VisPart part;
 	for (size_t fi = 0; fi < files.size(); fi++) {
 		if (sampled_out(fi)) {
 			continue;
@@ -780,6 +804,9 @@ TEST_CASE("visibility: the regions' structure checks hold on the shipped levels"
 			plans.push_back(lp[i]);
 		}
 		for (const std::vector<PlanItem> &plan : plans) {
+			if (!part.take()) {
+				continue;
+			}
 			const vis::Pt player{500, 300};
 			const vis::Result r = vis::compute(t, player, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
 			if (!r.supported) {
@@ -819,30 +846,111 @@ TEST_CASE("visibility: the regions' structure checks hold on the shipped levels"
 }
 
 // RC_VIS_BENCH=1: the time one region takes on the main level, by plan.
+// The region's cost (skipped; run with --no-skip): RC_VIS_SCENE=<dump name>
+// (default main), RC_VIS_BENCH_PLANS=<n> plans after the empty one (default 3),
+// 12 players. Per plan: build time (median, p95, max), casts per region by kind,
+// and the ladder's census over those casts (walks accepted at float64, declined
+// for a margin or for the estimate, BigFloat walks per tier, their time).
 TEST_CASE("visibility bench" * doctest::skip(true)) {
-	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/main.surfaces.json");
+	const char *sc = std::getenv("RC_VIS_SCENE");
+	const std::string scene = sc ? sc : "main";
+	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + scene + ".surfaces.json");
 	const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
 	Tracer t;
 	t.set_emit_infinity(true);
 	t.set_defs(defs);
+	const char *np = std::getenv("RC_VIS_BENCH_PLANS");
+	const size_t n_plans = np ? size_t(std::atoi(np)) : 3;
 	std::vector<std::vector<PlanItem>> plans{{}};
 	const auto lp = level_plans(defs);
-	for (size_t i = 0; i < lp.size() && plans.size() < 4; i++) {
-		plans.push_back(lp[i]);
+	for (size_t i = 0; i < lp.size() && plans.size() < n_plans + 1; i++) {
+		plans.push_back(lp[(i * 7) % lp.size()]);
 	}
+	std::printf("%s: %zu surfaces\n", scene.c_str(), defs.size());
 	for (const auto &plan : plans) {
 		std::vector<double> ms;
-		int casts = 0;
+		std::array<long long, 6> kinds{};
+		t.reset_ladder_stats();
 		for (int k = 0; k < 12; k++) {
-			const vis::Pt P{400.0 + k * 37.0, 300.0 + k * 21.0};
-			const auto t0 = std::chrono::steady_clock::now();
+			const vis::Pt P{400.0 + k * 97.0, 260.0 + k * 53.0};
 			const vis::Result r = vis::compute(t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
-			ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
-			casts += r.casts;
+			ms.push_back(double(r.build_usec) / 1000.0);
+			for (size_t q = 0; q < kinds.size(); q++) kinds[q] += r.casts_by_kind[q];
 		}
+		const LadderStats st = t.ladder_stats();
 		std::sort(ms.begin(), ms.end());
-		std::printf("plan of %zu entries: median %.1f ms, max %.1f ms, casts per region %d\n", plan.size(), ms[ms.size() / 2], ms.back(), casts / 12);
+		std::string pl;
+		for (const PlanItem &it : plan) pl += (pl.empty() ? "" : ",") + std::to_string(it.surface_id) + (it.left ? "L" : "R");
+		long long casts = 0;
+		for (long long c : kinds) casts += c;
+		std::printf("plan [%s]: median %.1f ms, p95 %.1f, max %.1f; casts/region %lld (crit %lld side %lld mid %lld refine %lld probe %lld)\n",
+			pl.c_str(), ms[ms.size() / 2], ms[size_t(double(ms.size()) * 0.95) < ms.size() ? size_t(double(ms.size()) * 0.95) : ms.size() - 1], ms.back(),
+			casts / 12, kinds[0] / 12, kinds[1] / 12, kinds[2] / 12, kinds[3] / 12, kinds[4] / 12);
+		std::printf("  ladder: walks %lld, f64 %lld, declined margin %lld, estimate %lld; BigFloat walks 4:%lld 8:%lld 16:%lld 32:%lld 64:%lld, %.1f ms\n",
+			st.walks, st.f64, st.unreliable, st.over_tol, st.tier_solves[1], st.tier_solves[2], st.tier_solves[3], st.tier_solves[4], st.tier_solves[5],
+			double(st.big_usec) / 1000.0);
 	}
+}
+
+// A digest of the regions on the shipped levels (skipped; run with --no-skip):
+// a hash of every region's loops, whiskers and cell count (exact bits), per
+// level and in total, for the empty plan, every fourth plan and the infinity
+// plan, players (500, 300) and (960, 540). Optimizations must leave it
+// unchanged (docs/TDD_15_PERFORMANCE.md). RC_VIS_DIGEST_VERBOSE=1: per region.
+TEST_CASE("visibility digest" * doctest::skip(true)) {
+	const std::string dir = std::string(RC_REPO_ROOT) + "/bench/scenes";
+	std::vector<std::string> files;
+	for (const auto &f : std::filesystem::directory_iterator(dir)) {
+		const std::string name = f.path().filename().string();
+		if (name.rfind("test_levels__", 0) == 0 || name.rfind("playground__", 0) == 0) {
+			files.push_back(f.path().string());
+		}
+	}
+	std::sort(files.begin(), files.end());
+	auto mix = [](uint64_t h, uint64_t v) { return (h ^ v) * 1099511628211ULL; };
+	auto bits = [](double x) { return std::bit_cast<uint64_t>(x); };
+	auto edge_hash = [&](uint64_t h, const vis::Edge &e) {
+		for (double x : {e.a.x, e.a.y, e.via.x, e.via.y, e.b.x, e.b.y}) h = mix(h, bits(x));
+		h = mix(h, uint64_t(int(e.kind)) | uint64_t(uint32_t(e.member)) << 8 | uint64_t(uint32_t(e.surface)) << 40);
+		return mix(h, uint64_t(e.inclusive) | uint64_t(e.incl_a) << 1 | uint64_t(e.arc) << 2);
+	};
+	const bool verbose = std::getenv("RC_VIS_DIGEST_VERBOSE") != nullptr;
+	uint64_t total = 14695981039346656037ULL;
+	int regions = 0;
+	for (const std::string &file : files) {
+		const ojson d = load_dump(file);
+		const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
+		Tracer t;
+		t.set_emit_infinity(true);
+		t.set_defs(defs);
+		std::vector<std::vector<PlanItem>> plans{{}};
+		const std::vector<std::vector<PlanItem>> lp = level_plans(defs);
+		for (size_t i = 0; i < lp.size(); i++) {
+			if (i % 4 == 0 || i + 1 == lp.size()) plans.push_back(lp[i]);
+		}
+		uint64_t fh = 14695981039346656037ULL;
+		const std::string name = std::filesystem::path(file).filename().string();
+		for (size_t pi = 0; pi < plans.size(); pi++) {
+			for (const vis::Pt player : {vis::Pt{500, 300}, vis::Pt{960, 540}}) {
+				const vis::Result r = vis::compute(t, player, plans[pi], Flags(), vis::Rect{0, 0, 1920, 1080});
+				uint64_t h = mix(14695981039346656037ULL, uint64_t(r.supported));
+				h = mix(h, r.cells.size());
+				for (const vis::Loop &l : r.loops) {
+					h = mix(h, l.edges.size());
+					for (const vis::Edge &e : l.edges) h = edge_hash(h, e);
+				}
+				for (const vis::Edge &e : r.whiskers) h = edge_hash(h, e);
+				regions++;
+				fh = mix(fh, h);
+				if (verbose) {
+					std::printf("%s plan %zu player (%g, %g): %016llx\n", name.c_str(), pi, player.x, player.y, (unsigned long long)h);
+				}
+			}
+		}
+		std::printf("%-44s %016llx\n", name.c_str(), (unsigned long long)fh);
+		total = mix(total, fh);
+	}
+	std::printf("digest of %d regions: %016llx\n", regions, (unsigned long long)total);
 }
 
 // A census over the shipped levels (skipped; run with --no-skip): regions,

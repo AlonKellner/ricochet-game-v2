@@ -215,6 +215,7 @@ struct StackEntry {
 	std::optional<CN<N>> q; // the frame's image of infinity before the push (restored by the pop)
 	std::optional<exact::ExactPole> pole; // the exact pole record before the push (Stage 105)
 	int pole_serial = 0;
+	std::shared_ptr<const exact::BeamRec> rec; // the exact beam before the push (Perf P2b)
 };
 
 template <Num N>
@@ -281,6 +282,12 @@ struct Walk {
 	std::map<std::tuple<double, double, int>, bool> incidence;
 	std::shared_ptr<const exact::Line> tangent_line;
 	std::map<int, bool> tangent;
+	// Perf P2b: the current beam's exact generalized circle, lazily (from_line
+	// of `line` whenever there is one; mapped by every effect; nullptr: no
+	// exact claim), and its tangencies to carriers (cached per record)
+	std::shared_ptr<const exact::BeamRec> rec;
+	std::shared_ptr<const exact::BeamRec> rec_tangent_of;
+	std::map<int, bool> rec_tangent;
 	Flags flags;
 	bool on_plan = true;
 	// Stage 101: the current frame's image of infinity (nullopt = infinity):
@@ -356,6 +363,7 @@ public:
 		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
 		if (b0->kappa.is_zero()) {
 			w.line = exact::Line::from_exact(exact::line_from_dir(player.fx(), player.fy(), dir.fx(), dir.fy()));
+			w.rec = exact::BeamRec::from_line(w.line);
 			add_line_endpoints(w, *b0);
 		}
 		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
@@ -656,12 +664,15 @@ private:
 	}
 
 	// The exact aim image within the budget (nullopt beyond it), cached per
-	// (cursor, plan, plan surfaces' data).
+	// (cursor, plan, plan surfaces' data). The cursor is keyed by its exact bits
+	// (hex): a decimal key once merged cursors closer than 5e-7 px (Perf P1).
 	std::optional<exact::Point3> exact_image_cached(const CN<N> &cursor, const std::vector<PlanItem> &plan, const Flags &flags) const {
 		if (cache_ == nullptr) {
 			return exact_image_h(cursor, plan, EXACT_IMAGE_LIMBS, flags);
 		}
-		std::string key = std::to_string(cursor.fx()) + "," + std::to_string(cursor.fy());
+		char cbuf[64];
+		std::snprintf(cbuf, sizeof cbuf, "%a,%a", cursor.fx(), cursor.fy());
+		std::string key = cbuf;
 		const std::vector<EffectType> effs = plan_effects(plan, flags);
 		for (size_t ji = 0; ji < plan.size(); ji++) {
 			const PlanItem &item = plan[ji];
@@ -1070,6 +1081,7 @@ private:
 		}
 		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
 		w.line = initial_line(player, cursor, plan, flags);
+		w.rec = exact::BeamRec::from_line(w.line);
 		if (w.line) {
 			// every frame change fixes the cursor: the aim image is the cursor itself
 			if (!plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
@@ -1165,6 +1177,7 @@ private:
 		}
 		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
 		w.line = line;
+		w.rec = exact::BeamRec::from_line(w.line);
 		if (w.line) {
 			if (X && !X->sub(player).is_zero() && !plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
 				w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, std::nullopt});
@@ -1350,6 +1363,34 @@ private:
 		return it != w.tangent.end() && it->second;
 	}
 
+	// Exact (Perf P2b): the current beam touches surf's carrier, its two roots
+	// there one point -- one decision, not two neighbours a margin separates.
+	// False when the beam has no exact record.
+	static bool beam_tangent(Walk<N> &w, const Surf<N> &surf) {
+		if (!w.rec) {
+			return false;
+		}
+		if (w.rec_tangent_of != w.rec) {
+			w.rec_tangent.clear();
+			w.rec_tangent_of = w.rec;
+		}
+		auto it = w.rec_tangent.find(surf.id);
+		if (it != w.rec_tangent.end()) {
+			return it->second;
+		}
+		bool r = false;
+		if (const std::optional<exact::GCircle> g = w.rec->exact()) {
+			if (surf.line) {
+				r = exact::gc_tangent_line(*g, surf.sx, surf.sy, surf.ex, surf.ey);
+			} else {
+				const auto &ec = surf.exact_circle();
+				r = exact::gc_tangent_circle(*g, ec.C, ec.rw2);
+			}
+		}
+		w.rec_tangent[surf.id] = r;
+		return r;
+	}
+
 	// Bound on the float rounding of an exact circle's center (C / w, rounded parts).
 	static double ecc(const typename Surf<N>::ExactCircle &ec) {
 		return 6.0 * exact::U * gd_maxf(std::fabs(ec.fcx), std::fabs(ec.fcy));
@@ -1505,6 +1546,8 @@ private:
 		});
 		if (w.line) {
 			concurrent_ties(w, cands);
+		} else if (w.rec) {
+			concurrent_ties_circle(w, beam, cands);
 		}
 		if (depart >= 0) {
 			// the departure re-hit is at the departure point (exact when known)
@@ -1538,6 +1581,62 @@ private:
 			const N t = x.t;
 			const std::optional<CN<N>> pt = x.pt ? x.pt : y.pt;
 			const bool at_q = x.at_q || y.at_q; // concurrent at Q: both pinned there
+			cands[i] = Candidate<N>{t, lo, false, pt, int(i), false, at_q};
+			cands[i + 1] = Candidate<N>{t, hi, false, pt, int(i), false, at_q};
+		}
+	}
+
+	// Perf P2b: on a circular beam with an exact record, adjacent crossings of
+	// two line carriers at their common point, which the beam passes exactly,
+	// share one parameter: the id orders them, never rounding (as on an exact
+	// line; the oracle's _concurrent_ties_gc). The roots at the point are told
+	// from the carriers' other roots by distance; the decision itself is exact.
+	static void concurrent_ties_circle(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands) {
+		for (size_t i = 0; i + 1 < cands.size(); i++) {
+			Candidate<N> &x = cands[i];
+			Candidate<N> &y = cands[i + 1];
+			if (x.surf == nullptr || y.surf == nullptr || x.rehit || y.rehit || !x.surf->line || !y.surf->line || x.tie >= 0 || y.tie >= 0) {
+				continue;
+			}
+			double xx, xy, yx, yy;
+			Backend<N>::f64_point(beam, x.t, xx, xy);
+			Backend<N>::f64_point(beam, y.t, yx, yy);
+			const double scale = gd_maxf(1.0, gd_maxf(std::fabs(xx), std::fabs(xy)));
+			if (!(d64(xx, xy, yx, yy) <= 1e-6 * scale)) {
+				continue; // (the cheap filter: a common point is a rounding apart)
+			}
+			const Surf<N> *p = x.surf;
+			const Surf<N> *q = y.surf;
+			const exact::Line3 L1 = exact::line_through(p->sx, p->sy, p->ex, p->ey);
+			const exact::Line3 L2 = exact::line_through(q->sx, q->sy, q->ex, q->ey);
+			using exact::add;
+			using exact::mul;
+			using exact::sub;
+			// the common point, homogeneous: (c1 b2 - c2 b1, a1 c2 - a2 c1, a1 b2 - a2 b1)
+			const BigFloat Xw = sub(mul(L1[0], L2[1]), mul(L2[0], L1[1]));
+			if (Xw.is_zero()) {
+				continue; // parallel carriers
+			}
+			const BigFloat Xx = sub(mul(L1[2], L2[1]), mul(L2[2], L1[1]));
+			const BigFloat Xy = sub(mul(L1[0], L2[2]), mul(L2[0], L1[2]));
+			const double fx = Xx.to_float() / Xw.to_float();
+			const double fy = Xy.to_float() / Xw.to_float();
+			if (!(d64(xx, xy, fx, fy) <= 1e-6 * scale && d64(yx, yy, fx, fy) <= 1e-6 * scale)) {
+				continue; // the crossings near each other, but not at the common point
+			}
+			const std::optional<exact::GCircle> g = w.rec->exact();
+			if (!g) {
+				continue;
+			}
+			const BigFloat on = add(add(mul(g->A, add(mul(Xx, Xx), mul(Xy, Xy))), mul(add(mul(g->B, Xx), mul(g->C, Xy)), Xw)), mul(g->D, mul(Xw, Xw)));
+			if (!on.is_zero()) {
+				continue;
+			}
+			const Surf<N> *lo = p->id < q->id ? p : q;
+			const Surf<N> *hi = p->id < q->id ? q : p;
+			const N t = x.t;
+			const std::optional<CN<N>> pt = x.pt ? x.pt : y.pt;
+			const bool at_q = x.at_q || y.at_q;
 			cands[i] = Candidate<N>{t, lo, false, pt, int(i), false, at_q};
 			cands[i + 1] = Candidate<N>{t, hi, false, pt, int(i), false, at_q};
 		}
@@ -1584,8 +1683,9 @@ private:
 	}
 
 	// Per candidate: px distance to its neighbours in the walk order (and, for
-	// a segment, to its endpoints).
-	static std::vector<double> gaps(const Beam<N> &beam, const std::vector<Candidate<N>> &cands) {
+	// a segment, to its endpoints). The two roots of a carrier the beam touches
+	// exactly (beam_tangent) are one decision: not each other's neighbour.
+	static std::vector<double> gaps(Walk<N> &w, const Beam<N> &beam, const std::vector<Candidate<N>> &cands) {
 		std::vector<std::pair<double, double>> pts;
 		for (const Candidate<N> &cand : cands) {
 			if (cand.inf && !cand.pt) {
@@ -1598,6 +1698,29 @@ private:
 				pts.emplace_back(x, y);
 			}
 		}
+		// double roots: consecutive candidates on one surface, a rounding apart,
+		// where the beam touches its carrier exactly
+		std::vector<int> dbl(cands.size(), -1);
+		for (size_t i = 0; i < cands.size(); i++) {
+			const Surf<N> *s = cands[i].surf;
+			if (s == nullptr || cands[i].rehit) {
+				continue;
+			}
+			size_t j = i + 1;
+			while (j < cands.size() && cands[j].surf == nullptr) {
+				j++;
+			}
+			if (j >= cands.size() || cands[j].surf != s || cands[j].rehit) {
+				continue;
+			}
+			const double d = d64(pts[i].first, pts[i].second, pts[j].first, pts[j].second);
+			const double scale = gd_maxf(1.0, gd_maxf(std::fabs(pts[i].first), std::fabs(pts[i].second)));
+			if (d <= 1e-6 * scale && beam_tangent(w, *s)) {
+				dbl[j] = dbl[i] >= 0 ? dbl[i] : int(i);
+				dbl[i] = dbl[j];
+			}
+		}
+		auto same_root = [&](size_t i, long k) { return dbl[i] >= 0 && dbl[size_t(k)] == dbl[i]; };
 		std::vector<double> out;
 		for (size_t i = 0; i < cands.size(); i++) {
 			double g = INF_D;
@@ -1606,14 +1729,14 @@ private:
 				const bool exact_i = cands[i].pt.has_value();
 				const int tie_i = cands[i].tie;
 				long l = long(i) - 1;
-				while (l >= 0 && (cands[size_t(l)].surf == nullptr || (exact_i && cands[size_t(l)].pt) || (tie_i >= 0 && cands[size_t(l)].tie == tie_i))) {
+				while (l >= 0 && (cands[size_t(l)].surf == nullptr || (exact_i && cands[size_t(l)].pt) || (tie_i >= 0 && cands[size_t(l)].tie == tie_i) || same_root(i, l))) {
 					l--;
 				}
 				if (l >= 0) {
 					g = gd_minf(g, d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second));
 				}
 				size_t r = i + 1;
-				while (r < cands.size() && (cands[r].surf == nullptr || (exact_i && cands[r].pt) || (tie_i >= 0 && cands[r].tie == tie_i))) {
+				while (r < cands.size() && (cands[r].surf == nullptr || (exact_i && cands[r].pt) || (tie_i >= 0 && cands[r].tie == tie_i) || same_root(i, long(r)))) {
 					r++;
 				}
 				if (r < cands.size()) {
@@ -1834,7 +1957,7 @@ private:
 			}
 			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0, keep_cursor);
 			keep_cursor = false;
-			std::vector<double> gp = gaps(*beam, cands);
+			std::vector<double> gp = gaps(w, *beam, cands);
 			std::optional<Next> next;
 			bool restart = false;
 			size_t ci = skip;
@@ -2165,6 +2288,7 @@ private:
 			w.known = std::move(top.known);
 			tag_departure(w.known, q, t_res, top.sid, pt_exact, src.portal);
 			w.line = top.line;
+			w.rec = top.rec;
 			w.Q = top.q;
 			w.pole = top.pole;
 			w.pole_serial = top.pole_serial;
@@ -2172,7 +2296,7 @@ private:
 		}
 		const N other = other_root(*beam, surf, depart, t0, t, pt);
 		const int pop_id = surf.portal ? surf.pair : surf.id;
-		w.stack.push_back(StackEntry<N>{beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype), w.Q, w.pole, w.pole_serial});
+		w.stack.push_back(StackEntry<N>{beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype), w.Q, w.pole, w.pole_serial, w.rec});
 		set_pole(w, pole_after(w, surf));
 		w.Q = effects::map_point(w.Q, surf, false);
 		const std::vector<Known<N>> old_known = w.known;
@@ -2218,6 +2342,7 @@ private:
 		}
 		if (w.line && surf.line) {
 			w.line = w.line->reflected(surf.sx, surf.sy, surf.ex, surf.ey);
+			w.rec = exact::BeamRec::from_line(w.line);
 			add_line_endpoints(w, *res.beam);
 		} else if (w.line && line_through_center(*w.line, surf)) {
 			res.beam = Backend<N>::straightened(res.beam);
@@ -2231,6 +2356,10 @@ private:
 			add_line_endpoints(w, *res.beam);
 		} else {
 			w.line = nullptr;
+			// the circle the beam becomes: the old one under the map (Perf P2b)
+			if (w.rec) {
+				w.rec = surf.line ? w.rec->reflected(surf.sx, surf.sy, surf.ex, surf.ey) : w.rec->inverted(surf.exact_circle().C, surf.exact_circle().rw2);
+			}
 			if (!surf.line) {
 				for (const Known<N> &k : old_known) {
 					if (is_center(k.p, surf)) {
@@ -2335,6 +2464,7 @@ private:
 			}
 			auto el = w.chain->exit_lines.find(w.plan_index - 1);
 			w.line = el == w.chain->exit_lines.end() ? nullptr : el->second;
+			w.rec = exact::BeamRec::from_line(w.line);
 			if (w.line) {
 				add_line_endpoints(w, *ab);
 			}
@@ -2348,6 +2478,7 @@ private:
 			w.known.push_back(Known<N>{pt, beam->kappa.like(0.0), surf.id, std::nullopt});
 		}
 		w.line = nullptr;
+		w.rec = nullptr;
 		if (pt_exact) {
 			// an exact data line: through pt along the exact axis
 			const EffectType etype = surf.effect(left);
@@ -2365,12 +2496,14 @@ private:
 				L = exact::line_from_dir(px, py, pr.nx, pr.ny);
 			}
 			w.line = exact::Line::from_exact(L);
+			w.rec = exact::BeamRec::from_line(w.line);
 			add_line_endpoints(w, *nb);
 		}
 		if (at_h) {
 			auto el = w.chain->exit_lines.find(w.plan_index - 1);
 			if (el != w.chain->exit_lines.end()) {
 				w.line = el->second;
+				w.rec = exact::BeamRec::from_line(w.line);
 				add_line_endpoints(w, *nb);
 			}
 		}
@@ -2422,9 +2555,11 @@ private:
 		w.known = known;
 		if (w.line && surf.theta == 0.0) {
 			w.line = w.line->translated(surf.dx, surf.dy);
+			w.rec = exact::BeamRec::from_line(w.line);
 			add_line_endpoints(w, *res.beam);
 		} else {
 			w.line = nullptr;
+			w.rec = (w.rec && surf.theta == 0.0) ? w.rec->translated(surf.dx, surf.dy) : nullptr;
 		}
 	}
 };

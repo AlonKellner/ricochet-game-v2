@@ -31,7 +31,13 @@
 #include "rc/tracer.hpp"
 
 #include <algorithm>
+#include <array>
+#include <bit>
+#include <atomic>
+#include <chrono>
 #include <cmath>
+#include <cstdlib>
+#include <thread>
 #include <limits>
 #include <map>
 #include <optional>
@@ -41,6 +47,20 @@
 
 namespace rc {
 namespace vis {
+
+// Threads a region build casts on (Perf P3): RC_VIS_THREADS=<n> (1: in order on
+// the caller's thread), else every core up to 8. The region is the same for any
+// count (the casts are independent; the visibility digest pins it).
+inline int vis_threads() {
+	static const int n = [] {
+		if (const char *e = std::getenv("RC_VIS_THREADS")) {
+			return std::max(1, std::atoi(e));
+		}
+		const unsigned hw = std::thread::hardware_concurrency();
+		return int(std::clamp(hw == 0 ? 1u : hw, 1u, 8u));
+	}();
+	return n;
+}
 
 constexpr double INF = std::numeric_limits<double>::infinity();
 constexpr double PI = 3.14159265358979323846;
@@ -339,6 +359,9 @@ struct Loop {
 	double area = 0.0; // signed, of the tessellated loop
 };
 
+// What a cast is for (the benches count them by kind).
+enum class CastKind { Crit, Side, Mid, Refine, Probe, Other };
+
 // A member: the beam of the final frame that every cursor aiming along `dir`
 // lies on, and the casts that read its walk.
 struct Member {
@@ -400,6 +423,9 @@ struct Result {
 	int casts = 0;
 	int refinements = 0;
 	std::vector<std::string> notes; // construction anomalies (reported by the checks)
+	// the benches: casts per CastKind, and the build's wall time
+	std::array<int, 6> casts_by_kind{};
+	long long build_usec = 0;
 };
 
 // Angular order of aim directions, counterclockwise from the fixed reference
@@ -1128,13 +1154,61 @@ private:
 
 	// ---- casts
 
-	Cast cast(const Pt &c, const Pt &dir, const Beam<F64> &member) {
+	Cast cast(const Pt &c, const Pt &dir, const Beam<F64> &member, CastKind kind = CastKind::Other) {
+		res_.casts++;
+		res_.casts_by_kind[size_t(kind)]++;
+		return cast_on(tracer_, c, dir, member);
+	}
+
+	// A batch of casts, in parallel over threads (Perf P3): each thread casts
+	// with a helper tracer of its own (Tracer::helper; the solve caches are pure
+	// memos), the results land by index, so they are the casts made in order.
+	struct CastJob {
+		Pt c;
+		Pt dir;
+		Beam<F64> member;
+		CastKind kind = CastKind::Other;
+	};
+	std::vector<Cast> cast_batch(const std::vector<CastJob> &jobs) {
+		std::vector<Cast> out(jobs.size());
+		for (const CastJob &j : jobs) {
+			res_.casts++;
+			res_.casts_by_kind[size_t(j.kind)]++;
+		}
+		const size_t nt = std::min(jobs.size(), size_t(vis_threads()));
+		if (nt <= 1) {
+			for (size_t i = 0; i < jobs.size(); i++) {
+				out[i] = cast_on(tracer_, jobs[i].c, jobs[i].dir, jobs[i].member);
+			}
+			return out;
+		}
+		std::vector<Tracer *> tracers{&tracer_};
+		for (size_t k = 1; k < nt; k++) {
+			tracers.push_back(&tracer_.helper(k - 1));
+		}
+		std::atomic<size_t> next{0};
+		auto work = [&](Tracer *t) {
+			for (size_t i = next++; i < jobs.size(); i = next++) {
+				out[i] = cast_on(*t, jobs[i].c, jobs[i].dir, jobs[i].member);
+			}
+		};
+		std::vector<std::thread> threads;
+		for (size_t k = 1; k < nt; k++) {
+			threads.emplace_back(work, tracers[k]);
+		}
+		work(tracers[0]);
+		for (std::thread &th : threads) {
+			th.join();
+		}
+		return out;
+	}
+
+	Cast cast_on(Tracer &tracer, const Pt &c, const Pt &dir, const Beam<F64> &member) const {
 		Cast r;
 		r.cursor = c;
 		r.dir = dir;
-		res_.casts++;
 		const Pt P = res_.player;
-		const std::optional<LadderResult> lr = tracer_.solve(P.x, P.y, c.x, c.y, plan_, flags_);
+		const std::optional<LadderResult> lr = tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_);
 		if (!lr) {
 			return r;
 		}
@@ -1162,7 +1236,7 @@ private:
 		}
 		// The walks as the merge reads them: the steps trace_pair draws, paired by
 		// index, compared by frame id; es[i] counts the steps after event i.
-		const auto paths = tracer_.cast_paths(*lr, P.x, P.y, c.x, c.y, flags_);
+		const auto paths = tracer.cast_paths(*lr, P.x, P.y, c.x, c.y, flags_);
 		const std::vector<TraceStep> &spl = paths.first.steps;
 		const std::vector<TraceStep> &sph = paths.second.steps;
 		const std::vector<int> &espl = paths.first.event_steps;
@@ -1415,6 +1489,9 @@ private:
 	void cast_members() {
 		std::vector<Member> &ms = res_.members;
 		const size_t n = ms.size();
+		// every member's own cast and its two side casts, in one parallel batch
+		std::vector<CastJob> jobs;
+		std::vector<std::pair<size_t, int>> slot; // (member, 0 crit / 1 minus / 2 plus)
 		for (size_t i = 0; i < n; i++) {
 			Member &m = ms[i];
 			m.beam = member_of(m.cursor);
@@ -1426,15 +1503,28 @@ private:
 			}
 			m.tq = tq_of(m.beam);
 			m.own_a = walk_key(m.beam.param_of(cn_of(m.cursor)).v, 0.0) < walk_key(m.tq, 0.0);
-			m.crit = cast(m.cursor, m.dir, m.beam);
+			jobs.push_back(CastJob{m.cursor, m.dir, m.beam, CastKind::Crit});
+			slot.emplace_back(i, 0);
 		}
 		for (size_t i = 0; i < n; i++) {
 			const Pt &prev = ms[(i + n - 1) % n].dir;
 			const Pt &next = ms[(i + 1) % n].dir;
 			const double gap = std::min(ccw_angle(prev, ms[i].dir), ccw_angle(ms[i].dir, next));
 			const double eps = std::min(1e-6, gap / 8.0);
-			ms[i].minus = side_cast(ms[i].dir, -eps);
-			ms[i].plus = side_cast(ms[i].dir, eps);
+			for (int side : {1, 2}) {
+				const Pt d = rotate(ms[i].dir, side == 1 ? -eps : eps);
+				if (const std::optional<Pt> c = cursor_for(d)) {
+					jobs.push_back(CastJob{*c, d, member_of(*c), CastKind::Side});
+					slot.emplace_back(i, side);
+				} else {
+					(side == 1 ? ms[i].minus : ms[i].plus) = Cast{};
+				}
+			}
+		}
+		std::vector<Cast> casts = cast_batch(jobs);
+		for (size_t k = 0; k < jobs.size(); k++) {
+			Member &m = ms[slot[k].first];
+			(slot[k].second == 0 ? m.crit : slot[k].second == 1 ? m.minus : m.plus) = std::move(casts[k]);
 		}
 	}
 
@@ -1444,7 +1534,7 @@ private:
 		if (!c) {
 			return Cast{};
 		}
-		return cast(*c, d, member_of(*c));
+		return cast(*c, d, member_of(*c), CastKind::Side);
 	}
 
 	// ---- cells
@@ -1741,7 +1831,7 @@ private:
 			if (!c) {
 				break;
 			}
-			Cast m = cast(*c, d, member_of(*c));
+			Cast m = cast(*c, d, member_of(*c), CastKind::Refine);
 			if (m.same_shape(lo)) {
 				lo = std::move(m);
 			} else {
@@ -1767,7 +1857,7 @@ private:
 		nm.beam = member_of(*c);
 		nm.tq = tq_of(nm.beam);
 		nm.own_a = walk_key(nm.beam.param_of(cn_of(*c)).v, 0.0) < walk_key(nm.tq, 0.0);
-		nm.crit = cast(*c, d, nm.beam);
+		nm.crit = cast(*c, d, nm.beam, CastKind::Refine);
 		nm.minus = std::move(lo);
 		nm.plus = std::move(hi);
 		auto &ms = res_.members;
@@ -1786,6 +1876,31 @@ private:
 		}
 		std::vector<Gap> gaps(ms.size());
 		const int MAX_REFINE = 64;
+		// the gaps' middle casts, in one parallel batch up front, keyed by the
+		// direction (the loop below takes them where it would cast; gaps a
+		// refinement creates are cast there)
+		auto skip_gap = [&](size_t i, size_t r) {
+			return dir_equal(ms[i].dir, ms[r].dir) || (ms.size() > 4 && ccw_angle(ms[i].dir, ms[r].dir) > PI);
+		};
+		auto dir_key2 = [](const Pt &d) { return std::make_pair(std::bit_cast<uint64_t>(d.x), std::bit_cast<uint64_t>(d.y)); };
+		std::map<std::pair<uint64_t, uint64_t>, Cast> pre_mid;
+		{
+			std::vector<CastJob> jobs;
+			for (size_t i = 0; i < ms.size(); i++) {
+				const size_t r = (i + 1) % ms.size();
+				if (skip_gap(i, r)) {
+					continue;
+				}
+				const Pt dm = rotate(ms[i].dir, ccw_angle(ms[i].dir, ms[r].dir) / 2.0);
+				if (const std::optional<Pt> c = cursor_for(dm)) {
+					jobs.push_back(CastJob{*c, dm, member_of(*c), CastKind::Mid});
+				}
+			}
+			std::vector<Cast> casts = cast_batch(jobs);
+			for (size_t k = 0; k < jobs.size(); k++) {
+				pre_mid.emplace(dir_key2(jobs[k].dir), std::move(casts[k]));
+			}
+		}
 		bool changed = true;
 		while (changed) {
 			changed = false;
@@ -1794,15 +1909,20 @@ private:
 					continue;
 				}
 				const size_t r = (i + 1) % ms.size();
-				if (dir_equal(ms[i].dir, ms[r].dir) || (ms.size() > 4 && ccw_angle(ms[i].dir, ms[r].dir) > PI)) {
+				if (skip_gap(i, r)) {
 					// no gap between one direction and itself (the axes keep every
 					// real gap below a quarter turn: a wider one is a rounding reversal)
 					gaps[i].mid = Cast{};
 					continue;
 				}
 				const Pt dm = rotate(ms[i].dir, ccw_angle(ms[i].dir, ms[r].dir) / 2.0);
-				const std::optional<Pt> c = cursor_for(dm);
-				gaps[i].mid = c ? cast(*c, dm, member_of(*c)) : Cast{};
+				if (auto pm = pre_mid.find(dir_key2(dm)); pm != pre_mid.end()) {
+					gaps[i].mid = std::move(pm->second);
+					pre_mid.erase(pm);
+				} else {
+					const std::optional<Pt> c = cursor_for(dm);
+					gaps[i].mid = c ? cast(*c, dm, member_of(*c), CastKind::Mid) : Cast{};
+				}
 				const Cast &mid = *gaps[i].mid;
 				const bool left_ok = ms[i].plus.same_shape(mid);
 				const bool right_ok = ms[r].minus.same_shape(mid);
@@ -1830,7 +1950,7 @@ private:
 			for (Proto &p : gaps[i].protos) {
 				if (p.ka == End::Near) {
 					const Pt probe = exact_on_carrier(mid.near_sid, mid.near_pt);
-					p.near_incl = cast(probe, mid.dir, member_of(probe)).cursor_ok;
+					p.near_incl = cast(probe, mid.dir, member_of(probe), CastKind::Probe).cursor_ok;
 				}
 			}
 			for (const Proto &p : gaps[i].protos) {
@@ -1869,7 +1989,7 @@ private:
 			// after a loop past the divergence), at a point exactly on the carrier
 			// as a cursor there is
 			const Pt probe = exact_on_carrier(mid.near_sid, mid.near_pt);
-			if (!cast(probe, mid.dir, member_of(probe)).cursor_ok) {
+			if (!cast(probe, mid.dir, member_of(probe), CastKind::Probe).cursor_ok) {
 				continue;
 			}
 			Edge e = carrier_edge(mid.near_sid, End::Near, a, b, mid.near_pt);
@@ -3146,11 +3266,13 @@ inline Fill fill_triangles(const Result &r) {
 
 // The visibility region of the plan for the player (bounds: the level's).
 inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanItem> &plan, const Flags &flags, const Rect &bounds) {
+	const auto t0 = std::chrono::steady_clock::now();
 	Builder b(tracer, player, plan, flags, bounds);
 	Result r = b.build();
 	for (Loop &l : r.loops) {
 		l.area = loop_area(l.edges);
 	}
+	r.build_usec = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
 	return r;
 }
 

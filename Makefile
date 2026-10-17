@@ -3,9 +3,12 @@ CMAKE ?= cmake
 CTEST ?= ctest
 # bounded parallelism: a bare `-j` lets Make start every godot-cpp compile at once
 JOBS ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+# ctest entries in parallel: every core (the entries are single-threaded; JOBS
+# bounds compiles, which need more memory)
+CTEST_JOBS ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
 
 .PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test \
-	native native-debug native-asan ctest
+	native native-debug native-asan ctest gates
 
 # ---------------------------------------------------------------- native (C++)
 # RelWithDebInfo build loaded by Godot (ricochet.gdextension -> native/bin/).
@@ -37,10 +40,14 @@ native-asan:
 		-DRC_SANITIZE=address,undefined \
 		-DRC_EXTENSION_OUTPUT_DIR=$(CURDIR)/native/build-asan/bin
 	$(CMAKE) --build native/build-asan -j $(JOBS)
-	RC_SWEEP_STRIDE=$(ASAN_SWEEP_STRIDE) $(CTEST) --test-dir native/build-asan -j $(JOBS) --output-on-failure
+	RC_SWEEP_STRIDE=$(ASAN_SWEEP_STRIDE) $(CTEST) --test-dir native/build-asan -j $(CTEST_JOBS) --output-on-failure
 
 ctest:
-	$(CTEST) --test-dir native/build -j $(JOBS) --output-on-failure
+	$(CTEST) --test-dir native/build -j $(CTEST_JOBS) --output-on-failure
+
+# Every gate before a commit, with a timed summary (gates.sh).
+gates:
+	./gates.sh
 
 # ------------------------------------------------------------------ oracle
 # The mpmath oracle's own tests and the fixture schema (docs/research/oracle).

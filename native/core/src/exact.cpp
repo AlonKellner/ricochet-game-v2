@@ -530,5 +530,172 @@ bool Line::tangent_to(const Point3 &C, const BigFloat &rw2, double cx, double cy
 	return L && tangent_zero(*L, C, rw2);
 }
 
+// ---------------------------------------------------------------- the exact beam (Perf P2b)
+
+GCircle gc_from_line(const Line3 &L) {
+	// a x + b y = c  ->  0 |z|^2 + a x + b y - c = 0
+	return GCircle{of(0.0), L[0], L[1], L[2].neg()};
+}
+
+// z -> S + Rot (z - S), Rot = [[mx^2 - my^2, 2 mx my], [2 mx my, my^2 - mx^2]] / |M|^2:
+// G'(z) = G(R z) (R is an involution), scaled by |M|^2.
+GCircle gc_reflect(const GCircle &g, double sx, double sy, double ex, double ey) {
+	const BigFloat mx = sub(of(ex), of(sx));
+	const BigFloat my = sub(of(ey), of(sy));
+	const BigFloat mm = add(mul(mx, mx), mul(my, my));
+	const BigFloat r11 = sub(mul(mx, mx), mul(my, my));
+	const BigFloat r12 = add(mul(mx, my), mul(my, mx));
+	const BigFloat esx = of(sx);
+	const BigFloat esy = of(sy);
+	const BigFloat two_a = add(g.A, g.A);
+	// V = 2 A S + (B, C); RV = Rot_num V
+	const BigFloat vx = add(mul(two_a, esx), g.B);
+	const BigFloat vy = add(mul(two_a, esy), g.C);
+	const BigFloat rvx = add(mul(r11, vx), mul(r12, vy));
+	const BigFloat rvy = sub(mul(r12, vx), mul(r11, vy));
+	const BigFloat ss = add(mul(esx, esx), mul(esy, esy));
+	// K = A |S|^2 + B sx + C sy + D
+	const BigFloat k = add(add(mul(g.A, ss), add(mul(g.B, esx), mul(g.C, esy))), g.D);
+	GCircle o;
+	o.A = mul(g.A, mm);
+	o.B = sub(rvx, mul(mul(two_a, mm), esx));
+	o.C = sub(rvy, mul(mul(two_a, mm), esy));
+	o.D = sub(mul(mm, add(mul(g.A, ss), k)), add(mul(rvx, esx), mul(rvy, esy)));
+	return o;
+}
+
+namespace {
+// G'(z) = G(z - d) for d = (px, py) / pw, scaled by pw^2: the image under z -> z + d.
+GCircle gc_shift_h(const GCircle &g, const BigFloat &px, const BigFloat &py, const BigFloat &pw) {
+	const BigFloat pw2 = mul(pw, pw);
+	const BigFloat two_a_pw = mul(add(g.A, g.A), pw);
+	GCircle o;
+	o.A = mul(g.A, pw2);
+	o.B = sub(mul(g.B, pw2), mul(two_a_pw, px));
+	o.C = sub(mul(g.C, pw2), mul(two_a_pw, py));
+	const BigFloat pp = add(mul(px, px), mul(py, py));
+	o.D = add(sub(mul(g.A, pp), mul(add(mul(g.B, px), mul(g.C, py)), pw)), mul(g.D, pw2));
+	return o;
+}
+} // namespace
+
+GCircle gc_translate(const GCircle &g, double dx, double dy) {
+	return gc_shift_h(g, of(dx), of(dy), of(1.0));
+}
+
+// The image under the inversion in the circle (C, rw2): shift the center to
+// the origin, w -> R^2 w / |w|^2 there ((A, B, C, D) -> (D, R^2 B, R^2 C, A R^4),
+// scaled by pw^4 with R^2 = rw2 / pw^2), shift back.
+GCircle gc_invert(const GCircle &g, const Point3 &C, const BigFloat &rw2) {
+	const GCircle rel = gc_shift_h(g, C[0].neg(), C[1].neg(), C[2]);
+	const BigFloat pw2 = mul(C[2], C[2]);
+	const BigFloat k = mul(rw2, pw2);
+	GCircle inv;
+	inv.A = mul(rel.D, mul(pw2, pw2));
+	inv.B = mul(k, rel.B);
+	inv.C = mul(k, rel.C);
+	inv.D = mul(rel.A, mul(rw2, rw2));
+	return gc_shift_h(inv, C[0], C[1], C[2]);
+}
+
+int gc_limbs(const GCircle &g) {
+	return std::max({g.A.precision_limbs(), g.B.precision_limbs(), g.C.precision_limbs(), g.D.precision_limbs()});
+}
+
+// a circle (A != 0) tangent to a x + b y = c: (a B + b C + 2 A c)^2 = (a^2 + b^2)(B^2 + C^2 - 4 A D)
+bool gc_tangent_line(const GCircle &g, double sx, double sy, double ex, double ey) {
+	if (g.A.is_zero()) {
+		return false; // two lines meet once or never touch
+	}
+	const BigFloat a = sub(of(ey), of(sy));
+	const BigFloat b = sub(of(sx), of(ex));
+	const BigFloat c = add(mul(a, of(sx)), mul(b, of(sy)));
+	const BigFloat lhs0 = add(add(mul(a, g.B), mul(b, g.C)), mul(add(g.A, g.A), c));
+	const BigFloat delta = sub(add(mul(g.B, g.B), mul(g.C, g.C)), mul(mul(of(4.0), g.A), g.D));
+	return sub(mul(lhs0, lhs0), mul(add(mul(a, a), mul(b, b)), delta)).is_zero();
+}
+
+// with s = 2 A, q = pw, E = |(-B q - px s, -C q - py s)|^2, Delta = B^2 + C^2 - 4 A D:
+// (E - Delta q^2 - rw2 s^2)^2 = 4 Delta q^2 rw2 s^2 (|c1 - c2| = r1 +- r2)
+bool gc_tangent_circle(const GCircle &g, const Point3 &C, const BigFloat &rw2) {
+	if (g.A.is_zero()) {
+		return tangent_zero(Line3{g.B, g.C, g.D.neg()}, C, rw2);
+	}
+	const BigFloat s = add(g.A, g.A);
+	const BigFloat &q = C[2];
+	const BigFloat X = sub(mul(g.B, q).neg(), mul(C[0], s));
+	const BigFloat Y = sub(mul(g.C, q).neg(), mul(C[1], s));
+	const BigFloat E = add(mul(X, X), mul(Y, Y));
+	const BigFloat delta = sub(add(mul(g.B, g.B), mul(g.C, g.C)), mul(mul(of(4.0), g.A), g.D));
+	const BigFloat q2 = mul(q, q);
+	const BigFloat s2 = mul(s, s);
+	const BigFloat u = sub(sub(E, mul(delta, q2)), mul(rw2, s2));
+	return sub(mul(u, u), mul(mul(of(4.0), delta), mul(q2, mul(rw2, s2)))).is_zero();
+}
+
+std::shared_ptr<const BeamRec> BeamRec::from_line(std::shared_ptr<const Line> line) {
+	if (!line) {
+		return nullptr;
+	}
+	auto r = std::make_shared<BeamRec>();
+	r->kind_ = Kind::Line;
+	r->line_ = std::move(line);
+	return r;
+}
+
+std::shared_ptr<const BeamRec> BeamRec::reflected(double sx, double sy, double ex, double ey) const {
+	auto r = std::make_shared<BeamRec>();
+	r->kind_ = Kind::Reflect;
+	r->parent_ = std::make_shared<BeamRec>(*this);
+	r->m_[0] = sx;
+	r->m_[1] = sy;
+	r->m_[2] = ex;
+	r->m_[3] = ey;
+	return r;
+}
+
+std::shared_ptr<const BeamRec> BeamRec::translated(double dx, double dy) const {
+	auto r = std::make_shared<BeamRec>();
+	r->kind_ = Kind::Translate;
+	r->parent_ = std::make_shared<BeamRec>(*this);
+	r->m_[0] = dx;
+	r->m_[1] = dy;
+	return r;
+}
+
+std::shared_ptr<const BeamRec> BeamRec::inverted(const Point3 &C, const BigFloat &rw2) const {
+	auto r = std::make_shared<BeamRec>();
+	r->kind_ = Kind::Invert;
+	r->parent_ = std::make_shared<BeamRec>(*this);
+	r->c_ = C;
+	r->rw2_ = rw2;
+	return r;
+}
+
+std::optional<GCircle> BeamRec::exact() const {
+	if (done_) {
+		return exact_;
+	}
+	done_ = true;
+	std::optional<GCircle> g;
+	if (kind_ == Kind::Line) {
+		if (const std::optional<Line3> L = line_->exact()) {
+			g = gc_from_line(*L);
+		}
+	} else if (const std::optional<GCircle> p = parent_->exact()) {
+		switch (kind_) {
+			case Kind::Reflect: g = gc_reflect(*p, m_[0], m_[1], m_[2], m_[3]); break;
+			case Kind::Translate: g = gc_translate(*p, m_[0], m_[1]); break;
+			case Kind::Invert: g = gc_invert(*p, c_, rw2_); break;
+			case Kind::Line: break;
+		}
+	}
+	if (g && gc_limbs(*g) > EXACT_LIMBS) {
+		g.reset();
+	}
+	exact_ = g;
+	return exact_;
+}
+
 } // namespace exact
 } // namespace rc

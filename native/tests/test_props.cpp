@@ -365,3 +365,78 @@ TEST_CASE("props: walker invariants on random scenes (and the float64 twin is bi
 	CHECK(walks == 300);
 	CHECK(applied > 300);
 }
+
+// ---------------------------------------------------------------- Perf P2b: the exact beam
+
+namespace {
+// G at the homogeneous point (x, y, w): A (x^2 + y^2) + B x w + C y w + D w^2
+BigFloat gc_at(const exact::GCircle &g, const exact::Point3 &X) {
+	using namespace exact;
+	const BigFloat &w = X[2];
+	return add(add(mul(g.A, add(mul(X[0], X[0]), mul(X[1], X[1]))), add(mul(mul(g.B, X[0]), w), mul(mul(g.C, X[1]), w))), mul(g.D, mul(w, w)));
+}
+exact::Point3 pt(double x, double y) { return {exact::of(x), exact::of(y), exact::of(1.0)}; }
+exact::Point3 translate_h(const exact::Point3 &X, double dx, double dy) {
+	using namespace exact;
+	return {add(X[0], mul(of(dx), X[2])), add(X[1], mul(of(dy), X[2])), X[2]};
+}
+} // namespace
+
+TEST_CASE("P2b: the exact beam's maps carry every point of the curve onto the image curve") {
+	using namespace exact;
+	// the line through (1, 2) and (7, -3), points on it
+	const Line3 L = line_through(1.0, 2.0, 7.0, -3.0);
+	std::vector<Point3> pts = {pt(1.0, 2.0), pt(7.0, -3.0), pt(13.0, -8.0), pt(-5.0, 7.0)};
+	GCircle g = gc_from_line(L);
+	for (const Point3 &X : pts) {
+		CHECK(gc_at(g, X).is_zero());
+	}
+	// a chain: invert in (3, 1) r^2 = 50, reflect in the line (0, 0) -> (2, 5),
+	// translate by (-4, 9), invert in (10, 10) r^2 = 7 (center (20, 20) / 2)
+	const Point3 C1 = pt(3.0, 1.0);
+	const BigFloat r1 = of(50.0);
+	const Point3 C2 = {of(20.0), of(20.0), of(2.0)};
+	const BigFloat r2 = mul(of(7.0), of(4.0)); // (r w)^2 = 7 * 2^2
+	g = gc_invert(g, C1, r1);
+	for (Point3 &X : pts) X = *invert_point_h(X, C1, r1);
+	for (const Point3 &X : pts) CHECK(gc_at(g, X).is_zero());
+	g = gc_reflect(g, 0.0, 0.0, 2.0, 5.0);
+	for (Point3 &X : pts) X = reflect_point_h(X, 0.0, 0.0, 2.0, 5.0);
+	for (const Point3 &X : pts) CHECK(gc_at(g, X).is_zero());
+	g = gc_translate(g, -4.0, 9.0);
+	for (Point3 &X : pts) X = translate_h(X, -4.0, 9.0);
+	for (const Point3 &X : pts) CHECK(gc_at(g, X).is_zero());
+	g = gc_invert(g, C2, r2);
+	for (Point3 &X : pts) X = *invert_point_h(X, C2, r2);
+	for (const Point3 &X : pts) CHECK(gc_at(g, X).is_zero());
+	// and a point off the curve stays off
+	CHECK(!gc_at(g, pt(0.5, 0.25)).is_zero());
+}
+
+TEST_CASE("P2b: exact tangency of a beam's circle with line and circle carriers") {
+	using namespace exact;
+	// the line x = 10 inverted in the circle at the origin, r^2 = 100: the circle
+	// of center (5, 0), radius 5 -- tangent to x = 10 and to x = 0
+	const GCircle c = gc_invert(gc_from_line(line_through(10.0, 0.0, 10.0, 1.0)), pt(0.0, 0.0), of(100.0));
+	CHECK(gc_tangent_line(c, 10.0, -3.0, 10.0, 4.0));
+	CHECK(gc_tangent_line(c, 0.0, 1.0, 0.0, 2.0));
+	CHECK(!gc_tangent_line(c, 9.0, 0.0, 9.0, 1.0));
+	CHECK(gc_tangent_line(c, 0.0, 5.0, 1.0, 5.0)); // y = 5, the top
+	CHECK(!gc_tangent_line(c, 0.0, 5.0000000001, 1.0, 5.0000000001));
+	// circle carriers: center (15, 0) r 5 (externally), center (7, 0) r 3 (internally)
+	CHECK(gc_tangent_circle(c, pt(15.0, 0.0), of(25.0)));
+	CHECK(gc_tangent_circle(c, pt(7.0, 0.0), of(9.0)));
+	CHECK(!gc_tangent_circle(c, pt(14.0, 0.0), of(25.0)));
+	CHECK(!gc_tangent_circle(c, pt(7.0, 0.0), of(8.0)));
+	// a straight beam (A = 0) against a circle: y = 5 touches the circle at the origin of r 5
+	const GCircle l = gc_from_line(line_through(-1.0, 5.0, 1.0, 5.0));
+	CHECK(gc_tangent_circle(l, pt(0.0, 0.0), of(25.0)));
+	CHECK(!gc_tangent_circle(l, pt(0.0, 0.0), of(24.0)));
+	CHECK(!gc_tangent_line(l, 0.0, 0.0, 1.0, 0.0)); // two lines never touch
+	// the lazy record gives the same circle
+	const auto rec = BeamRec::from_line(Line::from_exact(line_through(10.0, 0.0, 10.0, 1.0)))->inverted(pt(0.0, 0.0), of(100.0));
+	const std::optional<GCircle> e = rec->exact();
+	REQUIRE(e.has_value());
+	CHECK(gc_tangent_line(*e, 10.0, -3.0, 10.0, 4.0));
+	CHECK(gc_tangent_circle(*e, pt(15.0, 0.0), of(25.0)));
+}

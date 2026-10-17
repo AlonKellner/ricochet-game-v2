@@ -15,6 +15,9 @@ extends SceneTree
 # (the dirty flags), and the mean frame of every phase must stay under
 # BUDGET_MS. The budget is generous on purpose: this guards against a per-frame
 # regression on a possibly loaded machine; it is not a profiler.
+# The region columns are the visibility worker's build time of the regions
+# finished during the phase (off the main thread, so not in the frame time:
+# how long the region lags the player).
 
 const DEFAULT_SCENE := "res://scenes/main.tscn"
 const BUDGET_MS := 8.0
@@ -32,6 +35,8 @@ var _frame := 0
 var _times: Array[float] = []
 var _version_start := 0
 var _vis_start := 0   # Stage 110: the visibility renderer's recomputations at the phase's start
+var _vis_seen := 0    # the last region version whose build time was sampled
+var _region_ms: Array[float] = []  # the worker's build time of each region finished in the phase
 var _rows: Array = []
 var _failed := false
 var _base_player := Vector2.ZERO
@@ -91,6 +96,7 @@ func _process(_delta: float) -> bool:
 		if _frame > 0:
 			_times.append(float(now - _last_tick) / 1000.0)
 		_last_tick = now
+		_sample_region()
 		if _frame < _frames:
 			_phases[_phase]["step"].call(_frame)
 			_frame += 1
@@ -102,6 +108,7 @@ func _process(_delta: float) -> bool:
 		_report()
 		return true
 	_times.clear()
+	_region_ms.clear()
 	_frame = 0
 	_player.global_position = _base_player
 	_cursor.global_position = _base_cursor
@@ -110,6 +117,7 @@ func _process(_delta: float) -> bool:
 	_phases[_phase]["setup"].call()
 	_version_start = _renderer.trace_version
 	_vis_start = _vis_version()
+	_vis_seen = _vis_start
 	return false
 
 # ---------------------------------------------------------------- phases
@@ -160,6 +168,16 @@ func _hover_near_surface() -> void:
 func _surfaces() -> Array:
 	return _scene.surfaces if "surfaces" in _scene else []
 
+# The build time of a region the visibility renderer finished since the last
+# sample (on its worker thread: not part of the frame time).
+func _sample_region() -> void:
+	var vis := _scene.get_node_or_null("VisibilityRenderer")
+	if vis == null or vis.visibility_version == _vis_seen:
+		return
+	_vis_seen = vis.visibility_version
+	if vis.region != null and vis.region.is_supported():
+		_region_ms.append(float(vis.region.get_build_usec()) / 1000.0)
+
 func _vis_version() -> int:
 	var vis := _scene.get_node_or_null("VisibilityRenderer")
 	return vis.visibility_version if vis != null else 0
@@ -189,15 +207,19 @@ func _finish_phase() -> void:
 	if mean > BUDGET_MS:
 		ok = false
 	_failed = _failed or not ok
+	var rs := _region_ms.duplicate()
+	rs.sort()
+	var region_p95: float = rs[mini(rs.size() - 1, int(rs.size() * 0.95))] if rs.size() > 0 else 0.0
+	var region_max: float = rs.back() if rs.size() > 0 else 0.0
 	_rows.append({"name": ph["name"], "mean": mean, "p95": p95, "max": mx, "recomputes": recomputes,
-		"vis": vis_recomputes, "frames": _times.size(), "ok": ok})
+		"vis": vis_recomputes, "frames": _times.size(), "ok": ok, "region_p95": region_p95, "region_max": region_max})
 
 func _report() -> void:
 	print("")
-	print("%-14s %8s %8s %8s %11s %8s %s" % ["phase", "mean_ms", "p95_ms", "max_ms", "recomputes", "regions", ""])
+	print("%-14s %8s %8s %8s %11s %8s %10s %10s %s" % ["phase", "mean_ms", "p95_ms", "max_ms", "recomputes", "regions", "region_p95", "region_max", ""])
 	for r in _rows:
-		print("%-14s %8.3f %8.3f %8.3f %6d/%-4d %8d %s" % [r["name"], r["mean"], r["p95"], r["max"], r["recomputes"], r["frames"], r["vis"],
-			"" if r["ok"] else "FAIL"])
+		print("%-14s %8.3f %8.3f %8.3f %6d/%-4d %8d %10.1f %10.1f %s" % [r["name"], r["mean"], r["p95"], r["max"], r["recomputes"], r["frames"], r["vis"],
+			r["region_p95"], r["region_max"], "" if r["ok"] else "FAIL"])
 	print("")
 	if _failed:
 		print("frame_bench: FAIL (a static phase recomputed the trace or the region, or a mean frame exceeded %.1f ms)" % BUDGET_MS)

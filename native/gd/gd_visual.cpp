@@ -3,6 +3,9 @@
 #include "rc/error.hpp"
 
 #include <godot_cpp/classes/object.hpp>
+
+#include <map>
+#include <memory>
 #include <godot_cpp/core/class_db.hpp>
 
 using godot::Array;
@@ -206,26 +209,95 @@ void VisualConverter::_bind_methods() {
 	ClassDB::bind_static_method("VisualConverter", D_METHOD("clip_to_bounds", "origin", "dir", "bounds"), &VisualConverter::clip_to_bounds);
 	ClassDB::bind_static_method("VisualConverter", D_METHOD("is_arc", "start", "via", "end_v"), &VisualConverter::is_arc);
 	ClassDB::bind_static_method("VisualConverter", D_METHOD("arc_params", "start", "via", "end_v"), &VisualConverter::arc_params);
+	ClassDB::bind_static_method("VisualConverter", D_METHOD("arc_draw", "start", "via", "end_v"), &VisualConverter::arc_draw);
+	ClassDB::bind_static_method("VisualConverter",
+		D_METHOD("dash_arc", "center", "radius", "start_angle", "end_angle", "point_count", "dash_on", "dash_off", "max_len"), &VisualConverter::dash_arc);
+	ClassDB::bind_static_method("VisualConverter", D_METHOD("dash_line", "from", "to", "dash_on", "dash_off", "max_len"), &VisualConverter::dash_line);
 	BIND_CONSTANT(POINTS_PER_FULL_CIRCLE);
+}
+
+PackedVector2Array VisualConverter::dash_arc(const Vector2 &center, double radius, double start_angle, double end_angle, int point_count,
+		double dash_on, double dash_off, double max_len) {
+	PackedVector2Array pts;
+	const double span = end_angle - start_angle;
+	const double total_len = std::min(radius * std::abs(span), max_len);
+	if (total_len == 0.0 || !(dash_on > 0.0) || !(dash_off >= 0.0)) {
+		return pts;
+	}
+	const double cx = center.x;
+	const double cy = center.y;
+	double drawn = 0.0;
+	bool on = true;
+	while (drawn < total_len) {
+		const double seg_len = std::min(on ? dash_on : dash_off, total_len - drawn);
+		if (on) {
+			const double a0 = start_angle + (drawn / total_len) * span;
+			const double a1 = start_angle + ((drawn + seg_len) / total_len) * span;
+			const int seg_points = std::max(2, int(point_count * seg_len / total_len));
+			Vector2 prev(float(cx + std::cos(a0) * radius), float(cy + std::sin(a0) * radius));
+			for (int k = 1; k < seg_points; k++) {
+				const double th = a0 + (k / (seg_points - 1.0)) * (a1 - a0);
+				const Vector2 q(float(cx + std::cos(th) * radius), float(cy + std::sin(th) * radius));
+				pts.push_back(prev);
+				pts.push_back(q);
+				prev = q;
+			}
+		}
+		drawn += seg_len;
+		on = !on;
+	}
+	return pts;
+}
+
+PackedVector2Array VisualConverter::dash_line(const Vector2 &from, const Vector2 &to, double dash_on, double dash_off, double max_len) {
+	PackedVector2Array pts;
+	const double dx = double(to.x) - double(from.x);
+	const double dy = double(to.y) - double(from.y);
+	const double total_len = std::min(std::sqrt(dx * dx + dy * dy), max_len);
+	if (total_len == 0.0 || !(dash_on > 0.0) || !(dash_off >= 0.0)) {
+		return pts;
+	}
+	// (as the GDScript original: the direction over the capped length)
+	const double ux = dx / total_len;
+	const double uy = dy / total_len;
+	double drawn = 0.0;
+	bool on = true;
+	while (drawn < total_len) {
+		const double seg_len = std::min(on ? dash_on : dash_off, total_len - drawn);
+		if (on) {
+			pts.push_back(Vector2(float(from.x + ux * drawn), float(from.y + uy * drawn)));
+			pts.push_back(Vector2(float(from.x + ux * (drawn + seg_len)), float(from.y + uy * (drawn + seg_len))));
+		}
+		drawn += seg_len;
+		on = !on;
+	}
+	return pts;
 }
 
 namespace {
 
 // The carrier of the game surface with `surface_id` among `surfaces` (duck-typed: id, segment).
+// (Perf P4: each id is looked up once per call; the scan reads properties)
 std::function<std::optional<rc::arc::GeneralizedCircle>(int)> carrier_lookup(const Array &surfaces) {
-	return [surfaces](int surface_id) -> std::optional<rc::arc::GeneralizedCircle> {
+	auto memo = std::make_shared<std::map<int, std::optional<rc::arc::GeneralizedCircle>>>();
+	return [surfaces, memo](int surface_id) -> std::optional<rc::arc::GeneralizedCircle> {
+		if (auto it = memo->find(surface_id); it != memo->end()) {
+			return it->second;
+		}
+		std::optional<rc::arc::GeneralizedCircle> found;
 		for (int64_t i = 0; i < surfaces.size(); i++) {
 			godot::Object *s = surfaces[i];
 			if (s == nullptr || int(int64_t(s->get("id"))) != surface_id) {
 				continue;
 			}
 			const Ref<Segment> seg = s->get("segment");
-			if (seg.is_null()) {
-				return std::nullopt;
+			if (seg.is_valid()) {
+				found = seg->get_carrier()->g;
 			}
-			return seg->get_carrier()->g;
+			break;
 		}
-		return std::nullopt;
+		(*memo)[surface_id] = found;
+		return found;
 	};
 }
 
@@ -319,6 +391,23 @@ Dictionary VisualConverter::arc_params(const Vector2 &start, const Vector2 &via,
 	d["point_count"] = p.point_count;
 	d["span"] = p.span;
 	return d;
+}
+
+godot::PackedFloat64Array VisualConverter::arc_draw(const Vector2 &start, const Vector2 &via, const Vector2 &end_v) {
+	godot::PackedFloat64Array out;
+	if (!rc::arc::is_arc(to_v2(start), to_v2(via), to_v2(end_v))) {
+		return out;
+	}
+	const rc::arc::ArcParams p = rc::arc::arc_params(to_v2(start), to_v2(via), to_v2(end_v));
+	const Vector2 c = to_vec(p.center);
+	out.resize(6);
+	out[0] = c.x;
+	out[1] = c.y;
+	out[2] = p.radius;
+	out[3] = p.start_angle;
+	out[4] = p.end_angle;
+	out[5] = double(p.point_count);
+	return out;
 }
 
 // ---------------------------------------------------------------- StepTreeMerge

@@ -5,8 +5,9 @@ What the suite sweeps (Stages 103, 105). Every sweep runs natively (`SweepKernel
 tracer the game uses and checked by the invariant kernel (`rc/invariants.hpp`);
 one combo per scene also runs through the live `PathRenderer` and
 `InvariantChecker` ("LIVE"). `SWEEP_SHARD=i/n` keeps the player positions
-with index % n == i (`run_tests_parallel.sh` shards each sweep file over the
-performance cores). Scenes, plans and positions come from `SweepPlans`.
+with index % n == i (`run_tests_parallel.sh` shards each sweep file over every
+core, the visibility sweep into twice as many shards, longest first). Scenes,
+plans and positions come from `SweepPlans`.
 
 | Test | Scenes | Plans | Positions |
 |---|---|---|---|

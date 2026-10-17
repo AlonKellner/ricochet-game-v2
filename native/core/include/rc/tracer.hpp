@@ -208,6 +208,46 @@ public:
 
 	void set_clock(Ladder::Clock clock) { clock_ = std::move(clock); }
 
+	// The ladder's counters since the context was built or reset (benches),
+	// the helpers' included.
+	LadderStats ladder_stats() const {
+		LadderStats s = ctx_ ? ctx_->stats() : LadderStats{};
+		for (const auto &h : helpers_) {
+			const LadderStats x = h->ladder_stats();
+			s.walks += x.walks;
+			s.f64 += x.f64;
+			s.unreliable += x.unreliable;
+			s.over_tol += x.over_tol;
+			s.verify += x.verify;
+			for (size_t q = 0; q < 6; q++) {
+				s.tier_solves[q] += x.tier_solves[q];
+			}
+			s.big_usec += x.big_usec;
+		}
+		return s;
+	}
+	void reset_ladder_stats() {
+		if (ctx_) {
+			ctx_->stats() = LadderStats{};
+		}
+		for (auto &h : helpers_) {
+			h->reset_ladder_stats();
+		}
+	}
+
+	// The i-th helper tracer (Perf P3: the visibility region's parallel casts):
+	// the same defs and switches, caches of its own, kept across calls. Not
+	// thread-safe itself: take the helpers before starting the threads.
+	Tracer &helper(size_t i) {
+		while (helpers_.size() <= i) {
+			helpers_.push_back(std::make_unique<Tracer>());
+		}
+		Tracer &h = *helpers_[i];
+		h.set_emit_infinity(emit_infinity_);
+		h.set_defs(defs_);
+		return h;
+	}
+
 	// ---------------------------------------------------------------- conversion
 
 	// Steps are in visual space; frame_id identifies the (epoch, transform stack, flags).
@@ -351,6 +391,7 @@ private:
 	std::vector<SurfaceDef> defs_;
 	bool emit_infinity_ = false;
 	std::unique_ptr<LadderContext> ctx_;
+	std::vector<std::unique_ptr<Tracer>> helpers_;
 	Ladder::Clock clock_ = Ladder::steady_usec;
 	bool cache_valid_ = false;
 	CacheKey cache_key_;

@@ -541,6 +541,7 @@ class StackEntry:
     etype: str = None           # the effect pushed (a pop needs the same effect)
     q: object = None            # the frame's image of infinity before the push (restored by the pop)
     pole: object = None         # the exact pole record before the push (Stage 105)
+    gc: object = None           # the exact generalized circle before the push (Perf P2b)
 
 
 @dataclass
@@ -553,6 +554,7 @@ class Walk:
     post_mode: int
     known: list = field(default_factory=list)   # (point, t, skip surface id) on the current beam
     line: object = None                         # exact implicit line (a, b, c) of the current beam, or None
+    gc: object = None                           # Perf P2b: its exact generalized circle (A, B, C, D), or None
     plan_index: int = 0
     plan_matched: bool = True
     plan_spans: list = None   # Stage 108: per entry, a piece's span (Seg) or None (the whole surface)
@@ -705,6 +707,81 @@ def _concurrent_ties(walk: Walk, cands):
     return out
 
 
+# ---------------------------------------------------------------- the exact beam (Perf P2b)
+# A generalized circle A (x^2 + y^2) + B x + C y + D = 0, exact (A = 0: a line):
+# the current beam's, carried through every map as `line` is (the line's own
+# while there is one; a beam without it makes no exact claim).
+
+def gc_from_line(line):
+    a, b, c = line
+    return (Fraction(0), a, b, -c)
+
+
+def _gc_shift(g, dx, dy):
+    """The image under z -> z + d: G(z - d)."""
+    A, B, C, D = g
+    return (A, B - 2 * A * dx, C - 2 * A * dy, A * (dx * dx + dy * dy) - B * dx - C * dy + D)
+
+
+def gc_reflect(g, seg):
+    """G(R z): R the reflection in the line of seg (an involution)."""
+    A, B, C, D = g
+    S, E = FC(seg.S), FC(seg.E)
+    M = _sub(E, S)
+    mm = M[0] * M[0] + M[1] * M[1]
+    r11, r12 = (M[0] * M[0] - M[1] * M[1]) / mm, 2 * M[0] * M[1] / mm
+    vx, vy = 2 * A * S[0] + B, 2 * A * S[1] + C
+    rvx, rvy = r11 * vx + r12 * vy, r12 * vx - r11 * vy
+    ss = S[0] * S[0] + S[1] * S[1]
+    k = A * ss + B * S[0] + C * S[1] + D
+    return (A, rvx - 2 * A * S[0], rvy - 2 * A * S[1], A * ss - (rvx * S[0] + rvy * S[1]) + k)
+
+
+def gc_invert(g, seg):
+    """The image under the inversion in seg's circle (center c, radius^2 rr)."""
+    nx, ny, w, rr = _center_h(seg)
+    cx, cy = nx / w, ny / w
+    A, B, C, D = _gc_shift(g, -cx, -cy)
+    return _gc_shift((D, rr * B, rr * C, A * rr * rr), cx, cy)
+
+
+def gc_translate(g, dx, dy):
+    return _gc_shift(g, F(dx), F(dy))
+
+
+def gc_at(g, X):
+    A, B, C, D = g
+    return A * (X[0] * X[0] + X[1] * X[1]) + B * X[0] + C * X[1] + D
+
+
+def _concurrent_ties_gc(walk: Walk, beam, cands):
+    """Perf P2b: on a circular beam with an exact circle, adjacent crossings of
+    two line carriers at their common point, which the beam passes exactly,
+    share one parameter: the id rule orders them, never rounding (as on an
+    exact line, _concurrent_ties). The roots at the point are told from the
+    carriers' other roots by distance; the decision itself is exact."""
+    by_id = {s.id: s for s in walk.surfaces}
+    tol = mp.mpf(10) ** (-(mp.mp.dps // 2))
+    out = list(cands)
+    i = 0
+    while i + 1 < len(out):
+        x, y = out[i], out[i + 1]
+        if x[1] == 1 and y[1] == 1 and not x[4] and not y[4] and by_id[x[2]].seg.kind == "line" and by_id[y[2]].seg.kind == "line":
+            a1, b1, c1 = _line_coeffs(by_id[x[2]].seg)
+            a2, b2, c2 = _line_coeffs(by_id[y[2]].seg)
+            det = a1 * b2 - a2 * b1
+            if det != 0:
+                X = ((c1 * b2 - c2 * b1) / det, (a1 * c2 - a2 * c1) / det)
+                xm = mp.mpc(mp.mpf(X[0].numerator) / X[0].denominator, mp.mpf(X[1].numerator) / X[1].denominator)
+                scale = max(mp.mpf(1), abs(xm))
+                if gc_at(walk.gc, X) == 0 and abs(beam.at(x[3]) - xm) <= tol * scale and abs(beam.at(y[3]) - xm) <= tol * scale:
+                    lo, hi = (x, y) if x[2] < y[2] else (y, x)
+                    out[i] = (x[0], 1, lo[2], x[3], False)
+                    out[i + 1] = (x[0], 1, hi[2], x[3], False)
+        i += 1
+    return out
+
+
 def _junction_blocked(walk: Walk, surf: Surface, pt, direction):
     """Blocked sides at an exact endpoint, incl. other segments sharing it."""
     bl = br = False
@@ -846,6 +923,8 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
         cands.sort(key=lambda c: (c[0], c[1], c[2]))
         if walk.line is not None:
             cands = _concurrent_ties(walk, cands)
+        elif walk.gc is not None:
+            cands = _concurrent_ties_gc(walk, beam, cands)
         if depart is not None:
             cands.append(((2, 0), 2, depart, t0, True))      # departure re-hit, last
         applied = False
@@ -987,6 +1066,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 walk.depart_q = False
                 if planned_exit is not None:
                     walk.line = planned_exit
+                    walk.gc = gc_from_line(planned_exit)
                     _add_line_endpoints(walk, beam)
                 depart, t0, fresh = sid, mp.mpf(0), True
                 applied = True
@@ -1057,6 +1137,7 @@ def _project(walk: Walk, beam, t, surf: Surface, side, pt, pt_exact):
     walk.pole = None
     walk.known = [(pt, mp.mpf(0), surf.id)] if pt_exact else []
     walk.line = None
+    walk.gc = None
     if pt_exact:
         # exact data line: through pt along the axis (exact for line normals,
         # full-circle radii and directional normals)
@@ -1072,6 +1153,7 @@ def _project(walk: Walk, beam, t, surf: Surface, side, pt, pt_exact):
         K = FC(pt)
         a, b = -ax[1], ax[0]
         walk.line = (a, b, a * K[0] + b * K[1])
+        walk.gc = gc_from_line(walk.line)
         _add_line_endpoints(walk, nb)
     return nb
 
@@ -1206,6 +1288,7 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
             t_res = top.t_hit if dh < do else top.other
         walk.known = _tag_departure(top.known, q, t_res, top.sid, pt_exact, src.portal() is not None)
         walk.line = top.line
+        walk.gc = top.gc
         walk.Q = top.q
         walk.pole = top.pole
         return top.beam, top.sid, t_res, False
@@ -1213,7 +1296,7 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
     portal = surf.portal()
     pop_id = portal[2] if portal is not None else surf.id
     walk.stack.append(StackEntry(beam, surf.id, t, other, walk.known, walk.line, pop_id, map_kind(surf, etype), walk.Q,
-                                 walk.pole))
+                                 walk.pole, walk.gc))
     walk.pole = _pole_apply(walk.pole, walk.Q, walk.line, surf)
     walk.Q = map_point(walk.Q, surf)
     nb = apply_effect(beam, t, surf, etype, pt)
@@ -1225,6 +1308,7 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
     walk.known += [(k, nb.param_of(k), None) for k, _, _ in old_known if k != pt and incident(k, surf)]
     if walk.line is not None and surf.seg.kind == "line":
         walk.line = reflect_line_data(walk.line, surf.seg)
+        walk.gc = gc_from_line(walk.line)
         _add_line_endpoints(walk, nb)
     elif walk.line is not None and _line_through_center(walk.line, surf.seg):
         nb = Beam(nb.p, nb.tau, mp.mpf(0))
@@ -1232,6 +1316,8 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
         _add_line_endpoints(walk, nb)
     else:
         walk.line = None
+        if walk.gc is not None:
+            walk.gc = gc_reflect(walk.gc, surf.seg) if surf.seg.kind == "line" else gc_invert(walk.gc, surf.seg)
         if surf.seg.kind != "line" and any(_is_center(k, surf.seg) for k, _, _ in old_known):
             # the old beam passes exactly through the inversion center (a
             # known point): its image is exactly a line
@@ -1306,9 +1392,11 @@ def _portal_known(walk, surf, pt, pt_exact, old_known, nb):
     if walk.line is not None and cfg["theta"] == 0:
         a, b, c = walk.line
         walk.line = (a, b, c + a * F(cfg["d"][0]) + b * F(cfg["d"][1]))
+        walk.gc = gc_from_line(walk.line)
         _add_line_endpoints(walk, nb)
     else:
         walk.line = None
+        walk.gc = gc_translate(walk.gc, cfg["d"][0], cfg["d"][1]) if walk.gc is not None and cfg["theta"] == 0 else None
     return True
 
 
@@ -1618,6 +1706,7 @@ def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="
     walk.known = [(p0, mp.mpf(0), None)]
     walk.known += [(k, b0.param_of(k), None) for k in extra_known if k != p0]
     walk.line = line_from_dir(p0, direction) if line == "direction" else line
+    walk.gc = gc_from_line(walk.line) if walk.line is not None else None
     if walk.line is not None:
         _add_line_endpoints(walk, b0)
     walk_from(walk, b0, None)

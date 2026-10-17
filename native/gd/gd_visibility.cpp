@@ -31,6 +31,7 @@ void VisibilityRegion::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("contains", "point"), &VisibilityRegion::contains);
 	ClassDB::bind_method(D_METHOD("margin", "point"), &VisibilityRegion::margin);
 	ClassDB::bind_method(D_METHOD("get_cast_count"), &VisibilityRegion::get_cast_count);
+	ClassDB::bind_method(D_METHOD("get_build_usec"), &VisibilityRegion::get_build_usec);
 	ClassDB::bind_method(D_METHOD("get_cell_count"), &VisibilityRegion::get_cell_count);
 	ClassDB::bind_method(D_METHOD("get_member_count"), &VisibilityRegion::get_member_count);
 	ClassDB::bind_method(D_METHOD("get_domain"), &VisibilityRegion::get_domain);

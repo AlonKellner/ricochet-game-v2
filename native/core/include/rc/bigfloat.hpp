@@ -4,9 +4,11 @@
 //   value = sign * M * 2^exp, M = sum(limbs[i] * 2^(BITS*i)), limbs little-endian,
 //   normalized so the top limb has bit (BITS-1) set; precision = BITS * limbs.size().
 //   Rounding is toward zero (truncation); add keeps one guard limb; mul
-//   accumulates carry-free column sums in wrapping int64 (B1: can wrap above
-//   ~128 non-zero limbs per factor, exactly as GDScript's int wraps).
+//   sums its columns exactly (B1, fixed in Stage 102: the GDScript original
+//   wrapped above ~128 limbs per factor).
 #pragma once
+
+#include "rc/small_vec.hpp"
 
 #include <cstdint>
 #include <string>
@@ -23,7 +25,8 @@ public:
 	// +infinity (the projective parameter's t = inf): a reserved exponent
 	static constexpr int64_t INF_EXP = int64_t(1) << 40;
 
-	using Limbs = std::vector<int64_t>;
+	// up to 8 limbs inline (Perf P2): the low tiers and the exact predicates' values do not allocate
+	using Limbs = SmallVec<int64_t, 8>;
 
 	int sign = 0;
 	int64_t exp = 0;

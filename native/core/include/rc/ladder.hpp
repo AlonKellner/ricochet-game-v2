@@ -180,6 +180,17 @@ struct LadderResult {
 	long long usec_physical = 0;
 };
 
+// What the ladder did (counters for the benches; they never steer a solve).
+struct LadderStats {
+	long long walks = 0;      // decisions taken (one per walk solved)
+	long long f64 = 0;        // walks accepted at float64
+	long long unreliable = 0; // declined: a decision margin within its error estimate
+	long long over_tol = 0;   // declined: the estimate above tol
+	long long verify = 0;     // verified by a climb
+	long long tier_solves[6] = {}; // BigFloat walks computed per tier (index into TIERS)
+	long long big_usec = 0;   // time in those walks
+};
+
 // The scenes of one solve at every tier, built on demand, plus the solve caches.
 class LadderContext {
 public:
@@ -216,8 +227,10 @@ public:
 	}
 	SolveCache<Dual> &dual_cache() { return dual_cache_; }
 	SolveCache<BigFloat> &big_cache(int limbs) { return big_caches_[limbs]; }
+	LadderStats &stats() { return stats_; }
 
 private:
+	LadderStats stats_;
 	std::vector<SurfaceDef> defs_;
 	bool emit_infinity_ = false;
 	std::unique_ptr<Scene<Dual>> dual_;
@@ -448,6 +461,17 @@ private:
 	Climb decide(const estimate::Sensitivity &sens, const F64Events &events, const std::vector<double> &est, double tol, bool verify,
 			const Compute &compute) {
 		const bool reliable = sens.unreliable_from < 0 && !events.empty();
+		LadderStats &st = ctx_.stats();
+		st.walks++;
+		if (verify) {
+			st.verify++;
+		} else if (!reliable) {
+			st.unreliable++;
+		} else if (worst(est) > tol) {
+			st.over_tol++;
+		} else {
+			st.f64++;
+		}
 		if (reliable && worst(est) <= tol && !verify) {
 			Climb c;
 			c.f64_events = events;
@@ -486,6 +510,19 @@ private:
 		return -1;
 	}
 
+	// compute(limbs), counted in the context's stats
+	std::vector<Event<BigFloat>> timed(int limbs, const Compute &compute) {
+		const auto t0 = std::chrono::steady_clock::now();
+		std::vector<Event<BigFloat>> ev = compute(limbs);
+		LadderStats &st = ctx_.stats();
+		const int ti = tier_index(limbs);
+		if (ti >= 0) {
+			st.tier_solves[ti]++;
+		}
+		st.big_usec += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+		return ev;
+	}
+
 	// Compute at `limbs`, re-estimate along that trajectory with replay, accept
 	// when the estimate meets tol and every decision is reliable at that tier;
 	// otherwise jump to the tier the replay asks for.
@@ -494,7 +531,7 @@ private:
 		int ti = tier_index(limbs);
 		while (ti >= 0 && ti < int(TIERS.size())) {
 			const int L = TIERS[size_t(ti)];
-			std::vector<Event<BigFloat>> ev = compute(L);
+			std::vector<Event<BigFloat>> ev = timed(L, compute);
 			c.tried.push_back(L);
 			c.big_events = ev;
 			c.limbs = L;
@@ -525,14 +562,14 @@ private:
 			prev_f64 = *first_events;
 			c.f64_events = prev_f64;
 		} else {
-			prev_big = compute(limbs);
+			prev_big = timed(limbs, compute);
 			c.big_events = prev_big;
 		}
 		c.tried.push_back(limbs);
 		c.limbs = limbs;
 		while (ti + 1 < int(TIERS.size())) {
 			const int nxt = TIERS[size_t(ti) + 1];
-			std::vector<Event<BigFloat>> ev = compute(nxt);
+			std::vector<Event<BigFloat>> ev = timed(nxt, compute);
 			c.tried.push_back(nxt);
 			const std::vector<double> d = prev_is_f64 ? event_distance(prev_f64, ev) : event_distance(prev_big, ev);
 			c.big_events = ev;

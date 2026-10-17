@@ -1161,3 +1161,49 @@ def test_b5_a_reflection_is_never_matched_by_frame():
     w, n = _rescues(lambda: T.physical(s, (100, 0), (150, 100), plan))
     assert not any(e.kind == "cursor" for e in w.events)
     assert n == 0
+
+
+# ---------------------------------------------------------------- Perf P2b: the exact beam
+
+def _gc_scene_circle(sid, c, r):
+    return T.surface_from_json({"id": sid, "line": False, "start": [c[0] + r, c[1]], "end": [c[0] - r / 2, c[1] - r * 0.75],
+                                "via": [c[0] - r / 2, c[1] + r * 0.75], "full": True,
+                                "circle": {"center": list(c), "radius": r},
+                                "left": {"type": "inversion", "interactive": True},
+                                "right": {"type": "inversion", "interactive": True}})
+
+
+def test_gc_maps_carry_points_onto_the_image():
+    from fractions import Fraction as Fr
+    g = T.gc_from_line((Fr(0), Fr(1), Fr(450)))            # y = 450
+    pts = [(Fr(x), Fr(450)) for x in (100, 413, 700)]
+    inv = _gc_scene_circle(1, (500, 500), 100)
+    g = T.gc_invert(g, inv.seg)
+    # the inversion of the points in the circle at (500, 500), r^2 = 10000
+    pts = [(500 + 10000 * (x - 500) / ((x - 500) ** 2 + (y - 500) ** 2),
+            500 + 10000 * (y - 500) / ((x - 500) ** 2 + (y - 500) ** 2)) for x, y in pts]
+    assert all(T.gc_at(g, p) == 0 for p in pts)
+    assert T.gc_at(g, (Fr(600), Fr(400))) == 0               # the circle (500, 400), radius 100
+    mirror = line(2, (0, 0), (3, 4))
+    g2 = T.gc_reflect(g, mirror.seg)
+    # reflection in the line through (0, 0) and (3, 4): R(z) = (M^2 / |M|^2) conj(z)
+    def refl(p):
+        x, y = p
+        return (Fr(-7, 25) * x + Fr(24, 25) * y, Fr(24, 25) * x + Fr(7, 25) * y)
+    assert all(T.gc_at(g2, refl(p)) == 0 for p in pts)
+    g3 = T.gc_translate(g2, -4.0, 9.5)
+    assert all(T.gc_at(g3, (refl(p)[0] - 4, refl(p)[1] + Fr(19, 2))) == 0 for p in pts)
+    assert T.gc_at(g3, (Fr(0), Fr(0))) != 0
+
+
+def test_circle_beam_concurrent_crossings_tie_by_id():
+    """A circular beam through the common point of two line carriers: both hits
+    there, in id order (as on an exact line), whichever id each line has."""
+    walls = [line(10 + i, a, b, TERM, TERM) for i, (a, b) in enumerate(
+        [((-1000, -1000), (2000, -1000)), ((2000, -1000), (2000, 2000)), ((2000, 2000), (-1000, 2000)), ((-1000, 2000), (-1000, -1000))])]
+    falling, rising = ((550, 450), (650, 350)), ((500, 350), (700, 450))
+    for first, second in ((falling, rising), (rising, falling)):
+        s = [_gc_scene_circle(1, (500, 500), 100), line(2, *first, PASS, PASS), line(3, *second, PASS, PASS)] + walls
+        w = T.trace_physical_direction(s, (200.0, 450.0), mp.mpc(1, 0))
+        at_x = [e.surface_id for e in w.events if e.kind == "hit" and abs(e.point - mp.mpc(600, 400)) < mp.mpf("1e-20")]
+        assert at_x == [2, 3], at_x

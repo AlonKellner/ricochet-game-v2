@@ -8,6 +8,7 @@
 #include "gd_tracer.hpp"
 #include "rc/visual.hpp"
 
+#include <godot_cpp/variant/packed_float64_array.hpp>
 #include <godot_cpp/variant/packed_vector2_array.hpp>
 #include <godot_cpp/variant/rect2.hpp>
 
@@ -96,6 +97,16 @@ public:
 	static godot::Vector2 clip_to_bounds(const godot::Vector2 &origin, const godot::Vector2 &dir, const godot::Rect2 &bounds);
 	static bool is_arc(const godot::Vector2 &start, const godot::Vector2 &via, const godot::Vector2 &end_v);
 	static godot::Dictionary arc_params(const godot::Vector2 &start, const godot::Vector2 &via, const godot::Vector2 &end_v);
+	// Perf P4: what the preview draws an arc step with, in one call: [center x,
+	// center y, radius, start angle, end angle, point count] (arc_params' values),
+	// empty when the three points are not an arc (is_arc)
+	static godot::PackedFloat64Array arc_draw(const godot::Vector2 &start, const godot::Vector2 &via, const godot::Vector2 &end_v);
+	// Perf P4: a dashed step's segments for one draw_multiline (pairs of points):
+	// dashes of dash_on, gaps of dash_off, along at most max_len; an arc dash is
+	// the point_count-proportional polyline draw_arc draws for it.
+	static godot::PackedVector2Array dash_arc(const godot::Vector2 &center, double radius, double start_angle, double end_angle, int point_count,
+			double dash_on, double dash_off, double max_len);
+	static godot::PackedVector2Array dash_line(const godot::Vector2 &from, const godot::Vector2 &to, double dash_on, double dash_off, double max_len);
 };
 
 class StepTreeMerge : public godot::RefCounted {

@@ -1022,7 +1022,8 @@ The walker visits the candidates **in this order, one event each**, until an eff
 | Exact line exactly tangent to a circle carrier | Touches without crossing: no event. |
 | Beam tangent to a carrier at the frame's infinity point `Q` (Stage 105) | Touches without crossing: no event. Decided exactly from provenance: beside `Q` the walk keeps an exact **pole record** (`Q` and the beam's direction there, §31.3), so a carrier through `Q` is tangent there exactly when its direction at `Q` is parallel to the record's. Where the frame is not exact data (a rotated portal, an aim image beyond the exact budget, a shot from a rounded direction) there is no record and the precision ladder decides, as for any near-tangency. |
 | Carriers through the frame's infinity point | Crossed exactly at `Q` (the root nearest `Q` takes `Q`'s parameter): simultaneous crossings there tie by id, then the passage of infinity. When the beam departs from `Q` (an effect fired at `Q`), another carrier through `Q` is crossed at the departure point at the end of the loop, and the departing carrier's root at `Q` is the departure. |
-| Concurrent line carriers | On an exact line, adjacent crossings of two line carriers that meet the line at one point (exact 3×3 determinant) share one parameter. The ID rule orders them. |
+| Concurrent line carriers | On an exact line, adjacent crossings of two line carriers that meet the line at one point (exact 3×3 determinant) share one parameter. The ID rule orders them. On a circular beam with an **exact circle** (§31.4), adjacent crossings of two line carriers at their common point, which the circle passes exactly, share one parameter too, and the ID rule orders them (Perf P2b): never rounding. |
+| Exact circle tangent to a carrier | Its two roots there are one point: one decision, not two neighbours whose gap the precision ladder must resolve (Perf P2b). |
 | Inversion of a beam through the inversion center | Any beam through a known point that is exactly the center becomes an exactly straight beam. |
 | Player or cursor exactly at an inversion center (point at ∞ in the anchored construction) | Forward walk from the exact aim direction. If the aim image itself is at ∞, or is the player (the cursor's image under the plan is the player: every direction solves the plan), the walk goes straight at the cursor: the beam through the player and the cursor (in a pre-transform frame the circle through the player, the cursor and `Q_0`), the same in the oracle and natively (Stage 106, K3). |
 | Player = cursor | No aim: no trace (`BeamTracer.trace_pair` returns null). |
@@ -2474,7 +2475,7 @@ The aim is a two-point `Direction` (player → cursor), with no stored angle. It
 
 - Cross-product sign against a fixed reference direction. Never `atan2`.
 - Hits in projective order of the beam parameter `t` from the current parameter (§11.3). Never by distance from an unrelated point.
-- Points known by provenance (known points) keep their exact parameter. Concurrent crossings on an exact line share one parameter (§11.4).
+- Points known by provenance (known points) keep their exact parameter. Concurrent crossings on an exact line, or at a common point an exact circle passes, share one parameter (§11.4).
 - Ties: cursor first, then surface ID; the departure re-hit is last. *(Deterministic, total order.)*
 
 **Cross-products over angles:** all internal geometric decisions (arc containment, winding direction, radial ordering, sweep direction) use cross-product sign tests, never atan2. Angles appear only at the Godot API boundary (`draw_arc()` parameters) and are computed from points at the last possible moment during visual conversion (§7.3).
@@ -2525,6 +2526,7 @@ In the beam solver, provenance takes three forms (`beam_solver.gd` header, `trac
   - the reflection of an exact line in a line mirror (an exact map of the coefficients);
   - an exact line inverted in a circle whose center it contains;
   - an exact projective exit.
+- **Exact circles** (Perf P2b): every beam of an epoch is the image of a line under the frame's maps, so a beam that had an exact line keeps an exact **generalized circle** `A (x² + y²) + B x + C y + D = 0` through every reflection, inversion and portal translation since. It is carried lazily: the exact line and the maps, made exact only when a decision needs it, within an exact-data budget. The stack saves and restores it. A projective, a rotated portal or a beam that never had an exact line has none, and makes no exact claim.
 - **The provenance stack:** re-applying the surface on top of the stack (or hitting a portal's pair) pops it and restores the earlier beam *object*. A projective clears the stack and starts a new epoch. `frame_id` identifies `(epoch, stack)`.
 
 ### 31.5 Precision and stability (formerly: frame composition stability)
@@ -2640,4 +2642,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.19.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.20.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
