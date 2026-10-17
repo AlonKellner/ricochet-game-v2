@@ -1546,6 +1546,8 @@ private:
 		});
 		if (w.line) {
 			concurrent_ties(w, cands);
+		} else if (w.rec) {
+			concurrent_ties_circle(w, beam, cands);
 		}
 		if (depart >= 0) {
 			// the departure re-hit is at the departure point (exact when known)
@@ -1579,6 +1581,62 @@ private:
 			const N t = x.t;
 			const std::optional<CN<N>> pt = x.pt ? x.pt : y.pt;
 			const bool at_q = x.at_q || y.at_q; // concurrent at Q: both pinned there
+			cands[i] = Candidate<N>{t, lo, false, pt, int(i), false, at_q};
+			cands[i + 1] = Candidate<N>{t, hi, false, pt, int(i), false, at_q};
+		}
+	}
+
+	// Perf P2b: on a circular beam with an exact record, adjacent crossings of
+	// two line carriers at their common point, which the beam passes exactly,
+	// share one parameter: the id orders them, never rounding (as on an exact
+	// line; the oracle's _concurrent_ties_gc). The roots at the point are told
+	// from the carriers' other roots by distance; the decision itself is exact.
+	static void concurrent_ties_circle(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands) {
+		for (size_t i = 0; i + 1 < cands.size(); i++) {
+			Candidate<N> &x = cands[i];
+			Candidate<N> &y = cands[i + 1];
+			if (x.surf == nullptr || y.surf == nullptr || x.rehit || y.rehit || !x.surf->line || !y.surf->line || x.tie >= 0 || y.tie >= 0) {
+				continue;
+			}
+			double xx, xy, yx, yy;
+			Backend<N>::f64_point(beam, x.t, xx, xy);
+			Backend<N>::f64_point(beam, y.t, yx, yy);
+			const double scale = gd_maxf(1.0, gd_maxf(std::fabs(xx), std::fabs(xy)));
+			if (!(d64(xx, xy, yx, yy) <= 1e-6 * scale)) {
+				continue; // (the cheap filter: a common point is a rounding apart)
+			}
+			const Surf<N> *p = x.surf;
+			const Surf<N> *q = y.surf;
+			const exact::Line3 L1 = exact::line_through(p->sx, p->sy, p->ex, p->ey);
+			const exact::Line3 L2 = exact::line_through(q->sx, q->sy, q->ex, q->ey);
+			using exact::add;
+			using exact::mul;
+			using exact::sub;
+			// the common point, homogeneous: (c1 b2 - c2 b1, a1 c2 - a2 c1, a1 b2 - a2 b1)
+			const BigFloat Xw = sub(mul(L1[0], L2[1]), mul(L2[0], L1[1]));
+			if (Xw.is_zero()) {
+				continue; // parallel carriers
+			}
+			const BigFloat Xx = sub(mul(L1[2], L2[1]), mul(L2[2], L1[1]));
+			const BigFloat Xy = sub(mul(L1[0], L2[2]), mul(L2[0], L1[2]));
+			const double fx = Xx.to_float() / Xw.to_float();
+			const double fy = Xy.to_float() / Xw.to_float();
+			if (!(d64(xx, xy, fx, fy) <= 1e-6 * scale && d64(yx, yy, fx, fy) <= 1e-6 * scale)) {
+				continue; // the crossings near each other, but not at the common point
+			}
+			const std::optional<exact::GCircle> g = w.rec->exact();
+			if (!g) {
+				continue;
+			}
+			const BigFloat on = add(add(mul(g->A, add(mul(Xx, Xx), mul(Xy, Xy))), mul(add(mul(g->B, Xx), mul(g->C, Xy)), Xw)), mul(g->D, mul(Xw, Xw)));
+			if (!on.is_zero()) {
+				continue;
+			}
+			const Surf<N> *lo = p->id < q->id ? p : q;
+			const Surf<N> *hi = p->id < q->id ? q : p;
+			const N t = x.t;
+			const std::optional<CN<N>> pt = x.pt ? x.pt : y.pt;
+			const bool at_q = x.at_q || y.at_q;
 			cands[i] = Candidate<N>{t, lo, false, pt, int(i), false, at_q};
 			cands[i + 1] = Candidate<N>{t, hi, false, pt, int(i), false, at_q};
 		}

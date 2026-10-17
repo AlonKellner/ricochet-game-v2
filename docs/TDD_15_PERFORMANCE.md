@@ -7,7 +7,7 @@
 | P0 | Benches: the region build per scene and plan, the ladder's census, the worker's region time in the frame bench | Done |
 | P5 | Gate turnaround: scheduling, sharding, the ctest split, `make gates` | Done: about 9 min to 4.5 min |
 | P1 | The exact-image cache key (a 6-decimal cursor key: a bug) | Done: no region or golden changed |
-| P2 | The ladder: BigFloat only where an exact decision needs it | P2a done (BigFloat arithmetic, bit-identical); P2b proposed |
+| P2 | The ladder: BigFloat only where an exact decision needs it | Done: P2a (BigFloat arithmetic, bit-identical), P2b (exact circles: double roots, circular concurrency) |
 | P3 | The region build: cast reuse, cheaper casts, the fill | P3a done (parallel casts) |
 | P4 | The frame path: defs handle, lean trace results, overlay keys | Not started |
 | P6 | Docs | Not started |
@@ -147,4 +147,28 @@ The members' own and side casts (`cast_members`), and the gaps' first middle cas
 **`frame-bench`, inversion_grid:** player_orbit finishes 56 regions in 250 frames (14 before), at a 10 ms p95.
 
 The p95 on inversion_grid plans is still about twice the budget. The longest single cast bounds a batch: a walk that climbs to 64 limbs (P2b).
+
+## P2b: exact circles (user decisions, 2026-10-17)
+
+**User decisions:** "Exact double-root rule"; then, once the census showed the climbs were concurrencies, "Concurrency rule, oracle first", keeping the double-root rule.
+
+- **The exact beam** (`exact::BeamRec`, `exact::GCircle`; the oracle's `walk.gc`). Every beam of an epoch is the image of a line under the frame's maps. The walk keeps its beam's exact generalized circle A(x² + y²) + Bx + Cy + D = 0: the last exact line and the maps since (reflection, inversion, portal translation). It is made exact only when a decision asks, within 320 limbs, and the stack saves and restores it. Each map is exact in coefficient form: reflection by the rotation trick of `reflect_point_h`; inversion by shifting to the center, (A, B, C, D) → (D, R²B, R²C, AR⁴), and shifting back.
+- **Double roots** (`Solver::beam_tangent`, `gaps`). Two roots of one carrier a rounding apart, where the circle touches the carrier exactly (`gc_tangent_line`, `gc_tangent_circle`), are one decision: not each other's neighbour in the margins. It fires on no measured walk; the goldens and the digest are unchanged.
+- **Concurrency on a circular beam** (`Solver::concurrent_ties_circle`, the oracle's `_concurrent_ties_gc`, GAME_SPEC §11.4). Adjacent crossings of two line carriers at their common point, which the exact circle passes, share one parameter, and the id orders them, as on an exact line. Before, rounding ordered them, and the ladder climbed every tier to 64 limbs without converging: the margin between the two hits was 0 at every tier.
+  - **Fixtures** (`gen_fixtures_perf_ties.py` → `bench/fixtures/perf_circle_ties.json`). The inversion of y = 450 in the circle at (500, 500), r 100, passes X = (600, 400), where two pass lines cross. Both id assignments come in id order. With the rule off the oracle gives [3, 2] for one of them. A control moves one line by 1/16 px.
+  - **Native** (`test_circle_ties.cpp`): f64, Dual, 4 and 64 limbs. The tests fail without the rule.
+  - **Oracle tests:** `test_trace2.py` (the maps carry points onto the image; the tie).
+  - **No other change:** regenerating every fixture and the corpus gives the same output under the old and the new oracle. The goldens replay with 0 mismatches over 284,096 combos, and the region digest is unchanged.
+
+**inversion_grid** (`visibility bench`, 12 players):
+
+| Plan | Median before (P3a) | Median after | p95 before | p95 after | 64-limb walks before | 64-limb walks after |
+|---|---|---|---|---|---|---|
+| [1 L] | 62.7 ms | 28.0 ms | 116 | 47.5 | 33 | 2 |
+| [4 R] | 69.3 ms | 25.5 ms | 91 | 60.0 | 52 | 3 |
+| [8 L] | — | 29.9 ms | — | 36.6 | 59 | 1 |
+
+**What remains** are near-concurrencies: a beam within less than one float64 ulp of a corner, not through it. The ladder's margins are float64 distances, so the two hits round to one point at every tier. Only the 64-limb walk orders them correctly; that climb is right and stays.
+
+**Note:** the oracle's generators do not reproduce 344 committed fixture and corpus files byte for byte, under either oracle (format or library drift, not a behaviour change). They were not re-committed.
 
