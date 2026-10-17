@@ -208,6 +208,14 @@ public:
 
 	void set_clock(Ladder::Clock clock) { clock_ = std::move(clock); }
 
+	// The ladder's counters since the context was built or reset (benches).
+	LadderStats ladder_stats() const { return ctx_ ? ctx_->stats() : LadderStats{}; }
+	void reset_ladder_stats() {
+		if (ctx_) {
+			ctx_->stats() = LadderStats{};
+		}
+	}
+
 	// ---------------------------------------------------------------- conversion
 
 	// Steps are in visual space; frame_id identifies the (epoch, transform stack, flags).

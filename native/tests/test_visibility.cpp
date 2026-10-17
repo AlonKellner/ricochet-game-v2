@@ -819,29 +819,49 @@ TEST_CASE("visibility: the regions' structure checks hold on the shipped levels"
 }
 
 // RC_VIS_BENCH=1: the time one region takes on the main level, by plan.
+// The region's cost (skipped; run with --no-skip): RC_VIS_SCENE=<dump name>
+// (default main), RC_VIS_BENCH_PLANS=<n> plans after the empty one (default 3),
+// 12 players. Per plan: build time (median, p95, max), casts per region by kind,
+// and the ladder's census over those casts (walks accepted at float64, declined
+// for a margin or for the estimate, BigFloat walks per tier, their time).
 TEST_CASE("visibility bench" * doctest::skip(true)) {
-	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/main.surfaces.json");
+	const char *sc = std::getenv("RC_VIS_SCENE");
+	const std::string scene = sc ? sc : "main";
+	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + scene + ".surfaces.json");
 	const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
 	Tracer t;
 	t.set_emit_infinity(true);
 	t.set_defs(defs);
+	const char *np = std::getenv("RC_VIS_BENCH_PLANS");
+	const size_t n_plans = np ? size_t(std::atoi(np)) : 3;
 	std::vector<std::vector<PlanItem>> plans{{}};
 	const auto lp = level_plans(defs);
-	for (size_t i = 0; i < lp.size() && plans.size() < 4; i++) {
-		plans.push_back(lp[i]);
+	for (size_t i = 0; i < lp.size() && plans.size() < n_plans + 1; i++) {
+		plans.push_back(lp[(i * 7) % lp.size()]);
 	}
+	std::printf("%s: %zu surfaces\n", scene.c_str(), defs.size());
 	for (const auto &plan : plans) {
 		std::vector<double> ms;
-		int casts = 0;
+		std::array<long long, 6> kinds{};
+		t.reset_ladder_stats();
 		for (int k = 0; k < 12; k++) {
-			const vis::Pt P{400.0 + k * 37.0, 300.0 + k * 21.0};
-			const auto t0 = std::chrono::steady_clock::now();
+			const vis::Pt P{400.0 + k * 97.0, 260.0 + k * 53.0};
 			const vis::Result r = vis::compute(t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
-			ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
-			casts += r.casts;
+			ms.push_back(double(r.build_usec) / 1000.0);
+			for (size_t q = 0; q < kinds.size(); q++) kinds[q] += r.casts_by_kind[q];
 		}
+		const LadderStats st = t.ladder_stats();
 		std::sort(ms.begin(), ms.end());
-		std::printf("plan of %zu entries: median %.1f ms, max %.1f ms, casts per region %d\n", plan.size(), ms[ms.size() / 2], ms.back(), casts / 12);
+		std::string pl;
+		for (const PlanItem &it : plan) pl += (pl.empty() ? "" : ",") + std::to_string(it.surface_id) + (it.left ? "L" : "R");
+		long long casts = 0;
+		for (long long c : kinds) casts += c;
+		std::printf("plan [%s]: median %.1f ms, p95 %.1f, max %.1f; casts/region %lld (crit %lld side %lld mid %lld refine %lld probe %lld)\n",
+			pl.c_str(), ms[ms.size() / 2], ms[size_t(double(ms.size()) * 0.95) < ms.size() ? size_t(double(ms.size()) * 0.95) : ms.size() - 1], ms.back(),
+			casts / 12, kinds[0] / 12, kinds[1] / 12, kinds[2] / 12, kinds[3] / 12, kinds[4] / 12);
+		std::printf("  ladder: walks %lld, f64 %lld, declined margin %lld, estimate %lld; BigFloat walks 4:%lld 8:%lld 16:%lld 32:%lld 64:%lld, %.1f ms\n",
+			st.walks, st.f64, st.unreliable, st.over_tol, st.tier_solves[1], st.tier_solves[2], st.tier_solves[3], st.tier_solves[4], st.tier_solves[5],
+			double(st.big_usec) / 1000.0);
 	}
 }
 

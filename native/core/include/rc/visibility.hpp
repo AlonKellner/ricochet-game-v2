@@ -31,6 +31,8 @@
 #include "rc/tracer.hpp"
 
 #include <algorithm>
+#include <array>
+#include <chrono>
 #include <cmath>
 #include <limits>
 #include <map>
@@ -339,6 +341,9 @@ struct Loop {
 	double area = 0.0; // signed, of the tessellated loop
 };
 
+// What a cast is for (the benches count them by kind).
+enum class CastKind { Crit, Side, Mid, Refine, Probe, Other };
+
 // A member: the beam of the final frame that every cursor aiming along `dir`
 // lies on, and the casts that read its walk.
 struct Member {
@@ -400,6 +405,9 @@ struct Result {
 	int casts = 0;
 	int refinements = 0;
 	std::vector<std::string> notes; // construction anomalies (reported by the checks)
+	// the benches: casts per CastKind, and the build's wall time
+	std::array<int, 6> casts_by_kind{};
+	long long build_usec = 0;
 };
 
 // Angular order of aim directions, counterclockwise from the fixed reference
@@ -1128,11 +1136,12 @@ private:
 
 	// ---- casts
 
-	Cast cast(const Pt &c, const Pt &dir, const Beam<F64> &member) {
+	Cast cast(const Pt &c, const Pt &dir, const Beam<F64> &member, CastKind kind = CastKind::Other) {
 		Cast r;
 		r.cursor = c;
 		r.dir = dir;
 		res_.casts++;
+		res_.casts_by_kind[size_t(kind)]++;
 		const Pt P = res_.player;
 		const std::optional<LadderResult> lr = tracer_.solve(P.x, P.y, c.x, c.y, plan_, flags_);
 		if (!lr) {
@@ -1426,7 +1435,7 @@ private:
 			}
 			m.tq = tq_of(m.beam);
 			m.own_a = walk_key(m.beam.param_of(cn_of(m.cursor)).v, 0.0) < walk_key(m.tq, 0.0);
-			m.crit = cast(m.cursor, m.dir, m.beam);
+			m.crit = cast(m.cursor, m.dir, m.beam, CastKind::Crit);
 		}
 		for (size_t i = 0; i < n; i++) {
 			const Pt &prev = ms[(i + n - 1) % n].dir;
@@ -1444,7 +1453,7 @@ private:
 		if (!c) {
 			return Cast{};
 		}
-		return cast(*c, d, member_of(*c));
+		return cast(*c, d, member_of(*c), CastKind::Side);
 	}
 
 	// ---- cells
@@ -1741,7 +1750,7 @@ private:
 			if (!c) {
 				break;
 			}
-			Cast m = cast(*c, d, member_of(*c));
+			Cast m = cast(*c, d, member_of(*c), CastKind::Refine);
 			if (m.same_shape(lo)) {
 				lo = std::move(m);
 			} else {
@@ -1767,7 +1776,7 @@ private:
 		nm.beam = member_of(*c);
 		nm.tq = tq_of(nm.beam);
 		nm.own_a = walk_key(nm.beam.param_of(cn_of(*c)).v, 0.0) < walk_key(nm.tq, 0.0);
-		nm.crit = cast(*c, d, nm.beam);
+		nm.crit = cast(*c, d, nm.beam, CastKind::Refine);
 		nm.minus = std::move(lo);
 		nm.plus = std::move(hi);
 		auto &ms = res_.members;
@@ -1802,7 +1811,7 @@ private:
 				}
 				const Pt dm = rotate(ms[i].dir, ccw_angle(ms[i].dir, ms[r].dir) / 2.0);
 				const std::optional<Pt> c = cursor_for(dm);
-				gaps[i].mid = c ? cast(*c, dm, member_of(*c)) : Cast{};
+				gaps[i].mid = c ? cast(*c, dm, member_of(*c), CastKind::Mid) : Cast{};
 				const Cast &mid = *gaps[i].mid;
 				const bool left_ok = ms[i].plus.same_shape(mid);
 				const bool right_ok = ms[r].minus.same_shape(mid);
@@ -1830,7 +1839,7 @@ private:
 			for (Proto &p : gaps[i].protos) {
 				if (p.ka == End::Near) {
 					const Pt probe = exact_on_carrier(mid.near_sid, mid.near_pt);
-					p.near_incl = cast(probe, mid.dir, member_of(probe)).cursor_ok;
+					p.near_incl = cast(probe, mid.dir, member_of(probe), CastKind::Probe).cursor_ok;
 				}
 			}
 			for (const Proto &p : gaps[i].protos) {
@@ -1869,7 +1878,7 @@ private:
 			// after a loop past the divergence), at a point exactly on the carrier
 			// as a cursor there is
 			const Pt probe = exact_on_carrier(mid.near_sid, mid.near_pt);
-			if (!cast(probe, mid.dir, member_of(probe)).cursor_ok) {
+			if (!cast(probe, mid.dir, member_of(probe), CastKind::Probe).cursor_ok) {
 				continue;
 			}
 			Edge e = carrier_edge(mid.near_sid, End::Near, a, b, mid.near_pt);
@@ -3146,11 +3155,13 @@ inline Fill fill_triangles(const Result &r) {
 
 // The visibility region of the plan for the player (bounds: the level's).
 inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanItem> &plan, const Flags &flags, const Rect &bounds) {
+	const auto t0 = std::chrono::steady_clock::now();
 	Builder b(tracer, player, plan, flags, bounds);
 	Result r = b.build();
 	for (Loop &l : r.loops) {
 		l.area = loop_area(l.edges);
 	}
+	r.build_usec = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
 	return r;
 }
 

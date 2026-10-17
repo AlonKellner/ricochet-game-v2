@@ -42,6 +42,7 @@ public:
 	int contains(const godot::Vector2 &p) const;
 	double margin(const godot::Vector2 &p) const;
 	int get_cast_count() const { return region.casts; }
+	int64_t get_build_usec() const { return region.build_usec; }
 	int get_cell_count() const { return int(region.cells.size()); }
 	int get_member_count() const { return int(region.members.size()); }
 	godot::Rect2 get_domain() const;
