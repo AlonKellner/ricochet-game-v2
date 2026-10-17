@@ -10,7 +10,7 @@
 | P2 | The ladder: BigFloat only where an exact decision needs it | Done: P2a (BigFloat arithmetic, bit-identical), P2b (exact circles: double roots, circular concurrency) |
 | P3 | The region build: cast reuse, cheaper casts, the fill | P3a done (parallel casts); the cast memo and the fill not needed for the budgets |
 | P4 | The frame path: defs handle, lean trace results, overlay keys | Done: P4a (native dashes, lazy hit records), P4b (defs key, lazy hit points, one call per arc step, memoized carriers) |
-| P6 | Docs | Done; user sign-off pending |
+| P6 | Docs | Done; signed off (user, 2026-10-18) |
 
 **Rules:** every phase is behaviour-neutral. Traces, regions and goldens stay bit-identical. A changed golden is a behaviour change, brought to the user with evidence. Coverage stays as it is: trims of duplicated checks come only as a separate proposal with numbers (user, 2026-10-17).
 
