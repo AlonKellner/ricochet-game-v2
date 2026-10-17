@@ -146,8 +146,8 @@ Array render_violations(const rc::inv::Violations &vs) {
 // ---------------------------------------------------------------- InvariantKernel
 
 void InvariantKernel::_bind_methods() {
-	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_visibility_pin", "region", "cursor", "planned", "typed"),
-			&InvariantKernel::check_visibility_pin);
+	ClassDB::bind_static_method("InvariantKernel", D_METHOD("check_visibility_pin", "region", "cursor", "planned", "typed", "cursor_point_agrees"),
+			&InvariantKernel::check_visibility_pin, DEFVAL(true));
 	ClassDB::bind_static_method("InvariantKernel",
 			D_METHOD("check_all", "player", "cursor", "physical", "planned", "typed", "result", "surfaces", "defs", "flags", "plan_entries", "has_renderer", "plan_applied", "emit_infinity"),
 			&InvariantKernel::check_all, DEFVAL(false));
@@ -272,14 +272,15 @@ Array InvariantKernel::extract_trace_geometry(const Ref<TracePath> &path) {
 	return out;
 }
 
-Array InvariantKernel::check_visibility_pin(const Ref<RefCounted> &region, const Vector2 &cursor, const Ref<TracePath> &planned, const Array &typed) {
+Array InvariantKernel::check_visibility_pin(const Ref<RefCounted> &region, const Vector2 &cursor, const Ref<TracePath> &planned, const Array &typed,
+		bool cursor_point_agrees) {
 	const VisibilityRegion *r = Object::cast_to<VisibilityRegion>(region.ptr());
 	if (r == nullptr || planned.is_null()) {
 		return Array();
 	}
 	const rc::TracePath pl = core_path_of(planned);
 	const std::vector<rc::TraceStep> ty = core_steps_of(typed);
-	return render_violations(rc::inv::check_VISIBILITY_EQUALS_NON_DIVERGENCE(r->region, to_v2(cursor), &pl, &ty));
+	return render_violations(rc::inv::check_VISIBILITY_EQUALS_NON_DIVERGENCE(r->region, to_v2(cursor), &pl, &ty, cursor_point_agrees));
 }
 
 // ---------------------------------------------------------------- SweepKernel

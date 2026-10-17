@@ -1455,10 +1455,11 @@ There is no separate post-cursor computation. Both traces run the full path from
 
 The visibility region highlights the **set of cursor positions that will not cause divergence** for the current plan: if the cursor is placed there, the planned and the physical paths agree up to it. *(Principle 14: visibility shares the world.)*
 
-**Definition.** A cursor is in the region iff the preview's planned path reaches it and every merged step before it is ALIGNED (§14.2: the same frame ids, epoch, stack and flags). It is exactly what the preview shows: an all-green solid path from the player to the cursor. The region never depends on the cursor, only on the player, the plan (with its clicks and pieces), the game state's flags and the surfaces.
+**Definition.** A cursor is in the region iff (V1) the preview's planned path reaches it, (V2) every merged step before it is ALIGNED (§14.2: the same frame ids, epoch, stack and flags), and (V3) both walks leave the cursor's own point in the same frame. V1 and V2 are what the preview shows: an all-green solid path from the player to the cursor. V3 counts the decisions made exactly at the cursor, which fall between the last step before it and the first after it (B4, Stage 110). When the physical walk has no event at the cursor's point, it passes the point in the frame it had. The region never depends on the cursor, only on the player, the plan (with its clicks and pieces), the game state's flags and the surfaces.
 - A cursor that the trace never reaches (cut by the event limit, §12.6) is **outside**.
 - A cursor on the player (no aim), on the player's image `P_K` or on the frame's infinity `Q_K` is **not classified**: the aim degenerates there (§11.4).
-- A cursor exactly at the last entry's departure point is reached at once (§11.3), before any divergence at that entry shows. The departure points of an entry crossed off its segment are therefore visible even where nothing past them is: they form 1D **whiskers** on the planned carrier.
+- A cursor exactly where the last entry is crossed off its segment is **outside**: the planned walk applies the entry there and the physical one passes, so they leave the point in different frames (V3). Before B4 these departure points formed thin lines along the planned carrier.
+- The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4), and on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor).
 
 ### 15.2 Members
 
@@ -1493,7 +1494,7 @@ The region is built from **casts**: ordinary pair traces (`Tracer::solve`, the s
 ```
 VisibilityRegion:
     loops:    closed loops of edges (member arcs, carrier arcs, the clip rectangle)
-    whiskers: carrier arcs of visible departure points (no area)
+    whiskers: the region's 1D parts (no area; see 15.1)
     cells:    the cells (for drawing)
     contains(c) -> Inside | Outside | Unclassified
 ```
@@ -2423,6 +2424,7 @@ The following invariants are tested by the sweep but not in the original specifi
 | `VIS_BOUNDARY_DECIDED` | At every exact point of interest (an endpoint, a piece's end) the region decides as the solver |
 | `VIS_CONTAINS_MATCHES_POLYGON` | The merged loops and the drawn cells agree away from the boundary |
 | `VIS_DETERMINISTIC` | The same inputs give the same region (S3) |
+| `VIS_REGULAR` | The region has area wherever it is: its only 1D parts are an arc of a member tangent at a frame's finite infinity point (`Q_j`) to a carrier through it and a piece of the last planned terminal's segment; no loop doubles back on itself (B4, Stage 110) |
 
 *Retired with the legacy frames (Stage 83):* `SHARED_RAY`, `RAY_ALIGNMENT`, `ARC_MIDPOINT_ALIGNMENT`, `POST_INVERSION_ARC`, `PARAMETER_MONOTONICITY`, `BACK_TRANSFORM_ALIGNMENT`, `S18_FRAME_DETERMINANT`.
 

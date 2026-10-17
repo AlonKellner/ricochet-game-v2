@@ -10,6 +10,7 @@ Usage:
 Writes bench/fixtures/stage110_visibility.json.
 """
 import json
+from fractions import Fraction
 import os
 import sys
 
@@ -40,8 +41,37 @@ def sides(surfs, types):
     return out
 
 
-def cursors(surfs, player):
-    pts = []
+def carrier_extension(surfs, plan):
+    """Cursors on the planned surfaces' carriers (lines, and a portal's pair)
+    beyond their segments: S + k (E - S), k in {-1, -1/2, -1/8, 9/8, 3/2, 2}, kept when
+    exact in float32 (where a walk departs from a planned surface crossed off
+    its segment -- B4)."""
+    by_id = {s["id"]: s for s in surfs}
+    ids = []
+    for sid, _side in plan:
+        s = by_id.get(sid)
+        if s is None:
+            continue
+        ids.append(sid)
+        for key in ("left", "right"):
+            cfg = s.get(key) or {}
+            if cfg.get("type") == "portal" and cfg.get("pair") is not None:
+                ids.append(cfg["pair"])
+    out = []
+    for sid in ids:
+        s = by_id[sid]
+        if not s.get("line", True) or s.get("full"):
+            continue
+        S, E = (Fraction(s["start"][0]), Fraction(s["start"][1])), (Fraction(s["end"][0]), Fraction(s["end"][1]))
+        for k in (Fraction(-1), Fraction(-1, 2), Fraction(-1, 8), Fraction(9, 8), Fraction(3, 2), Fraction(2)):
+            p = (S[0] + k * (E[0] - S[0]), S[1] + k * (E[1] - S[1]))
+            if all(Fraction(V._f32(c)) == c for c in p):
+                out.append((float(p[0]), float(p[1])))
+    return out
+
+
+def cursors(surfs, player, plan=()):
+    pts = carrier_extension(surfs, plan)
     for i in range(14):
         for j in range(8):
             pts.append((40.0 + i * 140.0, 40.0 + j * 140.0))
@@ -78,7 +108,7 @@ def case(name, scene, player, plan):
     surfs = dump(scene)
     sc = T.scene_from_json(surfs)
     labelled = []
-    for c in cursors(surfs, player):
+    for c in cursors(surfs, player, plan):
         v = V.visible(sc, player, c, plan)
         if v is not None:
             labelled.append([c[0], c[1], bool(v)])
@@ -101,6 +131,11 @@ def main():
     out.append(case("pre_inverted_no_plan", "playground__pre_inverted", (500.0, 300.0), []))
     out.append(case("empty_room_infinity", "test_levels__empty_room", (500.0, 300.0), [(T.INFINITY_ID, "LEFT")]))
     out.append(case("room_with_passthroughs_no_plan", "test_levels__room_with_passthroughs", room, []))
+    # B5: a co-carrier write of the planned value (hit_effects: 15 fires, 16 is planned)
+    out.append(case("hit_effects_state_plan", "test_levels__hit_effects", (960.0, 540.0), [(16, "RIGHT")]))
+    # B4: the reported thin lines -- departures off the planned segment (float32 player)
+    three = (V._f32(914.4775), V._f32(425.2639))
+    out.append(case("three_mirrors_departures", "test_levels__three_mirrors", three, [(4, "LEFT"), (6, "RIGHT")]))
     path = os.path.join(ROOT, "bench", "fixtures", "stage110_visibility.json")
     json.dump({"dps": mp.mp.dps, "cases": out}, open(path, "w"), indent=1)
     for c in out:

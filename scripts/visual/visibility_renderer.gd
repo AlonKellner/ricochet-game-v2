@@ -171,6 +171,9 @@ static func preview_visible(renderer: Node) -> bool:
 	var planned: TracePath = renderer._planned_path
 	if planned == null or planned.cursor_index < 0:
 		return false
+	# B4: both walks leave the cursor's own point in one frame
+	if renderer.last_pair != null and not renderer.last_pair.cursor_point_agrees:
+		return false
 	var merged: Array = renderer._merged_steps
 	# the display may drop a zero-length piece before the cursor without moving
 	# its index: every drawn step before the cursor counts (inv::preview_visible)

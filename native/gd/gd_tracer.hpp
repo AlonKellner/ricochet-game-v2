@@ -208,11 +208,13 @@ public:
 	godot::Ref<TracePath> physical;
 	godot::Ref<PrecisionLadderResult> result;
 	godot::Dictionary final_flags;
+	bool cursor_point_agrees = true; // Stage 110, B4: both walks leave the cursor's point in one frame
 
 	godot::Ref<TracePath> get_planned() const { return planned; }
 	godot::Ref<TracePath> get_physical() const { return physical; }
 	godot::Ref<PrecisionLadderResult> get_result() const { return result; }
 	godot::Dictionary get_final_flags() const { return final_flags; }
+	bool get_cursor_point_agrees() const { return cursor_point_agrees; }
 };
 
 class BeamTracer : public godot::RefCounted {

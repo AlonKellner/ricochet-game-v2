@@ -373,10 +373,12 @@ void BeamTracerPair::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_physical"), &BeamTracerPair::get_physical);
 	ClassDB::bind_method(D_METHOD("get_result"), &BeamTracerPair::get_result);
 	ClassDB::bind_method(D_METHOD("get_final_flags"), &BeamTracerPair::get_final_flags);
+	ClassDB::bind_method(D_METHOD("get_cursor_point_agrees"), &BeamTracerPair::get_cursor_point_agrees);
 	ADD_PROPERTY(obj_prop("planned", "TracePath"), "", "get_planned");
 	ADD_PROPERTY(obj_prop("physical", "TracePath"), "", "get_physical");
 	ADD_PROPERTY(obj_prop("result", "PrecisionLadderResult"), "", "get_result");
 	ADD_PROPERTY(PropertyInfo(Variant::DICTIONARY, "final_flags"), "", "get_final_flags");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "cursor_point_agrees"), "", "get_cursor_point_agrees");
 }
 
 // ---------------------------------------------------------------- BeamTracer
@@ -444,6 +446,7 @@ Ref<BeamTracerPair> BeamTracer::trace_pair(const Array &defs, const Vector2 &pla
 	}
 	o->result = PrecisionLadderResult::wrap(pair->result);
 	o->final_flags = flags_to_dict(pair->final_flags);
+	o->cursor_point_agrees = pair->cursor_point_agrees;
 	return o;
 }
 

@@ -28,7 +28,7 @@ func _preview_visible(surfaces: Array, player: Vector2, cursor: Vector2, plan: A
 	if pair == null:
 		return false
 	var ci := pair.planned.cursor_index
-	if ci < 0:
+	if ci < 0 or not pair.cursor_point_agrees:
 		return false
 	var merged := StepTreeMerge.merge(pair.planned.steps, pair.physical.steps, ci)
 	for i in ci:

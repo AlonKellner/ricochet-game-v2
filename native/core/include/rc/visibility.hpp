@@ -348,6 +348,7 @@ struct Member {
 	bool straight = false; // the line through P_K and a finite Q_K: it passes the real infinity
 	int tangent_sid = -1;  // tangent in the final frame to this surface's carrier at its cursor (a double root)
 	int tangent_q_sid = -1; // tangent at a finite Q_K to this surface's carrier (they meet at Q_K only)
+	bool tangent_pole = false; // tangent at some frame's finite infinity point to a carrier through it (VIS-REGULAR)
 	bool exact = false;    // its cursor is exact data of the final frame (a segment's endpoint, a piece's end)
 	Cast crit;            // the member itself
 	Cast minus;           // just before it (direction rotated by -eps)
@@ -972,8 +973,11 @@ private:
 					if (const std::optional<Pt> t = tangent_at_pole(A, *B, s)) {
 						const size_t before = pois.size();
 						add_poi(pois, cn_of(*t), j, "tangency at Q to " + std::to_string(s.id));
-						for (size_t q = before; q < pois.size() && j == K; q++) {
-							pois[q].tangent_q_sid = s.id; // (the other way round too: the same circle)
+						for (size_t q = before; q < pois.size(); q++) {
+							pois[q].tangent_pole = true; // (the other way round too: the same circle)
+							if (j == K || carrier_fixed(s.id, j)) {
+								pois[q].tangent_q_sid = s.id;
+							}
 						}
 					}
 				}
@@ -1124,7 +1128,7 @@ private:
 		bool reached = met && aligned(nK);
 		bool alive = reached && (eK < 0 || aligned(nK + 1));
 		// the cast's own cursor: every step before it aligned
-		r.cursor_ok = paths.first.cursor_index >= 0 && aligned(paths.first.cursor_index);
+		r.cursor_ok = paths.first.cursor_index >= 0 && aligned(paths.first.cursor_index) && cursor_point_agrees(paths.first, paths.second);
 		// the near end
 		if (K == 0) {
 			r.near_kind = End::PoleP;

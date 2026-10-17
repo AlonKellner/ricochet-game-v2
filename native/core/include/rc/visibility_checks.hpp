@@ -23,9 +23,9 @@ using detail::v;
 
 // What the preview shows: the planned display path reaches the cursor and the
 // merged steps before it are ALIGNED (GAME_SPEC 15.1).
-inline bool preview_visible(const TracePath &planned, const std::vector<TraceStep> &typed) {
-	if (planned.cursor_index < 0) {
-		return false;
+inline bool preview_visible(const TracePath &planned, const std::vector<TraceStep> &typed, bool cursor_point_agrees = true) {
+	if (planned.cursor_index < 0 || !cursor_point_agrees) {
+		return false; // (V1; V3: both walks leave the cursor's own point in one frame, B4)
 	}
 	// the display may drop a zero-length piece before the cursor without moving
 	// its index (the incoming half of a wrap on the bounds' edge): every drawn
@@ -68,7 +68,7 @@ inline std::string pin_tag(const vis::Result &r, const vis::Pt &c) {
 }
 
 inline Violations check_VISIBILITY_EQUALS_NON_DIVERGENCE(const vis::Result &r, const V2 &cursor, const TracePath *planned,
-		const std::vector<TraceStep> *typed) {
+		const std::vector<TraceStep> *typed, bool cursor_point_agrees) {
 	Violations out;
 	if (planned == nullptr || typed == nullptr) {
 		return out; // no trace: the cursor is not classified
@@ -79,7 +79,7 @@ inline Violations check_VISIBILITY_EQUALS_NON_DIVERGENCE(const vis::Result &r, c
 		return out;
 	}
 	const bool in = m == vis::Membership::Inside;
-	const bool shown = preview_visible(*planned, *typed);
+	const bool shown = preview_visible(*planned, *typed, cursor_point_agrees);
 	if (in != shown) {
 		const std::string tag = pin_tag(r, c);
 		out.push_back(v("VISIBILITY-EQUALS-NON-DIVERGENCE%s: %s at the cursor (%.3f, %.3f): the region %s it, the preview %s (margin %.6f px)",
@@ -674,6 +674,57 @@ inline Violations check_VIS_DETERMINISTIC(const VisInput &in) {
 	return out;
 }
 
+// The region has area wherever it is (B4, Stage 110). Its only 1D parts are
+// whiskers of two kinds: an arc of a member tangent at a frame's finite infinity
+// point to a carrier through it (every other member crosses that carrier there),
+// and a piece of the last planned entry's own segment when that side is a
+// terminal (the arrow ends exactly at the cursor). A whisker anywhere else -- a departure point off
+// the planned segment, the thin lines of the B4 report -- is a violation, as is
+// a loop that doubles back on itself (a spike of no area).
+inline Violations check_VIS_REGULAR(const vis::Result &r, const Scene<F64> *scene, const Flags &flags, const std::vector<PlanItem> &plan) {
+	using namespace visdetail;
+	Violations out;
+	for (size_t wi = 0; wi < r.whiskers.size(); wi++) {
+		const vis::Edge &w = r.whiskers[wi];
+		if (w.kind == vis::EdgeKind::Member) {
+			const bool tangent_pole = w.member >= 0 && w.member < int(r.members.size()) && r.members[size_t(w.member)].tangent_pole;
+			if (!tangent_pole) {
+				out.push_back(v("VIS-REGULAR: whisker %d lies along member %d, which is not tangent at a frame's infinity point", I(int64_t(wi)),
+					I(int64_t(w.member))));
+			}
+			continue;
+		}
+		if (scene == nullptr) {
+			continue;
+		}
+		const Surf<F64> *s = scene->find(w.surface);
+		const bool last = !plan.empty() && !plan.back().is_infinity() && plan.back().surface_id == w.surface;
+		const bool terminal = last && s != nullptr && s->effect(plan.back().left, flags) == EffectType::Terminal;
+		if (!terminal || !geom::on_segment(s->seg, vis::cn_of(w.via))) {
+			out.push_back(v("VIS-REGULAR: whisker %d on surface %d at %s has no area and is not on the planned terminal's segment", I(int64_t(wi)),
+				I(int64_t(w.surface)), S(pt_str(w.via))));
+		}
+	}
+	for (size_t li = 0; li < r.loops.size(); li++) {
+		const auto &es = r.loops[li].edges;
+		const size_t n = es.size();
+		for (size_t i = 0; n > 1 && i < n; i++) {
+			// an edge and the next on the same geometry, the next back to where the first began
+			const vis::Edge &a = es[i];
+			const vis::Edge &b = es[(i + 1) % n];
+			const bool same = a.kind == b.kind && a.member == b.member && a.surface == b.surface && a.kind != vis::EdgeKind::Bounds;
+			const double tol = TOL * scale_of(a.a);
+			// the next edge retraces this one (its middle on this edge): a full circle
+			// split into two arcs is not a spike
+			if (same && vis::norm(a.b - a.a) > tol && vis::norm(a.a - b.b) <= tol && vis::edge_dist(a, b.via) <= tol) {
+				out.push_back(v("VIS-REGULAR: loop %d doubles back at %s (edges %d and %d, a spike of no area)", I(int64_t(li)), S(pt_str(a.b)),
+					I(int64_t(i)), I(int64_t((i + 1) % n))));
+			}
+		}
+	}
+	return out;
+}
+
 // Every region check, in order.
 inline Violations check_visibility(const VisInput &in) {
 	Violations out;
@@ -695,6 +746,9 @@ inline Violations check_visibility(const VisInput &in) {
 		add(check_VIS_VERTEX_PROVENANCE(r, scene));
 		add(check_VIS_SHADOW_ANCHORED(r, scene));
 		add(check_VIS_NO_BLOCKER_INSIDE(r, scene, flags, in.plan));
+		add(check_VIS_REGULAR(r, &scene, flags, in.plan));
+	} else {
+		add(check_VIS_REGULAR(r, nullptr, in.flags, in.plan));
 	}
 	add(check_VIS_SOURCE_ON_BOUNDARY(r));
 	add(check_VIS_STAR(r));

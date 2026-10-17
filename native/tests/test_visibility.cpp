@@ -57,7 +57,7 @@ std::optional<bool> defined_visible(Tracer &t, V2 player, V2 cursor, const std::
 	if (dl.cursor_index < 0) {
 		return false;
 	}
-	return inv::preview_visible(dl, sweep::merge(dl.steps, dp.steps, dl.cursor_index));
+	return inv::preview_visible(dl, sweep::merge(dl.steps, dp.steps, dl.cursor_index), pair->cursor_point_agrees);
 }
 
 struct PinStats {
@@ -679,4 +679,132 @@ TEST_CASE("visibility bench" * doctest::skip(true)) {
 		std::sort(ms.begin(), ms.end());
 		std::printf("plan of %zu entries: median %.1f ms, max %.1f ms, casts per region %d\n", plan.size(), ms[ms.size() / 2], ms.back(), casts / 12);
 	}
+}
+
+// A census over the shipped levels (skipped; run with --no-skip): regions,
+// whiskers on carriers and on members, and departure edges the region excludes
+// (near_incl). VIS-REGULAR allows only member whiskers along a member tangent at
+// a finite pole. RC_VIS_FULL=1 for every plan and two players.
+TEST_CASE("visibility census" * doctest::skip(true)) {
+	const std::string dir = std::string(RC_REPO_ROOT) + "/bench/scenes";
+	std::vector<std::string> files;
+	for (const auto &f : std::filesystem::directory_iterator(dir)) {
+		const std::string name = f.path().filename().string();
+		if (name.rfind("test_levels__", 0) == 0 || name.rfind("playground__", 0) == 0) {
+			files.push_back(f.path().string());
+		}
+	}
+	std::sort(files.begin(), files.end());
+	int regions = 0, with_whiskers = 0, carrier_whiskers = 0, member_whiskers = 0, near_edges = 0, near_excluded = 0, casts = 0;
+	for (const std::string &file : files) {
+		const ojson d = load_dump(file);
+		const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
+		Tracer t;
+		t.set_emit_infinity(true);
+		t.set_defs(defs);
+		std::vector<std::vector<PlanItem>> plans{{}};
+		const std::vector<std::vector<PlanItem>> lp = level_plans(defs);
+		for (size_t i = 0; i < lp.size(); i += full() ? 1 : 4) {
+			plans.push_back(lp[i]);
+		}
+		const std::vector<V2> players = full() ? std::vector<V2>{V2{960, 540}, V2{500, 300}} : std::vector<V2>{V2{500, 300}};
+		for (const auto &plan : plans) {
+			for (const V2 player : players) {
+				const vis::Result r = vis::compute(t, vis::Pt{player.x, player.y}, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
+				if (!r.supported) {
+					continue;
+				}
+				regions++;
+				casts += r.casts;
+				for (const auto &w : r.whiskers) {
+					(w.kind == vis::EdgeKind::Member ? member_whiskers : carrier_whiskers)++;
+					if (w.kind != vis::EdgeKind::Member && carrier_whiskers <= 10) {
+						std::string pl;
+						for (const PlanItem &it : plan) pl += std::to_string(it.surface_id) + (it.left ? "L," : "R,");
+						const std::string m = std::filesystem::path(file).filename().string() + " plan " + pl + " player " + std::to_string(player.x) + ","
+							+ std::to_string(player.y) + ": a carrier whisker on " + std::to_string(w.surface);
+						MESSAGE(m);
+					}
+				}
+				with_whiskers += r.whiskers.empty() ? 0 : 1;
+				for (const auto &c : r.cells) {
+					for (const auto &e : c.edges()) {
+						if (e.kind == vis::EdgeKind::Carrier && e.role == vis::End::Near) {
+							near_edges++;
+							near_excluded += e.inclusive ? 0 : 1;
+						}
+					}
+				}
+			}
+		}
+	}
+	const std::string s = "regions " + std::to_string(regions) + ", casts " + std::to_string(casts) + ", with whiskers " + std::to_string(with_whiskers)
+		+ " (carrier " + std::to_string(carrier_whiskers) + ", member " + std::to_string(member_whiskers) + "), departure edges "
+		+ std::to_string(near_edges) + " (excluded " + std::to_string(near_excluded) + ")";
+	MESSAGE(s);
+}
+
+namespace {
+vis::Result region_of(Tracer &t, const char *scene, const std::vector<PlanItem> &plan, vis::Pt player) {
+	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + scene + ".surfaces.json");
+	t.set_emit_infinity(true);
+	t.set_defs(defs_from_json(d["surfaces"]));
+	return vis::compute(t, player, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
+}
+
+int count_kind(const inv::Violations &vs, const std::string &kind) {
+	int n = 0;
+	for (const inv::Violation &v : vs) {
+		n += render(v).rfind(kind, 0) == 0 ? 1 : 0;
+	}
+	return n;
+}
+} // namespace
+
+TEST_CASE("visibility: VIS-REGULAR flags parts of no area") {
+	// three_mirrors, plan [4 L]: mirror 4 spans x = 800, y 300..780
+	Tracer t;
+	const std::vector<PlanItem> plan{PlanItem{4, true, std::nullopt, std::nullopt}};
+	vis::Result r = region_of(t, "test_levels__three_mirrors", plan, vis::Pt{960, 827.999});
+	REQUIRE(r.supported);
+	inv::VisInput in{&r, &t, vis::Pt{960, 827.999}, plan, Flags(), vis::Rect{0, 0, 1920, 1080}};
+	CHECK(count_kind(inv::check_visibility(in), "VIS-REGULAR") == 0);
+	// a departure whisker off the planned segment (the B4 report's thin lines)
+	vis::Edge w;
+	w.kind = vis::EdgeKind::Carrier;
+	w.surface = 4;
+	w.role = vis::End::Near;
+	w.a = vis::Pt{800, 790};
+	w.via = vis::Pt{800, 810};
+	w.b = vis::Pt{800, 830};
+	r.whiskers.push_back(w);
+	CHECK(count_kind(inv::check_visibility(in), "VIS-REGULAR") == 1);
+	r.whiskers.clear();
+	// a loop that doubles back on itself
+	REQUIRE(!r.loops.empty());
+	vis::Edge back = r.loops[0].edges[0];
+	std::swap(back.a, back.b);
+	r.loops[0].edges.insert(r.loops[0].edges.begin() + 1, back);
+	CHECK(count_kind(inv::check_VIS_REGULAR(r, nullptr, Flags(), plan), "VIS-REGULAR") >= 1);
+}
+
+TEST_CASE("visibility: VIS-REGULAR allows a member tangent at Q and a planned terminal's segment") {
+	Tracer t;
+	// tangent_infinity, plan [infinity]: the only live member is tangent at Q to surface 6
+	const std::vector<PlanItem> inf{PlanItem{INFINITY_ID, true, std::nullopt, std::nullopt}};
+	const vis::Result r = region_of(t, "playground__tangent_infinity", inf, vis::Pt{760, 440});
+	REQUIRE(r.supported);
+	int members = 0;
+	for (const auto &w : r.whiskers) members += w.kind == vis::EdgeKind::Member ? 1 : 0;
+	CHECK(members >= 1);
+	inv::VisInput in{&r, &t, vis::Pt{760, 440}, inf, Flags(), vis::Rect{0, 0, 1920, 1080}};
+	CHECK(count_kind(inv::check_visibility(in), "VIS-REGULAR") == 0);
+	// hit_effects, plan [11 L]: surface 11 is a terminal; cursors on its segment end the arrow there
+	Tracer t2;
+	const std::vector<PlanItem> term{PlanItem{11, true, std::nullopt, std::nullopt}};
+	const vis::Result r2 = region_of(t2, "test_levels__hit_effects", term, vis::Pt{960, 540});
+	REQUIRE(r2.supported);
+	CHECK(!r2.whiskers.empty());
+	inv::VisInput in2{&r2, &t2, vis::Pt{960, 540}, term, Flags(), vis::Rect{0, 0, 1920, 1080}};
+	CHECK(count_kind(inv::check_visibility(in2), "VIS-REGULAR") == 0);
 }

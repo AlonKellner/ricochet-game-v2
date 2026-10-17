@@ -162,6 +162,7 @@ struct Input {
 	Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
 	bool emit_infinity = false;               // Stage 88: the renderer's tracer emitted infinity events
 	const vis::Result *visibility = nullptr;  // Stage 110: the player's visibility region (null: not checked)
+	bool cursor_point_agrees = true;          // Stage 110, B4: TracePair::cursor_point_agrees (both walks leave the cursor's point in one frame)
 };
 
 inline Beam<F64> f64_beam(const EvInfo &e) {
@@ -1101,7 +1102,7 @@ inline Violations check_REAPPLY_IN_PLACE(const Input &in) {
 
 // Stage 110 (rc/visibility_checks.hpp)
 inline Violations check_VISIBILITY_EQUALS_NON_DIVERGENCE(const vis::Result &r, const V2 &cursor, const TracePath *planned,
-		const std::vector<TraceStep> *typed);
+		const std::vector<TraceStep> *typed, bool cursor_point_agrees);
 
 // InvariantChecker.check_all, in its order
 inline Violations check_all(const Input &in) {
@@ -1134,7 +1135,7 @@ inline Violations check_all(const Input &in) {
 		add(check_DIRECTION_ONLY(in));
 	}
 	if (in.visibility != nullptr && in.player != in.cursor) {
-		add(check_VISIBILITY_EQUALS_NON_DIVERGENCE(*in.visibility, in.cursor, in.planned, in.typed));
+		add(check_VISIBILITY_EQUALS_NON_DIVERGENCE(*in.visibility, in.cursor, in.planned, in.typed, in.cursor_point_agrees));
 	}
 	return out;
 }

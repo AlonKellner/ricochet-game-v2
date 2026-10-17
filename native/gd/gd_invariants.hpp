@@ -27,7 +27,7 @@ public:
 			bool has_renderer, bool plan_applied, bool emit_infinity = false);
 	// Stage 110: VISIBILITY-EQUALS-NON-DIVERGENCE at the cursor (region: a VisibilityRegion)
 	static godot::Array check_visibility_pin(const godot::Ref<godot::RefCounted> &region, const godot::Vector2 &cursor,
-			const godot::Ref<TracePath> &planned, const godot::Array &typed);
+			const godot::Ref<TracePath> &planned, const godot::Array &typed, bool cursor_point_agrees = true);
 	static godot::Array check_direction_only(const godot::Vector2 &player, const godot::Vector2 &cursor, const godot::Ref<PrecisionLadderResult> &result,
 			const godot::Array &defs, const godot::Dictionary &flags, const godot::Array &plan_entries, bool emit_infinity = false);
 	static godot::Array check_effect_law(const godot::Array &events, const godot::Ref<BeamScene> &scene);

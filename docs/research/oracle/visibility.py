@@ -1,18 +1,25 @@
 """Stage 110: the visibility region's definition (GAME_SPEC 15.1), in the oracle.
 
-A cursor is visible when the preview shows an all-green path from the player to
-it: the planned walk reaches the cursor, and both walks leave every event before
-it in the same frame (the same decision: kind, surface, side, applied, and the
-flags after a hit). An event in the cursor's own point changes no step before
-the cursor (no step is drawn between them), so a run of events there just
-before the cursor does not count -- a cursor exactly at a departure point is
-reached before the divergence shows.
+A cursor is visible when
+  (V1) the planned walk reaches it,
+  (V2) the preview's steps before it are aligned: the two walks leave every
+       point before the cursor's in the same frame, and
+  (V3) both walks leave the cursor's own point in the same frame (B4).
+
+A step ends at each drawn point (float32, as the preview draws it): the events
+at one point form a run, and the merge compares the frame each step is walked
+in -- the frame after the run before it (epoch, transform stack, flags). V3
+counts the decisions made exactly at the cursor: a cursor where a planned
+surface is crossed off its segment (the planned walk reflects there, the
+physical one passes) is not visible. When the physical walk has no event at
+the cursor's point it passes it in the frame it had.
 
 The native region (rc/visibility.hpp) is a construction; this is what it must
 equal. gen_fixtures_stage110_visibility.py labels cursors with it, and the native
 test checks the region and the native traces against the labels.
 """
 import os
+import struct
 import sys
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
@@ -20,12 +27,49 @@ import trace2 as T  # noqa: E402
 from geometry import P  # noqa: E402
 
 
-def same_decision(a, b):
-    if a.kind != b.kind or a.surface_id != b.surface_id or a.applied != b.applied:
-        return False
-    if a.kind == "hit" and (a.side != b.side or (a.flags or {}) != (b.flags or {})):
-        return False
-    return True
+def _f32(x):
+    """x as the preview draws it: float64, then float32."""
+    return struct.unpack("f", struct.pack("f", float(x)))[0]
+
+
+def _drawn(e):
+    """The event's drawn point, or None (an escape, the wrap at the real infinity)."""
+    if e.point is None:
+        return None
+    return (_f32(e.point.real), _f32(e.point.imag))
+
+
+def _frames_after(events, flags0):
+    """The frame after each event: (epoch, transform stack, flags), as the
+    native cast reads it (Tracer::to_path_events)."""
+    out = []
+    stack, epoch, flags = [], 0, dict(flags0 or {})
+    for e in events:
+        if e.kind == "hit":
+            if e.applied and not e.terminal:
+                if e.projective:
+                    stack = []
+                    epoch += 1
+                elif e.popped:
+                    stack = stack[:-1]
+                else:
+                    stack = stack + [e.surface_id]
+            flags = dict(e.flags or {})
+        out.append((epoch, tuple(stack), tuple(sorted(flags.items()))))
+    return out
+
+
+def _runs(events):
+    """Maximal runs of consecutive events at one drawn point (an event without
+    a point is a run of its own): (drawn point, index of the run's last event)."""
+    runs = []
+    for i, e in enumerate(events):
+        d = _drawn(e)
+        if runs and d is not None and runs[-1][0] == d:
+            runs[-1] = (d, i)
+        else:
+            runs.append((d, i))
+    return runs
 
 
 def visible(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
@@ -36,10 +80,19 @@ def visible(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
     ph = T.physical(surfaces, player, cursor, plan, flags, hints, spans)
     ci = next((i for i, e in enumerate(pl.events) if e.kind == "cursor"), None)
     if ci is None:
-        return False
-    first_here = ci
-    while first_here > 0 and pl.events[first_here - 1].point is not None and pl.events[first_here - 1].point == P(cursor):
-        first_here -= 1
-    if len(ph.events) < first_here:
-        return False
-    return all(same_decision(pl.events[k], ph.events[k]) for k in range(first_here))
+        return False                                    # V1
+    fpl, fph = _frames_after(pl.events, flags), _frames_after(ph.events, flags)
+    rpl, rph = _runs(pl.events), _runs(ph.events)
+    kc = next(k for k, (_, last) in enumerate(rpl) if last >= ci)
+    if len(rph) <= kc:
+        return False                                    # the physical walk ends before the cursor's step
+    for k in range(kc):                                 # V2
+        if fpl[rpl[k][1]] != fph[rph[k][1]]:
+            return False
+    # V3: the frame each walk leaves the cursor's point in
+    leave_pl = fpl[rpl[kc][1]]
+    if rph[kc][0] == rpl[kc][0]:
+        leave_ph = fph[rph[kc][1]]
+    else:
+        leave_ph = fph[rph[kc - 1][1]] if kc > 0 else (0, (), tuple(sorted((flags or {}).items())))
+    return leave_pl == leave_ph

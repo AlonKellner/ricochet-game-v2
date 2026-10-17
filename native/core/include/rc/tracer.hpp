@@ -20,7 +20,39 @@ struct TracePair {
 	LadderResult result;
 	Flags final_flags; // the physical trace's flags at its end (promoted after a shot)
 	bool shared = false; // one trajectory: planned is the physical path (the GDScript shares the step objects)
+	// B4 (Stage 110): both walks leave the cursor's own point in one frame
+	// (cursor_point_agrees); the visibility definition's third condition
+	bool cursor_point_agrees = true;
 };
+
+// B4 (Stage 110): whether both walks leave the cursor's own point in the same
+// frame (GAME_SPEC 15.1, V3). n = the planned cursor_index: the planned walk
+// leaves the point in the frame after its last event drawn at the end of step
+// n - 1 (the cursor event and the events at its point); the physical one, when
+// its step n - 1 ends at the same drawn point, in the frame after its last
+// event there, else in the frame it passes the point in (its step n - 1's).
+// Raw paths (trace_pair's), not display ones.
+inline bool cursor_point_agrees(const TracePath &pl, const TracePath &ph) {
+	const int n = pl.cursor_index;
+	if (n <= 0 || pl.event_frames.size() != pl.event_steps.size() || ph.event_frames.size() != ph.event_steps.size()) {
+		return true; // no step before the cursor (not classified) or no frame data
+	}
+	if (int(ph.steps.size()) < n || int(pl.steps.size()) < n) {
+		return false;
+	}
+	// the frame after the last event with event_steps == k (the frame step k is walked in)
+	auto frame_at = [](const TracePath &p, int k) -> std::string {
+		std::string f = p.start_frame;
+		for (size_t i = 0; i < p.event_steps.size() && p.event_steps[i] <= k; i++) {
+			f = p.event_frames[i];
+		}
+		return f;
+	};
+	const std::string leave_pl = frame_at(pl, n);
+	const bool same_end = ph.steps[size_t(n - 1)].end == pl.steps[size_t(n - 1)].end;
+	const std::string leave_ph = same_end ? frame_at(ph, n) : frame_at(ph, n - 1);
+	return leave_pl == leave_ph;
+}
 
 class Tracer {
 public:
@@ -116,6 +148,7 @@ public:
 			pair.planned = to_path(res.planned, frames, aim, flags);
 		}
 		pair.shared = shared;
+		pair.cursor_point_agrees = shared || cursor_point_agrees(pair.planned, pair.physical);
 		pair.result = std::move(res);
 		cache_key_ = key;
 		cache_pair_ = pair;
@@ -195,6 +228,7 @@ public:
 		bool gap = false; // the previous event teleported (portal)
 		const std::string init_flags = flags.canonical_key();
 		std::string cur_flags = init_flags;
+		path.start_frame = frame_key({}, 0, init_flags);
 		bool ghost = flags.is_true(GHOST);
 		Flags before = flags; // the flags before the next hit (Stage 107)
 		const Scene<Dual> &scene = ctx_->dual_scene();
@@ -295,6 +329,7 @@ public:
 				path.cursor_index = int(path.steps.size());
 			}
 			path.event_steps.push_back(int(path.steps.size()));
+			path.event_frames.push_back(frame_key(stack, e.projective ? e.epoch + 1 : e.epoch, cur_flags));
 			if (e.kind == EventKind::Max) {
 				path.truncated = true;
 				break;
@@ -406,6 +441,18 @@ private:
 			return same_prefix_ev(a.big_events, b.f64_events, n);
 		}
 		return same_prefix_ev(a.big_events, b.big_events, n);
+	}
+
+	// The frame's key: epoch | transform stack | flags (frame_id interns it).
+	static std::string frame_key(const std::vector<int> &stack, int epoch, const std::string &flags_key) {
+		std::string key = std::to_string(epoch) + "|";
+		for (size_t i = 0; i < stack.size(); i++) {
+			if (i) {
+				key += ",";
+			}
+			key += std::to_string(stack[i]);
+		}
+		return key + "|" + flags_key;
 	}
 
 	// frame id per (epoch, transform stack, flags): a projective starts a new

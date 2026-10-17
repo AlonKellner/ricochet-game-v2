@@ -161,10 +161,11 @@ inline inv::Violations check_combo(Tracer &tracer, const Scene<F64> &scene, cons
 		physical_events = inv::ev_infos(pair->result.physical);
 		in.planned_events = &planned_events;
 		in.physical_events = &physical_events;
+		in.cursor_point_agrees = pair->cursor_point_agrees;
 	}
 	if (pin_only) {
 		return visibility == nullptr || player == cursor || !pair ? inv::Violations{}
-			: inv::check_VISIBILITY_EQUALS_NON_DIVERGENCE(*visibility, cursor, &disp_planned, &typed);
+			: inv::check_VISIBILITY_EQUALS_NON_DIVERGENCE(*visibility, cursor, &disp_planned, &typed, pair->cursor_point_agrees);
 	}
 	in.visibility = visibility;
 	return inv::check_all(in);

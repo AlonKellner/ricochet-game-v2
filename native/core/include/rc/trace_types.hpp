@@ -207,6 +207,11 @@ struct TracePath {
 	int hit_count = 0;
 	bool truncated = false; // cut by the event limit: it ends with a max event (GAME_SPEC 12.6)
 	std::vector<int> event_steps; // Stage 110: the number of steps after each event (the region's casts read it)
+	// Stage 110 (B4): the frame after each event -- epoch | transform stack | flags,
+	// as a key (not an interned id, so step frame ids are unchanged) -- and before
+	// the first; the cursor's own point is read through them (cursor_point_agrees)
+	std::vector<std::string> event_frames;
+	std::string start_frame;
 };
 
 } // namespace rc
