@@ -130,5 +130,49 @@ private:
 	mutable bool source_done_ = false;
 };
 
+// ---- the exact beam (Perf P2b)
+// A generalized circle A (x^2 + y^2) + B x + C y + D = 0, exact (any nonzero
+// scale; A = 0: a line).
+struct GCircle {
+	BigFloat A, B, C, D;
+};
+GCircle gc_from_line(const Line3 &L);
+GCircle gc_reflect(const GCircle &g, double sx, double sy, double ex, double ey);
+GCircle gc_translate(const GCircle &g, double dx, double dy);
+GCircle gc_invert(const GCircle &g, const Point3 &C, const BigFloat &rw2);
+int gc_limbs(const GCircle &g);
+// Exact: the generalized circle touches the carrier (a line through s and e;
+// a circle of center C, rw2 = (r w)^2) at one point.
+bool gc_tangent_line(const GCircle &g, double sx, double sy, double ex, double ey);
+bool gc_tangent_circle(const GCircle &g, const Point3 &C, const BigFloat &rw2);
+
+// A beam's exact generalized circle, carried lazily: an exact line (the last
+// straight beam with exact data) and the maps applied to it since, made exact
+// only when a decision asks (BeamRec::exact). Every beam of an epoch is the
+// image of a line under the frame's maps (see ExactPole); a beam whose record
+// is missing makes no exact claim.
+class BeamRec {
+public:
+	static std::shared_ptr<const BeamRec> from_line(std::shared_ptr<const Line> line);
+	std::shared_ptr<const BeamRec> reflected(double sx, double sy, double ex, double ey) const;
+	std::shared_ptr<const BeamRec> translated(double dx, double dy) const;
+	std::shared_ptr<const BeamRec> inverted(const Point3 &C, const BigFloat &rw2) const;
+	// nullopt: the base line has no exact coefficients, or the circle grew past
+	// the budget (EXACT_LIMBS)
+	std::optional<GCircle> exact() const;
+	static constexpr int EXACT_LIMBS = 320;
+
+private:
+	enum class Kind { Line, Reflect, Translate, Invert };
+	Kind kind_ = Kind::Line;
+	std::shared_ptr<const Line> line_;
+	std::shared_ptr<const BeamRec> parent_;
+	double m_[4] = {0.0, 0.0, 0.0, 0.0};
+	Point3 c_;
+	BigFloat rw2_;
+	mutable bool done_ = false;
+	mutable std::optional<GCircle> exact_;
+};
+
 } // namespace exact
 } // namespace rc
