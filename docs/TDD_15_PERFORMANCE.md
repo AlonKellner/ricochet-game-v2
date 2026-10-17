@@ -6,7 +6,7 @@
 |-------|-------|--------|
 | P0 | Benches: the region build per scene and plan, the ladder's census, the worker's region time in the frame bench | Done |
 | P5 | Gate turnaround: scheduling, sharding, the ctest split, `make gates` | Done: about 9 min to 4.5 min |
-| P1 | The exact-image cache key (a 6-decimal cursor key: a bug) | Not started |
+| P1 | The exact-image cache key (a 6-decimal cursor key: a bug) | Done: no region or golden changed |
 | P2 | The ladder: BigFloat only where an exact decision needs it | Not started |
 | P3 | The region build: cast reuse, cheaper casts, the fill | Not started |
 | P4 | The frame path: defs handle, lean trace results, overlay keys | Not started |
@@ -93,4 +93,20 @@ A profile of the native visibility sweep (`sample`) puts about 90% in `Ladder::r
 | Total | about 9 min | 271 s |
 
 The rest is the region's cost: the GUT visibility shards and the ASan visibility cases (VIS-REGULAR's allowance case alone, 79 s under ASan). P2 and P3 attack it.
+
+## P1: the exact-image cache key
+
+`Solver::exact_image_cached` keyed the cursor with `std::to_string` (6 decimals), so cursors closer than 5e-7 px shared one cached exact image. It now keys by the exact bits (`%a`).
+
+**Census:** a temporary counter of cache hits whose cursor differed from the stored entry's.
+
+| Run | Wrong hits | Hits |
+|---|---|---|
+| Native visibility tests | about 1,600 | 92,000 |
+| inversion_grid bench | 889 | 50,000 |
+| Goldens | 0 (game cursors are float32) | 266,000 |
+
+So the bug touched only region casts.
+
+**Effect:** none observed. The new `visibility digest` (a skipped doctest that hashes every region on the shipped levels, 264 regions, exact bits; `--no-skip`) is unchanged: `21dafb508ef1834b`. The goldens are byte-identical. The digest is the reference that P2–P4 must keep.
 

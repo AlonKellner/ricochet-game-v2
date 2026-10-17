@@ -656,12 +656,15 @@ private:
 	}
 
 	// The exact aim image within the budget (nullopt beyond it), cached per
-	// (cursor, plan, plan surfaces' data).
+	// (cursor, plan, plan surfaces' data). The cursor is keyed by its exact bits
+	// (hex): a decimal key once merged cursors closer than 5e-7 px (Perf P1).
 	std::optional<exact::Point3> exact_image_cached(const CN<N> &cursor, const std::vector<PlanItem> &plan, const Flags &flags) const {
 		if (cache_ == nullptr) {
 			return exact_image_h(cursor, plan, EXACT_IMAGE_LIMBS, flags);
 		}
-		std::string key = std::to_string(cursor.fx()) + "," + std::to_string(cursor.fy());
+		char cbuf[64];
+		std::snprintf(cbuf, sizeof cbuf, "%a,%a", cursor.fx(), cursor.fy());
+		std::string key = cbuf;
 		const std::vector<EffectType> effs = plan_effects(plan, flags);
 		for (size_t ji = 0; ji < plan.size(); ji++) {
 			const PlanItem &item = plan[ji];
