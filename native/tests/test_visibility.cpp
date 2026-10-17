@@ -4,6 +4,7 @@
 #include "support/json_defs.hpp"
 #include "support/png_debug.hpp"
 #include "rc/sweep.hpp"
+#include "rc/earcut.hpp"
 #include "rc/visibility.hpp"
 
 #include <doctest/doctest.h>
@@ -433,6 +434,167 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 			}
 		}
 	}
+	if (std::getenv("RC_VIS_FILL")) {
+		// RC_VIS_FILL=1: the drawn fill -- each loop's clipped ring, and the triangles' area
+		for (size_t li = 0; li < r.loops.size(); li++) {
+			const std::vector<vis::Pt> ring = vis::clip_polygon(vis::polyline(r.loops[li].edges), r.domain);
+			std::printf("ring %zu: %zu points, area %.3f, first (%.3f,%.3f)\n", li, ring.size(), vis::signed_area(ring), ring.empty() ? 0.0 : ring[0].x,
+				ring.empty() ? 0.0 : ring[0].y);
+			if (std::getenv("RC_VIS_FILL")[0] == '2') {
+				for (const auto &q : ring) std::printf("  (%.6f,%.6f)\n", q.x, q.y);
+			}
+		}
+		{
+			// each hole with the largest ring alone, through earcut
+			std::vector<std::vector<earcut::XY>> rs;
+			size_t outer = 0;
+			double big = 0.0;
+			for (size_t li = 0; li < r.loops.size(); li++) {
+				std::vector<earcut::XY> ring;
+				for (const auto &q : vis::clip_polygon(vis::polyline(r.loops[li].edges), r.domain)) ring.push_back(earcut::XY{q.x, q.y});
+				const double ar = std::abs(vis::signed_area(vis::clip_polygon(vis::polyline(r.loops[li].edges), r.domain)));
+				if (ar > big) { big = ar; outer = li; }
+				rs.push_back(ring);
+			}
+			auto tri_area = [](const std::vector<std::vector<earcut::XY>> &g) {
+				std::vector<earcut::XY> pts;
+				for (const auto &x : g) pts.insert(pts.end(), x.begin(), x.end());
+				earcut::Triangulator tr;
+				const auto idx = tr.run(g);
+				double sum = 0.0;
+				for (size_t k = 0; k + 2 < idx.size(); k += 3) {
+					const auto &p0 = pts[idx[k]], &p1 = pts[idx[k + 1]], &p2 = pts[idx[k + 2]];
+					sum += std::abs((p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x)) / 2.0;
+				}
+				return sum;
+			};
+			std::printf("earcut outer %zu alone: %.3f\n", outer, tri_area({rs[outer]}));
+			for (size_t li = 0; li < r.loops.size(); li++) {
+				const std::vector<vis::Pt> ring = vis::clip_polygon(vis::polyline(r.loops[li].edges), r.domain);
+				std::vector<std::vector<vis::Pt>> parts;
+				const double a0 = vis::signed_area(ring);
+				vis::simple_rings(ring, a0 > 0 ? 1.0 : -1.0, parts);
+				std::printf("simple_rings %zu: %zu parts:", li, parts.size());
+				for (const auto &pp : parts) std::printf(" %.3f", vis::signed_area(pp));
+				std::printf("\n");
+			}
+			for (size_t li = 0; li < rs.size(); li++) {
+				if (li != outer) std::printf("earcut outer %zu with hole %zu: %.3f\n", outer, li, tri_area({rs[outer], rs[li]}));
+			}
+			std::vector<std::vector<earcut::XY>> all{rs[outer]};
+			for (size_t li = 0; li < rs.size(); li++) if (li != outer) all.push_back(rs[li]);
+			std::printf("earcut outer %zu with every other ring: %.3f\n", outer, tri_area(all));
+			if (const char *g = std::getenv("RC_VIS_FILL_GROUP")) {
+				// RC_VIS_FILL_GROUP="0,1,2": these rings, the first the outer
+				std::vector<std::vector<earcut::XY>> grp;
+				for (const char *c = g; *c; c++) if (*c >= '0' && *c <= '9') grp.push_back(rs[size_t(*c - '0')]);
+				std::printf("earcut group %s: %.3f\n", g, tri_area(grp));
+			}
+			// nesting as the fill computes it (middle of the longest side)
+			std::vector<std::vector<vis::Pt>> vr;
+			for (size_t li = 0; li < r.loops.size(); li++) vr.push_back(vis::clip_polygon(vis::polyline(r.loops[li].edges), r.domain));
+			for (size_t i = 0; i < vr.size(); i++) {
+				size_t best = 0;
+				double len = -1;
+				for (size_t k = 0; k < vr[i].size(); k++) {
+					const double dd = vis::norm(vr[i][(k + 1) % vr[i].size()] - vr[i][k]);
+					if (dd > len) { len = dd; best = k; }
+				}
+				const vis::Pt rp = (vr[i][best] + vr[i][(best + 1) % vr[i].size()]) * 0.5;
+				std::printf("ring %zu rep (%.3f,%.3f) inside:", i, rp.x, rp.y);
+				for (size_t j = 0; j < vr.size(); j++) if (j != i && vis::in_ring(vr[j], rp)) std::printf(" %zu", j);
+				std::printf("\n");
+			}
+		}
+		const vis::Fill f = vis::fill_triangles(r);
+		double a = 0.0;
+		int neg = 0, pos = 0;
+		for (size_t k = 0; k + 2 < f.indices.size(); k += 3) {
+			const double c = vis::cross(f.points[f.indices[k + 1]] - f.points[f.indices[k]], f.points[f.indices[k + 2]] - f.points[f.indices[k]]) / 2.0;
+			a += std::abs(c);
+			(c < 0 ? neg : pos)++;
+		}
+		std::printf("fill: %zu points, %zu triangles (%d one way, %d the other), area %.3f\n", f.points.size(), f.indices.size() / 3, pos, neg, a);
+		if (const char *cs = std::getenv("RC_VIS_FILL_CELL")) {
+			// RC_VIS_FILL_CELL=i: that cell's conforming ring and its simple parts
+			std::map<vis::fill_detail::GeomKey, std::vector<vis::Pt>> corners;
+			for (const auto &c : r.cells) for (const auto &l : c.loops) for (const auto &e : l) {
+				const auto k = vis::fill_detail::key_of(e);
+				if (k.kind != 0) { corners[k].push_back(e.a); corners[k].push_back(e.b); }
+			}
+			const auto &cell = r.cells[size_t(std::atoi(cs))];
+			for (const auto &l : cell.loops) {
+				std::vector<vis::Pt> poly;
+				for (const auto &e : l) vis::fill_detail::conforming(e, corners, poly);
+				const std::vector<vis::Pt> ring = vis::clip_polygon(poly, r.domain);
+				std::vector<std::vector<vis::Pt>> parts;
+				const double a0 = vis::signed_area(ring);
+				vis::simple_rings(ring, a0 > 0 ? 1.0 : -1.0, parts);
+				if (std::getenv("RC_VIS_FILL_DUMP")) {
+					std::printf("conforming:");
+					for (const auto &q : ring) if (q.y > 870) std::printf(" (%.2f,%.2f)", q.x, q.y);
+					std::printf("\nplain:");
+					for (const auto &q : vis::clip_polygon(vis::polyline(l), r.domain)) if (q.y > 870) std::printf(" (%.2f,%.2f)", q.x, q.y);
+					std::printf("\n");
+				}
+				std::printf("cell ring: %zu points, area %.3f (plain chords %.3f); %zu parts:", ring.size(), a0,
+					vis::signed_area(vis::clip_polygon(vis::polyline(l), r.domain)), parts.size());
+				for (const auto &pp : parts) std::printf(" %.3f", vis::signed_area(pp));
+				std::printf("\n");
+				for (const auto &pp : parts) {
+					std::vector<earcut::XY> xy;
+					for (const auto &q : pp) xy.push_back(earcut::XY{q.x, q.y});
+					earcut::Triangulator tr;
+					const auto idx = tr.run({xy});
+					double sum = 0.0;
+					for (size_t k = 0; k + 2 < idx.size(); k += 3) {
+						const auto &p0 = xy[idx[k]], &p1 = xy[idx[k + 1]], &p2 = xy[idx[k + 2]];
+						sum += std::abs((p1.x - p0.x) * (p2.y - p0.y) - (p1.y - p0.y) * (p2.x - p0.x)) / 2.0;
+					}
+					std::printf("  earcut: %zu triangles, area %.3f\n", idx.size() / 3, sum);
+					if (const char *at2 = std::getenv("RC_VIS_FILL_AT")) {
+						vis::Pt q;
+						std::sscanf(at2, "%lf,%lf", &q.x, &q.y);
+						int cov = 0;
+						for (size_t k = 0; k + 2 < idx.size(); k += 3) {
+							const vis::Pt p0{xy[idx[k]].x, xy[idx[k]].y}, p1{xy[idx[k + 1]].x, xy[idx[k + 1]].y}, p2{xy[idx[k + 2]].x, xy[idx[k + 2]].y};
+							const double d1 = vis::cross(p1 - p0, q - p0), d2 = vis::cross(p2 - p1, q - p1), d3 = vis::cross(p0 - p2, q - p2);
+							cov += ((d1 >= 0 && d2 >= 0 && d3 >= 0) || (d1 <= 0 && d2 <= 0 && d3 <= 0)) ? 1 : 0;
+						}
+						std::printf("  the conforming ring contains it: %d; its triangles cover it %d times\n", int(vis::in_ring(pp, q)), cov);
+					}
+					if (std::getenv("RC_VIS_FILL_DUMP")) for (const auto &q : pp) std::printf("    %.17g %.17g\n", q.x, q.y);
+				}
+			}
+		}
+		if (const char *at = std::getenv("RC_VIS_FILL_AT")) {
+			// RC_VIS_FILL_AT=x,y: the cells covering that point, and their rings' areas
+			vis::Pt q;
+			std::sscanf(at, "%lf,%lf", &q.x, &q.y);
+			int cover = 0;
+			for (size_t k = 0; k + 2 < f.indices.size(); k += 3) {
+				const vis::Pt &p0 = f.points[f.indices[k]], &p1 = f.points[f.indices[k + 1]], &p2 = f.points[f.indices[k + 2]];
+				const double d1 = vis::cross(p1 - p0, q - p0), d2 = vis::cross(p2 - p1, q - p1), d3 = vis::cross(p0 - p2, q - p2);
+				if ((d1 >= 0 && d2 >= 0 && d3 >= 0) || (d1 <= 0 && d2 <= 0 && d3 <= 0)) {
+					cover++;
+					std::printf("covered by triangle %zu: (%.3f,%.3f) (%.3f,%.3f) (%.3f,%.3f)\n", k / 3, p0.x, p0.y, p1.x, p1.y, p2.x, p2.y);
+				}
+			}
+			std::printf("fill covers (%.3f,%.3f) %d times; contains %d\n", q.x, q.y, cover, int(vis::contains(r, q)));
+			for (size_t ci = 0; ci < r.cells.size(); ci++) {
+				for (const auto &l : r.cells[ci].loops) {
+					const std::vector<vis::Pt> poly = vis::clip_polygon(vis::polyline(l), r.domain);
+					if (vis::in_ring(poly, q)) {
+						std::printf("cell %zu covers it: ring area %.3f, %zu points, %zu edges:\n", ci, vis::signed_area(poly), poly.size(), l.size());
+						for (const auto &e : l) {
+							std::printf("  kind %d m%d s%d (%.4f,%.4f) via (%.4f,%.4f) -> (%.4f,%.4f) arc%d gline%d gr %.17g gc (%.17g,%.17g)\n", int(e.kind), e.member, e.surface,
+								e.a.x, e.a.y, e.via.x, e.via.y, e.b.x, e.b.y, int(e.arc), int(e.gline), e.gr, e.gc.x, e.gc.y);
+						}
+					}
+				}
+			}
+		}
+	}
 	if (std::getenv("RC_VIS_POLYS")) {
 		// RC_VIS_POLYS=1: every cell's drawn polygon (what VisibilityRegion.cell_polygons hands the renderer)
 		for (size_t ci = 0; ci < r.cells.size(); ci++) {
@@ -807,4 +969,87 @@ TEST_CASE("visibility: VIS-REGULAR allows a member tangent at Q and a planned te
 	CHECK(!r2.whiskers.empty());
 	inv::VisInput in2{&r2, &t2, vis::Pt{960, 540}, term, Flags(), vis::Rect{0, 0, 1920, 1080}};
 	CHECK(count_kind(inv::check_visibility(in2), "VIS-REGULAR") == 0);
+}
+
+TEST_CASE("visibility: the drawn fill covers the region once (F8)") {
+	// pre_inverted, empty plan, the user's player (float32): a member nearly
+	// tangent to surface 4's carrier made the tessellated hole cross itself, and
+	// the triangulation overlapped itself in a thin triangle
+	Tracer t;
+	const vis::Result r = region_of(t, "playground__pre_inverted", {}, vis::Pt{1277.0030517578125, 387.4353942871094});
+	REQUIRE(r.supported);
+	CHECK(inv::check_VIS_DRAWN_MATCHES(r).empty());
+}
+
+TEST_CASE("visibility: the drawn fill has no seams (F8)") {
+	// drawn cell by cell, two cells tessellated a shared arc differently: hairline
+	// seams (106 T-junctions on pre_inverted, 66 on tangent_infinity, empty
+	// plan). A seam is a mesh edge used by one triangle only that lies inside the
+	// region: every such edge must lie on the region's boundary (within the
+	// tessellation's bound) or on the domain's edge, or face another open edge
+	// across less than 0.1 px.
+	struct Case {
+		const char *scene;
+		vis::Pt player;
+	};
+	for (const Case &c : {Case{"playground__pre_inverted", {500, 300}}, Case{"playground__tangent_infinity", {608.4711, 635.5568}},
+			 Case{"playground__pre_inverted", {1277.0030517578125, 387.4353942871094}}, Case{"test_levels__room_with_inversion", {760, 400}}}) {
+		Tracer t;
+		const vis::Result r = region_of(t, c.scene, {}, c.player);
+		REQUIRE(r.supported);
+		const vis::Fill f = vis::fill_triangles(r);
+		std::map<std::pair<std::pair<double, double>, std::pair<double, double>>, int> uses;
+		auto key = [](const vis::Pt &a, const vis::Pt &b) {
+			std::pair<double, double> u{a.x, a.y}, w{b.x, b.y};
+			return u < w ? std::make_pair(u, w) : std::make_pair(w, u);
+		};
+		for (size_t k = 0; k + 2 < f.indices.size(); k += 3) {
+			for (int s = 0; s < 3; s++) {
+				uses[key(f.points[f.indices[k + size_t(s)]], f.points[f.indices[k + size_t((s + 1) % 3)]])]++;
+			}
+		}
+		const vis::Rect &d = r.domain;
+		// the mesh's open edges inside the region
+		std::vector<std::pair<vis::Pt, vis::Pt>> open;
+		for (const auto &[e, n] : uses) {
+			if (n != 1) {
+				continue;
+			}
+			const vis::Pt a{e.first.first, e.first.second};
+			const vis::Pt b{e.second.first, e.second.second};
+			const vis::Pt m = (a + b) * 0.5;
+			const bool on_domain = std::abs(m.x - d.x0) < 1e-6 || std::abs(m.x - d.x1) < 1e-6 || std::abs(m.y - d.y0) < 1e-6 || std::abs(m.y - d.y1) < 1e-6;
+			if (!on_domain && vis::margin(r, m) > 0.5) {
+				open.push_back({a, b});
+			}
+		}
+		// a seam is as wide as the gap to the open edge facing it
+		auto seg_d = [](const vis::Pt &p, const vis::Pt &a, const vis::Pt &b) {
+			const vis::Pt ab = b - a;
+			const double L = vis::dot(ab, ab);
+			const double t = L > 0 ? std::clamp(vis::dot(p - a, ab) / L, 0.0, 1.0) : 0.0;
+			return vis::norm(p - (a + ab * t));
+		};
+		int seams = 0;
+		double widest = 0.0;
+		for (size_t i = 0; i < open.size(); i++) {
+			const vis::Pt m = (open[i].first + open[i].second) * 0.5;
+			double w = std::numeric_limits<double>::infinity();
+			for (size_t j = 0; j < open.size(); j++) {
+				if (j != i) w = std::min(w, seg_d(m, open[j].first, open[j].second));
+			}
+			widest = std::max(widest, std::isfinite(w) ? w : 0.0);
+			// (thin cells where members converge at a pole leave gaps of hundredths of a
+			// pixel; the seams this guards against were up to the chords' 0.25 px)
+			if (std::isfinite(w) && w > 0.1) {
+				seams++;
+				if (std::getenv("RC_VIS_TJ")) std::printf("seam %s: (%.4f,%.4f)-(%.4f,%.4f) width %.3g\n", c.scene, open[i].first.x, open[i].first.y, open[i].second.x, open[i].second.y, w);
+			}
+		}
+		const std::string info = std::string(c.scene) + ": open interior edges " + std::to_string(open.size()) + ", widest gap " + std::to_string(widest);
+		MESSAGE(info);
+		const std::string msg = std::string(c.scene) + ": " + std::to_string(seams) + " seams";
+		CHECK_MESSAGE(seams == 0, msg);
+		CHECK(inv::check_VIS_DRAWN_MATCHES(r).empty());
+	}
 }

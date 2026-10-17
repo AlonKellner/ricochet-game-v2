@@ -1495,7 +1495,8 @@ The region is built from **casts**: ordinary pair traces (`Tracer::solve`, the s
 VisibilityRegion:
     loops:    closed loops of edges (member arcs, carrier arcs, the clip rectangle)
     whiskers: the region's 1D parts (no area; see 15.1)
-    cells:    the cells (for drawing)
+    cells:    the cells (a partition of the region; the checks read them)
+    fill:     one triangle mesh of the cells, tessellated conformingly -- what is drawn
     contains(c) -> Inside | Outside | Unclassified
 ```
 
@@ -2422,7 +2423,8 @@ The following invariants are tested by the sweep but not in the original specifi
 | `VIS_CELL_CONSTANT` | A cast inside a cell has the cell's walk shape (no critical direction missed) |
 | `VIS_ITERATION_CHAIN` | The departure points lie in the region of the plan without its last entry |
 | `VIS_BOUNDARY_DECIDED` | At every exact point of interest (an endpoint, a piece's end) the region decides as the solver |
-| `VIS_CONTAINS_MATCHES_POLYGON` | The merged loops and the drawn cells agree away from the boundary |
+| `VIS_CONTAINS_MATCHES_POLYGON` | The merged loops and the cells agree away from the boundary |
+| `VIS_DRAWN_MATCHES` | The drawn fill (one mesh of the cells) covers a point once where the region contains it and never elsewhere; its area is the cells' (Stage 110, F8) |
 | `VIS_DETERMINISTIC` | The same inputs give the same region (S3) |
 | `VIS_REGULAR` | The region has area wherever it is: its only 1D parts are an arc of a member tangent at a frame's finite infinity point (`Q_j`) to a carrier through it and a piece of the last planned terminal's segment; no loop doubles back on itself (B4, Stage 110) |
 

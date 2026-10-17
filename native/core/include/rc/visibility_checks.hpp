@@ -652,6 +652,70 @@ inline Violations check_VIS_CONTAINS_MATCHES_POLYGON(const vis::Result &r) {
 	return out;
 }
 
+// What is drawn is the region (F8): the fill's triangles (vis::fill_triangles,
+// one conforming mesh of the cells) cover a sampled point more than 1 px from the
+// boundary exactly once where contains() says Inside and never elsewhere, and
+// their area is the cells' exact area within the tessellation's bound.
+inline Violations check_VIS_DRAWN_MATCHES(const vis::Result &r) {
+	using namespace visdetail;
+	Violations out;
+	const vis::Fill f = vis::fill_triangles(r);
+	auto tri_area = [&](size_t t) {
+		const vis::Pt &a = f.points[f.indices[t]];
+		const vis::Pt &b = f.points[f.indices[t + 1]];
+		const vis::Pt &c = f.points[f.indices[t + 2]];
+		return vis::cross(b - a, c - a) / 2.0;
+	};
+	auto covers = [&](size_t t, const vis::Pt &p) {
+		const vis::Pt &a = f.points[f.indices[t]];
+		const vis::Pt &b = f.points[f.indices[t + 1]];
+		const vis::Pt &c = f.points[f.indices[t + 2]];
+		const double d1 = vis::cross(b - a, p - a);
+		const double d2 = vis::cross(c - b, p - b);
+		const double d3 = vis::cross(a - c, p - c);
+		return (d1 >= 0 && d2 >= 0 && d3 >= 0) || (d1 <= 0 && d2 <= 0 && d3 <= 0);
+	};
+	const vis::Rect &d = r.domain;
+	int reported = 0;
+	for (int i = 0; i <= 32 && reported < 4; i++) {
+		for (int j = 0; j <= 18 && reported < 4; j++) {
+			const vis::Pt p{d.x0 + (d.x1 - d.x0) * (i + 0.37) / 33.0, d.y0 + (d.y1 - d.y0) * (j + 0.61) / 19.0};
+			const vis::Membership m = vis::contains(r, p);
+			if (m == vis::Membership::Unclassified || vis::margin(r, p) < 1.0) {
+				continue;
+			}
+			int n = 0;
+			for (size_t t = 0; t + 2 < f.indices.size(); t += 3) {
+				n += std::abs(tri_area(t)) > 0.0 && covers(t, p) ? 1 : 0;
+			}
+			if (n != (m == vis::Membership::Inside ? 1 : 0)) {
+				out.push_back(v("VIS-DRAWN-MATCHES: at %s the region says %s, the drawn fill covers it %d times", S(pt_str(p)),
+					S(m == vis::Membership::Inside ? "in" : "out"), I(int64_t(n))));
+				reported++;
+			}
+		}
+	}
+	double drawn = 0.0;
+	for (size_t t = 0; t + 2 < f.indices.size(); t += 3) {
+		drawn += std::abs(tri_area(t));
+	}
+	double exact = 0.0;
+	double perimeter = 0.0;
+	for (const vis::Cell &c : r.cells) {
+		for (const auto &l : c.loops) {
+			const std::vector<vis::Pt> poly = vis::clip_polygon(vis::polyline(l), d);
+			exact += std::abs(vis::signed_area(poly));
+			for (size_t k = 0; k < poly.size(); k++) {
+				perimeter += vis::norm(poly[(k + 1) % poly.size()] - poly[k]);
+			}
+		}
+	}
+	if (std::abs(drawn - exact) > 0.5 * perimeter + 1e-6 * exact) {
+		out.push_back(v("VIS-DRAWN-MATCHES: the fill's area %.3f differs from the cells' %.3f (bound %.3f)", F(drawn), F(exact), F(0.5 * perimeter)));
+	}
+	return out;
+}
+
 inline Violations check_VIS_DETERMINISTIC(const VisInput &in) {
 	Violations out;
 	if (in.tracer == nullptr) {
@@ -756,6 +820,7 @@ inline Violations check_visibility(const VisInput &in) {
 	add(check_VIS_ITERATION_CHAIN(in));
 	add(check_VIS_BOUNDARY_DECIDED(r));
 	add(check_VIS_CONTAINS_MATCHES_POLYGON(r));
+	add(check_VIS_DRAWN_MATCHES(r));
 	add(check_VIS_DETERMINISTIC(in));
 	return out;
 }

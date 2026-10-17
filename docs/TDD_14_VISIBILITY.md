@@ -37,16 +37,20 @@ Specification: GAME_SPEC §15 (rewritten in this stage), §29.3. Background: TDD
 
 **Infinity on the carriers.** A straight member parallel to a line carrier meets it at infinity (a refinement member at the switch where the crossing passes through infinity). That crossing is a vertex at infinity at the end the cast reached, as `Q_K` is: the carrier piece leaves the clip rectangle along the carrier, and a connector joins the member's far point.
 
+**Drawing: one generalized polygon.** The renderer draws the whole region as one triangle array (`vis::fill_triangles`, on the worker thread). Drawn cell by cell, two cells tessellated their shared arc independently, and the differing chord points (T-junctions: 106 on `pre_inverted`, 66 on `tangent_infinity`, empty plan) showed as hairline cracks and double-tinted slivers between shapes, mostly with circle inversions (user, 2026-10-17). The fill tessellates every edge on one circle or line -- the same member or carrier, exactly the same canonical geometry -- at the same points: a common angular grid of a whole number of steps per turn, plus every cell corner lying on it. Cells sharing a piece therefore share its vertices, and the cells (simple rings) are triangulated with earcut (`rc/earcut.hpp`) into one watertight mesh. The merged loops are not triangulated directly: their holes pinch at `P_K` and `Q_K`, where every member meets, and ear clipping is unreliable with touching holes. Where a member is nearly tangent to a carrier, two arcs' chords can cross within the tessellation's tolerance though the exact cell is simple: a ring is first cut at such crossings and the lobes wound against it are dropped (`vis::simple_rings`; without it the fill overlapped itself in a thin triangle, user's report on `pre_inverted.tscn`). VIS-DRAWN-MATCHES checks the result; a test checks there are no seams wider than 0.1 px (thin cells where members converge at a pole leave gaps of hundredths of a pixel).
+
 **What stays out.** Projective plan entries (110.5): `BeamTracer.visibility` reports such plans as unsupported and nothing is drawn. The arrow's flight cue at the event limit (§12.6).
 
 ## What Is Introduced
 
-- `native/core/include/rc/visibility.hpp`: `vis::compute`, `vis::contains`, `vis::margin`, the builder, the edge geometry and tessellation.
+- `native/core/include/rc/visibility.hpp`: `vis::compute`, `vis::contains`, `vis::margin`, `vis::fill_triangles`, the builder, the edge geometry and tessellation.
+- `native/core/include/rc/earcut.hpp`: polygon triangulation (the earcut algorithm, ISC; holes supported, unused by the fill).
+- `VisibilityRegion.fill_triangles()`: `{points, indices}` for the renderer.
 - `native/core/include/rc/visibility_checks.hpp`: the pin and the structure checks (included by `invariants.hpp`).
 - `Tracer::solve`: one cast (the ladder's events for a float64 cursor, no display conversion, no cache).
 - `inv::Input.visibility`, `sweep::check_combo(..., visibility, pin_only)`, `sweep::run(..., visibility)`.
 - `native/gd/gd_visibility.{hpp,cpp}`: `VisibilityRegion` (`cell_polygons`, `outlines`, `whisker_polylines`, `contains`, `margin`, `check`, `notes`). Also `BeamTracer.visibility(defs, player, plan_entries, flags, bounds)`, `InvariantKernel.check_visibility_pin`, and `SweepKernel.run(..., visibility)`.
-- `scripts/visual/visibility_renderer.gd`: the fill at z 10, recomputed only when the player, the plan (with clicks and pieces), the flags, the surfaces or a switch change. Debug builds log `LIVE VISIBILITY-EQUALS-NON-DIVERGENCE` where the region and the preview disagree at the cursor.
+- `scripts/visual/visibility_renderer.gd`: the fill at z 10 (one triangle array), recomputed only when the player, the plan (with clicks and pieces), the flags, the surfaces or a switch change. Debug builds log `LIVE VISIBILITY-EQUALS-NON-DIVERGENCE` where the region and the preview disagree at the cursor.
 - `LevelSettings` adds the renderer next to the edge overlay; `FeatureFlags.visibility()`; the V key toggles it.
 - Oracle: `docs/research/oracle/visibility.py` (the definition at 50 digits) and `gen_fixtures_stage110_visibility.py` (`bench/fixtures/stage110_visibility.json`: about 1,000 cursors labelled on eight cases).
 
@@ -58,7 +62,7 @@ Per cursor (in `inv::check_all` when a region is given; the visibility sweep run
 Per region (`inv::check_visibility`):
 - **Validity:** VIS-REGULAR (the region has area wherever it is: no whisker but the two kinds above, no loop that doubles back on itself), VIS-CLOSED (loops close, no zero-length edge), VIS-SIMPLE (no two edges of a loop cross or overlap, S13), VIS-ORIENTED (cells wind one way, loops have area, an outer loop exists), VIS-DISJOINT (loops neither cross nor share pieces; cells partition the region, S15), VIS-FINITE (S16).
 - **Provenance:** VIS-EDGE-ON-GEOMETRY (every edge lies on a member through `P_K` and `Q_K`, on a surface's carrier, on its segment at a stop and at a departure whose entry transforms (a pass or state entry is consumed on its carrier, B1), or on the clip rectangle, S14), VIS-VERTEX-PROVENANCE (every vertex is a pole, on the rectangle, or on a carrier), VIS-SHADOW-ANCHORED (a member boundary piece ends at such anchors), VIS-NO-BLOCKER-INSIDE (no region inside a two-sided blocker that is not planned and not through a pole), VIS-SOURCE-ON-BOUNDARY (departure points belong to the region).
-- **Consistency:** VIS-STAR (each cell's middle member is in the region over its intervals), VIS-CELL-CONSTANT (a cast inside a cell has the cell's shape), VIS-ITERATION-CHAIN (departure points are in the region of the plan without its last entry), VIS-BOUNDARY-DECIDED (at every exact point of interest the region decides as the solver), VIS-CONTAINS-MATCHES-POLYGON (the loops and the drawn cells agree away from the boundary), VIS-DETERMINISTIC (S3).
+- **Consistency:** VIS-STAR (each cell's middle member is in the region over its intervals), VIS-CELL-CONSTANT (a cast inside a cell has the cell's shape), VIS-ITERATION-CHAIN (departure points are in the region of the plan without its last entry), VIS-BOUNDARY-DECIDED (at every exact point of interest the region decides as the solver), VIS-CONTAINS-MATCHES-POLYGON (the loops and the drawn cells agree away from the boundary), VIS-DRAWN-MATCHES (the drawn triangles cover a point once where the region contains it and never elsewhere; their area is the cells' within the tessellation bound), VIS-DETERMINISTIC (S3).
 
 ## Unit Tests Added
 
@@ -118,6 +122,8 @@ The region is recomputed only when its inputs change, on a worker thread. The cu
 6. **Inversion** (`room_with_inversion.tscn`, `playgrounds/plannable_inversion.tscn`): curved regions.
 7. **Infinity** (`playground/pre_inverted.tscn`, and an edge click on `empty_room.tscn`): the region through infinity, curved through `Q0` with the pre-transform.
 8. **Truncation:** between two facing mirrors (`parallel_mirrors.tscn`) a trapped shot shows the stop marker at the cut.
+9. **No thin lines** (B4): with a planned mirror (`three_mirrors.tscn`, plan [4 L, 6 R]) walking the player shows no lines along the mirror's carrier beyond its ends, and nothing flickers.
+10. **No seams** (F8): on `pre_inverted.tscn`, `tangent_infinity.tscn` and `plannable_inversion.tscn` the fill shows no hairlines between shapes.
 
 ## Regression Checklist
 

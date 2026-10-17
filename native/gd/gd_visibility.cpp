@@ -25,6 +25,7 @@ void VisibilityRegion::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("is_supported"), &VisibilityRegion::is_supported);
 	ClassDB::bind_method(D_METHOD("get_reason"), &VisibilityRegion::get_reason);
 	ClassDB::bind_method(D_METHOD("cell_polygons"), &VisibilityRegion::cell_polygons);
+	ClassDB::bind_method(D_METHOD("fill_triangles"), &VisibilityRegion::fill_triangles);
 	ClassDB::bind_method(D_METHOD("outlines"), &VisibilityRegion::outlines);
 	ClassDB::bind_method(D_METHOD("whisker_polylines"), &VisibilityRegion::whisker_polylines);
 	ClassDB::bind_method(D_METHOD("contains", "point"), &VisibilityRegion::contains);
@@ -49,6 +50,19 @@ Array VisibilityRegion::cell_polygons() const {
 			}
 		}
 	}
+	return out;
+}
+
+Dictionary VisibilityRegion::fill_triangles() const {
+	const rc::vis::Fill f = rc::vis::fill_triangles(region);
+	PackedInt32Array idx;
+	idx.resize(int64_t(f.indices.size()));
+	for (size_t i = 0; i < f.indices.size(); i++) {
+		idx[int64_t(i)] = int32_t(f.indices[i]);
+	}
+	Dictionary out;
+	out["points"] = to_packed(f.points);
+	out["indices"] = idx;
 	return out;
 }
 

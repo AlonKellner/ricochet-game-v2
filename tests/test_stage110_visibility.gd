@@ -135,3 +135,39 @@ func test_the_renderer_computes_on_a_worker_thread():
 	vis.async_compute = false
 	vis.recompute()
 	assert_eq(vis.region.get_cell_count(), cells, "the worker computed the same region")
+
+# F8: the renderer draws the region as one generalized polygon -- its merged
+# loops triangulated natively -- so adjacent cells leave no seam between them.
+func test_the_renderer_draws_one_triangle_array():
+	Surface.reset_id_counter()
+	var scene: Node = load("res://scenes/playground/pre_inverted.tscn").instantiate()
+	scene.gravity = Vector2.ZERO
+	add_child_autofree(scene)
+	var vis: VisibilityRenderer = scene.get_node("VisibilityRenderer")
+	vis.async_compute = false
+	scene.get_node("Cursor").set_process(false)
+	scene.get_node("Player").set_physics_process(false)
+	await get_tree().process_frame
+	await get_tree().process_frame
+	vis.recompute()
+	assert_true(vis.region != null and vis.region.is_supported(), "a region")
+	var fill: Dictionary = vis.region.fill_triangles()
+	var points: PackedVector2Array = fill["points"]
+	var indices: PackedInt32Array = fill["indices"]
+	assert_gt(indices.size(), 0, "triangles")
+	assert_eq(indices.size() % 3, 0, "whole triangles")
+	assert_eq(vis._fill_indices, indices, "the renderer holds the fill")
+	# the triangles cover a point where the region contains it, and only there
+	var bounds: Rect2 = vis.region.get_domain()
+	for i in 12:
+		for j in 7:
+			var p := bounds.position + bounds.size * Vector2((i + 0.37) / 12.0, (j + 0.61) / 7.0)
+			var m: int = vis.region.contains(p)
+			if m < 0 or vis.region.margin(p) < 1.0:
+				continue
+			var n := 0
+			for t in range(0, indices.size(), 3):
+				if Geometry2D.point_is_inside_triangle(p, points[indices[t]], points[indices[t + 1]], points[indices[t + 2]]):
+					n += 1
+			assert_eq(n, 1 if m == 1 else 0, "the fill at %s" % p)
+	assert_eq(vis.region.check(), [], "the structure checks hold (VIS-DRAWN-MATCHES included)")

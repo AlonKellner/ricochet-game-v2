@@ -25,6 +25,7 @@
 #pragma once
 
 #include "rc/beam_geom.hpp"
+#include "rc/earcut.hpp"
 #include "rc/solver.hpp"
 #include "rc/tracer.hpp"
 
@@ -2826,6 +2827,264 @@ inline std::vector<Pt> clip_polygon(const std::vector<Pt> &poly, const Rect &r) 
 	pass([&](const Pt &p) { return p.x <= r.x1; }, at_x(r.x1));
 	pass([&](const Pt &p) { return p.y >= r.y0; }, at_y(r.y0));
 	pass([&](const Pt &p) { return p.y <= r.y1; }, at_y(r.y1));
+	return out;
+}
+
+// Whether p is inside a closed polyline (even-odd).
+inline bool in_ring(const std::vector<Pt> &ring, const Pt &p) {
+	bool in = false;
+	for (size_t i = 0, j = ring.size() - 1; i < ring.size(); j = i++) {
+		const Pt &a = ring[i];
+		const Pt &b = ring[j];
+		if ((a.y > p.y) != (b.y > p.y) && p.x < (b.x - a.x) * (p.y - a.y) / (b.y - a.y) + a.x) {
+			in = !in;
+		}
+	}
+	return in;
+}
+
+// A tessellated ring made simple: where two arcs nearly touch (a member nearly
+// tangent to a carrier), chords within the tessellation's tolerance can cross,
+// though the exact loop is simple (VIS-SIMPLE checks the arcs). The ring is cut
+// at each crossing of two of its segments into two rings; a ring wound against
+// the original is a chord artifact (a lobe of sub-pixel width) and is dropped.
+inline void simple_rings(std::vector<Pt> ring, double sign, std::vector<std::vector<Pt>> &out, int depth = 0) {
+	const size_t n = ring.size();
+	if (n < 3) {
+		return;
+	}
+	auto proper = [](const Pt &p1, const Pt &p2, const Pt &q1, const Pt &q2, Pt *x) {
+		const double d1 = cross(p2 - p1, q1 - p1);
+		const double d2 = cross(p2 - p1, q2 - p1);
+		const double d3 = cross(q2 - q1, p1 - q1);
+		const double d4 = cross(q2 - q1, p2 - q1);
+		if (!((d1 > 0 && d2 < 0) || (d1 < 0 && d2 > 0)) || !((d3 > 0 && d4 < 0) || (d3 < 0 && d4 > 0))) {
+			return false;
+		}
+		const double t = d3 / (d3 - d4);
+		*x = p1 + (p2 - p1) * t;
+		return true;
+	};
+	if (depth < 64) {
+		for (size_t a = 0; a < n; a++) {
+			const Pt &p1 = ring[a];
+			const Pt &p2 = ring[(a + 1) % n];
+			const double ax0 = std::min(p1.x, p2.x), ax1 = std::max(p1.x, p2.x), ay0 = std::min(p1.y, p2.y), ay1 = std::max(p1.y, p2.y);
+			for (size_t b = a + 2; b < n; b++) {
+				if ((b + 1) % n == a) {
+					continue; // adjacent through the closure
+				}
+				const Pt &q1 = ring[b];
+				const Pt &q2 = ring[(b + 1) % n];
+				if (std::max(q1.x, q2.x) < ax0 || std::min(q1.x, q2.x) > ax1 || std::max(q1.y, q2.y) < ay0 || std::min(q1.y, q2.y) > ay1) {
+					continue;
+				}
+				Pt x;
+				if (!proper(p1, p2, q1, q2, &x)) {
+					continue;
+				}
+				// ring A: 0..a, x, b+1..n-1; ring B: x, a+1..b
+				std::vector<Pt> ra(ring.begin(), ring.begin() + long(a) + 1);
+				ra.push_back(x);
+				ra.insert(ra.end(), ring.begin() + long(b) + 1, ring.end());
+				std::vector<Pt> rb{x};
+				rb.insert(rb.end(), ring.begin() + long(a) + 1, ring.begin() + long(b) + 1);
+				simple_rings(std::move(ra), sign, out, depth + 1);
+				simple_rings(std::move(rb), sign, out, depth + 1);
+				return;
+			}
+		}
+	}
+	const double a = signed_area(ring);
+	if (a * sign > 0.0) {
+		out.push_back(std::move(ring));
+	}
+}
+
+// The region drawn as one generalized polygon (Stage 110, F8): every cell
+// triangulated into one triangle array, with a conforming tessellation. Drawn
+// cell by cell with independent tessellations, two cells sharing an arc chose
+// different chord points (T-junctions): hairline cracks and double-tinted
+// slivers. Here every edge on one circle or line (the same member or carrier:
+// exactly the same canonical geometry) is cut at the same points -- a common
+// angular grid on the circle plus every cell corner lying on it -- so cells that
+// share a piece share its vertices and the mesh has no seams. (The merged loops
+// themselves are not triangulated: their holes pinch at P_K and Q_K, where
+// every member meets, and ear clipping is not reliable with touching holes.)
+struct Fill {
+	std::vector<Pt> points;
+	std::vector<uint32_t> indices; // triangles, three per
+};
+
+namespace fill_detail {
+
+// The geometry an edge lies on, as a key: a canonical circle or line, or none.
+struct GeomKey {
+	int kind = 0; // 0 none, 1 circle, 2 line
+	double v[4] = {0, 0, 0, 0};
+	bool operator<(const GeomKey &o) const {
+		if (kind != o.kind) return kind < o.kind;
+		for (int i = 0; i < 4; i++) {
+			if (v[i] != o.v[i]) return v[i] < o.v[i];
+		}
+		return false;
+	}
+};
+
+inline GeomKey key_of(const Edge &e) {
+	GeomKey k;
+	if (e.kind == EdgeKind::Bounds) {
+		return k;
+	}
+	if (e.arc && !e.gline && e.gr > 0.0) {
+		k.kind = 1;
+		k.v[0] = e.gc.x;
+		k.v[1] = e.gc.y;
+		k.v[2] = e.gr;
+		return k;
+	}
+	if (!e.arc && e.gline && (e.gd.x != 0.0 || e.gd.y != 0.0)) {
+		Pt d = e.gd;
+		if (d.x < 0.0 || (d.x == 0.0 && d.y < 0.0)) {
+			d = d * -1.0;
+		}
+		k.kind = 2;
+		k.v[0] = e.gp.x;
+		k.v[1] = e.gp.y;
+		k.v[2] = d.x;
+		k.v[3] = d.y;
+	}
+	return k;
+}
+
+// The points of edge e, a first, b excluded: its conforming tessellation.
+inline void conforming(const Edge &e, const std::map<GeomKey, std::vector<Pt>> &corners, std::vector<Pt> &out, double tol = 0.25) {
+	const GeomKey k = key_of(e);
+	if (k.kind == 0) {
+		tessellate(e, out, tol); // no shared geometry: no neighbour to conform to
+		return;
+	}
+	out.push_back(e.a);
+	std::vector<std::pair<double, Pt>> inner; // (position along the edge, point)
+	auto add_corners = [&](auto pos, double len) {
+		const auto it = corners.find(k);
+		if (it == corners.end()) {
+			return;
+		}
+		for (const Pt &q : it->second) {
+			const double s = pos(q);
+			if (s > 1e-12 * std::max(1.0, len) && s < len * (1.0 - 1e-12)) {
+				inner.push_back({s, q});
+			}
+		}
+	};
+	if (k.kind == 1) {
+		const ArcGeom g = arc_geom(e);
+		if (g.line) {
+			return;
+		}
+		const double a0 = std::atan2(e.a.y - g.c.y, e.a.x - g.c.x);
+		const double sw = arc_sweep(e, g);
+		const double sg = sw > 0.0 ? 1.0 : -1.0;
+		const double len = std::abs(sw);
+		auto pos = [&](const Pt &q) {
+			double d = (std::atan2(q.y - g.c.y, q.x - g.c.x) - a0) * sg;
+			while (d < 0.0) d += 2.0 * PI;
+			while (d >= 2.0 * PI) d -= 2.0 * PI;
+			return d;
+		};
+		add_corners(pos, len);
+		// the circle's common grid: angles k * 2 pi / N (a whole number of steps per
+		// turn, so an edge across the angle +-pi meets the same points as one that is not)
+		const double step0 = std::min(2.0 * PI / 64.0, 2.0 * std::acos(std::max(-1.0, 1.0 - tol / g.r)));
+		const double turns = std::ceil(2.0 * PI / step0);
+		const long nturn = long(std::min(turns, 4e6));
+		const double step = 2.0 * PI / double(nturn);
+		const double lo = sg > 0.0 ? a0 : a0 - len;
+		const double hi = lo + len;
+		const long k0 = long(std::ceil(lo / step));
+		const long k1 = long(std::floor(hi / step));
+		if (k1 - k0 < 2000000) {
+			for (long j = k0; j <= k1; j++) {
+				const double ang = double(((j % nturn) + nturn) % nturn) * step; // (bit-identical across turns)
+				const Pt q{g.c.x + g.r * std::cos(ang), g.c.y + g.r * std::sin(ang)};
+				const double s = pos(q);
+				if (s > 1e-12 && s < len * (1.0 - 1e-12)) {
+					inner.push_back({s, q});
+				}
+			}
+		}
+	} else if (k.kind == 2) {
+		const Pt d = e.b - e.a;
+		const double len = norm(d);
+		if (!(len > 0.0)) {
+			return;
+		}
+		const Pt u = d * (1.0 / len);
+		add_corners([&](const Pt &q) { return std::abs(cross(u, q - e.a)) <= 1e-9 * std::max({1.0, std::abs(q.x), std::abs(q.y)}) ? dot(q - e.a, u) : -1.0; }, len);
+	}
+	std::sort(inner.begin(), inner.end(), [](const auto &x, const auto &y) { return x.first < y.first; });
+	for (const auto &[s, q] : inner) {
+		if (!(out.back() == q)) {
+			out.push_back(q);
+		}
+	}
+}
+
+} // namespace fill_detail
+
+inline Fill fill_triangles(const Result &r) {
+	using namespace fill_detail;
+	Fill out;
+	// every cell corner, by the geometry its edges lie on
+	std::map<GeomKey, std::vector<Pt>> corners;
+	for (const Cell &c : r.cells) {
+		for (const auto &l : c.loops) {
+			for (const Edge &e : l) {
+				const GeomKey k = key_of(e);
+				if (k.kind != 0) {
+					corners[k].push_back(e.a);
+					corners[k].push_back(e.b);
+				}
+			}
+		}
+	}
+	earcut::Triangulator tri;
+	for (const Cell &c : r.cells) {
+		for (const auto &l : c.loops) {
+			std::vector<Pt> poly;
+			for (const Edge &e : l) {
+				conforming(e, corners, poly);
+			}
+			std::vector<Pt> ring;
+			for (const Pt &q : clip_polygon(poly, r.domain)) {
+				if (ring.empty() || !(ring.back() == q)) {
+					ring.push_back(q);
+				}
+			}
+			while (ring.size() > 1 && ring.back() == ring.front()) {
+				ring.pop_back();
+			}
+			const double a0 = ring.size() >= 3 ? signed_area(ring) : 0.0;
+			if (std::abs(a0) <= 1e-9) {
+				continue;
+			}
+			std::vector<std::vector<Pt>> simple;
+			simple_rings(std::move(ring), a0 > 0.0 ? 1.0 : -1.0, simple);
+			for (const std::vector<Pt> &sr : simple) {
+				std::vector<earcut::XY> xy;
+				xy.reserve(sr.size());
+				for (const Pt &q : sr) {
+					xy.push_back(earcut::XY{q.x, q.y});
+				}
+				const uint32_t base = uint32_t(out.points.size());
+				out.points.insert(out.points.end(), sr.begin(), sr.end());
+				for (uint32_t idx : tri.run({xy})) {
+					out.indices.push_back(base + idx);
+				}
+			}
+		}
+	}
 	return out;
 }
 

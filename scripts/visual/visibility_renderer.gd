@@ -30,7 +30,8 @@ var live_mismatches := 0     # debug: cursors where region and preview disagreed
 var _tracer := BeamTracer.new()
 var _defs_cache := SceneDefsCache.new()
 var _inputs = null
-var _polygons: Array = []
+var _fill_points := PackedVector2Array()   # the region drawn as one generalized polygon (F8)
+var _fill_indices := PackedInt32Array()
 var _whiskers: Array = []
 var _level: Node
 var _player: Node2D
@@ -85,10 +86,13 @@ func _request() -> void:
 
 func _work(job: Dictionary) -> void:
 	var r = null
+	var fill = null
 	if job["on"]:
 		r = _tracer.visibility(job["defs"], job["player"], job["entries"], job["flags"], job["bounds"])
+		if r != null and r.is_supported():
+			fill = r.fill_triangles() # the triangulation off the main thread too
 	_mutex.lock()
-	_task_result = r
+	_task_result = [r, fill]
 	_mutex.unlock()
 
 func _collect() -> void:
@@ -97,10 +101,10 @@ func _collect() -> void:
 	WorkerThreadPool.wait_for_task_completion(_task_id)
 	_task_id = -1
 	_mutex.lock()
-	var r = _task_result
+	var result: Array = _task_result
 	_task_result = null
 	_mutex.unlock()
-	_apply(r, _task_inputs)
+	_apply(result[0], _task_inputs, result[1])
 	queue_redraw()
 	if _inputs != _task_inputs:
 		_request()
@@ -116,18 +120,21 @@ func _job() -> Dictionary:
 	return {"on": FeatureFlags.visibility(), "defs": _defs_cache.defs(_surfaces()), "player": _player.global_position,
 		"entries": entries, "flags": _renderer.get_flags().duplicate(true), "bounds": _bounds()}
 
-func _apply(r, for_inputs) -> void:
+func _apply(r, for_inputs, fill = null) -> void:
 	visibility_version += 1
 	region = r
 	_region_inputs = for_inputs
-	_polygons = []
+	_fill_points = PackedVector2Array()
+	_fill_indices = PackedInt32Array()
 	_whiskers = []
 	if region == null or not region.is_supported():
 		return
-	# a cell cut to a sliver by the bounds may not triangulate: not drawn
-	for poly: PackedVector2Array in region.cell_polygons():
-		if not Geometry2D.triangulate_polygon(poly).is_empty():
-			_polygons.append(poly)
+	# one generalized polygon: the region's merged loops, triangulated natively
+	# (no edges between adjacent cells, so no seams between them)
+	if fill == null:
+		fill = region.fill_triangles()
+	_fill_points = fill["points"]
+	_fill_indices = fill["indices"]
 	_whiskers = region.whisker_polylines()
 
 # What the region depends on: the player's position, the plan entries (by
@@ -161,8 +168,8 @@ func recompute() -> void:
 	_apply(r, current_inputs())
 
 func _draw() -> void:
-	for poly: PackedVector2Array in _polygons:
-		draw_colored_polygon(poly, FILL)
+	if not _fill_indices.is_empty():
+		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), _fill_indices, _fill_points, PackedColorArray([FILL]))
 	for line: PackedVector2Array in _whiskers:
 		draw_polyline(line, FILL * Color(1, 1, 1, 3.0), WHISKER_WIDTH)
 

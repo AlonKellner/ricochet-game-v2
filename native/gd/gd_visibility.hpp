@@ -32,6 +32,9 @@ public:
 	godot::String get_reason() const;
 	// the cells as polygons for drawing (tessellated, cut to the classified domain)
 	godot::Array cell_polygons() const;
+	// The region's fill (Stage 110, F8): its merged loops triangulated --
+	// {points: PackedVector2Array, indices: PackedInt32Array}
+	godot::Dictionary fill_triangles() const;
 	// the boundary loops and the whiskers as polylines (closed loops repeat no point)
 	godot::Array outlines() const;
 	godot::Array whisker_polylines() const;
