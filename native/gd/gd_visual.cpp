@@ -3,6 +3,9 @@
 #include "rc/error.hpp"
 
 #include <godot_cpp/classes/object.hpp>
+
+#include <map>
+#include <memory>
 #include <godot_cpp/core/class_db.hpp>
 
 using godot::Array;
@@ -206,6 +209,7 @@ void VisualConverter::_bind_methods() {
 	ClassDB::bind_static_method("VisualConverter", D_METHOD("clip_to_bounds", "origin", "dir", "bounds"), &VisualConverter::clip_to_bounds);
 	ClassDB::bind_static_method("VisualConverter", D_METHOD("is_arc", "start", "via", "end_v"), &VisualConverter::is_arc);
 	ClassDB::bind_static_method("VisualConverter", D_METHOD("arc_params", "start", "via", "end_v"), &VisualConverter::arc_params);
+	ClassDB::bind_static_method("VisualConverter", D_METHOD("arc_draw", "start", "via", "end_v"), &VisualConverter::arc_draw);
 	ClassDB::bind_static_method("VisualConverter",
 		D_METHOD("dash_arc", "center", "radius", "start_angle", "end_angle", "point_count", "dash_on", "dash_off", "max_len"), &VisualConverter::dash_arc);
 	ClassDB::bind_static_method("VisualConverter", D_METHOD("dash_line", "from", "to", "dash_on", "dash_off", "max_len"), &VisualConverter::dash_line);
@@ -273,20 +277,27 @@ PackedVector2Array VisualConverter::dash_line(const Vector2 &from, const Vector2
 namespace {
 
 // The carrier of the game surface with `surface_id` among `surfaces` (duck-typed: id, segment).
+// (Perf P4: each id is looked up once per call; the scan reads properties)
 std::function<std::optional<rc::arc::GeneralizedCircle>(int)> carrier_lookup(const Array &surfaces) {
-	return [surfaces](int surface_id) -> std::optional<rc::arc::GeneralizedCircle> {
+	auto memo = std::make_shared<std::map<int, std::optional<rc::arc::GeneralizedCircle>>>();
+	return [surfaces, memo](int surface_id) -> std::optional<rc::arc::GeneralizedCircle> {
+		if (auto it = memo->find(surface_id); it != memo->end()) {
+			return it->second;
+		}
+		std::optional<rc::arc::GeneralizedCircle> found;
 		for (int64_t i = 0; i < surfaces.size(); i++) {
 			godot::Object *s = surfaces[i];
 			if (s == nullptr || int(int64_t(s->get("id"))) != surface_id) {
 				continue;
 			}
 			const Ref<Segment> seg = s->get("segment");
-			if (seg.is_null()) {
-				return std::nullopt;
+			if (seg.is_valid()) {
+				found = seg->get_carrier()->g;
 			}
-			return seg->get_carrier()->g;
+			break;
 		}
-		return std::nullopt;
+		(*memo)[surface_id] = found;
+		return found;
 	};
 }
 
@@ -380,6 +391,23 @@ Dictionary VisualConverter::arc_params(const Vector2 &start, const Vector2 &via,
 	d["point_count"] = p.point_count;
 	d["span"] = p.span;
 	return d;
+}
+
+godot::PackedFloat64Array VisualConverter::arc_draw(const Vector2 &start, const Vector2 &via, const Vector2 &end_v) {
+	godot::PackedFloat64Array out;
+	if (!rc::arc::is_arc(to_v2(start), to_v2(via), to_v2(end_v))) {
+		return out;
+	}
+	const rc::arc::ArcParams p = rc::arc::arc_params(to_v2(start), to_v2(via), to_v2(end_v));
+	const Vector2 c = to_vec(p.center);
+	out.resize(6);
+	out[0] = c.x;
+	out[1] = c.y;
+	out[2] = p.radius;
+	out[3] = p.start_angle;
+	out[4] = p.end_angle;
+	out[5] = double(p.point_count);
+	return out;
 }
 
 // ---------------------------------------------------------------- StepTreeMerge

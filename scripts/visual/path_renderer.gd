@@ -100,6 +100,8 @@ func _compute_from(inputs: Array) -> void:
 	var bounds := _level_bounds()
 	# The precision-converging beam solver; null only for player = cursor (no
 	# line, UX7).
+	# the defs cache's version keys the defs: the tracer converts them once per version
+	_tracer.defs_key = _defs_cache.version_of(surfaces)
 	var pair: BeamTracerPair = _tracer.trace_pair(_defs_cache.defs(surfaces), player_pos, cursor_pos, plan_entries, get_flags(), _defs_cache.segments(surfaces))
 	last_solver = "beam"
 	last_pair = pair
@@ -177,7 +179,7 @@ func _draw_merged() -> void:
 		var col := StepTypes.color(ms.type)
 		_draw_step(ms, ghost_color(col) if ms.ghost else col, not StepTypes.is_solid(ms.type))
 
-	_draw_endpoint_circles(_merged_steps, func(s: TraceStep) -> Color: return StepTypes.color(s.type))
+	_draw_endpoint_circles(_merged_steps, true, Color.WHITE)
 	for m in truncation_markers():
 		_draw_stop_marker(m["point"] - global_position, m["color"])
 
@@ -227,7 +229,7 @@ func _draw_raw_trace(path: TracePath, base_color: Color, label_prefix: String) -
 			col = ghost_color(col)
 		_draw_step(step, col, step.hit == null)
 
-	_draw_endpoint_circles(path.steps, func(_s: TraceStep) -> Color: return base_color)
+	_draw_endpoint_circles(path.steps, false, base_color)
 	for i in path.steps.size():
 		var step: TraceStep = path.steps[i]
 		var mid := ((step.start + step.end) / 2.0) - global_position + Vector2(0, -10)
@@ -239,9 +241,11 @@ func _draw_raw_trace(path: TracePath, base_color: Color, label_prefix: String) -
 				lbl += "*"
 			draw_string(font, mid, lbl, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, col)
 
-func _draw_endpoint_circles(steps: Array, color_fn: Callable) -> void:
+# by_type: each step's type colour (the merged view), else base_color (Perf P4:
+# no Callable per step)
+func _draw_endpoint_circles(steps: Array, by_type: bool, base_color: Color) -> void:
 	for step: TraceStep in steps:
-		var col: Color = color_fn.call(step)
+		var col: Color = StepTypes.color(step.type) if by_type else base_color
 		col.a = 0.4
 		var s_local := step.start - global_position
 		var e_local := step.end - global_position
@@ -251,13 +255,14 @@ func _draw_endpoint_circles(steps: Array, color_fn: Callable) -> void:
 			draw_circle(e_local, 4.0, col)
 
 func _draw_step(step: TraceStep, col: Color, dashed: bool) -> void:
-	if step.is_arc_step and VisualConverter.is_arc(step.start, step.via, step.end):
-		var p := VisualConverter.arc_params(step.start, step.via, step.end)
-		var arc_center: Vector2 = p["center"] - global_position
+	# (Perf P4: is_arc and arc_params in one call, no Dictionary)
+	var a := VisualConverter.arc_draw(step.start, step.via, step.end) if step.is_arc_step else PackedFloat64Array()
+	if a.size() > 0:
+		var arc_center: Vector2 = Vector2(a[0], a[1]) - global_position
 		if dashed:
-			_draw_dashed_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col)
+			_draw_dashed_arc(arc_center, a[2], a[3], a[4], int(a[5]), col)
 		else:
-			draw_arc(arc_center, p["radius"], p["start_angle"], p["end_angle"], p["point_count"], col, LINE_WIDTH)
+			draw_arc(arc_center, a[2], a[3], a[4], int(a[5]), col, LINE_WIDTH)
 	else:
 		var from := step.start - global_position
 		var to := step.end - global_position

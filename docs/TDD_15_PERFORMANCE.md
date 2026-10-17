@@ -8,9 +8,9 @@
 | P5 | Gate turnaround: scheduling, sharding, the ctest split, `make gates` | Done: about 9 min to 4.5 min |
 | P1 | The exact-image cache key (a 6-decimal cursor key: a bug) | Done: no region or golden changed |
 | P2 | The ladder: BigFloat only where an exact decision needs it | Done: P2a (BigFloat arithmetic, bit-identical), P2b (exact circles: double roots, circular concurrency) |
-| P3 | The region build: cast reuse, cheaper casts, the fill | P3a done (parallel casts) |
-| P4 | The frame path: defs handle, lean trace results, overlay keys | P4a done (native dashes, lazy hit records) |
-| P6 | Docs | Not started |
+| P3 | The region build: cast reuse, cheaper casts, the fill | P3a done (parallel casts); the cast memo and the fill not needed for the budgets |
+| P4 | The frame path: defs handle, lean trace results, overlay keys | Done: P4a (native dashes, lazy hit records), P4b (defs key, lazy hit points, one call per arc step, memoized carriers) |
+| P6 | Docs | Done; user sign-off pending |
 
 **Rules:** every phase is behaviour-neutral. Traces, regions and goldens stay bit-identical. A changed golden is a behaviour change, brought to the user with evidence. Coverage stays as it is: trims of duplicated checks come only as a separate proposal with numbers (user, 2026-10-17).
 
@@ -204,4 +204,47 @@ A cached `trace_pair`, with no solve, still cost 189 µs: about 34 µs convertin
 - **Spikes:** the maxima are the preview's own trace when the cursor is near a tie and the ladder climbs (`trace_pair` max 6.7 ms against 0.42 ms mean).
 - **Per recompute:** about 0.1 ms of step wrapping and 0.03 ms of defs conversion.
 - **Gates:** 231 s for a change outside the core headers (ASan 108 s); a core header change rebuilds both trees (about 290–340 s).
+
+## P4b: the rest of the frame path
+
+- **`BeamTracer.defs_key`:** the caller's key of the defs it passes. The PathRenderer passes its `SceneDefsCache` version, and the tracer converts the defs only when the key changes, instead of every call (about 30 µs).
+- **`TraceHit.point`:** the hit's `Point` object is made on first read, from the stored coordinates. Every hit step made three Godot objects before.
+- **`VisualConverter.arc_draw`:** `is_arc` and `arc_params` in one call, returning a packed array instead of a Dictionary.
+- **`prepare_for_display`:** the carrier lookup reads each surface's properties once per call, not once per step.
+- **Endpoint circles:** coloured without a Callable per step.
+
+**Main-thread frame on inversion_grid** (two runs):
+
+| Phase | Mean | Max |
+|---|---|---|
+| cursor_orbit | 0.44 ms | 6.1–6.4 ms |
+| plan_orbit | 1.03 ms | 4.1–4.2 ms |
+| player_orbit | 1.02–1.06 ms | 7.1–7.3 ms |
+
+The maxima are the preview's own trace near a tie (the ladder climbing), left as they are (user, 2026-10-17).
+
+## Summary (before, after)
+
+| What | Before | After | Budget |
+|---|---|---|---|
+| Gates, a change outside the core headers | about 9 min | 202–231 s (`make gates`) | ≤ 240 s |
+| Gates, a core header change | about 9 min | 290–340 s | — |
+| Region, inversion_grid with a plan, median | 297–368 ms | 24–28 ms | — |
+| Region, inversion_grid with a plan, p95 | 459–489 ms | 32–55 ms | ≤ 50 ms |
+| Region, main, p95 | 9–44 ms | 3–15 ms | ≤ 10 ms |
+| Frame mean, inversion_grid, cursor / plan orbit | 0.71 / 1.97 ms | 0.44 / 1.03 ms | ≤ 1 ms |
+| Frame max, inversion_grid | 12–17 ms | 4–7 ms | ≤ 4 ms |
+
+The budgets are met or within a few percent, except the frame maxima and the region tails. Both are near-ties, where the ladder rightly climbs: a beam within less than one float64 ulp of a tie. Removing them would mean changing the precision semantics or moving the preview off the main thread; the user chose neither.
+
+## Interactive user tests
+
+1. **The preview looks as before** (`main.tscn`, `playground/inversion_grid.tscn`): dashed lines and dashed arcs (the dashes, their spacing, where they stop), solid parts, the endpoint circles, ghost steps.
+2. **The visibility region looks as before and follows the player sooner** while walking on inversion_grid with a plan; the cursor alone does not recompute it.
+3. **Firing works:** the arrow flies the preview's path, and hit effects, spawns and targets still happen. They read the lazily made hit records.
+4. **No new hitches** while orbiting the cursor with a plan on inversion_grid.
+
+## Regression checklist
+
+`make gates`: the native build, oracle, ctest (RelWithDebInfo), the GUT suite, ASan, the goldens unchanged. The region digest (`visibility digest`, `--no-skip`) stays `21dafb508ef1834b`.
 

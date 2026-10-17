@@ -88,7 +88,10 @@ protected:
 
 public:
 	double t = 0.0;
-	godot::Ref<Point> point;
+	// the point object is made on first read (Perf P4: the preview never reads it)
+	mutable godot::Ref<Point> point;
+	godot::Vector2 point_coords;
+	bool has_point = false;
 	godot::Variant segment; // the game Segment (or null)
 	int surface_id = -1;
 	int side = 0;
@@ -103,7 +106,8 @@ public:
 	type get_##name() const { return name; } \
 	void set_##name(type v) { name = v; }
 	RC_HIT_ACCESSOR(t, double)
-	RC_HIT_ACCESSOR(point, godot::Ref<Point>)
+	godot::Ref<Point> get_point() const;
+	void set_point(const godot::Ref<Point> &v);
 	RC_HIT_ACCESSOR(segment, godot::Variant)
 	RC_HIT_ACCESSOR(surface_id, int)
 	RC_HIT_ACCESSOR(side, int)
@@ -249,6 +253,14 @@ public:
 	// Stage 88: the `infinity` event and the infinity plan entry (off: the pre-Stage-88 traces)
 	void set_emit_infinity(bool on) { tracer.set_emit_infinity(on); }
 	bool get_emit_infinity() const { return tracer.emit_infinity(); }
+	// Perf P4: the caller's key of the defs it passes (SceneDefsCache.version_of):
+	// while it equals the key of the defs last converted, they are not converted
+	// again (-1: always convert). One key names one defs array for this tracer.
+	int defs_key = -1;
+	int converted_key = -1;
+	void set_defs_key(int k) { defs_key = k; }
+	int get_defs_key() const { return defs_key; }
+	void use_defs(const godot::Array &defs);
 	// events of one tier (limbs), their errors, the frames map (key -> {"id": n}, updated), the aim ray (or null).
 	godot::Ref<TracePath> to_path(const godot::Array &events, const godot::Array &errs, int limbs, const godot::Dictionary &frames,
 			const godot::Variant &aim = godot::Variant(), const godot::Dictionary &flags = godot::Dictionary(),
