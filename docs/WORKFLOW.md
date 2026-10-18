@@ -58,10 +58,21 @@ spread over the three `Solver<N>` instantiations, `BigFloat`/`Dual`, nlohmann an
 single function dominates). The remaining lever is out-of-line definitions and explicit instantiation of
 the solver in `ricochet_core` (estimated 40 % less per TU); not done.
 
-ctest in the core tree: 26 entries, 18 s wall (the Stage 105/106 random-scene cases run in `RC_CASE_PARTS`
-= 4 parts each: `RC_CASE_PART=k/n`, the k-th scene of every n, the scenes drawn as in the whole run).
-ASan: a cold tree plus its ctest 97 s; the ctest alone 51 s (was 74–85 s with godot-cpp in the tree and
-the two random cases whole).
+ctest in the core tree: 50 entries (the Stage 105/106 random-scene cases in `RC_CASE_PARTS` = 4 parts
+each: `RC_CASE_PART=k/n`, the k-th scene of every n, the scenes drawn as in the whole run; the native
+sweeps in 6 + 12 parts; the regions' digest in 6): about 75 s wall with every sweep player, 38 s at the
+commit gate's stride of 4 (the sweeps alone: 52 s and 16 s). ASan (`native-asan`): the ctest alone about
+60 s with the native sweeps at one player in 24 and the regions parts left out (was 74–85 s with
+godot-cpp in the tree and the two random cases whole; every sweep player sanitized would be 650 s).
+
+The gates, measured on 2026-10-18 (the main branch; `gates.sh` prints the same table):
+
+| Gate | core | oracle | ctest | native | manifests | gut | asan | total |
+|---|---|---|---|---|---|---|---|---|
+| `make gate` (commit) | 0–5 | 2 | 32–38 | 7 | 10 | 30 | – | 81–88 s |
+| `make gates` (merge) | 0–5 | 2 | 72–75 | 8 | 10 | 30 | 65 | 187 s |
+
+Before the rework the one gate took 202–343 s per commit (GUT 76–96 s, since Stage 111 over 3 min).
 
 ## The sweeps
 
@@ -79,8 +90,10 @@ of interest, the plans from `SweepPlans`) and hand them to the native kernel (`S
 - **`native/tests/test_sweeps.cpp`** replays every manifest through `rc::sweep::run` as the binding calls it:
   the `rc_sweeps_inv_{k}` (6 parts) and `rc_sweeps_vis_{k}` (12 parts) ctest entries, `RC_SWEEPS_PART=k/n`
   over the players, `RC_SWEEPS_STRIDE=s` thinning them (the commit gate: 4), `RC_SWEEPS_FILTER=text`,
-  `RC_SWEEPS_VIOLATIONS=path` for the violation viewer's JSON. `make check AREA=sweeps`: 57 s wall, about
-  580 s CPU, 386k invariant and 105k visibility combos (the main branch, 2026-10-18).
+  `RC_SWEEPS_VIOLATIONS=path` for the violation viewer's JSON. The strided players are dealt round-robin
+  to the parts across the manifests, so every part carries its share. `make check AREA=sweeps`: 52 s
+  wall (16 s at stride 4), about 580 s CPU, 386k invariant and 105k visibility combos (the main branch,
+  2026-10-18).
 - **The manifests gate** (`gates.sh`, both levels) regenerates the manifests into a temp dir and diffs them
   against `bench/sweeps`: the native sweep checks exactly the combos the GUT sweep would. After a change to
   a level, `SweepPlans`, `SweepRunner`, `SceneDefs` or `InvariantChecker.surface_infos`: `make manifests`

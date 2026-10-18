@@ -73,14 +73,20 @@ native-debug:
 # ASan+UBSan rc_tests (no godot-cpp: nothing loads a sanitized extension), the
 # ctest entries in parallel. Debug (assertions on) at -O1: the sanitizers catch
 # the same errors many times faster than at -O0. ASAN_SWEEP_STRIDE=n replays one
-# sweep combo in n for a quicker look.
+# golden sweep combo in n for a quicker look; ASAN_SWEEPS_STRIDE=n runs the
+# native sweeps (bench/sweeps) at one player in n (default 24: the sanitizers
+# want the code paths, not every combo; the release ctest runs them all). The
+# regions' digest parts (bit-identity pins, 53 s sanitized) are left out: the
+# level loops exercise the same regions.
 ASAN_SWEEP_STRIDE ?= 1
+ASAN_SWEEPS_STRIDE ?= 24
 native-asan:
 	$(CMAKE) -S native -B $(BUILD_ASAN) $(call gen,$(BUILD_ASAN)) -DCMAKE_BUILD_TYPE=Debug \
 		-DCMAKE_CXX_FLAGS_DEBUG="-g -O1" -DCMAKE_C_FLAGS_DEBUG="-g -O1" \
 		-DRC_SANITIZE=address,undefined -DRC_BUILD_EXTENSION=OFF -DRC_BUILD_TESTS=ON
 	$(CMAKE) --build $(BUILD_ASAN) -j $(JOBS)
-	RC_SWEEP_STRIDE=$(ASAN_SWEEP_STRIDE) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) --output-on-failure
+	RC_SWEEP_STRIDE=$(ASAN_SWEEP_STRIDE) RC_SWEEPS_STRIDE=$(ASAN_SWEEPS_STRIDE) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) \
+		--output-on-failure -E rc_tests_regions
 
 # the release ctest (build-core; `make core` first)
 ctest:

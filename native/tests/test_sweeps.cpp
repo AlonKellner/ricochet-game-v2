@@ -107,16 +107,35 @@ std::string v2_str(const V2 &v) {
 	return b;
 }
 
-// The player shard: the part's k-th player of every n, thinned by the stride
-// (both over the player index, as SweepRunner.in_shard; the cursors stay whole).
-void shard_of(int &shard_i, int &shard_n) {
-	const rc_test::Part part = rc_test::part_of("RC_SWEEPS_PART");
+// The players this entry sweeps: every stride-th player (RC_SWEEPS_STRIDE),
+// those dealt round-robin to the RC_SWEEPS_PART parts across the manifests (so
+// every part gets its share whatever the stride and the manifest's size); the
+// cursors stay whole, as SweepRunner.in_shard.
+struct Selection {
 	int stride = 1;
-	if (const char *s = std::getenv("RC_SWEEPS_STRIDE")) {
-		stride = std::max(1, std::atoi(s));
+	rc_test::Part part;
+	long dealt = 0;
+	std::vector<size_t> players(size_t n_positions) {
+		std::vector<size_t> out;
+		for (size_t pi = 0; pi < n_positions; pi++) {
+			if (pi % size_t(stride) != 0) {
+				continue;
+			}
+			if (part.takes(dealt++)) {
+				out.push_back(pi);
+			}
+		}
+		return out;
 	}
-	shard_n = int(part.n) * stride;
-	shard_i = int(part.k) * stride;
+};
+
+Selection selection() {
+	Selection s;
+	s.part = rc_test::part_of("RC_SWEEPS_PART");
+	if (const char *e = std::getenv("RC_SWEEPS_STRIDE")) {
+		s.stride = std::max(1, std::atoi(e));
+	}
+	return s;
 }
 
 struct Totals {
@@ -127,23 +146,22 @@ struct Totals {
 };
 
 void run_manifests(bool visibility, Totals &t) {
-	int shard_i = 0, shard_n = 1;
-	shard_of(shard_i, shard_n);
+	Selection sel = selection();
 	for (const std::filesystem::path &path : manifest_files()) {
 		const Manifest m = load_manifest(path);
 		if (m.visibility != visibility) {
 			continue;
 		}
 		t.manifests++;
-		long players = 0;
-		for (size_t pi = 0; pi < m.positions.size(); pi++) {
-			if (shard_n <= 1 || int(pi) % shard_n == shard_i) {
-				players++;
-			}
+		const std::vector<size_t> players = sel.players(m.positions.size());
+		t.combos += long(players.size()) * long(m.positions.size() - (m.skip_equal ? 1 : 0)) * long(m.plans.size());
+		std::vector<sweep::Combo> failing;
+		for (const size_t pi : players) {
+			// one player: the shard rule pi % n == i with n = the position count
+			std::vector<sweep::Combo> f = sweep::run(m.defs, m.infos, m.positions, m.plans, m.flags, int(pi), int(m.positions.size()), m.skip_equal, true,
+				m.emit_infinity, m.visibility, m.carrier_cursors);
+			failing.insert(failing.end(), f.begin(), f.end());
 		}
-		t.combos += players * long(m.positions.size() - (m.skip_equal ? 1 : 0)) * long(m.plans.size());
-		const std::vector<sweep::Combo> failing = sweep::run(m.defs, m.infos, m.positions, m.plans, m.flags, shard_i, shard_n, m.skip_equal, true,
-			m.emit_infinity, m.visibility, m.carrier_cursors);
 		for (const sweep::Combo &c : failing) {
 			for (const inv::Violation &v : c.violations) {
 				const std::string line = "[" + m.file + "] plan=" + plan_str(m.plans[size_t(c.plan_index)]) + " player=" + v2_str(c.player) +
@@ -167,8 +185,8 @@ void run_manifests(bool visibility, Totals &t) {
 		std::ofstream f(out);
 		f << t.dump.dump(2);
 	}
-	MESSAGE((visibility ? "visibility" : "invariant") << " sweeps: " << t.manifests << " manifests, " << t.combos << " combos (players " << shard_i << "/" << shard_n
-																		  << "), " << t.violations.size() << " violations");
+	MESSAGE((visibility ? "visibility" : "invariant") << " sweeps: " << t.manifests << " manifests, " << t.combos << " combos (part " << sel.part.k << "/"
+																		  << sel.part.n << ", stride " << sel.stride << "), " << t.violations.size() << " violations");
 	for (size_t i = 0; i < t.violations.size() && i < 40; i++) {
 		MESSAGE(t.violations[i]);
 	}
