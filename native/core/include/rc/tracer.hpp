@@ -160,17 +160,41 @@ public:
 	// physical events for a float64 player and cursor, as trace_pair solves them
 	// (ghost erased, the same tolerance), without the display conversion or the
 	// cache; nullopt where trace_pair returns none.
-	std::optional<LadderResult> solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags) {
+	std::optional<LadderResult> solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags,
+			std::optional<bool> force_reversed = std::nullopt) {
 		if (!ctx_ || !scene_supported(defs_) || (px == cx && py == cy)) {
 			return std::nullopt;
 		}
 		flags.erase(GHOST);
 		Ladder ladder(*ctx_, clock_);
-		LadderResult res = ladder.solve(px, py, cx, cy, plan, MAX_HITS, MAX_HITS, TRACE_TOL, false, flags);
+		LadderResult res = ladder.solve(px, py, cx, cy, plan, MAX_HITS, MAX_HITS, TRACE_TOL, false, flags, force_reversed);
 		if (res.planned.empty() || res.physical.empty() || !finite(res.planned) || !finite(res.physical)) {
 			return std::nullopt;
 		}
 		return res;
+	}
+
+	// Stage 111: the realization the plan's first entry picks for a cursor when
+	// the walk does not decide (Solver::tie_choice): reversed or not; nullopt
+	// where no solve is possible.
+	std::optional<bool> tie_choice(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags) {
+		if (!ctx_ || !scene_supported(defs_) || (px == cx && py == cy)) {
+			return std::nullopt;
+		}
+		flags.erase(GHOST);
+		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		return solver.tie_choice(CN<Dual>{Dual{px, 0.0}, Dual{py, 0.0}}, CN<Dual>{Dual{cx, 0.0}, Dual{cy, 0.0}}, plan, flags).reversed;
+	}
+
+	// Stage 111: the plan's realization for a cursor (the solver's own choice):
+	// reversed or not; nullopt where no solve is possible.
+	std::optional<bool> realization_reversed(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags) {
+		if (!ctx_ || !scene_supported(defs_) || (px == cx && py == cy)) {
+			return std::nullopt;
+		}
+		flags.erase(GHOST);
+		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		return solver.realization(CN<Dual>{Dual{px, 0.0}, Dual{py, 0.0}}, CN<Dual>{Dual{cx, 0.0}, Dual{cy, 0.0}}, plan, flags).reversed;
 	}
 
 	// Stage 110: a cast's two paths, as trace_pair converts them (one frame-id

@@ -251,7 +251,8 @@ public:
 
 	// player / cursor: float64 (never float32-rounded here). tol: px.
 	LadderResult solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, int max_planned,
-			int max_physical, double tol, bool verify = false, const Flags &flags = Flags()) {
+			int max_physical, double tol, bool verify = false, const Flags &flags = Flags(), std::optional<bool> force = std::nullopt) {
+		force_ = force;
 		const long long t0 = clock_();
 		LadderResult r;
 		// ---- physical
@@ -278,6 +279,7 @@ public:
 			return r;
 		}
 		Solver<Dual> fast(ctx_.dual_scene(), &ctx_.dual_cache());
+		fast.force_reversed = force_;
 		const CN<Dual> P{Dual{px, 0.0}, Dual{py, 0.0}};
 		const CN<Dual> Cc{Dual{cx, 0.0}, Dual{cy, 0.0}};
 		std::optional<Walk<Dual>> wq = fast.run(P, Cc, plan, Mode::Planned, max_planned, flags);
@@ -299,6 +301,7 @@ public:
 		} else {
 			auto planned_fn = [&](int limbs) -> std::vector<Event<BigFloat>> {
 				Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
+				big.force_reversed = force_;
 				const BigFloat l = BigFloat::from_int(1, limbs);
 				return big.planned(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, max_planned, flags);
 			};
@@ -388,12 +391,14 @@ public:
 private:
 	LadderContext &ctx_;
 	Clock clock_;
+	std::optional<bool> force_; // Stage 111: the orientation the caller forces on every tier
 
 	using Compute = std::function<std::vector<Event<BigFloat>>(int)>;
 
 	Climb solve_physical_into(LadderResult &r, double px, double py, double cx, double cy, const std::vector<PlanItem> &plan,
 			int max_physical, double tol, bool verify, const Flags &flags) {
 		Solver<Dual> fast(ctx_.dual_scene(), &ctx_.dual_cache());
+		fast.force_reversed = force_;
 		const CN<Dual> P{Dual{px, 0.0}, Dual{py, 0.0}};
 		const CN<Dual> Cc{Dual{cx, 0.0}, Dual{cy, 0.0}};
 		std::optional<Walk<Dual>> wp = fast.run(P, Cc, plan, Mode::Physical, max_physical, flags);
@@ -403,6 +408,7 @@ private:
 		const std::vector<double> est_p = estimate::estimate(sp, tier_eps(0));
 		auto physical_fn = [&](int limbs) -> std::vector<Event<BigFloat>> {
 			Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
+			big.force_reversed = force_;
 			const BigFloat l = BigFloat::from_int(1, limbs);
 			return big.physical(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, max_physical, flags);
 		};

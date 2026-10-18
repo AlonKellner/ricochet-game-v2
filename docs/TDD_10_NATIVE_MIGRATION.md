@@ -284,7 +284,7 @@ The oracle (`docs/research/oracle/trace2.py`) gained `INFINITY_ID = -3` and the
 `infinity` event between the crossings ahead and the wrapped ones, counted
 toward `MAX_HITS` (a cut there is a `max` with no point); the event is applied
 when the next plan entry is ∞ (both modes). `via_infinity` reverses the aim
-when the plan's first epoch holds an ∞ entry: every plan has two realizations
+when the plan's first epoch holds an ∞ entry (superseded by Stage 111, docs/TDD_16_ORIENTATION.md: the first entry fixes the realization; the ∞ entry selects it only where that leaves both open): every plan has two realizations
 (toward the aim image, or away from it and back through ∞). Ten oracle tests,
 `gen_fixtures_stage88.py` → `bench/fixtures/stage88_infinity.json` (26
 fixtures, planned + physical twins), `tests/test_stage88_infinity.gd` (schema
