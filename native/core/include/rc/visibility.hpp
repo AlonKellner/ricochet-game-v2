@@ -583,6 +583,9 @@ struct SolveMemo {
 	std::unordered_map<Key, std::optional<bool>, Hash> ties;
 	std::unordered_map<Key, std::optional<bool>, Hash> realizations;
 	long hits = 0;
+	// RC_VIS_MEMO_STATS=1: the time each kind of call took (misses), printed by compute
+	double solve_ms = 0, tie_ms = 0, realization_ms = 0;
+	long solve_n = 0, tie_n = 0, realization_n = 0;
 };
 
 class Builder {
@@ -1371,9 +1374,13 @@ private:
 				return it->second;
 			}
 		}
+		const auto t0 = std::chrono::steady_clock::now();
 		std::optional<LadderResult> lr = tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force);
+		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 		std::lock_guard<std::mutex> lock(memo_->mutex);
 		memo_->solves.emplace(key, lr);
+		memo_->solve_ms += ms;
+		memo_->solve_n++;
 		return lr;
 	}
 	std::optional<bool> memo_tie(Tracer &tracer, const Pt &c) const {
@@ -1390,9 +1397,13 @@ private:
 				return it->second;
 			}
 		}
+		const auto t0 = std::chrono::steady_clock::now();
 		const std::optional<bool> q = tracer.tie_choice(P.x, P.y, c.x, c.y, plan_, flags_);
+		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 		std::lock_guard<std::mutex> lock(memo_->mutex);
 		memo_->ties.emplace(key, q);
+		memo_->tie_ms += ms;
+		memo_->tie_n++;
 		return q;
 	}
 	std::optional<bool> memo_realization(Tracer &tracer, const Pt &c) const {
@@ -1409,9 +1420,13 @@ private:
 				return it->second;
 			}
 		}
+		const auto t0 = std::chrono::steady_clock::now();
 		const std::optional<bool> q = tracer.realization_reversed(P.x, P.y, c.x, c.y, plan_, flags_);
+		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 		std::lock_guard<std::mutex> lock(memo_->mutex);
 		memo_->realizations.emplace(key, q);
+		memo_->realization_ms += ms;
+		memo_->realization_n++;
 		return q;
 	}
 
@@ -3701,6 +3716,10 @@ inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanIt
 		br.share(&memo);
 		Result ra = bd.build();
 		Result rb = br.build();
+		if (std::getenv("RC_VIS_MEMO_STATS") != nullptr) {
+			std::fprintf(stderr, "memo: solves %ld (%.1f ms), ties %ld (%.1f ms), realizations %ld (%.1f ms), hits %ld\n", memo.solve_n, memo.solve_ms, memo.tie_n,
+				memo.tie_ms, memo.realization_n, memo.realization_ms, memo.hits);
+		}
 		r = join_halves(std::move(ra), std::move(rb));
 	}
 	for (Loop &l : r.loops) {

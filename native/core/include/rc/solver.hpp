@@ -279,6 +279,9 @@ struct Walk {
 	bool cursor_done = false;
 	int count = 0;
 	int max_events = MAX_HITS;
+	// Workflow W2.0: a decision walk (realize, R2) needs the cursor event alone:
+	// it stops there (the events up to it are the same walk's)
+	bool stop_at_cursor = false;
 	std::vector<Event<N>> events;
 	std::vector<double> gains;
 	std::vector<StackEntry<N>> stack;
@@ -692,7 +695,7 @@ public:
 				}
 				// the plan's order is a question of geometry, not of the event budget:
 				// a wide one, so a realization cut by MAX_HITS still counts as reaching
-				const Walk<N> w = walk_chain(player, cursor, plan, Mode::Planned, 8 * MAX_HITS, flags, ch);
+				const Walk<N> w = walk_chain(player, cursor, plan, Mode::Planned, 8 * MAX_HITS, flags, ch, true);
 				for (const Event<N> &e : w.events) {
 					if (e.kind == EventKind::Cursor) {
 						reach[o] = true;
@@ -1392,8 +1395,9 @@ private:
 	}
 
 	Walk<N> walk_chain(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan, Mode mode, int max_events,
-			const Flags &flags, const std::shared_ptr<const AnchorChain<N>> &chain) {
+			const Flags &flags, const std::shared_ptr<const AnchorChain<N>> &chain, bool stop_at_cursor = false) {
 		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
+		w.stop_at_cursor = stop_at_cursor;
 		w.chain = chain;
 		w.anchored = true;
 		BeamPtr<N> b0 = chain->beams[0];
@@ -2450,6 +2454,10 @@ private:
 					ce.anchored = w.anchored;
 					t_prev = t;
 					w.cursor_done = true;
+					if (w.stop_at_cursor) {
+						w.done = true;
+						return;
+					}
 					w.mode = w.post_mode;
 					// the post-cursor continuation is the sensitive part
 					w.anchored = false;

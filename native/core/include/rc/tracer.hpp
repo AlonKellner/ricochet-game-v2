@@ -9,6 +9,7 @@
 
 #include <memory>
 #include <string>
+#include <unordered_map>
 
 namespace rc {
 
@@ -63,6 +64,8 @@ public:
 		if (ctx_ && defs_ == defs) {
 			return;
 		}
+		tie_memo_.clear();
+		realization_memo_.clear();
 		defs_ = defs;
 		ctx_ = std::make_unique<LadderContext>(defs);
 		ctx_->set_emit_infinity(emit_infinity_);
@@ -79,6 +82,8 @@ public:
 		}
 		emit_infinity_ = on;
 		cache_valid_ = false;
+		tie_memo_.clear();
+		realization_memo_.clear();
 		if (ctx_) {
 			ctx_->set_emit_infinity(on);
 		}
@@ -182,8 +187,14 @@ public:
 			return std::nullopt;
 		}
 		flags.erase(GHOST);
+		const std::string key = decision_key(px, py, cx, cy, plan, flags);
+		if (const auto it = tie_memo_.find(key); it != tie_memo_.end()) {
+			return it->second;
+		}
 		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
-		return solver.tie_choice(CN<Dual>{Dual{px, 0.0}, Dual{py, 0.0}}, CN<Dual>{Dual{cx, 0.0}, Dual{cy, 0.0}}, plan, flags).reversed;
+		const std::optional<bool> q = solver.tie_choice(CN<Dual>{Dual{px, 0.0}, Dual{py, 0.0}}, CN<Dual>{Dual{cx, 0.0}, Dual{cy, 0.0}}, plan, flags).reversed;
+		remember(tie_memo_, key, q);
+		return q;
 	}
 
 	// Stage 111: the plan's realization for a cursor (the solver's own choice):
@@ -193,9 +204,34 @@ public:
 			return std::nullopt;
 		}
 		flags.erase(GHOST);
+		const std::string key = decision_key(px, py, cx, cy, plan, flags);
+		if (const auto it = realization_memo_.find(key); it != realization_memo_.end()) {
+			return it->second;
+		}
 		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
-		return solver.realization(CN<Dual>{Dual{px, 0.0}, Dual{py, 0.0}}, CN<Dual>{Dual{cx, 0.0}, Dual{cy, 0.0}}, plan, flags).reversed;
+		const std::optional<bool> q = solver.realization(CN<Dual>{Dual{px, 0.0}, Dual{py, 0.0}}, CN<Dual>{Dual{cx, 0.0}, Dual{cy, 0.0}}, plan, flags).reversed;
+		remember(realization_memo_, key, q);
+		return q;
 	}
+
+	// Workflow W2.0: the two decisions are pure functions of (player, cursor,
+	// plan, flags) on this tracer's defs; memoized per tracer (cleared with the
+	// defs, bounded), so a region's determinism rebuild and its per-cell
+	// prefix builders do not walk them again.
+	static std::string decision_key(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, const Flags &flags) {
+		char buf[96];
+		std::snprintf(buf, sizeof buf, "%a,%a,%a,%a|", px, py, cx, cy);
+		return buf + plan_key(plan) + "|" + flags.canonical_key();
+	}
+	static void remember(std::unordered_map<std::string, std::optional<bool>> &memo, const std::string &key, std::optional<bool> v) {
+		if (memo.size() >= DECISION_MEMO_MAX) {
+			memo.clear();
+		}
+		memo.emplace(key, v);
+	}
+	static constexpr size_t DECISION_MEMO_MAX = 1 << 16;
+	std::unordered_map<std::string, std::optional<bool>> tie_memo_;
+	std::unordered_map<std::string, std::optional<bool>> realization_memo_;
 
 	// Stage 110: a cast's two paths, as trace_pair converts them (one frame-id
 	// map, the physical walk first), without the shared-trajectory shortcut.
