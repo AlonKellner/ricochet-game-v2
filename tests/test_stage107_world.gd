@@ -120,7 +120,9 @@ func test_stage107_plans_on_surfaces_that_left_are_dropped():
 	await get_tree().process_frame
 	var gm = scene.get_node("GameManager")
 	var host := _at_x(scene, 900)
-	gm.plan.add_entry(host.id, Side.Value.LEFT, Vector2(900, 540))
+	# the side facing the player (Stage 111: the plan's first entry fixes the aim's
+	# orientation; planning the far side would send the shot the other way round)
+	gm.plan.add_entry(host.id, Side.Value.RIGHT, Vector2(900, 540))
 	_shoot(scene, Vector2(700, 540), Vector2(850, 540))
 	assert_true(gm.plan.is_empty(), "the spent host's entry is dropped")
 
