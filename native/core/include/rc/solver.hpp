@@ -295,6 +295,9 @@ struct Walk {
 	std::map<std::tuple<double, double, int>, bool> incidence;
 	std::shared_ptr<const exact::Line> tangent_line;
 	std::map<int, bool> tangent;
+	// Stage 112: the line carriers the current exact line is parallel to (cached per line)
+	std::shared_ptr<const exact::Line> parallel_line;
+	std::map<int, bool> parallel;
 	// Perf P2b: the current beam's exact generalized circle, lazily (from_line
 	// of `line` whenever there is one; mapped by every effect; nullptr: no
 	// exact claim), and its tangencies to carriers (cached per record)
@@ -1737,6 +1740,22 @@ private:
 		return r;
 	}
 
+	// Exact (Stage 112, K10): the current exact line is parallel to surf's line
+	// carrier (computed once per line, with the tangencies).
+	static bool parallel(Walk<N> &w, const Surf<N> &surf) {
+		if (w.parallel_line != w.line) {
+			w.parallel.clear();
+			for (const auto &s : w.scene->surfaces) {
+				if (s->line) {
+					w.parallel[s->id] = w.line->parallel_to(s->sx, s->sy, s->ex, s->ey);
+				}
+			}
+			w.parallel_line = w.line;
+		}
+		auto it = w.parallel.find(surf.id);
+		return it != w.parallel.end() && it->second;
+	}
+
 	// Exact: the current exact line is tangent to surf's circle (computed once per line).
 	static bool tangent(Walk<N> &w, const Surf<N> &surf) {
 		if (w.tangent_line != w.line) {
@@ -1822,6 +1841,9 @@ private:
 			}
 			if (w.line && !s.line && tangent(w, s)) {
 				continue; // a tangent touch is not a crossing (exact)
+			}
+			if (w.line && s.line && parallel(w, s)) {
+				continue; // Stage 112 (K10): an exact line never meets a parallel carrier (the tier's far root is an artefact)
 			}
 			// K6 (Stage 109): surfaces on one carrier share its roots (computed once
 			// per loop -- on the departing member's own segment when the beam

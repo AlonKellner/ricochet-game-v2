@@ -530,6 +530,25 @@ bool Line::tangent_to(const Point3 &C, const BigFloat &rw2, double cx, double cy
 	return L && tangent_zero(*L, C, rw2);
 }
 
+bool Line::parallel_to(double sx, double sy, double ex, double ey) const {
+	// a dx + b dy = 0 with (dx, dy) = e - s exact in float64 (the data's own differences)
+	const double dx = ex - sx;
+	const double dy = ey - sy;
+	const double edx = 2.0 * U * std::fabs(dx);
+	const double edy = 2.0 * U * std::fabs(dy);
+	const EB v = eadd(emul(EB{fa, ea}, EB{dx, edx}), emul(EB{fb, eb}, EB{dy, edy}));
+	if (std::fabs(v.v) > v.e) {
+		return false;
+	}
+	const std::optional<Line3> L = exact();
+	if (!L) {
+		return false;
+	}
+	const BigFloat Dx = sub(of(ex), of(sx));
+	const BigFloat Dy = sub(of(ey), of(sy));
+	return add(mul((*L)[0], Dx), mul((*L)[1], Dy)).is_zero();
+}
+
 // ---------------------------------------------------------------- the exact beam (Perf P2b)
 
 GCircle gc_from_line(const Line3 &L) {

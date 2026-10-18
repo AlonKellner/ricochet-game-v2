@@ -118,6 +118,10 @@ public:
 	bool contains(double x, double y) const;
 	bool contains_h(const Point3 &X, double x, double y, double exy) const;
 	bool tangent_to(const Point3 &C, const BigFloat &rw2, double cx, double cy, double rr, double ecc, double err) const;
+	// Exact (Stage 112): the line is parallel to the line through s and e (no
+	// crossing exists; the tier's root of a nearly parallel pair is an artefact).
+	// False when the line has no exact coefficients.
+	bool parallel_to(double sx, double sy, double ex, double ey) const;
 
 	// enable_shared_from_this is not needed: derived lines capture the parent
 	// pointer handed to them by the caller through the shared_ptr factories.
