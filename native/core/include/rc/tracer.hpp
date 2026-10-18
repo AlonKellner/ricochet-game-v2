@@ -581,6 +581,12 @@ private:
 			const CN<N> inf_pt = *b.at_infinity();
 			via = V2::of(inf_pt.fx(), inf_pt.fy());
 		}
+		if (!is_line && start == end && (via - start).length() < float(1.0 / std::fabs(bf.kappa.v))) {
+			// K9: two events at one drawn point (a tie at an exact common point):
+			// a step of zero length. Its middle, recomputed on the beam, is a rounding
+			// away; only a middle at the antipode (a diameter away) is the full loop.
+			return {TraceStep::make(start, end, fid, std::nullopt, std::nullopt, start, true)};
+		}
 		if (!is_line) {
 			// an arc the renderer cannot draw as an arc is drawn as the chord; when
 			// the path goes the long way round, draw it like a straight beam

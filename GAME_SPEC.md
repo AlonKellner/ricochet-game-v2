@@ -1460,7 +1460,7 @@ The visibility region highlights the **set of cursor positions that will not cau
 - A cursor that the trace never reaches (cut by the event limit, §12.6) is **outside**.
 - A cursor on the player (no aim), on the player's image `P_K` or on the frame's infinity `Q_K` is **not classified**: the aim degenerates there (§11.4).
 - A cursor exactly where the last entry is crossed off its segment is **outside**: the planned walk applies the entry there and the physical one passes, so they leave the point in different frames (V3). Before B4 these departure points formed thin lines along the planned carrier.
-- The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4), and on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor).
+- The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4), and on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor). A whisker's end at exact data (a segment endpoint) belongs to the region exactly when the preview reaches a cursor there: at a planned terminal's endpoint the hit does not fire physically, so the walks diverge and the endpoint is outside (K7).
 
 ### 15.2 Members
 
@@ -2515,7 +2515,7 @@ When the system classifies a point (on-segment, which side, intersection index),
 In the beam solver, provenance takes three forms (`beam_solver.gd` header, `trace2.py`):
 - **Known points:** exact data points a beam passes through, each with its parameter. These are:
   - the player (initial beam, `t = 0`);
-  - the cursor, whenever it is a candidate;
+  - the cursor, whenever it is a candidate, and on every beam whose exact circle (§31.4) passes it (K7: a carrier through the cursor is crossed exactly there, so a departure point at the cursor is the cursor exactly and the cursor is reached at once);
   - the departure point of a beam born at an exact hit point;
   - every known point of the previous beam lying on the carrier of the surface applied (an effect fixes its carrier pointwise);
   - every segment endpoint and via on an exact line.
@@ -2526,7 +2526,7 @@ In the beam solver, provenance takes three forms (`beam_solver.gd` header, `trac
   - the reflection of an exact line in a line mirror (an exact map of the coefficients);
   - an exact line inverted in a circle whose center it contains;
   - an exact projective exit.
-- **Exact circles** (Perf P2b): every beam of an epoch is the image of a line under the frame's maps, so a beam that had an exact line keeps an exact **generalized circle** `A (x² + y²) + B x + C y + D = 0` through every reflection, inversion and portal translation since. It is carried lazily: the exact line and the maps, made exact only when a decision needs it, within an exact-data budget. The stack saves and restores it. A projective, a rotated portal or a beam that never had an exact line has none, and makes no exact claim.
+- **Exact circles** (Perf P2b): every beam of an epoch is the image of a line under the frame's maps, so a beam that had an exact line (or, K9, an aimed pre-transform start: the circle through the player, the exact aim image and `Q0`) keeps an exact **generalized circle** `A (x² + y²) + B x + C y + D = 0` through every reflection, inversion and portal translation since. It is carried lazily: the exact line and the maps, made exact only when a decision needs it, within an exact-data budget. The stack saves and restores it. A projective, a rotated portal or a beam that never had an exact line has none, and makes no exact claim.
 - **The provenance stack:** re-applying the surface on top of the stack (or hitting a portal's pair) pops it and restores the earlier beam *object*. A projective clears the stack and starts a new epoch. `frame_id` identifies `(epoch, stack)`.
 
 ### 31.5 Precision and stability (formerly: frame composition stability)
@@ -2642,4 +2642,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.20.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.22.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -39,18 +39,11 @@ inline bool preview_visible(const TracePath &planned, const std::vector<TraceSte
 	return true;
 }
 
-// Where a disagreement is a known finding (docs/TDD_14_VISIBILITY.md): a cursor
-// exactly on a planned carrier (K7: a departure point or a lap's end). Empty
-// elsewhere. (K8, a cursor on a critical member, was fixed by exact cursors.)
-inline std::string pin_tag(const vis::Result &r, const vis::Pt &c) {
-	const double tol = 1e-9 * std::max({1.0, std::abs(c.x), std::abs(c.y)});
-	for (const vis::Result::Carrier &cr : r.plan_carriers) {
-		if (cr.dist(c) <= tol) {
-			return "on a planned carrier";
-		}
-	}
-	return "";
-}
+// Where a disagreement is a known finding (docs/TDD_14_VISIBILITY.md): none
+// open. (K8, a cursor on a critical member, was fixed by exact member cursors;
+// K7, a cursor exactly on a planned carrier, by the cursor as a known point of
+// exact beams and by exact endpoints deciding whisker ends.)
+inline std::string pin_tag(const vis::Result &, const vis::Pt &) { return ""; }
 
 inline Violations check_VISIBILITY_EQUALS_NON_DIVERGENCE(const vis::Result &r, const V2 &cursor, const TracePath *planned,
 		const std::vector<TraceStep> *typed, bool cursor_point_agrees) {

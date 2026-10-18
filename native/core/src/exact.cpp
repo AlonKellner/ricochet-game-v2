@@ -537,6 +537,23 @@ GCircle gc_from_line(const Line3 &L) {
 	return GCircle{of(0.0), L[0], L[1], L[2].neg()};
 }
 
+// rows (x^2 + y^2, x w, y w, w^2) of the three points: A S + B X + C Y + D = 0
+// is the 4x4 determinant with the row (S, X, Y, 1), expanded along it
+GCircle gc_through(const Point3 &P1, const Point3 &P2, const Point3 &P3) {
+	std::array<std::array<BigFloat, 4>, 3> r;
+	const Point3 *ps[3] = {&P1, &P2, &P3};
+	for (size_t i = 0; i < 3; i++) {
+		const Point3 &p = *ps[i];
+		r[i] = {add(mul(p[0], p[0]), mul(p[1], p[1])), mul(p[0], p[2]), mul(p[1], p[2]), mul(p[2], p[2])};
+	}
+	auto det3 = [&](int a, int b, int c) {
+		const auto m = [&](int i, int j) -> const BigFloat & { return r[size_t(i)][size_t(j == 0 ? a : j == 1 ? b : c)]; };
+		return add(sub(mul(m(0, 0), sub(mul(m(1, 1), m(2, 2)), mul(m(1, 2), m(2, 1)))), mul(m(0, 1), sub(mul(m(1, 0), m(2, 2)), mul(m(1, 2), m(2, 0))))),
+			mul(m(0, 2), sub(mul(m(1, 0), m(2, 1)), mul(m(1, 1), m(2, 0)))));
+	};
+	return GCircle{det3(1, 2, 3), det3(0, 2, 3).neg(), det3(0, 1, 3), det3(0, 1, 2).neg()};
+}
+
 // z -> S + Rot (z - S), Rot = [[mx^2 - my^2, 2 mx my], [2 mx my, my^2 - mx^2]] / |M|^2:
 // G'(z) = G(R z) (R is an involution), scaled by |M|^2.
 GCircle gc_reflect(const GCircle &g, double sx, double sy, double ex, double ey) {
@@ -633,6 +650,12 @@ bool gc_tangent_circle(const GCircle &g, const Point3 &C, const BigFloat &rw2) {
 	return sub(mul(u, u), mul(mul(of(4.0), delta), mul(q2, mul(rw2, s2)))).is_zero();
 }
 
+bool gc_passes(const GCircle &g, double x, double y) {
+	const BigFloat ex = of(x);
+	const BigFloat ey = of(y);
+	return add(add(mul(g.A, add(mul(ex, ex), mul(ey, ey))), add(mul(g.B, ex), mul(g.C, ey))), g.D).is_zero();
+}
+
 std::shared_ptr<const BeamRec> BeamRec::from_line(std::shared_ptr<const Line> line) {
 	if (!line) {
 		return nullptr;
@@ -640,6 +663,17 @@ std::shared_ptr<const BeamRec> BeamRec::from_line(std::shared_ptr<const Line> li
 	auto r = std::make_shared<BeamRec>();
 	r->kind_ = Kind::Line;
 	r->line_ = std::move(line);
+	return r;
+}
+
+std::shared_ptr<const BeamRec> BeamRec::from_gc(const GCircle &g) {
+	auto r = std::make_shared<BeamRec>();
+	r->kind_ = Kind::Circle;
+	r->done_ = true;
+	r->exact_ = g;
+	if (gc_limbs(g) > EXACT_LIMBS) {
+		r->exact_.reset();
+	}
 	return r;
 }
 
@@ -687,7 +721,8 @@ std::optional<GCircle> BeamRec::exact() const {
 			case Kind::Reflect: g = gc_reflect(*p, m_[0], m_[1], m_[2], m_[3]); break;
 			case Kind::Translate: g = gc_translate(*p, m_[0], m_[1]); break;
 			case Kind::Invert: g = gc_invert(*p, c_, rw2_); break;
-			case Kind::Line: break;
+			case Kind::Line:
+			case Kind::Circle: break;
 		}
 	}
 	if (g && gc_limbs(*g) > EXACT_LIMBS) {

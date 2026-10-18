@@ -137,6 +137,9 @@ struct GCircle {
 	BigFloat A, B, C, D;
 };
 GCircle gc_from_line(const Line3 &L);
+// The generalized circle through three exact homogeneous points (a line when
+// they are collinear).
+GCircle gc_through(const Point3 &P1, const Point3 &P2, const Point3 &P3);
 GCircle gc_reflect(const GCircle &g, double sx, double sy, double ex, double ey);
 GCircle gc_translate(const GCircle &g, double dx, double dy);
 GCircle gc_invert(const GCircle &g, const Point3 &C, const BigFloat &rw2);
@@ -145,6 +148,8 @@ int gc_limbs(const GCircle &g);
 // a circle of center C, rw2 = (r w)^2) at one point.
 bool gc_tangent_line(const GCircle &g, double sx, double sy, double ex, double ey);
 bool gc_tangent_circle(const GCircle &g, const Point3 &C, const BigFloat &rw2);
+// Exact: the generalized circle passes the float64 point (x, y).
+bool gc_passes(const GCircle &g, double x, double y);
 
 // A beam's exact generalized circle, carried lazily: an exact line (the last
 // straight beam with exact data) and the maps applied to it since, made exact
@@ -154,6 +159,8 @@ bool gc_tangent_circle(const GCircle &g, const Point3 &C, const BigFloat &rw2);
 class BeamRec {
 public:
 	static std::shared_ptr<const BeamRec> from_line(std::shared_ptr<const Line> line);
+	// a beam whose exact circle is known outright (K9: a pre-transform start)
+	static std::shared_ptr<const BeamRec> from_gc(const GCircle &g);
 	std::shared_ptr<const BeamRec> reflected(double sx, double sy, double ex, double ey) const;
 	std::shared_ptr<const BeamRec> translated(double dx, double dy) const;
 	std::shared_ptr<const BeamRec> inverted(const Point3 &C, const BigFloat &rw2) const;
@@ -163,7 +170,7 @@ public:
 	static constexpr int EXACT_LIMBS = 320;
 
 private:
-	enum class Kind { Line, Reflect, Translate, Invert };
+	enum class Kind { Line, Circle, Reflect, Translate, Invert };
 	Kind kind_ = Kind::Line;
 	std::shared_ptr<const Line> line_;
 	std::shared_ptr<const BeamRec> parent_;

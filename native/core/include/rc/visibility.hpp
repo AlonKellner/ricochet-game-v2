@@ -323,6 +323,7 @@ struct Edge {
 	bool arc = false;
 	bool inclusive = false; // its interior points are in the region
 	bool incl_a = false;    // its start vertex is in the region
+	bool incl_b = false;    // a whisker's end vertex is in the region (K7: decided like incl_a)
 	int layer = 0;
 	double ta = 0.0; // Member: the parameters of a and b on the member's beam
 	double tb = 0.0;
@@ -773,6 +774,17 @@ private:
 		return true;
 	}
 
+	// Frame j is the final frame: no entry from j on changes it (K7: exact data
+	// found in it is exact data of the final frame).
+	bool same_frame_as_final(size_t j) const {
+		for (size_t e = j; e < K; e++) {
+			if (changes_[e]) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	void add_poi(std::vector<Member> &out, const CN<F64> &z, size_t j, const std::string &why, int tangent_sid = -1, bool exact = false,
 			const std::optional<Pt> &other = std::nullopt) {
 		const std::optional<CN<F64>> c = forward(std::optional<CN<F64>>(z), j, K);
@@ -794,10 +806,10 @@ private:
 		m.poi = true;
 		m.why = why + (j < K ? " (frame " + std::to_string(j) + ")" : "");
 		m.tangent_sid = j == K || (tangent_sid >= 0 && carrier_fixed(tangent_sid, j)) ? tangent_sid : -1;
-		m.exact = exact && j == K;
+		m.exact = exact && same_frame_as_final(j);
 		out.push_back(m);
 		m.exact = false; // (only the first copy keeps the flag: see below)
-		out.back().exact = exact && j == K;
+		out.back().exact = exact && same_frame_as_final(j);
 		// the walk the other way along the same member passes the point too (after
 		// the wrap, or before an infinity entry): the opposite aim is critical as
 		// well -- unless the walk's owned part comes first and nothing after it
@@ -1947,10 +1959,13 @@ private:
 				continue;
 			}
 			make_protos(int(i), int((i + 1) % ms.size()), mid, gaps[i].protos);
+			// K7: a cursor exactly at a departure point is reached at once (the cursor
+			// is a known point of the exact beam that crosses there), and the cell's
+			// middle cast is alive -- both walks leave the point in one frame (V3):
+			// the departure points belong to the region
 			for (Proto &p : gaps[i].protos) {
 				if (p.ka == End::Near) {
-					const Pt probe = exact_on_carrier(mid.near_sid, mid.near_pt);
-					p.near_incl = cast(probe, mid.dir, member_of(probe), CastKind::Probe).cursor_ok;
+					p.near_incl = true;
 				}
 			}
 			for (const Proto &p : gaps[i].protos) {
@@ -1993,7 +2008,12 @@ private:
 				continue;
 			}
 			Edge e = carrier_edge(mid.near_sid, End::Near, a, b, mid.near_pt);
-			e.incl_a = true;
+			// K7: an end that is a member's exact point of interest (a segment's
+			// endpoint, say) is in the region exactly when that member's own cast
+			// reaches it there -- at a planned terminal's endpoint the walks diverge
+			auto end_in = [](const Member &m, const Pt &p) { return !(m.exact && m.cursor == p) || m.crit.cursor_ok; };
+			e.incl_a = end_in(L, e.a);
+			e.incl_b = end_in(R, e.b);
 			if (e.a == e.b) {
 				continue;
 			}
@@ -2004,7 +2024,10 @@ private:
 				fb.p = carrier_far(mid.near_sid, b.p, b.p + (b.p - a.p));
 				Edge e1 = carrier_edge(mid.near_sid, End::Near, a, fa, (a.p + fa.p) * 0.5);
 				Edge e2 = carrier_edge(mid.near_sid, End::Near, fb, b, (fb.p + b.p) * 0.5);
-				e1.incl_a = e2.incl_a = true;
+				e1.incl_a = e.incl_a;
+				e1.incl_b = true;
+				e2.incl_a = true;
+				e2.incl_b = e.incl_b;
 				res_.whiskers.push_back(e1);
 				res_.whiskers.push_back(e2);
 			} else {
@@ -2028,6 +2051,7 @@ private:
 					}
 					e.inclusive = true;
 					e.incl_a = true;
+					e.incl_b = true; // (the member's own cast sees its whole arc)
 					res_.whiskers.push_back(e);
 				}
 			}
@@ -2887,6 +2911,12 @@ inline Membership contains(const Result &r, const Pt &c) {
 	for (const Edge &e : r.whiskers) {
 		double scale = 1.0;
 		if (edge_dist(e, c, &scale) <= 1e-9 * scale) {
+			// its ends as decided (K7; an excluded end is decided by the rest of
+			// the region), its interior in
+			const double tol = 1e-9 * std::max({1.0, std::abs(c.x), std::abs(c.y)});
+			if ((norm(c - e.a) <= tol && !e.incl_a) || (norm(c - e.b) <= tol && !e.incl_b)) {
+				continue;
+			}
 			return Membership::Inside;
 		}
 	}

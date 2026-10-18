@@ -1,7 +1,8 @@
 // Perf P2b: exact concurrency on a circular beam. Adjacent crossings of two
 // line carriers at their common point, which the beam's exact circle passes,
 // share one parameter and the id orders them (GAME_SPEC 9.3), never rounding
-// (gen_fixtures_perf_ties.py). The oracle's fixtures at every tier.
+// (gen_fixtures_perf_ties.py), on a pre-transform start too (K9). The oracle's
+// fixtures at every tier.
 #include "oracle_fixtures.hpp"
 
 #include <doctest/doctest.h>
@@ -25,5 +26,5 @@ TEST_CASE("circle ties: the Perf P2b fixtures match the oracle at f64, Dual, 4 a
 		CHECK_MESSAGE(diff_against_oracle(r64l, fx["expected"]) == "", (name + " big64: " + diff_against_oracle(r64l, fx["expected"])));
 		fixtures++;
 	}
-	CHECK(fixtures == 3);
+	CHECK(fixtures == 8);
 }
