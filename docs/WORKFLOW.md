@@ -69,10 +69,13 @@ The gates, measured on 2026-10-18 (the main branch; `gates.sh` prints the same t
 
 | Gate | core | oracle | ctest | native | manifests | gut | asan | total |
 |---|---|---|---|---|---|---|---|---|
-| `make gate` (commit) | 0–5 | 2 | 32–38 | 7 | 10 | 30 | – | 81–88 s |
-| `make gates` (merge) | 0–5 | 2 | 72–75 | 8 | 10 | 30 | 65 | 187 s |
+| `make gate` (commit), main before Stage 111 | 0–5 | 2 | 32–38 | 7 | 10 | 30 | – | 81–88 s |
+| `make gates` (merge), main before Stage 111 | 0–5 | 2 | 72–75 | 8 | 10 | 30 | 65 | 187 s |
+| `make gate` (commit), with Stage 111 | 0–5 | 2 | 68 | 28 | 11 | 48 | – | 157 s |
+| `make gates` (merge), with Stage 111 | 0–5 | 2 | 135 | 8 | 10 | 48 | 179 (with its rebuild) | 382 s |
 
 Before the rework the one gate took 202–343 s per commit (GUT 76–96 s, since Stage 111 over 3 min).
+Stage 111's two-half regions cost about twice Stage 110's per visibility sweep (TDD_16, 111.6).
 
 ## The sweeps
 
@@ -158,6 +161,7 @@ while they are stale, and the generators read them.
 | Variable | Where | What |
 |---|---|---|
 | `RC_VIS_TRACE=1` | `vis::Builder` | one line per cast: half, cursor, aim, tie-choice, chosen, valid / alive / met, the consuming event, both ends, a tie cut |
+| `RC_VIS_MEMO_STATS=1` | `vis::compute` | the two halves' shared memo: solves, tie-choices, realizations (counts, time), hits |
 | `RC_VIS_TIE=1` | `vis::Builder` | the tie-choice per cast (Stage 111) |
 | `RC_REALIZE_TRACE=1` | `Solver::realize`, `first_firing`, `project` | the realization rule's decisions (R1-R3) |
 | `RC_VIS_SCENE`, `RC_VIS_PLAN`, `RC_VIS_PLAYER`, `RC_VIS_PROBE`, `RC_VIS_HALF`, `RC_VIS_NEAR`, `RC_VIS_PIN`, `RC_VIS_CELLS`, `RC_VIS_FILL*`, `RC_VIS_PNG`, `RC_VIS_SVG`, `RC_VIS_VIEW`, `RC_VIS_POLYS` | the skipped `visibility debug` case (`make check TC="visibility debug" SKIP=0`) | one region, probed, drawn (plan ∞ is `-3L`) |
