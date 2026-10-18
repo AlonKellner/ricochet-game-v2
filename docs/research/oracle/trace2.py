@@ -862,6 +862,8 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
         for s in walk.surfaces:
             if walk.line is not None and s.seg.kind != "line" and _tangent(walk.line, s.seg):
                 continue        # a tangent touch is not a crossing (exact)
+            if walk.line is not None and s.seg.kind == "line" and _parallel(walk.line, s.seg):
+                continue        # an exact line never meets a parallel carrier (exact, Stage 112 / K10)
             if walk.pole is not None and _pole_tangent(walk.pole, s.seg):
                 continue        # tangent at the frame's infinity point (exact, Stage 105)
             key = groups[s.id]
@@ -1363,6 +1365,16 @@ def _center_h(seg):
     ny = la * (Cc[0] - B[0]) + lb * (A[0] - Cc[0]) + lc * (B[0] - A[0])
     rr = (A[0] - nx / w) ** 2 + (A[1] - ny / w) ** 2
     return nx, ny, w, rr
+
+
+def _parallel(line, seg):
+    """Exact (Stage 112, K10): the line is parallel to seg's line carrier, so no
+    crossing exists -- the root a rounded tangent gives (far away, before the
+    wrap through infinity) is an artefact. Exact data: the line's coefficients
+    and the segment's float64 endpoints."""
+    a, b, _c = line
+    S, E = FC(seg.S), FC(seg.E)
+    return a * (E[0] - S[0]) + b * (E[1] - S[1]) == 0
 
 
 def _tangent(line, seg):

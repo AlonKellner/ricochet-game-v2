@@ -1360,3 +1360,48 @@ def test_player_inside_a_circle_keeps_the_realization_by_infinity():
         b = T.planned([c], (500, 50), (550, 0), [(1, side), (T.INFINITY_ID, "")])
         assert "cursor" in kinds(a) and "cursor" in kinds(b), (kinds(a), kinds(b))
         assert abs(a.events[0].beam.tau + b.events[0].beam.tau) < mp.mpf(10) ** -40, "the same circle the other way"
+
+
+# ---------------------------------------------------------------- Stage 112: an exact line never meets a parallel carrier (K10)
+
+def _k10_scene(projective):
+    from gen_fixtures_stage81 import REFL, line, room
+    return [line(1, (400, -500), (400, 200), REFL, REFL), projective,
+            line(3, (0, 450), (380, 450), REFL, REFL)] + room(10, -1000, -1000, 1000, 1000)
+
+
+def test_parallel_is_exact():
+    # the vertical line x = 250 (exact data) against vertical and horizontal carriers
+    from gen_fixtures_stage81 import PASS, line
+    vertical = (T.F(1), T.F(0), T.F(250))
+    assert T._parallel(vertical, T.surface_from_json(line(1, (400, -500), (400, 200), PASS, PASS)).seg)
+    assert not T._parallel(vertical, T.surface_from_json(line(1, (0, 450), (380, 450), PASS, PASS)).seg)
+    tilted = (T.F(1), T.F(2) ** -54, T.F(250))
+    assert not T._parallel(tilted, T.surface_from_json(line(1, (400, -500), (400, 200), PASS, PASS)).seg)
+
+
+def test_projective_exit_meets_no_parallel_wall_before_the_wrap():
+    # K10 (TDD_16): the chain after the projective leaves along the exact
+    # vertical x = 250; the rounded tangent of the beam after the reflection
+    # at 3 would cross the vertical walls at |y| ~ 10^80 before the wrap. The
+    # exact line decides: no such event, at any precision
+    from gen_fixtures_stage85 import circle
+    from gen_fixtures_stage87 import proj
+    from gen_fixtures_stage81 import line
+    cases = [
+        (line(2, (0, 200), (380, 200), *(proj("line_normal_projection", False),) * 2), [(1, "LEFT"), (2, "RIGHT"), (3, "RIGHT")]),
+        (circle(2, (250.0, 240.0), 40.0, *(proj("circle_normal_projection", False),) * 2), [(1, "LEFT"), (2, "LEFT"), (3, "RIGHT")]),
+        (line(2, (0, 200), (380, 200), *(proj("line_directional_projection", False, (0.0, 1.0)),) * 2), [(1, "LEFT"), (2, "RIGHT"), (3, "RIGHT")]),
+    ]
+    with emit_infinity():
+        for p2, plan in cases:
+            for dps in (40, 80, 160):
+                with mp.workdps(dps):
+                    w = T.planned(T.scene_from_json(_k10_scene(p2)), (200, -200), (250, 300), plan)
+                    ks = kinds(w)
+                    assert "cursor" in ks, (dps, ks)
+                    for e in w.events:
+                        if e.point is not None:
+                            assert abs(e.point.real) <= 2000 and abs(e.point.imag) <= 2000, (dps, e.kind, e.surface_id, e.point)
+                    i3 = next(i for i, e in enumerate(w.events) if e.kind == "hit" and e.surface_id == 3 and e.applied)
+                    assert w.events[i3 + 1].surface_id == 12, (dps, ks[i3:i3 + 3])
