@@ -8,8 +8,11 @@ tools/judge.sh (make judge) produces the inputs:
                   changed sweep hashes; the changed fixtures, corpus and regions
                   fields), what apply_rebless.py applies after the approval
   --rules NAME    a stage's classifier on top of the generic classes:
-                  docs/research/<NAME>_judge.py with judge_trace(old, new, segs,
-                  portal_src) (stage106: the departure rule)
+                  docs/research/<NAME>_judge.py with judge_combo(old_dump,
+                  new_dump) -> {"planned", "physical", "cls", "fine"} and,
+                  optionally, judge_rebless_lines(path) -> (classes, examples,
+                  findings) for the fixture and corpus fields (stage106: the
+                  departure rule; stage111: the realization by the first entry)
   --report PATH   the Markdown report (stdout otherwise)
 
 Generic classes per changed combo, from the dumps alone (no mpmath):
@@ -21,8 +24,7 @@ Generic classes per changed combo, from the dumps alone (no mpmath):
   limbs    the final tiers, old -> new
 
 Exit status: 0 nothing changed; 2 changes without a rule (the report is for the
-user); 1 a rule's findings (regression, both-wrong, beam-differs,
-applied-differs).
+user); 1 a rule's findings (what the rule does not explain).
 """
 import argparse
 import collections
@@ -36,7 +38,6 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, HERE)
 sys.path.insert(0, os.path.join(HERE, "oracle"))
 
-FINDINGS = ("regression", "both-wrong", "beam-differs", "applied-differs")
 EVENT_FIELDS = ("kind", "sid", "applied", "rehit", "popped", "teleport", "left", "x", "y")
 
 
@@ -122,20 +123,6 @@ def load_rules(name):
     return mod
 
 
-def rule_classes(mod, o, n):
-    segs = mod.segs_of(n["defs"])
-    portal_src = {}
-    for df in n["defs"]:
-        if "portal" in df:
-            portal_src[df["pair"]] = tuple(dbl(h) for h in df["portal"])
-    out = {}
-    for which in ("planned", "physical"):
-        if o.get(which) is None or n.get(which) is None:
-            continue
-        out[which] = mod.judge_trace(o[which], n[which], segs, portal_src)
-    return out
-
-
 def read_rebless(path):
     sweeps = collections.Counter()
     fields = collections.defaultdict(collections.Counter)
@@ -169,11 +156,15 @@ def main():
         rec = {"group": key[0], "combo": key[1]}
         rec.update(generic(old[key], new[key]))
         if rules is not None:
-            rec["rules"] = rule_classes(rules, old[key], new[key])
-            rec["cls"] = max((r["cls"] for r in rec["rules"].values()), key=lambda c: (c in FINDINGS, c), default="undecidable")
+            rec["rules"] = rules.judge_combo(old[key], new[key])
+            rec["cls"] = rec["rules"]["cls"]
+            rec["fine"] = rec["rules"]["fine"]
         records.append(rec)
     sweeps, fields = read_rebless(args.rebless)
     n_fields = sum(sum(c.values()) for c in fields.values())
+    field_rules = None
+    if rules is not None and args.rebless and hasattr(rules, "judge_rebless_lines") and os.path.exists(args.rebless):
+        field_rules = rules.judge_rebless_lines(args.rebless)
 
     out = []
     w = out.append
@@ -212,19 +203,35 @@ def main():
             cls = collections.Counter(r["cls"] for r in records)
             w("## The rule's classes (%s)" % args.rules)
             w("")
-            w(", ".join("%s %d" % kv for kv in sorted(cls.items())))
+            w("| class | combos | fine |")
+            w("|---|---|---|")
+            for c, n in sorted(cls.items(), key=lambda kv: -kv[1]):
+                fine = all(r["fine"] for r in records if r["cls"] == c)
+                w("| %s | %d | %s |" % (c, n, "yes" if fine else "FINDING"))
             w("")
-            for c in FINDINGS:
-                bad = [r for r in records if r["cls"] == c]
-                if bad:
-                    w("### %s (%d)" % (c, len(bad)))
-                    for r in bad[:50]:
-                        w("- %s combo %d: %s" % (r["group"], r["combo"], json.dumps(r["rules"])[:400]))
-                    w("")
+            bad = [r for r in records if not r["fine"]]
+            if bad:
+                w("### Findings (%d)" % len(bad))
+                for r in bad[:50]:
+                    w("- %s combo %d: %s" % (r["group"], r["combo"], json.dumps(r["rules"])[:400]))
+                w("")
         w("## Examples")
         w("")
         for r in records[: args.examples]:
             w("- %s combo %d: aim %s; planned %s; physical %s" % (r["group"], r["combo"], r["aim"], json.dumps(r["planned"]), json.dumps(r["physical"])))
+        w("")
+    if field_rules is not None:
+        counts, ex, f_findings = field_rules
+        w("## The rule's classes of the fixture and corpus fields (%s)" % args.rules)
+        w("")
+        w("| class | fields |")
+        w("|---|---|")
+        for c, n in sorted(counts.items(), key=lambda kv: -kv[1]):
+            w("| %s | %d |" % (c, n))
+        w("")
+        for c in sorted(ex):
+            for e in ex[c][:4]:
+                w("- %s: e.g. %s" % (c, e))
         w("")
     if fields:
         w("## Changed golden fields")
@@ -247,7 +254,9 @@ def main():
         print("\nnothing changed")
         return 0
     if rules is not None:
-        return 1 if any(r["cls"] in FINDINGS for r in records) else 0
+        findings = sum(1 for r in records if not r["fine"]) + (field_rules[2] if field_rules is not None else 0)
+        print("\nfindings: %d" % findings)
+        return 1 if findings else 0
     return 2
 
 

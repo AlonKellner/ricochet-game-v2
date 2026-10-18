@@ -198,10 +198,12 @@ TEST_CASE("infinity: with the switch on every older fixture differs from its gol
 	CHECK(fixtures == 115);
 	// the oracle's own diff of the regenerated fixtures against the pre-Stage-88
 	// ones (docs/research/stage88b_fixture_diff.md, updated for Stage 101): 32
-	// of the 115 fixtures change, 83 infinity events, 8 traces cut earlier
+	// of the 115 fixtures change, 83 infinity events, 8 traces cut earlier;
+	// since Stage 111's re-bless (11 fixtures realized by the plan's first
+	// entry, GAME_SPEC 13.1) 87 infinity events and 9 cuts
 	CHECK(changed == 32);
-	CHECK(inserted == 83);
-	CHECK(cut == 8);
+	CHECK(inserted == 87);
+	CHECK(cut == 9);
 }
 
 TEST_CASE("Stage 105: the tangency-at-infinity fixtures match the oracle at f64, Dual, 4 and 64 limbs") {

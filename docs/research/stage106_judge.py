@@ -202,6 +202,33 @@ def judge_trace(old, new, segs, portal_src):
             "departure": list(D)}
 
 
+# ---- the rules-module interface of docs/research/judge.py (make judge RULES=stage106)
+
+FINDINGS = ("regression", "both-wrong", "beam-differs", "applied-differs")
+
+
+def judge_combo(old, new):
+    mp.mp.dps = max(mp.mp.dps, 200)
+    segs = segs_of(new["defs"])
+    portal_src = {}
+    for df in new["defs"]:
+        if "portal" in df:
+            portal_src[df["pair"]] = tuple(dbl(h) for h in df["portal"])
+    out = {}
+    worst = "undecidable"
+    rank = {"regression": 4, "both-wrong": 3, "beam-differs": 2, "applied-differs": 2, "fix": 1, "prefix": 1, "undecidable": 0}
+    for which in ("planned", "physical"):
+        if old.get(which) is None or new.get(which) is None:
+            continue
+        r = judge_trace(old[which], new[which], segs, portal_src)
+        out[which] = r["cls"]
+        if rank[r["cls"]] > rank[worst]:
+            worst = r["cls"]
+    out["cls"] = worst
+    out["fine"] = worst not in FINDINGS
+    return out
+
+
 def main():
     ap = argparse.ArgumentParser()
     ap.add_argument("--old", required=True)

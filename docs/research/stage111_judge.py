@@ -251,6 +251,8 @@ def judge_rebless(path, examples, verdicts):
         return "planned" in field
     lines.sort(key=lambda l: (0 if is_planned(l[1], l[2], l[3]) else 1))
     for _, file, key, field, newj in lines:
+        if file not in golds:
+            continue
         if field.endswith("_err") or field.endswith("_tier") or field.endswith("tiers_tried"):
             counts["consequence: " + field] += 1
             continue
@@ -270,6 +272,26 @@ def judge_rebless(path, examples, verdicts):
             ex[cls].append(tag)
         verdicts.append({"file": file, "key": key, "field": field, "class": cls})
     return counts, ex
+
+
+# ---- the rules-module interface of docs/research/judge.py (make judge RULES=stage111)
+
+def judge_combo(old, new):
+    """one changed sweep combo, both dumps -> {"planned": cls, "physical": cls, "cls": the worst, "fine": bool}"""
+    po, pn = from_dump_climb(old["planned"]), from_dump_climb(new["planned"])
+    cls = judge_planned(po, pn, new["plan"])
+    pcls = judge_physical(from_dump_climb(old["physical"]), from_dump_climb(new["physical"]), cls)
+    fine = is_fine(cls) and is_fine(pcls)
+    return {"planned": cls, "physical": pcls, "cls": cls if not is_fine(cls) else (pcls if not is_fine(pcls) else cls), "fine": fine}
+
+
+def judge_rebless_lines(path):
+    """the REBLESS-JSON lines of the fixtures and the corpus -> (Counter of classes, examples, findings);
+    other goldens' lines (regions) are left to the generic report"""
+    verdicts = []
+    counts, ex = judge_rebless(path, 4, verdicts)
+    findings = sum(v for k, v in counts.items() if not is_fine(k))
+    return counts, ex, findings
 
 
 def main():
