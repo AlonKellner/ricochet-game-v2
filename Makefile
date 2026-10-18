@@ -14,6 +14,10 @@ CTEST_JOBS ?= $(NCPU)
 NINJA := $(shell command -v ninja 2>/dev/null)
 gen = $(if $(wildcard $(1)/CMakeCache.txt),,$(if $(NINJA),-G Ninja,))
 
+comma := ,
+empty :=
+space := $(empty) $(empty)
+
 BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
@@ -43,6 +47,7 @@ check_re_all := .
 check_re_solver := ^rc_tests$$|tier_independence|pop_tiers|sweep_goldens
 check_re_vis := visibility
 check_re_goldens := ^rc_tests$$|sweep_goldens
+check_re_sweeps := rc_sweeps
 check: core
 	@if [ -n "$(TC)" ]; then $(BUILD_CORE)/rc_tests -tc="$(TC)" $(if $(filter 0,$(SKIP)),--no-skip,); \
 	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --output-on-failure -R '$(check_re_$(AREA))'; fi
@@ -88,6 +93,20 @@ gates:
 gate:
 	LEVEL=commit ./gates.sh
 
+# ------------------------------------------------------------- sweep manifests
+# Workflow W2: the GUT sweeps' inputs (what SweepRunner.sweep_native hands
+# SweepKernel.run) as bench/sweeps/*.json, replayed natively by rc_tests
+# (sweeps:*). Regenerate after a change to the levels, SweepPlans or
+# SweepRunner; the manifests gate (gates.sh) fails while they are stale.
+SWEEP_MANIFEST_FILES := test_invariant_sweep.gd test_invariant_combos.gd test_stage107_level_sweep.gd \
+	test_stage108_level_sweep.gd test_visibility_sweep.gd
+MANIFEST_DIR ?= $(CURDIR)/bench/sweeps
+manifests: native
+	rm -rf "$(MANIFEST_DIR)" && mkdir -p "$(MANIFEST_DIR)"
+	SWEEP_MANIFEST_DIR="$(MANIFEST_DIR)" $(GODOT) --headless -s addons/gut/gut_cmdln.gd -gconfig= \
+		-gtest=$(subst $(space),$(comma),$(addprefix res://tests/,$(SWEEP_MANIFEST_FILES))) -gexit > /dev/null
+	@ls "$(MANIFEST_DIR)" | wc -l | sed 's/^ *//; s/$$/ manifests/'
+
 # ------------------------------------------------------------------ oracle
 # The mpmath oracle's own tests and the fixture schema (docs/research/oracle).
 ORACLE_PY := docs/research/.venv/bin/python
@@ -118,9 +137,6 @@ test-stage:
 SWEEPS := test_invariant_sweep.gd test_invariant_combos.gd test_precision_invariant_sweep.gd test_stage107_level_sweep.gd test_stage108_level_sweep.gd test_visibility_sweep.gd
 FAST_TESTS := $(filter-out $(addprefix tests/,$(SWEEPS)),$(wildcard tests/test_*.gd)) \
 	$(wildcard tests/native/test_*.gd)
-comma := ,
-empty :=
-space := $(empty) $(empty)
 test-fast: core native ctest oracle-test
 	$(GODOT) --headless -s addons/gut/gut_cmdln.gd -gconfig= \
 		-gtest=$(subst $(space),$(comma),$(addprefix res://,$(FAST_TESTS))) -gexit

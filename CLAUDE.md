@@ -25,7 +25,7 @@ The protocol: `docs/WORKFLOW.md` (the three gates, the three build trees, the da
 ```bash
 # The inner loop: the rc_tests binary alone (no godot-cpp), then ctest entries of an area
 make check                      # every entry, ~18 s after the build
-make check AREA=vis             # solver | vis | goldens | all
+make check AREA=vis             # solver | vis | goldens | sweeps | all
 make check TC="visibility digest" SKIP=0   # one doctest filter (--no-skip with SKIP=0)
 
 # Before every commit (core, oracle, ctest, the extension, GUT, goldens unchanged; timed summary)

@@ -122,7 +122,7 @@ if(RC_BUILD_TESTS)
     # cores: the sweep goldens replay in RC_SWEEP_PARTS parts (RC_SWEEP_PART),
     # the Stage 105 tier-independence walks alone, every other case together.
     set(RC_SWEEP_PARTS 6 CACHE STRING "ctest entries the sweep goldens replay is split into")
-    set(RC_HEAVY_CASES "goldens: the sweep combos*,Stage 105: on coincidence*,Stage 106: pops at known points*,visibility:*")
+    set(RC_HEAVY_CASES "goldens: the sweep combos*,Stage 105: on coincidence*,Stage 106: pops at known points*,visibility:*,sweeps:*")
     add_test(NAME rc_tests COMMAND rc_tests "--test-case-exclude=${RC_HEAVY_CASES}")
     # the two random-scene walks (the ASan critical path) in RC_CASE_PARTS parts
     # each (RC_CASE_PART: the k-th scene of every n, the scenes drawn as unsharded)
@@ -158,6 +158,22 @@ if(RC_BUILD_TESTS)
     foreach(part RANGE ${RC_SWEEP_LAST})
         add_test(NAME rc_tests_sweep_goldens_${part} COMMAND rc_tests "--test-case=goldens: the sweep combos*")
         set_tests_properties(rc_tests_sweep_goldens_${part} PROPERTIES ENVIRONMENT "RC_SWEEP_PART=${part}/${RC_SWEEP_PARTS}")
+    endforeach()
+
+    # Workflow W2: the GUT sweeps' manifests (bench/sweeps) natively, the players
+    # in parts (RC_SWEEPS_PART); one cast thread per region (the parts are the
+    # parallelism)
+    set(RC_SWEEPS_INV_PARTS 6 CACHE STRING "ctest entries the invariant sweeps run in")
+    set(RC_SWEEPS_VIS_PARTS 12 CACHE STRING "ctest entries the visibility sweeps run in")
+    math(EXPR RC_SWEEPS_INV_LAST "${RC_SWEEPS_INV_PARTS} - 1")
+    foreach(part RANGE ${RC_SWEEPS_INV_LAST})
+        add_test(NAME rc_sweeps_inv_${part} COMMAND rc_tests "--test-case=sweeps: the invariant*")
+        set_tests_properties(rc_sweeps_inv_${part} PROPERTIES ENVIRONMENT "RC_SWEEPS_PART=${part}/${RC_SWEEPS_INV_PARTS};RC_VIS_THREADS=1")
+    endforeach()
+    math(EXPR RC_SWEEPS_VIS_LAST "${RC_SWEEPS_VIS_PARTS} - 1")
+    foreach(part RANGE ${RC_SWEEPS_VIS_LAST})
+        add_test(NAME rc_sweeps_vis_${part} COMMAND rc_tests "--test-case=sweeps: the visibility*")
+        set_tests_properties(rc_sweeps_vis_${part} PROPERTIES ENVIRONMENT "RC_SWEEPS_PART=${part}/${RC_SWEEPS_VIS_PARTS};RC_VIS_THREADS=1")
     endforeach()
 
     # ricochet_core must stay Godot-free: fails if any file under core/ names godot-cpp.

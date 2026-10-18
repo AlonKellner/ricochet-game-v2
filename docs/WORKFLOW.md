@@ -17,9 +17,9 @@ machine (6 performance, 6 efficiency cores) unless a row says otherwise.
 
 | Target | When | What | Time |
 |---|---|---|---|
-| `make check` | after every edit | `make core` (the `rc_tests` binary alone) then the ctest entries of an area: `AREA=all` (default) / `solver` / `vis` / `goldens`, or one doctest filter `TC="..."` (`SKIP=0` adds `--no-skip`) | 18–24 s for a core header change + the entries (all: 18 s) |
-| `make gate` | before every commit | `gates.sh LEVEL=commit`: core, oracle, ctest (release), the extension build, the GUT suite, the goldens unchanged | see the table below |
-| `make gates` | before a merge to main, at each phase close, and whenever a golden, a fixture or a dump changes | `LEVEL=merge`: the same, then ctest under ASan+UBSan | see the table below |
+| `make check` | after every edit | `make core` (the `rc_tests` binary alone) then the ctest entries of an area: `AREA=all` (default) / `solver` / `vis` / `goldens` / `sweeps`, or one doctest filter `TC="..."` (`SKIP=0` adds `--no-skip`) | 18–24 s for a core header change + the entries (all: 18 s) |
+| `make gate` | before every commit | `gates.sh LEVEL=commit`: core, oracle, ctest (release; the native sweeps at one player in 4), the extension build, the manifests current, the GUT suite (its sweeps sampled), the goldens unchanged | see below |
+| `make gates` | before a merge to main, at each phase close, and whenever a golden, a fixture or a dump changes | `LEVEL=merge`: the same with every sweep player, then ctest under ASan+UBSan | see below |
 
 Every gate runs even after a failure; the summary names the failed ones and the log directory.
 
@@ -62,6 +62,34 @@ ctest in the core tree: 26 entries, 18 s wall (the Stage 105/106 random-scene ca
 = 4 parts each: `RC_CASE_PART=k/n`, the k-th scene of every n, the scenes drawn as in the whole run).
 ASan: a cold tree plus its ctest 97 s; the ctest alone 51 s (was 74–85 s with godot-cpp in the tree and
 the two random cases whole).
+
+## The sweeps
+
+The invariant and visibility sweeps (`tests/test_invariant_sweep.gd`, `test_invariant_combos.gd`,
+`test_stage107_level_sweep.gd`, `test_stage108_level_sweep.gd`, `test_visibility_sweep.gd`) build their
+inputs in Godot (the scene's defs and surface infos, the positions from the grid, Godot's RNG and the points
+of interest, the plans from `SweepPlans`) and hand them to the native kernel (`SweepKernel.run` →
+`rc::sweep::run`). Those inputs are data:
+
+- **`bench/sweeps/<scene>__<n>.json`** (136 manifests, 1.5 MB): one per `SweepRunner.sweep_native` call,
+  written under `SWEEP_MANIFEST_DIR` (`make manifests`, a dry GUT pass of the five files, 14 s). A manifest
+  holds the defs, the infos (segment and carrier as the binding reads them), the positions, the plans, the
+  flags and the switches (`skip_equal`, `emit_infinity`, `visibility`, `carrier_cursors`), in Godot's
+  full-precision JSON.
+- **`native/tests/test_sweeps.cpp`** replays every manifest through `rc::sweep::run` as the binding calls it:
+  the `rc_sweeps_inv_{k}` (6 parts) and `rc_sweeps_vis_{k}` (12 parts) ctest entries, `RC_SWEEPS_PART=k/n`
+  over the players, `RC_SWEEPS_STRIDE=s` thinning them (the commit gate: 4), `RC_SWEEPS_FILTER=text`,
+  `RC_SWEEPS_VIOLATIONS=path` for the violation viewer's JSON. `make check AREA=sweeps`: 57 s wall, about
+  580 s CPU, 386k invariant and 105k visibility combos (the main branch, 2026-10-18).
+- **The manifests gate** (`gates.sh`, both levels) regenerates the manifests into a temp dir and diffs them
+  against `bench/sweeps`: the native sweep checks exactly the combos the GUT sweep would. After a change to
+  a level, `SweepPlans`, `SweepRunner`, `SceneDefs` or `InvariantChecker.surface_infos`: `make manifests`
+  and commit the result.
+- **The GUT sweep files stay as the bindings' sample**: `SWEEP_SAMPLE=8` (set by `run_tests_parallel.sh`)
+  thins every shard to one player in eight, the LIVE combos (one per scene through `PathRenderer` and
+  `InvariantChecker`) run as before, and `SWEEP_SAMPLE=1` runs every player. The GUT suite takes 29 s
+  (78 s before). The precision sweep (`test_precision_invariant_sweep.gd`, through the live renderer) is
+  sampled the same way.
 
 ## The data pipelines
 

@@ -1,0 +1,621 @@
+{
+	"schema": "sweep-manifest/1",
+	"scene": "res://scenes/playground/pre_inverted.tscn",
+	"seq": 4,
+	"defs": [
+		{
+			"circle": null,
+			"id": 1,
+			"start": [
+				300.0,
+				150.0
+			],
+			"end": [
+				1600.0,
+				150.0
+			],
+			"via": [
+				950.0,
+				150.0
+			],
+			"full": false,
+			"line": true,
+			"left": {
+				"type": "terminal",
+				"interactive": false
+			},
+			"right": {
+				"type": "terminal",
+				"interactive": false
+			},
+			"is_target": false,
+			"player_solid": true
+		},
+		{
+			"circle": null,
+			"id": 2,
+			"start": [
+				500.0,
+				250.0
+			],
+			"end": [
+				500.0,
+				650.0
+			],
+			"via": [
+				500.0,
+				450.0
+			],
+			"full": false,
+			"line": true,
+			"left": {
+				"type": "reflection",
+				"interactive": true
+			},
+			"right": {
+				"type": "pass",
+				"interactive": false
+			},
+			"is_target": false,
+			"player_solid": false
+		},
+		{
+			"circle": null,
+			"id": 3,
+			"start": [
+				1450.0,
+				350.0
+			],
+			"end": [
+				1450.0,
+				800.0
+			],
+			"via": [
+				1450.0,
+				575.0
+			],
+			"full": false,
+			"line": true,
+			"left": {
+				"type": "reflection",
+				"interactive": true
+			},
+			"right": {
+				"type": "pass",
+				"interactive": false
+			},
+			"is_target": false,
+			"player_solid": false
+		},
+		{
+			"circle": null,
+			"id": 4,
+			"start": [
+				700.0,
+				880.0
+			],
+			"end": [
+				1300.0,
+				880.0
+			],
+			"via": [
+				1000.0,
+				880.0
+			],
+			"full": false,
+			"line": true,
+			"left": {
+				"type": "pass",
+				"interactive": false
+			},
+			"right": {
+				"type": "reflection",
+				"interactive": true
+			},
+			"is_target": false,
+			"player_solid": false
+		},
+		{
+			"circle": null,
+			"id": 5,
+			"start": [
+				0.0,
+				0.0
+			],
+			"end": [
+				1920.0,
+				0.0
+			],
+			"via": [
+				960.0,
+				0.0
+			],
+			"full": false,
+			"line": true,
+			"left": {
+				"type": "pass",
+				"interactive": false
+			},
+			"right": {
+				"type": "pass",
+				"interactive": false
+			},
+			"is_target": false,
+			"player_solid": false
+		},
+		{
+			"circle": null,
+			"id": 6,
+			"start": [
+				1920.0,
+				0.0
+			],
+			"end": [
+				1920.0,
+				1080.0
+			],
+			"via": [
+				1920.0,
+				540.0
+			],
+			"full": false,
+			"line": true,
+			"left": {
+				"type": "pass",
+				"interactive": false
+			},
+			"right": {
+				"type": "pass",
+				"interactive": false
+			},
+			"is_target": false,
+			"player_solid": false
+		},
+		{
+			"circle": null,
+			"id": 7,
+			"start": [
+				1920.0,
+				1080.0
+			],
+			"end": [
+				0.0,
+				1080.0
+			],
+			"via": [
+				960.0,
+				1080.0
+			],
+			"full": false,
+			"line": true,
+			"left": {
+				"type": "pass",
+				"interactive": false
+			},
+			"right": {
+				"type": "pass",
+				"interactive": false
+			},
+			"is_target": false,
+			"player_solid": false
+		},
+		{
+			"circle": null,
+			"id": 8,
+			"start": [
+				0.0,
+				1080.0
+			],
+			"end": [
+				0.0,
+				0.0
+			],
+			"via": [
+				0.0,
+				540.0
+			],
+			"full": false,
+			"line": true,
+			"left": {
+				"type": "pass",
+				"interactive": false
+			},
+			"right": {
+				"type": "pass",
+				"interactive": false
+			},
+			"is_target": false,
+			"player_solid": false
+		},
+		{
+			"circle": {
+				"center": [
+					960.0,
+					540.0
+				],
+				"radius": 260.0
+			},
+			"id": 9,
+			"start": [
+				1220.0,
+				540.0
+			],
+			"end": [
+				830.0,
+				314.8399963378906
+			],
+			"via": [
+				830.0,
+				765.1600341796875
+			],
+			"full": true,
+			"line": false,
+			"left": {
+				"type": "inversion",
+				"interactive": false
+			},
+			"right": {
+				"type": "inversion",
+				"interactive": false
+			},
+			"is_target": false,
+			"player_solid": false,
+			"pre_transform": true
+		}
+	],
+	"infos": [
+		{
+			"id": 1,
+			"has_effect": true,
+			"segment": {
+				"start": [
+					300.0,
+					150.0
+				],
+				"end": [
+					1600.0,
+					150.0
+				],
+				"via": [
+					950.0,
+					150.0
+				],
+				"full": false
+			},
+			"carrier": {
+				"a": 0.0,
+				"b": 0.0,
+				"c": -549250000.0,
+				"d": 82387500000.0
+			}
+		},
+		{
+			"id": 2,
+			"has_effect": true,
+			"segment": {
+				"start": [
+					500.0,
+					250.0
+				],
+				"end": [
+					500.0,
+					650.0
+				],
+				"via": [
+					500.0,
+					450.0
+				],
+				"full": false
+			},
+			"carrier": {
+				"a": 0.0,
+				"b": 16000000.0,
+				"c": 0.0,
+				"d": -8000000000.0
+			}
+		},
+		{
+			"id": 3,
+			"has_effect": true,
+			"segment": {
+				"start": [
+					1450.0,
+					350.0
+				],
+				"end": [
+					1450.0,
+					800.0
+				],
+				"via": [
+					1450.0,
+					575.0
+				],
+				"full": false
+			},
+			"carrier": {
+				"a": 0.0,
+				"b": 22781250.0,
+				"c": 0.0,
+				"d": -33032812500.0
+			}
+		},
+		{
+			"id": 4,
+			"has_effect": true,
+			"segment": {
+				"start": [
+					700.0,
+					880.0
+				],
+				"end": [
+					1300.0,
+					880.0
+				],
+				"via": [
+					1000.0,
+					880.0
+				],
+				"full": false
+			},
+			"carrier": {
+				"a": 0.0,
+				"b": 0.0,
+				"c": -54000000.0,
+				"d": 47520000000.0
+			}
+		},
+		{
+			"id": 5,
+			"has_effect": false,
+			"segment": {
+				"start": [
+					0.0,
+					0.0
+				],
+				"end": [
+					1920.0,
+					0.0
+				],
+				"via": [
+					960.0,
+					0.0
+				],
+				"full": false
+			},
+			"carrier": {
+				"a": 0.0,
+				"b": 0.0,
+				"c": -1769472000.0,
+				"d": 0.0
+			}
+		},
+		{
+			"id": 6,
+			"has_effect": false,
+			"segment": {
+				"start": [
+					1920.0,
+					0.0
+				],
+				"end": [
+					1920.0,
+					1080.0
+				],
+				"via": [
+					1920.0,
+					540.0
+				],
+				"full": false
+			},
+			"carrier": {
+				"a": 0.0,
+				"b": 314928000.0,
+				"c": 0.0,
+				"d": -604661760000.0
+			}
+		},
+		{
+			"id": 7,
+			"has_effect": false,
+			"segment": {
+				"start": [
+					1920.0,
+					1080.0
+				],
+				"end": [
+					0.0,
+					1080.0
+				],
+				"via": [
+					960.0,
+					1080.0
+				],
+				"full": false
+			},
+			"carrier": {
+				"a": 0.0,
+				"b": 0.0,
+				"c": 1769472000.0,
+				"d": -1911029760000.0
+			}
+		},
+		{
+			"id": 8,
+			"has_effect": false,
+			"segment": {
+				"start": [
+					0.0,
+					1080.0
+				],
+				"end": [
+					0.0,
+					0.0
+				],
+				"via": [
+					0.0,
+					540.0
+				],
+				"full": false
+			},
+			"carrier": {
+				"a": 0.0,
+				"b": -314928000.0,
+				"c": 0.0,
+				"d": 0.0
+			}
+		}
+	],
+	"positions": [
+		[
+			570.0,
+			250.0
+		],
+		[
+			830.0,
+			250.0
+		],
+		[
+			1090.0,
+			250.0
+		],
+		[
+			1350.0,
+			250.0
+		],
+		[
+			570.0,
+			443.3333435058594
+		],
+		[
+			830.0,
+			443.3333435058594
+		],
+		[
+			1090.0,
+			443.3333435058594
+		],
+		[
+			1350.0,
+			443.3333435058594
+		],
+		[
+			570.0,
+			636.6666870117188
+		],
+		[
+			830.0,
+			636.6666870117188
+		],
+		[
+			1090.0,
+			636.6666870117188
+		],
+		[
+			1350.0,
+			636.6666870117188
+		],
+		[
+			570.0,
+			830.0
+		],
+		[
+			830.0,
+			830.0
+		],
+		[
+			1090.0,
+			830.0
+		],
+		[
+			1350.0,
+			830.0
+		],
+		[
+			999.7749633789063,
+			281.2597351074219
+		],
+		[
+			729.841552734375,
+			386.6212158203125
+		],
+		[
+			598.9611206054688,
+			426.3520812988281
+		],
+		[
+			811.13623046875,
+			572.4208984375
+		],
+		[
+			587.5267333984375,
+			515.45166015625
+		],
+		[
+			1025.29150390625,
+			359.8753356933594
+		],
+		[
+			760.0,
+			640.0
+		],
+		[
+			835.0,
+			665.0
+		],
+		[
+			760.0,
+			440.0
+		],
+		[
+			835.0,
+			415.0
+		],
+		[
+			1085.0,
+			665.0
+		]
+	],
+	"plans": [
+		[
+			{
+				"surface_id": -3,
+				"side": "LEFT"
+			}
+		],
+		[
+			{
+				"surface_id": -3,
+				"side": "LEFT"
+			},
+			{
+				"surface_id": -3,
+				"side": "LEFT"
+			}
+		],
+		[
+			{
+				"surface_id": -3,
+				"side": "LEFT"
+			},
+			{
+				"surface_id": 2,
+				"side": "LEFT"
+			}
+		],
+		[
+			{
+				"surface_id": 2,
+				"side": "LEFT"
+			},
+			{
+				"surface_id": -3,
+				"side": "LEFT"
+			}
+		]
+	],
+	"flags": {},
+	"skip_equal": true,
+	"emit_infinity": true,
+	"visibility": true,
+	"carrier_cursors": true
+}

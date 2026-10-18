@@ -2,6 +2,7 @@
 // cursor is inside iff the preview's merged steps before it are ALIGNED and it
 // is reached -- on the shipped levels' scene dumps.
 #include "support/json_defs.hpp"
+#include "support/violations.hpp"
 #include "support/png_debug.hpp"
 #include "rc/sweep.hpp"
 #include "rc/earcut.hpp"
@@ -216,29 +217,7 @@ TEST_CASE("visibility: the empty plan's region is the non-divergence set on ever
 
 namespace {
 
-// A violation's message with its arguments (Godot's % formatting, the subset used).
-std::string render(const inv::Violation &vi) {
-	std::string out;
-	size_t ai = 0;
-	for (size_t i = 0; i < vi.fmt.size(); i++) {
-		if (vi.fmt[i] != '%' || i + 1 >= vi.fmt.size()) {
-			out += vi.fmt[i];
-			continue;
-		}
-		size_t j = i + 1;
-		while (j < vi.fmt.size() && (std::isdigit(static_cast<unsigned char>(vi.fmt[j])) || vi.fmt[j] == '.')) j++;
-		const std::string spec = vi.fmt.substr(i, j - i + 1);
-		const inv::Arg &a = ai < vi.args.size() ? vi.args[ai++] : inv::Arg(std::string("?"));
-		char buf[256];
-		if (const auto *x = std::get_if<int64_t>(&a)) std::snprintf(buf, sizeof buf, "%lld", (long long)*x);
-		else if (const auto *d = std::get_if<double>(&a)) std::snprintf(buf, sizeof buf, spec.c_str(), *d);
-		else if (const auto *str = std::get_if<std::string>(&a)) std::snprintf(buf, sizeof buf, "%s", str->c_str());
-		else std::snprintf(buf, sizeof buf, "?");
-		out += buf;
-		i = j;
-	}
-	return out;
-}
+using rc_test::render;
 
 // Plans on a level: one entry per transformative side (and pass / state sides),
 // then pairs of the first few mirror entries, then an infinity entry.

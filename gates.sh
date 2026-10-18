@@ -1,8 +1,11 @@
 #!/usr/bin/env bash
 # The gates, in order, with one timed summary (docs/WORKFLOW.md):
 #   LEVEL=commit (make gate): the core build, the oracle, ctest (RelWithDebInfo,
-#     build-core), the extension build, the GUT suite, the goldens unchanged.
-#   LEVEL=merge (make gates): the same, then ctest under ASan+UBSan (build-asan).
+#     build-core; the native sweeps at one player in 4), the extension build,
+#     the sweep manifests current, the GUT suite (its sweeps sampled), the
+#     goldens unchanged.
+#   LEVEL=merge (make gates): the same with every sweep player, then ctest under
+#     ASan+UBSan (build-asan).
 # Every gate runs even after a failure; the exit status is nonzero if any failed.
 # Logs: $LOGDIR (printed). JOBS bounds the compiles (default: every core).
 #
@@ -31,6 +34,18 @@ gate() {
 	SECS+=($(( $(date +%s) - t0 )))
 }
 
+# the committed sweep manifests are what the GUT sweeps hand the kernel now
+manifests_current() {
+	local d
+	d=$(mktemp -d "${TMPDIR:-/tmp}/ricochet_manifests.XXXXXX")
+	make -s manifests MANIFEST_DIR="$d" || return 1
+	if ! diff -r bench/sweeps "$d"; then
+		echo "!! bench/sweeps is stale: make manifests"
+		return 1
+	fi
+	rm -rf "$d"
+}
+
 goldens_unchanged() {
 	local d
 	d=$(git diff --stat bench/goldens)
@@ -39,8 +54,13 @@ goldens_unchanged() {
 
 gate core make core
 gate oracle make -s oracle-test
-gate ctest make ctest
+if [ "$LEVEL" = commit ]; then
+	gate ctest env RC_SWEEPS_STRIDE=4 make ctest # the native sweeps: one player in 4
+else
+	gate ctest make ctest
+fi
 gate native make native
+gate manifests manifests_current
 gate gut env SKIP_ORACLE=1 SKIP_BUILD=1 ./run_tests_parallel.sh
 if [ "$LEVEL" = merge ]; then
 	gate asan make native-asan
