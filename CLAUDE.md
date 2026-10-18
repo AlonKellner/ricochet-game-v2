@@ -51,17 +51,19 @@ make test-stage STAGE=3         # one stage's GUT files
 
 ## Stage Workflow
 
-Each stage follows the feedback loop protocol:
+Each stage follows the feedback loop protocol (the gates and targets: `docs/WORKFLOW.md`):
 
-1. Implement stage (code + unit tests)
-2. Run all unit tests (new + all prior) — all must pass
-3. User performs interactive tests
-4. User provides pass/fail feedback
-5. Convert failing interactive tests into automated tests
-6. Fix and re-run — repeat until all pass
-7. Stage complete
+1. Spec first: `GAME_SPEC.md`, then the oracle (`docs/research/oracle`) and its tests, then the fixtures (`make regen`)
+2. Native: the kernel and its tests green under `make check`, then `make gate` before each commit (small green commits on a branch)
+3. Bindings, GUT, visuals
+4. Goldens: `make judge`, the user's approval of the report, `make rebless APPROVED=1`
+5. Docs: the stage's TDD doc (phase table), CHANGELOG, GAME_SPEC's version; `make gates` closes each phase
+6. User performs interactive tests and gives pass/fail feedback
+7. Convert failing interactive tests into automated tests; fix and re-run until all pass
+8. Stage complete
 
-**No stage is complete without user sign-off on interactive tests.**
+**No stage is complete without user sign-off on interactive tests.** A changed golden, region digest or
+fixture is a behaviour change: bring the evidence (the judge's report) before applying it.
 
 ## Code Style
 

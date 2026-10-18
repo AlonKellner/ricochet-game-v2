@@ -115,13 +115,28 @@ pinned per-region hashes make the check automatic (`rc_tests_regions_{k}`, 6 par
 prints the regions by name. A new level: `RC_REGIONS_WRITE=bench/goldens/regions.json rc_tests
 -tc="visibility: the regions' digest*"` rewrites the whole golden.
 
+## The fixtures and the corpus: `make regen`
+
+`docs/research/regen.py` runs every `gen_fixtures_*.py` and `gen_scene_corpus.py` (timed), compares each
+regenerated file with the committed one as parsed JSON (floats as floats, decimal strings as decimals, so
+a different spelling of the same value is no change), prints the report (identical / byte-only /
+changed cases per file / scenarios added and removed), and restores the files; `make regen-apply` keeps
+only the files whose content changed, so a blanket regeneration is safe to commit. `ONLY=stage111`
+narrows to one generator. On 2026-10-18 the 19 fixture files regenerate byte for byte and the corpus
+takes 13 s. A changed expectation is a behaviour change: the oracle changed, and the native tests
+(`test_corpus_oracle.cpp`, the fixture tests) say whether the kernel follows; bring it with the judge's
+report.
+
+`make dumps` rewrites `bench/scenes/*.surfaces.json` from the levels (Godot); the GUT parity tests fail
+while they are stale, and the generators read them.
+
 ## The data pipelines
 
 | Data | Producer | Target | Consumers |
 |---|---|---|---|
-| `bench/scenes/*.surfaces.json` (the levels as surface defs) | `scripts/testing/dump_scene_surfaces.gd` (Godot) | by hand (`godot --headless --path . -s res://scripts/testing/dump_scene_surfaces.gd`) | the native visibility tests, the generators, `tscn_import.py`'s parity test |
-| `bench/fixtures/*.json` | `docs/research/oracle/gen_fixtures_*.py` | by hand, one generator each | GUT and native fixture tests |
-| `bench/scenes_corpus/{scenarios,expected}` | `docs/research/oracle/gen_scene_corpus.py` | by hand | GUT corpus test, the native corpus goldens |
+| `bench/scenes/*.surfaces.json` (the levels as surface defs) | `scripts/testing/dump_scene_surfaces.gd` (Godot) | `make dumps` | the native visibility tests, the generators, `tscn_import.py`'s parity test |
+| `bench/fixtures/*.json` | `docs/research/oracle/gen_fixtures_*.py` | `make regen` / `make regen-apply` | GUT and native fixture tests |
+| `bench/scenes_corpus/{scenarios,expected}` | `docs/research/oracle/gen_scene_corpus.py` | `make regen` / `make regen-apply` | the GUT corpus test, `test_corpus_oracle.cpp`, the corpus goldens |
 | `bench/goldens/*.json` | dumped at tag `pre-native` (the script is gone); re-blessed only | `make judge`, the user's approval, `make rebless APPROVED=1` | `test_goldens.cpp`, `test_visibility.cpp` (regions) |
 | `bench/sweeps/*.json` | `SweepRunner.sweep_native` under `SWEEP_MANIFEST_DIR` | `make manifests` (the manifests gate fails while stale) | `test_sweeps.cpp` |
 
