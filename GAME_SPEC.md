@@ -1460,7 +1460,7 @@ The visibility region highlights the **set of cursor positions that will not cau
 - A cursor that the trace never reaches (cut by the event limit, §12.6) is **outside**.
 - A cursor on the player (no aim), on the player's image `P_K` or on the frame's infinity `Q_K` is **not classified**: the aim degenerates there (§11.4).
 - A cursor exactly where the last entry is crossed off its segment is **outside**: the planned walk applies the entry there and the physical one passes, so they leave the point in different frames (V3). Before B4 these departure points formed thin lines along the planned carrier.
-- The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4), and on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor).
+- The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4), and on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor). A whisker's end at exact data (a segment endpoint) belongs to the region exactly when the preview reaches a cursor there: at a planned terminal's endpoint the hit does not fire physically, so the walks diverge and the endpoint is outside (K7).
 
 ### 15.2 Members
 

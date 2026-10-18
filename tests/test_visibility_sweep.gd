@@ -15,10 +15,7 @@ var VIOLATIONS_PATH := SweepRunner.violations_path("visibility")
 # unsharded sweep so the list stays true. An entry without a scene matches
 # every scene (and is not required to occur).
 const KNOWN_FINDINGS := [
-	# K7: a cursor exactly on a planned surface's carrier, where a walk departs or
-	# ends its lap: whether the solver reaches it at once or only after the loop
-	# varies along the carrier with no change in the casts (a measure-zero set).
-	{"id": "K7", "prefix": "VISIBILITY-EQUALS-NON-DIVERGENCE (on a planned carrier)"},
+	# (K7 and K8 were fixed after Stage 110: docs/TDD_14_VISIBILITY.md.)
 ]
 
 func test_visibility_empty_plan_on_every_level() -> void:
