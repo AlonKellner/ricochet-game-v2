@@ -13,7 +13,7 @@ Specification: GAME_SPEC §13.1 (the two realizations, R1-R3), §4.2, §9.5, §1
 | 111.2 | Region: two forced halves joined, the tie cut, the crack members, the per-half checks | Done |
 | 111.3 | GUT: `test_stage111_orientation.gd`; the Stage 87 fork test and the spent-host test re-derived; the scene corpus regenerated | Done |
 | 111.4 | Goldens: judged (`make judge RULES=stage111`: 32,742 sweep combos, 612 fields -- corpus 568, fixtures 33, regions 11 -- 0 findings); re-blessed on the user's instruction to merge (2026-10-18) | Done |
-| 111.5 | Interactive sign-off | Pending |
+| 111.5 | Interactive sign-off | Done (user, 2026-10-18: "I approve visually") |
 | 111.6 | The region's cost (Workflow W2.0): the two halves share a solve memo, a decision walk stops at the cursor event, the decisions are memoized per tracer; every level's visibility sweep is at about 2x Stage 110's (the two halves), from 2.5-11x; digest unchanged | Done |
 
 **Workflow:** branch `orientation-by-entry`, small green commits; merged with `workflow-native` (the rework of the gates, `docs/WORKFLOW.md`): `make gate` before every commit, `make gates` before the merge.
