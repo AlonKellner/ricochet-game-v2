@@ -26,5 +26,5 @@ TEST_CASE("circle ties: the Perf P2b fixtures match the oracle at f64, Dual, 4 a
 		CHECK_MESSAGE(diff_against_oracle(r64l, fx["expected"]) == "", (name + " big64: " + diff_against_oracle(r64l, fx["expected"])));
 		fixtures++;
 	}
-	CHECK(fixtures == 6);
+	CHECK(fixtures == 8);
 }

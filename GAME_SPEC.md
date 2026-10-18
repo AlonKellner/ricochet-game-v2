@@ -2515,7 +2515,7 @@ When the system classifies a point (on-segment, which side, intersection index),
 In the beam solver, provenance takes three forms (`beam_solver.gd` header, `trace2.py`):
 - **Known points:** exact data points a beam passes through, each with its parameter. These are:
   - the player (initial beam, `t = 0`);
-  - the cursor, whenever it is a candidate;
+  - the cursor, whenever it is a candidate, and on every beam whose exact circle (§31.4) passes it (K7: a carrier through the cursor is crossed exactly there, so a departure point at the cursor is the cursor exactly and the cursor is reached at once);
   - the departure point of a beam born at an exact hit point;
   - every known point of the previous beam lying on the carrier of the surface applied (an effect fixes its carrier pointwise);
   - every segment endpoint and via on an exact line.
@@ -2642,4 +2642,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.21.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.22.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

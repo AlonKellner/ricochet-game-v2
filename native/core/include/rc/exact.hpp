@@ -148,6 +148,8 @@ int gc_limbs(const GCircle &g);
 // a circle of center C, rw2 = (r w)^2) at one point.
 bool gc_tangent_line(const GCircle &g, double sx, double sy, double ex, double ey);
 bool gc_tangent_circle(const GCircle &g, const Point3 &C, const BigFloat &rw2);
+// Exact: the generalized circle passes the float64 point (x, y).
+bool gc_passes(const GCircle &g, double x, double y);
 
 // A beam's exact generalized circle, carried lazily: an exact line (the last
 // straight beam with exact data) and the maps applied to it since, made exact

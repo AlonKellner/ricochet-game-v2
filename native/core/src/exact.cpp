@@ -650,6 +650,12 @@ bool gc_tangent_circle(const GCircle &g, const Point3 &C, const BigFloat &rw2) {
 	return sub(mul(u, u), mul(mul(of(4.0), delta), mul(q2, mul(rw2, s2)))).is_zero();
 }
 
+bool gc_passes(const GCircle &g, double x, double y) {
+	const BigFloat ex = of(x);
+	const BigFloat ey = of(y);
+	return add(add(mul(g.A, add(mul(ex, ex), mul(ey, ey))), add(mul(g.B, ex), mul(g.C, ey))), g.D).is_zero();
+}
+
 std::shared_ptr<const BeamRec> BeamRec::from_line(std::shared_ptr<const Line> line) {
 	if (!line) {
 		return nullptr;

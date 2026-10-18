@@ -943,7 +943,9 @@ TEST_CASE("visibility digest" * doctest::skip(true)) {
 				regions++;
 				fh = mix(fh, h);
 				if (verbose) {
-					std::printf("%s plan %zu player (%g, %g): %016llx\n", name.c_str(), pi, player.x, player.y, (unsigned long long)h);
+					std::string ps;
+					for (const PlanItem &it : plans[pi]) ps += (ps.empty() ? "" : ",") + std::to_string(it.surface_id) + (it.left ? "L" : "R");
+					std::printf("%s plan %zu [%s] player (%g, %g): %016llx\n", name.c_str(), pi, ps.c_str(), player.x, player.y, (unsigned long long)h);
 				}
 			}
 		}

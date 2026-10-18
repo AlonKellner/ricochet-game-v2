@@ -888,6 +888,12 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             cands.append(((-1, 0) if tc == t0 else sort_key(tc, t0), 0, -1, tc, False))
             if not any(k[0] == walk.cursor for k in walk.known):
                 walk.known.append((walk.cursor, tc, None))
+        # K7: the cursor is a known point of every beam whose exact circle passes
+        # it, so a carrier through the cursor is crossed exactly there (the
+        # departure point after it is the cursor exactly: reached at once)
+        if walk.cursor is not None and walk.gc is not None and not any(k[0] == walk.cursor for k in walk.known) \
+                and gc_at(walk.gc, FC(walk.cursor)) == 0:
+            walk.known.append((walk.cursor, beam.param_of(walk.cursor), None))
         snapped = {}
         for kp, kt, skip in walk.known:
             for s in walk.surfaces:

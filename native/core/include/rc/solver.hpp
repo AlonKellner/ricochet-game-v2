@@ -288,6 +288,9 @@ struct Walk {
 	std::shared_ptr<const exact::BeamRec> rec;
 	std::shared_ptr<const exact::BeamRec> rec_tangent_of;
 	std::map<int, bool> rec_tangent;
+	// K7: whether the record's circle passes the cursor (cached per record)
+	std::shared_ptr<const exact::BeamRec> rec_cursor_of;
+	bool rec_cursor_on = false;
 	Flags flags;
 	bool on_plan = true;
 	// Stage 101: the current frame's image of infinity (nullopt = infinity):
@@ -1372,6 +1375,27 @@ private:
 		return it != w.tangent.end() && it->second;
 	}
 
+	// Exact (K7): the current beam's exact circle passes the cursor. A float64
+	// distance first (an exact pass is a rounding away; the filter only spares
+	// the exact test), cached per record.
+	static bool cursor_on_beam(Walk<N> &w, const Beam<N> &beam) {
+		if (w.rec_cursor_of == w.rec) {
+			return w.rec_cursor_on;
+		}
+		w.rec_cursor_of = w.rec;
+		w.rec_cursor_on = false;
+		const CN<N> &c = *w.cursor;
+		const CN<N> q = beam.at(Backend<N>::param_of(beam, c));
+		const double scale = gd_maxf(1.0, gd_maxf(std::fabs(c.fx()), std::fabs(c.fy())));
+		if (!(q.sub(c).abs2().to_float() <= (1e-6 * scale) * (1e-6 * scale))) {
+			return false;
+		}
+		if (const std::optional<exact::GCircle> g = w.rec->exact()) {
+			w.rec_cursor_on = exact::gc_passes(*g, c.fx(), c.fy());
+		}
+		return w.rec_cursor_on;
+	}
+
 	// Exact (Perf P2b): the current beam touches surf's carrier, its two roots
 	// there one point -- one decision, not two neighbours a margin separates.
 	// False when the beam has no exact record.
@@ -1484,6 +1508,12 @@ private:
 			if (ki < 0) {
 				w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
 			}
+		}
+		// K7: the cursor is a known point of every beam whose exact circle passes
+		// it, so a carrier through the cursor is crossed exactly there (the
+		// departure point after it is the cursor exactly: reached at once)
+		if (w.cursor && w.rec && known_index(w.known, *w.cursor) < 0 && cursor_on_beam(w, beam)) {
+			w.known.push_back(Known<N>{*w.cursor, Backend<N>::param_of(beam, *w.cursor), -1, std::nullopt});
 		}
 		for (Known<N> &kp : w.known) {
 			snap(w, beam, cands, kp);

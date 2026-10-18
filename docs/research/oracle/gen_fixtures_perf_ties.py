@@ -15,6 +15,8 @@ control with one line moved by 1/16 px keeps the geometric order.
 
 Usage:
   docs/research/.venv/bin/python docs/research/oracle/gen_fixtures_perf_ties.py
+K9 and K7 (docs/TDD_14_VISIBILITY.md): the same rules in a pre-transform level.
+
 Writes bench/fixtures/perf_circle_ties.json.
 """
 import json
@@ -75,14 +77,30 @@ def main():
     # player, X and Q0: exact) passes. Both hits there in id order.
     d = json.load(open(os.path.join(ROOT, "bench", "scenes", "playground__pre_inverted.surfaces.json")))
     plan = [(2, T.LEFT), (3, T.LEFT), (4, T.RIGHT)]
-    # (the planned walk from (1350, 443.33334) reaches the cursor at once in the
-    # oracle and after the lap natively: K7, docs/TDD_14_VISIBILITY.md)
     for player, modes in (((760.0, 640.0), ("physical", "planned")), ((1350.0, 443.33334), ("physical",))):
         for mode in modes:
             f = fixture("k9_pre_inverted_%d_%s" % (int(player[0]), mode), d["surfaces"], player, plan=plan, mode=mode, cursor=(1900.0, 880.0))
             if mode == "physical":
                 assert hits_near(f, 0.0, 880.0) == [4, 8], (f["name"], hits_near(f, 0.0, 880.0))
             fx.append(f)
+
+    # K7: the same shot from (1350, 443.33334): the planned walk consumes surface 4
+    # exactly at the cursor (the start circle's image passes it), so the cursor is
+    # the departure point after it: reached at once -- at every precision (before,
+    # at 80 digits at once, at 60 after the lap)
+    for mode in ("planned", "physical"):
+        f = fixture("k7_pre_inverted_1350_%s" % mode, d["surfaces"], (1350.0, 443.33334), plan=plan, mode=mode, cursor=(1900.0, 880.0))
+        if mode == "planned":
+            ks = [(e["kind"], e["surface_id"]) for e in f["expected"]]
+            ci = ks.index(("cursor", -1))
+            assert ks[ci - 1] == ("hit", 4), ks[:ci + 1]
+            old_dps = mp.mp.dps
+            for dps in (40, 120):
+                mp.mp.dps = dps
+                g = fixture("probe", d["surfaces"], (1350.0, 443.33334), plan=plan, mode=mode, cursor=(1900.0, 880.0))
+                assert [(e["kind"], e["surface_id"]) for e in g["expected"]] == ks, dps
+            mp.mp.dps = old_dps
+        fx.append(f)
 
     out = os.path.join(ROOT, "bench", "fixtures", "perf_circle_ties.json")
     json.dump({"dps": mp.mp.dps, "fixtures": fx}, open(out, "w"), indent=1)

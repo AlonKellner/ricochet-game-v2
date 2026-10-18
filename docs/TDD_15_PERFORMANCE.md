@@ -246,5 +246,5 @@ The budgets are met or within a few percent, except the frame maxima and the reg
 
 ## Regression checklist
 
-`make gates`: the native build, oracle, ctest (RelWithDebInfo), the GUT suite, ASan, the goldens unchanged. The region digest (`visibility digest`, `--no-skip`) stays `21dafb508ef1834b`.
+`make gates`: the native build, oracle, ctest (RelWithDebInfo), the GUT suite, ASan, the goldens unchanged. The region digest (`visibility digest`, `--no-skip`) stays `21dafb508ef1834b` through this stage (K7's rule, approved afterwards, made it `3d5a1d04d997484e`).
 
