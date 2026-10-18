@@ -33,10 +33,10 @@ std::vector<Event<N>> walk_oracle_fixture(const ojson &fx, const std::vector<Sur
 	return w ? w->events : std::vector<Event<N>>{};
 }
 
-// The oracle's event record compared field by field (points within 1e-9 px,
-// as the GUT fixture tests compare).
+// The oracle's event record compared field by field (points within tol px:
+// 1e-9 as the GUT fixture tests compare, 0.01 for the corpus).
 template <rc::Num N>
-std::string diff_against_oracle(const std::vector<Event<N>> &events, const ojson &expected) {
+std::string diff_against_oracle(const std::vector<Event<N>> &events, const ojson &expected, double tol = 1e-9) {
 	if (events.size() != expected.size()) {
 		std::string got;
 		for (const Event<N> &e : events) {
@@ -70,7 +70,7 @@ std::string diff_against_oracle(const std::vector<Event<N>> &events, const ojson
 			}
 			const double dx = e.point->fx() - std::stod(x["x"].get<std::string>());
 			const double dy = e.point->fy() - std::stod(x["y"].get<std::string>());
-			if (std::sqrt(dx * dx + dy * dy) > 1e-9) {
+			if (std::sqrt(dx * dx + dy * dy) > tol) {
 				return "event " + std::to_string(i) + ": point off by " + std::to_string(std::sqrt(dx * dx + dy * dy));
 			}
 		} else if (e.point && e.kind != EventKind::Hit) {
