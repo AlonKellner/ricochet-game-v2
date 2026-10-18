@@ -91,6 +91,30 @@ of interest, the plans from `SweepPlans`) and hand them to the native kernel (`S
   (78 s before). The precision sweep (`test_precision_invariant_sweep.gd`, through the live renderer) is
   sampled the same way.
 
+## The goldens: judge, approve, re-bless
+
+`bench/goldens/*.json` pin bit-identical behaviour (the traces of 284k sweep combos, the fixtures, the
+corpus, the chains, the kernels, and `regions.json`: the region digest's 264 regions by hash). A change
+there is a behaviour change, and the rule is: evidence first, the user's approval, then the re-bless.
+
+1. **`make judge [REF=main] [RULES=stage106]`** (`tools/judge.sh`): a detached worktree of `REF` under
+   `native/build-ref/` (gitignored, `.gdignore`d) builds `rc_tests` without the extension, cached by commit;
+   the current `rc_tests` lists every changed sweep combo and golden field (`RC_SWEEP_REBLESS=1`,
+   `RC_GOLDEN_REBLESS=1` → `native/build-ref/judge/rebless.txt`); both binaries dump those combos
+   (`RC_SWEEP_DUMP`); `docs/research/judge.py` classifies them → `native/build-ref/judge/report.md`.
+   Generic classes from the dumps alone: the planned aim (same, reversed, other), the first differing
+   event of each trace, the cursor reached or lost, the tiers; a stage's rule module
+   (`docs/research/<name>_judge.py`, `judge_trace(old, new, segs, portal_src)`) adds its own classes.
+   Exit 0: nothing changed; 2: changes to show the user; 1: a rule's findings.
+2. The user approves the report (or not).
+3. **`make rebless APPROVED=1`** applies `rebless.txt` with `docs/research/apply_rebless.py`; commit the
+   goldens with the change they pin. `make gates` passes the goldens gate again once they are committed.
+
+The region digest's one-line summary (`make check TC="visibility digest" SKIP=0`) stays for the docs; the
+pinned per-region hashes make the check automatic (`rc_tests_regions_{k}`, 6 parts, 7 s) and a change
+prints the regions by name. A new level: `RC_REGIONS_WRITE=bench/goldens/regions.json rc_tests
+-tc="visibility: the regions' digest*"` rewrites the whole golden.
+
 ## The data pipelines
 
 | Data | Producer | Target | Consumers |
@@ -98,7 +122,8 @@ of interest, the plans from `SweepPlans`) and hand them to the native kernel (`S
 | `bench/scenes/*.surfaces.json` (the levels as surface defs) | `scripts/testing/dump_scene_surfaces.gd` (Godot) | by hand (`godot --headless --path . -s res://scripts/testing/dump_scene_surfaces.gd`) | the native visibility tests, the generators, `tscn_import.py`'s parity test |
 | `bench/fixtures/*.json` | `docs/research/oracle/gen_fixtures_*.py` | by hand, one generator each | GUT and native fixture tests |
 | `bench/scenes_corpus/{scenarios,expected}` | `docs/research/oracle/gen_scene_corpus.py` | by hand | GUT corpus test, the native corpus goldens |
-| `bench/goldens/*.json` | dumped at tag `pre-native` (the script is gone); re-blessed only | `RC_SWEEP_REBLESS=1` / `RC_GOLDEN_REBLESS=1` + `docs/research/apply_rebless.py`, after a judged report the user approved | `test_goldens.cpp` |
+| `bench/goldens/*.json` | dumped at tag `pre-native` (the script is gone); re-blessed only | `make judge`, the user's approval, `make rebless APPROVED=1` | `test_goldens.cpp`, `test_visibility.cpp` (regions) |
+| `bench/sweeps/*.json` | `SweepRunner.sweep_native` under `SWEEP_MANIFEST_DIR` | `make manifests` (the manifests gate fails while stale) | `test_sweeps.cpp` |
 
 ## A stage
 

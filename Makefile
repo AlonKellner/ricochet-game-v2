@@ -23,7 +23,7 @@ BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
 .PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test \
-	core check native native-debug native-asan ctest gates gate
+	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -107,9 +107,38 @@ manifests: native
 		-gtest=$(subst $(space),$(comma),$(addprefix res://tests/,$(SWEEP_MANIFEST_FILES))) -gexit > /dev/null
 	@ls "$(MANIFEST_DIR)" | wc -l | sed 's/^ *//; s/$$/ manifests/'
 
+# ------------------------------------------------------------- goldens judge
+# Workflow W4: what the tree changes against REF (default main), dumped from
+# a cached reference build and classified (tools/judge.sh, docs/research/judge.py)
+# -> native/build-ref/judge/report.md. `make rebless APPROVED=1` applies the
+# judged re-bless lines (docs/research/apply_rebless.py) after the user approved
+# the report; `make gates` then passes the goldens gate once they are committed.
+REF ?= main
+RULES ?=
+judge: core
+	REF=$(REF) RULES=$(RULES) tools/judge.sh
+rebless:
+	@if [ "$(APPROVED)" != 1 ]; then echo "!! make rebless APPROVED=1: only after the user approved native/build-ref/judge/report.md"; exit 1; fi
+	@[ -s native/build-ref/judge/rebless.txt ] || { echo "!! no re-bless lines: make judge first"; exit 1; }
+	$(ORACLE_PY) docs/research/apply_rebless.py native/build-ref/judge/rebless.txt
+
 # ------------------------------------------------------------------ oracle
 # The mpmath oracle's own tests and the fixture schema (docs/research/oracle).
 ORACLE_PY := docs/research/.venv/bin/python
+# Workflow W3: every fixture generator and the scene corpus, compared
+# semantically with the committed files (docs/research/regen.py): `regen`
+# reports and restores, `regen-apply` keeps the files whose content changed
+# (a byte-only difference is never committed). ONLY=stage111 narrows.
+ONLY ?=
+regen:
+	$(ORACLE_PY) -I docs/research/regen.py $(if $(ONLY),--only $(ONLY),)
+regen-apply:
+	$(ORACLE_PY) -I docs/research/regen.py --keep $(if $(ONLY),--only $(ONLY),)
+# the levels as surface defs (bench/scenes/*.surfaces.json): the generators'
+# and the native visibility tests' input; the GUT parity tests
+# (test_stage81_scene_switch, test_stage107_level_parity) fail while stale
+dumps: native
+	$(GODOT) --headless --path . -s res://scripts/testing/dump_scene_surfaces.gd
 oracle-test:
 	@if [ -x $(ORACLE_PY) ]; then $(ORACLE_PY) -m pytest -q docs/research/oracle; \
 	else echo "!! oracle tests skipped: no docs/research/.venv (python3 -m venv docs/research/.venv && docs/research/.venv/bin/pip install mpmath numpy pytest)"; fi
