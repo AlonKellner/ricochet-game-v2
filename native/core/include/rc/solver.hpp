@@ -231,11 +231,21 @@ struct Candidate {
 
 // Anchored beams B_0..B_K of a plan (flat: beams[j] is the beam after j
 // consumed entries; a popped frame IS the earlier beam object).
+// Stage 111: how the plan's realization was decided (GAME_SPEC 13.1).
+enum class RealizationKind {
+	NoEntry,    // no planned surface entry in the first epoch: today's rule (R3)
+	NoCrossing, // no orientation fires the first entry (the aim parallel to its carrier, a line missing a circle): today's rule, the cast dead
+	Entry,      // the first entry decided it (R1, R2)
+	Alike       // both orientations fire it alike and the walk did not decide: today's rule (R3)
+};
+
 template <Num N>
 struct AnchorChain {
 	std::vector<BeamPtr<N>> beams;
 	std::map<int, CN<N>> hits;                                 // projective entry index -> its back-propagated H
 	std::map<int, std::shared_ptr<const exact::Line>> exit_lines; // projective entry index -> exact exit line
+	bool reversed = false; // the first epoch runs the other way round (Stage 111: the plan's realization)
+	RealizationKind kind = RealizationKind::NoEntry;
 };
 
 // B5 (Stage 110): the physical walk at one point -- a run of candidates with one
@@ -269,6 +279,9 @@ struct Walk {
 	bool cursor_done = false;
 	int count = 0;
 	int max_events = MAX_HITS;
+	// Workflow W2.0: a decision walk (realize, R2) needs the cursor event alone:
+	// it stops there (the events up to it are the same walk's)
+	bool stop_at_cursor = false;
 	std::vector<Event<N>> events;
 	std::vector<double> gains;
 	std::vector<StackEntry<N>> stack;
@@ -332,8 +345,9 @@ struct SolveCache {
 		double px = 0, py = 0, cx = 0, cy = 0;
 		std::string flags;
 		std::vector<std::tuple<int, bool, bool, float, float>> plan;
+		int force = 0; // Stage 111: 0 the plan's realization, 1 forced direct, 2 forced reversed
 		bool operator==(const ChainKey &o) const {
-			return scene == o.scene && px == o.px && py == o.py && cx == o.cx && cy == o.cy && flags == o.flags && plan == o.plan;
+			return scene == o.scene && px == o.px && py == o.py && cx == o.cx && cy == o.cy && flags == o.flags && plan == o.plan && force == o.force;
 		}
 	};
 	std::optional<ChainKey> chain_key;
@@ -434,6 +448,316 @@ public:
 			}
 		}
 		return false;
+	}
+
+	// Stage 111: the index of the first planned entry of the first epoch that
+	// names a present surface (infinity entries and absent surfaces skipped; a
+	// pass side, a terminal, a projective count: the planned walk fires only on
+	// an id and side match), or -1.
+	int first_entry(const std::vector<PlanItem> &plan, const Flags &flags) const {
+		for (size_t j = 0; j < plan.size(); j++) {
+			if (plan[j].is_infinity()) {
+				continue;
+			}
+			const Surf<N> *surf = scene_.find(plan[j].surface_id);
+			if (surf != nullptr && surf->present(flags)) {
+				return int(j);
+			}
+		}
+		return -1;
+	}
+
+	// Stage 111: the plan's realization -- whether B_0 (P -> X_0 -> Q_0, toward
+	// the aim image) runs the other way round. Let e be the first planned entry
+	// of the first epoch naming a present surface. R1: when only one
+	// orientation of B_0 crosses e's carrier from e's side (a straight beam and
+	// a line carrier, always), that one -- decided exactly: the sign of
+	// dot(X_0 - P, grad) from the homogeneous aim image with rigorous bounds,
+	// exactly when the bounds straddle zero, the tier's value when the image
+	// is not exact data. R2: when both do (a circle carrier, a circle beam),
+	// the one whose planned walk consumes the plan and reaches the cursor;
+	// when both or neither do, the one that fires e before the passage of Q_0
+	// -- after it when an infinity entry precedes e. R3: otherwise (no e, no
+	// crossing, both orientations alike) today's rule: toward X_0, reversed by
+	// an infinity entry in the first epoch (via_infinity). Infinity entries are
+	// otherwise only matched by the walker (GAME_SPEC 13.1).
+	struct Realization {
+		bool reversed = false;
+		RealizationKind kind = RealizationKind::NoEntry;
+	};
+
+	// first_firing: (q) of the first crossing of surf's carrier from `left`
+	// along the beam from t = 0 in the walker's projective order (t > 0
+	// ascending, the pole, t <= 0 ascending; at one parameter the hit before
+	// the pole), q = the pole was passed first; nullopt when no crossing fires.
+	std::optional<bool> first_firing(const Beam<N> &b, const Surf<N> &surf, bool left, const std::optional<N> &tq,
+			const std::shared_ptr<const exact::Line> &line, const exact::ExactPole *pole, const std::optional<CN<N>> &Q) const {
+		if (line && !surf.line) {
+			const auto &ec = surf.exact_circle();
+			if (line->tangent_to(ec.C, ec.rw2, ec.fcx, ec.fcy, ec.frr, ecc(ec), 8.0 * exact::U * std::fabs(ec.frr))) {
+				return std::nullopt; // a tangent touch is not a crossing (exact)
+			}
+		}
+		// a carrier through the frame's infinity point (Stage 105): tangent there,
+		// a touch; else crossed exactly there -- its root nearest Q is Q's
+		// parameter, so the hit and the passage tie exactly (the hit first)
+		bool through_q = false;
+		if (pole != nullptr && Q) {
+			if (surf.line ? exact::pole_on_line(*pole, surf.sx, surf.sy, surf.ex, surf.ey) : exact::pole_on_circle(*pole, surf.exact_circle().C, surf.exact_circle().rw2)) {
+				if (surf.line ? exact::pole_tangent_line(*pole, surf.sx, surf.sy, surf.ex, surf.ey)
+							  : exact::pole_tangent_circle(*pole, surf.exact_circle().C, surf.exact_circle().rw2)) {
+					return std::nullopt;
+				}
+				through_q = true;
+			}
+		}
+		// (a crossing at t = 0 -- the player on the carrier -- is met last, after
+		// the full loop; one at t = infinity -- the antipode of a circle beam -- at
+		// the wrap: as the walker orders them)
+		std::vector<N> rs = geom::hits(b, surf.seg, false);
+		if (rs.size() == 2 && rs[0].cmp(rs[1]) == 0) {
+			return std::nullopt; // a double root: a touch
+		}
+		if (through_q && tq && !rs.empty()) {
+			size_t best = 0;
+			double bd = INF_D;
+			for (size_t i = 0; i < rs.size(); i++) {
+				const double d = b.at(rs[i]).sub(*Q).abs2().to_float();
+				if (d < bd) {
+					bd = d;
+					best = i;
+				}
+			}
+			rs[best] = *tq;
+		}
+		struct Cand {
+			N t;
+			bool pole;
+		};
+		std::vector<Cand> cands;
+		for (const N &t : rs) {
+			cands.push_back(Cand{t, false});
+		}
+		if (tq) {
+			cands.push_back(Cand{*tq, true});
+		}
+		const N t0 = b.p.re.like(0.0);
+		std::sort(cands.begin(), cands.end(), [&](const Cand &a, const Cand &c) {
+			const int cmp = a.t.cmp(c.t);
+			if (cmp != 0) {
+				return before(a.t, c.t, t0);
+			}
+			return c.pole && !a.pole;
+		});
+		bool q = false;
+		static const bool trace = std::getenv("RC_REALIZE_TRACE") != nullptr;
+		for (const Cand &c : cands) {
+			if (c.pole) {
+				if (trace) {
+					std::fprintf(stderr, "  cand pole t %.9g\n", c.t.to_float());
+				}
+				q = true;
+				continue;
+			}
+			const bool sl = geom::side_left(surf.seg, b.at(c.t), b.tangent_at(c.t));
+			if (trace) {
+				const CN<N> pt = b.at(c.t);
+				std::fprintf(stderr, "  cand hit t %.9g at (%.6g, %.6g) left %d want %d kappa %.6g\n", c.t.to_float(), pt.fx(), pt.fy(), int(sl), int(left), b.kappa.to_float());
+			}
+			if (sl == left) {
+				return q;
+			}
+		}
+		return std::nullopt;
+	}
+
+	static bool eb_nonzero(const exact::EB &x) { return std::isfinite(x.v) && std::isfinite(x.e) && std::fabs(x.v) > x.e; }
+
+	// R1 exactly: sign of dot(X_0 - P, grad(seg)) for a line carrier, 0 when
+	// parallel or undecidable from exact data (nullopt: no exact image).
+	std::optional<int> exact_aim_grad_sign(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
+			const Flags &flags, const Surf<N> &surf) const {
+		using exact::EB;
+		const double gx = -(surf.ey - surf.sy);
+		const double gy = surf.ex - surf.sx;
+		const double px = player.fx();
+		const double py = player.fy();
+		if (const std::optional<std::array<EB, 3>> X = exact_image_approx(cursor, plan, flags)) {
+			// dot((X - px w, Y - py w), g) and w
+			const EB rx = exact::esub((*X)[0], exact::emul(EB{px, 0.0}, (*X)[2]));
+			const EB ry = exact::esub((*X)[1], exact::emul(EB{py, 0.0}, (*X)[2]));
+			const EB d = exact::eadd(exact::emul(rx, EB{gx, 0.0}), exact::emul(ry, EB{gy, 0.0}));
+			if (eb_nonzero(d) && eb_nonzero((*X)[2])) {
+				return (d.v < 0.0) != ((*X)[2].v < 0.0) ? -1 : 1;
+			}
+		}
+		const std::optional<exact::Point3> Xh = exact_image_cached(cursor, plan, flags);
+		if (!Xh) {
+			return std::nullopt;
+		}
+		const BigFloat &w = (*Xh)[2];
+		if (w.is_zero()) {
+			return std::nullopt; // the image at infinity
+		}
+		const BigFloat rx = exact::sub((*Xh)[0], exact::mul(exact::of(px), w));
+		const BigFloat ry = exact::sub((*Xh)[1], exact::mul(exact::of(py), w));
+		const BigFloat d = exact::add(exact::mul(rx, exact::of(gx)), exact::mul(ry, exact::of(gy)));
+		if (d.is_zero()) {
+			return 0;
+		}
+		return (d.is_negative() != w.is_negative()) ? -1 : 1;
+	}
+
+	// The realization of the aim beam b0 (P -> X_0 -> Q_0). `walks`: the
+	// anchored chain to walk both ways when both orientations fire e (R2);
+	// nullptr (the degenerate aim) decides by the order against Q_0 alone.
+	Realization realize(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan, const Flags &flags,
+			const Beam<N> &b0, const std::shared_ptr<const AnchorChain<N>> &walks) {
+		const Realization fallback{via_infinity(plan, flags), RealizationKind::Alike};
+		const int j = first_entry(plan, flags);
+		if (j < 0) {
+			return Realization{via_infinity(plan, flags), RealizationKind::NoEntry};
+		}
+		const Surf<N> &surf = *scene_.find(plan[size_t(j)].surface_id);
+		const bool left = plan[size_t(j)].left;
+		const std::optional<CN<N>> q0 = effects::scene_pre_q(scene_);
+		if (!q0 && surf.line) {
+			// R1: a straight beam and a line carrier cross once per loop
+			std::optional<int> sign = exact_aim_grad_sign(player, cursor, plan, flags, surf);
+			if (!sign) {
+				// no exact image (a rotation portal, a projective's target): the tier's value
+				const N d = CN<N>::dot(b0.tau, CN<N>{b0.tau.re.like(-(surf.ey - surf.sy)), b0.tau.re.like(surf.ex - surf.sx)});
+				sign = d.is_zero() ? 0 : (d.is_negative() ? -1 : 1);
+			}
+			if (*sign == 0) {
+				return Realization{fallback.reversed, RealizationKind::NoCrossing}; // parallel: no realization fires e
+			}
+			// side_left of a line: LEFT iff dot(dir, grad) > 0 (its winding is negative)
+			const bool left_direct = *sign > 0;
+			return Realization{left_direct != left, RealizationKind::Entry};
+		}
+		// R2: both orientations may fire e
+		const std::shared_ptr<const exact::Line> line = q0 ? nullptr : initial_line(player, cursor, plan, flags);
+		// the exact pole record of a pre-transform start (Stage 105): the circle
+		// through the player, the exact aim image and Q0
+		std::optional<exact::ExactPole> pole;
+		if (q0) {
+			if (const std::optional<exact::Point3> q0e = pre_q_exact()) {
+				if (const std::optional<exact::Point3> X0 = exact_image_cached(cursor, plan, flags)) {
+					pole = exact::pole_start_aimed(player.fx(), player.fy(), *X0, *q0e);
+					if (pole && exact::pole_limbs(*pole) > EXACT_IMAGE_LIMBS) {
+						pole.reset();
+					}
+				}
+			}
+		}
+		std::optional<N> tq;
+		if (!q0) {
+			if (b0.kappa.is_zero()) {
+				tq = b0.p.re.like(INF_D);
+			}
+		} else {
+			if (q0->sub(player).is_zero()) {
+				return fallback; // the player at the frame's infinity: every aim degenerates
+			}
+			tq = Backend<N>::param_of(b0, *q0);
+			if (tq->is_zero()) {
+				return fallback;
+			}
+		}
+		const Beam<N> rev{b0.p, b0.tau.neg(), b0.kappa.neg()};
+		const std::optional<bool> qd = first_firing(b0, surf, left, tq, line, pole ? &*pole : nullptr, q0);
+		std::optional<N> tq_rev = tq;
+		if (tq && !tq->is_inf()) {
+			tq_rev = Backend<N>::param_of(rev, *q0);
+		}
+		const std::optional<bool> qr = first_firing(rev, surf, left, tq_rev, line, pole ? &*pole : nullptr, q0);
+		static const bool trace = std::getenv("RC_REALIZE_TRACE") != nullptr;
+		if (trace) {
+			std::fprintf(stderr, "realize: cursor (%.9g, %.9g) pole %d tq %.6g qd %s qr %s\n", cursor.fx(), cursor.fy(), int(pole.has_value()),
+				tq ? tq->to_float() : -1.0, qd ? (*qd ? "after" : "before") : "none", qr ? (*qr ? "after" : "before") : "none");
+		}
+		if (qd.has_value() != qr.has_value()) {
+			return Realization{qr.has_value(), RealizationKind::Entry};
+		}
+		if (!qd) {
+			return Realization{fallback.reversed, RealizationKind::NoCrossing};
+		}
+		if (walks) {
+			// the orientation whose planned walk consumes the plan and reaches the cursor
+			bool reach[2] = {false, false};
+			for (int o = 0; o < 2; o++) {
+				std::shared_ptr<const AnchorChain<N>> ch = walks;
+				if (o == 1) {
+					auto rc = std::make_shared<AnchorChain<N>>(*walks);
+					reverse_beams(rc->beams, 0, first_epoch_end(plan, flags));
+					ch = rc;
+				}
+				// the plan's order is a question of geometry, not of the event budget:
+				// a wide one, so a realization cut by MAX_HITS still counts as reaching
+				const Walk<N> w = walk_chain(player, cursor, plan, Mode::Planned, 8 * MAX_HITS, flags, ch, true);
+				for (const Event<N> &e : w.events) {
+					if (e.kind == EventKind::Cursor) {
+						reach[o] = true;
+						break;
+					}
+				}
+			}
+			if (reach[0] != reach[1]) {
+				return Realization{reach[1], RealizationKind::Entry};
+			}
+		}
+		if (*qd != *qr) {
+			// an infinity entry before e asks for the passage of Q_0 first (with the
+			// switch off the entry can never be consumed: the direct order)
+			bool before_e = false;
+			for (int i = 0; i < j && scene_.emit_infinity; i++) {
+				before_e = before_e || plan[size_t(i)].is_infinity();
+			}
+			return Realization{*qr == before_e, RealizationKind::Entry};
+		}
+		return fallback;
+	}
+
+	// one past the last beam of the first epoch (every beam up to and
+	// including the one after the last pre-projective entry)
+	size_t first_epoch_end(const std::vector<PlanItem> &plan, const Flags &flags) const {
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		for (size_t j = 0; j < plan.size(); j++) {
+			if (is_projective(effs[j])) {
+				return j + 1;
+			}
+		}
+		return plan.size() + 1;
+	}
+
+	// Stage 111: the region casts a member in a forced orientation (nullopt: the plan's realization).
+	std::optional<bool> force_reversed;
+
+	// Stage 111: the realization the order against Q_0 (or today's rule) picks
+	// without the walk: what a cursor both planned walks reach gets; the region
+	// reads it per member to split the cursors between the two orientations.
+	Realization tie_choice(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan, const Flags &flags) {
+		if (const std::shared_ptr<const AnchorChain<N>> chain = build_chain_direct(player, cursor, plan, flags)) {
+			return realize(player, cursor, plan, flags, *chain->beams[0], nullptr);
+		}
+		const std::optional<std::pair<Beam<N>, std::shared_ptr<const exact::Line>>> db = degenerate_beam(player, cursor, plan, flags);
+		if (!db) {
+			return Realization{};
+		}
+		return realize(player, cursor, plan, flags, db->first, nullptr);
+	}
+
+	// The plan's realization for a cursor (public: the region and the invariants).
+	Realization realization(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan, const Flags &flags) {
+		if (const std::shared_ptr<const AnchorChain<N>> chain = select_chain(player, cursor, plan, flags)) {
+			return Realization{chain->reversed, chain->kind};
+		}
+		const std::optional<std::pair<Beam<N>, std::shared_ptr<const exact::Line>>> db = degenerate_beam(player, cursor, plan, flags);
+		if (!db) {
+			return Realization{};
+		}
+		return realize(player, cursor, plan, flags, db->first, nullptr);
 	}
 
 	// Stage 101: the frame's image of infinity after `plan` (nullopt = infinity):
@@ -636,7 +960,7 @@ public:
 
 	// The anchored chain of a plan (public for the differential tests).
 	std::shared_ptr<const AnchorChain<N>> anchor_chain(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
-			const Flags &flags) const {
+			const Flags &flags) {
 		return build_chain(player, cursor, plan, flags);
 	}
 
@@ -746,6 +1070,7 @@ private:
 		for (const PlanItem &p : plan) {
 			key.plan.emplace_back(p.surface_id, p.left, p.hint.has_value(), p.hint ? p.hint->x : 0.0f, p.hint ? p.hint->y : 0.0f);
 		}
+		key.force = force_reversed ? (*force_reversed ? 2 : 1) : 0;
 		if (cache_->chain_key && *cache_->chain_key == key) {
 			return cache_->chain;
 		}
@@ -787,24 +1112,23 @@ private:
 
 	// Projective entries split the plan into sub-chains (GAME_SPEC 13.3/13.4).
 	std::shared_ptr<const AnchorChain<N>> build_chain(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
-			const Flags &flags) const {
+			const Flags &flags) {
 		std::shared_ptr<const AnchorChain<N>> chain = build_chain_direct(player, cursor, plan, flags);
-		if (chain && via_infinity(plan, flags)) {
+		if (!chain) {
+			return chain;
+		}
+		// Stage 111: the plan's realization (or the orientation the caller forces)
+		const Realization r = force_reversed ? Realization{*force_reversed, RealizationKind::Entry}
+											: realize(player, cursor, plan, flags, *chain->beams[0], chain);
+		auto out = std::make_shared<AnchorChain<N>>(*chain);
+		out->reversed = r.reversed;
+		out->kind = r.kind;
+		if (r.reversed) {
 			// the second realization: the first epoch's beams reversed (every beam
 			// up to and including the one after the last pre-projective entry)
-			const std::vector<EffectType> effs = plan_effects(plan, flags);
-			size_t first_proj = plan.size();
-			for (size_t j = 0; j < plan.size(); j++) {
-				if (is_projective(effs[j])) {
-					first_proj = j;
-					break;
-				}
-			}
-			auto rev = std::make_shared<AnchorChain<N>>(*chain);
-			reverse_beams(rev->beams, 0, first_proj + 1);
-			return rev;
+			reverse_beams(out->beams, 0, first_epoch_end(plan, flags));
 		}
-		return chain;
+		return out;
 	}
 
 	std::shared_ptr<const AnchorChain<N>> build_chain_direct(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
@@ -1071,8 +1395,9 @@ private:
 	}
 
 	Walk<N> walk_chain(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan, Mode mode, int max_events,
-			const Flags &flags, const std::shared_ptr<const AnchorChain<N>> &chain) {
+			const Flags &flags, const std::shared_ptr<const AnchorChain<N>> &chain, bool stop_at_cursor = false) {
 		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
+		w.stop_at_cursor = stop_at_cursor;
 		w.chain = chain;
 		w.anchored = true;
 		BeamPtr<N> b0 = chain->beams[0];
@@ -1115,6 +1440,59 @@ private:
 	// (the image, else the cursor): in a pre-transform frame the circle through
 	// the player, that point and Q0 (the oracle's beam_through), the straight
 	// line toward it otherwise. nullopt only for player = cursor.
+	// The degenerate aim's pulled-back point X (nullopt: at infinity), by the
+	// same backward pass as the anchored chain's, projectives by back-propagation.
+	std::optional<CN<N>> degenerate_image(const CN<N> &cursor, const std::vector<PlanItem> &plan, const Flags &flags) const {
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		std::optional<CN<N>> X = cursor;
+		int on_sid = -2;
+		for (size_t jj = plan.size(); jj-- > 0;) {
+			const Surf<N> *surf = scene_.find(plan[jj].surface_id);
+			if (surf != nullptr && is_projective(effs[jj]) && X) {
+				const bool on = on_sid == surf->id || (on_sid == -2 && on_carrier(*surf, *X));
+				const effects::F32Point *hint = plan[jj].hint ? &*plan[jj].hint : nullptr;
+				std::optional<CN<N>> Hh = effects::back_propagate(*surf, plan[jj].left, *X, on, hint);
+				if (Hh) {
+					X = Hh;
+					on_sid = surf->id;
+				}
+				continue;
+			}
+			if (surf != nullptr && is_transformative(effs[jj])) {
+				on_sid = -1;
+			}
+			if (surf == nullptr || !is_transformative(effs[jj])) {
+				continue;
+			}
+			X = effects::map_point(X, *surf, true);
+			if (!X) {
+				break;
+			}
+		}
+		return X;
+	}
+
+	// The degenerate aim's beam (P -> aim -> Q0) and exact line; nullopt for player = cursor.
+	std::optional<std::pair<Beam<N>, std::shared_ptr<const exact::Line>>> degenerate_beam(const CN<N> &player, const CN<N> &cursor,
+			const std::vector<PlanItem> &plan, const Flags &flags) const {
+		const std::optional<CN<N>> X = degenerate_image(cursor, plan, flags);
+		CN<N> aim;
+		std::shared_ptr<const exact::Line> line;
+		if (!X || X->sub(player).is_zero()) {
+			aim = cursor;
+			if (cursor.sub(player).is_zero()) {
+				return std::nullopt;
+			}
+			line = exact::Line::from_exact(exact::line_through(player.fx(), player.fy(), cursor.fx(), cursor.fy()));
+		} else {
+			aim = *X;
+			line = initial_line(player, cursor, plan, flags);
+		}
+		const std::optional<CN<N>> q0 = effects::scene_pre_q(scene_);
+		const CN<N> delta = q0 ? player.sub(*q0) : player.sub(player);
+		return std::make_pair(Beam<N>::through(player, aim, q0 ? &delta : nullptr), line);
+	}
+
 	std::optional<Walk<N>> run_degenerate(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan, Mode mode,
 			int max_events, const Flags &flags) {
 		const std::vector<EffectType> effs = plan_effects(plan, flags);
@@ -1173,8 +1551,8 @@ private:
 				start_gc = exact::gc_through(exact::Point3{exact::of(player.fx()), exact::of(player.fy()), exact::of(1.0)}, *X0, *q0);
 			}
 		}
-		if (via_infinity(plan, flags)) {
-			b = Beam<N>{b.p, b.tau.neg(), b.kappa.neg()}; // the second realization: the same circle the other way (Stage 88)
+		if (force_reversed ? *force_reversed : realize(player, cursor, plan, flags, b, nullptr).reversed) {
+			b = Beam<N>{b.p, b.tau.neg(), b.kappa.neg()}; // the second realization: the same circle the other way (Stages 88, 111)
 		}
 		BeamPtr<N> b0 = std::make_shared<const Beam<N>>(b);
 		if (w.Q) {
@@ -2076,6 +2454,10 @@ private:
 					ce.anchored = w.anchored;
 					t_prev = t;
 					w.cursor_done = true;
+					if (w.stop_at_cursor) {
+						w.done = true;
+						return;
+					}
 					w.mode = w.post_mode;
 					// the post-cursor continuation is the sensitive part
 					w.anchored = false;
@@ -2479,6 +2861,14 @@ private:
 			}
 		}
 		const bool at_h = w.on_plan && w.chain && at_planned_hit(*beam, surf, pt, H);
+		{
+			static const bool trace = std::getenv("RC_REALIZE_TRACE") != nullptr;
+			if (trace) {
+				std::fprintf(stderr, "project: pt (%.6g, %.6g) H %s on_plan %d chain %d anchored %d at_h %d mode %d plan_index %d cursor (%.6g, %.6g)\n", pt.fx(), pt.fy(),
+					H ? (std::to_string(H->fx()) + "," + std::to_string(H->fy())).c_str() : "none", int(w.on_plan), int(w.chain != nullptr), int(w.anchored), int(at_h),
+					int(w.mode), w.plan_index, w.cursor ? w.cursor->fx() : 0.0, w.cursor ? w.cursor->fy() : 0.0);
+			}
+		}
 		if (!at_h) {
 			w.on_plan = false;
 		}

@@ -880,7 +880,7 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 		return out;
 	}
 	const Scene<F64> &sc = *in.scene;
-	const Solver<F64> solver(sc);
+	Solver<F64> solver(sc);
 	std::optional<CN<F64>> X = CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}};
 	double scale = gd_maxf(1.0, in.cursor.length());
 	const std::vector<EffectType> effs = solver.plan_effects(in.plan, in.flags);
@@ -915,11 +915,12 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 	if (solver.fixes_cursor(CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}}, in.plan, in.flags)) {
 		X = CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}};
 	}
-	// Stage 88/101: the plan's second realization (an infinity entry in its first
-	// epoch) is the same aim run the other way: the reference shot gets the
-	// infinity entry alone, a pure orientation (no effect), in every frame
+	// Stages 88/101/111: the plan's second realization is the same aim run the
+	// other way: the reference shot gets the infinity entry alone, a pure
+	// orientation (no effect), in every frame
 	std::vector<PlanItem> ref_plan;
-	if (solver.via_infinity(in.plan, in.flags)) {
+	if (solver.realization(CN<F64>{F64{double(in.player.x)}, F64{double(in.player.y)}},
+			CN<F64>{F64{double(in.cursor.x)}, F64{double(in.cursor.y)}}, in.plan, in.flags).reversed) {
 		ref_plan.push_back(PlanItem{INFINITY_ID, false, std::nullopt, std::nullopt});
 	}
 	const V2 img = V2::of(X->fx(), X->fy());

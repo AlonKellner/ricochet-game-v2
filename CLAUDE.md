@@ -20,26 +20,27 @@ Three-layer architecture with strict dependency direction: Math -> Visual -> Gam
 
 ## Testing
 
+The protocol: `docs/WORKFLOW.md` (the three gates, the three build trees, the data pipelines).
+
 ```bash
-# Every gate before a commit (native build, oracle, ctest, GUT, ASan, goldens), timed summary
+# The inner loop: the rc_tests binary alone (no godot-cpp), then ctest entries of an area
+make check                      # every entry, ~18 s after the build
+make check AREA=vis             # solver | vis | goldens | sweeps | all
+make check TC="visibility digest" SKIP=0   # one doctest filter (--no-skip with SKIP=0)
+
+# Before every commit (core, oracle, ctest, the extension, GUT, goldens unchanged; timed summary)
+make gate
+
+# Before a merge to main or a phase close: the same plus ASan+UBSan
 make gates
 
-# Run all tests headlessly
-./run_tests.sh
-
-# Same suite, sweeps sharded over parallel processes (about 2 min instead of 27)
-./run_tests_parallel.sh
-
-# Or directly
-godot --headless -s addons/gut/gut_cmdln.gd
-
-# Run specific stage
-make test-stage STAGE=3
-
-# The native core: build (JOBS=4), ctest, ASan (run alone), the oracle
-make native JOBS=4 && make ctest
-make native-asan
-make oracle-test
+# The pieces
+make core && make ctest         # rc_tests (native/build-core) and its ctest
+make native                     # the extension Godot loads (native/build -> native/bin), import if needed
+make native-asan                # rc_tests under ASan+UBSan (native/build-asan)
+make oracle-test                # the mpmath oracle's pytest
+./run_tests_parallel.sh         # the GUT suite, sweeps sharded over parallel processes
+make test-stage STAGE=3         # one stage's GUT files
 ```
 
 - Test files: `tests/test_stage{N}_{topic}.gd`
@@ -50,17 +51,19 @@ make oracle-test
 
 ## Stage Workflow
 
-Each stage follows the feedback loop protocol:
+Each stage follows the feedback loop protocol (the gates and targets: `docs/WORKFLOW.md`):
 
-1. Implement stage (code + unit tests)
-2. Run all unit tests (new + all prior) — all must pass
-3. User performs interactive tests
-4. User provides pass/fail feedback
-5. Convert failing interactive tests into automated tests
-6. Fix and re-run — repeat until all pass
-7. Stage complete
+1. Spec first: `GAME_SPEC.md`, then the oracle (`docs/research/oracle`) and its tests, then the fixtures (`make regen`)
+2. Native: the kernel and its tests green under `make check`, then `make gate` before each commit (small green commits on a branch)
+3. Bindings, GUT, visuals
+4. Goldens: `make judge`, the user's approval of the report, `make rebless APPROVED=1`
+5. Docs: the stage's TDD doc (phase table), CHANGELOG, GAME_SPEC's version; `make gates` closes each phase
+6. User performs interactive tests and gives pass/fail feedback
+7. Convert failing interactive tests into automated tests; fix and re-run until all pass
+8. Stage complete
 
-**No stage is complete without user sign-off on interactive tests.**
+**No stage is complete without user sign-off on interactive tests.** A changed golden, region digest or
+fixture is a behaviour change: bring the evidence (the judge's report) before applying it.
 
 ## Code Style
 

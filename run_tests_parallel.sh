@@ -10,16 +10,19 @@
 #   ./run_tests_parallel.sh            # JOBS = performance cores
 #   JOBS=4 ./run_tests_parallel.sh
 #   SKIP_ORACLE=1 ./run_tests_parallel.sh   # the oracle runs elsewhere (make gates)
+#   SKIP_BUILD=1 ./run_tests_parallel.sh    # the extension is built already (gates.sh)
+#   SWEEP_SAMPLE=1 ./run_tests_parallel.sh  # every sweep player (default 8: one in 8; the
+#                                           # whole sweep runs natively, make check AREA=sweeps)
 #
 # Jobs start longest first (the visibility sweep, in 2 x JOBS shards so its
-# tail balances), then the shorter sweeps, then the other files.
+# tail balances), then the other files, then the shorter sweeps.
 set -uo pipefail
 
 GODOT="${GODOT_BIN:-godot}"
 cd "$(dirname "$0")"
 
 # fail fast: the tests/native/ files need native/bin/ and the import step
-if ! GODOT_BIN="$GODOT" make native; then
+if [ -z "${SKIP_BUILD:-}" ] && ! GODOT_BIN="$GODOT" make native; then
 	echo "!! native build failed (make native); not running the suite"
 	exit 1
 fi
@@ -80,6 +83,9 @@ export GODOT LOGDIR
 # the processes are the parallelism: one cast thread per region build in each
 # (Perf P3: 12 processes x 8 threads oversubscribed the cores, 96 s -> 116 s)
 export RC_VIS_THREADS="${RC_VIS_THREADS:-1}"
+# the GUT sweeps are the bindings' sample (SweepRunner.shard); the full combos
+# run natively on bench/sweeps
+export SWEEP_SAMPLE="${SWEEP_SAMPLE:-8}"
 
 start=$(date +%s)
 echo "Running $(wc -l < "$LOGDIR/jobs.txt" | tr -d ' ') jobs on $JOBS processes (logs: $LOGDIR)"

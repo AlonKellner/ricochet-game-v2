@@ -40,8 +40,10 @@
 #include <thread>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -95,6 +97,7 @@ enum class End : int {
 	PoleP,    // P_K, the player's image (excluded: a cursor there aims at nothing)
 	PoleQ,    // Q_K, the frame's infinity (excluded)
 	Loop,     // the walk's full loop back to its departure point
+	TieNear,  // Stage 111: the other orientation's departure point: from there on its planned walk reaches the cursors, and it is the plan's realization
 };
 
 inline const char *end_name(End e) {
@@ -105,6 +108,7 @@ inline const char *end_name(End e) {
 		case End::PoleP: return "P";
 		case End::PoleQ: return "Q";
 		case End::Loop: return "loop";
+		case End::TieNear: return "tie-near";
 	}
 	return "?";
 }
@@ -177,6 +181,22 @@ struct Cast {
 	// decision diverges: a cursor at the departure point is still reached (at
 	// once, before the divergence shows) -- the region's whisker on that carrier
 	bool whisker = false;
+	// Stage 111: the departure point of the last consumed surface entry (the
+	// beam's own start; the near end when no infinity entry follows it)
+	bool has_depart = false;
+	Pt depart_pt;
+	int depart_sid = -1;
+	// Stage 111: in a half that is not the member's tie-choice, the other
+	// orientation's planned reach -- its whole loop from its departure, or,
+	// after a planned infinity last, from the frame's infinity round to its
+	// departure -- is the plan's realization there: cut out of this cast
+	bool chosen = true;       // Stage 111: this cast's orientation is the one the solver picks for its cursor
+	int ek = -1;              // the planned event that consumed the last entry (debugging)
+	bool met = false;
+	bool has_tie = false;
+	bool tie_after_q = false; // its reach begins at Q_K (an infinity entry consumed last)
+	Pt tie_depart_pt;
+	int tie_depart_sid = -1;
 	End near_kind = End::PoleP;
 	int near_sid = -1;
 	Pt near_pt;
@@ -344,6 +364,7 @@ struct Cell {
 	int left = -1;  // member index
 	int right = -1; // member index
 	int run = -1;
+	int half = 0;   // the Half it was built in (Stage 111)
 	std::vector<std::vector<Edge>> loops; // closed loops (a cell clipped by the rectangle can split)
 	Pt inside; // a point strictly inside (from the mid cast)
 	Cast mid;
@@ -358,10 +379,18 @@ struct Cell {
 struct Loop {
 	std::vector<Edge> edges;
 	double area = 0.0; // signed, of the tessellated loop
+	int half = 0;      // the Half it was built in (Stage 111)
 };
 
 // What a cast is for (the benches count them by kind).
 enum class CastKind { Crit, Side, Mid, Refine, Probe, Other };
+
+// Stage 111: the plan's first entry fixes the realization per cursor
+// (GAME_SPEC 13.1): the cursors whose aim runs toward their image and those
+// whose aim runs the other way round are two regions, built by today's direct
+// and through-infinity machinery, disjoint, joined at the aims no orientation
+// fires the entry for. Single: one realization for the whole plan (no entry).
+enum class Half : int { Single = 0, Direct = 1, Reversed = 2 };
 
 // A member: the beam of the final frame that every cursor aiming along `dir`
 // lies on, and the casts that read its walk.
@@ -408,6 +437,8 @@ struct Result {
 	Rect domain;        // the cursors classified: the level bounds grown by 50
 	Rect clip;          // where the cells are cut (it holds every finite corner)
 	int orientation = 1; // +1: the cells wind counterclockwise (x right, y up); -1: clockwise
+	Half half = Half::Single;     // Stage 111: the half this result was built as (Single: the whole, or one realization)
+	bool split = false;           // Stage 111: the join of the two halves of a split plan (every cell and loop tagged by its half; the reversed half's cells wind the other way)
 	bool near_transforms = false; // the last plan entry changes the transform: its departures lie on its segment
 	struct Carrier {
 		bool line = true;
@@ -529,16 +560,51 @@ inline double arc_sweep(const Edge &e, const ArcGeom &g) {
 	return sw;
 }
 
+// Workflow W2.0: the solves of a split plan's two halves, shared. A half's
+// tie cast (the other orientation's reach) is the other half's own cast of the
+// same cursor, and the tie-choice and the realization of a cursor are the
+// same in both; each is a pure function of (player, cursor, plan, flags,
+// orientation), so the memo changes no result (the halves run in turn; the
+// cast threads share it under the mutex).
+struct SolveMemo {
+	struct Key {
+		uint64_t x = 0, y = 0;
+		int force = 2; // 0 direct, 1 reversed, 2 the solver's own choice
+		bool operator==(const Key &o) const { return x == o.x && y == o.y && force == o.force; }
+	};
+	struct Hash {
+		size_t operator()(const Key &k) const { return size_t((k.x * 1099511628211ULL) ^ (k.y * 14695981039346656037ULL) ^ uint64_t(k.force)); }
+	};
+	static Key key(const Pt &c, std::optional<bool> force) {
+		return Key{std::bit_cast<uint64_t>(c.x), std::bit_cast<uint64_t>(c.y), force ? (*force ? 1 : 0) : 2};
+	}
+	std::mutex mutex;
+	std::unordered_map<Key, std::optional<LadderResult>, Hash> solves;
+	std::unordered_map<Key, std::optional<bool>, Hash> ties;
+	std::unordered_map<Key, std::optional<bool>, Hash> realizations;
+	long hits = 0;
+	// RC_VIS_MEMO_STATS=1: the time each kind of call took (misses), printed by compute
+	double solve_ms = 0, tie_ms = 0, realization_ms = 0;
+	long solve_n = 0, tie_n = 0, realization_n = 0;
+};
+
 class Builder {
 public:
-	Builder(Tracer &tracer, Pt player, std::vector<PlanItem> plan, Flags flags, Rect bounds)
+	Builder(Tracer &tracer, Pt player, std::vector<PlanItem> plan, Flags flags, Rect bounds, Half half = Half::Single)
 		: tracer_(tracer), plan_(std::move(plan)), flags_(std::move(flags)),
-		  scene_(Scene<F64>::from_defs(tracer.defs(), F64{1.0})), solver_(scene_, nullptr) {
+		  scene_(Scene<F64>::from_defs(tracer.defs(), F64{1.0})), solver_(scene_, nullptr), half_(half) {
 		flags_.erase(GHOST);
 		scene_.emit_infinity = tracer.emit_infinity();
 		res_.player = player;
 		res_.domain = bounds.grown(50.0);
+		res_.half = half;
 	}
+
+	// Stage 111: whether the plan splits into two halves (its first entry may
+	// fix the realization per cursor, R1/R2)
+	bool splits() const { return solver_.first_entry(plan_, flags_) >= 0; }
+	// Workflow W2.0: the memo the two halves share (compute)
+	void share(SolveMemo *memo) { memo_ = memo; }
 
 	// One cast of the cursor c (after prepare(); for tests and debugging).
 	std::optional<Cast> probe(const Pt &c) {
@@ -570,16 +636,24 @@ public:
 		cast_members();
 		build_cells();
 		merge_cells();
+		for (Cell &c : res_.cells) {
+			c.half = int(half_);
+		}
+		for (Loop &l : res_.loops) {
+			l.half = int(half_);
+		}
 		return std::move(res_);
 	}
 
 private:
 	Tracer &tracer_;
+	SolveMemo *memo_ = nullptr;
 	std::vector<PlanItem> plan_;
 	Flags flags_;
 	Scene<F64> scene_;
-	Solver<F64> solver_;
+	mutable Solver<F64> solver_;
 	Result res_;
+	Half half_ = Half::Single;
 	std::vector<EffectType> effs_;
 	std::vector<bool> changes_; // entry j changes the frame
 	std::vector<effects::Poles<F64>> frames_; // frames_[j]: after j entries
@@ -624,7 +698,8 @@ private:
 				res_.plan_carriers.push_back(cr);
 			}
 		}
-		via_ = solver_.via_infinity(plan_, flags_);
+		// Stage 111: a half runs its own realization; the whole runs the plan's
+		via_ = half_ == Half::Single ? solver_.via_infinity(plan_, flags_) : half_ == Half::Reversed;
 		q0_ = effects::scene_pre_q(scene_);
 		const CN<F64> P = cn_of(res_.player);
 		effects::Poles<F64> cur{P, q0_, q0_ ? std::optional<CN<F64>>(P.sub(*q0_)) : std::nullopt};
@@ -712,7 +787,7 @@ private:
 		return d.finite() ? std::optional<Pt>(unit(d)) : std::nullopt;
 	}
 
-	// A frame-K cursor whose aim direction is d.
+	// A frame-K cursor whose aim direction is d (in this half's realization).
 	std::optional<Pt> cursor_for(const Pt &d) const {
 		const CN<F64> P = cn_of(res_.player);
 		const Pt s = via_ ? d * -1.0 : d;
@@ -1115,6 +1190,25 @@ private:
 				}
 			}
 		}
+		// Stage 111: the aims parallel to the first entry's line carrier: no
+		// orientation fires the entry there (the cast is dead), and the members
+		// bound the cells of both halves at the crack between them
+		if (half_ != Half::Single) {
+			const int j = solver_.first_entry(plan_, flags_);
+			const Surf<F64> *e = j >= 0 ? scene_.find(plan_[size_t(j)].surface_id) : nullptr;
+			if (e != nullptr && e->line) {
+				const Pt u = unit(Pt{e->ex - e->sx, e->ey - e->sy});
+				for (const Pt &d : {u, u * -1.0}) {
+					if (const std::optional<Pt> c = cursor_for(d)) {
+						Member m;
+						m.dir = d;
+						m.cursor = *c;
+						m.why = "the aim parallel to the first entry's carrier";
+						pois.push_back(std::move(m));
+					}
+				}
+			}
+		}
 		// the axes: every gap between members stays below a quarter turn
 		for (const Pt &d : {Pt{1, 0}, Pt{0, 1}, Pt{-1, 0}, Pt{0, -1}}) {
 			Member m;
@@ -1215,18 +1309,146 @@ private:
 		return out;
 	}
 
+	// Stage 111: a cast in this half's orientation. In a split plan the half's
+	// orientation is forced on the solver; where it is not the member's
+	// tie-choice (what a cursor both planned walks reach gets), the other
+	// orientation's planned reach is the plan's realization there, and the
+	// cast keeps only what lies outside it.
+	// RC_VIS_TRACE=1: one line per cast (Workflow W5): the half, the cursor, the
+	// aim, the tie-choice, whether the solver's own choice is this half (chosen),
+	// valid / alive / met, the consuming event, the near and far ends.
+	void trace_cast(const Cast &r, std::optional<bool> q) const {
+		if (std::getenv("RC_VIS_TRACE") == nullptr) {
+			return;
+		}
+		std::fprintf(stderr, "cast half %d cursor (%.9g, %.9g) dir (%.9f, %.9f) tie %s chosen %d valid %d alive %d met %d ek %d depart %d near %s end %s%s\n",
+			int(half_), r.cursor.x, r.cursor.y, r.dir.x, r.dir.y, q ? (*q ? "reversed" : "direct") : "none", int(r.chosen), int(r.valid), int(r.alive),
+			int(r.met), r.ek, int(r.has_depart), end_name(r.near_kind), end_name(r.end_kind), r.has_tie ? (r.tie_after_q ? " tie-cut after Q" : " tie-cut") : "");
+	}
+
 	Cast cast_on(Tracer &tracer, const Pt &c, const Pt &dir, const Beam<F64> &member) const {
+		if (half_ == Half::Single) {
+			Cast r = cast_core(tracer, c, dir, member, std::nullopt, nullptr);
+			trace_cast(r, std::nullopt);
+			return r;
+		}
+		const bool rev = half_ == Half::Reversed;
+		// (a plan without an entry -- the prefix of a split plan, built in a cell's
+		// orientation by a check -- has no tie-choice: the forced orientation alone)
+		const std::optional<bool> q = solver_.first_entry(plan_, flags_) >= 0 ? memo_tie(tracer, c) : std::nullopt;
+		if (std::getenv("RC_VIS_TIE") != nullptr) {
+			std::fprintf(stderr, "tie half %d cursor (%.6g, %.6g) dir (%.9f, %.9f) angle %.9f -> %s\n", int(half_), c.x, c.y, dir.x, dir.y,
+				std::atan2(dir.y, dir.x), q ? (*q ? "reversed" : "direct") : "none");
+		}
+		std::optional<Cast> tie;
+		if (q && *q != rev) {
+			tie = cast_core(tracer, c, dir, Beam<F64>{member.p, member.tau.neg(), member.kappa.neg()}, *q, nullptr);
+			if (!tie->valid) {
+				tie.reset();
+			}
+		}
+		Cast r = cast_core(tracer, c, dir, member, rev, tie ? &*tie : nullptr);
+		if (r.valid) {
+			const std::optional<bool> own = memo_realization(tracer, c);
+			r.chosen = own && *own == rev;
+		}
+		// a tie cut names the other orientation's departure: only in a split half,
+		// only where the tie-choice is the other orientation
+		RC_ASSERT(!r.has_tie || (q && *q != rev), "vis: a tie cut outside a tie");
+		trace_cast(r, q);
+		return r;
+	}
+
+	// the three solver calls of a cast, through the shared memo when there is one
+	std::optional<LadderResult> memo_solve(Tracer &tracer, const Pt &c, std::optional<bool> force) const {
+		const Pt P = res_.player;
+		if (memo_ == nullptr) {
+			return tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force);
+		}
+		const SolveMemo::Key key = SolveMemo::key(c, force);
+		{
+			std::lock_guard<std::mutex> lock(memo_->mutex);
+			const auto it = memo_->solves.find(key);
+			if (it != memo_->solves.end()) {
+				memo_->hits++;
+				return it->second;
+			}
+		}
+		const auto t0 = std::chrono::steady_clock::now();
+		std::optional<LadderResult> lr = tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force);
+		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+		std::lock_guard<std::mutex> lock(memo_->mutex);
+		memo_->solves.emplace(key, lr);
+		memo_->solve_ms += ms;
+		memo_->solve_n++;
+		return lr;
+	}
+	std::optional<bool> memo_tie(Tracer &tracer, const Pt &c) const {
+		const Pt P = res_.player;
+		if (memo_ == nullptr) {
+			return tracer.tie_choice(P.x, P.y, c.x, c.y, plan_, flags_);
+		}
+		const SolveMemo::Key key = SolveMemo::key(c, std::nullopt);
+		{
+			std::lock_guard<std::mutex> lock(memo_->mutex);
+			const auto it = memo_->ties.find(key);
+			if (it != memo_->ties.end()) {
+				memo_->hits++;
+				return it->second;
+			}
+		}
+		const auto t0 = std::chrono::steady_clock::now();
+		const std::optional<bool> q = tracer.tie_choice(P.x, P.y, c.x, c.y, plan_, flags_);
+		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+		std::lock_guard<std::mutex> lock(memo_->mutex);
+		memo_->ties.emplace(key, q);
+		memo_->tie_ms += ms;
+		memo_->tie_n++;
+		return q;
+	}
+	std::optional<bool> memo_realization(Tracer &tracer, const Pt &c) const {
+		const Pt P = res_.player;
+		if (memo_ == nullptr) {
+			return tracer.realization_reversed(P.x, P.y, c.x, c.y, plan_, flags_);
+		}
+		const SolveMemo::Key key = SolveMemo::key(c, std::nullopt);
+		{
+			std::lock_guard<std::mutex> lock(memo_->mutex);
+			const auto it = memo_->realizations.find(key);
+			if (it != memo_->realizations.end()) {
+				memo_->hits++;
+				return it->second;
+			}
+		}
+		const auto t0 = std::chrono::steady_clock::now();
+		const std::optional<bool> q = tracer.realization_reversed(P.x, P.y, c.x, c.y, plan_, flags_);
+		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+		std::lock_guard<std::mutex> lock(memo_->mutex);
+		memo_->realizations.emplace(key, q);
+		memo_->realization_ms += ms;
+		memo_->realization_n++;
+		return q;
+	}
+
+	Cast cast_core(Tracer &tracer, const Pt &c, const Pt &dir, const Beam<F64> &member, std::optional<bool> force, const Cast *tie) const {
 		Cast r;
 		r.cursor = c;
 		r.dir = dir;
 		const Pt P = res_.player;
-		const std::optional<LadderResult> lr = tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_);
+		const std::optional<LadderResult> lr = memo_solve(tracer, c, force);
 		if (!lr) {
 			return r;
+		}
+		if (tie != nullptr) {
+			r.has_tie = true;
+			r.tie_after_q = tie->near_kind == End::PoleQ;
+			r.tie_depart_pt = tie->depart_pt;
+			r.tie_depart_sid = tie->depart_sid;
 		}
 		r.valid = true;
 		const std::vector<CastEvent> pl = cast_events(lr->planned, init_flags_);
 		const std::vector<CastEvent> ph = cast_events(lr->physical, init_flags_);
+
 		// the event that consumes the last plan entry, on the planned walk
 		int eK = -1;
 		bool met = K == 0;
@@ -1240,6 +1462,11 @@ private:
 				const PlanItem &item = plan_[j];
 				const bool consumed = item.is_infinity() ? (e.kind == EventKind::Infinity && e.applied)
 														 : (e.kind == EventKind::Hit && e.sid == item.surface_id && e.left == item.left);
+				if (consumed && !item.is_infinity()) {
+					r.has_depart = true;
+					r.depart_pt = e.pt;
+					r.depart_sid = e.sid;
+				}
 				if (consumed && ++j == K) {
 					eK = int(i);
 					met = true;
@@ -1267,6 +1494,8 @@ private:
 		};
 		auto steps_after = [](const std::vector<int> &es, int i) { return i < int(es.size()) ? es[size_t(i)] : (es.empty() ? 0 : es.back()); };
 		const int nK = eK >= 0 ? steps_after(espl, eK) : 0;
+		r.ek = eK;
+		r.met = met;
 		// both walks reach the last entry's crossing in one frame, and leave it in one
 		bool reached = met && aligned(nK);
 		bool alive = reached && (eK < 0 || aligned(nK + 1));
@@ -1367,6 +1596,19 @@ private:
 		r.alive = alive;
 		// a whisker point is one a cursor there aims at along this member: on its owned arc
 		r.whisker = !alive && reached && K > 0 && r.near_kind == End::Near && owned_at(member, c, r.near_pt);
+		if (r.whisker && r.has_tie) {
+			// Stage 111: the other orientation's reach owns the departure point
+			if (!r.tie_after_q) {
+				r.whisker = false;
+			} else {
+				const double tq = tq_of(member);
+				const double tie_to = member.param_of(cn_of(r.tie_depart_pt)).v;
+				const double td = member.param_of(cn_of(r.near_pt)).v;
+				if (walk_key(td, tie_to) <= walk_key(tq, tie_to)) {
+					r.whisker = false;
+				}
+			}
+		}
 		if (stop_i >= 0 && (budget_i < 0 || stop_i <= budget_i)) {
 			r.end_kind = End::Stop;
 			r.end_sid = ph[size_t(stop_i)].sid;
@@ -1468,7 +1710,9 @@ private:
 		}
 		// a stop at the departure point comes after the full loop (it is re-hit last)
 		const Pt start_pt = r.near_kind == End::Near ? r.near_pt : (r.near_kind == End::PoleP ? res_.pk : res_.qk);
-		const bool loop = r.end_kind == End::Loop || (r.end_kind == End::Stop && r.end_rehit)
+		// (after a planned infinity last, the departure re-hit is a stop at the
+		// departure point: the pieces passed before the wrap were not reached)
+		const bool loop = r.end_kind == End::Loop || (r.end_kind == End::Stop && r.end_rehit && r.near_kind != End::PoleQ)
 			|| ((r.end_kind == End::Stop || r.end_kind == End::Budget) && r.end_pt == start_pt && r.near_kind != End::PoleQ);
 		double te = t0;
 		if (r.end_kind == End::PoleQ) {
@@ -1486,13 +1730,30 @@ private:
 				bps.push_back(m);
 			}
 		}
+		// Stage 111: the other orientation's planned reach is the plan's
+		// realization: its whole loop (nothing is left for this walk), or, after
+		// a planned infinity last, from Q_K round to its departure -- which runs
+		// the other way along the member: the arc from its departure forward to
+		// Q_K in this walk's order
+		double tie_to = 0.0; // its departure, on b
+		if (r.has_tie) {
+			if (!r.tie_after_q) {
+				return;
+			}
+			tie_to = b.param_of(cn_of(r.tie_depart_pt)).v;
+			const Mark m{End::TieNear, tie_to};
+			if (m.t != t0 && walk_key(m.t, t0) < ke && !std::any_of(bps.begin(), bps.end(), [&](const Mark &x) { return x.t == m.t; })) {
+				bps.push_back(m);
+			}
+		}
+		auto in_tie = [&](double t) { return r.has_tie && walk_key(t, tie_to) <= walk_key(tq, tie_to); };
 		std::sort(bps.begin(), bps.end(), [&](const Mark &a, const Mark &c) { return walk_key(a.t, t0) < walk_key(c.t, t0); });
 		marks.insert(marks.end(), bps.begin(), bps.end());
 		marks.push_back(Mark{r.end_kind, te});
 		for (size_t i = 0; i + 1 < marks.size(); i++) {
 			const bool full = loop && i == 0 && marks.size() == 2;
 			const double mid = between(marks[i].t, marks[i + 1].t, full);
-			if (owned(mid)) {
+			if (owned(mid) && !in_tie(mid)) {
 				r.iv.push_back(Interval{marks[i], marks[i + 1]});
 			}
 		}
@@ -1559,6 +1820,9 @@ private:
 		const Member &m = res_.members[size_t(mi)];
 		Vertex v;
 		v.member = mi;
+		if (kind == End::Loop) {
+			kind = src.near_kind == End::Near ? End::Loop : src.near_kind; // a loop closes where it began: at a pole when it began there
+		}
 		if (kind == End::PoleP) {
 			v.p = res_.pk;
 			v.t = 0.0;
@@ -1577,7 +1841,7 @@ private:
 			return v;
 		}
 		const bool near = kind == End::Near || kind == End::Loop;
-		const Pt target = near ? src.near_pt : src.end_pt;
+		const Pt target = kind == End::TieNear ? src.tie_depart_pt : near ? src.near_pt : src.end_pt;
 		// a walk that stops (or departs) at a pole -- a carrier through Q_K is
 		// crossed exactly there (Stage 105) -- ends at the pole itself
 		const double tol = 1e-9 * std::max({1.0, std::abs(target.x), std::abs(target.y)});
@@ -1588,8 +1852,20 @@ private:
 			v.pole = true;
 			return v;
 		}
-		return root_on(mi, near ? src.near_sid : src.end_sid, target);
+		return root_on(mi, kind == End::TieNear ? src.tie_depart_sid : near ? src.near_sid : src.end_sid, target);
 	}
+
+	// Stage 111: the carrier and the point a mark of this kind lies on
+	static std::pair<int, Pt> mark_carrier(const Cast &c, End kind) {
+		switch (kind) {
+			case End::TieNear: return {c.tie_depart_sid, c.tie_depart_pt};
+			case End::Near:
+			case End::Loop: return {c.near_sid, c.near_pt};
+			default: return {c.end_sid, c.end_pt};
+		}
+	}
+	// the role a carrier edge of this mark kind plays (a tie cut is a departure or a budget cut)
+	static End role_of(End kind) { return kind == End::TieNear ? End::Near : kind; }
 
 	Vertex root_on(int mi, int sid, const Pt &target) const {
 		const Member &m = res_.members[size_t(mi)];
@@ -1815,11 +2091,9 @@ private:
 			p.ae = vertex_on(li, p.kb, L.plus);
 			p.bs = vertex_on(ri, p.ka, R.minus);
 			p.be = vertex_on(ri, p.kb, R.minus);
-			p.sid_a = mid.near_sid;
-			p.via_a = mid.near_pt;
+			std::tie(p.sid_a, p.via_a) = mark_carrier(mid, p.ka);
 			const bool loop = p.kb == End::Loop;
-			p.sid_b = loop ? mid.near_sid : mid.end_sid;
-			p.via_b = loop ? mid.near_pt : mid.end_pt;
+			std::tie(p.sid_b, p.via_b) = mark_carrier(mid, p.kb);
 			const double tm = between(iv.a.t, iv.b.t, loop && iv.a.t == iv.b.t);
 			const std::optional<CN<F64>> z = std::isinf(tm) ? mb.at_infinity() : std::optional<CN<F64>>(mb.at(F64{tm}));
 			p.inside = z ? pt_of(*z) : mid.cursor;
@@ -1883,7 +2157,9 @@ private:
 	void build_cells() {
 		auto &ms = res_.members;
 		if (ms.size() < 2) {
-			res_.notes.push_back("fewer than two members");
+			if (half_ == Half::Single) {
+				res_.notes.push_back("fewer than two members");
+			}
 			return;
 		}
 		std::vector<Gap> gaps(ms.size());
@@ -2050,8 +2326,9 @@ private:
 						continue;
 					}
 					e.inclusive = true;
-					e.incl_a = true;
-					e.incl_b = true; // (the member's own cast sees its whole arc)
+					// (the member's own cast sees its whole arc; an end at a pole is never in the region)
+					e.incl_a = !(a.pole && e.a == a.p);
+					e.incl_b = !(b.pole && e.b == b.p);
 					res_.whiskers.push_back(e);
 				}
 			}
@@ -2495,7 +2772,7 @@ private:
 			const Pt to = place(be, 1.0);
 			loop.push_back(connector(from, to));
 		} else if (p.kb != End::PoleP && p.kb != End::PoleQ) {
-			carrier_piece(p.sid_b, p.kb, ae, be, p.via_b, incl(ae));
+			carrier_piece(p.sid_b, role_of(p.kb), ae, be, p.via_b, incl(ae));
 		}
 		member_piece(ri, R, be, bs, false);
 		// the near side
@@ -2503,12 +2780,13 @@ private:
 			const Pt from = bridge(bs, -1.0);
 			const Pt to = loop.empty() ? place(as, -1.0) : loop.front().a;
 			loop.push_back(connector(from, to));
-		} else if (p.ka == End::Near) {
+		} else if (p.ka == End::Near || p.ka == End::TieNear) {
 			const size_t before = loop.size();
-			carrier_piece(p.sid_a, End::Near, bs, as, p.via_a, incl(bs));
+			carrier_piece(p.sid_a, role_of(p.ka), bs, as, p.via_a, incl(bs));
 			for (size_t k = before; k < loop.size(); k++) {
 				if (!loop[k].connector) {
-					loop[k].inclusive = p.near_incl;
+					// a tie cut belongs to the other orientation (Stage 111)
+					loop[k].inclusive = p.ka == End::Near && p.near_incl;
 				}
 			}
 		}
@@ -3294,11 +3572,156 @@ inline Fill fill_triangles(const Result &r) {
 	return out;
 }
 
+// Stage 111: the two halves of a split plan as one result: the direct half's
+// scalars, every member, cell, loop and whisker of both (the reversed half's
+// member indices rebased; cells and loops tagged by their half for the checks
+// that read one realization at a time: the winding, the disjointness -- the
+// two share the crack between them). A half's whisker inside the other half's
+// area is that area's (one member's cast landed on the other side of the
+// switch): dropped.
+inline Membership contains(const Result &r, const Pt &c);
+inline Result join_halves(Result a, Result b) {
+	auto rebase = [](Edge &e, int off) {
+		if (e.member >= 0) {
+			e.member += off;
+		}
+	};
+	for (Result *h : {&a, &b}) {
+		for (Loop &l : h->loops) {
+			l.area = loop_area(l.edges);
+		}
+	}
+	auto keep_whiskers = [](Result &mine, const Result &other) {
+		std::vector<Edge> kept;
+		for (const Edge &w : mine.whiskers) {
+			if (w.kind == EdgeKind::Member) {
+				// sampled along it (a straight whisker may run to the real infinity)
+				std::vector<Pt> samples{w.via};
+				if (!w.arc) {
+					for (double f : {0.02, 0.2, 0.8, 0.98}) {
+						samples.push_back(w.a + (w.b - w.a) * f);
+					}
+				}
+				// kept only where it sticks out of the other half within the domain
+				bool outside = false;
+				for (const Pt &q : samples) {
+					outside = outside || contains(other, q) == Membership::Outside;
+				}
+				if (!outside) {
+					continue;
+				}
+			}
+			kept.push_back(w);
+		}
+		mine.whiskers = std::move(kept);
+	};
+	keep_whiskers(a, b);
+	keep_whiskers(b, a);
+	Result r = a;
+	r.half = Half::Single;
+	r.split = true;
+	if (!b.supported) {
+		r.supported = false;
+		r.reason = b.reason;
+	}
+	const int off = int(a.members.size());
+	for (Edge &e : b.whiskers) {
+		rebase(e, off);
+	}
+	for (Loop &l : b.loops) {
+		for (Edge &e : l.edges) {
+			rebase(e, off);
+		}
+	}
+	for (Cell &c : b.cells) {
+		if (c.left >= 0) {
+			c.left += off;
+		}
+		if (c.right >= 0) {
+			c.right += off;
+		}
+		for (auto &l : c.loops) {
+			for (Edge &e : l) {
+				rebase(e, off);
+			}
+		}
+	}
+	r.members.insert(r.members.end(), b.members.begin(), b.members.end());
+	r.cells.insert(r.cells.end(), b.cells.begin(), b.cells.end());
+	r.loops.insert(r.loops.end(), b.loops.begin(), b.loops.end());
+	r.whiskers.insert(r.whiskers.end(), b.whiskers.begin(), b.whiskers.end());
+	r.casts += b.casts;
+	// every member reference of the joined region names one of its members (the
+	// second half's rebased exactly once)
+	{
+		const int n = int(r.members.size());
+		auto in_range = [n](int m) { return m >= -1 && m < n; };
+		for (const Loop &l : r.loops) {
+			for (const Edge &e : l.edges) {
+				RC_ASSERT(in_range(e.member), "vis: a loop edge's member after the join");
+			}
+		}
+		for (const Edge &e : r.whiskers) {
+			RC_ASSERT(in_range(e.member), "vis: a whisker's member after the join");
+		}
+		for (const Cell &c : r.cells) {
+			RC_ASSERT(in_range(c.left) && in_range(c.right), "vis: a cell's members after the join");
+		}
+	}
+	r.refinements += b.refinements;
+	for (size_t k = 0; k < r.casts_by_kind.size(); k++) {
+		r.casts_by_kind[k] += b.casts_by_kind[k];
+	}
+	for (const std::string &n : b.notes) {
+		r.notes.push_back("the other way: " + n);
+	}
+	r.clip.add(Pt{b.clip.x0, b.clip.y0});
+	r.clip.add(Pt{b.clip.x1, b.clip.y1});
+	return r;
+}
+
+// Stage 111: one half of a joined result, for the checks that read one
+// realization: its cells and loops, winding its own way.
+inline Result half_of(const Result &r, int half) {
+	Result h = r;
+	h.cells.clear();
+	h.loops.clear();
+	for (const Cell &c : r.cells) {
+		if (c.half == half) {
+			h.cells.push_back(c);
+		}
+	}
+	for (const Loop &l : r.loops) {
+		if (l.half == half) {
+			h.loops.push_back(l);
+		}
+	}
+	h.orientation = half == int(Half::Reversed) ? -r.orientation : r.orientation;
+	return h;
+}
+
 // The visibility region of the plan for the player (bounds: the level's).
 inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanItem> &plan, const Flags &flags, const Rect &bounds) {
 	const auto t0 = std::chrono::steady_clock::now();
 	Builder b(tracer, player, plan, flags, bounds);
-	Result r = b.build();
+	Result r;
+	if (!b.splits()) {
+		r = b.build();
+	} else {
+		// Stage 111: the plan's first entry fixes the realization per cursor
+		SolveMemo memo;
+		Builder bd(tracer, player, plan, flags, bounds, Half::Direct);
+		Builder br(tracer, player, plan, flags, bounds, Half::Reversed);
+		bd.share(&memo);
+		br.share(&memo);
+		Result ra = bd.build();
+		Result rb = br.build();
+		if (std::getenv("RC_VIS_MEMO_STATS") != nullptr) {
+			std::fprintf(stderr, "memo: solves %ld (%.1f ms), ties %ld (%.1f ms), realizations %ld (%.1f ms), hits %ld\n", memo.solve_n, memo.solve_ms, memo.tie_n,
+				memo.tie_ms, memo.realization_n, memo.realization_ms, memo.hits);
+		}
+		r = join_halves(std::move(ra), std::move(rb));
+	}
 	for (Loop &l : r.loops) {
 		l.area = loop_area(l.edges);
 	}

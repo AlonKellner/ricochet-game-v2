@@ -2,6 +2,7 @@
 // cursor is inside iff the preview's merged steps before it are ALIGNED and it
 // is reached -- on the shipped levels' scene dumps.
 #include "support/json_defs.hpp"
+#include "support/violations.hpp"
 #include "support/png_debug.hpp"
 #include "rc/sweep.hpp"
 #include "rc/earcut.hpp"
@@ -216,29 +217,7 @@ TEST_CASE("visibility: the empty plan's region is the non-divergence set on ever
 
 namespace {
 
-// A violation's message with its arguments (Godot's % formatting, the subset used).
-std::string render(const inv::Violation &vi) {
-	std::string out;
-	size_t ai = 0;
-	for (size_t i = 0; i < vi.fmt.size(); i++) {
-		if (vi.fmt[i] != '%' || i + 1 >= vi.fmt.size()) {
-			out += vi.fmt[i];
-			continue;
-		}
-		size_t j = i + 1;
-		while (j < vi.fmt.size() && (std::isdigit(static_cast<unsigned char>(vi.fmt[j])) || vi.fmt[j] == '.')) j++;
-		const std::string spec = vi.fmt.substr(i, j - i + 1);
-		const inv::Arg &a = ai < vi.args.size() ? vi.args[ai++] : inv::Arg(std::string("?"));
-		char buf[256];
-		if (const auto *x = std::get_if<int64_t>(&a)) std::snprintf(buf, sizeof buf, "%lld", (long long)*x);
-		else if (const auto *d = std::get_if<double>(&a)) std::snprintf(buf, sizeof buf, spec.c_str(), *d);
-		else if (const auto *str = std::get_if<std::string>(&a)) std::snprintf(buf, sizeof buf, "%s", str->c_str());
-		else std::snprintf(buf, sizeof buf, "?");
-		out += buf;
-		i = j;
-	}
-	return out;
-}
+using rc_test::render;
 
 // Plans on a level: one entry per transformative side (and pass / state sides),
 // then pairs of the first few mirror entries, then an infinity entry.
@@ -388,12 +367,14 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 	if (const char *pc = std::getenv("RC_VIS_PROBE")) {
 		vis::Pt c;
 		std::sscanf(pc, "%lf,%lf", &c.x, &c.y);
-		vis::Builder b(t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
+		// RC_VIS_HALF=1|2: the cast in that forced orientation (Stage 111)
+		const char *ph = std::getenv("RC_VIS_HALF");
+		vis::Builder b(t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080}, ph ? vis::Half(std::atoi(ph)) : vis::Half::Single);
 		const std::optional<vis::Cast> k = b.probe(c);
 		const vis::Result &rr = b.result();
 		std::printf("P_K (%.3f,%.3f) Q_K %s (%.3f,%.3f)\n", rr.pk.x, rr.pk.y, rr.qk_inf ? "inf" : "", rr.qk.x, rr.qk.y);
 		if (k) {
-			std::printf("cast: %s cursor_ok %d near (%.3f,%.3f) end (%.3f,%.3f)\n", k->shape().c_str(), int(k->cursor_ok), k->near_pt.x, k->near_pt.y,
+			std::printf("cast: %s cursor_ok %d met %d ek %d chosen %d tie %d near (%.3f,%.3f) end (%.3f,%.3f)\n", k->shape().c_str(), int(k->cursor_ok), int(k->met), k->ek, int(k->chosen), int(k->has_tie), k->near_pt.x, k->near_pt.y,
 				k->end_pt.x, k->end_pt.y);
 			for (const auto &iv : k->iv) std::printf("  interval %s %.6g -> %s %.6g\n", vis::end_name(iv.a.kind), iv.a.t, vis::end_name(iv.b.kind), iv.b.t);
 		}
@@ -437,8 +418,8 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 	}
 	for (size_t i = 0; i < r.members.size() && std::getenv("RC_VIS_PIN") == nullptr; i++) {
 		const auto &m = r.members[i];
-		std::printf("member %zu dir(%.6f,%.6f) %s cursor(%.3f,%.3f)\n  crit %s\n  minus %s\n  plus %s\n", i, m.dir.x, m.dir.y, m.why.c_str(), m.cursor.x,
-			m.cursor.y, m.crit.shape().c_str(), m.minus.shape().c_str(), m.plus.shape().c_str());
+		std::printf("member %zu dir(%.6f,%.6f) %s cursor(%.3f,%.3f) ok %d chosen %d tie %d\n  crit %s\n  minus %s\n  plus %s\n", i, m.dir.x, m.dir.y, m.why.c_str(), m.cursor.x,
+			m.cursor.y, int(m.crit.cursor_ok), int(m.crit.chosen), int(m.crit.has_tie), m.crit.shape().c_str(), m.minus.shape().c_str(), m.plus.shape().c_str());
 	}
 	if (const char *cl = std::getenv("RC_VIS_CELLS")) {
 		std::string str = cl;
@@ -892,12 +873,22 @@ TEST_CASE("visibility bench" * doctest::skip(true)) {
 	}
 }
 
-// A digest of the regions on the shipped levels (skipped; run with --no-skip):
-// a hash of every region's loops, whiskers and cell count (exact bits), per
-// level and in total, for the empty plan, every fourth plan and the infinity
-// plan, players (500, 300) and (960, 540). Optimizations must leave it
-// unchanged (docs/TDD_15_PERFORMANCE.md). RC_VIS_DIGEST_VERBOSE=1: per region.
-TEST_CASE("visibility digest" * doctest::skip(true)) {
+namespace {
+
+// RC_GOLDEN_REBLESS=1: a pinned value that differs is printed as
+// "REBLESS-JSON\t<golden file>\t<key>\t<field path>\t<json>" for
+// docs/research/apply_rebless.py (as test_goldens.cpp prints).
+void rebless_line(const char *file, const std::string &key, const std::string &path, const std::string &got_json, const std::string &want_json) {
+	if (got_json != want_json && std::getenv("RC_GOLDEN_REBLESS")) {
+		std::printf("REBLESS-JSON\t%s\t%s\t%s\t%s\n", file, key.c_str(), path.c_str(), got_json.c_str());
+	}
+}
+
+// The region digest's set: every test level and playground dump, the empty
+// plan, every 4th of the level's plans and the last one, players (500, 300)
+// and (960, 540); a region's hash covers its exact edge bits, flags, whiskers
+// and cell count. Pinned in bench/goldens/regions.json (Workflow W4).
+std::vector<std::string> digest_files() {
 	const std::string dir = std::string(RC_REPO_ROOT) + "/bench/scenes";
 	std::vector<std::string> files;
 	for (const auto &f : std::filesystem::directory_iterator(dir)) {
@@ -907,52 +898,143 @@ TEST_CASE("visibility digest" * doctest::skip(true)) {
 		}
 	}
 	std::sort(files.begin(), files.end());
-	auto mix = [](uint64_t h, uint64_t v) { return (h ^ v) * 1099511628211ULL; };
+	return files;
+}
+
+uint64_t digest_mix(uint64_t h, uint64_t v) { return (h ^ v) * 1099511628211ULL; }
+
+uint64_t region_hash(const vis::Result &r) {
 	auto bits = [](double x) { return std::bit_cast<uint64_t>(x); };
 	auto edge_hash = [&](uint64_t h, const vis::Edge &e) {
-		for (double x : {e.a.x, e.a.y, e.via.x, e.via.y, e.b.x, e.b.y}) h = mix(h, bits(x));
-		h = mix(h, uint64_t(int(e.kind)) | uint64_t(uint32_t(e.member)) << 8 | uint64_t(uint32_t(e.surface)) << 40);
-		return mix(h, uint64_t(e.inclusive) | uint64_t(e.incl_a) << 1 | uint64_t(e.arc) << 2);
+		for (double x : {e.a.x, e.a.y, e.via.x, e.via.y, e.b.x, e.b.y}) h = digest_mix(h, bits(x));
+		h = digest_mix(h, uint64_t(int(e.kind)) | uint64_t(uint32_t(e.member)) << 8 | uint64_t(uint32_t(e.surface)) << 40);
+		return digest_mix(h, uint64_t(e.inclusive) | uint64_t(e.incl_a) << 1 | uint64_t(e.arc) << 2);
 	};
-	const bool verbose = std::getenv("RC_VIS_DIGEST_VERBOSE") != nullptr;
-	uint64_t total = 14695981039346656037ULL;
-	int regions = 0;
-	for (const std::string &file : files) {
+	uint64_t h = digest_mix(14695981039346656037ULL, uint64_t(r.supported));
+	h = digest_mix(h, r.cells.size());
+	for (const vis::Loop &l : r.loops) {
+		h = digest_mix(h, l.edges.size());
+		for (const vis::Edge &e : l.edges) h = edge_hash(h, e);
+	}
+	for (const vis::Edge &e : r.whiskers) h = edge_hash(h, e);
+	return h;
+}
+
+std::vector<std::vector<PlanItem>> digest_plans(const std::vector<SurfaceDef> &defs) {
+	std::vector<std::vector<PlanItem>> plans{{}};
+	const std::vector<std::vector<PlanItem>> lp = level_plans(defs);
+	for (size_t i = 0; i < lp.size(); i++) {
+		if (i % 4 == 0 || i + 1 == lp.size()) plans.push_back(lp[i]);
+	}
+	return plans;
+}
+
+std::string plan_label(const std::vector<PlanItem> &plan) {
+	std::string ps;
+	for (const PlanItem &it : plan) ps += (ps.empty() ? "" : ",") + std::to_string(it.surface_id) + (it.left ? "L" : "R");
+	return ps;
+}
+
+std::string hex16(uint64_t h) {
+	char b[17];
+	std::snprintf(b, sizeof b, "%016llx", (unsigned long long)h);
+	return b;
+}
+
+} // namespace
+
+// The regions' digest as a golden: bench/goldens/regions.json pins every
+// region of the digest's set by its hash (dump name -> "plan|player" ->
+// hash). A changed region is a behaviour change: RC_GOLDEN_REBLESS=1 prints
+// the REBLESS-JSON lines for apply_rebless.py (after the user approved the
+// judged report); RC_REGIONS_WRITE=<path> writes the whole golden (a new
+// level). RC_VIS_PART parts (ctest's rc_tests_regions_k).
+TEST_CASE("visibility: the regions' digest matches bench/goldens/regions.json") {
+	const char *write = std::getenv("RC_REGIONS_WRITE");
+	ojson gold;
+	if (write == nullptr) {
+		gold = load_dump(std::string(RC_REPO_ROOT) + "/bench/goldens/regions.json");
+	}
+	ojson out;
+	out["_schema"] = {{"generator", "native/tests/test_visibility.cpp (RC_REGIONS_WRITE)"},
+		{"what", "the region digest's set: hash per dump, plan and player; see the visibility digest case"}};
+	VisPart part;
+	int regions = 0, changed = 0;
+	for (const std::string &file : digest_files()) {
 		const ojson d = load_dump(file);
 		const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
 		Tracer t;
 		t.set_emit_infinity(true);
 		t.set_defs(defs);
-		std::vector<std::vector<PlanItem>> plans{{}};
-		const std::vector<std::vector<PlanItem>> lp = level_plans(defs);
-		for (size_t i = 0; i < lp.size(); i++) {
-			if (i % 4 == 0 || i + 1 == lp.size()) plans.push_back(lp[i]);
+		const std::string name = std::filesystem::path(file).filename().string();
+		ojson &level = out[name];
+		level = ojson::object();
+		for (const std::vector<PlanItem> &plan : digest_plans(defs)) {
+			for (const vis::Pt player : {vis::Pt{500, 300}, vis::Pt{960, 540}}) {
+				if (!part.take()) {
+					continue;
+				}
+				const std::string key = "[" + plan_label(plan) + "]|" + std::to_string(int(player.x)) + "," + std::to_string(int(player.y));
+				const vis::Result r = vis::compute(t, player, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
+				const std::string h = hex16(region_hash(r));
+				level[key] = h;
+				regions++;
+				if (write != nullptr) {
+					continue;
+				}
+				const std::string want = gold.contains(name) && gold[name].contains(key) ? gold[name][key].get<std::string>() : "";
+				if (h != want) {
+					changed++;
+					MESSAGE(name << " " << key << ": " << h << " (golden " << (want.empty() ? "none" : want) << ")");
+					rebless_line("regions", name, key, ojson(h).dump(), ojson(want).dump());
+				}
+			}
 		}
+	}
+	if (write != nullptr) {
+		REQUIRE_MESSAGE(part.n == 1, "RC_REGIONS_WRITE needs the whole set (no RC_VIS_PART)");
+		std::ofstream f(write);
+		f << out.dump();
+		MESSAGE("wrote " << regions << " regions to " << std::string(write));
+		return;
+	}
+	MESSAGE("regions " << regions << ", changed " << changed << " (part " << part.k << "/" << part.n << ")");
+	CHECK(changed == 0);
+}
+
+// A digest of the regions on the shipped levels (skipped; run with --no-skip):
+// a hash of every region's loops, whiskers and cell count (exact bits), per
+// level and in total, for the empty plan, every fourth plan and the infinity
+// plan, players (500, 300) and (960, 540). Optimizations must leave it
+// unchanged (docs/TDD_15_PERFORMANCE.md). RC_VIS_DIGEST_VERBOSE=1: per region.
+TEST_CASE("visibility digest" * doctest::skip(true)) {
+	const bool verbose = std::getenv("RC_VIS_DIGEST_VERBOSE") != nullptr;
+	uint64_t total = 14695981039346656037ULL;
+	int regions = 0;
+	for (const std::string &file : digest_files()) {
+		const ojson d = load_dump(file);
+		const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
+		Tracer t;
+		t.set_emit_infinity(true);
+		t.set_defs(defs);
+		const std::vector<std::vector<PlanItem>> plans = digest_plans(defs);
 		uint64_t fh = 14695981039346656037ULL;
 		const std::string name = std::filesystem::path(file).filename().string();
 		for (size_t pi = 0; pi < plans.size(); pi++) {
 			for (const vis::Pt player : {vis::Pt{500, 300}, vis::Pt{960, 540}}) {
 				const vis::Result r = vis::compute(t, player, plans[pi], Flags(), vis::Rect{0, 0, 1920, 1080});
-				uint64_t h = mix(14695981039346656037ULL, uint64_t(r.supported));
-				h = mix(h, r.cells.size());
-				for (const vis::Loop &l : r.loops) {
-					h = mix(h, l.edges.size());
-					for (const vis::Edge &e : l.edges) h = edge_hash(h, e);
-				}
-				for (const vis::Edge &e : r.whiskers) h = edge_hash(h, e);
+				const uint64_t h = region_hash(r);
 				regions++;
-				fh = mix(fh, h);
+				fh = digest_mix(fh, h);
 				if (verbose) {
-					std::string ps;
-					for (const PlanItem &it : plans[pi]) ps += (ps.empty() ? "" : ",") + std::to_string(it.surface_id) + (it.left ? "L" : "R");
-					std::printf("%s plan %zu [%s] player (%g, %g): %016llx\n", name.c_str(), pi, ps.c_str(), player.x, player.y, (unsigned long long)h);
+					std::printf("%s plan %zu [%s] player (%g, %g): %s\n", name.c_str(), pi, plan_label(plans[pi]).c_str(), player.x, player.y, hex16(h).c_str());
 				}
 			}
 		}
-		std::printf("%-44s %016llx\n", name.c_str(), (unsigned long long)fh);
-		total = mix(total, fh);
+		std::printf("%-44s %s\n", name.c_str(), hex16(fh).c_str());
+		total = digest_mix(total, fh);
 	}
-	std::printf("digest of %d regions: %016llx\n", regions, (unsigned long long)total);
+	std::printf("digest of %d regions: %s\n", regions, hex16(total).c_str());
 }
 
 // A census over the shipped levels (skipped; run with --no-skip): regions,
@@ -1156,7 +1238,7 @@ TEST_CASE("visibility: every region check detects its corruption") {
 	const vis::Pt player{960, 827.999};
 	const vis::Result base = region_of(t, "test_levels__three_mirrors", plan, player);
 	REQUIRE(base.supported);
-	REQUIRE(base.loops.size() == 1);
+	REQUIRE(!base.loops.empty()); // (Stage 111: the realization through infinity adds a loop of its own)
 	REQUIRE(base.loops[0].edges.size() > 4);
 	REQUIRE(base.loops[0].edges[1].kind == vis::EdgeKind::Member);
 	REQUIRE(base.loops[0].edges[2].kind == vis::EdgeKind::Bounds);
@@ -1218,9 +1300,16 @@ TEST_CASE("visibility: every region check detects its corruption") {
 		{"a cell's middle member elsewhere", {"VIS-STAR"}, {}, [](vis::Result &r) { r.cells[0].mid_beam = r.members[0].beam; }},
 		{"a cell's middle cast of another shape", {"VIS-CELL-CONSTANT"}, {}, [](vis::Result &r) { r.cells[0].mid.iv.push_back(r.cells[0].mid.iv[0]); }},
 		{"an exact point decided the other way", {"VIS-BOUNDARY-DECIDED"}, {}, [](vis::Result &r) {
+			 // (Stage 111: a split plan holds the point in both halves; the check
+			 // reads the orientation the solver picks, so every copy is flipped)
 			 for (vis::Member &m : r.members) {
-				 if (m.exact && m.crit.valid && vis::contains(r, m.cursor) != vis::Membership::Unclassified) {
-					 m.crit.cursor_ok = !m.crit.cursor_ok;
+				 if (m.exact && m.crit.valid && m.crit.chosen && vis::contains(r, m.cursor) != vis::Membership::Unclassified) {
+					 const vis::Pt c = m.cursor;
+					 for (vis::Member &o : r.members) {
+						 if (o.cursor == c) {
+							 o.crit.cursor_ok = !o.crit.cursor_ok;
+						 }
+					 }
 					 return;
 				 }
 			 }

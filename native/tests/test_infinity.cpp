@@ -198,10 +198,12 @@ TEST_CASE("infinity: with the switch on every older fixture differs from its gol
 	CHECK(fixtures == 115);
 	// the oracle's own diff of the regenerated fixtures against the pre-Stage-88
 	// ones (docs/research/stage88b_fixture_diff.md, updated for Stage 101): 32
-	// of the 115 fixtures change, 83 infinity events, 8 traces cut earlier
+	// of the 115 fixtures change, 83 infinity events, 8 traces cut earlier;
+	// since Stage 111's re-bless (11 fixtures realized by the plan's first
+	// entry, GAME_SPEC 13.1) 87 infinity events and 9 cuts
 	CHECK(changed == 32);
-	CHECK(inserted == 83);
-	CHECK(cut == 8);
+	CHECK(inserted == 87);
+	CHECK(cut == 9);
 }
 
 TEST_CASE("Stage 105: the tangency-at-infinity fixtures match the oracle at f64, Dual, 4 and 64 limbs") {
@@ -242,4 +244,23 @@ TEST_CASE("Stage 106: the pop-departure fixtures match the oracle at f64, Dual, 
 	}
 	CHECK(fixtures == int(fxs["fixtures"].size()));
 	CHECK(fixtures >= 11);
+}
+
+TEST_CASE("Stage 111: the realization-by-entry fixtures match the oracle at f64, Dual, 4 and 64 limbs") {
+	const ojson fxs = load_json("bench/fixtures/stage111_orientation.json");
+	int fixtures = 0;
+	for (const ojson &fx : fxs["fixtures"]) {
+		const std::string name = fx["name"].get<std::string>();
+		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
+		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
+		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
+		const auto rb64 = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
+		CHECK_MESSAGE(diff_against_oracle(rb64, fx["expected"]) == "", (name + " big64: " + diff_against_oracle(rb64, fx["expected"])));
+		fixtures++;
+	}
+	CHECK(fixtures == 32);
 }

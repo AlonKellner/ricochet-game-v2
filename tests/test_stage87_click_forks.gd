@@ -101,11 +101,14 @@ func _hit(name: String, j: int) -> Vector2:
 	var h: Array = _fx[name]["hits"][str(j)]
 	return Vector2(String(h[0]).to_float(), String(h[1]).to_float())
 
-# The click picks the hit point. The near branch is realized: the projective
-# fires there and the cursor is reached. The far one is aimed at, but the beam
-# meets the circle first on the planned side and fires there (the first
-# matching crossing): off the planned path -- the cursor is not reached, and
-# the preview shows it.
+# The click picks the hit point. The near branch is realized at once: the
+# projective fires there and the cursor is reached. Aimed straight at the far
+# one, the beam would meet the circle first on the planned side and fire
+# there; Stage 111 realizes the plan the other way round instead (GAME_SPEC
+# 13.1, R2: the orientation whose planned walk reaches the cursor): after an
+# unplanned wrap the clicked point is the first crossing met, the projective
+# fires there and the cursor is reached -- while the physical shot, aimed away,
+# ends at the room's wall.
 func test_click_picks_each_branch_circle_normal():
 	var near := _hit("cn_inside_click_near_planned", 0)
 	var far := _hit("cn_inside_click_far_planned", 0)
@@ -118,13 +121,18 @@ func test_click_picks_each_branch_circle_normal():
 			assert_almost_eq(Vector2(proj[0].point.fx(), proj[0].point.fy()), near, Vector2(1e-6, 1e-6),
 				"near %s: the projective fires at the clicked candidate" % mode)
 		assert_true(ev.any(func(e): return e.kind == "cursor"), "near %s: the cursor is reached" % mode)
-		var evf := _walk("cn_inside_click_far_%s" % mode, NumCtx.f64())
-		var projf := evf.filter(func(e): return e.kind == "hit" and e.projective and e.applied)
-		assert_gt(projf.size(), 0)
-		if projf.size() > 0:
-			assert_gt(Vector2(projf[0].point.fx(), projf[0].point.fy()).distance_to(far), 1.0,
-				"far %s: fired at an earlier crossing, not at the clicked point" % mode)
-		assert_false(evf.any(func(e): return e.kind == "cursor"), "far %s: off the planned path, the cursor is not reached" % mode)
+	var evf := _walk("cn_inside_click_far_planned", NumCtx.f64())
+	var kinds := evf.map(func(e): return e.kind)
+	var projf := evf.filter(func(e): return e.kind == "hit" and e.projective and e.applied)
+	assert_gt(projf.size(), 0, "far planned: the projective fires")
+	if projf.size() > 0:
+		assert_almost_eq(Vector2(projf[0].point.fx(), projf[0].point.fy()), far, Vector2(1e-6, 1e-6),
+			"far planned: the other way round, the projective fires at the clicked candidate")
+		assert_lt(kinds.find("infinity"), evf.find(projf[0]), "far planned: after the wrap")
+	assert_true(kinds.has("cursor"), "far planned: the cursor is reached")
+	var evp := _walk("cn_inside_click_far_physical", NumCtx.f64())
+	assert_true(evp.size() > 0 and evp[0].kind == "hit" and evp[0].terminal, "far physical: aimed away, the shot ends at the wall")
+	assert_false(evp.any(func(e): return e.kind == "cursor"), "far physical: the cursor is not reached")
 
 func test_click_picks_each_branch_circle_directional():
 	assert_gt(_hit("cd_inside_click_left_planned", 0).distance_to(_hit("cd_inside_click_right_planned", 0)), 100.0)

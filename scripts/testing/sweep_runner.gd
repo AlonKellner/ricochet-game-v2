@@ -14,14 +14,19 @@ var _fuzz_seed := 42
 # Sharding for parallel test runs (run_tests_parallel.sh): SWEEP_SHARD="i/n"
 # makes a sweep check only the player positions with index % n == i. The n
 # shards together cover exactly the unsharded sweep. Unset: everything.
+# SWEEP_SAMPLE=s (Workflow W2) thins every shard to one player in s: the GUT
+# sweeps are the bindings' sample, the whole sweep runs natively on the
+# manifests (bench/sweeps, native/tests/test_sweeps.cpp). SWEEP_SAMPLE=1 or
+# unset: every player.
 static func shard() -> Vector2i:
+	var sample := maxi(1, OS.get_environment("SWEEP_SAMPLE").to_int())
 	var s := OS.get_environment("SWEEP_SHARD")
 	if s == "" or not s.contains("/"):
-		return Vector2i(0, 1)
+		return Vector2i(0, sample)
 	var n := s.get_slice("/", 1).to_int()
 	var i := s.get_slice("/", 0).to_int()
 	assert(n >= 1 and i >= 0 and i < n, "SWEEP_SHARD must be i/n with 0 <= i < n")
-	return Vector2i(i, n)
+	return Vector2i(i * sample, n * sample)
 
 static func in_shard(index: int) -> bool:
 	var sh := shard()
@@ -120,6 +125,12 @@ static func sweep_native(scene: Node, positions: Array[Vector2], plans: Array, s
 	var surfaces: Array = scene.surfaces if "surfaces" in scene else []
 	var defs := SceneDefs.defs_from_surfaces(surfaces)
 	var infos := InvariantChecker.surface_infos(surfaces, flags)
+	# Workflow W2: under SWEEP_MANIFEST_DIR the sweep is not run; its inputs are
+	# written as a manifest for the native runner (native/tests/test_sweeps.cpp)
+	var manifest_dir := OS.get_environment("SWEEP_MANIFEST_DIR")
+	if manifest_dir != "":
+		_write_manifest(manifest_dir, scene, defs, infos, positions, plans, flags, skip_equal, emit, visibility, carrier_cursors)
+		return []
 	var sh := shard()
 	var out: Array[Dictionary] = []
 	for raw in SweepKernel.run(defs, infos, PackedVector2Array(positions), plans, flags, sh.x, sh.y, skip_equal, emit, visibility, carrier_cursors):
@@ -165,3 +176,64 @@ func _add_unique(points: Array[Vector2], seen: Dictionary, point: Vector2) -> vo
 	if not seen.has(key):
 		seen[key] = true
 		points.append(point)
+
+# ---------------------------------------------------------------- manifests (Workflow W2)
+
+# one file per sweep_native call: <scene>__<n>.json, n counting the calls on
+# that scene in this process (the sweep files run in one process, in order)
+static var _manifest_seq := {}
+
+static func _v2(p: Vector2):
+	if is_inf(p.x) or is_inf(p.y):
+		return null
+	return [p.x, p.y]
+
+static func _write_manifest(dir: String, scene: Node, defs: Array, infos: Array, positions: Array[Vector2], plans: Array,
+		flags: Dictionary, skip_equal: bool, emit: bool, visibility: bool, carrier_cursors: bool) -> void:
+	var path: String = scene.scene_file_path if scene.scene_file_path != "" else "res://scene"
+	var name := path.get_file().get_basename()
+	var n: int = _manifest_seq.get(name, 0)
+	_manifest_seq[name] = n + 1
+	var info_data: Array = []
+	for i in infos:
+		var seg: Segment = i.segment
+		var c: GeneralizedCircle = seg.get_carrier()
+		info_data.append({
+			"id": i.id,
+			"has_effect": i.has_effect,
+			"segment": {"start": _v2(seg.start.coords), "end": _v2(seg.end.coords), "via": _v2(seg.via.coords), "full": seg.full},
+			"carrier": {"a": c.a, "b": c.b, "c": c.c, "d": c.d},
+		})
+	var plan_data: Array = []
+	for plan in plans:
+		var entries: Array = []
+		for e: PlanManager.PlanEntry in plan:
+			var d := {"surface_id": e.surface_id, "side": "LEFT" if e.side == Side.Value.LEFT else "RIGHT"}
+			if not is_inf(e.click.x) and not is_inf(e.click.y):
+				d["click"] = [e.click.x, e.click.y]
+			if e.span != null:
+				var sp: PackedFloat64Array = e.span
+				d["span"] = {"start": [sp[0], sp[1]], "end": [sp[2], sp[3]], "via": [sp[4], sp[5]]}
+			entries.append(d)
+		plan_data.append(entries)
+	var pos_data: Array = []
+	for p in positions:
+		pos_data.append([p.x, p.y])
+	var m := {
+		"schema": "sweep-manifest/1",
+		"scene": path,
+		"seq": n,
+		"defs": defs,
+		"infos": info_data,
+		"positions": pos_data,
+		"plans": plan_data,
+		"flags": flags,
+		"skip_equal": skip_equal,
+		"emit_infinity": emit,
+		"visibility": visibility,
+		"carrier_cursors": carrier_cursors,
+	}
+	DirAccess.make_dir_recursive_absolute(dir)
+	var f := FileAccess.open("%s/%s__%d.json" % [dir, name, n], FileAccess.WRITE)
+	f.store_string(JSON.stringify(m, "\t", false, true) + "\n")
+	f.close()

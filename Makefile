@@ -1,57 +1,150 @@
 GODOT ?= $(if $(GODOT_BIN),$(GODOT_BIN),godot)
 CMAKE ?= cmake
 CTEST ?= ctest
-# bounded parallelism: a bare `-j` lets Make start every godot-cpp compile at once
-JOBS ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
-# ctest entries in parallel: every core (the entries are single-threaded; JOBS
-# bounds compiles, which need more memory)
-CTEST_JOBS ?= $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+NCPU := $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
+# compiles: every core, except a cold godot-cpp build (1089 TUs; a bare -j once
+# took 25 min swapping): 4 until its library exists
+JOBS ?= $(NCPU)
+GODOTCPP_LIB := $(wildcard native/build/bin/libgodot-cpp*.a)
+JOBS_EXT ?= $(if $(GODOTCPP_LIB),$(JOBS),4)
+# ctest entries in parallel: every core (the entries are single-threaded)
+CTEST_JOBS ?= $(NCPU)
+# a tree configured for the first time gets Ninja when installed (an existing
+# tree keeps its generator: CMake refuses to switch one in place; rm -rf it to move)
+NINJA := $(shell command -v ninja 2>/dev/null)
+gen = $(if $(wildcard $(1)/CMakeCache.txt),,$(if $(NINJA),-G Ninja,))
+
+comma := ,
+empty :=
+space := $(empty) $(empty)
+
+BUILD_CORE := native/build-core
+BUILD_EXT := native/build
+BUILD_ASAN := native/build-asan
 
 .PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test \
-	native native-debug native-asan ctest gates
+	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps
 
 # ---------------------------------------------------------------- native (C++)
-# RelWithDebInfo build loaded by Godot (ricochet.gdextension -> native/bin/).
-# The headless --import afterwards is what makes a headless Godot discover the
-# extension: it writes .godot/extension_list.cfg, which later headless runs read.
-native:
-	$(CMAKE) -S native -B native/build -DCMAKE_BUILD_TYPE=RelWithDebInfo
-	$(CMAKE) --build native/build -j $(JOBS)
-	$(GODOT) --headless --import --path .
+# The three trees (docs/WORKFLOW.md):
+#   build-core  rc_tests alone, no godot-cpp: the inner loop and every ctest gate
+#   build       the GDExtension Godot loads (ricochet.gdextension -> native/bin/), no tests
+#   build-asan  rc_tests under ASan+UBSan, no godot-cpp
 
-# Debug build (RC_ASSERT aborts). Writes the same library name into native/bin,
+# rc_tests (RelWithDebInfo). A core header change rebuilds about 11 TUs of 2 s.
+core:
+	$(CMAKE) -S native -B $(BUILD_CORE) $(call gen,$(BUILD_CORE)) -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DRC_BUILD_EXTENSION=OFF -DRC_BUILD_TESTS=ON
+	$(CMAKE) --build $(BUILD_CORE) -j $(JOBS)
+
+# The inner loop: core, then the ctest entries of an area, or one doctest filter.
+#   make check                      # every entry (~20 s)
+#   make check AREA=solver|vis|goldens
+#   make check TC="Stage 111*"      # rc_tests -tc=<filter> (--no-skip with SKIP=0)
+AREA ?= all
+TC ?=
+check_re_all := .
+check_re_solver := ^rc_tests$$|tier_independence|pop_tiers|sweep_goldens
+check_re_vis := visibility
+check_re_goldens := ^rc_tests$$|sweep_goldens
+check_re_sweeps := rc_sweeps
+check: core
+	@if [ -n "$(TC)" ]; then $(BUILD_CORE)/rc_tests -tc="$(TC)" $(if $(filter 0,$(SKIP)),--no-skip,); \
+	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --output-on-failure -R '$(check_re_$(AREA))'; fi
+
+# The extension (RelWithDebInfo) loaded by Godot. The headless --import makes a
+# headless Godot discover it (.godot/extension_list.cfg); it runs when that file
+# is missing or older than ricochet.gdextension (2 s otherwise saved).
+native:
+	$(CMAKE) -S native -B $(BUILD_EXT) $(call gen,$(BUILD_EXT)) -DCMAKE_BUILD_TYPE=RelWithDebInfo \
+		-DRC_BUILD_EXTENSION=ON -DRC_BUILD_TESTS=OFF
+	$(CMAKE) --build $(BUILD_EXT) -j $(JOBS_EXT)
+	@if [ ! -s .godot/extension_list.cfg ] || [ ricochet.gdextension -nt .godot/extension_list.cfg ]; then \
+		$(GODOT) --headless --import --path .; else echo "import: extension_list.cfg current"; fi
+
+# Debug extension (RC_ASSERT aborts). Writes the same library name into native/bin,
 # so it replaces the RelWithDebInfo one until the next `make native`.
 native-debug:
-	$(CMAKE) -S native -B native/build-debug -DCMAKE_BUILD_TYPE=Debug
-	$(CMAKE) --build native/build-debug -j $(JOBS)
+	$(CMAKE) -S native -B native/build-debug $(call gen,native/build-debug) -DCMAKE_BUILD_TYPE=Debug \
+		-DRC_BUILD_EXTENSION=ON -DRC_BUILD_TESTS=OFF
+	$(CMAKE) --build native/build-debug -j $(JOBS_EXT)
 	$(GODOT) --headless --import --path .
 
-# ASan+UBSan build of everything (godot-cpp included), ctest run in place. Its
-# library goes to native/build-asan/bin so it never replaces the loadable one.
-# Debug (assertions on) at -O1: the sanitizers catch the same errors many times
-# faster than at -O0 (the whole ctest, every sweep combo included, in ~1 min
-# instead of ~10-40). The ctest entries run in parallel; ASAN_SWEEP_STRIDE=n
-# replays one sweep combo in n for a quicker look. Run it alone: other jobs on
-# the machine multiply its wall time.
+# ASan+UBSan rc_tests (no godot-cpp: nothing loads a sanitized extension), the
+# ctest entries in parallel. Debug (assertions on) at -O1: the sanitizers catch
+# the same errors many times faster than at -O0. ASAN_SWEEP_STRIDE=n replays one
+# golden sweep combo in n for a quicker look; ASAN_SWEEPS_STRIDE=n runs the
+# native sweeps (bench/sweeps) at one player in n (default 24: the sanitizers
+# want the code paths, not every combo; the release ctest runs them all). The
+# regions' digest parts (bit-identity pins, 53 s sanitized) are left out: the
+# level loops exercise the same regions.
 ASAN_SWEEP_STRIDE ?= 1
+ASAN_SWEEPS_STRIDE ?= 24
 native-asan:
-	$(CMAKE) -S native -B native/build-asan -DCMAKE_BUILD_TYPE=Debug \
+	$(CMAKE) -S native -B $(BUILD_ASAN) $(call gen,$(BUILD_ASAN)) -DCMAKE_BUILD_TYPE=Debug \
 		-DCMAKE_CXX_FLAGS_DEBUG="-g -O1" -DCMAKE_C_FLAGS_DEBUG="-g -O1" \
-		-DRC_SANITIZE=address,undefined \
-		-DRC_EXTENSION_OUTPUT_DIR=$(CURDIR)/native/build-asan/bin
-	$(CMAKE) --build native/build-asan -j $(JOBS)
-	RC_SWEEP_STRIDE=$(ASAN_SWEEP_STRIDE) $(CTEST) --test-dir native/build-asan -j $(CTEST_JOBS) --output-on-failure
+		-DRC_SANITIZE=address,undefined -DRC_BUILD_EXTENSION=OFF -DRC_BUILD_TESTS=ON
+	$(CMAKE) --build $(BUILD_ASAN) -j $(JOBS)
+	RC_SWEEP_STRIDE=$(ASAN_SWEEP_STRIDE) RC_SWEEPS_STRIDE=$(ASAN_SWEEPS_STRIDE) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) \
+		--output-on-failure -E rc_tests_regions
 
+# the release ctest (build-core; `make core` first)
 ctest:
-	$(CTEST) --test-dir native/build -j $(CTEST_JOBS) --output-on-failure
+	$(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --output-on-failure
 
-# Every gate before a commit, with a timed summary (gates.sh).
+# Every gate before a merge or a phase close (gates.sh LEVEL=merge), with a timed
+# summary; `make gate` is the commit gate (LEVEL=commit).
 gates:
-	./gates.sh
+	LEVEL=merge ./gates.sh
+gate:
+	LEVEL=commit ./gates.sh
+
+# ------------------------------------------------------------- sweep manifests
+# Workflow W2: the GUT sweeps' inputs (what SweepRunner.sweep_native hands
+# SweepKernel.run) as bench/sweeps/*.json, replayed natively by rc_tests
+# (sweeps:*). Regenerate after a change to the levels, SweepPlans or
+# SweepRunner; the manifests gate (gates.sh) fails while they are stale.
+SWEEP_MANIFEST_FILES := test_invariant_sweep.gd test_invariant_combos.gd test_stage107_level_sweep.gd \
+	test_stage108_level_sweep.gd test_visibility_sweep.gd
+MANIFEST_DIR ?= $(CURDIR)/bench/sweeps
+manifests: native
+	rm -rf "$(MANIFEST_DIR)" && mkdir -p "$(MANIFEST_DIR)"
+	SWEEP_MANIFEST_DIR="$(MANIFEST_DIR)" $(GODOT) --headless -s addons/gut/gut_cmdln.gd -gconfig= \
+		-gtest=$(subst $(space),$(comma),$(addprefix res://tests/,$(SWEEP_MANIFEST_FILES))) -gexit > /dev/null
+	@ls "$(MANIFEST_DIR)" | wc -l | sed 's/^ *//; s/$$/ manifests/'
+
+# ------------------------------------------------------------- goldens judge
+# Workflow W4: what the tree changes against REF (default main), dumped from
+# a cached reference build and classified (tools/judge.sh, docs/research/judge.py)
+# -> native/build-ref/judge/report.md. `make rebless APPROVED=1` applies the
+# judged re-bless lines (docs/research/apply_rebless.py) after the user approved
+# the report; `make gates` then passes the goldens gate once they are committed.
+REF ?= main
+RULES ?=
+judge: core
+	REF=$(REF) RULES=$(RULES) tools/judge.sh
+rebless:
+	@if [ "$(APPROVED)" != 1 ]; then echo "!! make rebless APPROVED=1: only after the user approved native/build-ref/judge/report.md"; exit 1; fi
+	@[ -s native/build-ref/judge/rebless.txt ] || { echo "!! no re-bless lines: make judge first"; exit 1; }
+	$(ORACLE_PY) docs/research/apply_rebless.py native/build-ref/judge/rebless.txt
 
 # ------------------------------------------------------------------ oracle
 # The mpmath oracle's own tests and the fixture schema (docs/research/oracle).
 ORACLE_PY := docs/research/.venv/bin/python
+# Workflow W3: every fixture generator and the scene corpus, compared
+# semantically with the committed files (docs/research/regen.py): `regen`
+# reports and restores, `regen-apply` keeps the files whose content changed
+# (a byte-only difference is never committed). ONLY=stage111 narrows.
+ONLY ?=
+regen:
+	$(ORACLE_PY) -I docs/research/regen.py $(if $(ONLY),--only $(ONLY),)
+regen-apply:
+	$(ORACLE_PY) -I docs/research/regen.py --keep $(if $(ONLY),--only $(ONLY),)
+# the levels as surface defs (bench/scenes/*.surfaces.json): the generators'
+# and the native visibility tests' input; the GUT parity tests
+# (test_stage81_scene_switch, test_stage107_level_parity) fail while stale
+dumps: native
+	$(GODOT) --headless --path . -s res://scripts/testing/dump_scene_surfaces.gd
 oracle-test:
 	@if [ -x $(ORACLE_PY) ]; then $(ORACLE_PY) -m pytest -q docs/research/oracle; \
 	else echo "!! oracle tests skipped: no docs/research/.venv (python3 -m venv docs/research/.venv && docs/research/.venv/bin/pip install mpmath numpy pytest)"; fi
@@ -79,10 +172,7 @@ test-stage:
 SWEEPS := test_invariant_sweep.gd test_invariant_combos.gd test_precision_invariant_sweep.gd test_stage107_level_sweep.gd test_stage108_level_sweep.gd test_visibility_sweep.gd
 FAST_TESTS := $(filter-out $(addprefix tests/,$(SWEEPS)),$(wildcard tests/test_*.gd)) \
 	$(wildcard tests/native/test_*.gd)
-comma := ,
-empty :=
-space := $(empty) $(empty)
-test-fast: native ctest oracle-test
+test-fast: core native ctest oracle-test
 	$(GODOT) --headless -s addons/gut/gut_cmdln.gd -gconfig= \
 		-gtest=$(subst $(space),$(comma),$(addprefix res://,$(FAST_TESTS))) -gexit
 

@@ -16,7 +16,7 @@ Specification: GAME_SPEC §15 (rewritten in this stage), §29.3. Background: TDD
 | 110.5 | Projective plan entries | Not started: the region is not drawn for such plans |
 | 110.6 | Follow-up: B3, B4, B5; the region drawn as one mesh; K8; VIS-REGULAR, VIS-DRAWN-MATCHES, the cursor-reading NO-POST check, carrier cursors in the sweeps, a detection case per region check | Done; signed off (user, 2026-10-17) |
 
-**Workflow:** branch `stage110-visibility`, small green commits. Before every commit: the full GUT suite (`./run_tests_parallel.sh`), ctest in RelWithDebInfo and under ASan (`make native-asan`, run alone), `make oracle-test`, and `git diff --stat bench/goldens` empty.
+**Workflow:** branch `stage110-visibility`, small green commits. Before every commit: the full GUT suite (`./run_tests_parallel.sh`), ctest in RelWithDebInfo and under ASan (`make native-asan`, run alone), `make oracle-test`, and `git diff --stat bench/goldens` empty. (Since 2026-10-18: `make gate` / `make gates`, `docs/WORKFLOW.md`.)
 
 ## Design decisions
 
@@ -29,6 +29,8 @@ Specification: GAME_SPEC §15 (rewritten in this stage), §29.3. Background: TDD
 **Critical members.** The walk's shape can change only where a member passes a segment endpoint, a tangency, a proper crossing (GAME_SPEC §9.7), a planned piece's end, the tangency at a finite `Q`, or (for a finite `Q_K`) the straight member through `P_K` and `Q_K`. These points, in every frame of the plan, are mapped to the final frame. Each one bounds two members, one each way along its line, because a walk passes the point after its wrap too. The four axes keep every gap below a quarter turn. Members are sorted by a diamond pseudo-angle (a real key: a strict order without trigonometry, §31.2).
 
 **Cells.** Three casts per member (the member, and either side of it at ±ε) and one in each gap. Where the three casts of a gap disagree on the walk's shape, the gap is bisected and a member is inserted at the switch (refinement). A cell is a curvilinear quadrilateral: two member arcs, the carrier arc its stops lie on, and the carrier arc its departures lie on (a point, for the empty plan). Its corners are the crossings of each side member with those carriers: the same computation for every cell that shares a corner, so shared corners are equal. On a member through a point of interest, a crossing there snaps to that point. On a tangency member, the touched carrier's crossing is the tangent point.
+
+**Two halves (Stage 111, docs/TDD_16_ORIENTATION.md).** When the plan's first entry fixes the realization per cursor, the region is the join of two builds of this machinery, every member cast with the orientation forced direct and again forced reversed; where a half is not a member's tie-choice, the other orientation's planned reach is cut out of its casts. Cells and loops are tagged by their half; the winding and the disjointness are checked per half; the aims parallel to a line first carrier are a crack between the halves (members of both, dead).
 
 **Clipping.** A cell through infinity (members to `Q_K` at infinity, or beside the straight member through a finite `Q_K`) runs outside the clip rectangle along a connector. Every cell is cut by the rectangle (Weiler–Atherton against a convex window), walking its boundary the way the cells wind: reversed by every reflection or inversion in the final frame, and by the realization through infinity. The rectangle holds the level bounds grown by 50 (the classified cursors) and every finite corner.
 
