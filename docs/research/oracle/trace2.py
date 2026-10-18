@@ -127,10 +127,18 @@ Hit effects and presence (Stage 107, GAME_SPEC 9.6 / 10.6):
 Infinity (Stage 88): a plan entry INFINITY_ID (the player clicked the screen
 edge) means "the beam wraps through infinity here". Every plan has two
 realizations: the aim toward the aim image X_0 (the direct one), and the aim
-away from it, reaching X_0 through infinity. An infinity entry in the plan's
-first epoch (before its first projective) selects the second; in a later
-epoch the projective's exit already fixes the orientation, so the entry is
-only matched. With EMIT_INFINITY, a beam passing the current frame's image
+away from it, reaching X_0 through infinity (the same circle the other way
+round). Which one is the plan's (Stage 111, `realization`) is fixed by the
+first planned entry e of the first epoch that names a present surface: R1 --
+when only one orientation crosses e's carrier from e's side (a straight beam
+and a line carrier, always), that one: on the planned side aim at the carrier,
+on the other side aim away and come back through infinity; R2 -- when both do
+(a circle carrier, a circle beam), the one whose planned walk consumes the
+plan and reaches the cursor, else the one that fires e before the passage of
+Q_0 -- after it when an infinity entry precedes e; R3 -- otherwise (no e, no
+crossing, both orientations alike) direct, reversed by an infinity entry in
+the first epoch (via_infinity). In a later epoch the projective's exit fixes
+the orientation. Infinity entries are otherwise only matched. With EMIT_INFINITY, a beam passing the current frame's image
 of infinity Q = F(inf) emits an "infinity" event, counted toward MAX_HITS like
 a pass. On a straight beam with Q = inf that is the passage of t = inf (the
 visual wrap: out through one screen edge, back in through the opposite one),
@@ -1894,13 +1902,129 @@ def via_infinity(surfaces, plan, flags=None):
     return False
 
 
+def first_entry(surfaces, plan, flags=None):
+    """The index of the first planned entry of the first epoch that names a
+    present surface (infinity entries and absent surfaces skipped; a pass
+    side, a terminal, a projective count: the planned walk fires only on an id
+    and side match), or None."""
+    by_id = {s.id: s for s in surfaces}
+    f = dict(flags or {})
+    for j, (sid, side) in enumerate(plan):
+        if sid == INFINITY_ID:
+            continue
+        surf = by_id.get(sid)
+        if surf is None or not surf.present(f):
+            continue
+        return j
+    return None
+
+
+def _first_firing(beam, surf, side, tq, line=None):
+    """(t, q) of the first crossing of surf's carrier from `side` along the
+    beam from t = 0 in the walker's projective order (t > 0 ascending, the
+    pole, t <= 0 ascending; at one parameter the hit before the pole), with q
+    = the pole was passed first; None when no crossing fires the entry."""
+    if line is not None and surf.seg.kind != "line" and _tangent(line, surf.seg):
+        return None         # a tangent touch is not a crossing (exact)
+    rs = [t for t in roots(beam, surf, False) if t != 0]
+    if len(rs) == 2 and rs[0] == rs[1]:
+        return None         # a double root: a touch
+    cands = [(sort_key(t, mp.mpf(0)), 1, t) for t in rs]
+    if tq is not None and tq != 0:
+        cands.append((sort_key(tq, mp.mpf(0)), 3, tq))
+    cands.sort(key=lambda c: (c[0], c[1]))
+    q = False
+    for key, kind, t in cands:
+        if kind == 3:
+            q = True
+            continue
+        if side_at(surf.seg, beam.at(t), beam.tangent_at(t)) == side:
+            return t, q
+    return None
+
+
+def realization(surfaces, player, cursor, plan, flags=None, hints=None):
+    """Stage 111: "direct" (B_0 runs P -> X_0 -> Q_0, toward the aim image) or
+    "reversed" (the same circle the other way, reaching X_0 through Q_0). Let
+    e be the first planned entry of the first epoch naming a present surface.
+    R1: when only one orientation of B_0 crosses e's carrier from e's side
+    (a straight B_0 and a line carrier, always), that one. R2: when both do,
+    one before the passage of Q_0 and one after it, the one whose order
+    matches the plan: Q_0 first iff an infinity entry precedes e. R3:
+    otherwise (no e, no crossing, both orientations alike) today's rule --
+    direct, reversed by an infinity entry in the first epoch (via_infinity).
+    Infinity entries are otherwise only matched by the walker."""
+    fallback = "reversed" if via_infinity(surfaces, plan, flags) else "direct"
+    j = first_entry(surfaces, plan, flags)
+    if j is None:
+        return fallback
+    d = exact_direction(surfaces, plan, player, cursor, flags, hints)
+    if d is None:
+        return fallback     # the aim image at infinity or the player itself (K3)
+    q0 = pre_q(surfaces)
+    p = P(player)
+    if q0 is None:
+        b = Beam(p, d / abs(d), mp.mpf(0))
+        line = initial_line(surfaces, player, cursor, plan, flags)
+    else:
+        if q0 == p:
+            return fallback     # the player at the frame's infinity: every aim degenerates
+        b = beam_through(p, p + d, q0)
+        line = None
+    by_id = {s.id: s for s in surfaces}
+    surf = by_id[plan[j][0]]
+    side = plan[j][1]
+    found = {}
+    for name, bm in (("direct", b), ("reversed", reversed_beam(b))):
+        tq = None if q0 is None else bm.param_of(q0)
+        if q0 is None:
+            tq = mp.inf
+        r = _first_firing(bm, surf, side, tq, line)
+        if r is not None:
+            found[name] = r[1]
+    if len(found) == 1:
+        return next(iter(found))
+    if len(found) == 0:
+        return fallback
+    # both orientations fire e (a circle carrier or a circle beam): the one
+    # whose planned walk consumes the plan and reaches the cursor; when both or
+    # neither do, the one that fires e before Q_0 -- after it when an infinity
+    # entry precedes e; when both fire on the same side of Q_0, today's rule
+    reaching = []
+    for name in ("direct", "reversed"):
+        w = _planned_oriented(surfaces, player, cursor, plan, flags, hints, name == "reversed")
+        if any(e.kind == "cursor" for e in w.events):
+            reaching.append(name)
+    if len(reaching) == 1:
+        return reaching[0]
+    if found["direct"] != found["reversed"]:
+        before = any(sid == INFINITY_ID for sid, _ in plan[:j])
+        return "direct" if found["direct"] == before else "reversed"
+    return fallback
+
+
+def _planned_oriented(surfaces, player, cursor, plan, flags, hints, away):
+    """The planned walk of the aim in the given orientation (no realization
+    lookup: realization itself uses it)."""
+    d, line, known, beam, xe = _aim_oriented(surfaces, player, cursor, plan, flags, hints, away)
+    return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
+                                extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
+                                beam=beam, exact_aim=xe)
+
+
 def _aim(surfaces, player, cursor, plan, flags=None, hints=None):
     """(direction, exact line or None, known points): the exact aim image's
     direction, or -- when the image is at infinity (aim undetermined) --
     straight at the cursor. When every frame change fixes the cursor, the aim
     image is the cursor: exact data the initial beam passes through (known).
-    An infinity entry in the first epoch reverses the aim (via_infinity)."""
-    away = via_infinity(surfaces, plan, flags)
+    The orientation is the plan's realization (Stage 111)."""
+    away = realization(surfaces, player, cursor, plan, flags, hints) == "reversed"
+    return _aim_oriented(surfaces, player, cursor, plan, flags, hints, away)
+
+
+def _aim_oriented(surfaces, player, cursor, plan, flags, hints, away):
+    """_aim in a given orientation: away = the second realization, the same
+    circle the other way round (P -> Q -> X)."""
     d = exact_direction(surfaces, plan, player, cursor, flags, hints)
     straight_at_cursor = d is None
     if d is None:

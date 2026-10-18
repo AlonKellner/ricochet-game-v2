@@ -1,4 +1,5 @@
-"""Stage 88 fixtures: plannable infinity (GAME_SPEC 4.2, 6.3, 12.5, 13.1),
+"""Stage 88 fixtures: plannable infinity (GAME_SPEC 4.2, 6.3, 12.5, 13.1;
+the realization by the first entry since Stage 111),
 traced by the oracle (trace2) with EMIT_INFINITY on. Same format as
 gen_fixtures_stage85.py; the infinity plan entry is {"surface_id": -3
 (INFINITY_ID), "side": ""}, and the "infinity" event carries surface_id -3,
@@ -104,12 +105,20 @@ def main():
     # mirror first, the reflected beam wraps onto the cursor
     p = pair_search(fx, "mirror_then_infinity", [m], (0.0, 0.0), (600.0, 50.0), [1, INF])
     assert [e["kind"] for e in p["expected"]][:3] == ["hit", "infinity", "cursor"] and infinities(p)[0] is True, kinds(p)
-    # the misplaced order does not reach the cursor
+    # [inf, M] is a plan of its own (Stage 111, R1): the wrap first, then the
+    # mirror's far face, onto the cursor; its near face cannot follow the wrap
+    # (the mirror is met at once, passed by the planned walk: unmet)
+    got = {}
     for side in ("LEFT", "RIGHT"):
-        f = fixture("infinity_misplaced_before_mirror_%s_planned" % side.lower(), [m], (0.0, 0.0),
+        f = fixture("infinity_before_mirror_%s_planned" % side.lower(), [m], (0.0, 0.0),
                     plan=[INF, (1, side)], mode="planned", cursor=(600.0, 50.0))
-        assert not reaches(f), kinds(f)
+        got[side] = f
         fx.append(f)
+    far = [s for s, f in got.items() if reaches(f)]
+    assert len(far) == 1, {s: kinds(f) for s, f in got.items()}
+    assert [e["kind"] for e in got[far[0]]["expected"]][:3] == ["infinity", "hit", "cursor"], kinds(got[far[0]])
+    near = got["LEFT" if far[0] == "RIGHT" else "RIGHT"]
+    assert [e["kind"] for e in near["expected"]][:2] == ["hit", "infinity"] and not near["expected"][0]["applied"], kinds(near)
     # two mirrors with the wrap between them
     m1 = line(1, (200, -300), (200, 300), REFL, REFL)
     m2 = line(2, (900, -300), (900, 300), REFL, REFL)

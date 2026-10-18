@@ -319,19 +319,25 @@ def test_line_projective_ignores_click():
 
 
 def test_cursor_event_only_on_the_planned_path():
-    # the far click: the beam meets the circle earlier on the planned side
-    # and fires there -- off the planned path, no cursor event (never at a
-    # projection of the cursor)
+    # the far click: aimed at its hit point H, the beam would meet the circle
+    # earlier on the planned side and fire there, off the planned path. Stage
+    # 111: the realization is the one whose planned walk reaches the cursor --
+    # the other way round, through infinity, H is the first crossing met: the
+    # cursor is reached, after an unplanned wrap; the near click reaches it at
+    # once. A cursor event is never at a projection of the cursor.
     walls = [line(10 + i, a, b, TERM, TERM) for i, (a, b) in enumerate(
         [((-1000, -1000), (1000, -1000)), ((1000, -1000), (1000, 1000)),
          ((1000, 1000), (-1000, 1000)), ((-1000, 1000), (-1000, -1000))])]
     sc = [_circle_normal()] + walls
-    for click, reach in (((390.0, -160.0), True), ((610.0, 165.0), False)):
-        w = T.planned(sc, (100.0, -300.0), (520.0, 30.0), [(1, T.LEFT)], hints={0: click})
-        cur = [e for e in w.events if e.kind == "cursor"]
-        assert bool(cur) == reach
-        for e in cur:
-            assert abs(e.point - P((520.0, 30.0))) < mp.mpf(10) ** -30
+    with emit_infinity():
+        for click, wrap in (((390.0, -160.0), False), ((610.0, 165.0), True)):
+            w = T.planned(sc, (100.0, -300.0), (520.0, 30.0), [(1, T.LEFT)], hints={0: click})
+            ks = kinds(w)
+            cur = [e for e in w.events if e.kind == "cursor"]
+            assert cur, (click, ks)
+            assert ("infinity" in ks[:ks.index("cursor")]) == wrap, (click, ks)
+            for e in cur:
+                assert abs(e.point - P((520.0, 30.0))) < mp.mpf(10) ** -30
 
 
 # ---------------------------------------------------------------- Stage 88: infinity
@@ -475,9 +481,19 @@ def test_mirror_then_infinity_wraps_after_the_reflection():
         ks = kinds(found)
         assert ks[:3] == ["hit", "infinity", "cursor"], ks
         assert found.events[1].applied
-        # the misplaced entry order does not reach the cursor: [inf, M]
-        other = [kinds(T.planned([m], (0, 0), (600, 50), [(T.INFINITY_ID, ""), (1, s)])) for s in ("LEFT", "RIGHT")]
-        assert all("cursor" not in k for k in other), other
+        # Stage 111: [inf, M] is a plan of its own: the wrap first, then the
+        # mirror's far face (its own realization, R1), onto the cursor; the
+        # near face cannot come after the wrap: the mirror is met at once
+        # (passed by the planned walk: the entry after it is the wrap), unmet
+        reach = {}
+        for s in ("LEFT", "RIGHT"):
+            w = T.planned([m], (0, 0), (600, 50), [(T.INFINITY_ID, ""), (1, s)])
+            reach[s] = kinds(w)
+        far = [s for s, k in reach.items() if "cursor" in k]
+        assert len(far) == 1, reach
+        assert reach[far[0]][:3] == ["infinity", "hit", "cursor"], reach
+        near = [k for s, k in reach.items() if s != far[0]][0]
+        assert near[:2] == ["hit", "infinity"] and "cursor" not in near, near
 
 
 INV_CIRCLE = {"id": 1, "line": False, "start": [700, 0], "end": [400, -150], "via": [400, 150],
@@ -1207,3 +1223,140 @@ def test_circle_beam_concurrent_crossings_tie_by_id():
         w = T.trace_physical_direction(s, (200.0, 450.0), mp.mpc(1, 0))
         at_x = [e.surface_id for e in w.events if e.kind == "hit" and abs(e.point - mp.mpc(600, 400)) < mp.mpf("1e-20")]
         assert at_x == [2, 3], at_x
+
+
+# ---------------------------------------------------------------- Stage 111: the realization by the first entry
+
+def _mirror_and_wall():
+    """scenes/test_levels/mirror_and_wall.tscn: solid lines 1-4, the mirror 5
+    (reflect on its L side, the player's; pass on its R side), pass edges 6-9."""
+    return [
+        line(1, (560, 240), (1360, 240), TERM, TERM), line(2, (1360, 840), (560, 840), TERM, TERM),
+        line(3, (560, 840), (560, 240), TERM, TERM), line(4, (600, 300), (600, 780), TERM, TERM),
+        line(5, (800, 300), (800, 780), REFL, PASS),
+        line(6, (0, 0), (1920, 0), PASS, PASS), line(7, (1920, 0), (1920, 1080), PASS, PASS),
+        line(8, (1920, 1080), (0, 1080), PASS, PASS), line(9, (0, 1080), (0, 0), PASS, PASS),
+    ]
+
+
+MW_PLAYER = (1306.67, 540.0)
+
+
+def _reaches_aligned(sc, player, cursor, plan):
+    """Both walks reach the cursor by the same decisions (the four captures)."""
+    pl = T.planned(sc, player, cursor, plan)
+    ph = T.physical(sc, player, cursor, plan)
+    kp, kh = kinds(pl), kinds(ph)
+    assert "cursor" in kp, (plan, cursor, kp)
+    i = kp.index("cursor")
+    assert kh[:i + 1] == kp[:i + 1], (plan, cursor, kp, kh)
+    for a, b in zip(pl.events[:i], ph.events[:i]):
+        assert (a.surface_id, a.applied) == (b.surface_id, b.applied), (plan, cursor, kp, kh)
+    return pl
+
+
+def test_mirror_realization_by_side_reaches_cursors_behind_the_image():
+    # the four captures: the cursor beyond the mirror, in front of or behind
+    # the player's image (293.3, 540): the aim is at the mirror either way (R1),
+    # the reflected beam wraps and comes back onto the cursor; with [5 L, inf]
+    # the wrap is consumed
+    sc = _mirror_and_wall()
+    with emit_infinity():
+        for cursor in ((480.5005, 524.9722), (166.1731, 535.9927)):
+            for plan in ([(5, T.LEFT)], [(5, T.LEFT), (T.INFINITY_ID, "")]):
+                w = _reaches_aligned(sc, MW_PLAYER, cursor, plan)
+                ks = kinds(w)
+                assert ks[0] == "hit" and w.events[0].surface_id == 5 and w.events[0].applied, ks
+                assert w.events[0].beam.tau.real < 0, "aimed at the mirror"
+                i_inf = ks.index("infinity")
+                assert i_inf < ks.index("cursor")
+                assert w.events[i_inf].applied == (len(plan) == 2)
+
+
+def test_mirror_infinity_planned_leaves_direct_cursors_unreached():
+    # a cursor on the player's side of the mirror with [5 L, inf]: the reflected
+    # beam passes its point with the entry pending, wraps, and ends at the wall
+    sc = _mirror_and_wall()
+    with emit_infinity():
+        direct = T.planned(sc, MW_PLAYER, (1000.0, 600.0), [(5, T.LEFT)])
+        assert kinds(direct)[:2] == ["hit", "cursor"], kinds(direct)
+        w = T.planned(sc, MW_PLAYER, (1000.0, 600.0), [(5, T.LEFT), (T.INFINITY_ID, "")])
+        ks = kinds(w)
+        assert ks[0] == "hit" and w.events[0].applied and "cursor" not in ks, ks
+        assert any(e.kind == "infinity" and e.applied for e in w.events), ks
+
+
+def test_infinity_before_mirror_from_its_reflective_side_diverges_at_the_mirror():
+    # [inf, 5 L] with the player on the reflective side: the aim is still at
+    # the mirror (R1); the planned walk passes it (the wrap is next), the
+    # physical reflects: the plans differ at the mirror
+    sc = _mirror_and_wall()
+    with emit_infinity():
+        plan = [(T.INFINITY_ID, ""), (5, T.LEFT)]
+        pl = T.planned(sc, MW_PLAYER, (480.5005, 524.9722), plan)
+        ph = T.physical(sc, MW_PLAYER, (480.5005, 524.9722), plan)
+        assert pl.events[0].surface_id == 5 and not pl.events[0].applied, kinds(pl)
+        assert ph.events[0].surface_id == 5 and ph.events[0].applied, kinds(ph)
+        assert "cursor" not in kinds(pl)
+
+
+def test_mirror_seen_from_its_pass_side_is_reached_through_infinity_unplanned():
+    # the player on the mirror's pass side: the only realization of [M L] goes
+    # away from the mirror, wraps, and meets its reflective face; the wrap is
+    # an unplanned passage, and [inf, M L] the same path with it consumed
+    m = line(1, (200, -300), (200, 300), REFL, PASS)
+    with emit_infinity():
+        for cursor in ((600, 50), (-300, 20)):
+            for plan in ([(1, T.LEFT)], [(T.INFINITY_ID, ""), (1, T.LEFT)]):
+                w = T.planned([m], (0, 0), cursor, plan)
+                ks = kinds(w)
+                assert ks[:2] == ["infinity", "hit"] and "cursor" in ks, (cursor, plan, ks)
+                assert w.events[0].applied == (len(plan) == 2)
+                assert w.events[1].applied and w.events[1].side == T.LEFT
+                # a cursor behind the player: a second wrap after the reflection
+                assert ("infinity" in ks[2:ks.index("cursor")]) == (cursor[0] < 0), (cursor, plan, ks)
+
+
+INV_ARC = {"id": 5, "line": False, "start": [1000.0, 340.0], "end": [1000.0, 740.0], "via": [1130.0, 540.0],
+           "full": False, "left": {"type": "inversion", "interactive": True}, "right": {"type": "pass", "interactive": False}}
+
+
+def test_inversion_arc_from_outside_aims_at_the_arc_for_every_cursor_inside():
+    # room_with_inversion's arc (centre (1000, 540), radius 200, inversion on
+    # its outside): the player outside, the cursor inside. Its image is ahead
+    # of the player for (1100, 560) and far behind for (1010, 540); both
+    # orientations fire the entry (R2) and the walk picks the one at the arc
+    c = T.surface_from_json(INV_ARC)
+    with emit_infinity():
+        for cursor in ((1100.0, 560.0), (1010.0, 540.0)):
+            w = T.planned([c], (1500.0, 540.0), cursor, [(5, T.LEFT)])
+            ks = kinds(w)
+            assert "cursor" in ks, (cursor, ks)
+            assert ks[0] == "hit" and w.events[0].applied and w.events[0].surface_id == 5, (cursor, ks)
+            assert w.events[0].beam.tau.real < 0, (cursor, "aimed at the arc")
+
+
+def test_infinity_before_the_arc_is_the_long_way_round():
+    c = T.surface_from_json(INV_ARC)
+    with emit_infinity():
+        w = T.planned([c], (1500.0, 540.0), (1010.0, 540.0), [(T.INFINITY_ID, ""), (5, T.LEFT)])
+        ks = kinds(w)
+        assert ks[:2] == ["infinity", "hit"] and w.events[0].applied and w.events[1].applied, ks
+        assert w.events[0].beam.tau.real > 0, "away from the arc first"
+
+
+def test_player_inside_a_circle_keeps_the_realization_by_infinity():
+    # R3: both orientations exit the circle before Q0; the entry alone goes
+    # toward the cursor's image, the infinity entry after it the other way
+    c = T.surface_from_json(INV_CIRCLE)
+    with emit_infinity():
+        side = None
+        for s in ("LEFT", "RIGHT"):
+            w = T.planned([c], (500, 50), (550, 0), [(1, s)])
+            if kinds(w)[0] == "hit" and w.events[0].applied:
+                side = s
+        assert side is not None
+        a = T.planned([c], (500, 50), (550, 0), [(1, side)])
+        b = T.planned([c], (500, 50), (550, 0), [(1, side), (T.INFINITY_ID, "")])
+        assert "cursor" in kinds(a) and "cursor" in kinds(b), (kinds(a), kinds(b))
+        assert abs(a.events[0].beam.tau + b.events[0].beam.tau) < mp.mpf(10) ** -40, "the same circle the other way"
