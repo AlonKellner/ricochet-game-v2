@@ -13,6 +13,10 @@
 
 #include "rc/visibility.hpp"
 
+#include <map>
+#include <memory>
+#include <set>
+
 namespace rc {
 namespace inv {
 
@@ -543,13 +547,17 @@ inline Violations check_VIS_CELL_CONSTANT(const VisInput &in) {
 	if (in.tracer == nullptr) {
 		return out;
 	}
-	vis::Builder b(*in.tracer, in.player, in.plan, in.flags, in.bounds);
+	std::map<int, std::unique_ptr<vis::Builder>> builders; // per half (Stage 111)
 	for (size_t ci = 0; ci < r.cells.size(); ci++) {
 		const vis::Cell &c = r.cells[ci];
 		const vis::Pt &ld = r.members[size_t(c.left)].dir;
 		const vis::Pt &rd = r.members[size_t(c.right)].dir;
 		const vis::Pt d = vis::rotate(ld, vis::ccw_angle(ld, rd) * 0.381966); // away from the middle
-		const std::optional<vis::Cast> k = b.probe_dir(d);
+		std::unique_ptr<vis::Builder> &b = builders[c.half];
+		if (!b) {
+			b = std::make_unique<vis::Builder>(*in.tracer, in.player, in.plan, in.flags, in.bounds, vis::Half(c.half));
+		}
+		const std::optional<vis::Cast> k = b->probe_dir(d);
 		if (k && !k->same_shape(c.mid)) {
 			out.push_back(v("VIS-CELL-CONSTANT: cell %d: %s inside, %s in the middle", I(int64_t(ci)), S(k->shape()), S(c.mid.shape())));
 		}
@@ -569,12 +577,32 @@ inline Violations check_VIS_ITERATION_CHAIN(const VisInput &in) {
 	if (!prev.supported) {
 		return out;
 	}
+	// Stage 111: a split plan's cells depart where their own orientation's walk
+	// arrives: in the region of the plan without its last entry built in that
+	// same forced orientation
+	std::map<int, vis::Result> prev_half;
 	for (size_t ci = 0; ci < r.cells.size(); ci++) {
+		const vis::Result *check = &prev;
+		if (r.split) {
+			const int half = r.cells[ci].half;
+			if (!prev_half.count(half)) {
+				vis::Builder b(*in.tracer, in.player, prefix, in.flags, in.bounds, vis::Half(half));
+				vis::Result ph = b.build();
+				for (vis::Loop &l : ph.loops) {
+					l.area = vis::loop_area(l.edges);
+				}
+				prev_half.emplace(half, std::move(ph));
+			}
+			if (!prev_half.at(half).supported) {
+				continue;
+			}
+			check = &prev_half.at(half);
+		}
 		for (const vis::Edge &e : r.cells[ci].edges()) {
 			if (e.kind != vis::EdgeKind::Carrier || e.role != vis::End::Near || e.surface != in.plan.back().surface_id) {
 				continue; // a portal departs its pair: the plan without it reaches the source
 			}
-			if (vis::contains(prev, e.via) == vis::Membership::Outside) { // (beyond the domain: unclassified)
+			if (vis::contains(*check, e.via) == vis::Membership::Outside) { // (beyond the domain: unclassified)
 				out.push_back(v("VIS-ITERATION-CHAIN: cell %d departs from %s, outside the previous region", I(int64_t(ci)), S(visdetail::pt_str(e.via))));
 			}
 		}
@@ -588,18 +616,34 @@ inline Violations check_VIS_ITERATION_CHAIN(const VisInput &in) {
 // tangency, a crossing) is decided by rounding on both sides.
 inline Violations check_VIS_BOUNDARY_DECIDED(const vis::Result &r) {
 	Violations out;
+	// Stage 111: a split plan casts every point in both orientations; the
+	// solver's own answer is the orientation it picks, so the point is reached
+	// when either half's cast reaches it
+	// (every copy of the point, in either half, from any frame: a frame-j
+	// member's image of the point lands a rounding away from the exact one)
+	auto reached_at = [&](const vis::Pt &c) {
+		const double tol = 1e-9 * std::max({1.0, std::abs(c.x), std::abs(c.y)});
+		for (const vis::Member &o : r.members) {
+			if (o.crit.valid && o.crit.cursor_ok && o.crit.chosen && vis::norm(o.cursor - c) <= tol) {
+				return true;
+			}
+		}
+		return false;
+	};
+	std::set<std::pair<double, double>> done;
 	for (size_t mi = 0; mi < r.members.size(); mi++) {
 		const vis::Member &m = r.members[mi];
-		if (!m.exact || !m.crit.valid) {
+		if (!m.exact || !m.crit.valid || !done.insert({m.cursor.x, m.cursor.y}).second) {
 			continue;
 		}
 		const vis::Membership c = vis::contains(r, m.cursor);
 		if (c == vis::Membership::Unclassified) {
 			continue;
 		}
-		if ((c == vis::Membership::Inside) != m.crit.cursor_ok) {
+		const bool ok = reached_at(m.cursor);
+		if ((c == vis::Membership::Inside) != ok) {
 			out.push_back(v("VIS-BOUNDARY-DECIDED: at %s (%s) the region says %s, the solver %s", S(visdetail::pt_str(m.cursor)), S(m.why),
-				S(c == vis::Membership::Inside ? "in" : "out"), S(m.crit.cursor_ok ? "reached" : "not reached")));
+				S(c == vis::Membership::Inside ? "in" : "out"), S(ok ? "reached" : "not reached")));
 		}
 	}
 	return out;
@@ -729,7 +773,10 @@ inline Violations check_VIS_REGULAR(const vis::Result &r, const Scene<F64> *scen
 	for (size_t wi = 0; wi < r.whiskers.size(); wi++) {
 		const vis::Edge &w = r.whiskers[wi];
 		if (w.kind == vis::EdgeKind::Member) {
-			const bool tangent_pole = w.member >= 0 && w.member < int(r.members.size()) && r.members[size_t(w.member)].tangent_pole;
+			// (Stage 111: and the straight member through P_K and a finite Q_K, a
+			// line where its neighbours are circles: its own realization's reach)
+			const bool tangent_pole = w.member >= 0 && w.member < int(r.members.size())
+				&& (r.members[size_t(w.member)].tangent_pole || r.members[size_t(w.member)].straight);
 			if (!tangent_pole) {
 				out.push_back(v("VIS-REGULAR: whisker %d lies along member %d, which is not tangent at a frame's infinity point", I(int64_t(wi)),
 					I(int64_t(w.member))));
@@ -777,8 +824,17 @@ inline Violations check_visibility(const VisInput &in) {
 	auto add = [&](Violations vs) { out.insert(out.end(), vs.begin(), vs.end()); };
 	add(check_VIS_CLOSED(r));
 	add(check_VIS_SIMPLE(r));
-	add(check_VIS_ORIENTED(r));
-	add(check_VIS_DISJOINT(r));
+	if (!r.split) {
+		add(check_VIS_ORIENTED(r));
+		add(check_VIS_DISJOINT(r));
+	} else {
+		// Stage 111: each half winds its own way, and the two share the crack
+		for (int half : {int(vis::Half::Direct), int(vis::Half::Reversed)}) {
+			const vis::Result h = vis::half_of(r, half);
+			add(check_VIS_ORIENTED(h));
+			add(check_VIS_DISJOINT(h));
+		}
+	}
 	add(check_VIS_FINITE(r));
 	if (in.tracer != nullptr) {
 		Flags flags = in.flags;

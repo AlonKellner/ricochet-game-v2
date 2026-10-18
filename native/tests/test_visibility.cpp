@@ -388,12 +388,14 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 	if (const char *pc = std::getenv("RC_VIS_PROBE")) {
 		vis::Pt c;
 		std::sscanf(pc, "%lf,%lf", &c.x, &c.y);
-		vis::Builder b(t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
+		// RC_VIS_HALF=1|2: the cast in that forced orientation (Stage 111)
+		const char *ph = std::getenv("RC_VIS_HALF");
+		vis::Builder b(t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080}, ph ? vis::Half(std::atoi(ph)) : vis::Half::Single);
 		const std::optional<vis::Cast> k = b.probe(c);
 		const vis::Result &rr = b.result();
 		std::printf("P_K (%.3f,%.3f) Q_K %s (%.3f,%.3f)\n", rr.pk.x, rr.pk.y, rr.qk_inf ? "inf" : "", rr.qk.x, rr.qk.y);
 		if (k) {
-			std::printf("cast: %s cursor_ok %d near (%.3f,%.3f) end (%.3f,%.3f)\n", k->shape().c_str(), int(k->cursor_ok), k->near_pt.x, k->near_pt.y,
+			std::printf("cast: %s cursor_ok %d met %d ek %d chosen %d tie %d near (%.3f,%.3f) end (%.3f,%.3f)\n", k->shape().c_str(), int(k->cursor_ok), int(k->met), k->ek, int(k->chosen), int(k->has_tie), k->near_pt.x, k->near_pt.y,
 				k->end_pt.x, k->end_pt.y);
 			for (const auto &iv : k->iv) std::printf("  interval %s %.6g -> %s %.6g\n", vis::end_name(iv.a.kind), iv.a.t, vis::end_name(iv.b.kind), iv.b.t);
 		}
@@ -437,8 +439,8 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 	}
 	for (size_t i = 0; i < r.members.size() && std::getenv("RC_VIS_PIN") == nullptr; i++) {
 		const auto &m = r.members[i];
-		std::printf("member %zu dir(%.6f,%.6f) %s cursor(%.3f,%.3f)\n  crit %s\n  minus %s\n  plus %s\n", i, m.dir.x, m.dir.y, m.why.c_str(), m.cursor.x,
-			m.cursor.y, m.crit.shape().c_str(), m.minus.shape().c_str(), m.plus.shape().c_str());
+		std::printf("member %zu dir(%.6f,%.6f) %s cursor(%.3f,%.3f) ok %d chosen %d tie %d\n  crit %s\n  minus %s\n  plus %s\n", i, m.dir.x, m.dir.y, m.why.c_str(), m.cursor.x,
+			m.cursor.y, int(m.crit.cursor_ok), int(m.crit.chosen), int(m.crit.has_tie), m.crit.shape().c_str(), m.minus.shape().c_str(), m.plus.shape().c_str());
 	}
 	if (const char *cl = std::getenv("RC_VIS_CELLS")) {
 		std::string str = cl;
@@ -1156,7 +1158,7 @@ TEST_CASE("visibility: every region check detects its corruption") {
 	const vis::Pt player{960, 827.999};
 	const vis::Result base = region_of(t, "test_levels__three_mirrors", plan, player);
 	REQUIRE(base.supported);
-	REQUIRE(base.loops.size() == 1);
+	REQUIRE(!base.loops.empty()); // (Stage 111: the realization through infinity adds a loop of its own)
 	REQUIRE(base.loops[0].edges.size() > 4);
 	REQUIRE(base.loops[0].edges[1].kind == vis::EdgeKind::Member);
 	REQUIRE(base.loops[0].edges[2].kind == vis::EdgeKind::Bounds);
@@ -1218,9 +1220,16 @@ TEST_CASE("visibility: every region check detects its corruption") {
 		{"a cell's middle member elsewhere", {"VIS-STAR"}, {}, [](vis::Result &r) { r.cells[0].mid_beam = r.members[0].beam; }},
 		{"a cell's middle cast of another shape", {"VIS-CELL-CONSTANT"}, {}, [](vis::Result &r) { r.cells[0].mid.iv.push_back(r.cells[0].mid.iv[0]); }},
 		{"an exact point decided the other way", {"VIS-BOUNDARY-DECIDED"}, {}, [](vis::Result &r) {
+			 // (Stage 111: a split plan holds the point in both halves; the check
+			 // reads the orientation the solver picks, so every copy is flipped)
 			 for (vis::Member &m : r.members) {
-				 if (m.exact && m.crit.valid && vis::contains(r, m.cursor) != vis::Membership::Unclassified) {
-					 m.crit.cursor_ok = !m.crit.cursor_ok;
+				 if (m.exact && m.crit.valid && m.crit.chosen && vis::contains(r, m.cursor) != vis::Membership::Unclassified) {
+					 const vis::Pt c = m.cursor;
+					 for (vis::Member &o : r.members) {
+						 if (o.cursor == c) {
+							 o.crit.cursor_ok = !o.crit.cursor_ok;
+						 }
+					 }
 					 return;
 				 }
 			 }
