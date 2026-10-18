@@ -40,8 +40,10 @@
 #include <thread>
 #include <limits>
 #include <map>
+#include <mutex>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <utility>
 #include <vector>
 
@@ -558,6 +560,31 @@ inline double arc_sweep(const Edge &e, const ArcGeom &g) {
 	return sw;
 }
 
+// Workflow W2.0: the solves of a split plan's two halves, shared. A half's
+// tie cast (the other orientation's reach) is the other half's own cast of the
+// same cursor, and the tie-choice and the realization of a cursor are the
+// same in both; each is a pure function of (player, cursor, plan, flags,
+// orientation), so the memo changes no result (the halves run in turn; the
+// cast threads share it under the mutex).
+struct SolveMemo {
+	struct Key {
+		uint64_t x = 0, y = 0;
+		int force = 2; // 0 direct, 1 reversed, 2 the solver's own choice
+		bool operator==(const Key &o) const { return x == o.x && y == o.y && force == o.force; }
+	};
+	struct Hash {
+		size_t operator()(const Key &k) const { return size_t((k.x * 1099511628211ULL) ^ (k.y * 14695981039346656037ULL) ^ uint64_t(k.force)); }
+	};
+	static Key key(const Pt &c, std::optional<bool> force) {
+		return Key{std::bit_cast<uint64_t>(c.x), std::bit_cast<uint64_t>(c.y), force ? (*force ? 1 : 0) : 2};
+	}
+	std::mutex mutex;
+	std::unordered_map<Key, std::optional<LadderResult>, Hash> solves;
+	std::unordered_map<Key, std::optional<bool>, Hash> ties;
+	std::unordered_map<Key, std::optional<bool>, Hash> realizations;
+	long hits = 0;
+};
+
 class Builder {
 public:
 	Builder(Tracer &tracer, Pt player, std::vector<PlanItem> plan, Flags flags, Rect bounds, Half half = Half::Single)
@@ -573,6 +600,8 @@ public:
 	// Stage 111: whether the plan splits into two halves (its first entry may
 	// fix the realization per cursor, R1/R2)
 	bool splits() const { return solver_.first_entry(plan_, flags_) >= 0; }
+	// Workflow W2.0: the memo the two halves share (compute)
+	void share(SolveMemo *memo) { memo_ = memo; }
 
 	// One cast of the cursor c (after prepare(); for tests and debugging).
 	std::optional<Cast> probe(const Pt &c) {
@@ -615,6 +644,7 @@ public:
 
 private:
 	Tracer &tracer_;
+	SolveMemo *memo_ = nullptr;
 	std::vector<PlanItem> plan_;
 	Flags flags_;
 	Scene<F64> scene_;
@@ -1281,15 +1311,28 @@ private:
 	// tie-choice (what a cursor both planned walks reach gets), the other
 	// orientation's planned reach is the plan's realization there, and the
 	// cast keeps only what lies outside it.
+	// RC_VIS_TRACE=1: one line per cast (Workflow W5): the half, the cursor, the
+	// aim, the tie-choice, whether the solver's own choice is this half (chosen),
+	// valid / alive / met, the consuming event, the near and far ends.
+	void trace_cast(const Cast &r, std::optional<bool> q) const {
+		if (std::getenv("RC_VIS_TRACE") == nullptr) {
+			return;
+		}
+		std::fprintf(stderr, "cast half %d cursor (%.9g, %.9g) dir (%.9f, %.9f) tie %s chosen %d valid %d alive %d met %d ek %d depart %d near %s end %s%s\n",
+			int(half_), r.cursor.x, r.cursor.y, r.dir.x, r.dir.y, q ? (*q ? "reversed" : "direct") : "none", int(r.chosen), int(r.valid), int(r.alive),
+			int(r.met), r.ek, int(r.has_depart), end_name(r.near_kind), end_name(r.end_kind), r.has_tie ? (r.tie_after_q ? " tie-cut after Q" : " tie-cut") : "");
+	}
+
 	Cast cast_on(Tracer &tracer, const Pt &c, const Pt &dir, const Beam<F64> &member) const {
 		if (half_ == Half::Single) {
-			return cast_core(tracer, c, dir, member, std::nullopt, nullptr);
+			Cast r = cast_core(tracer, c, dir, member, std::nullopt, nullptr);
+			trace_cast(r, std::nullopt);
+			return r;
 		}
 		const bool rev = half_ == Half::Reversed;
-		const Pt P = res_.player;
 		// (a plan without an entry -- the prefix of a split plan, built in a cell's
 		// orientation by a check -- has no tie-choice: the forced orientation alone)
-		const std::optional<bool> q = solver_.first_entry(plan_, flags_) >= 0 ? tracer.tie_choice(P.x, P.y, c.x, c.y, plan_, flags_) : std::nullopt;
+		const std::optional<bool> q = solver_.first_entry(plan_, flags_) >= 0 ? memo_tie(tracer, c) : std::nullopt;
 		if (std::getenv("RC_VIS_TIE") != nullptr) {
 			std::fprintf(stderr, "tie half %d cursor (%.6g, %.6g) dir (%.9f, %.9f) angle %.9f -> %s\n", int(half_), c.x, c.y, dir.x, dir.y,
 				std::atan2(dir.y, dir.x), q ? (*q ? "reversed" : "direct") : "none");
@@ -1303,10 +1346,73 @@ private:
 		}
 		Cast r = cast_core(tracer, c, dir, member, rev, tie ? &*tie : nullptr);
 		if (r.valid) {
-			const std::optional<bool> own = tracer.realization_reversed(P.x, P.y, c.x, c.y, plan_, flags_);
+			const std::optional<bool> own = memo_realization(tracer, c);
 			r.chosen = own && *own == rev;
 		}
+		// a tie cut names the other orientation's departure: only in a split half,
+		// only where the tie-choice is the other orientation
+		RC_ASSERT(!r.has_tie || (q && *q != rev), "vis: a tie cut outside a tie");
+		trace_cast(r, q);
 		return r;
+	}
+
+	// the three solver calls of a cast, through the shared memo when there is one
+	std::optional<LadderResult> memo_solve(Tracer &tracer, const Pt &c, std::optional<bool> force) const {
+		const Pt P = res_.player;
+		if (memo_ == nullptr) {
+			return tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force);
+		}
+		const SolveMemo::Key key = SolveMemo::key(c, force);
+		{
+			std::lock_guard<std::mutex> lock(memo_->mutex);
+			const auto it = memo_->solves.find(key);
+			if (it != memo_->solves.end()) {
+				memo_->hits++;
+				return it->second;
+			}
+		}
+		std::optional<LadderResult> lr = tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force);
+		std::lock_guard<std::mutex> lock(memo_->mutex);
+		memo_->solves.emplace(key, lr);
+		return lr;
+	}
+	std::optional<bool> memo_tie(Tracer &tracer, const Pt &c) const {
+		const Pt P = res_.player;
+		if (memo_ == nullptr) {
+			return tracer.tie_choice(P.x, P.y, c.x, c.y, plan_, flags_);
+		}
+		const SolveMemo::Key key = SolveMemo::key(c, std::nullopt);
+		{
+			std::lock_guard<std::mutex> lock(memo_->mutex);
+			const auto it = memo_->ties.find(key);
+			if (it != memo_->ties.end()) {
+				memo_->hits++;
+				return it->second;
+			}
+		}
+		const std::optional<bool> q = tracer.tie_choice(P.x, P.y, c.x, c.y, plan_, flags_);
+		std::lock_guard<std::mutex> lock(memo_->mutex);
+		memo_->ties.emplace(key, q);
+		return q;
+	}
+	std::optional<bool> memo_realization(Tracer &tracer, const Pt &c) const {
+		const Pt P = res_.player;
+		if (memo_ == nullptr) {
+			return tracer.realization_reversed(P.x, P.y, c.x, c.y, plan_, flags_);
+		}
+		const SolveMemo::Key key = SolveMemo::key(c, std::nullopt);
+		{
+			std::lock_guard<std::mutex> lock(memo_->mutex);
+			const auto it = memo_->realizations.find(key);
+			if (it != memo_->realizations.end()) {
+				memo_->hits++;
+				return it->second;
+			}
+		}
+		const std::optional<bool> q = tracer.realization_reversed(P.x, P.y, c.x, c.y, plan_, flags_);
+		std::lock_guard<std::mutex> lock(memo_->mutex);
+		memo_->realizations.emplace(key, q);
+		return q;
 	}
 
 	Cast cast_core(Tracer &tracer, const Pt &c, const Pt &dir, const Beam<F64> &member, std::optional<bool> force, const Cast *tie) const {
@@ -1314,7 +1420,7 @@ private:
 		r.cursor = c;
 		r.dir = dir;
 		const Pt P = res_.player;
-		const std::optional<LadderResult> lr = tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force);
+		const std::optional<LadderResult> lr = memo_solve(tracer, c, force);
 		if (!lr) {
 			return r;
 		}
@@ -3530,6 +3636,23 @@ inline Result join_halves(Result a, Result b) {
 	r.loops.insert(r.loops.end(), b.loops.begin(), b.loops.end());
 	r.whiskers.insert(r.whiskers.end(), b.whiskers.begin(), b.whiskers.end());
 	r.casts += b.casts;
+	// every member reference of the joined region names one of its members (the
+	// second half's rebased exactly once)
+	{
+		const int n = int(r.members.size());
+		auto in_range = [n](int m) { return m >= -1 && m < n; };
+		for (const Loop &l : r.loops) {
+			for (const Edge &e : l.edges) {
+				RC_ASSERT(in_range(e.member), "vis: a loop edge's member after the join");
+			}
+		}
+		for (const Edge &e : r.whiskers) {
+			RC_ASSERT(in_range(e.member), "vis: a whisker's member after the join");
+		}
+		for (const Cell &c : r.cells) {
+			RC_ASSERT(in_range(c.left) && in_range(c.right), "vis: a cell's members after the join");
+		}
+	}
 	r.refinements += b.refinements;
 	for (size_t k = 0; k < r.casts_by_kind.size(); k++) {
 		r.casts_by_kind[k] += b.casts_by_kind[k];
@@ -3571,8 +3694,11 @@ inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanIt
 		r = b.build();
 	} else {
 		// Stage 111: the plan's first entry fixes the realization per cursor
+		SolveMemo memo;
 		Builder bd(tracer, player, plan, flags, bounds, Half::Direct);
 		Builder br(tracer, player, plan, flags, bounds, Half::Reversed);
+		bd.share(&memo);
+		br.share(&memo);
 		Result ra = bd.build();
 		Result rb = br.build();
 		r = join_halves(std::move(ra), std::move(rb));

@@ -12,10 +12,11 @@ Specification: GAME_SPEC §13.1 (the two realizations, R1-R3), §4.2, §9.5, §1
 | 111.1 | Native: `Solver::realize`, `realization`, `tie_choice`, a forced orientation for the region; DIRECTION-ONLY's reference | Done |
 | 111.2 | Region: two forced halves joined, the tie cut, the crack members, the per-half checks | Done |
 | 111.3 | GUT: `test_stage111_orientation.gd`; the Stage 87 fork test and the spent-host test re-derived; the scene corpus regenerated | Done |
-| 111.4 | Goldens: judged (`docs/research/stage111_judge.py`); re-blessed after the user's approval | Pending approval |
+| 111.4 | Goldens: judged (`make judge RULES=stage111`: 32,742 sweep combos, 612 fields -- corpus 568, fixtures 33, regions 11 -- 0 findings); re-blessed on the user's instruction to merge (2026-10-18) | Done |
 | 111.5 | Interactive sign-off | Pending |
+| 111.6 | The region's cost (Workflow W2.0): the two halves share a solve memo (`vis::SolveMemo`: a half's tie cast is the other half's own cast of the same cursor); the per-cast cost is back to Stage 110's, the cast count is the two halves' (1.7x); digest unchanged | Done |
 
-**Workflow:** branch `orientation-by-entry`, small green commits. Before every commit: the full GUT suite (`./run_tests_parallel.sh`), ctest in RelWithDebInfo and under ASan (`make native-asan`, run alone), `make oracle-test`, and `git diff --stat bench/goldens` empty (once re-blessed).
+**Workflow:** branch `orientation-by-entry`, small green commits; merged with `workflow-native` (the rework of the gates, `docs/WORKFLOW.md`): `make gate` before every commit, `make gates` before the merge.
 
 ## The finding
 
@@ -50,7 +51,11 @@ The judge (`docs/research/stage111_judge.py`) compares every changed trace of th
 | Sweep goldens (`sweeps.json`, 284,096 combos) | 32,742 combos (every physical follows its planned) | 30,046 | 2,400 | 181 | 115 | 0 |
 | Fixture and corpus goldens (`fixtures.json`, `corpus.json`) | 601 fields (222 physical follow; 142 are error bounds and tiers) | 198 | 33 | 3 | 3 | 0 |
 
-By group the sweep changes are `with_plans/*` (line and circle mirrors, R1 and R2-choice), `projective_plans/*` (R1 on the line projectives, R2-reach on the arcs), `combos/*`, `precision/plans/*`; the full report is the judge's output (`--examples` lists combos per class). Re-bless: `RC_SWEEP_REBLESS=1 rc_tests -tc="goldens: the sweep combos*"` and `RC_GOLDEN_REBLESS=1 rc_tests -tc="goldens: every stage fixture*,goldens: the corpus*"`, applied with `docs/research/apply_rebless.py`, after the user's approval. Until then `make gates` reports the golden pins.
+By group the sweep changes are `with_plans/*` (line and circle mirrors, R1 and R2-choice), `projective_plans/*` (R1 on the line projectives, R2-reach on the arcs), `combos/*`, `precision/plans/*`; the full report is the judge's output. Since the workflow rework the judge runs as `make judge RULES=stage111` (`docs/research/judge.py` with `stage111_judge.py` as its rules module: the same classes, plus the generic ones and the 11 changed regions of `bench/goldens/regions.json`), the report lands in `native/build-ref/judge/report.md`, and `make rebless APPROVED=1` applies it. Applied on 2026-10-18 on the user's instruction to merge both branches to main.
+
+**The region's cost (Workflow W2.0).** On a split plan every cast ran up to two ladder solves (its own and, where the tie-choice is the other orientation, the tie cast) and two realizations, and the second half re-solved what the first had: `mirror_and_wall` [5 L] built in 35 ms against 11.5 ms before the stage (442 casts against 237, 14,650 ladder walks against 5,521), and the GUT visibility sweep went from 580 to over 2,000 s of CPU. The two halves now share a `vis::SolveMemo` (the ladder solve by cursor and orientation, the tie-choice and the realization by cursor; pure functions, the cast threads share it under a mutex): 19.9 ms, 10,338 walks; per cast 45 µs against Stage 110's 48 µs. What remains is the cast count of two halves. VIS-DETERMINISTIC rebuilds every region once more by design (42 % of a sweep's time), ITERATION-CHAIN 12 %.
+
+**Debugging (Workflow W5).** `RC_VIS_TRACE=1` prints one line per cast (the half, the cursor, the aim, the tie-choice, chosen, valid / alive / met, the consuming event, both ends, a tie cut); `join_halves` asserts every member reference of the joined region in range, and a cast asserts a tie cut only where the tie-choice is the other orientation (`RC_ASSERT`: abort under ASan and Debug).
 
 ## Known findings
 

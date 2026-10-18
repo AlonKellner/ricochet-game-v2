@@ -13,6 +13,9 @@
 #include "parts.hpp"
 #include "violations.hpp"
 #include "rc/sweep.hpp"
+#include "rc/visibility_checks.hpp"
+
+#include <chrono>
 
 #include <doctest/doctest.h>
 #include <filesystem>
@@ -206,4 +209,76 @@ TEST_CASE("sweeps: the visibility sweeps' manifests hold on every combo") {
 	run_manifests(true, t);
 	CHECK(t.manifests > 0);
 	CHECK(t.violations.empty());
+}
+
+// Where a visibility sweep's time goes (skipped; run with --no-skip): per
+// player of the selected manifests, the region build, every structure check
+// by name, and the cursor pins; RC_SWEEPS_FILTER narrows the manifests.
+TEST_CASE("sweeps timing" * doctest::skip(true)) {
+	using clock = std::chrono::steady_clock;
+	auto ms = [](clock::time_point a, clock::time_point b) { return std::chrono::duration<double, std::milli>(b - a).count(); };
+	std::map<std::string, double> t;
+	std::map<std::string, long> n;
+	Selection sel = selection();
+	for (const std::filesystem::path &path : manifest_files()) {
+		const Manifest m = load_manifest(path);
+		if (!m.visibility) {
+			continue;
+		}
+		Tracer tracer;
+		tracer.set_emit_infinity(m.emit_infinity);
+		tracer.set_defs(m.defs);
+		Scene<F64> scene = Scene<F64>::from_defs(m.defs, F64{1.0});
+		scene.emit_infinity = m.emit_infinity;
+		const Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
+		const vis::Rect vb{0, 0, 1920, 1080};
+		for (size_t pli = 0; pli < m.plans.size(); pli++) {
+			std::vector<V2> cursors = m.positions;
+			for (const V2 &c : sweep::carrier_extension_cursors(m.defs, m.plans[pli], bounds)) {
+				if (std::find(cursors.begin(), cursors.end(), c) == cursors.end()) cursors.push_back(c);
+			}
+			for (const size_t pi : sel.players(m.positions.size())) {
+				const vis::Pt P{m.positions[pi].x, m.positions[pi].y};
+				auto t0 = clock::now();
+				const vis::Result r = vis::compute(tracer, P, m.plans[pli], m.flags, vb);
+				auto t1 = clock::now();
+				t["1 compute"] += ms(t0, t1);
+				n["1 compute"]++;
+				if (!r.supported) continue;
+				inv::VisInput in{&r, &tracer, P, m.plans[pli], m.flags, vb};
+				Flags flags = m.flags;
+				flags.erase(GHOST);
+				auto time = [&](const char *name, auto &&f) {
+					auto a = clock::now();
+					f();
+					t[name] += ms(a, clock::now());
+				};
+				time("2 CLOSED+SIMPLE", [&] { inv::check_VIS_CLOSED(r); inv::check_VIS_SIMPLE(r); });
+				time("2 ORIENTED+DISJOINT", [&] {
+					if (!r.split) { inv::check_VIS_ORIENTED(r); inv::check_VIS_DISJOINT(r); }
+					else for (int half : {1, 2}) { const vis::Result h = vis::half_of(r, half); inv::check_VIS_ORIENTED(h); inv::check_VIS_DISJOINT(h); }
+				});
+				time("2 geometry (EDGE,VERTEX,SHADOW,BLOCKER,REGULAR)", [&] {
+					inv::check_VIS_EDGE_ON_GEOMETRY(r, scene); inv::check_VIS_VERTEX_PROVENANCE(r, scene); inv::check_VIS_SHADOW_ANCHORED(r, scene);
+					inv::check_VIS_NO_BLOCKER_INSIDE(r, scene, flags, m.plans[pli]); inv::check_VIS_REGULAR(r, &scene, flags, m.plans[pli]);
+				});
+				time("2 SOURCE+STAR", [&] { inv::check_VIS_SOURCE_ON_BOUNDARY(r); inv::check_VIS_STAR(r); });
+				time("2 CELL_CONSTANT", [&] { inv::check_VIS_CELL_CONSTANT(in); });
+				time("2 ITERATION_CHAIN", [&] { inv::check_VIS_ITERATION_CHAIN(in); });
+				time("2 BOUNDARY_DECIDED", [&] { inv::check_VIS_BOUNDARY_DECIDED(r); });
+				time("2 CONTAINS+DRAWN", [&] { inv::check_VIS_CONTAINS_MATCHES_POLYGON(r); inv::check_VIS_DRAWN_MATCHES(r); });
+				time("2 DETERMINISTIC", [&] { inv::check_VIS_DETERMINISTIC(in); });
+				time("3 cursor pins", [&] {
+					for (const V2 &c : cursors) {
+						if (m.skip_equal && m.positions[pi] == c) continue;
+						sweep::check_combo(tracer, scene, m.defs, m.infos, m.positions[pi], c, m.plans[pli], m.flags, bounds, &r, true);
+					}
+				});
+			}
+		}
+	}
+	double total = 0;
+	for (const auto &kv : t) total += kv.second;
+	for (const auto &kv : t) std::printf("%-48s %9.1f ms  %5.1f%%\n", kv.first.c_str(), kv.second, 100.0 * kv.second / total);
+	std::printf("regions %ld, total %.1f ms\n", n["1 compute"], total);
 }

@@ -153,6 +153,26 @@ while they are stale, and the generators read them.
 | `bench/goldens/*.json` | dumped at tag `pre-native` (the script is gone); re-blessed only | `make judge`, the user's approval, `make rebless APPROVED=1` | `test_goldens.cpp`, `test_visibility.cpp` (regions) |
 | `bench/sweeps/*.json` | `SweepRunner.sweep_native` under `SWEEP_MANIFEST_DIR` | `make manifests` (the manifests gate fails while stale) | `test_sweeps.cpp` |
 
+## Debugging variables
+
+| Variable | Where | What |
+|---|---|---|
+| `RC_VIS_TRACE=1` | `vis::Builder` | one line per cast: half, cursor, aim, tie-choice, chosen, valid / alive / met, the consuming event, both ends, a tie cut |
+| `RC_VIS_TIE=1` | `vis::Builder` | the tie-choice per cast (Stage 111) |
+| `RC_REALIZE_TRACE=1` | `Solver::realize`, `first_firing`, `project` | the realization rule's decisions (R1-R3) |
+| `RC_VIS_SCENE`, `RC_VIS_PLAN`, `RC_VIS_PLAYER`, `RC_VIS_PROBE`, `RC_VIS_HALF`, `RC_VIS_NEAR`, `RC_VIS_PIN`, `RC_VIS_CELLS`, `RC_VIS_FILL*`, `RC_VIS_PNG`, `RC_VIS_SVG`, `RC_VIS_VIEW`, `RC_VIS_POLYS` | the skipped `visibility debug` case (`make check TC="visibility debug" SKIP=0`) | one region, probed, drawn (plan ∞ is `-3L`) |
+| `RC_VIS_THREADS` | `vis::compute` | cast threads per region (the sweeps set 1: the parts are the parallelism) |
+| `RC_VIS_FULL=1` | the level loops | every plan and two players |
+| `RC_VIS_PART`, `RC_SWEEP_PART`, `RC_SWEEPS_PART`, `RC_CASE_PART` | ctest entries | the k-th item of every n |
+| `RC_SWEEPS_STRIDE`, `RC_SWEEPS_FILTER`, `RC_SWEEPS_VIOLATIONS` | `test_sweeps.cpp` | one player in n; a manifest name; the violations as JSON |
+| `RC_SWEEP_STRIDE`, `RC_SWEEP_DUMP`, `RC_SWEEP_REBLESS`, `RC_GOLDEN_REBLESS` | `test_goldens.cpp`, the regions case | the goldens: thinning, the dumps for the judge, the re-bless lines |
+| `RC_REGIONS_WRITE=path` | the regions case | rewrite `bench/goldens/regions.json` |
+| `RC_VIS_DIGEST_VERBOSE=1` | `visibility digest` | one line per region |
+| `SWEEP_SHARD`, `SWEEP_SAMPLE`, `SWEEP_MANIFEST_DIR` | GUT sweeps | the shard, the sample, the manifest dump |
+
+The skipped `sweeps timing` case (`RC_SWEEPS_FILTER=<level> make check TC="sweeps timing" SKIP=0`) splits a
+visibility sweep's time into the region build, every structure check and the cursor pins.
+
 ## A stage
 
 1. Spec: `GAME_SPEC.md`, then the oracle and its tests (`make oracle-test`), then the fixtures.
