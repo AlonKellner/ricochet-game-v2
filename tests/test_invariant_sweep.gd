@@ -150,14 +150,8 @@ func test_sweep_infinity_plans() -> void:
 # violation matching one is reported, not failed; a finding that no longer
 # occurs fails the sweep so the list stays true.
 # (K1, K2 and K3 were resolved by Stages 105 and 106.)
-# K9 (Stage 110, docs/TDD_14_VISIBILITY.md): found by the cursors on the planned
-# carriers beyond their segments -- a cursor exactly on the last planned
-# surface's carrier far off its segment, in a pre-transform level with three
-# entries, the first applied by the planned walk off its segment.
-const KNOWN_FINDINGS := [
-	{"id": "K9", "scene": "res://scenes/playground/pre_inverted.tscn", "plan": "[2/L,3/L,4/R]", "prefix": "DIRECTION-ONLY"},
-	{"id": "K9", "scene": "res://scenes/playground/pre_inverted.tscn", "plan": "[2/L,3/L,4/R]", "prefix": "PHYSICS-COMPLIANCE"},
-]
+# (K9 was fixed after Stage 110: docs/TDD_14_VISIBILITY.md.)
+const KNOWN_FINDINGS := []
 
 static func _known(f: Dictionary, plan_str: String) -> String:
 	for k in KNOWN_FINDINGS:

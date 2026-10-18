@@ -1095,6 +1095,10 @@ private:
 			// an aimed shot in a pre-transform frame: the circle through P, X0, Q0
 			if (const std::optional<exact::Point3> X0 = exact_image_cached(cursor, plan, flags)) {
 				set_pole(w, exact::pole_start_aimed(player.fx(), player.fy(), *X0, *q0));
+				if (!w.rec) {
+					// K9: and its exact circle
+					w.rec = exact::BeamRec::from_gc(exact::gc_through(exact::Point3{exact::of(player.fx()), exact::of(player.fy()), exact::of(1.0)}, *X0, *q0));
+				}
 			}
 		}
 		walk_from(w, b0, -1, std::nullopt);
@@ -1151,6 +1155,7 @@ private:
 		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
 		const CN<N> delta = w.Q ? player.sub(*w.Q) : player.sub(player);
 		Beam<N> b = Beam<N>::through(player, aim, w.Q ? &delta : nullptr);
+		std::optional<exact::GCircle> start_gc;
 		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
 			// the exact pole record (Stage 105): the circle through the player, the aim
 			// point and Q0; a shot straight at the cursor passes exact data
@@ -1162,6 +1167,7 @@ private:
 			}
 			if (X0) {
 				set_pole(w, exact::pole_start_aimed(player.fx(), player.fy(), *X0, *q0));
+				start_gc = exact::gc_through(exact::Point3{exact::of(player.fx()), exact::of(player.fy()), exact::of(1.0)}, *X0, *q0);
 			}
 		}
 		if (via_infinity(plan, flags)) {
@@ -1178,6 +1184,9 @@ private:
 		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
 		w.line = line;
 		w.rec = exact::BeamRec::from_line(w.line);
+		if (!w.rec && start_gc) {
+			w.rec = exact::BeamRec::from_gc(*start_gc); // K9: a pre-transform start's exact circle
+		}
 		if (w.line) {
 			if (X && !X->sub(player).is_zero() && !plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
 				w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, std::nullopt});

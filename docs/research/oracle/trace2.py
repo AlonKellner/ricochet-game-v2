@@ -749,6 +749,18 @@ def gc_translate(g, dx, dy):
     return _gc_shift(g, F(dx), F(dy))
 
 
+def gc_through(P1, P2, P3):
+    """The generalized circle through three exact points (a line when they are
+    collinear): the rows (x^2 + y^2, x, y, 1) of the points, expanded."""
+    rows = [(p[0] * p[0] + p[1] * p[1], p[0], p[1], Fraction(1)) for p in (P1, P2, P3)]
+
+    def det3(cols):
+        m = [[r[c] for c in cols] for r in rows]
+        return (m[0][0] * (m[1][1] * m[2][2] - m[1][2] * m[2][1]) - m[0][1] * (m[1][0] * m[2][2] - m[1][2] * m[2][0])
+                + m[0][2] * (m[1][0] * m[2][1] - m[1][1] * m[2][0]))
+    return (det3((1, 2, 3)), -det3((0, 2, 3)), det3((0, 1, 3)), -det3((0, 1, 2)))
+
+
 def gc_at(g, X):
     A, B, C, D = g
     return A * (X[0] * X[0] + X[1] * X[1]) + B * X[0] + C * X[1] + D
@@ -1707,6 +1719,9 @@ def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="
     walk.known += [(k, b0.param_of(k), None) for k in extra_known if k != p0]
     walk.line = line_from_dir(p0, direction) if line == "direction" else line
     walk.gc = gc_from_line(walk.line) if walk.line is not None else None
+    if walk.gc is None and q0e is not None and beam is not None and exact_aim is not None:
+        # K9: an aimed shot in a pre-transform frame: the circle through P, X0, Q0
+        walk.gc = gc_through(FC(p0), exact_aim, q0e)
     if walk.line is not None:
         _add_line_endpoints(walk, b0)
     walk_from(walk, b0, None)

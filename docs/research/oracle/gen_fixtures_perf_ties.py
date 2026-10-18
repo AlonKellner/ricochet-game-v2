@@ -69,6 +69,21 @@ def main():
     assert hits_near(f, 600.0, 400.0) == [3], [(e["kind"], e["surface_id"], e.get("x"), e.get("y")) for e in f["expected"]]
     fx.append(f)
 
+    # K9: a pre-transform level (playground/pre_inverted), plan [2 L, 3 L, 4 R],
+    # the cursor on surface 4's carrier: its image X = (0, 880) is the corner of
+    # surface 4's and surface 8's carriers, which the start circle (through the
+    # player, X and Q0: exact) passes. Both hits there in id order.
+    d = json.load(open(os.path.join(ROOT, "bench", "scenes", "playground__pre_inverted.surfaces.json")))
+    plan = [(2, T.LEFT), (3, T.LEFT), (4, T.RIGHT)]
+    # (the planned walk from (1350, 443.33334) reaches the cursor at once in the
+    # oracle and after the lap natively: K7, docs/TDD_14_VISIBILITY.md)
+    for player, modes in (((760.0, 640.0), ("physical", "planned")), ((1350.0, 443.33334), ("physical",))):
+        for mode in modes:
+            f = fixture("k9_pre_inverted_%d_%s" % (int(player[0]), mode), d["surfaces"], player, plan=plan, mode=mode, cursor=(1900.0, 880.0))
+            if mode == "physical":
+                assert hits_near(f, 0.0, 880.0) == [4, 8], (f["name"], hits_near(f, 0.0, 880.0))
+            fx.append(f)
+
     out = os.path.join(ROOT, "bench", "fixtures", "perf_circle_ties.json")
     json.dump({"dps": mp.mp.dps, "fixtures": fx}, open(out, "w"), indent=1)
     for f in fx:

@@ -2526,7 +2526,7 @@ In the beam solver, provenance takes three forms (`beam_solver.gd` header, `trac
   - the reflection of an exact line in a line mirror (an exact map of the coefficients);
   - an exact line inverted in a circle whose center it contains;
   - an exact projective exit.
-- **Exact circles** (Perf P2b): every beam of an epoch is the image of a line under the frame's maps, so a beam that had an exact line keeps an exact **generalized circle** `A (x² + y²) + B x + C y + D = 0` through every reflection, inversion and portal translation since. It is carried lazily: the exact line and the maps, made exact only when a decision needs it, within an exact-data budget. The stack saves and restores it. A projective, a rotated portal or a beam that never had an exact line has none, and makes no exact claim.
+- **Exact circles** (Perf P2b): every beam of an epoch is the image of a line under the frame's maps, so a beam that had an exact line (or, K9, an aimed pre-transform start: the circle through the player, the exact aim image and `Q0`) keeps an exact **generalized circle** `A (x² + y²) + B x + C y + D = 0` through every reflection, inversion and portal translation since. It is carried lazily: the exact line and the maps, made exact only when a decision needs it, within an exact-data budget. The stack saves and restores it. A projective, a rotated portal or a beam that never had an exact line has none, and makes no exact claim.
 - **The provenance stack:** re-applying the surface on top of the stack (or hitting a portal's pair) pops it and restores the earlier beam *object*. A projective clears the stack and starts a new epoch. `frame_id` identifies `(epoch, stack)`.
 
 ### 31.5 Precision and stability (formerly: frame composition stability)
@@ -2642,4 +2642,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.20.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.21.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

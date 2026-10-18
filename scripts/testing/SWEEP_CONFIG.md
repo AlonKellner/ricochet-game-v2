@@ -39,10 +39,10 @@ player positions, and so the goldens' inputs, are unchanged.
 **Known findings** (`KNOWN_FINDINGS` in `tests/test_invariant_sweep.gd` and
 `tests/test_visibility_sweep.gd`: reported, not failed; the sweep fails if one
 stops occurring). K1 was resolved by Stage 105, K2 and K3 by Stage 106
-(docs/TDD_10_NATIVE_MIGRATION.md), K8 by Stage 110's exact member cursors.
-Open (docs/TDD_14_VISIBILITY.md): K7 (visibility, measure zero: a cursor
-exactly on a planned carrier) and K9 (pre_inverted, plan [2 L, 3 L, 4 R], a
-carrier cursor: DIRECTION-ONLY and PHYSICS-COMPLIANCE).
+(docs/TDD_10_NATIVE_MIGRATION.md), K8 by Stage 110's exact member cursors,
+K9 by exact pre-transform starts and zero-length steps (2026-10-18). Open
+(docs/TDD_14_VISIBILITY.md): K7 (visibility, measure zero: a cursor exactly on
+a planned carrier).
 
 The invariants are the checks of `rc/invariants.hpp` (`check_all`): UX7,
 PREVIEW-NOGAPS, S16, GREEN-FROM-PLAYER, ORIGIN-NOT-REHIT, SINGLE-DIVERGENCE,
