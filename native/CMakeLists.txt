@@ -5,9 +5,10 @@
 #   rc_tests       doctest executable, registered with ctest tests/
 #
 # Configure/build from the repo root:
-#   cmake -S native -B native/build -DCMAKE_BUILD_TYPE=RelWithDebInfo
-#   cmake --build native/build -j
-#   ctest --test-dir native/build --output-on-failure
+#   make core      # rc_tests alone (native/build-core, RC_BUILD_EXTENSION=OFF)
+#   make check     # core + ctest (AREA=solver|vis|goldens|all, or TC=<doctest filter>)
+#   make native    # the extension (native/build, RC_BUILD_TESTS=OFF) for Godot
+#   (docs/WORKFLOW.md)
 cmake_minimum_required(VERSION 3.25)
 project(ricochet_native LANGUAGES CXX)
 
@@ -16,6 +17,16 @@ option(RC_BUILD_EXTENSION "Build godot-cpp and the ricochet_gd GDExtension libra
 set(RC_SANITIZE "" CACHE STRING "Comma-separated -fsanitize= list for every target, e.g. address,undefined")
 set(RC_EXTENSION_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/bin" CACHE PATH
     "Where the GDExtension library is written (ricochet.gdextension points at native/bin)")
+
+# ccache when installed (the Makefile passes nothing: a tree configured before
+# ccache was installed keeps its rules). Content-keyed, so a branch switch or a
+# stash that restores a file compiles nothing twice.
+if(NOT DEFINED CMAKE_CXX_COMPILER_LAUNCHER)
+    find_program(RC_CCACHE ccache)
+    if(RC_CCACHE)
+        set(CMAKE_CXX_COMPILER_LAUNCHER "${RC_CCACHE}" CACHE STRING "compiler launcher (ccache)")
+    endif()
+endif()
 
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -68,7 +79,7 @@ if(RC_BUILD_EXTENSION)
     set(GODOTCPP_TARGET "template_debug" CACHE STRING "godot-cpp target: template_debug|template_release|editor")
     set(GODOTCPP_API_VERSION "4.7" CACHE STRING "Bundled extension_api-<ver>.json to generate bindings from")
     set(GODOTCPP_PRECISION "single" CACHE STRING "Must match the engine build (this project is single precision)")
-    set(GODOTCPP_USE_HOT_RELOAD ON CACHE BOOL "ricochet.gdextension sets reloadable = true")
+    set(GODOTCPP_USE_HOT_RELOAD ON CACHE BOOL "hot reload support in the bindings (ricochet.gdextension has reloadable = false: the library is loaded once)")
     set(GODOTCPP_SYSTEM_HEADERS ON CACHE BOOL "godot-cpp headers are not held to the rc warning flags")
     add_subdirectory(extern/godot-cpp SYSTEM)
 
@@ -113,8 +124,16 @@ if(RC_BUILD_TESTS)
     set(RC_SWEEP_PARTS 6 CACHE STRING "ctest entries the sweep goldens replay is split into")
     set(RC_HEAVY_CASES "goldens: the sweep combos*,Stage 105: on coincidence*,Stage 106: pops at known points*,visibility:*")
     add_test(NAME rc_tests COMMAND rc_tests "--test-case-exclude=${RC_HEAVY_CASES}")
-    add_test(NAME rc_tests_tier_independence COMMAND rc_tests "--test-case=Stage 105: on coincidence*")
-    add_test(NAME rc_tests_pop_tiers COMMAND rc_tests "--test-case=Stage 106: pops at known points*")
+    # the two random-scene walks (the ASan critical path) in RC_CASE_PARTS parts
+    # each (RC_CASE_PART: the k-th scene of every n, the scenes drawn as unsharded)
+    set(RC_CASE_PARTS 4 CACHE STRING "ctest entries the Stage 105/106 random-scene cases are split into")
+    math(EXPR RC_CASE_LAST "${RC_CASE_PARTS} - 1")
+    foreach(part RANGE ${RC_CASE_LAST})
+        add_test(NAME rc_tests_tier_independence_${part} COMMAND rc_tests "--test-case=Stage 105: on coincidence*")
+        add_test(NAME rc_tests_pop_tiers_${part} COMMAND rc_tests "--test-case=Stage 106: pops at known points*")
+        set_tests_properties(rc_tests_tier_independence_${part} rc_tests_pop_tiers_${part}
+            PROPERTIES ENVIRONMENT "RC_CASE_PART=${part}/${RC_CASE_PARTS}")
+    endforeach()
     # Stage 110: the visibility region against its definition on the shipped
     # levels. The two level loops (the plans' pin, the structure checks) run in
     # RC_VIS_PARTS parts over the level files (RC_VIS_PART); the rest together.

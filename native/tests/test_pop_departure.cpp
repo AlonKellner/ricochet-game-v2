@@ -5,6 +5,7 @@
 // test_infinity.cpp; here: the tag, the invariant, and tier independence on
 // random scenes whose players and cursors stand exactly on circle mirrors.
 #include "json_defs.hpp"
+#include "parts.hpp"
 #include "rc/invariants.hpp"
 #include "rc/solver.hpp"
 
@@ -130,6 +131,9 @@ TEST_CASE("Stage 106: a pop at the player's point tags it as the departure point
 
 TEST_CASE("Stage 106: pops at known points on random scenes: every tier agrees, nothing re-applies in place") {
 	std::mt19937_64 rng(1061);
+	// RC_CASE_PART=k/n: this part walks the k-th scene of every n (the scenes are
+	// drawn as in the whole run: the rng is consumed before the part is skipped)
+	const rc_test::Part part = rc_test::part_of("RC_CASE_PART");
 	int walks = 0;
 	int pops = 0;
 	int differing = 0;
@@ -158,7 +162,7 @@ TEST_CASE("Stage 106: pops at known points on random scenes: every tier agrees, 
 			qx = 64.0 * double(2 + rng() % 26);
 			qy = 64.0 * double(1 + rng() % 15);
 		}
-		if (qx == P[0] && qy == P[1]) {
+		if ((qx == P[0] && qy == P[1]) || !part.takes(k)) {
 			continue;
 		}
 		const std::vector<std::vector<PlanItem>> plans = {{}, {PlanItem{1, true, std::nullopt, std::nullopt}}};
@@ -188,8 +192,8 @@ TEST_CASE("Stage 106: pops at known points on random scenes: every tier agrees, 
 			}
 		}
 	}
-	MESSAGE("walks: " << walks << ", pops at float64: " << pops << ", tiers differing: " << differing);
-	CHECK(walks > 800);
-	CHECK(pops > 200);
+	MESSAGE("walks: " << walks << ", pops at float64: " << pops << ", tiers differing: " << differing << " (part " << part.k << "/" << part.n << ")");
+	CHECK(walks * part.n > 800);
+	CHECK(pops * part.n > 200);
 	CHECK(differing == 0);
 }

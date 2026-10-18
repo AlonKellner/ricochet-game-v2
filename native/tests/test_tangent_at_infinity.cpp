@@ -6,6 +6,7 @@
 // scenes full of exact coincidences, every precision tier makes the same
 // decisions.
 #include "json_defs.hpp"
+#include "parts.hpp"
 #include "rc/solver.hpp"
 
 #include <doctest/doctest.h>
@@ -252,10 +253,14 @@ std::string joined(const std::vector<std::string> &v, size_t n) {
 
 TEST_CASE("Stage 105: on coincidence-rich scenes every tier makes the same decisions (K1's property)") {
 	std::mt19937_64 rng(1053);
+	// RC_CASE_PART=k/n: this part walks the k-th scene of every n (the scenes are
+	// drawn as in the whole run: the rng is consumed before the part is skipped)
+	const rc_test::Part part = rc_test::part_of("RC_CASE_PART");
 	int walks = 0;
 	int differing = 0;
 	int compared = 0;
 	int whole = 0;
+	int taken = 0;
 	for (int k = 0; k < 400; k++) {
 		double q0x = 0, q0y = 0;
 		const std::vector<SurfaceDef> defs = coincidence_scene(rng, q0x, q0y, k % 2 == 0);
@@ -263,6 +268,10 @@ TEST_CASE("Stage 105: on coincidence-rich scenes every tier makes the same decis
 		const double px = q0x + 64.0 * (double(rng() % 9) - 4.0) + 32.0, py = q0y + 64.0 * (double(rng() % 7) - 3.0) + 16.0;
 		const double dirs[][2] = {{1, 0}, {0, 1}, {-1, 0}, {0, -1}, {1, 1}, {2, -1}, {-3, 4}};
 		const double *d = dirs[rng() % 7];
+		if (!part.takes(k)) {
+			continue;
+		}
+		taken++;
 		bool cut_a = false, cut_b = false, cut_c = false, cut_e = false;
 		const std::vector<std::string> a = structure<F64>(defs, F64{1}, px, py, d[0], d[1], cut_a);
 		const std::vector<std::string> b = structure<Dual>(defs, Dual{1, 0}, px, py, d[0], d[1], cut_b);
@@ -291,10 +300,11 @@ TEST_CASE("Stage 105: on coincidence-rich scenes every tier makes the same decis
 		}
 		walks++;
 	}
-	MESSAGE("events compared: " << compared << ", walks exact throughout: " << whole << ", parting away from Q: " << differing);
-	CHECK(compared > 4000);
-	CHECK(whole > 200);
-	CHECK(walks == 400);
+	MESSAGE("events compared: " << compared << ", walks exact throughout: " << whole << ", parting away from Q: " << differing << " (part " << part.k << "/"
+																				<< part.n << ")");
+	CHECK(compared * part.n > 4000);
+	CHECK(whole * part.n > 200);
+	CHECK(walks == taken);
 	CHECK(differing <= 4); // ties away from Q are rare in these scenes
 }
 

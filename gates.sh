@@ -1,15 +1,16 @@
 #!/usr/bin/env bash
-# Every gate before a commit, in order, with one timed summary:
-#   the native build, the oracle tests, ctest (RelWithDebInfo), the GUT suite
-#   (run_tests_parallel.sh), ctest under ASan+UBSan (alone: nothing else runs
-#   meanwhile), and the goldens unchanged (git diff --stat bench/goldens).
+# The gates, in order, with one timed summary (docs/WORKFLOW.md):
+#   LEVEL=commit (make gate): the core build, the oracle, ctest (RelWithDebInfo,
+#     build-core), the extension build, the GUT suite, the goldens unchanged.
+#   LEVEL=merge (make gates): the same, then ctest under ASan+UBSan (build-asan).
 # Every gate runs even after a failure; the exit status is nonzero if any failed.
-# Logs: $LOGDIR (printed). JOBS bounds the compiles (default 4).
+# Logs: $LOGDIR (printed). JOBS bounds the compiles (default: every core).
 #
-#   ./gates.sh          # or: make gates
+#   LEVEL=commit ./gates.sh     # or: make gate
+#   LEVEL=merge ./gates.sh      # or: make gates
 set -uo pipefail
 cd "$(dirname "$0")"
-JOBS="${JOBS:-4}"
+LEVEL="${LEVEL:-merge}"
 LOGDIR=$(mktemp -d "${TMPDIR:-/tmp}/ricochet_gates.XXXXXX")
 declare -a NAMES SECS RESULTS
 status=0
@@ -36,11 +37,14 @@ goldens_unchanged() {
 	[ -z "$d" ] || { echo "$d"; return 1; }
 }
 
-gate native make native JOBS="$JOBS"
+gate core make core
 gate oracle make -s oracle-test
 gate ctest make ctest
-gate gut env -u JOBS SKIP_ORACLE=1 ./run_tests_parallel.sh # every core (JOBS here bounds compiles)
-gate asan make native-asan JOBS="$JOBS"
+gate native make native
+gate gut env SKIP_ORACLE=1 SKIP_BUILD=1 ./run_tests_parallel.sh
+if [ "$LEVEL" = merge ]; then
+	gate asan make native-asan
+fi
 gate goldens goldens_unchanged
 
 echo
@@ -52,5 +56,5 @@ for i in "${!NAMES[@]}"; do
 done
 grep -h "Passing (" "$LOGDIR/gut.log" 2>/dev/null
 grep -h "known finding" "$(sed -n 's/.*(logs: \(.*\))/\1/p' "$LOGDIR/gut.log" | head -1)"/*.log 2>/dev/null | sort | uniq -c
-printf "%-10s %6d  %s   (logs: %s)\n" total "$total" "$([ $status = 0 ] && echo ok || echo FAIL)" "$LOGDIR"
+printf "%-10s %6d  %s   (LEVEL=%s, logs: %s)\n" total "$total" "$([ $status = 0 ] && echo ok || echo FAIL)" "$LEVEL" "$LOGDIR"
 exit $status

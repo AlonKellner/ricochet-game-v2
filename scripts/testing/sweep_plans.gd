@@ -4,9 +4,9 @@ extends RefCounted
 # The scenes, plans and positions the invariant sweeps check, in one place:
 # tests/test_invariant_sweep.gd, tests/test_invariant_combos.gd,
 # tests/test_precision_invariant_sweep.gd and scripts/testing/violation_viewer.gd
-# read the same definitions; bench/goldens/sweeps.json (dumped from these at
-# tag pre-native, replayed by native/tests/test_goldens.cpp) pins exactly what
-# the suite sweeps.
+# read the same definitions; bench/goldens/sweeps.json (dumped from these by
+# tools/dump_goldens.gd at tag pre-native, replayed by native/tests/test_goldens.cpp)
+# pins exactly what the suite sweeps.
 
 const TEST_LEVELS_DIR := "res://scenes/test_levels/"
 const PLAYGROUND_DIR := "res://scenes/playground/"

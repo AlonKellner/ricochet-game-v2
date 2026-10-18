@@ -1,5 +1,7 @@
-// The pre-native goldens (bench/goldens/*.json, tools/dump_goldens.gd): every
-// native tier must reproduce the GDScript stack bit for bit. Inputs are the
+// The pre-native goldens (bench/goldens/*.json, dumped by tools/dump_goldens.gd
+// at tag pre-native; the script is gone since Stage 99, the goldens are only
+// re-blessed: make judge, make rebless): every native tier must reproduce the
+// GDScript stack bit for bit. Inputs are the
 // bit patterns GDScript parsed (Godot's decimal parsing is not correctly rounded).
 #include "goldens.hpp"
 
@@ -604,7 +606,7 @@ TEST_CASE("goldens: anchored chains, image chains and pole chains of the main co
 
 namespace {
 
-// tools/dump_goldens.gd: h32v / h64 / step_canon / path_canon / pair_canon / sha16.
+// The canonical forms of tools/dump_goldens.gd (tag pre-native): h32v / h64 / step_canon / path_canon / pair_canon / sha16.
 std::string h32v(const V2 &v) {
 	unsigned char b[8];
 	std::memcpy(b, &v.x, 4);

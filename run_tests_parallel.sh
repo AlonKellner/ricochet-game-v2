@@ -10,16 +10,17 @@
 #   ./run_tests_parallel.sh            # JOBS = performance cores
 #   JOBS=4 ./run_tests_parallel.sh
 #   SKIP_ORACLE=1 ./run_tests_parallel.sh   # the oracle runs elsewhere (make gates)
+#   SKIP_BUILD=1 ./run_tests_parallel.sh    # the extension is built already (gates.sh)
 #
 # Jobs start longest first (the visibility sweep, in 2 x JOBS shards so its
-# tail balances), then the shorter sweeps, then the other files.
+# tail balances), then the other files, then the shorter sweeps.
 set -uo pipefail
 
 GODOT="${GODOT_BIN:-godot}"
 cd "$(dirname "$0")"
 
 # fail fast: the tests/native/ files need native/bin/ and the import step
-if ! GODOT_BIN="$GODOT" make native; then
+if [ -z "${SKIP_BUILD:-}" ] && ! GODOT_BIN="$GODOT" make native; then
 	echo "!! native build failed (make native); not running the suite"
 	exit 1
 fi
