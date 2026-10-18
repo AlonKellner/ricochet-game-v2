@@ -591,6 +591,7 @@ class Walk:
     # B5 (Stage 110): the point being crossed (a run of tied candidates), with
     # the planned walk's shadow over it -- see _Point
     point: object = None
+    max_hits: int = MAX_HITS   # the event budget (Stage 111: the realization decides with a wider one)
 
 
 @dataclass
@@ -977,7 +978,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             walk.count += 1
             if sid == INFINITY_ID:
                 q_pt = snapped.get((INFINITY_ID, t))   # None: the real infinity
-                if walk.count > MAX_HITS:
+                if walk.count > walk.max_hits:
                     walk.events.append(Event("max", INFINITY_ID, point=q_pt, t=t, beam=beam))
                     walk.done = True
                     return
@@ -992,7 +993,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 if consumed:
                     _late_cursor(walk, beam, cands, ci, key, t0)
                 continue
-            if walk.count > MAX_HITS:
+            if walk.count > walk.max_hits:
                 # the trace is cut at the next crossing (drawn up to it, no effect)
                 mp_ = beam.p if (rehit and fresh) else snapped.get((sid, t), beam.at(t))
                 walk.events.append(Event("max", point=mp_, t=t, beam=beam))
@@ -1108,7 +1109,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             # nothing fired on the full loop: a line escapes through infinity;
             # a circle closes at its departure point (beam.at(t0)) and repeats
             walk.count += 1
-            if walk.count <= MAX_HITS:
+            if walk.count <= walk.max_hits:
                 if beam.kappa == 0:
                     walk.events.append(Event("escape"))
                 else:
@@ -1700,12 +1701,13 @@ def trace_physical_direction(surfaces, player, direction, plan=(), cursor=None, 
 
 
 def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="direction", flags=None,
-                         extra_known=(), proj_hits=None, beam=None, exact_aim=None, spans=None):
+                         extra_known=(), proj_hits=None, beam=None, exact_aim=None, spans=None, max_hits=MAX_HITS):
     """line: the initial beam's exact implicit line; "direction": `direction`
     is exact data; None: not exact. beam: the initial beam itself (a scene
     with a pre-transform: the circle through Q0); else the straight beam
     along `direction`, or the circle through Q0 tangent to it."""
     walk = Walk(hittable(surfaces), list(plan), cursor, mode, PHYSICAL)
+    walk.max_hits = max_hits
     walk.plan_spans = spans
     walk.flags = dict(flags or {})
     walk.flags_before = walk.flags
@@ -1919,16 +1921,30 @@ def first_entry(surfaces, plan, flags=None):
     return None
 
 
-def _first_firing(beam, surf, side, tq, line=None):
+def _first_firing(beam, surf, side, tq, line=None, pole=None, Q=None):
     """(t, q) of the first crossing of surf's carrier from `side` along the
     beam from t = 0 in the walker's projective order (t > 0 ascending, the
     pole, t <= 0 ascending; at one parameter the hit before the pole), with q
-    = the pole was passed first; None when no crossing fires the entry."""
+    = the pole was passed first; None when no crossing fires the entry.
+    pole: the exact pole record of a pre-transform start (Stage 105): a
+    carrier through Q tangent there is a touch; else it is crossed exactly at
+    Q -- its root nearest Q is Q's parameter, so the hit and the passage tie."""
     if line is not None and surf.seg.kind != "line" and _tangent(line, surf.seg):
         return None         # a tangent touch is not a crossing (exact)
-    rs = [t for t in roots(beam, surf, False) if t != 0]
+    through_q = False
+    if pole is not None and Q is not None and _pole_on(pole, surf.seg):
+        if _pole_tangent(pole, surf.seg):
+            return None
+        through_q = True
+    # (a crossing at t = 0 -- the player on the carrier -- is met last, after
+    # the full loop; one at t = inf -- the antipode of a circle beam -- at the
+    # wrap: as the walker orders them)
+    rs = list(roots(beam, surf, False))
     if len(rs) == 2 and rs[0] == rs[1]:
         return None         # a double root: a touch
+    if through_q and tq is not None and rs:
+        best = min(range(len(rs)), key=lambda i: abs(beam.at(rs[i]) - Q))
+        rs[best] = tq
     cands = [(sort_key(t, mp.mpf(0)), 1, t) for t in rs]
     if tq is not None and tq != 0:
         cands.append((sort_key(tq, mp.mpf(0)), 3, tq))
@@ -1963,6 +1979,7 @@ def realization(surfaces, player, cursor, plan, flags=None, hints=None):
         return fallback     # the aim image at infinity or the player itself (K3)
     q0 = pre_q(surfaces)
     p = P(player)
+    pole = None
     if q0 is None:
         b = Beam(p, d / abs(d), mp.mpf(0))
         line = initial_line(surfaces, player, cursor, plan, flags)
@@ -1971,6 +1988,12 @@ def realization(surfaces, player, cursor, plan, flags=None, hints=None):
             return fallback     # the player at the frame's infinity: every aim degenerates
         b = beam_through(p, p + d, q0)
         line = None
+        # the exact pole record of the start (Stage 105): the circle through
+        # the player, the exact aim image and Q0
+        q0e = pre_q_exact(surfaces)
+        xe = exact_image(surfaces, cursor, plan, flags)
+        if q0e is not None and xe is not None:
+            pole = pole_start_aimed(FC(p), xe, q0e)
     by_id = {s.id: s for s in surfaces}
     surf = by_id[plan[j][0]]
     side = plan[j][1]
@@ -1979,7 +2002,7 @@ def realization(surfaces, player, cursor, plan, flags=None, hints=None):
         tq = None if q0 is None else bm.param_of(q0)
         if q0 is None:
             tq = mp.inf
-        r = _first_firing(bm, surf, side, tq, line)
+        r = _first_firing(bm, surf, side, tq, line, pole, q0)
         if r is not None:
             found[name] = r[1]
     if len(found) == 1:
@@ -2007,9 +2030,11 @@ def _planned_oriented(surfaces, player, cursor, plan, flags, hints, away):
     """The planned walk of the aim in the given orientation (no realization
     lookup: realization itself uses it)."""
     d, line, known, beam, xe = _aim_oriented(surfaces, player, cursor, plan, flags, hints, away)
+    # the plan's order is a question of geometry, not of the event budget: a
+    # wide one, so that a realization cut by MAX_HITS still counts as reaching
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
                                 extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
-                                beam=beam, exact_aim=xe)
+                                beam=beam, exact_aim=xe, max_hits=8 * MAX_HITS)
 
 
 def _aim(surfaces, player, cursor, plan, flags=None, hints=None):

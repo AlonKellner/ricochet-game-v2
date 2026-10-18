@@ -34,15 +34,30 @@ def planned_pair(fx, name, surfs, player, cursor, ids, sides_only=None, clicks=N
     """Planned and physical fixtures of a plan over `ids`, with the plan sides
     chosen as the first combination whose planned trace reaches the cursor
     (or exactly `sides_only`)."""
-    combos = [sides_only] if sides_only else itertools.product(("LEFT", "RIGHT"), repeat=len(ids))
+    combos = [sides_only] if sides_only else list(itertools.product(("LEFT", "RIGHT"), repeat=len(ids)))
+    # Stage 111: a plan's realization is fixed by its first entry, so a far
+    # side now reaches the cursor the other way round, through infinity,
+    # where the room's walls stop the shot: the combination whose physical
+    # trace reaches too (realizable) is preferred, the first planned-only
+    # one taken otherwise
+    found = None
     for sides in combos:
         plan = [(i, sd) if not clicks or clicks[k] is None else (i, sd, clicks[k])
                 for k, (i, sd) in enumerate(zip(ids, sides))]
         f = fixture(name + "_planned", surfs, player, plan=plan, mode="planned", cursor=cursor)
-        if reaches(f):
+        if not reaches(f):
+            continue
+        g = fixture(name + "_physical", surfs, player, plan=plan, mode="physical", cursor=cursor)
+        if reaches(g):
             fx.append(f)
-            fx.append(fixture(name + "_physical", surfs, player, plan=plan, mode="physical", cursor=cursor))
+            fx.append(g)
             return f
+        if found is None:
+            found = (f, g)
+    if found is not None:
+        fx.append(found[0])
+        fx.append(found[1])
+        return found[0]
     raise AssertionError("%s: no side combination reaches the cursor" % name)
 
 

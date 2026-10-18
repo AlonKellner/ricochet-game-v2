@@ -46,14 +46,24 @@ def pair_search(fx, name, surfs, player, cursor, entries):
     surface entries whose planned trace reaches the cursor is recorded."""
     import itertools
     ids = [e for e in entries if e is not INF]
+    found = None
     for sides in itertools.product(("LEFT", "RIGHT"), repeat=len(ids)):
         it = iter(sides)
         plan = [INF if e is INF else (e, next(it)) for e in entries]
         p = fixture(name + "_planned", surfs, player, plan=plan, mode="planned", cursor=cursor)
-        if reaches(p):
+        if not reaches(p):
+            continue
+        q = fixture(name + "_physical", surfs, player, plan=plan, mode="physical", cursor=cursor)
+        if reaches(q):     # realizable: preferred (Stage 111: see gen_fixtures_stage87.planned_pair)
             fx.append(p)
-            fx.append(fixture(name + "_physical", surfs, player, plan=plan, mode="physical", cursor=cursor))
+            fx.append(q)
             return p
+        if found is None:
+            found = (p, q)
+    if found is not None:
+        fx.append(found[0])
+        fx.append(found[1])
+        return found[0]
     raise AssertionError("%s: no side combination reaches the cursor" % name)
 
 
