@@ -8,10 +8,7 @@
 
 [node name="Main" type="Node2D"]
 script = ExtResource("2")
-gravity = Vector2(0, 0)
-room_rect = Rect2(300, 240, 1400, 600)
-build_room = true
-mirror_lines = [Vector4(700, 300, 700, 780), Vector4(1200, 300, 1200, 780)]
+level_path = "res://data/levels/test_levels/parallel_mirrors.json"
 
 [node name="Background" type="ColorRect" parent="."]
 offset_right = 1920.0

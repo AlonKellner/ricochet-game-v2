@@ -40,7 +40,7 @@ core:
 
 # The inner loop: core, then the ctest entries of an area, or one doctest filter.
 #   make check                      # every entry (~20 s)
-#   make check AREA=solver|vis|goldens
+#   make check AREA=solver|vis|goldens|sweeps|game
 #   make check TC="Stage 111*"      # rc_tests -tc=<filter> (--no-skip with SKIP=0)
 AREA ?= all
 TC ?=
@@ -49,6 +49,7 @@ check_re_solver := ^rc_tests$$|tier_independence|pop_tiers|sweep_goldens
 check_re_vis := visibility
 check_re_goldens := ^rc_tests$$|sweep_goldens
 check_re_sweeps := rc_sweeps
+check_re_game := ^rcg
 check: core
 	@if [ -n "$(TC)" ]; then $(BUILD_CORE)/rc_tests -tc="$(TC)" $(if $(filter 0,$(SKIP)),--no-skip,); \
 	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --output-on-failure -R '$(check_re_$(AREA))'; fi

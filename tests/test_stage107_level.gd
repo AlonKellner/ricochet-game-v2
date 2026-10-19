@@ -1,7 +1,7 @@
 extends GutTest
 
-# Stage 107: the interactive level (scenes/test_levels/hit_effects.tscn, made by
-# scripts/testing/make_hit_effects_level.gd) loads, builds every spec, plays
+# Stage 107: the interactive level (scenes/test_levels/hit_effects.tscn, its data
+# data/levels/test_levels/hit_effects.json) loads, builds every spec, plays
 # its scripted interactions, and passes the invariant sweep -- as built and
 # after spawns landed (presence-gated groups and spent hosts in the scene).
 
@@ -33,8 +33,10 @@ func test_stage107_level_builds():
 	await get_tree().process_frame
 	assert_not_null(scene.world)
 	assert_not_null(scene.get_node_or_null("SpawnPreview"), "a level that can spawn previews it")
-	assert_eq(scene.surface_specs.size(), 11)
-	for spec: SurfaceSpec in scene.surface_specs:
+	# the level's own specs (Stage 115: its data, data/levels/test_levels/hit_effects.json)
+	var specs: Array = scene.level_specs.filter(func(e): return e["label"] == "Spec").map(func(e): return e["spec"])
+	assert_eq(specs.size(), 11)
+	for spec: SurfaceSpec in specs:
 		assert_eq(spec.validate(), [] as Array[String])
 	var portal := _at(scene, Vector2(1000, 150))
 	assert_not_null(portal)

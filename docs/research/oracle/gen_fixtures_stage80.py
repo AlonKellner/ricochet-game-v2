@@ -17,7 +17,7 @@ import mpmath as mp
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from beam import Beam                                      # noqa: E402
 from geometry import Seg, on_segment, seg_hits, side_at    # noqa: E402
-from tscn_import import full_circle_points                 # noqa: E402
+from level_json import full_circle_points                 # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 OUT = os.path.join(ROOT, "bench", "fixtures", "stage80_geometry.json")

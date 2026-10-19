@@ -153,7 +153,8 @@ while they are stale, and the generators read them.
 
 | Data | Producer | Target | Consumers |
 |---|---|---|---|
-| `bench/scenes/*.surfaces.json` (the levels as surface defs) | `scripts/testing/dump_scene_surfaces.gd` (Godot) | `make dumps` | the native visibility tests, the generators, `tscn_import.py`'s parity test |
+| `data/levels/**/*.json` (the levels, `rc-level/1`, `docs/LEVEL_FORMAT.md`; the source of truth since Stage 115) | edited by hand; their canonical spelling `docs/research/levels/level_fmt.py` | -- | the game (`LevelSettings.level_path`), `rcg_tests` and the oracle's parity with the dumps |
+| `bench/scenes/*.surfaces.json` (the levels as surface defs) | `scripts/testing/dump_scene_surfaces.gd` (Godot) | `make dumps` | the native visibility tests, the generators, the level data's parity tests (native and Python) |
 | `bench/fixtures/*.json` | `docs/research/oracle/gen_fixtures_*.py` | `make regen` / `make regen-apply` | GUT and native fixture tests |
 | `bench/scenes_corpus/{scenarios,expected}` | `docs/research/oracle/gen_scene_corpus.py` | `make regen` / `make regen-apply` | the GUT corpus test, `test_corpus_oracle.cpp`, the corpus goldens |
 | `bench/goldens/*.json` | dumped at tag `pre-native` (the script is gone); re-blessed only | `make judge`, the user's approval, `make rebless APPROVED=1` | `test_goldens.cpp`, `test_visibility.cpp` (regions) |

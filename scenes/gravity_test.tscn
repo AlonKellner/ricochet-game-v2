@@ -9,8 +9,7 @@ b = Vector2(1920, 0)
 
 [node name="Main" type="Node2D"]
 script = ExtResource("2")
-gravity = Vector2(0, 980)
-build_room = false
+level_path = "res://data/levels/gravity_test.json"
 
 [node name="Floor" type="StaticBody2D" parent="."]
 position = Vector2(0, 800)

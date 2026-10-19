@@ -225,9 +225,10 @@ static func bounded_runner(scene: Node, grid: int, fuzz: int, seed: int) -> Swee
 # inversion circle is another coincidence, not this one.)
 static func q0_positions(scene: Node) -> Array[Vector2]:
 	var out: Array[Vector2] = []
-	if not "pre_transform_inversions" in scene or scene.pre_transform_inversions.size() < 3:
+	var pre: PackedFloat64Array = scene.pre_transform_circles() if scene.has_method("pre_transform_circles") else PackedFloat64Array()
+	if pre.size() < 3:
 		return out
-	var q0 := Vector2(scene.pre_transform_inversions[0], scene.pre_transform_inversions[1])
+	var q0 := Vector2(pre[0], pre[1])
 	for d in [Vector2(-200, 100), Vector2(-125, 125), Vector2(-200, -100), Vector2(-125, -125), Vector2(125, 125)]:
 		out.append(q0 + d)
 	return out

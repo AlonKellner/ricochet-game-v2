@@ -10,6 +10,7 @@
 #include "gd_visual.hpp"
 #include "gd_invariants.hpp"
 #include "gd_visibility.hpp"
+#include "gd_level.hpp"
 #include "rc/error.hpp"
 
 #include <gdextension_interface.h>
@@ -29,6 +30,8 @@ void initialize_ricochet_module(godot::ModuleInitializationLevel p_level) {
         godot::UtilityFunctions::push_error(godot::String(message));
     });
 
+    // Stage 115: the level data, read natively
+    GDREGISTER_CLASS(RcgLevel);
     GDREGISTER_CLASS(NativeProbeChild);
     GDREGISTER_CLASS(NativeProbe);
     // Stage 90: scalar tiers

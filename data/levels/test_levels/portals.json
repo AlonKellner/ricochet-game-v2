@@ -1,0 +1,256 @@
+{
+ "background": {
+  "color": [0.10000000149011612, 0.10000000149011612, 0.10000000149011612, 1.0],
+  "rect": [0.0, 0.0, 1920.0, 1080.0]
+ },
+ "bounds": [0.0, 0.0, 1920.0, 1080.0],
+ "camera": null,
+ "colliders": [],
+ "features": {
+  "arrow": false,
+  "cursor": true,
+  "game": false,
+  "hud": false,
+  "preview": true
+ },
+ "gravity": [0.0, 0.0],
+ "name": "test_levels/portals",
+ "player": {
+  "start": [650.0, 540.0]
+ },
+ "room": {
+  "built": true,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/1",
+ "surfaces": [
+  {
+   "end": [1360.0, 240.0],
+   "ids": [1],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [560.0, 240.0],
+   "via": [960.0, 240.0]
+  },
+  {
+   "end": [1360.0, 840.0],
+   "ids": [2],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1360.0, 240.0],
+   "via": [1360.0, 540.0]
+  },
+  {
+   "end": [560.0, 840.0],
+   "ids": [3],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1360.0, 840.0],
+   "via": [960.0, 840.0]
+  },
+  {
+   "end": [560.0, 240.0],
+   "ids": [4],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [560.0, 840.0],
+   "via": [560.0, 540.0]
+  },
+  {
+   "end": [960.0, 380.0],
+   "ids": [5],
+   "label": "MirrorB",
+   "left": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "start": [960.0, 280.0],
+   "via": [960.0, 330.0]
+  },
+  {
+   "end": [830.0, 740.0],
+   "ids": [6, 7],
+   "label": "Portal",
+   "left": {
+    "effect": {
+     "d": [300.0, 0.0],
+     "theta": 0.0,
+     "type": "portal"
+    },
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "d": [300.0, 0.0],
+     "theta": 0.0,
+     "type": "portal"
+    },
+    "interactive": true
+   },
+   "start": [830.0, 340.0],
+   "via": [830.0, 540.0]
+  },
+  {
+   "end": [700.0, 530.0],
+   "ids": [8, 9],
+   "label": "Portal",
+   "left": {
+    "effect": {
+     "d": [550.0, 0.0],
+     "theta": 0.0,
+     "type": "portal"
+    },
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "d": [550.0, 0.0],
+     "theta": 0.0,
+     "type": "portal"
+    },
+    "interactive": true
+   },
+   "start": [700.0, 350.0],
+   "via": [640.0, 440.0]
+  },
+  {
+   "end": [1920.0, 0.0],
+   "ids": [10],
+   "label": null,
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [0.0, 0.0],
+   "via": [960.0, 0.0]
+  },
+  {
+   "end": [1920.0, 1080.0],
+   "ids": [11],
+   "label": null,
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1920.0, 0.0],
+   "via": [1920.0, 540.0]
+  },
+  {
+   "end": [0.0, 1080.0],
+   "ids": [12],
+   "label": null,
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1920.0, 1080.0],
+   "via": [960.0, 1080.0]
+  },
+  {
+   "end": [0.0, 0.0],
+   "ids": [13],
+   "label": null,
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [0.0, 1080.0],
+   "via": [0.0, 540.0]
+  }
+ ]
+}

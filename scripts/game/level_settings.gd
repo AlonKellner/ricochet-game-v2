@@ -1,5 +1,11 @@
 extends Node2D
 
+# Stage 115.2: the level's data (rc-level/1, data/levels/*.json): when set, the
+# level is built from it (its bounds, gravity, room and surfaces in order) and
+# the arrays below are not used. Without it the level is built from them (the
+# combo base the sweeps and tests configure at run time).
+@export_file("*.json") var level_path := ""
+
 @export var gravity := Vector2(0, 0)
 @export var room_rect := Rect2(560, 240, 800, 600)
 @export var level_bounds := Rect2(0, 0, 1920, 1080)
@@ -51,8 +57,77 @@ var world: World = null
 # crossings keeps its single node, named as before
 var _nodes := {}    # surface id -> Array[SurfaceNode]
 var _prefix := {}   # surface id -> its node name prefix (no entry: not drawn)
+# Stage 115.2: the specs of a level built from its data (LevelData.surfaces)
+var level_specs: Array = []
+var _blocks := false
+
+# A level's data sets its fields before the children's _ready (they read the
+# bounds); its surfaces are built in _ready, as the arrays are.
+func _enter_tree() -> void:
+	if level_path == "" or not level_specs.is_empty():
+		return
+	var data := LevelData.load_data(level_path)
+	if data.is_empty():
+		return
+	level_bounds = LevelData.rect(data["bounds"])
+	gravity = LevelData.vec(data["gravity"])
+	room_rect = LevelData.rect(data["room"]["rect"])
+	build_room = data["room"]["built"]
+	level_specs = LevelData.surfaces(data)
+
+# Whether the level has blocks (the sweeps bound their positions by its room then).
+func has_blocks() -> bool:
+	return _blocks or block_lines.size() > 0
+
+# The pre-transform circles as (cx, cy, r) triples, from the data or the array.
+func pre_transform_circles() -> PackedFloat64Array:
+	if level_specs.is_empty():
+		return pre_transform_inversions
+	var out := PackedFloat64Array()
+	for e: Dictionary in level_specs:
+		if e["pre_transform"]:
+			out.append_array([e["spec"].center.x, e["spec"].center.y, e["spec"].radius])
+	return out
 
 func _ready() -> void:
+	if not level_specs.is_empty():
+		_build_from_data()
+	else:
+		_build_from_arrays()
+	world = World.new(surfaces)
+	surfaces = world.surfaces
+	_sync_nodes()
+	if not world.pieces().portal_crossings.is_empty():
+		push_error("crossing a portal (not split, GAME_SPEC 9.7): " + ", ".join(world.pieces().portal_crossings))
+	# the level bounds' edge: hover band and planned infinity entries (Stage 88)
+	var edge := Node2D.new()
+	edge.set_script(load("res://scripts/game/edge_overlay_node.gd"))
+	edge.name = "EdgeOverlay"
+	add_child(edge)
+	edge.setup(level_bounds)
+	# the visibility region (Stage 110) under the preview
+	if get_node_or_null("PathRenderer") != null:
+		var vis := VisibilityRenderer.new()
+		vis.name = "VisibilityRenderer"
+		add_child(vis)
+	# the spawn preview (Stage 107) where something can spawn
+	var specs: Array = level_specs.map(func(e): return e["spec"]) if not level_specs.is_empty() else surface_specs
+	if specs.any(func(s: SurfaceSpec): return not s.spawn_channels().is_empty()):
+		var preview := SpawnPreviewNode.new()
+		preview.name = "SpawnPreview"
+		add_child(preview)
+
+# The level's data, in order: a label is the node prefix (none: not drawn).
+func _build_from_data() -> void:
+	for e: Dictionary in level_specs:
+		var spec: SurfaceSpec = e["spec"]
+		if e["pre_transform"]:
+			_add_surface(Surface.pre_transform_circle(spec.center, spec.radius), e["label"])
+		else:
+			_add_spec(spec, e["label"])
+		_blocks = _blocks or e["label"] == "Block"
+
+func _build_from_arrays() -> void:
 	if build_room:
 		for wall in RoomBuilder.create_room_surfaces(room_rect):
 			_add_surface(wall, "Surface")
@@ -86,31 +161,12 @@ func _ready() -> void:
 		var pre := Surface.pre_transform_circle(Vector2(pre_transform_inversions[i], pre_transform_inversions[i + 1]),
 			pre_transform_inversions[i + 2])
 		_add_surface(pre, "PreTransform")
-	world = World.new(surfaces)
-	surfaces = world.surfaces
-	_sync_nodes()
-	if not world.pieces().portal_crossings.is_empty():
-		push_error("crossing a portal (not split, GAME_SPEC 9.7): " + ", ".join(world.pieces().portal_crossings))
-	# the level bounds' edge: hover band and planned infinity entries (Stage 88)
-	var edge := Node2D.new()
-	edge.set_script(load("res://scripts/game/edge_overlay_node.gd"))
-	edge.name = "EdgeOverlay"
-	add_child(edge)
-	edge.setup(level_bounds)
-	# the visibility region (Stage 110) under the preview
-	if get_node_or_null("PathRenderer") != null:
-		var vis := VisibilityRenderer.new()
-		vis.name = "VisibilityRenderer"
-		add_child(vis)
-	# the spawn preview (Stage 107) where something can spawn
-	if surface_specs.any(func(s: SurfaceSpec): return not s.spawn_channels().is_empty()):
-		var preview := SpawnPreviewNode.new()
-		preview.name = "SpawnPreview"
-		add_child(preview)
 
-func _add_surface(surf: Surface, prefix: String) -> void:
+# prefix null: a surface without a node (the level's edge walls)
+func _add_surface(surf: Surface, prefix) -> void:
 	surfaces.append(surf)
-	_prefix[surf.id] = prefix
+	if prefix != null:
+		_prefix[surf.id] = prefix
 
 # The nodes follow the world's pieces: a surface whose pieces changed (a
 # crossing came or went) gets new nodes, one that left the world loses them.
@@ -166,7 +222,7 @@ func apply_world_change(change: Dictionary) -> void:
 	_sync_nodes()
 
 # A spec's surfaces: one, or a portal's pair.
-func _add_spec(spec: SurfaceSpec, prefix: String) -> void:
+func _add_spec(spec: SurfaceSpec, prefix) -> void:
 	var errors := spec.validate()
 	if not errors.is_empty():
 		assert(false, "%s: %s" % [prefix, ", ".join(errors)])

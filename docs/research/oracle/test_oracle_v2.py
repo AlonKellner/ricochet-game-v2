@@ -14,7 +14,7 @@ sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 from beam import Beam                       # noqa: E402
 from geometry import (LEFT, RIGHT, P, Seg, endpoint_blocked_sides, line_hits,  # noqa: E402
                       on_segment, seg_hits, side_at)
-from tscn_import import import_scene        # noqa: E402
+from level_json import build_defs, level_names, load_level  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 mp.mp.dps = 60
@@ -30,19 +30,20 @@ def B(p, tau, k=0):
 DUMPS = sorted(glob.glob(os.path.join(ROOT, "bench", "scenes", "*.surfaces.json")))
 
 
-@pytest.mark.parametrize("dump", DUMPS, ids=[os.path.basename(d) for d in DUMPS])
-def test_tscn_import_matches_game(dump):
-    game = json.load(open(dump))
-    scene_path = os.path.join(ROOT, game["scene"].replace("res://", ""))
-    ours = import_scene(scene_path)
-    assert ours is not None
+@pytest.mark.parametrize("name", level_names())
+def test_level_data_matches_game(name):
+    """Stage 115.2: the level data built in Python equals the level dump (the
+    game's defs; a dump's zero stands for either sign: Godot's JSON drops it)."""
+    game = json.load(open(os.path.join(ROOT, "bench", "scenes", name.replace("/", "__") + ".surfaces.json")))
+    ours = build_defs(load_level(name))
     assert len(ours) == len(game["surfaces"])
     for a, b in zip(ours, game["surfaces"]):
-        assert a == b, f"{os.path.basename(dump)} surface {b['id']}: {a} != {b}"
+        assert a == b, f"{name} surface {b['id']}: {a} != {b}"
 
 
 def test_dumps_exist():
-    assert len(DUMPS) >= 25, "run scripts/testing/dump_scene_surfaces.gd first"
+    assert len(DUMPS) >= 25, "make dumps first"
+    assert len(level_names()) == len(DUMPS), "a level dump per level data file"
 
 
 # ---------------------------------------------------------------- line hits (closed forms)

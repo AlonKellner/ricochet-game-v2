@@ -1,8 +1,10 @@
 # Ricochet native toolchain (Stage 89).
 #
 #   ricochet_core  static, Godot-free (namespace rc)        core/
+#   ricochet_game  static, engine-free (namespace rcg)      game/  (Stage 115: levels, ...)
 #   ricochet_gd    shared GDExtension, links core+godot-cpp gd/   -> native/bin/
 #   rc_tests       doctest executable, registered with ctest tests/
+#   rcg_tests      doctest executable for the game layer       tests/game/
 #
 # Configure/build from the repo root:
 #   make core      # rc_tests alone (native/build-core, RC_BUILD_EXTENSION=OFF)
@@ -73,6 +75,18 @@ set_target_properties(ricochet_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 target_compile_definitions(ricochet_core PUBLIC "RC_ASSERT_ABORTS=$<IF:$<CONFIG:Debug>,1,0>")
 rc_apply_flags(ricochet_core)
 
+# ---------------------------------------------------------------- ricochet_game
+# Stage 115: the engine-free game layer (docs/TDD_20_ENGINE_AGNOSTIC_DATA.md):
+# the level data (rc-level/1) and its builder. JSON through the vendored
+# nlohmann (native/extern).
+file(GLOB RC_GAME_SOURCES CONFIGURE_DEPENDS game/src/*.cpp)
+add_library(ricochet_game STATIC ${RC_GAME_SOURCES})
+target_include_directories(ricochet_game PUBLIC game/include)
+target_include_directories(ricochet_game SYSTEM PUBLIC extern)
+target_link_libraries(ricochet_game PUBLIC ricochet_core)
+set_target_properties(ricochet_game PROPERTIES POSITION_INDEPENDENT_CODE ON)
+rc_apply_flags(ricochet_game)
+
 # ------------------------------------------------------------------ ricochet_gd
 if(RC_BUILD_EXTENSION)
     # godot-cpp options (names from extern/godot-cpp/cmake/godotcpp.cmake).
@@ -85,7 +99,7 @@ if(RC_BUILD_EXTENSION)
 
     file(GLOB RC_GD_SOURCES CONFIGURE_DEPENDS gd/*.cpp)
     add_library(ricochet_gd SHARED ${RC_GD_SOURCES})
-    target_link_libraries(ricochet_gd PRIVATE ricochet_core godot-cpp)
+    target_link_libraries(ricochet_gd PRIVATE ricochet_core ricochet_game godot-cpp)
 
     get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
     set_target_properties(ricochet_gd PROPERTIES
@@ -186,6 +200,19 @@ if(RC_BUILD_TESTS)
     add_test(NAME rc_core_no_godot
         COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/core
                 -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)
+    add_test(NAME rcg_game_no_godot
+        COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/game
+                -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)
+
+    # Stage 115: the game layer's tests (make check AREA=game)
+    file(GLOB RCG_TEST_SOURCES CONFIGURE_DEPENDS tests/game/*.cpp)
+    add_executable(rcg_tests ${RCG_TEST_SOURCES})
+    target_link_libraries(rcg_tests PRIVATE ricochet_game)
+    target_include_directories(rcg_tests SYSTEM PRIVATE extern)
+    target_include_directories(rcg_tests PRIVATE tests/support)
+    target_compile_definitions(rcg_tests PRIVATE "RC_REPO_ROOT=\"${RC_REPO_ROOT}\"")
+    rc_apply_flags(rcg_tests NO_CONVERSION)
+    add_test(NAME rcg_tests COMMAND rcg_tests)
 
     # The API file godot-cpp generated its bindings from must describe the installed binary.
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
