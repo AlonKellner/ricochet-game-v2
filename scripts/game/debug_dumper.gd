@@ -5,7 +5,7 @@ static func dump(gm) -> void:
 	var lines: PackedStringArray = []
 	lines.append("=== DEBUG STATE (F12) ===")
 
-	var player: CharacterBody2D = gm._player
+	var player: Node2D = gm._player
 	var cursor: Node2D = gm._cursor
 	var path_renderer: Node2D = gm._path_renderer
 

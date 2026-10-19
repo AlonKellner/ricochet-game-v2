@@ -9,7 +9,7 @@ extends RefCounted
 # this driver is the live-renderer path the smoke combos and unit tests use.
 
 var _scene: Node
-var _player: CharacterBody2D
+var _player: Node2D
 var _cursor: Node2D
 var _renderer: Node2D
 var _game_mgr: Node

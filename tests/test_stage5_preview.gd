@@ -1,6 +1,6 @@
 extends GutTest
 
-var _player: CharacterBody2D
+var _player: Node2D
 var _cursor: Node2D
 var _renderer: Node2D
 var _main_scene: Node

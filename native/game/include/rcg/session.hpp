@@ -15,6 +15,7 @@
 #include "rc/sweep.hpp"
 #include "rc/tracer.hpp"
 #include "rc/visibility.hpp"
+#include "rcg/kinematics.hpp"
 #include "rcg/landing.hpp"
 #include "rcg/model.hpp"
 #include "rcg/world.hpp"
@@ -79,6 +80,11 @@ public:
 	// the fire action, then the whole flight at a fixed frame time (speedup_at:
 	// the `any` key after that many frames; -1: never)
 	Flight fire(int speedup_at, double frame_dt);
+	// Stage 117: movement actions (move_left / move_right / move_up / move_down)
+	// held for `ticks` physics ticks (the native controller, rcg/kinematics.hpp):
+	// the player's position after every tick. The up action registers as just
+	// pressed on the second tick (the engine's input timing: a jump with gravity).
+	std::vector<V2> hold(const std::vector<std::string> &actions, int ticks);
 
 	// the derived state as the game's nodes reach it after their frames
 	void settle();
@@ -193,6 +199,7 @@ private:
 	// a fired shot: its final flags and physical trace (landed when the arrow is)
 	std::optional<rc::Flags> pending_flags_;
 	rc::TracePath pending_path_;
+	bool on_floor_ = false;
 	V2 arrow_pos_;
 	V2 arrow_dir_{1.0f, 0.0f};
 };

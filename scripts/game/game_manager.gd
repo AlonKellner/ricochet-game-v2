@@ -6,7 +6,7 @@ var _tracer := BeamTracer.new()
 const _DebugDumper := preload("res://scripts/game/debug_dumper.gd")
 const MOVEMENT_ACTIONS := ["move_up", "move_down", "move_left", "move_right"]
 
-var _player: CharacterBody2D
+var _player: Node2D
 var _cursor: Node2D
 var _arrow_animator: Node2D
 var _path_renderer: Node2D
@@ -342,7 +342,7 @@ func _try_reset() -> void:
 
 func _capture_checkpoint() -> CheckpointData:
 	var pos := _player.global_position if _player else Vector2.ZERO
-	var vel := _player.velocity if _player else Vector2.ZERO
+	var vel: Vector2 = _player.velocity if _player else Vector2.ZERO
 	var world: World = _world()
 	return CheckpointData.new(pos, vel, game_state, plan.entries, targets_hit, world.snapshot() if world != null else null)
 

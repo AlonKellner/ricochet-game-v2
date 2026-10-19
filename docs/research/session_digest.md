@@ -27,15 +27,16 @@ byte. A changed record is a behaviour change (the judge's report, the user's app
 ```
 
 - `level`: the level's path under `scenes/` without the extension (later: under `data/levels/`).
-- `kind`: `teleport` (the player only moves by `teleport`: the bit-exact gate) or `kinematic` (`hold` steps
-  move it by the player controller: the evidence of the native controller stage; recorded and gated like the
-  others until that stage re-blesses them).
+- `kind`: `teleport` (the player only moves by `teleport`) or `kinematic` (`hold` steps move it by the
+  player controller). Both are gated, natively too since Stage 117.
 - `switches`: optional overrides of the feature switches (default: the game's defaults).
 - Coordinates are multiples of 1/4 px (exact in every decimal parser; the recorder checks).
 - Actions: `undo` (Z), `reset` (R), `clear_plan` (C), `cycle_display` (Tab), `toggle_gravity` (G),
   `toggle_visibility` (V), `any` (a key that is no movement: speeds a flying arrow up).
 - `fire`: the fire action, then the whole flight; `speedup_at: k` presses `any` after the k-th flight frame.
-- `hold`: the movement actions held for `ticks` physics ticks (the player's physics runs only inside a hold).
+- `hold`: the movement actions held for `ticks` physics ticks (the player's physics runs only inside a hold;
+  the native controller since Stage 117). The up action registers as just pressed on the second tick (the
+  engine's input timing): a jump with gravity starts there.
 
 ## The run
 

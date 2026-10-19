@@ -39,7 +39,8 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Crossing surfaces: design surfaces split into pieces at crossings; spawned surfaces trimmed (§9.7, §10.6.3; TDD_12 Stage 108) | Done (user sign-off 2026-10-16) |
 | Plannable infinity — the ∞ plan entry, the `infinity` event (§4.2, §6.3, §12.5, §13.1; TDD_10 Stages 88, 101) | Done (B9 approved 2026-10-15): the frame's infinity `Q`, the edge or an on-screen point, plannable; the pre-transform (§9.5) |
 | Engine-agnostic port: the levels as data (`rc-level/1`, §19.1), the session replay golden, the headless host `rc_tool` (docs/TDD_20, Stage 115) | Done |
-| Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done (the player's controller, the drawing and the C API follow) |
+| Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done |
+| Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level editor | Planned |
 | Menus, HUD, save system | Planned |
 
@@ -2136,19 +2137,24 @@ The target system is extensible to point targets (tolerance-based) or region tar
 
 ### 25.1 Physics
 
-The player is a `CharacterBody2D` that collides with two kinds of geometry:
+The player is a circle of radius **12 units** moved by the native player controller (Stage 117,
+`rcg/kinematics.hpp`; every host drives the same one): at a fixed physics step of 1/60 s it is swept exactly
+(no tunnelling at any speed) against what it collides with, slides along what it meets (at most four contacts
+a step), is pushed out of any overlap, and rests a **0.08-unit skin** away from what it touches. It collides
+with two kinds of geometry:
 
-1. **Collision bodies** — plain `StaticBody2D` nodes with `CollisionShape2D` children (e.g., `SegmentShape2D` for floor lines, `RectangleShape2D` for platforms). These exist purely for player physics. They are invisible to arrow tracing, visibility, and planning systems. They are standard Godot collision objects with no game-mechanic behavior.
+1. **Colliders** — the level's player-only segments (`colliders`, §19.1: floors, platforms, ceilings in
+   gravity levels). They are invisible to arrow tracing, visibility, and planning.
+2. **Surfaces with `player_solid = true`** that are **present** (§9.6) — their exact geometry: a line, an arc
+   (its part of the circle from start through via to end, and its two ends), a full circle. An absent surface
+   does not block the player (Stage 117, as the arrow passes it). Surfaces with `player_solid = false` do not
+   impede the player. `player_solid` is per-surface (not per-side); sides do not matter to the player.
 
-2. **Surfaces with `player_solid = true`** (the default) — Surfaces (§9) generate collision shapes from their segment geometry. These participate in both player physics AND the arrow/visibility/planning systems. Surfaces with `player_solid = false` do not impede player movement but still interact with the arrow. `player_solid` is per-surface (not per-side). Godot's physics handles collision via `move_and_slide()` on CharacterBody2D — it doesn't distinguish surface sides.
-
-Collision bodies are appropriate for level geometry that only constrains the player (floors, platforms, ceilings in gravity levels). Surfaces are appropriate for geometry that the arrow must also interact with (walls, mirrors, portals). A level may use both. Movement uses standard Godot physics with gravity from `LevelData.gravity` (default `(0, 0)` — no gravity).
-
-Line surfaces generate `SegmentShape2D` collision shapes. Arc surfaces use `ConcavePolygonShape2D` with line segments approximating the arc (16 segments per full circle, scaled by arc span). Minimum **3 segments** per arc, regardless of arc span. `ConcavePolygonShape2D` handles both minor and major arcs. Since surfaces are static, the performance impact is acceptable. Godot has no native arc collision shape. Surfaces are zero-width geometry — the player slides along them.
+A **floor** is a contact whose normal is within 45° of up `(0, -1)`. With gravity, a player that stood on a
+floor and is not rising keeps to it within **1 unit** (a floor snap: walking off a ledge drops, walking along
+a floor stays on it).
 
 **Arrow origin:** the arrow originates from the **center of the player's collision shape** (no offset).
-
-Player collision shape: `CircleShape2D` with radius **12 units**.
 
 **Arrow–player interaction:** the arrow does **not** collide with the player. The player is not a surface for ray tracing purposes. The player can stand on or near a surface without blocking their own shot.
 
@@ -2156,7 +2162,7 @@ Player collision shape: `CircleShape2D` with radius **12 units**.
 
 - Move: WASD / left stick.
 - Default speed: **200 units/sec**. Horizontal input response is instant (no acceleration ramp). Gravity applies vertically as configured in `LevelData.gravity` — the player can fall and needs platforms when gravity is non-zero. Configurable per level.
-- Default jump velocity: **400 units/sec upward**. Single jump (no double jump). No coyote time. Parameters are tunable per level.
+- Default jump velocity: **400 units/sec upward**, from a floor only (the up action just pressed). Single jump (no double jump). No coyote time. Without gravity the movement is the input direction, normalized, times the speed.
 - **The arrow is never affected by gravity** — it follows pure geometric ray tracing regardless of the level's gravity setting.
 - The player can move while aiming. *(Principle 16.)*
 
@@ -2675,4 +2681,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.28.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.29.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
