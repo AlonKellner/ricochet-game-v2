@@ -1,0 +1,54 @@
+{
+ "planned": [
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "905.7982788085937500000000000000000000000",
+   "y": "828.3174438476562500000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 3,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "858.7878329995049706221978882511380553667",
+   "y": "840.0000000000000000000000000000000000000"
+  }
+ ],
+ "physical": [
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "905.7982788085937500000000000000000000000",
+   "y": "828.3174438476562500000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 3,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "858.7878329995049706221978882511380553667",
+   "y": "840.0000000000000000000000000000000000000"
+  }
+ ],
+ "planned_targets": [],
+ "physical_targets": [],
+ "name": "playground__projective_inversion__06",
+ "dps": 120
+}

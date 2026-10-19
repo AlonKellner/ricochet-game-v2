@@ -32,25 +32,22 @@ func test_visibility_plans() -> void:
 		return plans, 111, "Visibility, plans")
 
 func test_visibility_playground_plans() -> void:
-	await _sweep(SweepPlans.playground_plan_scenes(), func(scene): return SweepPlans.scene_plans(scene).filter(_supported), 112,
-		"Visibility, playground plans")
+	await _sweep(SweepPlans.playground_plan_scenes(), func(scene): return SweepPlans.scene_plans(scene), 112, "Visibility, playground plans")
 
 func test_visibility_infinity_plans() -> void:
 	var scenes: Array[String] = SweepPlans.plan_scenes()
 	scenes.append_array(SweepPlans.playground_plan_scenes())
-	await _sweep(scenes, func(scene): return SweepPlans.infinity_plans(scene).filter(_supported), 113, "Visibility, infinity plans")
+	await _sweep(scenes, func(scene): return SweepPlans.infinity_plans(scene), 113, "Visibility, infinity plans")
 
-# Plans through projective surfaces: the region is not computed yet (Stage 110 scope).
-func _supported(plan: Array) -> bool:
-	for e in plan:
-		if e.surface_id == BeamSolver.INFINITY_ID:
-			continue
-		var s: Surface = _scene_surfaces.get(e.surface_id)
-		if s != null:
-			var cfg: SideConfig = s.active_side_config(e.side, GameState.new({}))
-			if cfg != null and cfg.effect != null and cfg.effect.kind() == Effect.Kind.PROJECTIVE:
-				return false
-	return true
+# Stage 113: the projective playgrounds -- every projective side as a plan, the
+# first two projectives as one, each with a mirror or inversion after it where
+# the scene has one, and the empty plan.
+func test_visibility_projective_plans() -> void:
+	await _sweep(SweepPlans.projective_playground_scenes(), func(scene):
+		var plans := [[]]
+		plans.append_array(SweepPlans.projective_plans(scene))
+		plans.append_array(SweepPlans.projective_composition_plans(scene))
+		return plans, 114, "Visibility, projective plans")
 
 var _scene_surfaces := {}
 

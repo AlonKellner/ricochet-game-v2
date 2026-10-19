@@ -43,11 +43,28 @@ inline bool preview_visible(const TracePath &planned, const std::vector<TraceSte
 	return true;
 }
 
-// Where a disagreement is a known finding (docs/TDD_14_VISIBILITY.md): none
-// open. (K8, a cursor on a critical member, was fixed by exact member cursors;
-// K7, a cursor exactly on a planned carrier, by the cursor as a known point of
-// exact beams and by exact endpoints deciding whisker ends.)
-inline std::string pin_tag(const vis::Result &, const vis::Pt &) { return ""; }
+// Where a disagreement is a known finding: Stage 113's K13 -- a cursor exactly
+// on a member tangent to a carrier beyond the tangency (the member's own walk
+// fires at the touch, the cursor's own beam a rounding off it passes), on a
+// projective plan's region (docs/TDD_18_PROJECTIVE_VISIBILITY.md). (K8, a
+// cursor on a critical member, was fixed by exact member cursors; K7, a cursor
+// exactly on a planned carrier, by the cursor as a known point of exact beams
+// and by exact endpoints deciding whisker ends.)
+inline std::string pin_tag(const vis::Result &r, const vis::Pt &c) {
+	if (r.pencil.empty() || r.pencil == "aim") {
+		return "";
+	}
+	const double tol = 1e-9 * std::max({1.0, std::abs(c.x), std::abs(c.y)});
+	for (const vis::Loop &l : r.loops) {
+		for (const vis::Edge &e : l.edges) {
+			if (e.kind == vis::EdgeKind::Member && e.member >= 0 && e.member < int(r.members.size()) && r.members[size_t(e.member)].tangent_sid >= 0
+					&& vis::edge_dist(e, c) <= tol) {
+				return "on a member tangent to a carrier (K13)";
+			}
+		}
+	}
+	return "";
+}
 
 inline Violations check_VISIBILITY_EQUALS_NON_DIVERGENCE(const vis::Result &r, const V2 &cursor, const TracePath *planned,
 		const std::vector<TraceStep> *typed, bool cursor_point_agrees) {
@@ -205,7 +222,7 @@ inline Violations check_VIS_SIMPLE(const vis::Result &r) {
 		// edges joined through edges shorter than the tolerance meet like neighbours
 		auto short_between = [&](size_t from, size_t to, double tol) {
 			for (size_t k = (from + 1) % n; k != to; k = (k + 1) % n) {
-				if (vis::norm(es[k].b - es[k].a) > tol) {
+				if (!es[k].crack && vis::norm(es[k].b - es[k].a) > tol) { // (a crack has no width: its neighbours meet)
 					return false;
 				}
 			}
@@ -214,6 +231,9 @@ inline Violations check_VIS_SIMPLE(const vis::Result &r) {
 		for (size_t i = 0; i < n; i++) {
 			for (size_t j = i + 1; j < n; j++) {
 				const double tol = TOL * scale_of(es[i].a);
+				if (es[i].crack && es[j].crack && es[i].member == es[j].member) {
+					continue; // Stage 113: a crack's two edges lie on each other
+				}
 				if (vis::edges_overlap(es[i], es[j], tol)) {
 					out.push_back(v("VIS-SIMPLE: loop %d edges %d and %d overlap", I(int64_t(li)), I(int64_t(i)), I(int64_t(j))));
 					continue;
@@ -284,6 +304,9 @@ inline Violations check_VIS_DISJOINT(const vis::Result &r) {
 			for (const vis::Edge &e : r.loops[a].edges) {
 				for (const vis::Edge &f : r.loops[b].edges) {
 					const double tol = TOL * scale_of(e.a);
+					if (e.crack && f.crack && e.member == f.member) {
+						continue; // Stage 113: a crack's two edges, in two loops
+					}
 					if (vis::edges_overlap(e, f, tol)) {
 						out.push_back(v("VIS-DISJOINT: loops %d and %d share an edge piece", I(int64_t(a)), I(int64_t(b))));
 						goto next_pair;
@@ -362,7 +385,7 @@ inline Violations check_VIS_EDGE_ON_GEOMETRY(const vis::Result &r, const Scene<F
 						return;
 					}
 				}
-				if (member_dist(m, r.pk) > tol || (!r.qk_inf && member_dist(m, r.qk) > tol)) {
+				if ((!r.pk_none && member_dist(m, r.pk) > tol) || (!r.qk_inf && member_dist(m, r.qk) > tol)) {
 					out.push_back(v("VIS-EDGE-ON-GEOMETRY: %s: member %d misses P_K or Q_K", S(where), I(int64_t(e.member))));
 				}
 				return;
@@ -550,16 +573,17 @@ inline Violations check_VIS_CELL_CONSTANT(const VisInput &in) {
 	std::map<int, std::unique_ptr<vis::Builder>> builders; // per half (Stage 111)
 	for (size_t ci = 0; ci < r.cells.size(); ci++) {
 		const vis::Cell &c = r.cells[ci];
-		const vis::Pt &ld = r.members[size_t(c.left)].dir;
-		const vis::Pt &rd = r.members[size_t(c.right)].dir;
-		const vis::Pt d = vis::rotate(ld, vis::ccw_angle(ld, rd) * 0.381966); // away from the middle
 		std::unique_ptr<vis::Builder> &b = builders[c.half];
 		if (!b) {
 			b = std::make_unique<vis::Builder>(*in.tracer, in.player, in.plan, in.flags, in.bounds, vis::Half(c.half));
 		}
-		const std::optional<vis::Cast> k = b->probe_dir(d);
+		// away from the middle
+		const std::optional<vis::Cast> k = b->probe_between(r.members[size_t(c.left)], r.members[size_t(c.right)], 0.381966);
 		if (k && !k->same_shape(c.mid)) {
-			out.push_back(v("VIS-CELL-CONSTANT: cell %d: %s inside, %s in the middle", I(int64_t(ci)), S(k->shape()), S(c.mid.shape())));
+			char at[96];
+			std::snprintf(at, sizeof at, " (at (%.6g, %.6g) key %.9g; the middle at (%.6g, %.6g) key %.9g)", k->cursor.x, k->cursor.y, k->key, c.mid.cursor.x,
+				c.mid.cursor.y, c.mid.key);
+			out.push_back(v("VIS-CELL-CONSTANT: cell %d: %s inside, %s in the middle%s", I(int64_t(ci)), S(k->shape()), S(c.mid.shape()), S(std::string(at))));
 		}
 	}
 	return out;
@@ -602,7 +626,10 @@ inline Violations check_VIS_ITERATION_CHAIN(const VisInput &in) {
 			if (e.kind != vis::EdgeKind::Carrier || e.role != vis::End::Near || e.surface != in.plan.back().surface_id) {
 				continue; // a portal departs its pair: the plan without it reaches the source
 			}
-			if (vis::contains(*check, e.via) == vis::Membership::Outside) { // (beyond the domain: unclassified)
+			// (beyond the domain: unclassified; Stage 113: a departure at a tangency of
+			// the previous region's member with the carrier lies on its boundary a
+			// rounding away -- within 1e-6 px it is on it)
+			if (vis::contains(*check, e.via) == vis::Membership::Outside && vis::margin(*check, e.via) > 1e-6 * visdetail::scale_of(e.via)) {
 				out.push_back(v("VIS-ITERATION-CHAIN: cell %d departs from %s, outside the previous region", I(int64_t(ci)), S(visdetail::pt_str(e.via))));
 			}
 		}
@@ -624,7 +651,7 @@ inline Violations check_VIS_BOUNDARY_DECIDED(const vis::Result &r) {
 	auto reached_at = [&](const vis::Pt &c) {
 		const double tol = 1e-9 * std::max({1.0, std::abs(c.x), std::abs(c.y)});
 		for (const vis::Member &o : r.members) {
-			if (o.crit.valid && o.crit.cursor_ok && o.crit.chosen && vis::norm(o.cursor - c) <= tol) {
+			if (o.crit.valid && o.poi_ok && o.poi_chosen && vis::norm(o.cursor - c) <= tol) {
 				return true;
 			}
 		}
@@ -805,7 +832,7 @@ inline Violations check_VIS_REGULAR(const vis::Result &r, const Scene<F64> *scen
 			const double tol = TOL * scale_of(a.a);
 			// the next edge retraces this one (its middle on this edge): a full circle
 			// split into two arcs is not a spike
-			if (same && vis::norm(a.b - a.a) > tol && vis::norm(a.a - b.b) <= tol && vis::edge_dist(a, b.via) <= tol) {
+			if (same && !(a.crack && b.crack) && vis::norm(a.b - a.a) > tol && vis::norm(a.a - b.b) <= tol && vis::edge_dist(a, b.via) <= tol) {
 				out.push_back(v("VIS-REGULAR: loop %d doubles back at %s (edges %d and %d, a spike of no area)", I(int64_t(li)), S(pt_str(a.b)),
 					I(int64_t(i)), I(int64_t((i + 1) % n))));
 			}
@@ -824,16 +851,16 @@ inline Violations check_visibility(const VisInput &in) {
 	auto add = [&](Violations vs) { out.insert(out.end(), vs.begin(), vs.end()); };
 	add(check_VIS_CLOSED(r));
 	add(check_VIS_SIMPLE(r));
-	if (!r.split) {
+	if (r.cells.empty() && r.loops.empty()) {
 		add(check_VIS_ORIENTED(r));
 		add(check_VIS_DISJOINT(r));
-	} else {
-		// Stage 111: each half winds its own way, and the two share the crack
-		for (int half : {int(vis::Half::Direct), int(vis::Half::Reversed)}) {
-			const vis::Result h = vis::half_of(r, half);
-			add(check_VIS_ORIENTED(h));
-			add(check_VIS_DISJOINT(h));
-		}
+	}
+	// Stage 111: each half winds its own way, and the two share the crack;
+	// Stage 113: so do a pencil's two sheets, which meet at a pole
+	for (const auto &[half, wind] : vis::parts_of(r)) {
+		const vis::Result h = vis::part_of(r, half, wind);
+		add(check_VIS_ORIENTED(h));
+		add(check_VIS_DISJOINT(h));
 	}
 	add(check_VIS_FINITE(r));
 	if (in.tracer != nullptr) {

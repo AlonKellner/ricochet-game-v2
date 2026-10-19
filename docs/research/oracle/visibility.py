@@ -8,7 +8,10 @@ A cursor is visible when
 
 A step ends at each drawn point (float32, as the preview draws it): the events
 at one point form a run, and the merge compares the frame each step is walked
-in -- the frame after the run before it (epoch, transform stack, flags). V3
+in -- the frame after the run before it (epoch, transform stack, flags). An
+epoch is identified by the projective firings that opened it (surface and
+side), not by their count: two walks firing different projectives at one point
+leave it in different frames (K14, Stage 113). V3
 counts the decisions made exactly at the cursor: a cursor where a planned
 surface is crossed off its segment (the planned walk reflects there, the
 physical one passes) is not visible. When the physical walk has no event at
@@ -41,15 +44,16 @@ def _drawn(e):
 
 def _frames_after(events, flags0):
     """The frame after each event: (epoch, transform stack, flags), as the
-    native cast reads it (Tracer::to_path_events)."""
+    native cast reads it (Tracer::to_path_events); the epoch is the tuple of
+    the projective firings so far, (surface_id, side) each (K14)."""
     out = []
-    stack, epoch, flags = [], 0, dict(flags0 or {})
+    stack, epoch, flags = [], (), dict(flags0 or {})
     for e in events:
         if e.kind == "hit":
             if e.applied and not e.terminal:
                 if e.projective:
                     stack = []
-                    epoch += 1
+                    epoch = epoch + ((e.surface_id, e.side),)
                 elif e.popped:
                     stack = stack[:-1]
                 else:

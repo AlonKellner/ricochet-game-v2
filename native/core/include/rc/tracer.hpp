@@ -55,6 +55,13 @@ inline bool cursor_point_agrees(const TracePath &pl, const TracePath &ph) {
 	return leave_pl == leave_ph;
 }
 
+// One projective firing's mark in an epoch key: the surface and the side
+// (K14, Stage 113: two walks firing different projectives at one point are in
+// different frames; a count of firings would not tell them apart).
+inline std::string firing_key(int sid, bool left, bool first) {
+	return (first ? "" : ",") + std::to_string(sid) + (left ? "L" : "R");
+}
+
 class Tracer {
 public:
 	Tracer() = default;
@@ -328,13 +335,14 @@ public:
 		bool gap = false; // the previous event teleported (portal)
 		const std::string init_flags = flags.canonical_key();
 		std::string cur_flags = init_flags;
-		path.start_frame = frame_key({}, 0, init_flags);
+		path.start_frame = frame_key({}, "", init_flags);
+		std::string epoch_key; // the projective firings so far (K14: an epoch is its firing, not a count)
 		bool ghost = flags.is_true(GHOST);
 		Flags before = flags; // the flags before the next hit (Stage 107)
 		const Scene<Dual> &scene = ctx_->dual_scene();
 		for (size_t i = 0; i < events.size(); i++) {
 			const Event<N> &e = events[i];
-			const int fid = frame_id(stack, frames, e.epoch, cur_flags, init_flags);
+			const int fid = frame_id(stack, frames, epoch_key, cur_flags, init_flags);
 			std::vector<TraceStep> steps = steps_for(e, fid, gap ? std::nullopt : prev_pt);
 			bool gap_pending = gap;
 			gap = false;
@@ -371,6 +379,7 @@ public:
 			if (e.kind == EventKind::Hit && e.applied && !e.terminal) {
 				if (e.projective) {
 					stack.clear();
+					epoch_key += firing_key(e.surface_id, e.left, epoch_key.empty());
 				} else if (e.popped) {
 					stack.pop_back();
 				} else {
@@ -429,7 +438,7 @@ public:
 				path.cursor_index = int(path.steps.size());
 			}
 			path.event_steps.push_back(int(path.steps.size()));
-			path.event_frames.push_back(frame_key(stack, e.projective ? e.epoch + 1 : e.epoch, cur_flags));
+			path.event_frames.push_back(frame_key(stack, epoch_key, cur_flags)); // (the frame the event leaves in: its firing counted)
 			if (e.kind == EventKind::Max) {
 				path.truncated = true;
 				break;
@@ -544,9 +553,9 @@ private:
 		return same_prefix_ev(a.big_events, b.big_events, n);
 	}
 
-	// The frame's key: epoch | transform stack | flags (frame_id interns it).
-	static std::string frame_key(const std::vector<int> &stack, int epoch, const std::string &flags_key) {
-		std::string key = std::to_string(epoch) + "|";
+	// The frame's key: epoch (its firings) | transform stack | flags (frame_id interns it).
+	static std::string frame_key(const std::vector<int> &stack, const std::string &epoch, const std::string &flags_key) {
+		std::string key = epoch + "|";
 		for (size_t i = 0; i < stack.size(); i++) {
 			if (i) {
 				key += ",";
@@ -558,12 +567,12 @@ private:
 
 	// frame id per (epoch, transform stack, flags): a projective starts a new
 	// epoch, and a state change a new frame
-	static int frame_id(const std::vector<int> &stack, std::map<std::string, int> &frames, int epoch, const std::string &flags_key,
+	static int frame_id(const std::vector<int> &stack, std::map<std::string, int> &frames, const std::string &epoch, const std::string &flags_key,
 			const std::string &init_key) {
-		if (stack.empty() && epoch == 0 && flags_key == init_key) {
+		if (stack.empty() && epoch.empty() && flags_key == init_key) {
 			return IDENTITY_FRAME;
 		}
-		std::string key = std::to_string(epoch) + "|";
+		std::string key = epoch + "|";
 		for (size_t i = 0; i < stack.size(); i++) {
 			if (i) {
 				key += ",";

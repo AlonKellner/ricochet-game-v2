@@ -89,6 +89,16 @@ inline Pt perp(const Pt &a) { return {-a.y, a.x}; }
 inline Pt pt_of(const CN<F64> &z) { return {z.re.v, z.im.v}; }
 inline CN<F64> cn_of(const Pt &p) { return CN<F64>{F64{p.x}, F64{p.y}}; }
 
+// Stage 113: a member's position in its pencil. The aim pencil (a plan
+// without a projective entry: the circles through P_K and Q_K) is keyed by the
+// aim direction at the player; a projective epoch's pencil by a real parameter
+// (the key), the aim direction being informational there.
+struct Param {
+	Pt dir;           // the unit aim direction at the player
+	double key = 0.0; // the pencil parameter (a projective pencil)
+	double sub = 0.0; // among equal keys: the sheet's rank (a fork line is two members, one per candidate)
+};
+
 // Where a visible interval of a member begins or ends.
 enum class End : int {
 	Near = 0, // the departure point of the last plan entry (on its surface)
@@ -207,6 +217,8 @@ struct Cast {
 	std::vector<Interval> iv; // the member's visible intervals (walk order)
 	Pt cursor;                // the cast's cursor
 	Pt dir;                   // its aim direction at the player
+	double key = 0.0;         // Stage 113: its pencil parameter
+	Param param() const { return Param{dir, key}; }
 
 	// the walk's shape: equal shapes bound one cell
 	bool visible() const { return alive && !iv.empty(); }
@@ -265,6 +277,7 @@ std::vector<CastEvent> cast_events(const std::vector<Event<N>> &events, const st
 	std::vector<CastEvent> out;
 	out.reserve(events.size());
 	std::vector<int> stack;
+	std::string epoch_key; // K14: the projective firings so far
 	std::string flags_now = init_flags;
 	for (const Event<N> &e : events) {
 		CastEvent c;
@@ -279,6 +292,7 @@ std::vector<CastEvent> cast_events(const std::vector<Event<N>> &events, const st
 		if (e.kind == EventKind::Hit && e.applied && !e.terminal) {
 			if (e.projective) {
 				stack.clear();
+				epoch_key += firing_key(e.surface_id, e.left, epoch_key.empty());
 			} else if (e.popped) {
 				if (!stack.empty()) stack.pop_back();
 			} else {
@@ -288,7 +302,8 @@ std::vector<CastEvent> cast_events(const std::vector<Event<N>> &events, const st
 		if (e.kind == EventKind::Hit) {
 			flags_now = c.flags;
 		}
-		c.frame = std::to_string(e.epoch) + "|";
+		// (the projective's own event leaves in the frame its firing opens, as event_frames reads it)
+		c.frame = epoch_key + "|";
 		for (int sid : stack) {
 			c.frame += std::to_string(sid) + ",";
 		}
@@ -356,6 +371,7 @@ struct Edge {
 	Pt gc;
 	double gr = 0.0;
 	bool connector = false; // runs outside the clip rectangle (through infinity)
+	bool crack = false;     // Stage 113: a dead member between two live cells: a slit of no width the walks on it never reach (two edges, one each way)
 };
 
 // A cell: the curvilinear polygon between two adjacent members (closed loop
@@ -365,6 +381,7 @@ struct Cell {
 	int right = -1; // member index
 	int run = -1;
 	int half = 0;   // the Half it was built in (Stage 111)
+	int wind = 1;   // Stage 113: the way it winds (+1 counterclockwise, x right y up; -1 clockwise); a sheet of its pencil
 	std::vector<std::vector<Edge>> loops; // closed loops (a cell clipped by the rectangle can split)
 	Pt inside; // a point strictly inside (from the mid cast)
 	Cast mid;
@@ -380,6 +397,7 @@ struct Loop {
 	std::vector<Edge> edges;
 	double area = 0.0; // signed, of the tessellated loop
 	int half = 0;      // the Half it was built in (Stage 111)
+	int wind = 1;      // Stage 113: the winding of the cells it bounds
 };
 
 // What a cast is for (the benches count them by kind).
@@ -396,19 +414,28 @@ enum class Half : int { Single = 0, Direct = 1, Reversed = 2 };
 // lies on, and the casts that read its walk.
 struct Member {
 	Pt dir;               // unit aim direction at the player
+	double key = 0.0;     // Stage 113: its pencil parameter (a projective pencil; the aim pencil is keyed by dir)
+	double sub = 0.0;     // Stage 113: its rank among the members of one line (a fork line: the sheet before, then after)
+	double sigma = 0.0;   // Stage 113: the candidate its walk departs (+1 / -1 across the click's line; 0: the key's rule)
+	Param param() const { return Param{dir, key, sub}; }
 	Pt cursor;            // the cursor of its own cast (a point of interest, or an aim point's image)
 	bool poi = false;     // the cursor is a point of interest (exact data when it is a frame-K point)
 	std::string why;      // what put it here (for messages)
 	Beam<F64> beam;       // the member, p = P_K
 	bool straight = false; // the line through P_K and a finite Q_K: it passes the real infinity
+	bool crack = false;    // Stage 113: the fork line of a circle normal (the click-nearest candidate switches across it)
+	double t0 = 0.0;       // Stage 113: the walk's start parameter on the beam (0: the beam departs there)
 	int tangent_sid = -1;  // tangent in the final frame to this surface's carrier at its cursor (a double root)
 	int tangent_q_sid = -1; // tangent at a finite Q_K to this surface's carrier (they meet at Q_K only)
 	bool tangent_pole = false; // tangent at some frame's finite infinity point to a carrier through it (VIS-REGULAR)
 	bool exact = false;    // its cursor is exact data of the final frame (a segment's endpoint, a piece's end)
-	Cast crit;            // the member itself
+	Cast crit;            // the member itself (Stage 113: cast along the member off the projective's carrier when its point of interest lies on it)
 	Cast minus;           // just before it (direction rotated by -eps)
 	Cast plus;            // just after it
+	bool poi_ok = false;  // a cursor exactly at its point of interest: reached, both walks in one frame (crit's, or the carrier point's own cast)
+	bool poi_chosen = true; // ... and in this half's orientation
 	double tq = INF;      // Q_K's parameter on the beam
+	double tp = 0.0;      // P_K's parameter on the beam (0: the beam departs P_K; Stage 113: a projective walk departs H)
 	bool own_a = true;    // the owned arc runs forward from P_K to Q_K (else from Q_K to P_K)
 };
 
@@ -432,6 +459,7 @@ struct Result {
 	std::string reason; // why unsupported
 	Pt player;
 	Pt pk;              // P_K
+	bool pk_none = false; // Stage 113: no finite P pole (a parabolic pencil: pk is unset)
 	bool qk_inf = true; // Q_K at infinity
 	Pt qk;
 	Rect domain;        // the cursors classified: the level bounds grown by 50
@@ -440,6 +468,7 @@ struct Result {
 	Half half = Half::Single;     // Stage 111: the half this result was built as (Single: the whole, or one realization)
 	bool split = false;           // Stage 111: the join of the two halves of a split plan (every cell and loop tagged by its half; the reversed half's cells wind the other way)
 	bool near_transforms = false; // the last plan entry changes the transform: its departures lie on its segment
+	std::string pencil;           // Stage 113: the members' pencil (for messages): "aim", "parallel ...", "radial ..."
 	struct Carrier {
 		bool line = true;
 		Pt p, d; // a line: a point and its unit direction
@@ -611,26 +640,39 @@ public:
 		if (!res_.supported && !prepare()) {
 			return std::nullopt;
 		}
-		const std::optional<CN<F64>> X0 = backward(std::optional<CN<F64>>(cn_of(c)), K);
-		const std::optional<Pt> d = X0 ? aim_dir(*X0) : std::nullopt;
-		return cast(c, d ? *d : Pt{}, member_of(c));
+		const std::optional<Param> q = p_param(c);
+		return cast(c, q ? *q : Param{}, p_member(c));
 	}
 	// One cast whose aim direction is d.
 	std::optional<Cast> probe_dir(const Pt &d) {
+		return probe_param(Param{d, 0.0});
+	}
+	// One cast at the pencil position q.
+	std::optional<Cast> probe_param(const Param &q) {
 		if (!res_.supported && !prepare()) {
 			return std::nullopt;
 		}
-		const std::optional<Pt> c = cursor_for(d);
+		const std::optional<Pt> c = p_cursor(q);
 		if (!c) {
 			return std::nullopt;
 		}
-		return cast(*c, d, member_of(*c));
+		return cast(*c, q, p_member(*c));
+	}
+	// One cast at the fraction f of the way from member a to member b (VIS-CELL-CONSTANT).
+	std::optional<Cast> probe_between(const Member &a, const Member &b, double f) {
+		if (!res_.supported && !prepare()) {
+			return std::nullopt; // (the pencil's arithmetic needs the pencil)
+		}
+		return probe_param(p_step(a.param(), p_gap(a.param(), b.param()) * f));
 	}
 	const Result &result() const { return res_; }
 
 	Result build() {
 		if (!prepare()) {
 			return std::move(res_);
+		}
+		if (empty_) {
+			return std::move(res_); // (supported, nothing visible)
 		}
 		collect_members();
 		cast_members();
@@ -655,14 +697,398 @@ private:
 	Result res_;
 	Half half_ = Half::Single;
 	std::vector<EffectType> effs_;
-	std::vector<bool> changes_; // entry j changes the frame
+	std::vector<bool> changes_; // entry j changes the frame (a transformative or a projective)
+	std::vector<bool> moves_;   // entry j maps points (a transformative)
 	std::vector<effects::Poles<F64>> frames_; // frames_[j]: after j entries
 	std::optional<CN<F64>> q0_;
 	bool via_ = false;
 	size_t K = 0;
 	std::string init_flags_;
+	// Stage 113: the last epoch's pencil (GAME_SPEC 15.2). After a projective
+	// the beams are straight lines from its hit point H: all parallel (a line
+	// normal, a directional: Parallel, keyed by the offset across the family's
+	// direction pu_), or all through the circle's centre (a circle normal:
+	// Radial, keyed by the line's direction, a diamond pseudo-angle in [0, 2)).
+	// The last epoch's transformatives map them to the final frame.
+	enum class PencilKind { Aim, Parallel, Radial };
+	PencilKind kind_ = PencilKind::Aim;
+	std::vector<size_t> proj_;         // the projective entries, in order
+	size_t e0_ = 0;                    // the first entry of the last epoch (after its projective)
+	const Surf<F64> *psurf_ = nullptr; // the last projective
+	EffectType petype_ = EffectType::Pass;
+	bool pleft_ = true;
+	Pt pu_;                            // Parallel: the family's direction (unit)
+	Pt pc_;                            // Radial: the centre (the epoch frame)
+	double pr_ = 0.0;                  // the carrier's radius (a circle)
+	double prho_ = 128.0;              // a member's cursor: this far along the exit from H
+	int parity_ = 1;                   // the last epoch's reflections and inversions (-1: odd)
+	bool empty_ = false;               // a directional normal parallel to its line carrier: no exit family
 
 	static constexpr double AIM_R = 128.0;
+
+	// ---- the pencil (Stage 113): the members' positions and the operations
+	// the construction makes on them. The aim pencil: today's direction
+	// arithmetic, unchanged.
+	bool aim() const { return kind_ == PencilKind::Aim; }
+	// a key difference, forward (cyclic for the radial pencil: in [0, 2))
+	double key_diff(double a, double b) const {
+		if (kind_ == PencilKind::Radial) {
+			double d = std::fmod(b - a + 4.0, 2.0);
+			return d < 0.0 ? d + 2.0 : d;
+		}
+		return b - a;
+	}
+	double key_dist(double a, double b) const {
+		const double d = std::abs(key_diff(a, b));
+		return kind_ == PencilKind::Radial ? std::min(d, 2.0 - d) : d;
+	}
+	// one key: closer than the side casts resolve (no gap narrower than that is a
+	// cell, so two members that close are one -- the two roots of a beam tangent
+	// to the projective's carrier, say)
+	double key_tol(double) const { return 8.0 * p_eps_max(); }
+	bool p_less(const Param &a, const Param &b) const {
+		return aim() ? dir_less(a.dir, b.dir) : (a.key < b.key || (a.key == b.key && a.sub < b.sub));
+	}
+	// one member (for the deduplication): one line, and one sheet of it
+	bool p_equal(const Param &a, const Param &b) const {
+		return aim() ? dir_equal(a.dir, b.dir) : (key_dist(a.key, b.key) <= key_tol(a.key) && a.sub == b.sub);
+	}
+	// one line (no gap between them)
+	bool p_same(const Param &a, const Param &b) const { return aim() ? dir_equal(a.dir, b.dir) : key_dist(a.key, b.key) <= key_tol(a.key); }
+	// the pencil runs round (the last member's gap closes on the first)
+	bool p_cyclic() const { return kind_ != PencilKind::Parallel; }
+	// the distance forward from a to b (an angle; a key difference)
+	double p_gap(const Param &a, const Param &b) const {
+		if (aim()) {
+			return ccw_angle(a.dir, b.dir);
+		}
+		const double d = key_diff(a.key, b.key);
+		return kind_ == PencilKind::Radial && d == 0.0 ? 2.0 : d; // (as ccw_angle: a == b is the full round)
+	}
+	Param p_step(const Param &a, double delta) const {
+		if (aim()) {
+			return Param{rotate(a.dir, delta), 0.0, 0.0};
+		}
+		double k = a.key + delta;
+		if (kind_ == PencilKind::Radial) {
+			k = std::fmod(k + 4.0, 2.0);
+		}
+		return Param{Pt{}, k, 0.0};
+	}
+	// a and b face away from each other (never one point's two images)
+	bool p_opposite(const Param &a, const Param &b) const { return aim() && dot(a.dir, b.dir) <= 0.0; }
+	// a and b differ by rounding only
+	bool p_near(const Param &a, const Param &b) const {
+		return aim() ? !(ccw_angle(a.dir, b.dir) > 1e-7 && ccw_angle(b.dir, a.dir) > 1e-7) : key_dist(a.key, b.key) <= 1e-7;
+	}
+	double p_eps_max() const { return kind_ == PencilKind::Parallel ? 1e-4 : 1e-6; }   // a side cast's offset (px; a diamond unit)
+	double p_refine_tol() const { return 1e-11; } // the bisection's resolution
+	double p_wide() const { return aim() ? PI : (kind_ == PencilKind::Radial ? 1.0 : INF); } // a gap wider than this is a rounding reversal
+	std::optional<Pt> p_cursor(const Param &q) const { return aim() ? cursor_for(q.dir) : cursor_at(q.key); }
+	Beam<F64> p_member(const Pt &c) const { return aim() ? member_of(c) : member_through(c); }
+	std::optional<Param> p_param(const Pt &c) const {
+		if (!aim()) {
+			const std::optional<double> k = key_of(c);
+			return k ? std::optional<Param>(Param{Pt{}, *k, 0.0}) : std::nullopt;
+		}
+		const std::optional<CN<F64>> X0 = backward(std::optional<CN<F64>>(cn_of(c)), K);
+		const std::optional<Pt> d = X0 ? aim_dir(*X0) : std::nullopt;
+		return d ? std::optional<Param>(Param{*d, 0.0, 0.0}) : std::nullopt;
+	}
+
+	// ---- the projective pencil (Stage 113)
+
+	// a point of frame `from` pulled back to frame `to` (to <= from), over the point maps
+	std::optional<CN<F64>> backward_to(std::optional<CN<F64>> z, size_t from, size_t to) const {
+		for (size_t i = from; i-- > to && z;) {
+			if (moves_[i]) {
+				z = effects::map_point(z, *scene_.find(plan_[i].surface_id), true);
+			}
+		}
+		return z;
+	}
+	std::optional<CN<F64>> pull(const Pt &z) const { return backward_to(std::optional<CN<F64>>(cn_of(z)), K, e0_); }
+	std::optional<Pt> push(const CN<F64> &z) const {
+		const std::optional<CN<F64>> w = forward(std::optional<CN<F64>>(z), e0_, K);
+		return w && pt_of(*w).finite() ? std::optional<Pt>(pt_of(*w)) : std::nullopt;
+	}
+	// Exact (as the solver's on_carrier): the point lies on surf's carrier.
+	static bool on_carrier_exact(const Surf<F64> &surf, const CN<F64> &k) {
+		if (geom::endpoint_at(surf.seg, k) != 0) {
+			return true;
+		}
+		if (surf.line) {
+			return exact::orient_zero(surf.sx, surf.sy, surf.ex, surf.ey, k.fx(), k.fy());
+		}
+		if (surf.full) {
+			return exact::on_circle_zero(surf.cx, surf.cy, surf.r, k.fx(), k.fy());
+		}
+		return exact::incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, k.fx(), k.fy());
+	}
+	const Surf<F64> *proj_surf(size_t m) const { return scene_.find(plan_[proj_[m]].surface_id); }
+	// the hit point of projective m for a target z in its epoch's own frame (the solver's rule: the click-nearest candidate)
+	std::optional<CN<F64>> hit_of(size_t m, const CN<F64> &z) const {
+		const Surf<F64> *surf = proj_surf(m);
+		if (surf == nullptr) {
+			return std::nullopt;
+		}
+		const PlanItem &item = plan_[proj_[m]];
+		const effects::F32Point *hint = item.hint ? &*item.hint : nullptr;
+		return effects::back_propagate(*surf, item.left, z, on_carrier_exact(*surf, z), hint);
+	}
+	Pt exit_at(size_t m, const CN<F64> &H) const {
+		return unit(pt_of(effects::projective_exit(*proj_surf(m), plan_[proj_[m]].left, H)));
+	}
+	// the last projective's
+	std::optional<CN<F64>> hit_of(const CN<F64> &z) const { return hit_of(proj_.size() - 1, z); }
+	Pt exit_at(const CN<F64> &H) const { return exit_at(proj_.size() - 1, H); }
+	// the key of a line of the radial pencil: its direction's diamond pseudo-angle folded to [0, 2)
+	static double line_key(const Pt &u) {
+		const double k = dir_key(u);
+		return k >= 2.0 ? k - 2.0 : k;
+	}
+	static Pt diamond_dir(double k) {
+		k = std::fmod(k + 4.0, 4.0);
+		Pt d;
+		if (k < 1.0) {
+			d = {1.0 - k, k};
+		} else if (k < 2.0) {
+			d = {1.0 - k, 2.0 - k};
+		} else if (k < 3.0) {
+			d = {k - 3.0, 2.0 - k};
+		} else {
+			d = {k - 3.0, k - 4.0};
+		}
+		return unit(d);
+	}
+	// the key of a hit point on the last projective's carrier
+	double key_of_hit(const CN<F64> &H) const {
+		const Pt h = pt_of(H);
+		if (kind_ == PencilKind::Radial) {
+			return line_key(unit(h - pc_));
+		}
+		return dot(h, perp(pu_));
+	}
+	// the key of a final-frame point: its member's
+	std::optional<double> key_of(const Pt &z) const {
+		const std::optional<CN<F64>> ze = pull(z);
+		if (!ze) {
+			return std::nullopt;
+		}
+		const std::optional<CN<F64>> H = hit_of(*ze);
+		return H ? std::optional<double>(key_of_hit(*H)) : std::nullopt;
+	}
+	// the click the fork is settled by (the plan's, or the via point)
+	Pt click_point() const {
+		const PlanItem &item = plan_[proj_.back()];
+		if (item.hint) {
+			return Pt{double(item.hint->x), double(item.hint->y)};
+		}
+		return Pt{psurf_->vx, psurf_->vy};
+	}
+	// The candidate a key's walk departs by the click's rule (the nearer of the
+	// two candidates of a circle: +1 / -1 across the click's line), +1 for a line.
+	double sigma_rule(double key) const {
+		if (kind_ == PencilKind::Radial) {
+			return dot(click_point() - pc_, diamond_dir(key)) >= 0.0 ? 1.0 : -1.0;
+		}
+		if (!psurf_->line) {
+			return dot(click_point() - pc_, pu_) >= 0.0 ? 1.0 : -1.0;
+		}
+		return 1.0;
+	}
+	// the candidate a final-frame cursor's own walk departs (the solver's: its
+	// back-propagated hit point's side)
+	double sigma_of_cursor(const Pt &c, double key) const {
+		const std::optional<CN<F64>> ze = pull(c);
+		const std::optional<CN<F64>> H = ze ? hit_of(*ze) : std::nullopt;
+		if (!H) {
+			return sigma_rule(key);
+		}
+		if (kind_ == PencilKind::Radial) {
+			return dot(pt_of(*H) - pc_, diamond_dir(key)) >= 0.0 ? 1.0 : -1.0;
+		}
+		if (!psurf_->line) {
+			return dot(pt_of(*H) - pc_, pu_) >= 0.0 ? 1.0 : -1.0;
+		}
+		return 1.0;
+	}
+	// the rank of a sheet among the members of one line: the sheet the keys just below take, then the other
+	double sub_of(double key, double sigma) const { return sigma == sigma_rule(key - 1e-9) ? 0.0 : 1.0; }
+	// the hit point of a key: the member's line meets the carrier there (the
+	// candidate of sigma; by the click's rule when 0)
+	std::optional<CN<F64>> hit_at_key(double key, double sigma = 0.0) const {
+		const double sg = sigma != 0.0 ? sigma : sigma_rule(key);
+		if (kind_ == PencilKind::Radial) {
+			const Pt u = diamond_dir(key);
+			return cn_of(pc_ + u * (sg * pr_));
+		}
+		const Pt pu = perp(pu_);
+		if (psurf_->line) {
+			const Pt S{psurf_->sx, psurf_->sy};
+			const Pt d = unit(Pt{psurf_->ex - psurf_->sx, psurf_->ey - psurf_->sy});
+			const double den = dot(d, pu);
+			if (den == 0.0) {
+				return std::nullopt;
+			}
+			return cn_of(S + d * ((key - dot(S, pu)) / den));
+		}
+		// a directional on a circle: the chord at the key's offset (across the
+		// normal, measured from the centre), its end on the click's side of
+		// the diameter across the normal
+		const double off = key - dot(pc_, pu);
+		if (std::abs(off) > pr_) {
+			return std::nullopt;
+		}
+		const double h = std::sqrt(std::max(0.0, pr_ * pr_ - off * off));
+		return cn_of(pc_ + pu * off + pu_ * (sg * h));
+	}
+	// a final-frame cursor on the member of the key: prho_ along the exit from its hit point
+	std::optional<Pt> cursor_at(double key, double sigma = 0.0) const {
+		const std::optional<CN<F64>> H = hit_at_key(key, sigma);
+		if (!H) {
+			return std::nullopt;
+		}
+		const Pt e = exit_at(*H);
+		return push(cn_of(pt_of(*H) + e * prho_));
+	}
+	// the member of a key, run along the exit from the hit point of sigma's candidate
+	std::optional<Beam<F64>> member_from_key(double key, double sigma) const {
+		const std::optional<CN<F64>> H = hit_at_key(key, sigma);
+		return H ? member_from_hit(*H) : std::nullopt;
+	}
+	// the member through a final-frame point, run along the exit from the hit
+	// point the point's own walk departs
+	Beam<F64> member_through(const Pt &z) const {
+		const Beam<F64> fallback{cn_of(z), CN<F64>{F64{1.0}, F64{0.0}}, F64{0.0}};
+		const std::optional<double> key = key_of(z);
+		if (!key) {
+			return fallback;
+		}
+		return member_from_key(*key, sigma_of_cursor(z, *key)).value_or(fallback);
+	}
+	std::optional<Beam<F64>> member_from_hit(const CN<F64> &H) const {
+		const Pt e = exit_at(H);
+		const std::optional<Pt> P = push(H);
+		const std::optional<Pt> X = push(cn_of(pt_of(H) + e * prho_));
+		if (!P || !X || *P == *X) {
+			return std::nullopt;
+		}
+		const CN<F64> cp = cn_of(*P);
+		if (!res_.qk_inf) {
+			// the member through the frame's finite infinity (the epoch's line through
+			// an inversion's centre maps onto itself): exactly straight among circles
+			const Pt d = *X - *P;
+			const Pt q = res_.qk - *P;
+			const double scale = std::max({1.0, norm(d), norm(q)});
+			if (std::abs(cross(d, q)) <= 1e-9 * scale * scale) {
+				return Beam<F64>{cp, cn_of(unit(d)), F64{0.0}};
+			}
+		}
+		const CN<F64> delta = cp.sub(cn_of(res_.qk));
+		return Beam<F64>::through(cp, cn_of(*X), res_.qk_inf ? nullptr : &delta);
+	}
+	// the sheet a final-frame point lies on, as its cell winds: the walk from H
+	// runs away from the centre (+) or toward it (-) on the radial pencil,
+	// along (+) or against (-) the family's direction on the parallel one;
+	// the last epoch's reflections and inversions reverse it
+	int wind_at(const Pt &z, double key) const {
+		const std::optional<CN<F64>> H = hit_at_key(key, sigma_of_cursor(z, key));
+		if (!H) {
+			return parity_;
+		}
+		const Pt e = exit_at(*H);
+		double s = dot(e, pu_);
+		if (kind_ == PencilKind::Radial) {
+			const std::optional<CN<F64>> ze = pull(z);
+			s = ze ? dot(e, pt_of(*ze) - pc_) : 1.0;
+		}
+		return (s >= 0.0 ? 1 : -1) * parity_;
+	}
+	size_t epoch_of(size_t j) const {
+		size_t k = 0;
+		for (size_t p : proj_) {
+			if (p < j) {
+				k++;
+			}
+		}
+		return k;
+	}
+	// The keys of the members through a hit point on projective m's carrier:
+	// the next epoch's line from it (along the exit), mapped to the frame of
+	// the next projective and cut by its carrier, and so on to the last epoch.
+	void keys_from_hit(size_t m, const CN<F64> &H, std::vector<double> &out, int depth = 0) const {
+		if (m + 1 == proj_.size()) {
+			out.push_back(key_of_hit(H));
+			return;
+		}
+		if (depth > 8) {
+			return;
+		}
+		const size_t from = proj_[m] + 1;
+		const size_t to = proj_[m + 1];
+		const Pt e = exit_at(m, H);
+		const std::optional<CN<F64>> P = forward(std::optional<CN<F64>>(H), from, to);
+		const std::optional<CN<F64>> X = forward(std::optional<CN<F64>>(cn_of(pt_of(H) + e * 100.0)), from, to);
+		if (!P || !X) {
+			return;
+		}
+		const effects::Poles<F64> &fr = frames_[to];
+		const CN<F64> delta = fr.Q ? P->sub(*fr.Q) : CN<F64>{F64{0.0}, F64{0.0}};
+		const Beam<F64> b = Beam<F64>::through(*P, *X, fr.Q ? &delta : nullptr);
+		const Surf<F64> *next = proj_surf(m + 1);
+		if (next == nullptr) {
+			return;
+		}
+		for (const F64 &t : geom::hits(b, next->seg, false)) {
+			if (t.is_inf()) {
+				continue;
+			}
+			keys_from_hit(m + 1, b.at(t), out, depth + 1);
+		}
+	}
+	// The keys of the members through a point of frame j (j < e0_): the
+	// frame's own pencil member through it, pushed through the projectives.
+	void keys_from_point(size_t j, const CN<F64> &z, std::vector<double> &out) const {
+		const size_t k = epoch_of(j);
+		if (k == proj_.size()) {
+			if (const std::optional<CN<F64>> w = forward(std::optional<CN<F64>>(z), j, K)) {
+				if (const std::optional<double> key = pt_of(*w).finite() ? key_of(pt_of(*w)) : std::nullopt) {
+					out.push_back(*key);
+				}
+			}
+			return;
+		}
+		if (k == 0) {
+			const size_t p = proj_[0];
+			const effects::Poles<F64> &fr = frames_[p];
+			const std::optional<CN<F64>> zp = forward(std::optional<CN<F64>>(z), j, p);
+			if (!fr.P || !zp || zp->sub(*fr.P).is_zero()) {
+				return;
+			}
+			const CN<F64> delta = fr.Q ? fr.P->sub(*fr.Q) : CN<F64>{F64{0.0}, F64{0.0}};
+			const Beam<F64> b = Beam<F64>::through(*fr.P, *zp, fr.Q ? &delta : nullptr);
+			const Surf<F64> *first = proj_surf(0);
+			if (first == nullptr) {
+				return;
+			}
+			for (const F64 &t : geom::hits(b, first->seg, false)) {
+				if (!t.is_inf()) {
+					keys_from_hit(0, b.at(t), out);
+				}
+			}
+			return;
+		}
+		const size_t ek = proj_[k - 1] + 1;
+		const std::optional<CN<F64>> ze = backward_to(std::optional<CN<F64>>(z), j, ek);
+		const std::optional<CN<F64>> H = ze ? hit_of(k - 1, *ze) : std::nullopt;
+		if (H) {
+			keys_from_hit(k - 1, *H, out);
+		}
+	}
+	static std::tuple<uint64_t, uint64_t, uint64_t, uint64_t> p_bits(const Param &q) {
+		return {std::bit_cast<uint64_t>(q.dir.x), std::bit_cast<uint64_t>(q.dir.y), std::bit_cast<uint64_t>(q.key), std::bit_cast<uint64_t>(q.sub)};
+	}
 
 	bool unsupported(const std::string &why) {
 		res_.supported = false;
@@ -677,10 +1103,12 @@ private:
 		K = plan_.size();
 		effs_ = solver_.plan_effects(plan_, flags_);
 		for (size_t j = 0; j < K; j++) {
-			if (is_projective(effs_[j])) {
-				return unsupported("projective plan entries are not supported yet");
+			const bool present = !plan_[j].is_infinity() && scene_.find(plan_[j].surface_id) != nullptr;
+			moves_.push_back(present && is_transformative(effs_[j]));
+			changes_.push_back(present && (is_transformative(effs_[j]) || is_projective(effs_[j])));
+			if (present && is_projective(effs_[j])) {
+				proj_.push_back(j);
 			}
-			changes_.push_back(!plan_[j].is_infinity() && is_transformative(effs_[j]) && scene_.find(plan_[j].surface_id) != nullptr);
 		}
 		res_.near_transforms = K > 0 && changes_[K - 1];
 		for (const PlanItem &item : plan_) {
@@ -706,7 +1134,14 @@ private:
 		frames_.push_back(cur);
 		std::vector<std::pair<int, effects::Poles<F64>>> stack;
 		for (size_t j = 0; j < K; j++) {
-			if (changes_[j]) {
+			if (changes_[j] && !moves_[j]) {
+				// Stage 113: a projective starts a new epoch at the real infinity, its
+				// stack cleared; the epoch's beams depart its hit points (P: its via,
+				// a stand-in no member is built from)
+				const Surf<F64> &surf = *scene_.find(plan_[j].surface_id);
+				cur = effects::Poles<F64>{CN<F64>{F64{surf.vx}, F64{surf.vy}}, std::nullopt, std::nullopt};
+				stack.clear();
+			} else if (changes_[j]) {
 				const Surf<F64> &surf = *scene_.find(plan_[j].surface_id);
 				if (!stack.empty() && pop_id_of(stack.back().first) == surf.id) {
 					cur = stack.back().second;
@@ -729,18 +1164,72 @@ private:
 		for (const auto &st : stack) {
 			reversing += scene_.find(st.first)->portal ? 0 : 1;
 		}
-		// the realization through infinity runs every member the other way
-		res_.orientation = (reversing % 2 == 0 ? 1 : -1) * (via_ ? -1 : 1);
-		res_.pk = pt_of(*frames_.back().P);
+		parity_ = reversing % 2 == 0 ? 1 : -1;
 		res_.qk_inf = !frames_.back().Q.has_value();
-		if (!res_.qk_inf && pt_of(*frames_.back().Q) == res_.pk) {
-			return unsupported("the player at the frame's infinity (every aim degenerates)");
-		}
 		if (frames_.back().Q) {
 			res_.qk = pt_of(*frames_.back().Q);
 		}
 		Flags f = flags_;
 		init_flags_ = f.canonical_key();
+		if (!proj_.empty()) {
+			return prepare_projective();
+		}
+		// the realization through infinity runs every member the other way
+		res_.orientation = parity_ * (via_ ? -1 : 1);
+		res_.pencil = "aim";
+		res_.pk = pt_of(*frames_.back().P);
+		if (!res_.qk_inf && res_.qk == res_.pk) {
+			return unsupported("the player at the frame's infinity (every aim degenerates)");
+		}
+		res_.supported = true;
+		return true;
+	}
+
+	// Stage 113: the last epoch's pencil (GAME_SPEC 15.2).
+	bool prepare_projective() {
+		e0_ = proj_.back() + 1;
+		psurf_ = scene_.find(plan_[proj_.back()].surface_id);
+		pleft_ = plan_[proj_.back()].left;
+		petype_ = effs_[proj_.back()];
+		res_.orientation = parity_; // (the cells carry their own winding; the first epoch's realization plays no part)
+		char buf[160];
+		if (petype_ == EffectType::CircleNormalProjection) {
+			kind_ = PencilKind::Radial;
+			pc_ = Pt{psurf_->cx, psurf_->cy};
+			pr_ = psurf_->r;
+			prho_ = pr_ / 2.0;
+			const std::optional<Pt> A = push(cn_of(pc_));
+			if (!A) {
+				return unsupported("the centre's image is at infinity");
+			}
+			res_.pk = *A;
+			if (!res_.qk_inf && res_.qk == res_.pk) {
+				return unsupported("the centre's image at the frame's infinity");
+			}
+			std::snprintf(buf, sizeof buf, "radial: centre (%.6g, %.6g) r %.6g", pc_.x, pc_.y, pr_);
+		} else {
+			kind_ = PencilKind::Parallel;
+			res_.pk_none = true;
+			if (petype_ == EffectType::LineNormalProjection) {
+				pu_ = unit(perp(Pt{psurf_->ex - psurf_->sx, psurf_->ey - psurf_->sy}));
+			} else {
+				const Projective &pr = psurf_->proj(pleft_);
+				pu_ = unit(Pt{pr.nx, pr.ny});
+				if (psurf_->line && cross(Pt{psurf_->ex - psurf_->sx, psurf_->ey - psurf_->sy}, pu_) == 0.0) {
+					// the normal along the carrier: every exit is the carrier line itself,
+					// no hit point exists (GAME_SPEC 13.3): nothing is reached
+					empty_ = true;
+					res_.notes.push_back("a directional normal parallel to its line carrier: no exit family (the region is empty)");
+				}
+			}
+			if (!psurf_->line) {
+				pc_ = Pt{psurf_->cx, psurf_->cy};
+				pr_ = psurf_->r;
+				prho_ = pr_ / 2.0;
+			}
+			std::snprintf(buf, sizeof buf, "parallel: direction (%.6f, %.6f)", pu_.x, pu_.y);
+		}
+		res_.pencil = buf;
 		res_.supported = true;
 		return true;
 	}
@@ -753,7 +1242,7 @@ private:
 	// a point of frame j mapped to frame `to` (j <= to), or to frame 0 (inverse)
 	std::optional<CN<F64>> forward(std::optional<CN<F64>> z, size_t j, size_t to) const {
 		for (size_t i = j; i < to && z; i++) {
-			if (changes_[i]) {
+			if (moves_[i]) {
 				z = effects::map_point(z, *scene_.find(plan_[i].surface_id), false);
 			}
 		}
@@ -761,7 +1250,7 @@ private:
 	}
 	std::optional<CN<F64>> backward(std::optional<CN<F64>> z, size_t j) const {
 		for (size_t i = j; i-- > 0 && z;) {
-			if (changes_[i]) {
+			if (moves_[i]) {
 				z = effects::map_point(z, *scene_.find(plan_[i].surface_id), true);
 			}
 		}
@@ -863,12 +1352,41 @@ private:
 	void add_poi(std::vector<Member> &out, const CN<F64> &z, size_t j, const std::string &why, int tangent_sid = -1, bool exact = false,
 			const std::optional<Pt> &other = std::nullopt) {
 		const std::optional<CN<F64>> c = forward(std::optional<CN<F64>>(z), j, K);
-		const std::optional<CN<F64>> X0 = backward(std::optional<CN<F64>>(z), j);
+		const std::optional<CN<F64>> X0 = aim() ? backward(std::optional<CN<F64>>(z), j) : c;
 		if (!c || !X0) {
 			return;
 		}
 		const Pt cp = pt_of(*c);
-		if (!cp.finite() || cp == res_.pk || (!res_.qk_inf && cp == res_.qk) || cp == res_.player) {
+		if (!cp.finite() || (!res_.pk_none && cp == res_.pk) || (!res_.qk_inf && cp == res_.qk) || cp == res_.player) {
+			return;
+		}
+		if (!aim()) {
+			// Stage 113: the member through the point is its hit point's (the solver's
+			// candidate for a cursor there); one walk per member, no other way
+			const std::optional<double> key = key_of(cp);
+			if (!key) {
+				return;
+			}
+			Member m;
+			m.key = *key;
+			m.cursor = cp;
+			m.poi = true;
+			// its sheet: the candidate its own walk departs -- a point on the carrier
+			// (which aims at the other candidate) is on its own side
+			if (on_carrier_exact(*psurf_, cn_of(cp))) {
+				if (kind_ == PencilKind::Radial) {
+					m.sigma = dot(cp - pc_, diamond_dir(*key)) >= 0.0 ? 1.0 : -1.0;
+				} else {
+					m.sigma = psurf_->line ? 1.0 : (dot(cp - pc_, pu_) >= 0.0 ? 1.0 : -1.0);
+				}
+			} else {
+				m.sigma = sigma_of_cursor(cp, *key);
+			}
+			m.sub = sub_of(*key, m.sigma);
+			m.why = why + (j < K ? " (frame " + std::to_string(j) + ")" : "");
+			m.tangent_sid = j == K || (tangent_sid >= 0 && carrier_fixed(tangent_sid, j)) ? tangent_sid : -1;
+			m.exact = exact && same_frame_as_final(j);
+			out.push_back(std::move(m));
 			return;
 		}
 		const std::optional<Pt> d = aim_dir(*X0);
@@ -920,7 +1438,26 @@ private:
 	// Members of frame j's family (the circles through A and B, lines through A
 	// when B is infinity) tangent to a carrier: by the inversion about A (the
 	// family becomes the lines through B').
+	// a carrier's geometry (a line through S along dir, or the circle (c, r)), for the pencil computations
+	struct CarrierGeom {
+		bool line = true;
+		Pt S, dir;
+		Pt c;
+		double r = 0.0;
+	};
+	static CarrierGeom geom_of(const Surf<F64> &s) {
+		CarrierGeom g;
+		g.line = s.line;
+		g.S = Pt{s.sx, s.sy};
+		g.dir = unit(Pt{s.ex - s.sx, s.ey - s.sy});
+		g.c = Pt{s.cx, s.cy};
+		g.r = s.r;
+		return g;
+	}
 	static std::vector<Pt> tangent_points(const Pt &A, const std::optional<Pt> &B, const Surf<F64> &s) {
+		return tangent_points_geom(A, B, geom_of(s));
+	}
+	static std::vector<Pt> tangent_points_geom(const Pt &A, const std::optional<Pt> &B, const CarrierGeom &s) {
 		std::vector<Pt> out;
 		auto inv = [&](const Pt &z) -> std::optional<Pt> {
 			const Pt w = z - A;
@@ -935,17 +1472,17 @@ private:
 		Pt cc;
 		double rr = 0.0;
 		if (!s.line) {
-			const Pt c{s.cx, s.cy};
+			const Pt c = s.c;
 			const Pt d = c - A;
-			const double D = dot(d, d) - s.r2;
+			const double D = dot(d, d) - s.r * s.r;
 			if (D == 0.0) {
 				return out;
 			}
 			cc = A + d * (1.0 / D);
 			rr = s.r / std::abs(D);
 		} else {
-			const Pt S{s.sx, s.sy};
-			const Pt dir = unit(Pt{s.ex - s.sx, s.ey - s.sy});
+			const Pt S = s.S;
+			const Pt dir = s.dir;
 			const Pt F = S + dir * dot(A - S, dir); // the foot of A on the line
 			if (F == A) {
 				return out;
@@ -1115,9 +1652,215 @@ private:
 		return out;
 	}
 
+	// Stage 113: a carrier of frame j pulled back to the last epoch's own frame
+	// (its image under the inverse of the epoch's maps: a line or a circle,
+	// rebuilt from three or four mapped points), or nothing when a point maps
+	// to infinity.
+	std::optional<CarrierGeom> epoch_carrier(const Surf<F64> &s, size_t j) const {
+		const CarrierGeom g = geom_of(s);
+		if (j == e0_) {
+			return g;
+		}
+		std::vector<Pt> pts = s.line ? std::vector<Pt>{g.S, g.S + g.dir * 100.0, g.S - g.dir * 100.0}
+									 : std::vector<Pt>{g.c + Pt{g.r, 0}, g.c + Pt{0, g.r}, g.c - Pt{g.r, 0}, g.c - Pt{0, g.r}};
+		std::vector<Pt> im;
+		for (const Pt &q : pts) {
+			const std::optional<CN<F64>> w = backward_to(std::optional<CN<F64>>(cn_of(q)), j, e0_);
+			if (!w || !pt_of(*w).finite()) {
+				return std::nullopt;
+			}
+			im.push_back(pt_of(*w));
+		}
+		CarrierGeom out;
+		const Pt ab = im[1] - im[0];
+		const Pt ac = im[2] - im[0];
+		const double d = 2.0 * cross(ab, ac);
+		const double scale = std::max({1.0, norm(ab), norm(ac)});
+		if (std::abs(d) <= 1e-9 * scale * scale) {
+			out.line = true;
+			out.S = im[0];
+			out.dir = unit(ab);
+			return out;
+		}
+		const double ab2 = dot(ab, ab);
+		const double ac2 = dot(ac, ac);
+		const Pt u{(ac.y * ab2 - ab.y * ac2) / d, (ab.x * ac2 - ac.x * ab2) / d};
+		out.line = false;
+		out.c = im[0] + u;
+		out.r = norm(u);
+		return out;
+	}
+
+	// The points of frame j where the last epoch's pencil touches surface s
+	// (in frame j): the pencil's lines in the epoch frame against the carrier
+	// pulled back there, mapped forward.
+	std::vector<Pt> epoch_tangent_points(const Surf<F64> &s, size_t j) const {
+		std::vector<Pt> out;
+		const std::optional<CarrierGeom> g = epoch_carrier(s, j);
+		if (!g) {
+			return out;
+		}
+		std::vector<Pt> te;
+		if (kind_ == PencilKind::Radial) {
+			te = tangent_points_geom(pc_, std::nullopt, *g);
+		} else if (!g->line) {
+			te = {g->c + perp(pu_) * g->r, g->c - perp(pu_) * g->r};
+		}
+		for (const Pt &t : te) {
+			const std::optional<CN<F64>> w = forward(std::optional<CN<F64>>(cn_of(t)), e0_, j);
+			if (w && pt_of(*w).finite()) {
+				out.push_back(pt_of(*w));
+			}
+		}
+		return out;
+	}
+
+	// a member of the projective pencil at a key (its cursor along the exit), or none
+	void add_key(std::vector<Member> &out, double key, const std::string &why, bool crack = false, double sigma = 0.0) const {
+		const double sg = sigma != 0.0 ? sigma : sigma_rule(key);
+		const std::optional<Pt> c = cursor_at(key, sg);
+		if (!c) {
+			return;
+		}
+		Member m;
+		m.key = key;
+		m.cursor = *c;
+		m.why = why;
+		m.crack = crack;
+		m.sigma = sg;
+		m.sub = sub_of(key, sg);
+		out.push_back(std::move(m));
+	}
+	// the members through a point of an earlier epoch, pushed through the projectives
+	void add_pushed(std::vector<Member> &out, const CN<F64> &z, size_t j, const std::string &why) const {
+		std::vector<double> keys;
+		keys_from_point(j, z, keys);
+		for (double k : keys) {
+			add_key(out, k, why + " (frame " + std::to_string(j) + ", pushed through)");
+		}
+	}
+
+	void collect_projective_members(std::vector<Member> &pois) {
+		const auto &surfs = scene_.surfaces;
+		// (a) the last epoch's own points of interest, in each of its frames
+		for (size_t j = e0_; j <= K; j++) {
+			if (j > e0_ && !changes_[j - 1]) {
+				continue;
+			}
+			for (size_t a = 0; a < surfs.size(); a++) {
+				const Surf<F64> &s = *surfs[a];
+				if (!s.full) {
+					add_poi(pois, CN<F64>{F64{s.sx}, F64{s.sy}}, j, "endpoint of " + std::to_string(s.id), -1, true);
+					add_poi(pois, CN<F64>{F64{s.ex}, F64{s.ey}}, j, "endpoint of " + std::to_string(s.id), -1, true);
+				}
+				for (const Pt &t : epoch_tangent_points(s, j)) {
+					add_poi(pois, cn_of(t), j, "tangency to " + std::to_string(s.id), s.id);
+				}
+				for (size_t b = a + 1; b < surfs.size(); b++) {
+					if (surfs[b]->carrier_rep == s.carrier_rep) {
+						continue;
+					}
+					for (const Pt &x : carrier_points(s, *surfs[b])) {
+						add_poi(pois, cn_of(x), j, "crossing of " + std::to_string(s.id) + " and " + std::to_string(surfs[b]->id));
+					}
+				}
+			}
+			for (size_t e = j; e < K; e++) {
+				if (e > j && changes_[e - 1]) {
+					break;
+				}
+				if (plan_[e].span) {
+					const auto &sp = *plan_[e].span;
+					add_poi(pois, CN<F64>{F64{sp[0]}, F64{sp[1]}}, j, "piece end", -1, true);
+					add_poi(pois, CN<F64>{F64{sp[2]}, F64{sp[3]}}, j, "piece end", -1, true);
+				}
+			}
+		}
+		// (b) the earlier epochs' points of interest, pushed through the projectives:
+		// where their members cut the next projective's carrier, and so on
+		for (size_t j = 0; j < e0_; j++) {
+			if (j > 0 && !changes_[j - 1]) {
+				continue;
+			}
+			const effects::Poles<F64> &fr = frames_[j];
+			if (!fr.P) {
+				continue;
+			}
+			const bool first_epoch = epoch_of(j) == 0;
+			const Pt A = pt_of(*fr.P);
+			const std::optional<Pt> B = fr.Q ? std::optional<Pt>(pt_of(*fr.Q)) : std::nullopt;
+			for (size_t a = 0; a < surfs.size(); a++) {
+				const Surf<F64> &s = *surfs[a];
+				if (!s.full) {
+					add_pushed(pois, CN<F64>{F64{s.sx}, F64{s.sy}}, j, "endpoint of " + std::to_string(s.id));
+					add_pushed(pois, CN<F64>{F64{s.ex}, F64{s.ey}}, j, "endpoint of " + std::to_string(s.id));
+				}
+				if (first_epoch && !(s.line && !B)) {
+					for (const Pt &t : tangent_points(A, B, s)) {
+						add_pushed(pois, cn_of(t), j, "tangency to " + std::to_string(s.id));
+					}
+				}
+				for (size_t b = a + 1; b < surfs.size(); b++) {
+					if (surfs[b]->carrier_rep == s.carrier_rep) {
+						continue;
+					}
+					for (const Pt &x : carrier_points(s, *surfs[b])) {
+						add_pushed(pois, cn_of(x), j, "crossing of " + std::to_string(s.id) + " and " + std::to_string(surfs[b]->id));
+					}
+				}
+			}
+			for (size_t e = j; e < e0_; e++) {
+				if (e > j && changes_[e - 1]) {
+					break;
+				}
+				if (plan_[e].span) {
+					const auto &sp = *plan_[e].span;
+					add_pushed(pois, CN<F64>{F64{sp[0]}, F64{sp[1]}}, j, "piece end");
+					add_pushed(pois, CN<F64>{F64{sp[2]}, F64{sp[3]}}, j, "piece end");
+				}
+			}
+		}
+		if (kind_ == PencilKind::Radial) {
+			// (c) the fork line: through the centre, across the click (the click-nearest
+			// candidate switches there): one line, two members -- the sheet of the
+			// keys just below it, then the other
+			const Pt f = click_point() - pc_;
+			if (norm(f) > 0.0) {
+				const double k = line_key(unit(perp(f)));
+				add_key(pois, k, "the fork line", true, sigma_rule(k - 1e-9));
+				add_key(pois, k, "the fork line", true, -sigma_rule(k - 1e-9));
+			}
+			// (e) the axes: every gap stays below a quarter turn
+			for (double k : {0.0, 0.5, 1.0, 1.5}) {
+				add_key(pois, k, "axis");
+			}
+		} else {
+			if (!psurf_->line) {
+				// (d) where the normal is tangent to the circle: the exit flips across them
+				for (double sg : {1.0, -1.0}) {
+					add_poi(pois, cn_of(pc_ + perp(pu_) * (sg * pr_)), e0_, "tangency of the normal to " + std::to_string(psurf_->id), psurf_->id);
+				}
+			} else if (psurf_->full) {
+				// (e) a full line: the domain's extent bounds the keys
+				const Pt pu = perp(pu_);
+				double lo = INF;
+				double hi = -INF;
+				for (const Pt &q : {Pt{res_.domain.x0, res_.domain.y0}, Pt{res_.domain.x1, res_.domain.y0}, Pt{res_.domain.x0, res_.domain.y1}, Pt{res_.domain.x1, res_.domain.y1}}) {
+					lo = std::min(lo, dot(q, pu));
+					hi = std::max(hi, dot(q, pu));
+				}
+				add_key(pois, lo, "the domain's edge");
+				add_key(pois, hi, "the domain's edge");
+			}
+		}
+	}
+
 	void collect_members() {
 		std::vector<Member> pois;
-		for (size_t j = 0; j <= K; j++) {
+		if (!aim()) {
+			collect_projective_members(pois);
+		}
+		for (size_t j = 0; j <= K && aim(); j++) {
 			if (j > 0 && !changes_[j - 1]) {
 				continue; // the same frame as before
 			}
@@ -1174,7 +1917,7 @@ private:
 		}
 		// a finite Q_K: the line through P_K and Q_K is a member (both ways along
 		// it); the cells beside it reach the real infinity, which they clip
-		if (!res_.qk_inf) {
+		if (aim() && !res_.qk_inf) {
 			const Pt PK = res_.pk;
 			const Pt QK = res_.qk;
 			for (const Pt &c : {(PK + QK) * 0.5, PK * 2.0 - QK}) {
@@ -1193,7 +1936,7 @@ private:
 		// Stage 111: the aims parallel to the first entry's line carrier: no
 		// orientation fires the entry there (the cast is dead), and the members
 		// bound the cells of both halves at the crack between them
-		if (half_ != Half::Single) {
+		if (aim() && half_ != Half::Single) {
 			const int j = solver_.first_entry(plan_, flags_);
 			const Surf<F64> *e = j >= 0 ? scene_.find(plan_[size_t(j)].surface_id) : nullptr;
 			if (e != nullptr && e->line) {
@@ -1211,6 +1954,9 @@ private:
 		}
 		// the axes: every gap between members stays below a quarter turn
 		for (const Pt &d : {Pt{1, 0}, Pt{0, 1}, Pt{-1, 0}, Pt{0, -1}}) {
+			if (!aim()) {
+				break;
+			}
 			Member m;
 			m.dir = d;
 			m.why = "axis";
@@ -1219,23 +1965,23 @@ private:
 				pois.push_back(std::move(m));
 			}
 		}
-		std::stable_sort(pois.begin(), pois.end(), [](const Member &a, const Member &b) { return dir_less(a.dir, b.dir); });
+		std::stable_sort(pois.begin(), pois.end(), [&](const Member &a, const Member &b) { return p_less(a.param(), b.param()); });
 		// one member per direction: exact duplicates merge, and so do two images of
 		// one point (a carrier's point fixed by its own map, computed per frame)
 		auto same_point = [&](const Member &a, const Member &b) {
 			const double tol = 1e-9 * std::max({1.0, std::abs(a.cursor.x), std::abs(a.cursor.y)});
-			if (dot(a.dir, b.dir) <= 0.0) {
-				return false;
+			if (p_opposite(a.param(), b.param()) || (!aim() && a.sub != b.sub)) {
+				return false; // (Stage 113: one line's two sheets are two members)
 			}
 			if (norm(a.cursor - b.cursor) <= tol) {
 				return true;
 			}
 			// two points of interest on one member (a circle tangent to two
 			// carriers): one member, whose directions differ by rounding only
-			if (ccw_angle(a.dir, b.dir) > 1e-7 && ccw_angle(b.dir, a.dir) > 1e-7) {
+			if (!p_near(a.param(), b.param())) {
 				return false;
 			}
-			const Beam<F64> mb = member_of(a.cursor);
+			const Beam<F64> mb = p_member(a.cursor);
 			const Pt P = pt_of(mb.p);
 			const Pt t = pt_of(mb.tau);
 			const double k = mb.kappa.v;
@@ -1244,7 +1990,7 @@ private:
 		};
 		std::vector<Member> out;
 		for (Member &m : pois) {
-			if (!out.empty() && (dir_equal(out.back().dir, m.dir) || same_point(out.back(), m))) {
+			if (!out.empty() && (p_equal(out.back().param(), m.param()) || same_point(out.back(), m))) {
 				if (m.straight || (!out.back().poi && !out.back().straight && m.poi)) {
 					out.back() = std::move(m);
 				}
@@ -1252,7 +1998,7 @@ private:
 			}
 			out.push_back(std::move(m));
 		}
-		if (out.size() > 1 && (dir_equal(out.front().dir, out.back().dir) || same_point(out.front(), out.back()))) {
+		if (out.size() > 1 && p_cyclic() && (p_equal(out.front().param(), out.back().param()) || same_point(out.front(), out.back()))) {
 			out.pop_back();
 		}
 		res_.members = std::move(out);
@@ -1260,10 +2006,10 @@ private:
 
 	// ---- casts
 
-	Cast cast(const Pt &c, const Pt &dir, const Beam<F64> &member, CastKind kind = CastKind::Other) {
+	Cast cast(const Pt &c, const Param &q, const Beam<F64> &member, CastKind kind = CastKind::Other) {
 		res_.casts++;
 		res_.casts_by_kind[size_t(kind)]++;
-		return cast_on(tracer_, c, dir, member);
+		return cast_on(tracer_, c, q, member);
 	}
 
 	// A batch of casts, in parallel over threads (Perf P3): each thread casts
@@ -1271,7 +2017,7 @@ private:
 	// memos), the results land by index, so they are the casts made in order.
 	struct CastJob {
 		Pt c;
-		Pt dir;
+		Param q;
 		Beam<F64> member;
 		CastKind kind = CastKind::Other;
 	};
@@ -1284,7 +2030,7 @@ private:
 		const size_t nt = std::min(jobs.size(), size_t(vis_threads()));
 		if (nt <= 1) {
 			for (size_t i = 0; i < jobs.size(); i++) {
-				out[i] = cast_on(tracer_, jobs[i].c, jobs[i].dir, jobs[i].member);
+				out[i] = cast_on(tracer_, jobs[i].c, jobs[i].q, jobs[i].member);
 			}
 			return out;
 		}
@@ -1295,7 +2041,7 @@ private:
 		std::atomic<size_t> next{0};
 		auto work = [&](Tracer *t) {
 			for (size_t i = next++; i < jobs.size(); i = next++) {
-				out[i] = cast_on(*t, jobs[i].c, jobs[i].dir, jobs[i].member);
+				out[i] = cast_on(*t, jobs[i].c, jobs[i].q, jobs[i].member);
 			}
 		};
 		std::vector<std::thread> threads;
@@ -1326,36 +2072,37 @@ private:
 			int(r.met), r.ek, int(r.has_depart), end_name(r.near_kind), end_name(r.end_kind), r.has_tie ? (r.tie_after_q ? " tie-cut after Q" : " tie-cut") : "");
 	}
 
-	Cast cast_on(Tracer &tracer, const Pt &c, const Pt &dir, const Beam<F64> &member) const {
+	Cast cast_on(Tracer &tracer, const Pt &c, const Param &q, const Beam<F64> &member) const {
+		const Pt &dir = q.dir;
 		if (half_ == Half::Single) {
-			Cast r = cast_core(tracer, c, dir, member, std::nullopt, nullptr);
+			Cast r = cast_core(tracer, c, q, member, std::nullopt, nullptr);
 			trace_cast(r, std::nullopt);
 			return r;
 		}
 		const bool rev = half_ == Half::Reversed;
 		// (a plan without an entry -- the prefix of a split plan, built in a cell's
 		// orientation by a check -- has no tie-choice: the forced orientation alone)
-		const std::optional<bool> q = solver_.first_entry(plan_, flags_) >= 0 ? memo_tie(tracer, c) : std::nullopt;
+		const std::optional<bool> tq = solver_.first_entry(plan_, flags_) >= 0 ? memo_tie(tracer, c) : std::nullopt;
 		if (std::getenv("RC_VIS_TIE") != nullptr) {
 			std::fprintf(stderr, "tie half %d cursor (%.6g, %.6g) dir (%.9f, %.9f) angle %.9f -> %s\n", int(half_), c.x, c.y, dir.x, dir.y,
-				std::atan2(dir.y, dir.x), q ? (*q ? "reversed" : "direct") : "none");
+				std::atan2(dir.y, dir.x), tq ? (*tq ? "reversed" : "direct") : "none");
 		}
 		std::optional<Cast> tie;
-		if (q && *q != rev) {
-			tie = cast_core(tracer, c, dir, Beam<F64>{member.p, member.tau.neg(), member.kappa.neg()}, *q, nullptr);
+		if (tq && *tq != rev) {
+			tie = cast_core(tracer, c, q, Beam<F64>{member.p, member.tau.neg(), member.kappa.neg()}, *tq, nullptr);
 			if (!tie->valid) {
 				tie.reset();
 			}
 		}
-		Cast r = cast_core(tracer, c, dir, member, rev, tie ? &*tie : nullptr);
+		Cast r = cast_core(tracer, c, q, member, rev, tie ? &*tie : nullptr);
 		if (r.valid) {
 			const std::optional<bool> own = memo_realization(tracer, c);
 			r.chosen = own && *own == rev;
 		}
 		// a tie cut names the other orientation's departure: only in a split half,
 		// only where the tie-choice is the other orientation
-		RC_ASSERT(!r.has_tie || (q && *q != rev), "vis: a tie cut outside a tie");
-		trace_cast(r, q);
+		RC_ASSERT(!r.has_tie || (tq && *tq != rev), "vis: a tie cut outside a tie");
+		trace_cast(r, tq);
 		return r;
 	}
 
@@ -1430,10 +2177,11 @@ private:
 		return q;
 	}
 
-	Cast cast_core(Tracer &tracer, const Pt &c, const Pt &dir, const Beam<F64> &member, std::optional<bool> force, const Cast *tie) const {
+	Cast cast_core(Tracer &tracer, const Pt &c, const Param &q, const Beam<F64> &member, std::optional<bool> force, const Cast *tie) const {
 		Cast r;
 		r.cursor = c;
-		r.dir = dir;
+		r.dir = q.dir;
+		r.key = q.key;
 		const Pt P = res_.player;
 		const std::optional<LadderResult> lr = memo_solve(tracer, c, force);
 		if (!lr) {
@@ -1452,6 +2200,7 @@ private:
 		// the event that consumes the last plan entry, on the planned walk
 		int eK = -1;
 		bool met = K == 0;
+		std::optional<Pt> proj_pt; // Stage 113: where the planned walk fired the last projective
 		if (!met) {
 			size_t j = 0;
 			for (size_t i = 0; i < pl.size() && !met; i++) {
@@ -1467,10 +2216,28 @@ private:
 					r.depart_pt = e.pt;
 					r.depart_sid = e.sid;
 				}
+				if (consumed && !aim() && j == proj_.back()) {
+					proj_pt = e.pt;
+				}
 				if (consumed && ++j == K) {
 					eK = int(i);
 					met = true;
 				}
+			}
+		}
+		if (met && !aim()) {
+			// Stage 113: the planned walk fires the projective at its first matching
+			// crossing; when that is not the member's hit point H (the cursor's
+			// back-propagated one), the walk left the plan there (GAME_SPEC 13.3:
+			// the plan does not reach the cursor) and runs another line: not this
+			// member's walk
+			const std::optional<CN<F64>> ze = pull(c);
+			const std::optional<CN<F64>> H = ze ? hit_of(*ze) : std::nullopt;
+			const std::optional<Pt> hp = H ? std::optional<Pt>(pt_of(*H)) : std::nullopt; // (the firing's frame: the epoch's own)
+			const double tol = 1e-6 * std::max({1.0, std::abs(c.x), std::abs(c.y)});
+			if (!proj_pt || !hp || norm(*proj_pt - *hp) > tol) {
+				met = false;
+				eK = -1;
 			}
 		}
 		// The walks as the merge reads them: the steps trace_pair draws, paired by
@@ -1525,7 +2292,7 @@ private:
 		int stop_i = -1;
 		int budget_i = -1;
 		int counted = 0;
-		std::string frame_now = "0||" + init_flags_;
+		std::string frame_now = "||" + init_flags_; // (epoch 0: no firing yet, K14)
 		for (size_t i = 0; i < ph.size(); i++) {
 			const CastEvent &e = ph[i];
 			if (e.kind == EventKind::Hit || e.kind == EventKind::Infinity || e.kind == EventKind::Max) {
@@ -1560,7 +2327,7 @@ private:
 			const CastEvent &last = ph.back();
 			const Pt start = r.near_kind == End::Near ? r.near_pt : (r.near_kind == End::PoleP ? res_.pk : res_.qk);
 			if (last.kind == EventKind::Origin && last.has_pt) {
-				if (!same(last.pt, start) && !same(last.pt, res_.pk)) {
+				if (!same(last.pt, start) && !(!res_.pk_none && same(last.pt, res_.pk))) {
 					lap_kind = End::Stop;
 					lap_pt = last.pt;
 				}
@@ -1579,7 +2346,7 @@ private:
 					}
 				}
 				if (!same(o, start)) {
-					if (same(o, res_.pk)) {
+					if (!res_.pk_none && same(o, res_.pk)) {
 						lap_kind = End::PoleP;
 					} else if (!res_.qk_inf && same(o, res_.qk)) {
 						lap_kind = End::PoleQ;
@@ -1673,6 +2440,9 @@ private:
 
 	// p lies on the arc of member b (with the cursor c on it) that c's aim owns
 	bool owned_at(const Beam<F64> &b, const Pt &c, const Pt &p) const {
+		if (!aim()) {
+			return true; // Stage 113: one walk per member, the whole loop its own
+		}
 		const double tq = tq_of(b);
 		const double tc = b.param_of(cn_of(c)).v;
 		const double t = b.param_of(cn_of(p)).v;
@@ -1696,7 +2466,11 @@ private:
 		const double tq = tq_of(b);
 		const double tc = b.param_of(cn_of(r.cursor)).v;
 		const bool own_a = walk_key(tc, 0.0) < walk_key(tq, 0.0);
+		const double tP = kind_ == PencilKind::Radial ? b.param_of(cn_of(res_.pk)).v : 0.0;
 		auto owned = [&](double t) {
+			if (!aim()) {
+				return t != tq; // Stage 113: the whole loop (the poles are breakpoints)
+			}
 			if (t == 0.0 || t == tq) {
 				return false;
 			}
@@ -1725,7 +2499,10 @@ private:
 		const Key ke = loop ? Key{2, 0.0} : walk_key(te, t0);
 		std::vector<Mark> marks{{r.near_kind, t0}};
 		std::vector<Mark> bps;
-		for (const Mark &m : {Mark{End::PoleP, 0.0}, Mark{End::PoleQ, tq}}) {
+		for (const Mark &m : {Mark{End::PoleP, tP}, Mark{End::PoleQ, tq}}) {
+			if (m.kind == End::PoleP && res_.pk_none) {
+				continue;
+			}
 			if (m.t != t0 && walk_key(m.t, t0) < ke) {
 				bps.push_back(m);
 			}
@@ -1767,27 +2544,49 @@ private:
 		std::vector<std::pair<size_t, int>> slot; // (member, 0 crit / 1 minus / 2 plus)
 		for (size_t i = 0; i < n; i++) {
 			Member &m = ms[i];
-			m.beam = member_of(m.cursor);
+			m.beam = aim() ? member_of(m.cursor) : member_from_key(m.key, m.sigma).value_or(member_through(m.cursor));
 			if (m.straight) {
 				// exactly straight, run the way the circles near it run
 				const Pt u = unit(res_.qk - res_.pk);
 				const double sg = dot(pt_of(m.beam.tau), u) >= 0.0 ? 1.0 : -1.0;
 				m.beam = Beam<F64>{cn_of(res_.pk), cn_of(u * sg), F64{0.0}};
 			}
+			if (!aim() && !res_.qk_inf && m.beam.kappa.is_zero()) {
+				m.straight = true; // the line through the frame's finite infinity (REGULAR: a whisker may lie on it)
+			}
 			m.tq = tq_of(m.beam);
-			m.own_a = walk_key(m.beam.param_of(cn_of(m.cursor)).v, 0.0) < walk_key(m.tq, 0.0);
-			jobs.push_back(CastJob{m.cursor, m.dir, m.beam, CastKind::Crit});
+			m.tp = kind_ == PencilKind::Radial ? m.beam.param_of(cn_of(res_.pk)).v : 0.0;
+			m.own_a = aim() ? walk_key(m.beam.param_of(cn_of(m.cursor)).v, 0.0) < walk_key(m.tq, 0.0) : true;
+			// Stage 113: a point of interest on the projective's carrier aims at the
+			// other candidate (its own cast decides a cursor exactly there); the
+			// member's walk is cast from a cursor along its exit
+			std::optional<Pt> wc;
+			if (!aim() && m.poi && on_carrier_exact(*psurf_, cn_of(m.cursor))) {
+				wc = cursor_at(m.key, m.sigma);
+			}
+			jobs.push_back(CastJob{wc ? *wc : m.cursor, m.param(), m.beam, CastKind::Crit});
 			slot.emplace_back(i, 0);
+			if (wc) {
+				jobs.push_back(CastJob{m.cursor, m.param(), m.beam, CastKind::Probe});
+				slot.emplace_back(i, 3);
+			}
 		}
 		for (size_t i = 0; i < n; i++) {
-			const Pt &prev = ms[(i + n - 1) % n].dir;
-			const Pt &next = ms[(i + 1) % n].dir;
-			const double gap = std::min(ccw_angle(prev, ms[i].dir), ccw_angle(ms[i].dir, next));
-			const double eps = std::min(1e-6, gap / 8.0);
+			const Param prev = ms[(i + n - 1) % n].param();
+			const Param next = ms[(i + 1) % n].param();
+			const Param cur = ms[i].param();
+			double gap = INF;
+			if (p_cyclic() || i > 0) {
+				gap = std::min(gap, p_gap(prev, cur));
+			}
+			if (p_cyclic() || i + 1 < n) {
+				gap = std::min(gap, p_gap(cur, next));
+			}
+			const double eps = std::min(p_eps_max(), gap / 8.0);
 			for (int side : {1, 2}) {
-				const Pt d = rotate(ms[i].dir, side == 1 ? -eps : eps);
-				if (const std::optional<Pt> c = cursor_for(d)) {
-					jobs.push_back(CastJob{*c, d, member_of(*c), CastKind::Side});
+				const Param d = p_step(cur, side == 1 ? -eps : eps);
+				if (const std::optional<Pt> c = p_cursor(d)) {
+					jobs.push_back(CastJob{*c, d, p_member(*c), CastKind::Side});
 					slot.emplace_back(i, side);
 				} else {
 					(side == 1 ? ms[i].minus : ms[i].plus) = Cast{};
@@ -1795,19 +2594,37 @@ private:
 			}
 		}
 		std::vector<Cast> casts = cast_batch(jobs);
+		std::vector<bool> own(n, false);
 		for (size_t k = 0; k < jobs.size(); k++) {
 			Member &m = ms[slot[k].first];
+			if (slot[k].second == 3) {
+				m.poi_ok = casts[k].cursor_ok;
+				m.poi_chosen = casts[k].chosen;
+				own[slot[k].first] = true;
+				continue;
+			}
 			(slot[k].second == 0 ? m.crit : slot[k].second == 1 ? m.minus : m.plus) = std::move(casts[k]);
 		}
+		for (size_t i = 0; i < n; i++) {
+			if (!own[i]) {
+				ms[i].poi_ok = ms[i].crit.cursor_ok;
+				ms[i].poi_chosen = ms[i].crit.chosen;
+			}
+			set_t0(ms[i]);
+		}
+	}
+	// Stage 113: a projective walk's order along its member begins at its departure
+	void set_t0(Member &m) const {
+		m.t0 = !aim() && m.crit.valid && m.crit.near_kind == End::Near ? m.beam.param_of(cn_of(m.crit.near_pt)).v : 0.0;
 	}
 
-	Cast side_cast(const Pt &dir, double eps) {
-		const Pt d = rotate(dir, eps);
-		const std::optional<Pt> c = cursor_for(d);
+	Cast side_cast(const Param &q, double eps) {
+		const Param d = p_step(q, eps);
+		const std::optional<Pt> c = p_cursor(d);
 		if (!c) {
 			return Cast{};
 		}
-		return cast(*c, d, member_of(*c), CastKind::Side);
+		return cast(*c, d, p_member(*c), CastKind::Side);
 	}
 
 	// ---- cells
@@ -1825,7 +2642,7 @@ private:
 		}
 		if (kind == End::PoleP) {
 			v.p = res_.pk;
-			v.t = 0.0;
+			v.t = m.tp;
 			v.pole = true;
 			return v;
 		}
@@ -1845,10 +2662,10 @@ private:
 		// a walk that stops (or departs) at a pole -- a carrier through Q_K is
 		// crossed exactly there (Stage 105) -- ends at the pole itself
 		const double tol = 1e-9 * std::max({1.0, std::abs(target.x), std::abs(target.y)});
-		const bool at_p = norm(target - res_.pk) <= tol;
+		const bool at_p = !res_.pk_none && norm(target - res_.pk) <= tol;
 		if (at_p || (!res_.qk_inf && norm(target - res_.qk) <= tol)) {
 			v.p = at_p ? res_.pk : res_.qk;
-			v.t = at_p ? 0.0 : m.tq;
+			v.t = at_p ? m.tp : m.tq;
 			v.pole = true;
 			return v;
 		}
@@ -1937,7 +2754,7 @@ private:
 		// double root's rounding) is the pole
 		if (surf != nullptr) {
 			for (int k = 0; k < 2; k++) {
-				if (k == 1 && res_.qk_inf) {
+				if ((k == 1 && res_.qk_inf) || (k == 0 && res_.pk_none)) {
 					continue;
 				}
 				const Pt pole = k == 0 ? res_.pk : res_.qk;
@@ -1946,7 +2763,7 @@ private:
 											 : std::abs(norm(pole - Pt{surf->cx, surf->cy}) - surf->r);
 				if (on <= 1e-9 * sc && norm(v.p - pole) <= 1e-5 * sc) {
 					v.p = pole;
-					v.t = k == 0 ? 0.0 : m.tq;
+					v.t = k == 0 ? m.tp : m.tq;
 					v.pole = true;
 					return v;
 				}
@@ -1958,7 +2775,8 @@ private:
 		if (surf != nullptr && surf->line && m.beam.kappa.is_zero()) {
 			const Rect &dm = res_.domain;
 			const double far = 1e6 * (1.0 + (dm.x1 - dm.x0) + (dm.y1 - dm.y0));
-			if (!(best < INF) || norm(v.p - res_.pk) > far || norm(target - res_.pk) > far) {
+			const Pt ref = res_.pk_none ? pt_of(m.beam.p) : res_.pk;
+			if (!(best < INF) || norm(v.p - ref) > far || norm(target - ref) > far) {
 				const double tt = m.beam.param_of(cn_of(target)).v;
 				v.inf = true;
 				v.inf_sign = tt >= 0.0 ? 1 : -1;
@@ -1971,18 +2789,30 @@ private:
 
 	// Whether parameter t of member m is in the member's own visible set
 	// (closed at the near, stop, budget and loop ends, open at the poles).
+	// a parameter within rounding of the walk's start is the start (Stage 113: a
+	// projective walk departs at a computed parameter, not at the beam's own 0;
+	// the solver's departure point and the member's own hit point are two f64
+	// computations of one point, apart by rounding at the coordinates' scale)
+	double at_start(double t, double t0) const {
+		if (aim() || !std::isfinite(t0) || !std::isfinite(t)) {
+			return t;
+		}
+		const Rect &dm = res_.domain;
+		const double scale = std::max({1.0, std::abs(t), std::abs(t0), std::abs(dm.x0), std::abs(dm.x1), std::abs(dm.y0), std::abs(dm.y1)});
+		return std::abs(t - t0) <= 1e-9 * scale ? t0 : t;
+	}
 	bool in_extent(int mi, double t) const {
 		const Member &m = res_.members[size_t(mi)];
 		if (!m.crit.alive) {
 			return false;
 		}
-		const double t_start = m.own_a ? 0.0 : m.tq;
-		const Key k = walk_key(t, t_start);
+		const double t_start = m.own_a ? m.t0 : m.tq;
+		const Key k = walk_key(at_start(t, t_start), t_start);
 		for (const Interval &iv : m.crit.iv) {
 			const Vertex va = vertex_on(mi, iv.a.kind, m.crit);
 			const Vertex vb = vertex_on(mi, iv.b.kind, m.crit);
-			const Key ka = walk_key(va.t, t_start);
-			const Key kb = iv.b.kind == End::Loop && va.t == vb.t ? Key{2, 0.0} : walk_key(vb.t, t_start);
+			const Key ka = walk_key(at_start(va.t, t_start), t_start);
+			const Key kb = iv.b.kind == End::Loop && va.t == vb.t ? Key{2, 0.0} : walk_key(at_start(vb.t, t_start), t_start);
 			const bool closed_a = !va.pole && !va.inf;
 			const bool closed_b = !vb.pole && !vb.inf;
 			if ((closed_a ? k >= ka : k > ka) && (closed_b ? k <= kb : k < kb)) {
@@ -1999,14 +2829,15 @@ private:
 	bool vertex_in(int mi, const Pt &p, double t) const {
 		const Member &m = res_.members[size_t(mi)];
 		if (m.poi && p == m.cursor) {
-			return m.crit.cursor_ok;
+			return m.poi_ok;
 		}
 		return in_extent(mi, t);
 	}
 
 	Key arc_key(int mi, double t) const {
 		const Member &m = res_.members[size_t(mi)];
-		return walk_key(t, m.own_a ? 0.0 : m.tq);
+		const double t_start = m.own_a ? m.t0 : m.tq;
+		return walk_key(at_start(t, t_start), t_start);
 	}
 
 	Edge member_edge(int mi, const Vertex &a, const Vertex &b, bool forward) const {
@@ -2049,6 +2880,15 @@ private:
 				e.gline = false;
 				e.gc = Pt{surf->cx, surf->cy};
 				e.gr = surf->r;
+				// a tiny arc whose via lands on an end (the mid cast's point rounded
+				// onto a corner) would read as the whole circle: its via is the
+				// short arc's middle (Stage 113; B11: the aim pencil too)
+				const double tol = 1e-6 * std::max({1.0, std::abs(e.a.x), std::abs(e.a.y)});
+				if (e.a != e.b && (norm(e.via - e.a) <= tol || norm(e.via - e.b) <= tol)) {
+					const Pt m = (e.a + e.b) * 0.5 - e.gc;
+					const double n = norm(m);
+					e.via = n > 0.0 ? e.gc + m * (e.gr / n) : e.via;
+				}
 			}
 		}
 		e.inclusive = true; // a cursor on a stop is reached first (ties: the cursor); on a departure point at once
@@ -2082,7 +2922,7 @@ private:
 	void make_protos(int li, int ri, const Cast &mid, std::vector<Proto> &out) const {
 		const Member &L = res_.members[size_t(li)];
 		const Member &R = res_.members[size_t(ri)];
-		const Beam<F64> mb = member_of(mid.cursor);
+		const Beam<F64> mb = p_member(mid.cursor);
 		for (const Interval &iv : mid.iv) {
 			Proto p;
 			p.ka = iv.a.kind;
@@ -2108,42 +2948,53 @@ private:
 
 	// The two casts' shapes differ between directions lo and hi: bisect to the
 	// switch and put a member there (its sides: the last casts of each shape).
-	bool refine(size_t gi, std::vector<Gap> &gaps, const Cast &lo_cast, const Cast &hi_cast) {
+	// 1: a member inserted; 0: nothing to insert (the switch at a bounding
+	// member's own direction); -1 (Stage 113): the switch lies closer to a
+	// bounding member than the members resolve (between it and its side cast,
+	// at the aim's tangency with the projective's carrier): no cell can hold it
+	int refine(size_t gi, std::vector<Gap> &gaps, const Cast &lo_cast, const Cast &hi_cast) {
 		Cast lo = lo_cast;
 		Cast hi = hi_cast;
-		for (int it = 0; it < 48 && ccw_angle(lo.dir, hi.dir) > 1e-11; it++) {
-			const Pt d = rotate(lo.dir, ccw_angle(lo.dir, hi.dir) / 2.0);
-			const std::optional<Pt> c = cursor_for(d);
+		for (int it = 0; it < 48 && p_gap(lo.param(), hi.param()) > p_refine_tol(); it++) {
+			const Param d = p_step(lo.param(), p_gap(lo.param(), hi.param()) / 2.0);
+			const std::optional<Pt> c = p_cursor(d);
 			if (!c) {
 				break;
 			}
-			Cast m = cast(*c, d, member_of(*c), CastKind::Refine);
+			Cast m = cast(*c, d, p_member(*c), CastKind::Refine);
 			if (m.same_shape(lo)) {
 				lo = std::move(m);
 			} else {
 				hi = std::move(m);
 			}
 		}
-		const Pt d = rotate(lo.dir, ccw_angle(lo.dir, hi.dir) / 2.0);
+		const Param d = p_step(lo.param(), p_gap(lo.param(), hi.param()) / 2.0);
 		// the switch lies strictly inside the gap (at a bounding member it is that
 		// member's own: nothing to insert)
-		const Pt &dl = res_.members[gi].dir;
-		const Pt &dr = res_.members[(gi + 1) % res_.members.size()].dir;
-		if (dir_equal(d, dl) || dir_equal(d, dr) || ccw_angle(dl, d) >= ccw_angle(dl, dr)) {
-			return false;
+		const Param dl = res_.members[gi].param();
+		const Param dr = res_.members[(gi + 1) % res_.members.size()].param();
+		if (p_same(d, dl) || p_same(d, dr) || p_gap(dl, d) >= p_gap(dl, dr)) {
+			return !aim() && (p_same(d, dl) || p_same(d, dr)) ? -1 : 0;
 		}
-		const std::optional<Pt> c = cursor_for(d);
+		const std::optional<Pt> c = p_cursor(d);
 		if (!c) {
-			return false;
+			return 0;
 		}
 		Member nm;
-		nm.dir = d;
+		nm.dir = d.dir;
+		nm.key = d.key;
+		nm.sigma = aim() ? 0.0 : sigma_of_cursor(*c, d.key);
+		nm.sub = aim() ? 0.0 : sub_of(d.key, nm.sigma);
 		nm.cursor = *c;
 		nm.why = "refinement (" + lo.shape() + " | " + hi.shape() + ")";
-		nm.beam = member_of(*c);
+		nm.beam = p_member(*c);
 		nm.tq = tq_of(nm.beam);
-		nm.own_a = walk_key(nm.beam.param_of(cn_of(*c)).v, 0.0) < walk_key(nm.tq, 0.0);
+		nm.tp = kind_ == PencilKind::Radial ? nm.beam.param_of(cn_of(res_.pk)).v : 0.0;
+		nm.own_a = aim() ? walk_key(nm.beam.param_of(cn_of(*c)).v, 0.0) < walk_key(nm.tq, 0.0) : true;
 		nm.crit = cast(*c, d, nm.beam, CastKind::Refine);
+		nm.poi_ok = nm.crit.cursor_ok;
+		nm.poi_chosen = nm.crit.chosen;
+		set_t0(nm);
 		nm.minus = std::move(lo);
 		nm.plus = std::move(hi);
 		auto &ms = res_.members;
@@ -2151,7 +3002,7 @@ private:
 		gaps[gi].mid.reset();
 		gaps.insert(gaps.begin() + long(gi) + 1, Gap{});
 		res_.refinements++;
-		return true;
+		return 1;
 	}
 
 	void build_cells() {
@@ -2168,10 +3019,16 @@ private:
 		// direction (the loop below takes them where it would cast; gaps a
 		// refinement creates are cast there)
 		auto skip_gap = [&](size_t i, size_t r) {
-			return dir_equal(ms[i].dir, ms[r].dir) || (ms.size() > 4 && ccw_angle(ms[i].dir, ms[r].dir) > PI);
+			// (a pencil that does not run round has no gap from its last member to its first)
+			// (Stage 113: a gap narrower than the side casts resolve -- a sliver at
+			// the aim's tangency with the projective's carrier, where the solver's
+			// first-crossing decisions are a rounding apart -- is no cell)
+			return (!p_cyclic() && r <= i) || p_same(ms[i].param(), ms[r].param())
+				|| (ms.size() > 4 && p_gap(ms[i].param(), ms[r].param()) > p_wide())
+				|| (!aim() && p_gap(ms[i].param(), ms[r].param()) < 8.0 * p_eps_max());
 		};
-		auto dir_key2 = [](const Pt &d) { return std::make_pair(std::bit_cast<uint64_t>(d.x), std::bit_cast<uint64_t>(d.y)); };
-		std::map<std::pair<uint64_t, uint64_t>, Cast> pre_mid;
+		auto mid_param = [&](size_t i, size_t r) { return p_step(ms[i].param(), p_gap(ms[i].param(), ms[r].param()) / 2.0); };
+		std::map<std::tuple<uint64_t, uint64_t, uint64_t, uint64_t>, Cast> pre_mid;
 		{
 			std::vector<CastJob> jobs;
 			for (size_t i = 0; i < ms.size(); i++) {
@@ -2179,14 +3036,14 @@ private:
 				if (skip_gap(i, r)) {
 					continue;
 				}
-				const Pt dm = rotate(ms[i].dir, ccw_angle(ms[i].dir, ms[r].dir) / 2.0);
-				if (const std::optional<Pt> c = cursor_for(dm)) {
-					jobs.push_back(CastJob{*c, dm, member_of(*c), CastKind::Mid});
+				const Param dm = mid_param(i, r);
+				if (const std::optional<Pt> c = p_cursor(dm)) {
+					jobs.push_back(CastJob{*c, dm, p_member(*c), CastKind::Mid});
 				}
 			}
 			std::vector<Cast> casts = cast_batch(jobs);
 			for (size_t k = 0; k < jobs.size(); k++) {
-				pre_mid.emplace(dir_key2(jobs[k].dir), std::move(casts[k]));
+				pre_mid.emplace(p_bits(jobs[k].q), std::move(casts[k]));
 			}
 		}
 		bool changed = true;
@@ -2203,25 +3060,27 @@ private:
 					gaps[i].mid = Cast{};
 					continue;
 				}
-				const Pt dm = rotate(ms[i].dir, ccw_angle(ms[i].dir, ms[r].dir) / 2.0);
-				if (auto pm = pre_mid.find(dir_key2(dm)); pm != pre_mid.end()) {
+				const Param dm = mid_param(i, r);
+				if (auto pm = pre_mid.find(p_bits(dm)); pm != pre_mid.end()) {
 					gaps[i].mid = std::move(pm->second);
 					pre_mid.erase(pm);
 				} else {
-					const std::optional<Pt> c = cursor_for(dm);
-					gaps[i].mid = c ? cast(*c, dm, member_of(*c), CastKind::Mid) : Cast{};
+					const std::optional<Pt> c = p_cursor(dm);
+					gaps[i].mid = c ? cast(*c, dm, p_member(*c), CastKind::Mid) : Cast{};
 				}
 				const Cast &mid = *gaps[i].mid;
 				const bool left_ok = ms[i].plus.same_shape(mid);
 				const bool right_ok = ms[r].minus.same_shape(mid);
+				bool below = false; // the switch below the members' resolution: no note
 				if ((!left_ok || !right_ok) && res_.refinements < MAX_REFINE) {
-					const bool ok = !left_ok ? refine(i, gaps, ms[i].plus, mid) : refine(i, gaps, mid, ms[r].minus);
-					if (ok) {
+					const int ok = !left_ok ? refine(i, gaps, ms[i].plus, mid) : refine(i, gaps, mid, ms[r].minus);
+					if (ok == 1) {
 						changed = true;
 						break;
 					}
+					below = ok == -1;
 				}
-				if (!left_ok || !right_ok) {
+				if ((!left_ok || !right_ok) && !below) {
 					res_.notes.push_back("cell " + std::to_string(i) + ": shapes differ: " + ms[i].plus.shape() + " | " + mid.shape() + " | "
 						+ ms[r].minus.shape());
 				}
@@ -2252,7 +3111,9 @@ private:
 				}
 			}
 		}
-		clip.add(res_.pk); // every member's line is clipped from P_K (one exit point per member and way)
+		if (!res_.pk_none) {
+			clip.add(res_.pk); // every member's line is clipped from P_K (one exit point per member and way)
+		}
 		res_.clip = clip.grown(64.0);
 		// whiskers: the departure points of gaps whose walks die at the last entry
 		for (size_t i = 0; i < ms.size(); i++) {
@@ -2280,14 +3141,14 @@ private:
 			// after a loop past the divergence), at a point exactly on the carrier
 			// as a cursor there is
 			const Pt probe = exact_on_carrier(mid.near_sid, mid.near_pt);
-			if (!cast(probe, mid.dir, member_of(probe), CastKind::Probe).cursor_ok) {
+			if (!cast(probe, mid.param(), p_member(probe), CastKind::Probe).cursor_ok) {
 				continue;
 			}
 			Edge e = carrier_edge(mid.near_sid, End::Near, a, b, mid.near_pt);
 			// K7: an end that is a member's exact point of interest (a segment's
 			// endpoint, say) is in the region exactly when that member's own cast
 			// reaches it there -- at a planned terminal's endpoint the walks diverge
-			auto end_in = [](const Member &m, const Pt &p) { return !(m.exact && m.cursor == p) || m.crit.cursor_ok; };
+			auto end_in = [](const Member &m, const Pt &p) { return !(m.exact && m.cursor == p) || m.poi_ok; };
 			e.incl_a = end_in(L, e.a);
 			e.incl_b = end_in(R, e.b);
 			if (e.a == e.b) {
@@ -2340,9 +3201,10 @@ private:
 				cell.left = int(i);
 				cell.right = int((i + 1) % ms.size());
 				cell.mid = *gaps[i].mid;
-				cell.mid_beam = member_of(cell.mid.cursor);
+				cell.mid_beam = p_member(cell.mid.cursor);
 				cell.inside = p.inside;
-				cell.loops = cell_edges(cell.left, cell.right, p, layer++);
+				cell.wind = aim() ? res_.orientation : wind_at(p.inside, gaps[i].mid->key);
+				cell.loops = cell_edges(cell.left, cell.right, p, layer++, cell.wind);
 				res_.cells.push_back(std::move(cell));
 			}
 		}
@@ -2528,7 +3390,7 @@ private:
 	}
 
 	// A closed cell loop (connectors allowed) cut by the clip rectangle.
-	std::vector<std::vector<Edge>> clip_loop(const std::vector<Edge> &loop, const Pt &inside) const {
+	std::vector<std::vector<Edge>> clip_loop(const std::vector<Edge> &loop, const Pt &inside, int wind) const {
 		if (loop.empty()) {
 			return {};
 		}
@@ -2556,7 +3418,7 @@ private:
 		if (!any_out) {
 			return {pieces};
 		}
-		const int dir = res_.orientation;
+		const int dir = wind;
 		if (!any_in) {
 			if (!res_.clip.has(inside)) {
 				return {};
@@ -2695,7 +3557,7 @@ private:
 		return walk;
 	}
 
-	std::vector<std::vector<Edge>> cell_edges(int li, int ri, const Proto &p, int layer) const {
+	std::vector<std::vector<Edge>> cell_edges(int li, int ri, const Proto &p, int layer, int wind) const {
 		const Member &L = res_.members[size_t(li)];
 		const Member &R = res_.members[size_t(ri)];
 		std::vector<Edge> loop;
@@ -2795,7 +3657,7 @@ private:
 			e.layer = layer;
 			if (!(e.a == e.b)) kept.push_back(e);
 		}
-		std::vector<std::vector<Edge>> out = clip_loop(kept, p.inside);
+		std::vector<std::vector<Edge>> out = clip_loop(kept, p.inside, wind);
 		for (auto &l : out) {
 			for (Edge &e : l) {
 				e.layer = layer;
@@ -2811,13 +3673,29 @@ private:
 	// ---- regions: the cells of each run of adjacent live gaps, merged
 
 	void merge_cells() {
-		const size_t n = res_.members.size();
 		if (res_.cells.empty()) {
 			return;
 		}
+		// Stage 113: the cells of each winding merge among themselves (a
+		// pencil's two sheets meet at a pole only)
+		std::vector<int> winds;
+		for (const Cell &c : res_.cells) {
+			if (std::find(winds.begin(), winds.end(), c.wind) == winds.end()) {
+				winds.push_back(c.wind);
+			}
+		}
+		for (const int wind : winds) {
+			merge_cells_of(wind);
+		}
+	}
+
+	void merge_cells_of(int wind) {
+		const size_t n = res_.members.size();
 		std::vector<std::vector<size_t>> by_gap(n);
 		for (size_t c = 0; c < res_.cells.size(); c++) {
-			by_gap[size_t(res_.cells[c].left)].push_back(c);
+			if (res_.cells[c].wind == wind) {
+				by_gap[size_t(res_.cells[c].left)].push_back(c);
+			}
 		}
 		// runs: maximal cyclic sequences of gaps with cells
 		size_t start = 0;
@@ -2858,6 +3736,11 @@ private:
 				}
 			}
 			for (auto &kv : on_member) {
+				if (std::getenv("RC_VIS_MERGE") != nullptr) {
+					for (const Edge &e : kv.second) {
+						std::fprintf(stderr, "  piece m%d layer %d (%.3f,%.3f) -> (%.3f,%.3f) ta %.6g tb %.6g\n", kv.first, e.layer, e.a.x, e.a.y, e.b.x, e.b.y, e.ta, e.tb);
+					}
+				}
 				cancel(kv.first, kv.second, edges);
 			}
 			// a carrier piece two layers share (one's departure side, the other's
@@ -2875,7 +3758,20 @@ private:
 			for (size_t i = 0; i < edges.size(); i++) {
 				if (!gone[i]) kept.push_back(edges[i]);
 			}
-			chain(kept);
+			if (std::getenv("RC_VIS_MERGE") != nullptr) {
+				// RC_VIS_MERGE=1: the merge's groups (Stage 113): the winding, the run's cells, the member pieces kept
+				std::string cs;
+				for (size_t g : runs[ri]) {
+					for (size_t c : by_gap[g]) cs += std::to_string(c) + " ";
+				}
+				std::fprintf(stderr, "merge: wind %d run %zu cells [%s] kept %zu edges\n", wind, ri, cs.c_str(), kept.size());
+				for (const Edge &e : kept) {
+					if (e.kind == EdgeKind::Member) {
+						std::fprintf(stderr, "  m%d (%.3f,%.3f) -> (%.3f,%.3f) ta %.6g tb %.6g crack %d\n", e.member, e.a.x, e.a.y, e.b.x, e.b.y, e.ta, e.tb, int(e.crack));
+					}
+				}
+			}
+			chain(kept, wind);
 		}
 	}
 
@@ -2919,6 +3815,12 @@ private:
 			}
 		}
 		std::vector<std::pair<Key, std::pair<Pt, double>>> pts(bp.begin(), bp.end());
+		const bool dbg = std::getenv("RC_VIS_MERGE") != nullptr;
+		if (dbg) {
+			for (const auto &q : pts) {
+				std::fprintf(stderr, "    bp m%d key {%d, %.6g} at (%.3f,%.3f) t %.6g\n", mi, q.first.first, q.first.second, q.second.first.x, q.second.first.y, q.second.second);
+			}
+		}
 		for (size_t i = 0; i + 1 < pts.size(); i++) {
 			const Key lo = pts[i].first;
 			const Key hi = pts[i + 1].first;
@@ -2932,11 +3834,8 @@ private:
 					net += ka < kb ? 1 : -1;
 				}
 			}
-			if (net == 0) {
-				continue;
-			}
-			if (std::abs(net) > 1) {
-				res_.notes.push_back("member " + std::to_string(mi) + ": a piece covered " + std::to_string(std::abs(net)) + " times");
+			if (dbg) {
+				std::fprintf(stderr, "    sub m%d [{%d, %.6g} .. {%d, %.6g}] net %d\n", mi, lo.first, lo.second, hi.first, hi.second, net);
 			}
 			Vertex va;
 			va.member = mi;
@@ -2946,10 +3845,37 @@ private:
 			vb.p = pts[i + 1].second.first;
 			vb.t = pts[i + 1].second.second;
 			const double tmid = between(va.t, vb.t);
+			if (net == 0) {
+				// Stage 113: a dead member between two live cells (an aim tangent to
+				// the projective's carrier at the member's hit point, say) is a slit
+				// of no width the walks on it never reach: the cancelled pieces stay
+				// as a boundary, one edge each way, never inclusive
+				int covered = 0;
+				for (const Edge &e : pieces) {
+					const Key ka = key_of(e.a, e.ta);
+					const Key kb = key_of(e.b, e.tb);
+					if (std::min(ka, kb) <= lo && hi <= std::max(ka, kb)) {
+						covered++;
+					}
+				}
+				if (covered > 0 && !aim() && m.crit.valid && !m.crit.alive && !m.crit.whisker) {
+					for (const bool fwd : {true, false}) {
+						Edge e = fwd ? member_edge(mi, va, vb, true) : member_edge(mi, vb, va, false);
+						e.inclusive = false;
+						e.incl_a = false;
+						e.crack = true;
+						out.push_back(e);
+					}
+				}
+				continue;
+			}
+			if (std::abs(net) > 1) {
+				res_.notes.push_back("member " + std::to_string(mi) + ": a piece covered " + std::to_string(std::abs(net)) + " times");
+			}
 			Edge e = net > 0 ? member_edge(mi, va, vb, true) : member_edge(mi, vb, va, false);
 			e.inclusive = in_extent(mi, tmid);
 			const Vertex &start = net > 0 ? va : vb;
-			e.incl_a = !(start.p == res_.pk) && !(!res_.qk_inf && start.p == res_.qk) && !on_clip(start.p) && vertex_in(mi, start.p, start.t);
+			e.incl_a = !(!res_.pk_none && start.p == res_.pk) && !(!res_.qk_inf && start.p == res_.qk) && !on_clip(start.p) && vertex_in(mi, start.p, start.t);
 			out.push_back(e);
 		}
 	}
@@ -3004,7 +3930,7 @@ private:
 		return out;
 	}
 
-	void chain(std::vector<Edge> &edges) {
+	void chain(std::vector<Edge> &edges, int wind) {
 		std::vector<bool> used(edges.size(), false);
 		std::multimap<Pt, size_t> from;
 		for (size_t i = 0; i < edges.size(); i++) {
@@ -3038,7 +3964,7 @@ private:
 					}
 					const Pt out = end_tangent(edges[it->second], true);
 					double ang = std::atan2(cross(out, back), dot(out, back)); // from out to back, counterclockwise
-					if (res_.orientation < 0) {
+					if (wind < 0) {
 						ang = -ang;
 					}
 					while (ang <= 0.0) ang += 2.0 * PI;
@@ -3056,6 +3982,7 @@ private:
 			}
 			if (!closed) {
 				res_.notes.push_back("an open boundary chain of " + std::to_string(loop.edges.size()) + " edges");
+				loop.wind = wind;
 				res_.loops.push_back(std::move(loop));
 				continue;
 			}
@@ -3079,6 +4006,7 @@ private:
 				if (cut_j == 0) {
 					Loop l;
 					l.edges = drop_slivers(std::move(es));
+					l.wind = wind;
 					if (!l.edges.empty()) {
 						res_.loops.push_back(std::move(l));
 					}
@@ -3183,8 +4111,8 @@ inline Membership contains(const Result &r, const Pt &c) {
 	if (!r.supported || !c.finite() || !r.domain.has(c)) {
 		return Membership::Unclassified;
 	}
-	if (c == r.player || c == r.pk || (!r.qk_inf && c == r.qk)) {
-		return Membership::Unclassified; // the aim's degenerate points (GAME_SPEC 11.4)
+	if (c == r.player || (!r.pk_none && c == r.pk) || (!r.qk_inf && c == r.qk)) {
+		return Membership::Unclassified; // the aim's degenerate points (GAME_SPEC 11.4); Stage 113: the pencil's poles
 	}
 	for (const Edge &e : r.whiskers) {
 		double scale = 1.0;
@@ -3681,23 +4609,44 @@ inline Result join_halves(Result a, Result b) {
 }
 
 // Stage 111: one half of a joined result, for the checks that read one
-// realization: its cells and loops, winding its own way.
-inline Result half_of(const Result &r, int half) {
+// realization: its cells and loops, winding its own way. Stage 113: one
+// winding of it (a pencil's sheet).
+inline Result part_of(const Result &r, int half, int wind) {
 	Result h = r;
 	h.cells.clear();
 	h.loops.clear();
 	for (const Cell &c : r.cells) {
-		if (c.half == half) {
+		if (c.half == half && c.wind == wind) {
 			h.cells.push_back(c);
 		}
 	}
 	for (const Loop &l : r.loops) {
-		if (l.half == half) {
+		if (l.half == half && l.wind == wind) {
 			h.loops.push_back(l);
 		}
 	}
-	h.orientation = half == int(Half::Reversed) ? -r.orientation : r.orientation;
+	h.orientation = wind;
 	return h;
+}
+inline Result half_of(const Result &r, int half) {
+	return part_of(r, half, half == int(Half::Reversed) ? -r.orientation : r.orientation);
+}
+// The (half, wind) parts a result's cells and loops fall in, for the checks
+// that run per part (VIS-ORIENTED, VIS-DISJOINT).
+inline std::vector<std::pair<int, int>> parts_of(const Result &r) {
+	std::vector<std::pair<int, int>> out;
+	auto add = [&](int half, int wind) {
+		if (std::find(out.begin(), out.end(), std::make_pair(half, wind)) == out.end()) {
+			out.emplace_back(half, wind);
+		}
+	};
+	for (const Cell &c : r.cells) {
+		add(c.half, c.wind);
+	}
+	for (const Loop &l : r.loops) {
+		add(l.half, l.wind);
+	}
+	return out;
 }
 
 // The visibility region of the plan for the player (bounds: the level's).
