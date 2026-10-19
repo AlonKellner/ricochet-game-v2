@@ -1200,11 +1200,20 @@ private:
 			prho_ = pr_ / 2.0;
 			const std::optional<Pt> A = push(cn_of(pc_));
 			if (!A) {
-				return unsupported("the centre's image is at infinity");
-			}
-			res_.pk = *A;
-			if (!res_.qk_inf && res_.qk == res_.pk) {
-				return unsupported("the centre's image at the frame's infinity");
+				// the centre maps to infinity (an inversion centred on it after the
+				// projective): the lines through the centre map to the lines through
+				// the frame's image of infinity, then finite -- the same pencil with
+				// its poles swapped (Stage 113 follow-up)
+				if (res_.qk_inf) {
+					return unsupported("the centre's image is at infinity, and so is the frame's");
+				}
+				res_.pk = res_.qk;
+				res_.qk_inf = true;
+			} else {
+				res_.pk = *A;
+				if (!res_.qk_inf && res_.qk == res_.pk) {
+					return unsupported("the centre's image at the frame's infinity");
+				}
 			}
 			std::snprintf(buf, sizeof buf, "radial: centre (%.6g, %.6g) r %.6g", pc_.x, pc_.y, pr_);
 		} else {

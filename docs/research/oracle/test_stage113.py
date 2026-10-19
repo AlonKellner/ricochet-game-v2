@@ -119,3 +119,14 @@ def test_k14_two_projectives_fired_at_one_point_are_different_frames():
     assert sorted(h[:3] for h in _hits(ph)[:2]) == [("hit", 6, True), ("hit", 9, False)], _hits(ph)
     assert V.visible(sc, player, cursor, plan) is False
     assert V.visible(sc, player, (700.0, 800.0), plan) is False
+
+
+def test_b9_a_directional_normal_along_its_line_reaches_nothing():
+    # the former directional_degenerate playground (rejected at load now): line 5
+    # is x = 750, y 300..780, its normal (0, 1) along it
+    with open(os.path.join(ROOT, "bench", "fixtures", "stage113_degenerate_directional.json")) as f:
+        sc = T.scene_from_json(json.load(f)["surfaces"])
+    player = (760.0, 400.0)
+    for cursor in ((900.0, 400.0), (750.0, 200.0), (700.0, 500.0), (1300.0, 700.0)):
+        assert V.visible(sc, player, cursor, [(5, "LEFT")]) is False, cursor
+        assert V.visible(sc, player, cursor, [(5, "RIGHT")]) is False, cursor

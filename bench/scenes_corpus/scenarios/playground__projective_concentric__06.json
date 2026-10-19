@@ -1,0 +1,331 @@
+{
+ "name": "playground__projective_concentric__06",
+ "scene": "res://scenes/playground/projective_concentric.tscn",
+ "surfaces": [
+  {
+   "circle": null,
+   "id": 1,
+   "start": [
+    560.0,
+    240.0
+   ],
+   "end": [
+    1360.0,
+    240.0
+   ],
+   "via": [
+    960.0,
+    240.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "type": "terminal",
+    "interactive": false
+   },
+   "right": {
+    "type": "terminal",
+    "interactive": false
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 2,
+   "start": [
+    1360.0,
+    240.0
+   ],
+   "end": [
+    1360.0,
+    840.0
+   ],
+   "via": [
+    1360.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "type": "terminal",
+    "interactive": false
+   },
+   "right": {
+    "type": "terminal",
+    "interactive": false
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 3,
+   "start": [
+    1360.0,
+    840.0
+   ],
+   "end": [
+    560.0,
+    840.0
+   ],
+   "via": [
+    960.0,
+    840.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "type": "terminal",
+    "interactive": false
+   },
+   "right": {
+    "type": "terminal",
+    "interactive": false
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 4,
+   "start": [
+    560.0,
+    840.0
+   ],
+   "end": [
+    560.0,
+    240.0
+   ],
+   "via": [
+    560.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "type": "terminal",
+    "interactive": false
+   },
+   "right": {
+    "type": "terminal",
+    "interactive": false
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 5,
+   "start": [
+    700.0,
+    400.0
+   ],
+   "end": [
+    700.0,
+    680.0
+   ],
+   "via": [
+    700.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "type": "reflection",
+    "interactive": true
+   },
+   "right": {
+    "type": "pass",
+    "interactive": false
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": {
+    "center": [
+     960.0,
+     540.0
+    ],
+    "radius": 250.0
+   },
+   "id": 6,
+   "start": [
+    1210.0,
+    540.0
+   ],
+   "end": [
+    835.0,
+    323.5
+   ],
+   "via": [
+    835.0,
+    756.5
+   ],
+   "full": true,
+   "line": false,
+   "left": {
+    "type": "inversion",
+    "interactive": true
+   },
+   "right": {
+    "type": "inversion",
+    "interactive": true
+   },
+   "is_target": false,
+   "player_solid": true
+  },
+  {
+   "circle": null,
+   "id": 7,
+   "start": [
+    960.0,
+    440.0
+   ],
+   "end": [
+    960.0,
+    640.0
+   ],
+   "via": [
+    1060.0,
+    540.0
+   ],
+   "full": false,
+   "line": false,
+   "left": {
+    "type": "circle_normal_projection",
+    "back": false,
+    "interactive": true
+   },
+   "right": {
+    "type": "circle_normal_projection",
+    "back": false,
+    "interactive": true
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 8,
+   "start": [
+    0.0,
+    0.0
+   ],
+   "end": [
+    1920.0,
+    0.0
+   ],
+   "via": [
+    960.0,
+    0.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "type": "pass",
+    "interactive": false
+   },
+   "right": {
+    "type": "pass",
+    "interactive": false
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 9,
+   "start": [
+    1920.0,
+    0.0
+   ],
+   "end": [
+    1920.0,
+    1080.0
+   ],
+   "via": [
+    1920.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "type": "pass",
+    "interactive": false
+   },
+   "right": {
+    "type": "pass",
+    "interactive": false
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 10,
+   "start": [
+    1920.0,
+    1080.0
+   ],
+   "end": [
+    0.0,
+    1080.0
+   ],
+   "via": [
+    960.0,
+    1080.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "type": "pass",
+    "interactive": false
+   },
+   "right": {
+    "type": "pass",
+    "interactive": false
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 11,
+   "start": [
+    0.0,
+    1080.0
+   ],
+   "end": [
+    0.0,
+    0.0
+   ],
+   "via": [
+    0.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "type": "pass",
+    "interactive": false
+   },
+   "right": {
+    "type": "pass",
+    "interactive": false
+   },
+   "is_target": false,
+   "player_solid": false
+  }
+ ],
+ "player": [
+  835.291259765625,
+  819.3370971679688
+ ],
+ "cursor": [
+  1233.5943603515625,
+  760.7362060546875
+ ],
+ "plan": []
+}

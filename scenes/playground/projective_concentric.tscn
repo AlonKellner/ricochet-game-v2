@@ -10,7 +10,9 @@ script = ExtResource("2")
 gravity = Vector2(0, 0)
 room_rect = Rect2(560, 240, 800, 600)
 build_room = true
-directional_projection_lines = PackedFloat64Array(750, 300, 750, 780, 0, 1)
+mirror_lines = Array[Vector4]([Vector4(700, 400, 700, 680)])
+normal_projection_arcs = PackedFloat64Array(960, 440, 960, 640, 1060, 540)
+full_inversion_arcs = PackedFloat64Array(960, 540, 250)
 
 [node name="Background" type="ColorRect" parent="."]
 offset_right = 1920.0

@@ -156,6 +156,47 @@ TEST_CASE("visibility: the region and the traces agree with the oracle's labels"
 	CHECK(checked > 800);
 }
 
+// B9 (Stage 113): a directional normal along its line carrier is rejected at
+// load (GAME_SPEC 23); the region of such a scene (a kept dump) is supported and
+// empty: no beam leaves the line, nothing is visible through it.
+TEST_CASE("visibility: a directional normal along its line carrier is a supported empty region") {
+	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/fixtures/stage113_degenerate_directional.json");
+	Tracer t;
+	t.set_emit_infinity(true);
+	t.set_defs(defs_from_json(d["surfaces"]));
+	for (const bool left : {true, false}) {
+		const std::vector<PlanItem> plan{PlanItem{5, left, std::nullopt, std::nullopt}};
+		const vis::Result r = vis::compute(t, vis::Pt{760, 400}, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
+		REQUIRE_MESSAGE(r.supported, r.reason);
+		CHECK(r.cells.empty());
+		for (const vis::Pt c : {vis::Pt{900, 400}, vis::Pt{750, 200}, vis::Pt{700, 500}, vis::Pt{1300, 700}}) {
+			CHECK(vis::contains(r, c) == vis::Membership::Outside);
+		}
+		const inv::VisInput in{&r, &t, vis::Pt{760, 400}, plan, Flags(), vis::Rect{0, 0, 1920, 1080}};
+		CHECK(inv::check_visibility(in).empty());
+	}
+}
+
+// K15 (open, found by the projective_concentric playground, 2026-10-19): after a
+// circle normal fires, the beam runs through the circle's centre by provenance;
+// an inversion centred on that same point maps the line to itself (the centre
+// becoming the frame's image of infinity). The walker inverts the rounded beam
+// instead and gets a circle of enormous radius whose wrap overflows, so the solve
+// returns nothing where the oracle traces (the oracle, at 50 digits, gets away
+// with it). The fix is provenance: the exit beam knows it passes the centre, and
+// an inversion centred there keeps the line (the oracle first). Expected to fail
+// until then (doctest may_fail).
+TEST_CASE("K15: an inversion centred on the circle normal's centre, on the beam through it" * doctest::may_fail(true)) {
+	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/playground__projective_concentric.surfaces.json");
+	Tracer t;
+	t.set_emit_infinity(true);
+	t.set_defs(defs_from_json(d["surfaces"]));
+	const std::vector<PlanItem> plan{PlanItem{7, true, std::nullopt, std::nullopt}, PlanItem{6, true, std::nullopt, std::nullopt},
+		PlanItem{5, true, std::nullopt, std::nullopt}};
+	const std::optional<LadderResult> lr = t.solve(1100, 700, 960, 840, plan, Flags());
+	CHECK_MESSAGE(lr.has_value(), "the planned walk through the real infinity meets the inversion on the beam through its centre");
+}
+
 TEST_CASE("visibility: the empty plan's region is the non-divergence set on every test level") {
 	const std::string dir = std::string(RC_REPO_ROOT) + "/bench/scenes";
 	std::vector<std::string> files;
@@ -402,7 +443,14 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 				k->end_pt.x, k->end_pt.y);
 			for (const auto &iv : k->iv) std::printf("  interval %s %.6g -> %s %.6g\n", vis::end_name(iv.a.kind), iv.a.t, vis::end_name(iv.b.kind), iv.b.t);
 		}
-		const std::optional<LadderResult> lr = t.solve(P.x, P.y, c.x, c.y, plan, Flags());
+		std::optional<LadderResult> lr = t.solve(P.x, P.y, c.x, c.y, plan, Flags());
+		if (!lr) {
+			// the solve filtered the result (empty or non-finite): the raw ladder, for the look
+			std::printf("solve: none (the raw ladder follows)\n");
+			LadderContext ctx(defs_from_json(d["surfaces"]));
+			Ladder ladder(ctx);
+			lr = ladder.solve(P.x, P.y, c.x, c.y, plan, MAX_HITS, MAX_HITS, TRACE_TOL, false, Flags(), std::nullopt);
+		}
 		if (lr) {
 			for (const char *which : {"planned", "physical"}) {
 				const auto ev = vis::cast_events(std::string(which) == "planned" ? lr->planned : lr->physical, Flags().canonical_key());

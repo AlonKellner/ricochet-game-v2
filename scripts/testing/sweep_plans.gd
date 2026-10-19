@@ -121,7 +121,7 @@ static func projective_plans(scene: Node) -> Array:
 static func projective_playground_scenes() -> Array[String]:
 	var out: Array[String] = []
 	for n in ["projective", "projective_lines", "projective_arcs", "directional_lines", "directional_arcs", "projective_inversion",
-			"directional_degenerate"]:
+			"projective_concentric"]:
 		out.append(PLAYGROUND_DIR + n + ".tscn")
 	return out
 

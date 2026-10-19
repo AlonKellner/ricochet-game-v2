@@ -30,7 +30,7 @@ func test_stage107_every_path_effect_round_trips():
 		[_side("inversion", true), true],
 		[_side("line_normal_projection", true, {"back": true}), false],
 		[_side("circle_normal_projection", true, {"back": false}), true],
-		[_side("line_directional_projection", true, {"back": false, "normal": [0.0, 1.0]}), false],
+		[_side("line_directional_projection", true, {"back": false, "normal": [1.0, 0.0]}), false], # (across the line: B9)
 		[_side("circle_directional_projection", true, {"back": true, "normal": [1.0, 0.0]}), true],
 		[_side("pass", true, {}, [{"kind": "state", "key": "k", "op": "set", "value": 3, "deferred": false},
 			{"kind": "target", "deferred": true}, {"kind": "reset", "channels": ["a"], "deferred": false}]), false],
