@@ -133,7 +133,7 @@ if(RC_BUILD_TESTS)
     target_link_libraries(rc_tests PRIVATE ricochet_core)
     # vendored single headers: <doctest/doctest.h>, <nlohmann/json.hpp>
     target_include_directories(rc_tests SYSTEM PRIVATE extern)
-    target_include_directories(rc_tests PRIVATE tests/support)
+    target_include_directories(rc_tests PRIVATE tests/support game/include)
     # the goldens and fixtures live in the repository (bench/)
     get_filename_component(RC_REPO_ROOT "${CMAKE_SOURCE_DIR}/.." ABSOLUTE)
     target_compile_definitions(rc_tests PRIVATE "RC_REPO_ROOT=\"${RC_REPO_ROOT}\"")

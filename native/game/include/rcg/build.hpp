@@ -59,6 +59,15 @@ struct BuiltSurface {
 // does not validate).
 std::vector<BuiltSurface> build_level(const Level &level);
 
+// SurfaceSpec.segment(): its three points (a straight line: the exact line;
+// a full circle: from its center and radius).
+rc::arc::SegGeom segment_of(const SurfaceSpec &s);
+
+// SurfaceSpec.validate ([] = valid) and SurfaceSpec.build: one surface, or a
+// portal's pair (ids first_id, first_id + 1).
+std::vector<std::string> validate_spec(const SurfaceSpec &s);
+std::vector<BuiltSurface> build_spec(const SurfaceSpec &s, int first_id, const std::optional<std::string> &label);
+
 // SceneDefs.describe_surface / defs_from_surfaces (the latter adds each
 // portal side's "pair": the surface with the inverse motion).
 nlohmann::json describe_surface(const BuiltSurface &s);

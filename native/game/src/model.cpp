@@ -73,12 +73,9 @@ bool present(const BuiltSurface &s, const rc::Flags &flags) {
 	return true;
 }
 
-std::vector<rc::StateChangeDef> writes(const BuiltSide &side, int host_id, bool deferred) {
+std::vector<rc::StateChangeDef> hit_writes(const HitSpec &h, int host_id) {
 	std::vector<rc::StateChangeDef> out;
-	for (const HitSpec &h : side.hits) {
-		if (h.deferred != deferred) {
-			continue;
-		}
+	{
 		if (h.kind == "state") {
 			const bool toggle = h.op == "toggle";
 			out.push_back({h.key, toggle, flag_value(h.value)});
@@ -90,6 +87,18 @@ std::vector<rc::StateChangeDef> writes(const BuiltSide &side, int host_id, bool 
 			}
 		} else if (h.kind == "spawn") {
 			out.push_back({"chan:" + h.channel, false, std::string("pending")});
+		}
+	}
+	return out;
+}
+
+std::vector<rc::StateChangeDef> writes(const BuiltSide &side, int host_id, bool deferred) {
+	std::vector<rc::StateChangeDef> out;
+	for (const HitSpec &h : side.hits) {
+		if (h.deferred == deferred) {
+			for (rc::StateChangeDef &w : hit_writes(h, host_id)) {
+				out.push_back(std::move(w));
+			}
 		}
 	}
 	return out;

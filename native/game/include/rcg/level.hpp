@@ -6,6 +6,8 @@
 
 #include "rc/trace_types.hpp"
 
+#include <nlohmann/json.hpp>
+
 #include <array>
 #include <cstdint>
 #include <memory>
@@ -31,6 +33,7 @@ using FlagValue = std::variant<bool, std::int64_t, double, std::string>;
 // A side's path effect (EffectSpec: the scene-def form). Vectors are kept as
 // authored (float64); the built effect rounds them to the game's float32.
 struct EffectSpec {
+	nlohmann::json raw = {{"type", "pass"}}; // the dictionary as authored (the session digest records it)
 	std::string type = "pass";
 	bool back = false;
 	std::optional<std::array<double, 2>> normal; // directional projections
@@ -51,6 +54,7 @@ struct SpawnTemplateSpec {
 
 // A hit effect (HitEffectSpec): state, target, reset or spawn.
 struct HitSpec {
+	nlohmann::json raw; // the dictionary as authored
 	std::string kind;
 	bool deferred = false;
 	std::string key;                    // state

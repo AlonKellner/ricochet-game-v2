@@ -31,6 +31,9 @@ const BuiltSide *active_side(const BuiltSurface &s, Side side, const rc::Flags &
 // Surface.present: every presence condition holds (a missing key reads "DEFAULT").
 bool present(const BuiltSurface &s, const rc::Flags &flags);
 
+// HitEffect.writes: one hit effect's flag writes (in shot or at landing by its deferred flag).
+std::vector<rc::StateChangeDef> hit_writes(const HitSpec &h, int host_id);
+
 // SideConfig.in_shot_writes / landing writes: the hit effects' flag writes in
 // order (the deferred ones at landing); host_id: the surface carrying the side.
 std::vector<rc::StateChangeDef> writes(const BuiltSide &side, int host_id, bool deferred);
