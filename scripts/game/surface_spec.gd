@@ -139,7 +139,7 @@ func validate() -> Array[String]:
 		sides.append_array(resolver_table[k])
 	for s in sides:
 		if s != null:
-			out.append_array(s.validate(is_line))
+			out.append_array(s.validate(is_line, end - start if is_line else Vector2.ZERO))
 	if is_portal() and right != null and right.effect != left.effect:
 		out.append("a portal's sides are the same portal")
 	for c in presence:

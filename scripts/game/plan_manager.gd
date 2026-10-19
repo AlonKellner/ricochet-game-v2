@@ -66,3 +66,26 @@ func restore_from(p_entries: Array) -> void:
 	for entry in p_entries:
 		entries.append(entry.copy())
 	version += 1
+
+# B7 (Stage 113 follow-up, GAME_SPEC 4.2): a circle directional's two hit points
+# are the ends of the chord along its normal, and the click picks the end
+# nearer it -- the same end for every target exactly when the click is off the
+# diameter across the normal. A click within the UI tolerance of that diameter
+# is moved off it, to the side of the arc's own midpoint (the via), so no plan
+# rests on float32 noise.
+const SNAP_PX := 8.0
+
+static func snap_click(surface: Surface, side: Side.Value, click: Vector2, game_state: GameState) -> Vector2:
+	if surface == null or surface.segment.is_line():
+		return click
+	var cfg := surface.active_side_config(side, game_state)
+	if cfg == null or not (cfg.effect is CircleDirectionalProjection):
+		return click
+	var dir: CircleDirectionalProjection = cfg.effect
+	var n := dir.normal()
+	var c: Vector2 = surface.segment.get_carrier().center()
+	var along := (click - c).dot(n)
+	if absf(along) >= SNAP_PX:
+		return click
+	var sign := 1.0 if (surface.segment.get_via().coords - c).dot(n) >= 0.0 else -1.0
+	return click + n * (sign * SNAP_PX - along)

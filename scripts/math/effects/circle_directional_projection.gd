@@ -8,6 +8,9 @@ func _init(normal_dir: Vector2, project_back: bool = false) -> void:
 	_normal = normal_dir.normalized()
 	_project_back = project_back
 
+func normal() -> Vector2:
+	return _normal
+
 func kind() -> int:
 	return Kind.PROJECTIVE
 

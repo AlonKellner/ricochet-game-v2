@@ -1,6 +1,6 @@
 {
- "name": "playground__directional_degenerate__09",
- "scene": "res://scenes/playground/directional_degenerate.tscn",
+ "name": "playground__projective_concentric__11",
+ "scene": "res://scenes/playground/projective_concentric.tscn",
  "surfaces": [
   {
    "circle": null,
@@ -118,92 +118,90 @@
    "circle": null,
    "id": 5,
    "start": [
-    750.0,
-    300.0
+    700.0,
+    400.0
    ],
    "end": [
-    750.0,
-    780.0
+    700.0,
+    680.0
    ],
    "via": [
-    750.0,
+    700.0,
     540.0
    ],
    "full": false,
    "line": true,
    "left": {
-    "type": "line_directional_projection",
-    "back": false,
-    "normal": [
-     0.0,
-     1.0
-    ],
+    "type": "reflection",
     "interactive": true
    },
    "right": {
-    "type": "line_directional_projection",
-    "back": false,
-    "normal": [
-     0.0,
-     1.0
-    ],
-    "interactive": true
+    "type": "pass",
+    "interactive": false
    },
    "is_target": false,
    "player_solid": false
   },
   {
-   "circle": null,
+   "circle": {
+    "center": [
+     960.0,
+     540.0
+    ],
+    "radius": 250.0
+   },
    "id": 6,
    "start": [
-    0.0,
-    0.0
+    1210.0,
+    540.0
    ],
    "end": [
-    1920.0,
-    0.0
+    835.0,
+    323.5
    ],
    "via": [
-    960.0,
-    0.0
+    835.0,
+    756.5
    ],
-   "full": false,
-   "line": true,
+   "full": true,
+   "line": false,
    "left": {
-    "type": "pass",
-    "interactive": false
+    "type": "inversion",
+    "interactive": true
    },
    "right": {
-    "type": "pass",
-    "interactive": false
+    "type": "inversion",
+    "interactive": true
    },
    "is_target": false,
-   "player_solid": false
+   "player_solid": true
   },
   {
    "circle": null,
    "id": 7,
    "start": [
-    1920.0,
-    0.0
+    960.0,
+    440.0
    ],
    "end": [
-    1920.0,
-    1080.0
+    960.0,
+    640.0
    ],
    "via": [
-    1920.0,
+    1060.0,
     540.0
    ],
    "full": false,
-   "line": true,
+   "line": false,
    "left": {
-    "type": "pass",
-    "interactive": false
+    "type": "circle_normal_projection",
+    "back": false,
+    "interactive": true
    },
    "right": {
-    "type": "pass",
-    "interactive": false
+    "type": "circle_normal_projection",
+    "back": false,
+    "interactive": true
    },
    "is_target": false,
    "player_solid": false
@@ -212,16 +210,16 @@
    "circle": null,
    "id": 8,
    "start": [
-    1920.0,
-    1080.0
+    0.0,
+    0.0
    ],
    "end": [
-    0.0,
-    1080.0
+    1920.0,
+    0.0
    ],
    "via": [
     960.0,
-    1080.0
+    0.0
    ],
    "full": false,
    "line": true,
@@ -239,6 +237,62 @@
   {
    "circle": null,
    "id": 9,
+   "start": [
+    1920.0,
+    0.0
+   ],
+   "end": [
+    1920.0,
+    1080.0
+   ],
+   "via": [
+    1920.0,
+    540.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "type": "pass",
+    "interactive": false
+   },
+   "right": {
+    "type": "pass",
+    "interactive": false
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 10,
+   "start": [
+    1920.0,
+    1080.0
+   ],
+   "end": [
+    0.0,
+    1080.0
+   ],
+   "via": [
+    960.0,
+    1080.0
+   ],
+   "full": false,
+   "line": true,
+   "left": {
+    "type": "pass",
+    "interactive": false
+   },
+   "right": {
+    "type": "pass",
+    "interactive": false
+   },
+   "is_target": false,
+   "player_solid": false
+  },
+  {
+   "circle": null,
+   "id": 11,
    "start": [
     0.0,
     1080.0
@@ -266,17 +320,12 @@
   }
  ],
  "player": [
-  703.1683349609375,
-  794.1201782226562
+  896.014404296875,
+  378.5409240722656
  ],
  "cursor": [
-  704.618896484375,
-  431.3617248535156
+  734.0996704101562,
+  666.8629150390625
  ],
- "plan": [
-  {
-   "surface_id": 5,
-   "side": "LEFT"
-  }
- ]
+ "plan": []
 }

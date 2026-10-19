@@ -20,6 +20,7 @@ NOT_TRACES = {
     "bigfloat_cases.json",   # BigFloat arithmetic cases (precision research, read by precision_microbench.gd)
     "stage80_geometry.json",  # beam/segment intersection cases (gen_fixtures_stage80.py)
     "stage110_visibility.json",  # visibility labels (gen_fixtures_stage110_visibility.py), checked below
+    "stage113_degenerate_directional.json",  # a kept scene dump (B9: its playground is rejected at load), read by test_stage113.py and test_visibility.cpp
 }
 FIXTURE_KEYS = {"name", "surfaces", "player", "direction", "cursor", "plan", "mode", "expected", "targets"}
 EVENT_KINDS = {"hit", "cursor", "origin", "escape", "max", "infinity"}

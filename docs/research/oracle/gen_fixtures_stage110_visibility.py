@@ -169,6 +169,32 @@ def best_case(name, scene, plans, players):
     return best[1]
 
 
+def bare_carrier_cursor(surfs, plan, c):
+    """B6: a cursor exactly on a circle projective's carrier that is not one of its
+    data points aims at the other candidate (x_on_carrier), which the region
+    cannot follow off its points of interest: not a label (until the fork rule
+    prefers the on-segment candidate)."""
+    for sid, _side in plan:
+        s = next((x for x in surfs if x["id"] == sid), None)
+        if s is None or s["line"] or not s["left"]["type"].startswith("circle_"):
+            continue
+        if any(tuple(map(float, s[k])) == (float(c[0]), float(c[1])) for k in ("start", "end", "via")):
+            continue
+        x0, y0 = (Fraction(str(v)) for v in s["start"])
+        x1, y1 = (Fraction(str(v)) for v in s["end"])
+        x2, y2 = (Fraction(str(v)) for v in s["via"])
+        # the exact centre of the circle through the three points
+        d = 2 * (x0 * (y1 - y2) + x1 * (y2 - y0) + x2 * (y0 - y1))
+        if d == 0:
+            continue
+        ux = ((x0 * x0 + y0 * y0) * (y1 - y2) + (x1 * x1 + y1 * y1) * (y2 - y0) + (x2 * x2 + y2 * y2) * (y0 - y1)) / d
+        uy = ((x0 * x0 + y0 * y0) * (x2 - x1) + (x1 * x1 + y1 * y1) * (x0 - x2) + (x2 * x2 + y2 * y2) * (x1 - x0)) / d
+        cx, cy = Fraction(str(float(c[0]))), Fraction(str(float(c[1])))
+        if (cx - ux) ** 2 + (cy - uy) ** 2 == (x0 - ux) ** 2 + (y0 - uy) ** 2:
+            return True
+    return False
+
+
 def case(name, scene, player, plan, hints=None, extra=()):
     """hints: plan entry index -> the click (x, y), the fork of a circle projective;
     extra: cursors added to the grid."""
@@ -176,6 +202,8 @@ def case(name, scene, player, plan, hints=None, extra=()):
     sc = T.scene_from_json(surfs)
     labelled = []
     for c in cursors(surfs, player, plan, projective_cursors(sc, plan) + list(extra)):
+        if bare_carrier_cursor(surfs, plan, c):
+            continue
         v = V.visible(sc, player, c, plan, None, hints)
         if v is not None:
             labelled.append([c[0], c[1], bool(v)])
@@ -223,7 +251,9 @@ def projective_cases():
     for sid, side in sides_of("playground__directional_lines"):
         out.append(planned_case("directional_lines_%d%s" % (sid, side[0]), "playground__directional_lines", [(sid, side)]))
     # a directional normal parallel to its carrier: no exit family, nothing is reached
-    out.append(case("directional_degenerate_5L", "playground__directional_degenerate", (760.0, 400.0), [(5, "LEFT")]))
+    # (the degenerate directional -- its normal along its line -- is rejected at
+    # load since B9's follow-up; the native and the oracle pin its empty region
+    # on bench/fixtures/stage113_degenerate_directional.json directly)
     # the mixed playground: 11 line directional (x = 500, n = +x), 6 line normal
     # (x = 700); the portals 12 and 13 span y 300..700, so the rays run above them
     pg = "playground__projective"
@@ -247,6 +277,19 @@ def projective_cases():
                          [(1000.0, 480.0), (1100.0, 470.0)]))
     out.append(best_case("line_normal_then_circle_normal", pi, [[(7, s), (8, t)] for s in ("LEFT", "RIGHT") for t in ("LEFT", "RIGHT")],
                          [(960.0, 380.0), (900.0, 420.0)]))
+    # projective_concentric: 7 circle normal (right half, centre (960, 540) r 100),
+    # 6 a full inversion circle centred there too (r 250), 5 a mirror (x = 700).
+    # After the projective the inversion sends the centre to infinity: the pencil's
+    # poles swap (Stage 113 follow-up)
+    pc = "playground__projective_concentric"
+    out.append(best_case("circle_normal_then_concentric_inversion", pc, [[(7, s), (6, t)] for s in ("LEFT", "RIGHT") for t in ("LEFT", "RIGHT")],
+                         [(1100.0, 700.0), (960.0, 300.0), (800.0, 300.0)]))
+    out.append(best_case("concentric_inversion_then_circle_normal", pc, [[(6, t), (7, s)] for s in ("LEFT", "RIGHT") for t in ("LEFT", "RIGHT")],
+                         [(800.0, 300.0), (1100.0, 700.0), (1250.0, 540.0)]))
+    # (K15, open: with the mirror 5 after them the planned walk wraps through the
+    # real infinity and meets the inversion on the beam through its own centre;
+    # the native solver has no trace there while the oracle has one -- that case
+    # is test_visibility.cpp's known-failing "K15" test, not a label)
     # K14: line 6 of the mixed playground runs through arc 9's centre: the fork
     # line of the default click is line 6's carrier, where the physical walk fires
     # 6 and the planned walk 9 at one point (two frames, not one epoch count)

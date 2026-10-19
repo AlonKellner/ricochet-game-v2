@@ -1,6 +1,6 @@
 {
 	"schema": "sweep-manifest/1",
-	"scene": "res://scenes/playground/directional_degenerate.tscn",
+	"scene": "res://scenes/playground/projective_concentric.tscn",
 	"seq": 0,
 	"defs": [
 		{
@@ -119,92 +119,90 @@
 			"circle": null,
 			"id": 5,
 			"start": [
-				750.0,
-				300.0
+				700.0,
+				400.0
 			],
 			"end": [
-				750.0,
-				780.0
+				700.0,
+				680.0
 			],
 			"via": [
-				750.0,
+				700.0,
 				540.0
 			],
 			"full": false,
 			"line": true,
 			"left": {
-				"type": "line_directional_projection",
-				"back": false,
-				"normal": [
-					0.0,
-					1.0
-				],
+				"type": "reflection",
 				"interactive": true
 			},
 			"right": {
-				"type": "line_directional_projection",
-				"back": false,
-				"normal": [
-					0.0,
-					1.0
-				],
-				"interactive": true
+				"type": "pass",
+				"interactive": false
 			},
 			"is_target": false,
 			"player_solid": false
 		},
 		{
-			"circle": null,
+			"circle": {
+				"center": [
+					960.0,
+					540.0
+				],
+				"radius": 250.0
+			},
 			"id": 6,
 			"start": [
-				0.0,
-				0.0
+				1210.0,
+				540.0
 			],
 			"end": [
-				1920.0,
-				0.0
+				835.0,
+				323.5
 			],
 			"via": [
-				960.0,
-				0.0
+				835.0,
+				756.5
 			],
-			"full": false,
-			"line": true,
+			"full": true,
+			"line": false,
 			"left": {
-				"type": "pass",
-				"interactive": false
+				"type": "inversion",
+				"interactive": true
 			},
 			"right": {
-				"type": "pass",
-				"interactive": false
+				"type": "inversion",
+				"interactive": true
 			},
 			"is_target": false,
-			"player_solid": false
+			"player_solid": true
 		},
 		{
 			"circle": null,
 			"id": 7,
 			"start": [
-				1920.0,
-				0.0
+				960.0,
+				440.0
 			],
 			"end": [
-				1920.0,
-				1080.0
+				960.0,
+				640.0
 			],
 			"via": [
-				1920.0,
+				1060.0,
 				540.0
 			],
 			"full": false,
-			"line": true,
+			"line": false,
 			"left": {
-				"type": "pass",
-				"interactive": false
+				"type": "circle_normal_projection",
+				"back": false,
+				"interactive": true
 			},
 			"right": {
-				"type": "pass",
-				"interactive": false
+				"type": "circle_normal_projection",
+				"back": false,
+				"interactive": true
 			},
 			"is_target": false,
 			"player_solid": false
@@ -213,16 +211,16 @@
 			"circle": null,
 			"id": 8,
 			"start": [
-				1920.0,
-				1080.0
+				0.0,
+				0.0
 			],
 			"end": [
-				0.0,
-				1080.0
+				1920.0,
+				0.0
 			],
 			"via": [
 				960.0,
-				1080.0
+				0.0
 			],
 			"full": false,
 			"line": true,
@@ -240,6 +238,62 @@
 		{
 			"circle": null,
 			"id": 9,
+			"start": [
+				1920.0,
+				0.0
+			],
+			"end": [
+				1920.0,
+				1080.0
+			],
+			"via": [
+				1920.0,
+				540.0
+			],
+			"full": false,
+			"line": true,
+			"left": {
+				"type": "pass",
+				"interactive": false
+			},
+			"right": {
+				"type": "pass",
+				"interactive": false
+			},
+			"is_target": false,
+			"player_solid": false
+		},
+		{
+			"circle": null,
+			"id": 10,
+			"start": [
+				1920.0,
+				1080.0
+			],
+			"end": [
+				0.0,
+				1080.0
+			],
+			"via": [
+				960.0,
+				1080.0
+			],
+			"full": false,
+			"line": true,
+			"left": {
+				"type": "pass",
+				"interactive": false
+			},
+			"right": {
+				"type": "pass",
+				"interactive": false
+			},
+			"is_target": false,
+			"player_solid": false
+		},
+		{
+			"circle": null,
+			"id": 11,
 			"start": [
 				0.0,
 				1080.0
@@ -369,31 +423,81 @@
 		},
 		{
 			"id": 5,
-			"has_effect": false,
+			"has_effect": true,
 			"segment": {
 				"start": [
-					750.0,
-					300.0
+					700.0,
+					400.0
 				],
 				"end": [
-					750.0,
-					780.0
+					700.0,
+					680.0
 				],
 				"via": [
-					750.0,
+					700.0,
 					540.0
 				],
 				"full": false
 			},
 			"carrier": {
 				"a": 0.0,
-				"b": 27648000.0,
+				"b": 5488000.0,
 				"c": 0.0,
-				"d": -20736000000.0
+				"d": -3841600000.0
 			}
 		},
 		{
 			"id": 6,
+			"has_effect": true,
+			"segment": {
+				"start": [
+					1210.0,
+					540.0
+				],
+				"end": [
+					835.0,
+					323.5
+				],
+				"via": [
+					835.0,
+					756.5
+				],
+				"full": true
+			},
+			"carrier": {
+				"a": 1.0,
+				"b": -1920.0,
+				"c": -1080.0,
+				"d": 1150700.0
+			}
+		},
+		{
+			"id": 7,
+			"has_effect": false,
+			"segment": {
+				"start": [
+					960.0,
+					440.0
+				],
+				"end": [
+					960.0,
+					640.0
+				],
+				"via": [
+					1060.0,
+					540.0
+				],
+				"full": false
+			},
+			"carrier": {
+				"a": 20000.0,
+				"b": -38400000.0,
+				"c": -21600000.0,
+				"d": 24064000000.0
+			}
+		},
+		{
+			"id": 8,
 			"has_effect": false,
 			"segment": {
 				"start": [
@@ -418,7 +522,7 @@
 			}
 		},
 		{
-			"id": 7,
+			"id": 9,
 			"has_effect": false,
 			"segment": {
 				"start": [
@@ -443,7 +547,7 @@
 			}
 		},
 		{
-			"id": 8,
+			"id": 10,
 			"has_effect": false,
 			"segment": {
 				"start": [
@@ -468,7 +572,7 @@
 			}
 		},
 		{
-			"id": 9,
+			"id": 11,
 			"has_effect": false,
 			"segment": {
 				"start": [
@@ -581,11 +685,43 @@
 		[
 			1157.6153564453125,
 			741.6005859375
+		],
+		[
+			1210.0,
+			540.0
+		],
+		[
+			710.0,
+			540.0
+		],
+		[
+			960.0,
+			790.0
+		],
+		[
+			960.0,
+			290.0
 		]
 	],
 	"plans": [
 		[],
 		[
+			{
+				"surface_id": 7,
+				"side": "LEFT"
+			}
+		],
+		[
+			{
+				"surface_id": 7,
+				"side": "RIGHT"
+			}
+		],
+		[
+			{
+				"surface_id": 7,
+				"side": "LEFT"
+			},
 			{
 				"surface_id": 5,
 				"side": "LEFT"
@@ -594,6 +730,30 @@
 		[
 			{
 				"surface_id": 5,
+				"side": "LEFT"
+			},
+			{
+				"surface_id": 7,
+				"side": "LEFT"
+			}
+		],
+		[
+			{
+				"surface_id": 7,
+				"side": "RIGHT"
+			},
+			{
+				"surface_id": 5,
+				"side": "LEFT"
+			}
+		],
+		[
+			{
+				"surface_id": 5,
+				"side": "LEFT"
+			},
+			{
+				"surface_id": 7,
 				"side": "RIGHT"
 			}
 		]

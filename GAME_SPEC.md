@@ -231,7 +231,7 @@ The player builds a plan by clicking on **surface sides** in order. The plan is 
 
 - **Click detection**: surfaces are clickable within a tolerance band of **8 pixels** from the rendered line/arc. When multiple surfaces are within tolerance, the nearest one wins. For arc segments, the nearest point on the arc is found by projecting the cursor onto the carrier circle (nearest point on circle), then clamping to the arc's bounds using the same cross-product containment test as §11.1. This is a UI-layer concern, not math-layer. When multiple surfaces coincide geometrically within the tolerance band, repeated clicks cycle through them by surface ID order.
 - **Side selection**: when the player clicks near a surface, the side is determined by which side of the surface the cursor is on (left or right of the traversal direction). The selected side is locked into the plan entry. When the cursor is exactly on the surface carrier (`f(P) = 0`), the side is determined by the cursor's previous position (the last non-zero side evaluation). If no previous position exists, default to LEFT.
-- **Click position**: the plan entry also remembers *where* on the surface the player clicked. It settles the one kind of fork in planning. A circle projective (§13.3) can have two hit points whose projected beams both pass through the target; the one nearer the click is taken, so every plan has exactly one path. Without a click, the segment's midpoint stands in.
+- **Click position**: the plan entry also remembers *where* on the surface the player clicked. It settles the one kind of fork in planning. A circle projective (§13.3) can have two hit points whose projected beams both pass through the target; the one nearer the click is taken, so every plan has exactly one path. Without a click, the segment's midpoint stands in. For a circle directional projection the two hit points are the ends of the chord along its normal, and the click picks the same end for every target exactly when it is off the diameter across the normal: a click within the UI tolerance (8 px) of that diameter is moved off it, to the side of the segment's midpoint (`PlanManager.snap_click`; B7, Stage 113), so no plan rests on float32 noise.
 - **Highlighting**: when the cursor hovers over a surface, the approachable side highlights to indicate it is clickable.
 - **Plan display**: planned surface sides are visually marked (e.g., numbered overlay, distinct color on the planned side).
 - **Preview**: the trajectory preview updates in real time as the plan and cursor change.
@@ -1478,7 +1478,7 @@ Every cursor whose aim at the player has the direction `d` lies on one beam of t
 | Projective | The exit lines (the epoch's own frame) | The pencil | The key |
 |---|---|---|---|
 | Line normal, line directional, circle directional | all parallel (to the carrier's normal, or to the given normal `n`) | *parallel*: one pole, the frame's infinity `B = F'(∞)` (circles tangent there to `F'_*(n)`, lines when `B` is infinity) | the offset of `H` across the family's direction |
-| Circle normal | all through the centre `c` (converging and expanding alike) | *radial*: the poles `A = F'(c)` and `B = F'(∞)` (today's `P_K`/`Q_K` shape with `A` as `P_K`) | the line's direction, a diamond pseudo-angle folded to a half turn |
+| Circle normal | all through the centre `c` (converging and expanding alike) | *radial*: the poles `A = F'(c)` and `B = F'(∞)` (today's `P_K`/`Q_K` shape with `A` as `P_K`); an inversion centred on `c` after the projective sends `c` to infinity, and the pencil keeps its shape with the poles swapped (`A = ∞`, `B = F'(∞)` finite) | the line's direction, a diamond pseudo-angle folded to a half turn |
 
 A cursor's member is the line through its back-propagated hit point. The candidate of a circle (two per line, §13.3) is a property of the line, not of the cursor's place on it: the pair `c ± R·u` is the same for every cursor on a radial line, and every chord of a directional circle shares one perpendicular bisector. A **walk owns its whole member**: from `H` along the exit, through the frame's infinity, and round to `H` (there is no opposite aim). A directional normal along its own line carrier has no hit point at all: the region is empty.
 
@@ -2082,6 +2082,7 @@ Default `draw_arc()` point_count: **64 per full circle**, scaled by arc span (e.
 | UI click tolerance | 8 pixels (§4.2) | UI-layer tolerance — does NOT violate the no-epsilon constraint, which applies only to topology-changing geometric decisions in the math layer. |
 | Reflection carrier | Must be a line (`a = 0`) | Validated at level load and editor save. |
 | Inversion carrier | Must be a circle (`a ≠ 0`) | Validated at level load and editor save. |
+| Line directional projection's normal | Not along its line carrier (`cross(n, end − start) ≠ 0`) | A normal along the line leaves it nowhere: no beam departs, nothing is reachable through it (§15, an empty region). Validated at level load and editor save (`EffectSpec.validate`; B9, Stage 113). |
 
 ---
 
@@ -2663,4 +2664,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.25.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.25.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

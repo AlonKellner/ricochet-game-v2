@@ -26,8 +26,8 @@ static func of(cfg: SideConfig) -> SideSpec:
 	return make(cfg.effect.to_spec() if cfg.effect != null else {"type": "pass"}, cfg.interactive,
 		cfg.hit_effects.map(func(h: HitEffect): return h.to_spec()))
 
-func validate(carrier_is_line: bool) -> Array[String]:
-	var out := EffectSpec.validate(effect, carrier_is_line)
+func validate(carrier_is_line: bool, carrier_dir: Vector2 = Vector2.ZERO) -> Array[String]:
+	var out := EffectSpec.validate(effect, carrier_is_line, carrier_dir)
 	for h in hits:
 		if HitEffectSpec.build(h) == null:
 			out.append("unknown hit effect %s" % str(h))

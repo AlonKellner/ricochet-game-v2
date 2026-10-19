@@ -132,3 +132,58 @@ func test_the_renderer_recomputes_when_a_click_changes():
 	plan.entries[0].click = Vector2(880, 685)
 	await get_tree().process_frame
 	assert_eq(vis.visibility_version, v0 + 1, "the click moves the region")
+
+# B9 follow-up (GAME_SPEC 23): a line directional whose normal runs along its
+# carrier projects nowhere; a level with one is rejected at load.
+func test_b9_a_directional_normal_along_its_line_is_rejected_at_load():
+	var along := SideSpec.make({"type": "line_directional_projection", "normal": [0, 1]}, true, [])
+	var across := SideSpec.make({"type": "line_directional_projection", "normal": [1, 0]}, true, [])
+	var bad := SurfaceSpec.line(Vector2(750, 300), Vector2(750, 780), along, along)
+	assert_false(bad.validate().is_empty(), "the normal along the line: rejected")
+	assert_true(SurfaceSpec.line(Vector2(750, 300), Vector2(750, 780), across, across).validate().is_empty(), "across it: fine")
+	var slanted := SideSpec.make({"type": "line_directional_projection", "normal": [1, 1]}, true, [])
+	assert_true(SurfaceSpec.line(Vector2(750, 300), Vector2(750, 780), slanted, slanted).validate().is_empty(), "slanted: fine")
+	var circ := SideSpec.make({"type": "circle_directional_projection", "normal": [0, 1]}, true, [])
+	assert_true(SurfaceSpec.arc(Vector2(850, 390), Vector2(850, 690), Vector2(1000, 540), circ, circ).validate().is_empty(),
+		"a circle has no direction to run along")
+
+# B7 follow-up (GAME_SPEC 4.2): a click on the diameter across a circle
+# directional's normal is moved off it by the UI tolerance, to the via's side.
+func test_b7_a_click_on_the_diameter_across_the_normal_is_moved_off_it():
+	var gs := GameState.new()
+	# the right half of the circle centred (600, 300) r 100, n = (0, 1): the diameter across n is y = 300
+	var seg := Segment.from_coords(Vector2(600, 200), Vector2(600, 400), Vector2(700, 300))
+	var cfg := SideConfig.new(CircleDirectionalProjection.new(Vector2(0, 1)), true)
+	var arc := Surface.new(seg, cfg, cfg, false, false)
+	assert_eq(PlanManager.snap_click(arc, Side.Value.LEFT, Vector2(690, 330), gs), Vector2(690, 330), "off the diameter: unchanged")
+	assert_eq(PlanManager.snap_click(arc, Side.Value.LEFT, Vector2(690, 300), gs), Vector2(690, 308), "on it: moved to +n (the via is on it)")
+	assert_eq(PlanManager.snap_click(arc, Side.Value.LEFT, Vector2(690, 297), gs), Vector2(690, 308), "within the tolerance: the same")
+	# n = (1, 0): the diameter is x = 600, the via (700, 300) on its +n side
+	var cfg2 := SideConfig.new(CircleDirectionalProjection.new(Vector2(1, 0)), true)
+	var arc2 := Surface.new(Segment.from_coords(Vector2(600, 200), Vector2(600, 400), Vector2(700, 300)), cfg2, cfg2, false, false)
+	assert_eq(PlanManager.snap_click(arc2, Side.Value.LEFT, Vector2(600, 350), gs), Vector2(608, 350), "to the via's side")
+	# a line normal keeps its click, and so does a circle normal
+	assert_eq(PlanManager.snap_click(_line_normal(600, 150, 450), Side.Value.LEFT, Vector2(600, 300), gs), Vector2(600, 300))
+	var cn := _circle_normal(Vector2(600, 200), Vector2(600, 400), Vector2(700, 300))
+	assert_eq(PlanManager.snap_click(cn, Side.Value.LEFT, Vector2(600, 300), gs), Vector2(600, 300))
+
+# An inversion centred on a circle normal's centre after it sends the centre to
+# infinity: the pencil's poles swap and the region still builds.
+func test_an_inversion_concentric_with_the_circle_normal_builds_a_region():
+	Surface.reset_id_counter()
+	var scene: Node = load("res://scenes/playground/projective_concentric.tscn").instantiate()
+	scene.gravity = Vector2.ZERO
+	add_child_autofree(scene)
+	await get_tree().process_frame
+	var player := Vector2(1100, 700)
+	var plan := [PlanManager.PlanEntry.new(7, Side.Value.LEFT), PlanManager.PlanEntry.new(6, Side.Value.RIGHT)]
+	var region := _region(scene.surfaces, player, plan)
+	assert_true(region.is_supported(), "supported")
+	assert_gt(region.get_cell_count(), 0, "cells")
+	assert_eq(region.check(), [], "the structure checks hold")
+	for i in 9:
+		for j in 7:
+			var c := Vector2(600 + i * 90.0, 270 + j * 90.0)
+			var m: int = region.contains(c)
+			if m >= 0:
+				assert_eq(m == 1, _preview_visible(scene.surfaces, player, c, plan), "cursor %s" % c)

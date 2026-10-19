@@ -24,7 +24,9 @@ static func types() -> Array:
 	return CARRIER.keys()
 
 # Problems with a spec on a carrier ([] = valid).
-static func validate(spec: Dictionary, carrier_is_line: bool) -> Array[String]:
+# carrier_dir: a line carrier's direction (end - start), for the rule that a
+# directional projection's normal must leave its line (GAME_SPEC 23, B9).
+static func validate(spec: Dictionary, carrier_is_line: bool, carrier_dir: Vector2 = Vector2.ZERO) -> Array[String]:
 	var out: Array[String] = []
 	var t: String = spec.get("type", "pass")
 	if not CARRIER.has(t):
@@ -37,6 +39,9 @@ static func validate(spec: Dictionary, carrier_is_line: bool) -> Array[String]:
 		out.append("%s needs a circle carrier" % t)
 	if t.ends_with("directional_projection") and not spec.has("normal"):
 		out.append("%s needs a normal" % t)
+	if t == "line_directional_projection" and spec.has("normal") and carrier_dir != Vector2.ZERO \
+			and vec(spec["normal"]).cross(carrier_dir) == 0.0:
+		out.append("%s: the normal runs along the line carrier, no beam leaves it (GAME_SPEC 23)" % t)
 	if t == "portal" and not (spec.has("theta") and spec.has("d")):
 		out.append("a portal needs theta and d")
 	return out

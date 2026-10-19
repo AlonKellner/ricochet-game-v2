@@ -231,7 +231,11 @@ func _handle_plan_click(is_right_click: bool) -> void:
 			else:
 				plan.clear()
 		else:
-			plan.add_entry(sid, result.get("side", Side.Value.LEFT), _cursor.global_position, result.get("piece"))
+			var side: Side.Value = result.get("side", Side.Value.LEFT)
+			var click := _cursor.global_position
+			if not result.has("infinity"):
+				click = PlanManager.snap_click(result.surface, side, click, game_state) # (B7)
+			plan.add_entry(sid, side, click, result.get("piece"))
 
 	_refresh_ui()
 
