@@ -1725,10 +1725,10 @@ def back_propagate_candidates(surf, side, X, flags=None, x_on_carrier=False):
             return H - seg.c
         return P(cfg["normal"])
 
-    if x_on_carrier and len(cands) == 2:
+    if x_on_carrier and cands:
         # provenance: X is itself a candidate -- that one is X exactly (Stage 114:
         # the fork rule chooses between X and the other, as for any fork)
-        i = min(range(2), key=lambda k: abs(X - cands[k]))
+        i = min(range(len(cands)), key=lambda k: abs(X - cands[k]))
         cands[i] = X
 
     def direct(H):

@@ -115,7 +115,7 @@ void pin(Tracer &t, const vis::Result &r, V2 player, const std::vector<V2> &curs
 			st.by_label[lb]++;
 			if (st.samples.size() < 12) {
 				char buf[256];
-				std::snprintf(buf, sizeof buf, "%s player (%g, %g) cursor (%g, %g): region %s, preview %s, margin %.3g", label.c_str(), player.x,
+				std::snprintf(buf, sizeof buf, "%s player (%g, %g) cursor (%.9g, %.9g): region %s, preview %s, margin %.3g", label.c_str(), player.x,
 					player.y, c.x, c.y, m == vis::Membership::Inside ? "in" : "out", *d ? "visible" : "not", vis::margin(r, vis::Pt{c.x, c.y}));
 				st.samples.push_back(buf);
 			}
@@ -143,7 +143,7 @@ TEST_CASE("visibility: the region and the traces agree with the oracle's labels"
 			const V2 cur{float(x[0].get<double>()), float(x[1].get<double>())};
 			const bool label = x[2].get<bool>();
 			char where[128];
-			std::snprintf(where, sizeof where, "%s cursor (%g, %g): oracle %s", name.c_str(), cur.x, cur.y, label ? "visible" : "not");
+			std::snprintf(where, sizeof where, "%s cursor (%.9g, %.9g): oracle %s", name.c_str(), cur.x, cur.y, label ? "visible" : "not");
 			const vis::Membership m = vis::contains(r, vis::Pt{cur.x, cur.y});
 			if (m != vis::Membership::Unclassified) {
 				CHECK_MESSAGE((m == vis::Membership::Inside) == label, (std::string(where) + ", region disagrees"));
@@ -395,6 +395,211 @@ TEST_CASE("visibility: plans' regions are the non-divergence set on the shipped 
 	CHECK(st.mismatches == 0);
 }
 
+// K13: the pin on cursors along every member of a region, offset by `off`
+// (in float32 ulps of the coordinates) to either side of it: beside a computed
+// boundary member the region and the solver must agree once the cursor is
+// outside the unclassified band (vis::contains), and on it the region does not
+// classify. Returns the number of cursors.
+int scan_members(Tracer &t, const vis::Result &r, vis::Pt P, const std::vector<PlanItem> &plan, const vis::Rect &vb, int n, double off, PinStats &st,
+		const std::string &label) {
+	int total = 0;
+	for (size_t k = 0; k < r.members.size(); k++) {
+		const vis::Member &m = r.members[k];
+		std::vector<V2> cursors;
+		for (int i = 0; i <= n; i++) {
+			const double tt = -3000.0 + 6000.0 * i / n;
+			const CN<F64> z = m.beam.at(F64{tt});
+			if (!std::isfinite(z.fx()) || !std::isfinite(z.fy()) || z.fx() < vb.x0 || z.fx() > vb.x1 || z.fy() < vb.y0 || z.fy() > vb.y1) {
+				continue;
+			}
+			const CN<F64> tau = m.beam.tangent_at(F64{tt});
+			const vis::Pt nu = vis::unit(vis::Pt{-tau.fy(), tau.fx()});
+			const double eps = off * 5.96e-8 * std::max({1.0, std::abs(z.fx()), std::abs(z.fy())});
+			for (double sg : (off == 0.0 ? std::vector<double>{0.0} : std::vector<double>{1.0, -1.0})) {
+				cursors.push_back(V2{float(z.fx() + sg * eps * nu.x), float(z.fy() + sg * eps * nu.y)});
+			}
+		}
+		PinStats one;
+		pin(t, r, V2{float(P.x), float(P.y)}, cursors, plan, one, label + " member " + std::to_string(k) + " (" + m.why + ")");
+		st.checked += one.checked;
+		st.mismatches += one.mismatches;
+		for (const std::string &sm : one.samples) {
+			if (st.samples.size() < 12) st.samples.push_back(sm);
+		}
+		total += int(cursors.size());
+	}
+	return total;
+}
+
+// K13: the pin on the cursors of the keys within w of every member's key.
+int scan_keys(Tracer &t, const vis::Result &r, vis::Pt P, const std::vector<PlanItem> &plan, const vis::Rect &vb, double w, int n, PinStats &st,
+		const std::string &label) {
+	vis::Builder b(t, P, plan, Flags(), vb);
+	b.probe(P);
+	int total = 0;
+	for (const vis::Member &m : r.members) {
+		std::vector<V2> cursors;
+		for (int i = 0; i <= n; i++) {
+			const double k = m.key - w + 2.0 * w * i / n;
+			for (double sg : {1.0, -1.0}) {
+				const std::optional<vis::Pt> c = b.cursor_for_key(k, sg);
+				if (c && c->x >= vb.x0 && c->x <= vb.x1 && c->y >= vb.y0 && c->y <= vb.y1) {
+					cursors.push_back(V2{float(c->x), float(c->y)});
+				}
+			}
+		}
+		PinStats one;
+		pin(t, r, V2{float(P.x), float(P.y)}, cursors, plan, one, label + " key " + std::to_string(m.key) + " (" + m.why + ")");
+		st.checked += one.checked;
+		st.mismatches += one.mismatches;
+		for (const std::string &sm : one.samples) {
+			if (st.samples.size() < 12) st.samples.push_back(sm);
+		}
+		total += int(cursors.size());
+	}
+	return total;
+}
+
+// K13 (Stage 114): beside every member of the projective playgrounds' regions,
+// 8 float32 ulps to either side (outside the unclassified band of 4), the
+// region and the solver agree; on the member itself nothing is classified
+// off its points of interest' edges... except exact ones, which are decided.
+TEST_CASE("K13: the pin beside every member and around every key of the projective playgrounds") {
+	struct Case {
+		const char *scene;
+		std::vector<PlanItem> plan;
+		vis::Pt player;
+	};
+	auto item = [](int sid, bool left) { return PlanItem{sid, left, std::nullopt, std::nullopt}; };
+	const std::vector<Case> cases = {
+		{"playground__projective_inversion", {item(7, true), item(6, true)}, {960, 480}},
+		{"playground__projective_arcs", {item(6, true)}, {1250, 300}},
+		{"playground__projective_arcs", {item(5, true)}, {830, 250}},
+		{"playground__projective", {item(11, false), item(6, false)}, {300, 230}},
+		{"playground__directional_arcs", {item(5, true)}, {960, 300}},
+		{"playground__projective_concentric", {item(7, true), item(6, false)}, {1100, 700}},
+	};
+	for (const Case &cs : cases) {
+		const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + cs.scene + ".surfaces.json");
+		Tracer t;
+		t.set_emit_infinity(true);
+		t.set_defs(defs_from_json(d["surfaces"]));
+		const vis::Rect vb{0, 0, 1920, 1080};
+		const vis::Result r = vis::compute(t, cs.player, cs.plan, Flags(), vb);
+		REQUIRE_MESSAGE(r.supported, cs.scene << ": " << r.reason);
+		PinStats beside;
+		scan_members(t, r, cs.player, cs.plan, vb, 80, 8.0, beside, cs.scene);
+		for (const std::string &s : beside.samples) MESSAGE(s);
+		CHECK_MESSAGE(beside.mismatches == 0, cs.scene << ": beside the members");
+		PinStats keys;
+		scan_keys(t, r, cs.player, cs.plan, vb, 2e-5, 24, keys, cs.scene);
+		for (const std::string &s : keys.samples) MESSAGE(s);
+		CHECK_MESSAGE(keys.mismatches == 0, cs.scene << ": around the keys");
+	}
+}
+
+// RC_VIS_FLIP="<key>,<halfwidth>": the solver's own flip key (bisected on defined_visible)
+// along the radial at several distances from the centre, both sides (K13)
+TEST_CASE("visibility flip scan" * doctest::skip(true)) {
+	const char *scene = std::getenv("RC_VIS_SCENE");
+	const char *fl = std::getenv("RC_VIS_FLIP");
+	if (scene == nullptr || fl == nullptr) {
+		return;
+	}
+	double k0 = 0, w = 1e-5;
+	std::sscanf(fl, "%lf,%lf", &k0, &w);
+	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + scene + ".surfaces.json");
+	Tracer t;
+	t.set_emit_infinity(true);
+	t.set_defs(defs_from_json(d["surfaces"]));
+	std::vector<PlanItem> plan;
+	if (const char *ps = std::getenv("RC_VIS_PLAN")) {
+		std::string str = ps;
+		size_t pos = 0;
+		while (pos < str.size()) {
+			size_t comma = str.find(',', pos);
+			if (comma == std::string::npos) comma = str.size();
+			const std::string tok = str.substr(pos, comma - pos);
+			if (!tok.empty()) plan.push_back(PlanItem{std::stoi(tok.substr(0, tok.size() - 1)), tok.back() == 'L', std::nullopt, std::nullopt});
+			pos = comma + 1;
+		}
+	}
+	vis::Pt P{960, 540};
+	if (const char *pp = std::getenv("RC_VIS_PLAYER")) std::sscanf(pp, "%lf,%lf", &P.x, &P.y);
+	vis::Builder b(t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
+	b.probe(P);
+	auto vis_at = [&](double k, double sg, double dist) -> int {
+		const std::optional<vis::Pt> c = b.radial_point(k, sg, dist);
+		if (!c) return -1;
+		const std::optional<bool> v = defined_visible(t, V2{float(P.x), float(P.y)}, V2{float(c->x), float(c->y)}, plan, Flags());
+		return v ? int(*v) : -1;
+	};
+	// RC_VIS_FLIP_AT=<key>: the cast and the walks at that key's cursor (half 1)
+	if (const char *fa = std::getenv("RC_VIS_FLIP_AT")) {
+		const double ka = std::atof(fa);
+		vis::Builder ba(t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080}, vis::Half(1));
+		ba.probe(P);
+		const std::optional<vis::Pt> c = ba.cursor_for_key(ka);
+		if (c) {
+			const std::optional<vis::Cast> cs = ba.probe(*c);
+			std::printf("at key %.12g cursor (%.9g, %.9g):\n", ka, c->x, c->y);
+			if (cs) {
+				std::printf("  cast: %s cursor_ok %d met %d ek %d chosen %d near (%.6f,%.6f) end (%.3f,%.3f)\n", cs->shape().c_str(), int(cs->cursor_ok), int(cs->met), cs->ek,
+					int(cs->chosen), cs->near_pt.x, cs->near_pt.y, cs->end_pt.x, cs->end_pt.y);
+			}
+			const std::optional<LadderResult> lr = t.solve(P.x, P.y, c->x, c->y, plan, Flags());
+			if (lr) {
+				for (const char *which : {"planned", "physical"}) {
+					const auto ev = vis::cast_events(std::string(which) == "planned" ? lr->planned : lr->physical, Flags().canonical_key());
+					std::printf("  %s:", which);
+					int shown = 0;
+					for (const auto &e : ev) {
+						if (shown++ < 6) std::printf(" %s s%d %s%s (%.4f,%.4f);", event_kind_name(e.kind), e.sid, e.left ? "L" : "R", e.applied ? "*" : "", e.pt.x, e.pt.y);
+					}
+					std::printf("\n");
+				}
+			}
+		}
+	}
+	// the region's own cast at the key's cursor (the builder's half: RC_VIS_HALF), alive or not
+	for (int half : {0, 1, 2}) {
+		vis::Builder bh(t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080}, vis::Half(half));
+		bh.probe(P); // (prepares the pencil)
+		auto cast_at = [&](double k) -> int {
+			const std::optional<vis::Pt> c = bh.cursor_for_key(k);
+			if (!c) return -1;
+			const std::optional<vis::Cast> cs = bh.probe(*c);
+			return cs ? int(cs->cursor_ok) : -1;
+		};
+		double lo = k0 - w, hi = k0 + w;
+		const int vlo = cast_at(lo), vhi = cast_at(hi);
+		if (vlo == vhi || vlo < 0 || vhi < 0) {
+			std::printf("cast half %d: no flip in [%.9g, %.9g] (%d / %d)\n", half, lo, hi, vlo, vhi);
+		} else {
+			for (int i = 0; i < 44; i++) {
+				const double mid = 0.5 * (lo + hi);
+				if (cast_at(mid) == vlo) lo = mid; else hi = mid;
+			}
+			std::printf("cast half %d: flip at %.12g (%d -> %d)\n", half, 0.5 * (lo + hi), vlo, vhi);
+		}
+	}
+	for (double sg : {1.0, -1.0}) {
+		for (double dist : {30.0, 75.0, 120.0, 200.0, 350.0, 600.0}) {
+			double lo = k0 - w, hi = k0 + w;
+			const int vlo = vis_at(lo, sg, dist), vhi = vis_at(hi, sg, dist);
+			if (vlo == vhi || vlo < 0 || vhi < 0) {
+				std::printf("side %+g dist %g: no flip in [%.9g, %.9g] (%d / %d)\n", sg, dist, lo, hi, vlo, vhi);
+				continue;
+			}
+			for (int i = 0; i < 44; i++) {
+				const double mid = 0.5 * (lo + hi);
+				if (vis_at(mid, sg, dist) == vlo) lo = mid; else hi = mid;
+			}
+			std::printf("side %+g dist %g: flip at %.12g (%d -> %d)\n", sg, dist, 0.5 * (lo + hi), vlo, vhi);
+		}
+	}
+}
+
 // RC_VIS_SCENE=<dump name> RC_VIS_PLAN="1L,2R" RC_VIS_PLAYER="x,y" RC_VIS_SVG=<file>:
 // one region drawn with its cells and members, the definition sampled on a grid.
 TEST_CASE("visibility debug" * doctest::skip(true)) {
@@ -448,6 +653,12 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 		const std::optional<vis::Cast> k = b.probe(c);
 		const vis::Result &rr = b.result();
 		std::printf("P_K (%.3f,%.3f) Q_K %s (%.3f,%.3f)\n", rr.pk.x, rr.pk.y, rr.qk_inf ? "inf" : "", rr.qk.x, rr.qk.y);
+		{
+			const vis::Membership mm = vis::contains(rr, c);
+			const std::optional<bool> dv = defined_visible(t, V2{float(P.x), float(P.y)}, V2{float(c.x), float(c.y)}, plan, Flags());
+			std::printf("contains: %s (margin %.6g); preview: %s\n", mm == vis::Membership::Inside ? "in" : (mm == vis::Membership::Outside ? "out" : "unclassified"),
+				vis::margin(rr, c), dv ? (*dv ? "visible" : "not") : "none");
+		}
 		if (k) {
 			std::printf("cast: %s cursor_ok %d met %d ek %d chosen %d tie %d near (%.3f,%.3f) end (%.3f,%.3f)\n", k->shape().c_str(), int(k->cursor_ok), int(k->met), k->ek, int(k->chosen), int(k->has_tie), k->near_pt.x, k->near_pt.y,
 				k->end_pt.x, k->end_pt.y);
@@ -475,6 +686,12 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 	const vis::Result r = vis::compute(t, P, plan, Flags(), vbounds);
 	std::printf("supported %d %s casts %d refinements %d members %zu cells %zu loops %zu\n", int(r.supported), r.reason.c_str(), r.casts,
 		r.refinements, r.members.size(), r.cells.size(), r.loops.size());
+	if (const char *pc = std::getenv("RC_VIS_PROBE")) {
+		vis::Pt c;
+		std::sscanf(pc, "%lf,%lf", &c.x, &c.y);
+		const vis::Membership mm = vis::contains(r, c);
+		std::printf("contains(region): %s (margin %.6g)\n", mm == vis::Membership::Inside ? "in" : (mm == vis::Membership::Outside ? "out" : "unclassified"), vis::margin(r, c));
+	}
 	for (const std::string &n : r.notes) std::printf("note: %s\n", n.c_str());
 	{
 		inv::VisInput in{&r, &t, P, plan, Flags(), vbounds};
@@ -483,6 +700,26 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 			if (shown++ < 25) std::printf("check: %s\n", render(vi).c_str());
 		}
 		std::printf("checks: %d violations\n", shown);
+	}
+	// RC_VIS_MEMBER_SCAN=<n>[,<offset>]: the pin beside every member (K13)
+	if (const char *ms = std::getenv("RC_VIS_MEMBER_SCAN")) {
+		int n = 200;
+		double off = 0.0;
+		std::sscanf(ms, "%d,%lf", &n, &off);
+		PinStats st;
+		const int total = scan_members(t, r, P, plan, vbounds, n, off, st, std::string(scene));
+		for (const std::string &sm : st.samples) std::printf("pin: %s\n", sm.c_str());
+		std::printf("member scan: %d cursors, %d mismatches\n", total, st.mismatches);
+	}
+	// RC_VIS_KEY_SCAN=<halfwidth>,<n>: the pin on the cursors of the keys around every member's key (K13)
+	if (const char *ks = std::getenv("RC_VIS_KEY_SCAN")) {
+		double w = 1e-5;
+		int n = 200;
+		std::sscanf(ks, "%lf,%d", &w, &n);
+		PinStats st;
+		const int total = scan_keys(t, r, P, plan, vbounds, w, n, st, std::string(scene));
+		for (const std::string &sm : st.samples) std::printf("pin: %s\n", sm.c_str());
+		std::printf("key scan: %d cursors, %d mismatches\n", total, st.mismatches);
 	}
 	if (const char *ps = std::getenv("RC_VIS_PIN")) {
 		// RC_VIS_PIN=<step>: the pin on a grid over the level

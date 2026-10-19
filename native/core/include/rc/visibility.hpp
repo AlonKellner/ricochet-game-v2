@@ -223,6 +223,12 @@ struct Cast {
 	// the walk's shape: equal shapes bound one cell
 	bool visible() const { return alive && !iv.empty(); }
 	bool same_shape(const Cast &o) const {
+		// K13 (Stage 114): the solver's choice of orientation (a split plan's two
+		// halves) is part of the shape: a forced walk alive beyond the key where
+		// the solver stops choosing it is a dead stretch of its half
+		if (chosen != o.chosen) {
+			return false;
+		}
 		if (!visible() && !o.visible()) {
 			// nothing visible but the departure points (if any) of the last entry
 			return whisker == o.whisker && (!whisker || near_sid == o.near_sid);
@@ -666,6 +672,16 @@ public:
 		return probe_param(p_step(a.param(), p_gap(a.param(), b.param()) * f));
 	}
 	const Result &result() const { return res_; }
+	// (debug scans: the pencil's key of a point and the cursor of a key)
+	std::optional<double> key_for(const Pt &z) const { return key_of(z); }
+	std::optional<Pt> cursor_for_key(double key, double sigma = 0.0) const { return cursor_at(key, sigma); }
+	// (debug: a point of a radial pencil's line, dist from the centre on the sigma side, in the epoch's frame pushed forward)
+	std::optional<Pt> radial_point(double key, double sigma, double dist) const {
+		if (kind_ != PencilKind::Radial) {
+			return std::nullopt;
+		}
+		return push(cn_of(pc_ + diamond_dir(key) * (sigma * dist)));
+	}
 
 	Result build() {
 		if (!prepare()) {
@@ -1082,10 +1098,30 @@ private:
 			if (first == nullptr) {
 				return;
 			}
+			// K13: a pushed point on the carrier itself (a tangency of the frame-0
+			// member with it, say) is the hit -- not the double root a tangent beam
+			// recomputes at half the digits
+			const Pt zq = pt_of(*zp);
+			const CarrierGeom g = geom_of(*first);
+			const double dz = g.line ? std::abs(cross(g.dir, zq - g.S)) : std::abs(norm(zq - g.c) - g.r);
+			const bool on = dz <= 1e-6 * std::max({1.0, std::abs(zq.x), std::abs(zq.y)});
+			bool used = false;
 			for (const F64 &t : geom::hits(b, first->seg, false)) {
-				if (!t.is_inf()) {
-					keys_from_hit(0, b.at(t), out);
+				if (t.is_inf()) {
+					continue;
 				}
+				const CN<F64> h = b.at(t);
+				if (on && norm(pt_of(h) - zq) <= 1e-3 * std::max({1.0, std::abs(zq.x), std::abs(zq.y)})) {
+					if (!used) {
+						keys_from_hit(0, *zp, out);
+						used = true;
+					}
+					continue;
+				}
+				keys_from_hit(0, h, out);
+			}
+			if (on && !used) {
+				keys_from_hit(0, *zp, out);
 			}
 			return;
 		}
@@ -2979,6 +3015,7 @@ private:
 	struct Gap {
 		std::optional<Cast> mid;
 		std::vector<Proto> protos;
+		bool below = false; // the shape switches within the resolution of a bounding member: the gap is the mid's (K13)
 	};
 
 	// The two casts' shapes differ between directions lo and hi: bisect to the
@@ -3114,6 +3151,7 @@ private:
 						break;
 					}
 					below = ok == -1;
+					gaps[i].below = below;
 				}
 				if ((!left_ok || !right_ok) && !below) {
 					res_.notes.push_back("cell " + std::to_string(i) + ": shapes differ: " + ms[i].plus.shape() + " | " + mid.shape() + " | "
@@ -3125,7 +3163,9 @@ private:
 		Rect clip = res_.domain;
 		for (size_t i = 0; i < ms.size(); i++) {
 			const Cast &mid = *gaps[i].mid;
-			if (!mid.valid || !mid.alive || !ms[i].plus.same_shape(mid) || !ms[(i + 1) % ms.size()].minus.same_shape(mid)) {
+			// (K13: a switch at a bounding member, below its resolution, is that
+			// member's own sliver -- the gap is one cell of the mid's shape)
+			if (!mid.valid || !mid.alive || (!gaps[i].below && (!ms[i].plus.same_shape(mid) || !ms[(i + 1) % ms.size()].minus.same_shape(mid)))) {
 				continue;
 			}
 			make_protos(int(i), int((i + 1) % ms.size()), mid, gaps[i].protos);
@@ -4161,11 +4201,22 @@ inline Membership contains(const Result &r, const Pt &c) {
 			return Membership::Inside;
 		}
 	}
+	// On the boundary (K13, Stage 114): a cursor exactly at a vertex or on an
+	// edge is decided by the edge's inclusivity (the region's departure, stop and
+	// point-of-interest rules); within a float32 cursor's rounding of one, but
+	// not on it, the region does not classify -- the solver decides such a
+	// cursor by the rounding of its own hit point, and a computed boundary (a
+	// tangency, a refinement, a fork, a point pushed through a projective) is
+	// itself placed by rounding (GAME_SPEC 15.4).
+	const double band = 4.0 * 5.96e-8 * std::max({1.0, std::abs(c.x), std::abs(c.y)}); // 4 ulps of float32
+	bool near = false;
 	for (const Loop &l : r.loops) {
 		for (const Edge &e : l.edges) {
-			const double tol = 1e-9 * std::max({1.0, std::abs(c.x), std::abs(c.y)});
-			if (norm(c - e.a) <= tol) {
+			if (c == e.a) {
 				return e.incl_a ? Membership::Inside : Membership::Outside;
+			}
+			if (norm(c - e.a) <= band) {
+				near = true;
 			}
 		}
 	}
@@ -4173,10 +4224,16 @@ inline Membership contains(const Result &r, const Pt &c) {
 		for (const Edge &e : l.edges) {
 			double scale = 1.0;
 			const double d = edge_dist(e, c, &scale);
-			if (d <= 1e-9 * scale) {
+			if (d == 0.0) {
 				return e.inclusive ? Membership::Inside : Membership::Outside;
 			}
+			if (d <= band) {
+				near = true;
+			}
 		}
+	}
+	if (near) {
+		return Membership::Unclassified;
 	}
 	int n = 0;
 	for (const Loop &l : r.loops) {

@@ -996,6 +996,13 @@ public:
 				while (pick + 1 < pool.size() && !pool[pick].sub(Hc).is_zero()) {
 					pick++;
 				}
+				{
+					static const bool trace = std::getenv("RC_REALIZE_TRACE") != nullptr;
+					if (trace) {
+						std::fprintf(stderr, "backward: entry %zu surf %d on %d cands %zu pick %zu snapped %d Xe %d same %d limbs %d\n", jj, surf->id, int(on), cands.size(), pick,
+							int(snaps[pick].has_value()), int(Xe.has_value()), int(Hc.sub(*X).is_zero()), max_limbs);
+					}
+				}
 				if (Xe) {
 					if (snaps[pick]) {
 						out.exact_hits.emplace(jj, snaps[pick]->first);
@@ -2098,6 +2105,13 @@ private:
 				tc = t0;
 				cursor_now = true;
 			}
+			{
+				static const bool trace = std::getenv("RC_REALIZE_TRACE") != nullptr;
+				if (trace) {
+					std::fprintf(stderr, "cursor cand: tc %.9g t0 %.9g fresh %d ki %d skip %d depart %d now %d mode %d\n", tc.to_float(), t0.to_float(), int(fresh), ki,
+						ki >= 0 ? w.known[size_t(ki)].skip : -9, depart, int(cursor_now), int(w.mode));
+				}
+			}
 			cands.push_back(Candidate<N>{tc, nullptr, false, std::nullopt, -1});
 			if (ki < 0) {
 				w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
@@ -3111,9 +3125,9 @@ private:
 		{
 			static const bool trace = std::getenv("RC_REALIZE_TRACE") != nullptr;
 			if (trace) {
-				std::fprintf(stderr, "project: pt (%.6g, %.6g) H %s on_plan %d chain %d anchored %d at_h %d mode %d plan_index %d cursor (%.6g, %.6g)\n", pt.fx(), pt.fy(),
+				std::fprintf(stderr, "project: pt (%.6g, %.6g) H %s on_plan %d chain %d anchored %d at_h %d exact %d known %zu mode %d plan_index %d cursor (%.6g, %.6g)\n", pt.fx(), pt.fy(),
 					H ? (std::to_string(H->fx()) + "," + std::to_string(H->fy())).c_str() : "none", int(w.on_plan), int(w.chain != nullptr), int(w.anchored), int(at_h),
-					int(w.mode), w.plan_index, w.cursor ? w.cursor->fx() : 0.0, w.cursor ? w.cursor->fy() : 0.0);
+					int(pt_exact), w.known.size(), int(w.mode), w.plan_index, w.cursor ? w.cursor->fx() : 0.0, w.cursor ? w.cursor->fy() : 0.0);
 			}
 		}
 		if (!at_h) {
