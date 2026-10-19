@@ -17,7 +17,7 @@ Background: TDD_10 (the native core), TDD_15 (performance), docs/WORKFLOW.md (th
 | 115.3 | The headless host `rc_tool` (`native/hosts/headless`): `rc_tool fmt [--check]` (the canonical spelling, `rcg/canon.hpp`, byte-identical to `level_fmt.py`; ctest `rcg_levels_canonical`) and `rc_tool dumps` (`make dumps` without Godot; `dump_scene_surfaces.gd` retired). The dumps change: the canonical spelling (bytes) and 24 signed zeros Godot's JSON had flattened (F3) -- with them in place ctest 53/53 (the region digest unchanged), the GUT parity tests and `make regen` unchanged (semantically; byte-only in the files that embed the dumps) -- approved by the user (2026-10-19), applied; the `dumps` gate | Done |
 | 115.4 | `rc_tool manifests` | Moved to the next stage: several manifests sweep worlds after spawns landed (`test_stage107_level_sweep`), which needs the native world and landing fold of that stage; until then Godot writes them and the manifests gate holds them |
 | 115.5 | Docs (GAME_SPEC 2.27.0: §19.1, §19.3, §20.1; CHANGELOG; WORKFLOW; CLAUDE.md), `make gates` (584 s, green; ASan found a use-after-free in the new parity test's name mangling, fixed) | Done |
-| 115.6 | Interactive sign-off: the game unchanged (the levels now built from their data) | Pending (user) |
+| 115.6 | Interactive sign-off: the game unchanged (the levels now built from their data) | Done (user, 2026-10-19) |
 
 ## Findings
 
