@@ -800,11 +800,13 @@ void Session::update_spawn_preview() {
 	}
 	spawn_inputs_ = inputs;
 	spawn_placed_ = json::array();
+	spawn_specs_.clear();
 	spawn_vanishing_.clear();
 	if (!preview_.pair) {
 		return;
 	}
 	const Landing l = fold(preview_.pair->physical.hits, world_->surfaces(), preview_.pair->final_flags, world_->generations());
+	spawn_specs_ = l.placed;
 	for (const Placed &p : l.placed) {
 		spawn_placed_.push_back({{"channel", p.channel}, {"generation", p.generation}, {"spec", digest::spec_data(p.spec)}});
 	}

@@ -57,6 +57,7 @@ func recompute() -> void:
 			vanishing.append(s)
 
 func _draw() -> void:
+	DrawRec.begin(self)
 	for p in placed:
 		var spec: SurfaceSpec = p["spec"]
 		dashed(self, spec.segment(), GHOST_COLOR, WIDTH)
@@ -70,13 +71,13 @@ func _draw() -> void:
 # A segment drawn dashed on a canvas item (also SurfaceNode's absent outline).
 static func dashed(ci: CanvasItem, seg: Segment, color: Color, width: float) -> void:
 	if seg.is_line():
-		ci.draw_dashed_line(seg.start.coords, seg.end.coords, color, width, DASH)
+		DrawRec.dashed_line(ci, seg.start.coords, seg.end.coords, color, width, DASH)
 		return
 	var carrier := seg.get_carrier()
 	var c := carrier.center()
 	var r := carrier.radius()
 	if r > VisualConverter.MAX_ARC_RADIUS() and not seg.full:
-		ci.draw_dashed_line(seg.start.coords, seg.end.coords, color, width, DASH)   # visually straight
+		DrawRec.dashed_line(ci, seg.start.coords, seg.end.coords, color, width, DASH)   # visually straight
 		return
 	var a0 := 0.0
 	var span := TAU
@@ -89,4 +90,4 @@ static func dashed(ci: CanvasItem, seg: Segment, color: Color, width: float) -> 
 	for i in range(0, n, 2):
 		var t0 := a0 + span * i / n
 		var t1 := a0 + span * (i + 1) / n
-		ci.draw_arc(c, r, t0, t1, 4, color, width)
+		DrawRec.arc(ci, c, r, t0, t1, 4, color, width)

@@ -5,10 +5,11 @@
 //   rc_tool dumps <levels dir> <out dir>       every level's scene defs (bench/scenes/<dir>__<name>.surfaces.json)
 //   rc_tool manifests <sweeps recipes> <levels dir> <out dir>
 //                                             the sweep manifests (bench/sweeps) from data/sweeps.json
-//   rc_tool replay <sessions dir> <levels dir> <out dir> [--only <substring>]
+//   rc_tool replay <sessions dir> <levels dir> <out dir> [--only <substring>] [--draw [--full]]
 //                                             the session scripts played natively (rcg::Session): one
 //                                             record per step, as the golden (bench/sessions) holds them;
-//                                             (every session: the kinematic ones on the native controller)
+//                                             (every session: the kinematic ones on the native controller);
+//                                             --draw: the records hold the draw list's sha (--full: the list)
 //
 // Exit status: 0 done, 1 a check failed or a file is invalid, 2 usage.
 #include "rcg/build.hpp"
@@ -37,7 +38,7 @@ int usage() {
 	std::cerr << "usage: rc_tool fmt [--check] <file or dir>...\n"
 				 "       rc_tool dumps <levels dir> <out dir>\n"
 				 "       rc_tool manifests <sweeps recipes> <levels dir> <out dir>\n"
-				 "       rc_tool replay <sessions dir> <levels dir> <out dir> [--only <substring>]\n";
+				 "       rc_tool replay <sessions dir> <levels dir> <out dir> [--only <substring>] [--draw [--full]]\n";
 	return 2;
 }
 
@@ -163,10 +164,14 @@ int manifests(const std::vector<std::string> &args) {
 
 int replay(std::vector<std::string> args) {
 	std::string only;
-	for (size_t i = 3; i < args.size();) {
+	bool draw = false, full = false;
+	for (size_t i = 0; i < args.size();) {
 		if (args[i] == "--only" && i + 1 < args.size()) {
 			only = args[i + 1];
 			args.erase(args.begin() + long(i), args.begin() + long(i) + 2);
+		} else if (args[i] == "--draw" || args[i] == "--full") {
+			(args[i] == "--draw" ? draw : full) = true;
+			args.erase(args.begin() + long(i));
 		} else {
 			i++;
 		}
@@ -185,7 +190,8 @@ int replay(std::vector<std::string> args) {
 		const json script = json::parse(read(p));
 		try {
 			std::string text;
-			for (const std::string &l : rcg::replay_session(script, levels.string())) {
+			for (const std::string &l : rcg::replay_session(script, levels.string(),
+					 !draw ? rcg::DrawRecord::None : full ? rcg::DrawRecord::Full : rcg::DrawRecord::Sha)) {
 				text += l + "\n";
 			}
 			if (!write(out / (name + ".jsonl"), text)) {

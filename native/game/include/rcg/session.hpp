@@ -18,6 +18,7 @@
 #include "rcg/kinematics.hpp"
 #include "rcg/landing.hpp"
 #include "rcg/model.hpp"
+#include "rcg/render.hpp"
 #include "rcg/world.hpp"
 
 #include <nlohmann/json.hpp>
@@ -90,6 +91,9 @@ public:
 	void settle();
 	// the digest record (after settle()); extra: the step's own fields
 	nlohmann::json record(const nlohmann::json &extra) const;
+	// Stage 118: what the level's nodes draw (after settle()): the draw list
+	// (rcg/render.hpp), one node per thing drawn, in the GDScript nodes' calls
+	std::vector<render::Node> draw() const;
 
 	const std::vector<PlanEntry> &plan() const { return plan_; }
 	const rc::Flags &flags() const { return flags_; }
@@ -193,6 +197,7 @@ private:
 	rc::vis::Fill fill_;
 	std::vector<std::vector<V2>> whiskers_;
 	nlohmann::json spawn_placed_ = nlohmann::json::array();
+	std::vector<Placed> spawn_specs_; // the placed specs (the spawn preview's ghosts)
 	std::vector<int> spawn_vanishing_;
 	bool spawn_preview_ = false;
 	float facing_ = 0.0f;
@@ -200,6 +205,7 @@ private:
 	std::optional<rc::Flags> pending_flags_;
 	rc::TracePath pending_path_;
 	bool on_floor_ = false;
+	bool flying_ = false; // an arrow in flight (the path and its kin dimmed; the arrow drawn)
 	V2 arrow_pos_;
 	V2 arrow_dir_{1.0f, 0.0f};
 };

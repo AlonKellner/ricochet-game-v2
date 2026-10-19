@@ -9,5 +9,6 @@ func _process(_delta: float) -> void:
 	global_position = get_global_mouse_position()
 
 func _draw() -> void:
-	draw_line(Vector2(-CROSSHAIR_SIZE, 0), Vector2(CROSSHAIR_SIZE, 0), CROSSHAIR_COLOR, CROSSHAIR_WIDTH)
-	draw_line(Vector2(0, -CROSSHAIR_SIZE), Vector2(0, CROSSHAIR_SIZE), CROSSHAIR_COLOR, CROSSHAIR_WIDTH)
+	DrawRec.begin(self)
+	DrawRec.line(self, Vector2(-CROSSHAIR_SIZE, 0), Vector2(CROSSHAIR_SIZE, 0), CROSSHAIR_COLOR, CROSSHAIR_WIDTH)
+	DrawRec.line(self, Vector2(0, -CROSSHAIR_SIZE), Vector2(0, CROSSHAIR_SIZE), CROSSHAIR_COLOR, CROSSHAIR_WIDTH)

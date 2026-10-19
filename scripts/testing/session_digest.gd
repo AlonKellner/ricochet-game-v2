@@ -26,7 +26,7 @@ static func encode(v) -> String:
 		TYPE_COLOR:
 			return "[%s,%s,%s,%s]" % [encode(float(v.r)), encode(float(v.g)), encode(float(v.b)), encode(float(v.a))]
 		TYPE_ARRAY, TYPE_PACKED_VECTOR2_ARRAY, TYPE_PACKED_FLOAT64_ARRAY, TYPE_PACKED_FLOAT32_ARRAY, \
-				TYPE_PACKED_INT32_ARRAY, TYPE_PACKED_INT64_ARRAY, TYPE_PACKED_STRING_ARRAY:
+				TYPE_PACKED_INT32_ARRAY, TYPE_PACKED_INT64_ARRAY, TYPE_PACKED_STRING_ARRAY, TYPE_PACKED_COLOR_ARRAY:
 			var parts := PackedStringArray()
 			for x in v:
 				parts.append(encode(x))
@@ -109,8 +109,53 @@ static func record(level: Node, extra: Dictionary = {}, full := false) -> Dictio
 	var spawn := _spawn(level.get_node_or_null("SpawnPreview"))
 	r["spawn_n"] = spawn["n"]
 	r["spawn"] = spawn["all"] if full else sha(spawn["all"])
+	if DrawRec.enabled:
+		var d := draw(level)
+		r["draw"] = d if full else sha(d)
 	r.merge(extra, true)
 	return r
+
+# Stage 118: what the level's nodes draw (DrawRec's logs and the nodes drawn by
+# their properties), each [key, z_index, position, modulate, calls], sorted by
+# (z_index, key): the native painters' reference.
+static func draw(level: Node) -> Array:
+	var out := []
+	for child in level.get_children():
+		if not (child is CanvasItem) or child.is_queued_for_deletion() or not child.visible:
+			continue
+		var key := []
+		var calls: Array = child.get_meta("draw_log", [])
+		if child is SurfaceNode:
+			key = ["surface", child.surface.id, child.piece_index]
+		elif child is EdgeOverlayNode:
+			key = ["edge"]
+		elif child is VisibilityRenderer:
+			key = ["visibility"]
+		elif child is SpawnPreviewNode:
+			key = ["spawn"]
+		elif child is PathRenderer:
+			key = ["path"]
+		elif child.name == "ArrowAnimator":
+			key = ["arrow"]
+		elif child.name == "Cursor":
+			key = ["cursor"]
+		elif child.name == "Player":
+			var v: Polygon2D = child.get_node("Visual")
+			key = ["player"]
+			calls = [["polygon2d", v.polygon, v.color, float(v.rotation)]]
+		elif child is ColorRect:
+			key = ["background"]
+			calls = [["rect", child.position, child.size, child.color]]
+		elif child is Control and child.has_node("Label"):
+			continue
+		else:
+			continue
+		out.append([key, child.z_index, child.position, child.modulate, calls])
+	var hud := level.get_node_or_null("PlanHUD")
+	if hud != null:
+		out.append([["hud"], 0, Vector2.ZERO, Color.WHITE, [["label", hud._label.text]]])
+	out.sort_custom(func(a, b): return a[1] < b[1] or (a[1] == b[1] and encode(a[0]) < encode(b[0])))
+	return out
 
 static func _sorted_keys(d: Dictionary) -> Array:
 	var ks: Array = d.keys()

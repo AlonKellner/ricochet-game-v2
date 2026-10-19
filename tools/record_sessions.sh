@@ -3,7 +3,7 @@
 # directory, in JOBS parallel Godot processes (scripts/testing/record_sessions.gd
 # --shard i/JOBS). Exit status nonzero if any shard failed (its log tail printed).
 #
-#   tools/record_sessions.sh <out dir> [jobs]
+#   [RECORD_ARGS="--draw --full"] tools/record_sessions.sh <out dir> [jobs]
 set -uo pipefail
 cd "$(dirname "$0")/.."
 OUT="$1"
@@ -14,7 +14,7 @@ LOGS=$(mktemp -d "${TMPDIR:-/tmp}/ricochet_record.XXXXXX")
 pids=()
 for ((i = 0; i < JOBS; i++)); do
 	"$GODOT" --headless --fixed-fps 60 --path . -s res://scripts/testing/record_sessions.gd \
-		-- --out "$OUT" --shard "$i/$JOBS" > "$LOGS/shard$i.log" 2>&1 &
+		-- --out "$OUT" --shard "$i/$JOBS" ${RECORD_ARGS:-} > "$LOGS/shard$i.log" 2>&1 &
 	pids+=($!)
 done
 status=0

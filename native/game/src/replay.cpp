@@ -1,6 +1,7 @@
 #include "rcg/replay.hpp"
 
 #include "rcg/digest.hpp"
+#include "rcg/render.hpp"
 #include "rcg/session.hpp"
 
 #include <filesystem>
@@ -15,7 +16,7 @@ V2 at(const json &a) { return V2::of(a[0].get<double>(), a[1].get<double>()); }
 
 } // namespace
 
-std::vector<std::string> replay_session(const json &script, const std::string &levels_dir) {
+std::vector<std::string> replay_session(const json &script, const std::string &levels_dir, DrawRecord draw) {
 	const std::filesystem::path levels = levels_dir;
 	SessionConfig cfg;
 	if (script.contains("switches")) {
@@ -29,8 +30,15 @@ std::vector<std::string> replay_session(const json &script, const std::string &l
 	}
 	Session s(load_level((levels / (script["level"].get<std::string>() + ".json")).string()), cfg);
 	std::vector<std::string> lines;
+	auto record = [&](json extra) {
+		if (draw != DrawRecord::None) {
+			const json d = render::list_json(s.draw());
+			extra["draw"] = draw == DrawRecord::Full ? d : json(digest::sha(d));
+		}
+		lines.push_back(digest::encode(s.record(extra)));
+	};
 	s.settle();
-	lines.push_back(digest::encode(s.record({{"i", 0}, {"op", "start"}})));
+	record({{"i", 0}, {"op", "start"}});
 	const json &steps = script["steps"];
 	for (size_t i = 0; i < steps.size(); i++) {
 		const json &step = steps[i];
@@ -72,7 +80,7 @@ std::vector<std::string> replay_session(const json &script, const std::string &l
 			throw std::runtime_error("unsupported op " + op);
 		}
 		s.settle();
-		lines.push_back(digest::encode(s.record(extra)));
+		record(extra);
 	}
 	return lines;
 }
