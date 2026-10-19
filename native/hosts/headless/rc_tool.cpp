@@ -3,11 +3,20 @@
 //   rc_tool fmt [--check] <file or dir>...    the canonical spelling (rcg/canon.hpp) of JSON data;
 //                                             --check: list the files not in it, exit 1 if any
 //   rc_tool dumps <levels dir> <out dir>       every level's scene defs (bench/scenes/<dir>__<name>.surfaces.json)
+//   rc_tool manifests <sweeps recipes> <levels dir> <out dir>
+//                                             the sweep manifests (bench/sweeps) from data/sweeps.json
+//   rc_tool replay <sessions dir> <levels dir> <out dir> [--only <substring>]
+//                                             the session scripts played natively (rcg::Session): one
+//                                             record per step, as the golden (bench/sessions) holds them;
+//                                             kinematic sessions are skipped (no native controller yet)
 //
 // Exit status: 0 done, 1 a check failed or a file is invalid, 2 usage.
 #include "rcg/build.hpp"
 #include "rcg/canon.hpp"
 #include "rcg/level.hpp"
+#include "rcg/digest.hpp"
+#include "rcg/replay.hpp"
+#include "rcg/sweeps.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -26,7 +35,9 @@ namespace {
 
 int usage() {
 	std::cerr << "usage: rc_tool fmt [--check] <file or dir>...\n"
-				 "       rc_tool dumps <levels dir> <out dir>\n";
+				 "       rc_tool dumps <levels dir> <out dir>\n"
+				 "       rc_tool manifests <sweeps recipes> <levels dir> <out dir>\n"
+				 "       rc_tool replay <sessions dir> <levels dir> <out dir> [--only <substring>]\n";
 	return 2;
 }
 
@@ -131,6 +142,65 @@ int dumps(const std::vector<std::string> &args) {
 	return 0;
 }
 
+int manifests(const std::vector<std::string> &args) {
+	if (args.size() != 3) {
+		return usage();
+	}
+	try {
+		const auto ms = rcg::sweeps::manifests(json::parse(read(args[0])), args[1]);
+		for (const auto &[name, m] : ms) {
+			if (!write(fs::path(args[2]) / name, rcg::canonical(m))) {
+				return 1;
+			}
+		}
+		std::cout << ms.size() << " sweep manifests in " << args[2] << "\n";
+	} catch (const std::exception &e) {
+		std::cerr << e.what() << "\n";
+		return 1;
+	}
+	return 0;
+}
+
+int replay(std::vector<std::string> args) {
+	std::string only;
+	if (args.size() == 5 && args[3] == "--only") {
+		only = args[4];
+		args.resize(3);
+	}
+	if (args.size() != 3) {
+		return usage();
+	}
+	const fs::path in = args[0], levels = args[1], out = args[2];
+	fs::create_directories(out);
+	int n = 0, skipped = 0;
+	for (const fs::path &p : json_files({in.string()})) {
+		const std::string name = p.stem().string();
+		if (!only.empty() && name.find(only) == std::string::npos) {
+			continue;
+		}
+		const json script = json::parse(read(p));
+		if (script.value("kind", "teleport") != "teleport") {
+			skipped++;
+			continue;
+		}
+		try {
+			std::string text;
+			for (const std::string &l : rcg::replay_session(script, levels.string())) {
+				text += l + "\n";
+			}
+			if (!write(out / (name + ".jsonl"), text)) {
+				return 1;
+			}
+		} catch (const std::exception &e) {
+			std::cerr << name << ": " << e.what() << "\n";
+			return 1;
+		}
+		n++;
+	}
+	std::cout << n << " sessions replayed, " << skipped << " kinematic skipped\n";
+	return 0;
+}
+
 } // namespace
 
 int main(int argc, char **argv) {
@@ -144,6 +214,12 @@ int main(int argc, char **argv) {
 	}
 	if (cmd == "dumps") {
 		return dumps(args);
+	}
+	if (cmd == "manifests") {
+		return manifests(args);
+	}
+	if (cmd == "replay") {
+		return replay(args);
 	}
 	return usage();
 }

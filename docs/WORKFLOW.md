@@ -85,11 +85,12 @@ inputs in Godot (the scene's defs and surface infos, the positions from the grid
 of interest, the plans from `SweepPlans`) and hand them to the native kernel (`SweepKernel.run` →
 `rc::sweep::run`). Those inputs are data:
 
-- **`bench/sweeps/<scene>__<n>.json`** (136 manifests, 1.5 MB): one per `SweepRunner.sweep_native` call,
-  written under `SWEEP_MANIFEST_DIR` (`make manifests`, a dry GUT pass of the five files, 14 s). A manifest
-  holds the defs, the infos (segment and carrier as the binding reads them), the positions, the plans, the
-  flags and the switches (`skip_equal`, `emit_infinity`, `visibility`, `carrier_cursors`), in Godot's
-  full-precision JSON.
+- **`bench/sweeps/<scene>__<n>.json`** (143 manifests, 1.5 MB): one per sweep call site of the GUT sweep
+  files, now data: `data/sweeps.json` (rc-sweeps/1, 13 groups in the GUT order) expanded by the headless host
+  (`make manifests` = `rc_tool manifests`, 0.5 s, no Godot; Stage 116: `rcg/sweeps.hpp`, Godot's RNG as
+  `rcg::GodotRng`). A manifest holds the defs, the infos (segment and carrier), the positions, the plans,
+  the flags and the switches (`skip_equal`, `emit_infinity`, `visibility`, `carrier_cursors`), in the
+  canonical spelling.
 - **`native/tests/test_sweeps.cpp`** replays every manifest through `rc::sweep::run` as the binding calls it:
   the `rc_sweeps_inv_{k}` (6 parts) and `rc_sweeps_vis_{k}` (12 parts) ctest entries, `RC_SWEEPS_PART=k/n`
   over the players, `RC_SWEEPS_STRIDE=s` thinning them (the commit gate: 4), `RC_SWEEPS_FILTER=text`,
@@ -98,9 +99,8 @@ of interest, the plans from `SweepPlans`) and hand them to the native kernel (`S
   wall (16 s at stride 4), about 580 s CPU, 386k invariant and 105k visibility combos (the main branch,
   2026-10-18).
 - **The manifests gate** (`gates.sh`, both levels) regenerates the manifests into a temp dir and diffs them
-  against `bench/sweeps`: the native sweep checks exactly the combos the GUT sweep would. After a change to
-  a level, `SweepPlans`, `SweepRunner`, `SceneDefs` or `InvariantChecker.surface_infos`: `make manifests`
-  and commit the result.
+  against `bench/sweeps`. After a change to a level or to `data/sweeps.json`: `make manifests` and commit the
+  result (a changed manifest is a changed test input: bring the diff).
 - **The GUT sweep files stay as the bindings' sample**: `SWEEP_SAMPLE=8` (set by `run_tests_parallel.sh`)
   thins every shard to one player in eight, the LIVE combos (one per scene through `PathRenderer` and
   `InvariantChecker`) run as before, and `SWEEP_SAMPLE=1` runs every player. The GUT suite takes 29 s
@@ -158,7 +158,7 @@ while they are stale, and the generators read them.
 | `bench/fixtures/*.json` | `docs/research/oracle/gen_fixtures_*.py` | `make regen` / `make regen-apply` | GUT and native fixture tests |
 | `bench/scenes_corpus/{scenarios,expected}` | `docs/research/oracle/gen_scene_corpus.py` | `make regen` / `make regen-apply` | the GUT corpus test, `test_corpus_oracle.cpp`, the corpus goldens |
 | `bench/goldens/*.json` | dumped at tag `pre-native` (the script is gone); re-blessed only | `make judge`, the user's approval, `make rebless APPROVED=1` | `test_goldens.cpp`, `test_visibility.cpp` (regions) |
-| `bench/sweeps/*.json` | `SweepRunner.sweep_native` under `SWEEP_MANIFEST_DIR` | `make manifests` (the manifests gate fails while stale) | `test_sweeps.cpp` |
+| `bench/sweeps/*.json` | `rc_tool manifests` from `data/sweeps.json` and `data/levels` (Stage 116, no Godot) | `make manifests` (the manifests gate fails while stale) | `test_sweeps.cpp` |
 | `bench/sessions/*.jsonl` (the session replay golden, `docs/research/session_digest.md`) | the game played through `data/sessions` (`scripts/testing/record_sessions.gd`, Godot, 12 shards, ~30 s) | `make sessions` after the user approved `docs/research/session_judge.py`'s report; `make sessions-check` (the sessions gate) | the engine-agnostic port (Stage 115 on): the native session and the C API hosts reproduce every record |
 
 ## Debugging variables
@@ -179,7 +179,7 @@ while they are stale, and the generators read them.
 | `RC_SWEEP_STRIDE`, `RC_SWEEP_DUMP`, `RC_SWEEP_REBLESS`, `RC_GOLDEN_REBLESS` | `test_goldens.cpp`, the regions case | the goldens: thinning, the dumps for the judge, the re-bless lines |
 | `RC_REGIONS_WRITE=path` | the regions case | rewrite `bench/goldens/regions.json` |
 | `RC_VIS_DIGEST_VERBOSE=1` | `visibility digest` | one line per region |
-| `SWEEP_SHARD`, `SWEEP_SAMPLE`, `SWEEP_MANIFEST_DIR` | GUT sweeps | the shard, the sample, the manifest dump |
+| `SWEEP_SHARD`, `SWEEP_SAMPLE` | GUT sweeps | the shard, the sample |
 
 The skipped `sweeps timing` case (`RC_SWEEPS_FILTER=<level> make check TC="sweeps timing" SKIP=0`) splits a
 visibility sweep's time into the region build, every structure check and the cursor pins.

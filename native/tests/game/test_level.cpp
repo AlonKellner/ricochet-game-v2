@@ -6,6 +6,7 @@
 // (test_stage81_scene_switch, test_stage107_level_parity: the live game's defs).
 #include "rcg/build.hpp"
 #include "rcg/canon.hpp"
+#include "json_defs.hpp"
 #include "rcg/level.hpp"
 
 #include <doctest/doctest.h>
@@ -157,4 +158,51 @@ TEST_CASE("canonical spelling: floats as Python's repr") {
 	CHECK(rcg::float_repr(-2.5) == "-2.5");
 	const nlohmann::json doc = nlohmann::json::parse(R"({"b": [1, 2.0, "x"], "a": {"c": [{"d": null}], "e": {}}, "s": "∞\n"})");
 	CHECK(rcg::canonical(doc) == "{\n \"a\": {\n  \"c\": [\n   {\n    \"d\": null\n   }\n  ],\n  \"e\": {}\n },\n \"b\": [1, 2.0, \"x\"],\n \"s\": \"∞\\n\"\n}\n");
+}
+
+TEST_CASE("level data: the solver's defs built directly equal the dumps' (the game's SceneDefs path)") {
+	for (const auto &e : fs::recursive_directory_iterator(ROOT / "data" / "levels")) {
+		if (e.path().extension() != ".json") {
+			continue;
+		}
+		const std::string rel = fs::relative(e.path(), ROOT / "data" / "levels").replace_extension("").generic_string();
+		std::string dump_name;
+		for (const char c : rel) {
+			dump_name += c == '/' ? std::string("__") : std::string(1, c);
+		}
+		CAPTURE(rel);
+		std::ifstream in(ROOT / "bench" / "scenes" / (dump_name + ".surfaces.json"));
+		const ojson dump = ojson::parse(in);
+		std::vector<rc::SurfaceDef> want = rc::defs_from_json(dump["surfaces"]);
+		std::vector<rc::SurfaceDef> got = rcg::defs_of(rcg::build_level(rcg::load_level(e.path().string())));
+		// the dumps' JSON objects sort a resolver's table; the defs keep the level's order
+		for (auto *defs : {&want, &got}) {
+			for (rc::SurfaceDef &d : *defs) {
+				if (d.resolver) {
+					std::sort(d.resolver->table.begin(), d.resolver->table.end(), [](const auto &a, const auto &b) { return a.first < b.first; });
+				}
+			}
+		}
+		REQUIRE(got.size() == want.size());
+		for (size_t i = 0; i < got.size(); i++) {
+			CAPTURE(got[i].id);
+			CHECK(got[i] == want[i]);
+		}
+	}
+}
+
+TEST_CASE("level data: the builder validates as SideSpec / SpawnTemplate do") {
+	auto build = [](const std::string &surface) {
+		return rcg::build_level(rcg::parse_level(R"({"schema": "rc-level/1", "surfaces": [)" + surface + "]}"));
+	};
+	const std::string head = R"({"ids": [1], "start": [0, 0], "end": [100, 0], "via": [50, 0], "right": null, "left": )";
+	CHECK_THROWS_WITH_AS(build(head + R"({"effect": {"type": "pass"}, "interactive": true}})"), doctest::Contains("nothing to plan"), rcg::LevelError);
+	CHECK_THROWS_WITH_AS(build(head + R"({"effect": {"type": "pass"}, "interactive": true, "hits": [{"kind": "spawn", "channel": "a"}]}})"),
+			doctest::Contains("a spawn needs a template"), rcg::LevelError);
+	const std::string nested = R"({"kind": "spawn", "channel": "a", "template": {"surface": {"start": [0, 0], "end": [10, 0], "via": [5, 0],
+		"left": {"effect": {"type": "pass"}, "interactive": true, "hits": [{"kind": "spawn", "channel": "b", "template": {"surface":
+		{"start": [0, 0], "end": [1, 0], "via": [0.5, 0], "left": null, "right": null}}}]}, "right": null}}})";
+	CHECK_THROWS_WITH_AS(build(head + R"({"effect": {"type": "pass"}, "interactive": true, "hits": [)" + nested + "]}}"),
+			doctest::Contains("cannot spawn"), rcg::LevelError);
+	CHECK(build(head + R"({"effect": {"type": "pass"}, "interactive": true, "hits": [{"kind": "target"}]}})").size() == 1);
 }

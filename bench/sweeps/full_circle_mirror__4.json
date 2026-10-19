@@ -1,627 +1,384 @@
 {
-	"schema": "sweep-manifest/1",
-	"scene": "res://scenes/test_levels/full_circle_mirror.tscn",
-	"seq": 4,
-	"defs": [
-		{
-			"circle": null,
-			"id": 1,
-			"start": [
-				160.0,
-				90.0
-			],
-			"end": [
-				1760.0,
-				90.0
-			],
-			"via": [
-				960.0,
-				90.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"right": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": true
-		},
-		{
-			"circle": null,
-			"id": 2,
-			"start": [
-				1760.0,
-				90.0
-			],
-			"end": [
-				1760.0,
-				990.0
-			],
-			"via": [
-				1760.0,
-				540.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"right": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": true
-		},
-		{
-			"circle": null,
-			"id": 3,
-			"start": [
-				1760.0,
-				990.0
-			],
-			"end": [
-				160.0,
-				990.0
-			],
-			"via": [
-				960.0,
-				990.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"right": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": true
-		},
-		{
-			"circle": null,
-			"id": 4,
-			"start": [
-				160.0,
-				990.0
-			],
-			"end": [
-				160.0,
-				90.0
-			],
-			"via": [
-				160.0,
-				540.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"right": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": true
-		},
-		{
-			"circle": {
-				"center": [
-					960.0,
-					540.0
-				],
-				"radius": 200.0
-			},
-			"id": 5,
-			"start": [
-				1160.0,
-				540.0
-			],
-			"end": [
-				860.0,
-				366.79998779296875
-			],
-			"via": [
-				860.0,
-				713.2000122070313
-			],
-			"full": true,
-			"line": false,
-			"left": {
-				"type": "reflection",
-				"interactive": true
-			},
-			"right": {
-				"type": "reflection",
-				"interactive": true
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 6,
-			"start": [
-				0.0,
-				0.0
-			],
-			"end": [
-				1920.0,
-				0.0
-			],
-			"via": [
-				960.0,
-				0.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "pass",
-				"interactive": false
-			},
-			"right": {
-				"type": "pass",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 7,
-			"start": [
-				1920.0,
-				0.0
-			],
-			"end": [
-				1920.0,
-				1080.0
-			],
-			"via": [
-				1920.0,
-				540.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "pass",
-				"interactive": false
-			},
-			"right": {
-				"type": "pass",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 8,
-			"start": [
-				1920.0,
-				1080.0
-			],
-			"end": [
-				0.0,
-				1080.0
-			],
-			"via": [
-				960.0,
-				1080.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "pass",
-				"interactive": false
-			},
-			"right": {
-				"type": "pass",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 9,
-			"start": [
-				0.0,
-				1080.0
-			],
-			"end": [
-				0.0,
-				0.0
-			],
-			"via": [
-				0.0,
-				540.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "pass",
-				"interactive": false
-			},
-			"right": {
-				"type": "pass",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": false
-		}
-	],
-	"infos": [
-		{
-			"id": 1,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					160.0,
-					90.0
-				],
-				"end": [
-					1760.0,
-					90.0
-				],
-				"via": [
-					960.0,
-					90.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 0.0,
-				"c": -1024000000.0,
-				"d": 92160000000.0
-			}
-		},
-		{
-			"id": 2,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					1760.0,
-					90.0
-				],
-				"end": [
-					1760.0,
-					990.0
-				],
-				"via": [
-					1760.0,
-					540.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 182250000.0,
-				"c": 0.0,
-				"d": -320760000000.0
-			}
-		},
-		{
-			"id": 3,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					1760.0,
-					990.0
-				],
-				"end": [
-					160.0,
-					990.0
-				],
-				"via": [
-					960.0,
-					990.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 0.0,
-				"c": 1024000000.0,
-				"d": -1013760000000.0
-			}
-		},
-		{
-			"id": 4,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					160.0,
-					990.0
-				],
-				"end": [
-					160.0,
-					90.0
-				],
-				"via": [
-					160.0,
-					540.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": -182250000.0,
-				"c": 0.0,
-				"d": 29160000000.0
-			}
-		},
-		{
-			"id": 5,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					1160.0,
-					540.0
-				],
-				"end": [
-					860.0,
-					366.79998779296875
-				],
-				"via": [
-					860.0,
-					713.2000122070313
-				],
-				"full": true
-			},
-			"carrier": {
-				"a": 1.0,
-				"b": -1920.0,
-				"c": -1080.0,
-				"d": 1173200.0
-			}
-		},
-		{
-			"id": 6,
-			"has_effect": false,
-			"segment": {
-				"start": [
-					0.0,
-					0.0
-				],
-				"end": [
-					1920.0,
-					0.0
-				],
-				"via": [
-					960.0,
-					0.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 0.0,
-				"c": -1769472000.0,
-				"d": 0.0
-			}
-		},
-		{
-			"id": 7,
-			"has_effect": false,
-			"segment": {
-				"start": [
-					1920.0,
-					0.0
-				],
-				"end": [
-					1920.0,
-					1080.0
-				],
-				"via": [
-					1920.0,
-					540.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 314928000.0,
-				"c": 0.0,
-				"d": -604661760000.0
-			}
-		},
-		{
-			"id": 8,
-			"has_effect": false,
-			"segment": {
-				"start": [
-					1920.0,
-					1080.0
-				],
-				"end": [
-					0.0,
-					1080.0
-				],
-				"via": [
-					960.0,
-					1080.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 0.0,
-				"c": 1769472000.0,
-				"d": -1911029760000.0
-			}
-		},
-		{
-			"id": 9,
-			"has_effect": false,
-			"segment": {
-				"start": [
-					0.0,
-					1080.0
-				],
-				"end": [
-					0.0,
-					0.0
-				],
-				"via": [
-					0.0,
-					540.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": -314928000.0,
-				"c": 0.0,
-				"d": 0.0
-			}
-		}
-	],
-	"positions": [
-		[
-			170.0,
-			100.0
-		],
-		[
-			696.6666870117188,
-			100.0
-		],
-		[
-			1223.3333740234375,
-			100.0
-		],
-		[
-			1750.0,
-			100.0
-		],
-		[
-			170.0,
-			393.3333435058594
-		],
-		[
-			696.6666870117188,
-			393.3333435058594
-		],
-		[
-			1223.3333740234375,
-			393.3333435058594
-		],
-		[
-			1750.0,
-			393.3333435058594
-		],
-		[
-			170.0,
-			686.6666870117188
-		],
-		[
-			696.6666870117188,
-			686.6666870117188
-		],
-		[
-			1223.3333740234375,
-			686.6666870117188
-		],
-		[
-			1750.0,
-			686.6666870117188
-		],
-		[
-			170.0,
-			980.0
-		],
-		[
-			696.6666870117188,
-			980.0
-		],
-		[
-			1223.3333740234375,
-			980.0
-		],
-		[
-			1750.0,
-			980.0
-		],
-		[
-			602.0844116210938,
-			536.8863525390625
-		],
-		[
-			1516.3958740234375,
-			847.5506591796875
-		],
-		[
-			1616.521240234375,
-			280.30157470703125
-		],
-		[
-			706.3820190429688,
-			516.3873291015625
-		],
-		[
-			1447.8272705078125,
-			522.851806640625
-		],
-		[
-			1614.3284912109375,
-			161.8933868408203
-		],
-		[
-			1160.0,
-			540.0
-		],
-		[
-			760.0,
-			540.0
-		],
-		[
-			960.0,
-			740.0
-		],
-		[
-			960.0,
-			340.0
-		]
-	],
-	"plans": [
-		[
-			{
-				"surface_id": 5,
-				"side": "LEFT"
-			}
-		],
-		[
-			{
-				"surface_id": 5,
-				"side": "RIGHT"
-			}
-		],
-		[
-			{
-				"surface_id": 5,
-				"side": "LEFT"
-			},
-			{
-				"surface_id": 5,
-				"side": "LEFT"
-			}
-		]
-	],
-	"flags": {},
-	"skip_equal": true,
-	"emit_infinity": true,
-	"visibility": true,
-	"carrier_cursors": true
+ "carrier_cursors": true,
+ "defs": [
+  {
+   "circle": null,
+   "end": [1760.0, 90.0],
+   "full": false,
+   "id": 1,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [160.0, 90.0],
+   "via": [960.0, 90.0]
+  },
+  {
+   "circle": null,
+   "end": [1760.0, 990.0],
+   "full": false,
+   "id": 2,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1760.0, 90.0],
+   "via": [1760.0, 540.0]
+  },
+  {
+   "circle": null,
+   "end": [160.0, 990.0],
+   "full": false,
+   "id": 3,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1760.0, 990.0],
+   "via": [960.0, 990.0]
+  },
+  {
+   "circle": null,
+   "end": [160.0, 90.0],
+   "full": false,
+   "id": 4,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [160.0, 990.0],
+   "via": [160.0, 540.0]
+  },
+  {
+   "circle": {
+    "center": [960.0, 540.0],
+    "radius": 200.0
+   },
+   "end": [860.0, 366.79998779296875],
+   "full": true,
+   "id": 5,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "line": false,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "start": [1160.0, 540.0],
+   "via": [860.0, 713.2000122070312]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 0.0],
+   "full": false,
+   "id": 6,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [0.0, 0.0],
+   "via": [960.0, 0.0]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 1080.0],
+   "full": false,
+   "id": 7,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1920.0, 0.0],
+   "via": [1920.0, 540.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 1080.0],
+   "full": false,
+   "id": 8,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1920.0, 1080.0],
+   "via": [960.0, 1080.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 0.0],
+   "full": false,
+   "id": 9,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [0.0, 1080.0],
+   "via": [0.0, 540.0]
+  }
+ ],
+ "emit_infinity": true,
+ "flags": {},
+ "infos": [
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -0.0,
+    "c": -1024000000.0,
+    "d": 92160000000.0
+   },
+   "has_effect": true,
+   "id": 1,
+   "segment": {
+    "end": [1760.0, 90.0],
+    "full": false,
+    "start": [160.0, 90.0],
+    "via": [960.0, 90.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": 182250000.0,
+    "c": 0.0,
+    "d": -320760000000.0
+   },
+   "has_effect": true,
+   "id": 2,
+   "segment": {
+    "end": [1760.0, 990.0],
+    "full": false,
+    "start": [1760.0, 90.0],
+    "via": [1760.0, 540.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -0.0,
+    "c": 1024000000.0,
+    "d": -1013760000000.0
+   },
+   "has_effect": true,
+   "id": 3,
+   "segment": {
+    "end": [160.0, 990.0],
+    "full": false,
+    "start": [1760.0, 990.0],
+    "via": [960.0, 990.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -182250000.0,
+    "c": 0.0,
+    "d": 29160000000.0
+   },
+   "has_effect": true,
+   "id": 4,
+   "segment": {
+    "end": [160.0, 90.0],
+    "full": false,
+    "start": [160.0, 990.0],
+    "via": [160.0, 540.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 1.0,
+    "b": -1920.0,
+    "c": -1080.0,
+    "d": 1173200.0
+   },
+   "has_effect": true,
+   "id": 5,
+   "segment": {
+    "end": [860.0, 366.79998779296875],
+    "full": true,
+    "start": [1160.0, 540.0],
+    "via": [860.0, 713.2000122070312]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -0.0,
+    "c": -1769472000.0,
+    "d": -0.0
+   },
+   "has_effect": false,
+   "id": 6,
+   "segment": {
+    "end": [1920.0, 0.0],
+    "full": false,
+    "start": [0.0, 0.0],
+    "via": [960.0, 0.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": 314928000.0,
+    "c": 0.0,
+    "d": -604661760000.0
+   },
+   "has_effect": false,
+   "id": 7,
+   "segment": {
+    "end": [1920.0, 1080.0],
+    "full": false,
+    "start": [1920.0, 0.0],
+    "via": [1920.0, 540.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -0.0,
+    "c": 1769472000.0,
+    "d": -1911029760000.0
+   },
+   "has_effect": false,
+   "id": 8,
+   "segment": {
+    "end": [0.0, 1080.0],
+    "full": false,
+    "start": [1920.0, 1080.0],
+    "via": [960.0, 1080.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -314928000.0,
+    "c": 0.0,
+    "d": -0.0
+   },
+   "has_effect": false,
+   "id": 9,
+   "segment": {
+    "end": [0.0, 0.0],
+    "full": false,
+    "start": [0.0, 1080.0],
+    "via": [0.0, 540.0]
+   }
+  }
+ ],
+ "plans": [
+  [
+   {
+    "side": "LEFT",
+    "surface_id": 5
+   }
+  ],
+  [
+   {
+    "side": "RIGHT",
+    "surface_id": 5
+   }
+  ],
+  [
+   {
+    "side": "LEFT",
+    "surface_id": 5
+   },
+   {
+    "side": "LEFT",
+    "surface_id": 5
+   }
+  ]
+ ],
+ "positions": [
+  [170.0, 100.0],
+  [696.6666870117188, 100.0],
+  [1223.3333740234375, 100.0],
+  [1750.0, 100.0],
+  [170.0, 393.3333435058594],
+  [696.6666870117188, 393.3333435058594],
+  [1223.3333740234375, 393.3333435058594],
+  [1750.0, 393.3333435058594],
+  [170.0, 686.6666870117188],
+  [696.6666870117188, 686.6666870117188],
+  [1223.3333740234375, 686.6666870117188],
+  [1750.0, 686.6666870117188],
+  [170.0, 980.0],
+  [696.6666870117188, 980.0],
+  [1223.3333740234375, 980.0],
+  [1750.0, 980.0],
+  [602.0844116210938, 536.8863525390625],
+  [1516.3958740234375, 847.5506591796875],
+  [1616.521240234375, 280.30157470703125],
+  [706.3820190429688, 516.3873291015625],
+  [1447.8272705078125, 522.851806640625],
+  [1614.3284912109375, 161.8933868408203],
+  [1160.0, 540.0],
+  [760.0, 540.0],
+  [960.0, 740.0],
+  [960.0, 340.0]
+ ],
+ "scene": "res://scenes/test_levels/full_circle_mirror.tscn",
+ "schema": "sweep-manifest/1",
+ "seq": 4,
+ "skip_equal": true,
+ "visibility": true
 }

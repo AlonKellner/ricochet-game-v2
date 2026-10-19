@@ -114,6 +114,7 @@ FlagValue flag_value(const json &j, const std::string &path) {
 EffectSpec effect(const json &j, const std::string &path) {
 	only_keys(j, path, {"type", "back", "normal", "theta", "d"});
 	EffectSpec e;
+	e.raw = j;
 	e.type = str(req(j, "type", path), path + ".type");
 	if (const json *v = opt(j, "back")) {
 		e.back = boolean(*v, path + ".back");
@@ -135,6 +136,7 @@ SurfaceSpec surface_spec(const json &j, const std::string &path, bool in_level);
 HitSpec hit(const json &j, const std::string &path) {
 	only_keys(j, path, {"kind", "deferred", "key", "op", "value", "channels", "channel", "template"});
 	HitSpec h;
+	h.raw = j;
 	h.kind = str(req(j, "kind", path), path + ".kind");
 	if (const json *v = opt(j, "deferred")) {
 		h.deferred = boolean(*v, path + ".deferred");

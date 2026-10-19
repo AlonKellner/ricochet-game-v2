@@ -15,6 +15,8 @@ bool known_type(const std::string &t) {
 		   t == "circle_directional_projection";
 }
 
+} // namespace
+
 // SurfaceSpec.segment()
 rc::arc::SegGeom segment_of(const SurfaceSpec &s) {
 	if (s.full_circle) {
@@ -27,9 +29,59 @@ rc::arc::SegGeom segment_of(const SurfaceSpec &s) {
 	return g;
 }
 
+namespace {
+
+std::vector<std::string> validate(const SurfaceSpec &s);
+
+// SpawnTemplate.validate: its surface, which cannot spawn (no nesting).
+void validate_template(const SpawnTemplateSpec *t, std::vector<std::string> &out) {
+	if (t == nullptr || !t->surface) {
+		out.push_back("a spawn template needs a surface");
+		return;
+	}
+	for (const std::string &e : validate(*t->surface)) {
+		out.push_back(e);
+	}
+	std::vector<const SideSpec *> sides;
+	for (const std::optional<SideSpec> *sd : {&t->surface->left, &t->surface->right}) {
+		if (*sd) {
+			sides.push_back(&**sd);
+		}
+	}
+	for (const ResolverRow &r : t->surface->resolver) {
+		for (const std::optional<SideSpec> *sd : {&r.left, &r.right}) {
+			if (*sd) {
+				sides.push_back(&**sd);
+			}
+		}
+	}
+	for (const SideSpec *sd : sides) {
+		for (const HitSpec &h : sd->hits) {
+			if (h.kind == "spawn") {
+				out.push_back("a spawned surface cannot spawn (no nesting, GAME_SPEC 10.6)");
+			}
+		}
+	}
+}
+
 // SideSpec.validate / EffectSpec.validate: the problems of a side on a carrier.
 void validate_side(const SideSpec &side, bool carrier_is_line, const V2 &carrier_dir, std::vector<std::string> &out) {
 	const std::string &t = side.effect.type;
+	for (const HitSpec &h : side.hits) {
+		if (h.kind == "spawn") {
+			if (h.channel.empty()) {
+				out.push_back("a spawn needs a channel");
+			}
+			if (!h.spawn_template) {
+				out.push_back("a spawn needs a template");
+			} else {
+				validate_template(h.spawn_template.get(), out);
+			}
+		}
+	}
+	if (t == "pass" && side.hits.empty() && side.interactive) {
+		out.push_back("a pass side without hit effects has nothing to plan (GAME_SPEC 9.1)");
+	}
 	if (!known_type(t)) {
 		out.push_back("unknown effect type '" + t + "'");
 		return;
@@ -185,6 +237,92 @@ json describe_config(const std::optional<BuiltSide> &cfg, int host_id) {
 
 } // namespace
 
+namespace {
+
+std::optional<rc::SideDef> side_def(const std::optional<BuiltSide> &cfg, int host_id, int pair) {
+	if (!cfg) {
+		return std::nullopt;
+	}
+	const BuiltEffect &e = cfg->effect;
+	rc::SideDef d;
+	d.type = rc::effect_type_from_json(e.type);
+	d.interactive = cfg->interactive;
+	if (e.type == "line_normal_projection" || e.type == "circle_normal_projection" || e.type == "line_directional_projection" ||
+			e.type == "circle_directional_projection") {
+		d.back = e.back;
+	}
+	if (e.type == "line_directional_projection" || e.type == "circle_directional_projection") {
+		d.has_normal = true;
+		d.nx = e.normal.x;
+		d.ny = e.normal.y;
+	}
+	if (e.type == "portal") {
+		d.theta = e.theta;
+		d.dx = e.d.x;
+		d.dy = e.d.y;
+		d.pair = pair != 0 ? pair : -1;
+	}
+	for (const json &w : in_shot_writes(*cfg, host_id)) {
+		rc::StateChangeDef c;
+		c.key = w["key"].get<std::string>();
+		c.toggle = w["op"] == "toggle";
+		const json &v = w["value"];
+		c.value = v.is_boolean() ? rc::FlagValue(v.get<bool>()) : v.is_number() ? rc::FlagValue(v.get<double>()) : rc::FlagValue(v.get<std::string>());
+		d.states.push_back(std::move(c));
+	}
+	return d;
+}
+
+} // namespace
+
+std::vector<rc::SurfaceDef> defs_of(const std::vector<BuiltSurface> &surfaces) {
+	std::vector<rc::SurfaceDef> out;
+	for (const BuiltSurface &s : surfaces) {
+		const rc::arc::GeneralizedCircle &g = s.seg.get_carrier();
+		rc::SurfaceDef d;
+		d.id = s.id;
+		d.line = g.is_line();
+		d.sx = s.seg.s.x;
+		d.sy = s.seg.s.y;
+		d.ex = s.seg.e.x;
+		d.ey = s.seg.e.y;
+		d.has_via = !s.seg.v.is_inf();
+		if (d.has_via) {
+			d.vx = s.seg.v.x;
+			d.vy = s.seg.v.y;
+		}
+		d.full = s.seg.full;
+		if (s.seg.full && !g.is_line()) {
+			d.has_circle = true;
+			d.cx = g.center_x();
+			d.cy = g.center_y();
+			d.radius = g.radius();
+		}
+		if (s.resolver.empty()) {
+			d.left = side_def(s.left, s.id, s.portal_pair);
+			d.right = side_def(s.right, s.id, s.portal_pair);
+		} else {
+			rc::ResolverDef r;
+			r.key = s.resolver_key;
+			for (const BuiltRow &row : s.resolver) {
+				r.table.emplace_back(row.value, std::make_pair(side_def(row.left, s.id, 0), side_def(row.right, s.id, 0)));
+			}
+			d.resolver = r;
+		}
+		d.is_target = s.is_target();
+		d.pre_transform = s.pre_transform;
+		for (const PresenceSpec &c : s.presence) {
+			d.presence.push_back(rc::PresenceCond{c.key, c.values});
+		}
+		out.push_back(std::move(d));
+	}
+	return out;
+}
+
+json describe_side(const BuiltSide *cfg, int host_id) {
+	return describe_config(cfg ? std::optional<BuiltSide>(*cfg) : std::nullopt, host_id);
+}
+
 V2 apply_motion(const V2 &z, double theta, const V2 &d) {
 	const double c = std::cos(theta);
 	const double s = std::sin(theta);
@@ -244,12 +382,83 @@ json in_shot_writes(const BuiltSide &side, int host_id) {
 	return out;
 }
 
+std::vector<std::string> validate_spec(const SurfaceSpec &s) { return validate(s); }
+
+std::vector<BuiltSurface> build_spec(const SurfaceSpec &s, int first_id, const std::optional<std::string> &label) {
+	std::vector<BuiltSurface> out;
+	BuiltSurface b;
+	b.id = first_id;
+	b.label = label;
+	b.seg = segment_of(s);
+	b.player_solid = s.player_solid;
+	if (s.pre_transform) {
+		// Surface.pre_transform_circle: an inversion on both sides, not plannable, not solid
+		BuiltEffect inv_eff;
+		inv_eff.type = "inversion";
+		BuiltSide inv{inv_eff, false, {}};
+		b.left = inv;
+		b.right = inv;
+		b.player_solid = false;
+		b.pre_transform = true;
+		out.push_back(std::move(b));
+		return out;
+	}
+	// presence: authored, then a host exists while every channel it spawns into is armed
+	b.presence = s.presence;
+	for (const std::string &ch : spawn_channels(s)) {
+		b.presence.push_back({"chan:" + ch, {"DEFAULT", "armed"}});
+	}
+	if (s.is_portal()) {
+		const double theta = *s.left->effect.theta;
+		const V2 d = V2::of((*s.left->effect.d)[0], (*s.left->effect.d)[1]);
+		const SideSpec &ls_side = *s.left;
+		const SideSpec &rs_side = s.right ? *s.right : *s.left;
+		BuiltEffect src_eff;
+		src_eff.type = "portal";
+		src_eff.theta = theta;
+		src_eff.d = d;
+		BuiltEffect tgt_eff;
+		tgt_eff.type = "portal";
+		tgt_eff.theta = -theta;
+		tgt_eff.d = -apply_motion(d, -theta, V2{});
+		// the image of a line is a line, exactly (Segment.straight)
+		const V2 ts = apply_motion(b.seg.s, theta, d), te = apply_motion(b.seg.e, theta, d), tv = apply_motion(b.seg.v, theta, d);
+		rc::arc::SegGeom tseg = rc::arc::SegGeom::make(ts, te, tv, b.seg.full);
+		if (b.seg.is_line() && !b.seg.full) {
+			tseg.carrier = rc::arc::straight_carrier(ts, te);
+		}
+		b.label = "PortalSrc";
+		b.left = BuiltSide{src_eff, ls_side.interactive, ls_side.hits};
+		b.right = BuiltSide{src_eff, rs_side.interactive, rs_side.hits};
+		b.portal_pair = first_id + 1;
+		BuiltSurface t = b;
+		t.id = first_id + 1;
+		t.portal_pair = b.id;
+		t.label = "PortalTgt";
+		t.seg = tseg;
+		t.left = BuiltSide{tgt_eff, ls_side.interactive, ls_side.hits};
+		t.right = BuiltSide{tgt_eff, rs_side.interactive, rs_side.hits};
+		out.push_back(std::move(b));
+		out.push_back(std::move(t));
+		return out;
+	}
+	if (!s.resolver.empty()) {
+		b.resolver_key = s.resolver_key;
+		for (const ResolverRow &r : s.resolver) {
+			b.resolver.push_back({r.value, side_of(r.left), side_of(r.right)});
+		}
+	} else {
+		b.left = side_of(s.left);
+		b.right = side_of(s.right);
+	}
+	out.push_back(std::move(b));
+	return out;
+}
+
 std::vector<BuiltSurface> build_level(const Level &level) {
 	std::vector<BuiltSurface> out;
-	for (size_t i = 0; i < level.surfaces.size(); i++) {
-		const LevelSurface &ls = level.surfaces[i];
-		const SurfaceSpec &s = ls.spec;
-		const std::vector<std::string> errors = validate(s);
+	for (const LevelSurface &ls : level.surfaces) {
+		const std::vector<std::string> errors = validate(ls.spec);
 		if (!errors.empty()) {
 			std::string msg = level.name + ": surface " + std::to_string(ls.ids.front()) + ":";
 			for (const std::string &e : errors) {
@@ -257,72 +466,13 @@ std::vector<BuiltSurface> build_level(const Level &level) {
 			}
 			throw LevelError(msg);
 		}
-		BuiltSurface b;
-		b.id = ls.ids.front();
-		b.label = ls.label;
-		b.seg = segment_of(s);
-		b.player_solid = s.player_solid;
-		if (s.pre_transform) {
-			// Surface.pre_transform_circle: an inversion on both sides, not plannable, not solid
-			BuiltEffect inv_eff;
-			inv_eff.type = "inversion";
-			BuiltSide inv{inv_eff, false, {}};
-			b.left = inv;
-			b.right = inv;
-			b.player_solid = false;
-			b.pre_transform = true;
+		std::vector<BuiltSurface> built = build_spec(ls.spec, ls.ids.front(), ls.label);
+		if (built.size() != ls.ids.size() || (built.size() == 2 && built[1].id != ls.ids[1])) {
+			throw LevelError(level.name + ": surface " + std::to_string(ls.ids.front()) + ": its ids are not consecutive");
+		}
+		for (BuiltSurface &b : built) {
 			out.push_back(std::move(b));
-			continue;
 		}
-		// presence: authored, then a host exists while every channel it spawns into is armed
-		b.presence = s.presence;
-		for (const std::string &ch : spawn_channels(s)) {
-			b.presence.push_back({"chan:" + ch, {"DEFAULT", "armed"}});
-		}
-		if (s.is_portal()) {
-			const double theta = *s.left->effect.theta;
-			const V2 d = V2::of((*s.left->effect.d)[0], (*s.left->effect.d)[1]);
-			const SideSpec &ls_side = *s.left;
-			const SideSpec &rs_side = s.right ? *s.right : *s.left;
-			BuiltEffect src_eff;
-			src_eff.type = "portal";
-			src_eff.theta = theta;
-			src_eff.d = d;
-			BuiltEffect tgt_eff;
-			tgt_eff.type = "portal";
-			tgt_eff.theta = -theta;
-			tgt_eff.d = -apply_motion(d, -theta, V2{});
-			// the image of a line is a line, exactly (Segment.straight)
-			const V2 ts = apply_motion(b.seg.s, theta, d), te = apply_motion(b.seg.e, theta, d), tv = apply_motion(b.seg.v, theta, d);
-			rc::arc::SegGeom tseg = rc::arc::SegGeom::make(ts, te, tv, b.seg.full);
-			if (b.seg.is_line() && !b.seg.full) {
-				tseg.carrier = rc::arc::straight_carrier(ts, te);
-			}
-			b.label = "PortalSrc";
-			b.left = BuiltSide{src_eff, ls_side.interactive, ls_side.hits};
-			b.right = BuiltSide{src_eff, rs_side.interactive, rs_side.hits};
-			b.portal_pair = ls.ids.at(1);
-			BuiltSurface t = b;
-			t.id = ls.ids.at(1);
-			t.portal_pair = b.id;
-			t.label = "PortalTgt";
-			t.seg = tseg;
-			t.left = BuiltSide{tgt_eff, ls_side.interactive, ls_side.hits};
-			t.right = BuiltSide{tgt_eff, rs_side.interactive, rs_side.hits};
-			out.push_back(std::move(b));
-			out.push_back(std::move(t));
-			continue;
-		}
-		if (!s.resolver.empty()) {
-			b.resolver_key = s.resolver_key;
-			for (const ResolverRow &r : s.resolver) {
-				b.resolver.push_back({r.value, side_of(r.left), side_of(r.right)});
-			}
-		} else {
-			b.left = side_of(s.left);
-			b.right = side_of(s.right);
-		}
-		out.push_back(std::move(b));
 	}
 	return out;
 }

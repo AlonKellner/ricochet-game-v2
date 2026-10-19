@@ -564,5 +564,66 @@ inline std::array<V2, 3> chevron_vertices(const V2 &tip, const V2 &direction, do
 	return {tip, base_left, base_right};
 }
 
+// Stage 116: dashed strokes (VisualConverter.dash_arc / dash_line; the
+// drawing's dashes, as segment pairs [a0, b0, a1, b1, ...]). The arc's points
+// are float64 on the float32 center, rounded to float32; the line's dashes run
+// along the direction over the capped length (as the GDScript original).
+inline std::vector<V2> dash_arc(const V2 &center, double radius, double start_angle, double end_angle, int point_count, double dash_on,
+		double dash_off, double max_len) {
+	std::vector<V2> pts;
+	const double span = end_angle - start_angle;
+	const double total_len = std::min(radius * std::abs(span), max_len);
+	if (total_len == 0.0 || !(dash_on > 0.0) || !(dash_off >= 0.0)) {
+		return pts;
+	}
+	const double cx = center.x;
+	const double cy = center.y;
+	double drawn = 0.0;
+	bool on = true;
+	while (drawn < total_len) {
+		const double seg_len = std::min(on ? dash_on : dash_off, total_len - drawn);
+		if (on) {
+			const double a0 = start_angle + (drawn / total_len) * span;
+			const double a1 = start_angle + ((drawn + seg_len) / total_len) * span;
+			const int seg_points = std::max(2, int(point_count * seg_len / total_len));
+			V2 prev = V2::of(cx + std::cos(a0) * radius, cy + std::sin(a0) * radius);
+			for (int k = 1; k < seg_points; k++) {
+				const double th = a0 + (k / (seg_points - 1.0)) * (a1 - a0);
+				const V2 q = V2::of(cx + std::cos(th) * radius, cy + std::sin(th) * radius);
+				pts.push_back(prev);
+				pts.push_back(q);
+				prev = q;
+			}
+		}
+		drawn += seg_len;
+		on = !on;
+	}
+	return pts;
+}
+
+inline std::vector<V2> dash_line(const V2 &from, const V2 &to, double dash_on, double dash_off, double max_len) {
+	std::vector<V2> pts;
+	const double dx = double(to.x) - double(from.x);
+	const double dy = double(to.y) - double(from.y);
+	const double total_len = std::min(std::sqrt(dx * dx + dy * dy), max_len);
+	if (total_len == 0.0 || !(dash_on > 0.0) || !(dash_off >= 0.0)) {
+		return pts;
+	}
+	const double ux = dx / total_len;
+	const double uy = dy / total_len;
+	double drawn = 0.0;
+	bool on = true;
+	while (drawn < total_len) {
+		const double seg_len = std::min(on ? dash_on : dash_off, total_len - drawn);
+		if (on) {
+			pts.push_back(V2::of(from.x + ux * drawn, from.y + uy * drawn));
+			pts.push_back(V2::of(from.x + ux * (drawn + seg_len), from.y + uy * (drawn + seg_len)));
+		}
+		drawn += seg_len;
+		on = !on;
+	}
+	return pts;
+}
+
 } // namespace arc
 } // namespace rc

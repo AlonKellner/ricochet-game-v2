@@ -34,7 +34,7 @@ gate() {
 	SECS+=($(( $(date +%s) - t0 )))
 }
 
-# the committed sweep manifests are what the GUT sweeps hand the kernel now
+# the committed sweep manifests are what data/sweeps.json expands to (Stage 116: rc_tool)
 manifests_current() {
 	local d
 	d=$(mktemp -d "${TMPDIR:-/tmp}/ricochet_manifests.XXXXXX")
