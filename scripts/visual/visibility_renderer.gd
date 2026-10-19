@@ -191,7 +191,10 @@ static func preview_visible(renderer: Node) -> bool:
 	return true
 
 func _live_check() -> void:
-	if region == null or not region.is_supported() or _cursor == null or _renderer.last_pair == null or _region_inputs != _inputs:
+	# both sides fresh: the region's inputs and the preview's (TDD_20 F1: after a
+	# landing the region, never paused, recomputes a frame before the preview)
+	if region == null or not region.is_supported() or _cursor == null or _renderer.last_pair == null or _region_inputs != _inputs \
+			or not _renderer.is_current():
 		return
 	var key := [_inputs, _cursor.global_position, _renderer.trace_version]
 	if key == _live_key:
