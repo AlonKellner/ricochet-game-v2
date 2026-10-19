@@ -1527,6 +1527,8 @@ VisibilityRegion:
 
 A vertex at a member's own point of interest takes the solver's answer for a cursor exactly there. Cursors outside the level bounds grown by 50 are not classified.
 
+**The boundary band (Stage 114, K13).** The rules above apply to a cursor *exactly* on an edge or at a vertex. A cursor within a float32 cursor's rounding of the boundary (4 ulps of its coordinates) but not on it is **not classified**: a computed boundary -- a tangency, a refinement, a fork, a point pushed through a projective -- is placed by rounding, and the solver decides such a cursor by the rounding of its own hit point. The region's members are placed where the solver's own answer switches (the solver's choice of orientation on a split plan is part of a cast's shape, so a refinement finds that switch; a point of an earlier frame that lies on a projective's carrier is that carrier's hit, never a tangent beam's double root), so beside the band the region and the solver agree, and the band itself is below a pixel. A switch within a bounding member's resolution is that member's own sliver: the gap is one cell.
+
 ### 15.5 Ordering
 
 Members are ordered by their direction's pseudo-angle against +x, a real key and a strict order. All geometric decisions inside the solver remain cross-product signs (§31.2). The region's own geometry (circle centres, crossings with the clip rectangle) is computed in float64 from each carrier's canonical data, so equal inputs give equal points.
@@ -2665,4 +2667,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.26.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.26.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
