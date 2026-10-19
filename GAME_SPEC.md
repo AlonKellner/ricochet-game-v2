@@ -38,7 +38,8 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Hit effects as a second axis: any number per side (state change, target, spawn, reset), presence (§9.1, §9.6, §10.6; TDD_11 Stage 107) | Done (user sign-off 2026-10-16) |
 | Crossing surfaces: design surfaces split into pieces at crossings; spawned surfaces trimmed (§9.7, §10.6.3; TDD_12 Stage 108) | Done (user sign-off 2026-10-16) |
 | Plannable infinity — the ∞ plan entry, the `infinity` event (§4.2, §6.3, §12.5, §13.1; TDD_10 Stages 88, 101) | Done (B9 approved 2026-10-15): the frame's infinity `Q`, the edge or an on-screen point, plannable; the pre-transform (§9.5) |
-| Engine-agnostic port: the levels as data (`rc-level/1`, §19.1), the session replay golden, the headless host `rc_tool` (docs/TDD_20, Stage 115) | Done (the first of the program's stages; the game logic, rendering and physics move native next) |
+| Engine-agnostic port: the levels as data (`rc-level/1`, §19.1), the session replay golden, the headless host `rc_tool` (docs/TDD_20, Stage 115) | Done |
+| Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done (the player's controller, the drawing and the C API follow) |
 | Level editor | Planned |
 | Menus, HUD, save system | Planned |
 
@@ -1871,7 +1872,7 @@ The math layer has **zero Godot engine dependencies** beyond `Vector2`. Testable
 
 **GDScript performance note:** GDScript is significantly slower than C++ for tight numerical loops. For the intersection kernel (32 events × N surfaces per frame), avoid object allocation in hot loops. This is why `FastSolver` exists: a raw-float64 `PackedFloat64Array` backend, roughly 50× faster than the precision-generic code and bit-identical to it at float64. If profiling shows the intersection kernel is the bottleneck, consider moving it to a GDExtension (C++) module. The math layer's zero-dependency design makes this migration straightforward.
 
-**Level data (Stage 115):** a level scene points at its data (`LevelSettings.level_path`); `LevelData` turns the natively read data into `SurfaceSpec` / `SideSpec` / `SpawnTemplate` resources in build order, and the surfaces in the scene tree are `Node2D` instances drawing them. The engine-free game layer (`native/game`, `rcg::`) reads, validates and builds the same data; the headless host `rc_tool` runs the data pipelines without Godot.
+**Level data (Stage 115):** a level scene points at its data (`LevelSettings.level_path`); `LevelData` turns the natively read data into `SurfaceSpec` / `SideSpec` / `SpawnTemplate` resources in build order, and the surfaces in the scene tree are `Node2D` instances drawing them. The engine-free game layer (`native/game`, `rcg::`) reads, validates and builds the same data; the headless host `rc_tool` runs the data pipelines without Godot. Stage 116: the game's model and session are native too (`rcg::Session`: the plan, clicks, overlays, preview, visibility, spawn preview, fire / flight / landing, undo, reset; `rcg/world.hpp`, `rcg/landing.hpp`, `rcg/geom.hpp`), checked against the GDScript game by the session replay golden; the GDScript game still runs the shipped build until the engine boundary (a C API) replaces it.
 
 ### 20.2 Project structure
 
@@ -2674,4 +2675,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.27.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.28.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
