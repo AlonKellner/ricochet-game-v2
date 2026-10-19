@@ -5,6 +5,7 @@
 #   ricochet_gd    shared GDExtension, links core+godot-cpp gd/   -> native/bin/
 #   rc_tests       doctest executable, registered with ctest tests/
 #   rcg_tests      doctest executable for the game layer       tests/game/
+#   rc_tool        the headless host (data pipelines)           hosts/headless/
 #
 # Configure/build from the repo root:
 #   make core      # rc_tests alone (native/build-core, RC_BUILD_EXTENSION=OFF)
@@ -86,6 +87,11 @@ target_include_directories(ricochet_game SYSTEM PUBLIC extern)
 target_link_libraries(ricochet_game PUBLIC ricochet_core)
 set_target_properties(ricochet_game PROPERTIES POSITION_INDEPENDENT_CODE ON)
 rc_apply_flags(ricochet_game)
+
+# Stage 115: the headless host -- the data pipelines without an engine
+add_executable(rc_tool hosts/headless/rc_tool.cpp)
+target_link_libraries(rc_tool PRIVATE ricochet_game)
+rc_apply_flags(rc_tool)
 
 # ------------------------------------------------------------------ ricochet_gd
 if(RC_BUILD_EXTENSION)
@@ -213,6 +219,8 @@ if(RC_BUILD_TESTS)
     target_compile_definitions(rcg_tests PRIVATE "RC_REPO_ROOT=\"${RC_REPO_ROOT}\"")
     rc_apply_flags(rcg_tests NO_CONVERSION)
     add_test(NAME rcg_tests COMMAND rcg_tests)
+    # the level data is in its canonical spelling (rc_tool fmt)
+    add_test(NAME rcg_levels_canonical COMMAND rc_tool fmt --check ${RC_REPO_ROOT}/data/levels)
 
     # The API file godot-cpp generated its bindings from must describe the installed binary.
     find_package(Python3 COMPONENTS Interpreter REQUIRED)

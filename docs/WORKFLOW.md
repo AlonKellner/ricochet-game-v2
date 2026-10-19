@@ -18,7 +18,7 @@ machine (6 performance, 6 efficiency cores) unless a row says otherwise.
 | Target | When | What | Time |
 |---|---|---|---|
 | `make check` | after every edit | `make core` (the `rc_tests` binary alone) then the ctest entries of an area: `AREA=all` (default) / `solver` / `vis` / `goldens` / `sweeps`, or one doctest filter `TC="..."` (`SKIP=0` adds `--no-skip`) | 18–24 s for a core header change + the entries (all: 18 s) |
-| `make gate` | before every commit | `gates.sh LEVEL=commit`: core, oracle, ctest (release; the native sweeps at one player in 4), the extension build, the manifests current, the session replay current (Stage 115), the GUT suite (its sweeps sampled), the goldens and the session golden unchanged | see below |
+| `make gate` | before every commit | `gates.sh LEVEL=commit`: core, oracle, ctest (release; the native sweeps at one player in 4), the extension build, the level dumps current (Stage 115), the manifests current, the session replay current (Stage 115), the GUT suite (its sweeps sampled), the goldens and the session golden unchanged | see below |
 | `make gates` | before a merge to main, at each phase close, and whenever a golden, a fixture or a dump changes | `LEVEL=merge`: the same with every sweep player, then ctest under ASan+UBSan | see below |
 
 Every gate runs even after a failure; the summary names the failed ones and the log directory.
@@ -154,7 +154,7 @@ while they are stale, and the generators read them.
 | Data | Producer | Target | Consumers |
 |---|---|---|---|
 | `data/levels/**/*.json` (the levels, `rc-level/1`, `docs/LEVEL_FORMAT.md`; the source of truth since Stage 115) | edited by hand; their canonical spelling `docs/research/levels/level_fmt.py` | -- | the game (`LevelSettings.level_path`), `rcg_tests` and the oracle's parity with the dumps |
-| `bench/scenes/*.surfaces.json` (the levels as surface defs) | `scripts/testing/dump_scene_surfaces.gd` (Godot) | `make dumps` | the native visibility tests, the generators, the level data's parity tests (native and Python) |
+| `bench/scenes/*.surfaces.json` (the levels as surface defs) | `rc_tool dumps` (the headless host, from `data/levels`; Stage 115, no Godot) | `make dumps` (the dumps gate fails while stale) | the native visibility tests, the generators, the parity tests (the live game's defs in GUT, the Python builder) |
 | `bench/fixtures/*.json` | `docs/research/oracle/gen_fixtures_*.py` | `make regen` / `make regen-apply` | GUT and native fixture tests |
 | `bench/scenes_corpus/{scenarios,expected}` | `docs/research/oracle/gen_scene_corpus.py` | `make regen` / `make regen-apply` | the GUT corpus test, `test_corpus_oracle.cpp`, the corpus goldens |
 | `bench/goldens/*.json` | dumped at tag `pre-native` (the script is gone); re-blessed only | `make judge`, the user's approval, `make rebless APPROVED=1` | `test_goldens.cpp`, `test_visibility.cpp` (regions) |

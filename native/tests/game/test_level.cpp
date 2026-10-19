@@ -1,7 +1,11 @@
 // Stage 115.2: the level data (rc-level/1). Every level under data/levels,
-// built natively and described as scene defs, equals the level dump the
-// GDScript game wrote (bench/scenes/<dir>__<name>.surfaces.json), bit for bit.
+// built natively and described as scene defs, equals its level dump
+// (bench/scenes/<dir>__<name>.surfaces.json), bit for bit. The dumps were the
+// GDScript game's until 115.3 (they matched then, F3 aside); rc_tool writes
+// them now, so the game's side of the parity is the GUT tests
+// (test_stage81_scene_switch, test_stage107_level_parity: the live game's defs).
 #include "rcg/build.hpp"
+#include "rcg/canon.hpp"
 #include "rcg/level.hpp"
 
 #include <doctest/doctest.h>
@@ -28,13 +32,13 @@ json read_json(const fs::path &p) {
 }
 
 // The first place two JSON values differ ("" when equal): numbers by their
-// float64 bits (an int equals the float of the same value), objects by keys.
-// The dumps are Godot's JSON, which writes -0.0 as 0.0 (TDD_20 F3): a zero
-// there stands for either sign.
+// float64 bits (an int equals the float of the same value; a zero keeps its
+// sign: the dumps are rc_tool's since Stage 115, Godot's JSON dropped it, F3),
+// objects by keys.
 std::string first_difference(const json &a, const json &b, const std::string &path) {
 	if (a.is_number() && b.is_number()) {
 		const double x = a.get<double>(), y = b.get<double>();
-		if (std::bit_cast<std::uint64_t>(x) != std::bit_cast<std::uint64_t>(y) && !(x == 0.0 && y == 0.0)) {
+		if (std::bit_cast<std::uint64_t>(x) != std::bit_cast<std::uint64_t>(y)) {
 			std::ostringstream ss;
 			ss.precision(17);
 			ss << path << ": " << x << " vs " << y;
@@ -139,4 +143,21 @@ TEST_CASE("level data: a directional normal is normalized (float32), as the game
 	const nlohmann::json d = rcg::describe_level(rcg::build_level(lv));
 	CHECK(d[0]["left"]["normal"][0].get<double>() == double(0.6f));
 	CHECK(d[0]["left"]["normal"][1].get<double>() == double(0.8f));
+}
+
+TEST_CASE("canonical spelling: floats as Python's repr") {
+	CHECK(rcg::float_repr(1920.0) == "1920.0");
+	CHECK(rcg::float_repr(-0.0) == "-0.0");
+	CHECK(rcg::float_repr(0.0) == "0.0");
+	CHECK(rcg::float_repr(double(0.1f)) == "0.10000000149011612");
+	CHECK(rcg::float_repr(366.79998779296875) == "366.79998779296875");
+	CHECK(rcg::float_repr(0.0001) == "0.0001");
+	CHECK(rcg::float_repr(0.00001) == "1e-05");
+	CHECK(rcg::float_repr(1.5e-7) == "1.5e-07");
+	CHECK(rcg::float_repr(1e16) == "1e+16");
+	CHECK(rcg::float_repr(123456789012345678.0) == "1.2345678901234568e+17");
+	CHECK(rcg::float_repr(9999999999999998.0) == "9999999999999998.0");
+	CHECK(rcg::float_repr(-2.5) == "-2.5");
+	const nlohmann::json doc = nlohmann::json::parse(R"({"b": [1, 2.0, "x"], "a": {"c": [{"d": null}], "e": {}}, "s": "∞\n"})");
+	CHECK(rcg::canonical(doc) == "{\n \"a\": {\n  \"c\": [\n   {\n    \"d\": null\n   }\n  ],\n  \"e\": {}\n },\n \"b\": [1, 2.0, \"x\"],\n \"s\": \"∞\\n\"\n}\n");
 }

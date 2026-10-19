@@ -162,10 +162,11 @@ regen:
 regen-apply:
 	$(ORACLE_PY) -I docs/research/regen.py --keep $(if $(ONLY),--only $(ONLY),)
 # the levels as surface defs (bench/scenes/*.surfaces.json): the generators'
-# and the native visibility tests' input; the GUT parity tests
-# (test_stage81_scene_switch, test_stage107_level_parity) fail while stale
-dumps: native
-	$(GODOT) --headless --path . -s res://scripts/testing/dump_scene_surfaces.gd
+# and the native visibility tests' input, built from the level data by the
+# headless host (Stage 115, no Godot); the dumps gate fails while they are stale
+DUMPS_DIR ?= $(CURDIR)/bench/scenes
+dumps: core
+	$(BUILD_CORE)/rc_tool dumps data/levels "$(DUMPS_DIR)"
 oracle-test:
 	@if [ -x $(ORACLE_PY) ]; then $(ORACLE_PY) -m pytest -q docs/research/oracle; \
 	else echo "!! oracle tests skipped: no docs/research/.venv (python3 -m venv docs/research/.venv && docs/research/.venv/bin/pip install mpmath numpy pytest)"; fi
