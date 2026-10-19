@@ -117,6 +117,29 @@ static func projective_plans(scene: Node) -> Array:
 		plans.append([PlanManager.PlanEntry.new(projs[0].id, Side.Value.LEFT), PlanManager.PlanEntry.new(projs[1].id, Side.Value.LEFT)])
 	return plans
 
+# Stage 113: the playgrounds with projective surfaces (the visibility sweep).
+static func projective_playground_scenes() -> Array[String]:
+	var out: Array[String] = []
+	for n in ["projective", "projective_lines", "projective_arcs", "directional_lines", "directional_arcs", "projective_inversion",
+			"directional_degenerate"]:
+		out.append(PLAYGROUND_DIR + n + ".tscn")
+	return out
+
+# Stage 113: each projective side followed by the first transformative side
+# (a mirror, an inversion, a portal), and preceded by it.
+static func projective_composition_plans(scene: Node) -> Array:
+	var projs := projective_surfaces(scene)
+	var trans := _sides(scene, func(e): return e is TransformativeEffect)
+	var plans: Array = []
+	if projs.is_empty() or trans.is_empty():
+		return plans
+	var t = trans[0]
+	for s: Surface in projs:
+		for side in [Side.Value.LEFT, Side.Value.RIGHT]:
+			plans.append([PlanManager.PlanEntry.new(s.id, side), _entry(t)])
+			plans.append([_entry(t), PlanManager.PlanEntry.new(s.id, side)])
+	return plans
+
 # Stage 103: the playgrounds no other sweep plans on.
 static func playground_plan_scenes() -> Array[String]:
 	var out: Array[String] = []

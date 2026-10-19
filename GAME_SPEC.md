@@ -32,7 +32,7 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | No surface filtering principle | Done |
 | Invariant sweep testing (event-based checks, all scenes) | Done: every level swept; plans on every planned scene incl. infinity plans (Stage 103); one known finding (K1, TDD_10) |
 | Compound transformative effect | Planned |
-| Visibility polygon (§15) | Done for every plan without projective entries (Stage 110) |
+| Visibility polygon (§15) | Done (Stage 110; projective plans Stage 113) |
 | State flags — ConfigResolver + StateChange (§9.4, §10.6; Stage 85) | Done |
 | Ghost mode & toggler surfaces (Stage 86) | Done |
 | Hit effects as a second axis: any number per side (state change, target, spawn, reset), presence (§9.1, §9.6, §10.6; TDD_11 Stage 107) | Done (user sign-off 2026-10-16) |
@@ -897,7 +897,7 @@ The solver keeps a **provenance (transform) stack**. Each entry holds the beam *
 | Terminal | unchanged — trace ends | none |
 | Pass-through (or not fired) | unchanged | same beam continues |
 
-**Frame identity:** a step's `frame_id` is the id of `(epoch, stack signature)`. `frame_id = 0` (`TraceStep.IDENTITY_FRAME`) is the empty stack in epoch 0. `BeamTracer` assigns ids from one dictionary shared by the planned and the physical path of a pair, so equal ids mean the same applied effects since the last projective. A projective starts a new epoch, so frames after it get new ids even when the stack signature repeats.
+**Frame identity:** a step's `frame_id` is the id of `(epoch, stack signature)`. `frame_id = 0` (`TraceStep.IDENTITY_FRAME`) is the empty stack in epoch 0. `BeamTracer` assigns ids from one dictionary shared by the planned and the physical path of a pair, so equal ids mean the same applied effects since the last projective. A projective starts a new epoch, so frames after it get new ids even when the stack signature repeats. An epoch is identified by the projective firings that opened it (surface and side, in order), not by their count: two walks that fire different projectives at one point (a line normal through the centre of a circle normal, hit where its carrier meets the circle) leave it in different frames (K14, Stage 113).
 
 ### 10.8 Effect maps (beam maps and Möbius matrices)
 
@@ -1188,6 +1188,9 @@ For a contiguous sub-sequence of transformative entries, the anchored constructi
 > - **Forks:** two candidates are a fork, settled at planning time. The one nearer the point the player clicked is taken (§4.2), and without a click the segment's midpoint stands in. There is no search: one deterministic path.
 > - When the target itself lies on the carrier (provenance: a later projective entry on the same surface, or the cursor exactly on it), the candidate at the target is excluded.
 > - An entry with no candidate is skipped by the aim.
+> - **Exact hit points (Stage 113, K11).** When the target behind the entry is exact data (the cursor, or its exact image through later entries), whether `H` is a **data point** of the segment (an endpoint, the via) is decided by an exact predicate on the data, never by the rounding of `c ± R·u`: the foot of the target on the line (line normal: `dot(T − D, E − S) = 0`), a data point collinear with the target and the exact centre (circle normal), a data point `T + s·n` (directional). `H` is then that point exactly, a known point of the beams that reach it (§31.3), so the physical hit is at the endpoint itself: blocked on one side, it does not fire (§11.1), while the planned walk fires the entry there: the walks diverge. The aim image behind such an entry stays exact data (`exact_image` runs through it), and its exit line is exact. *Oracle:* `trace2._exact_data_hit`, `_backward`; fixtures `bench/fixtures/stage113_exact_hits.json`.
+> - **The cursor at the departure point (Stage 113, K12).** A cursor exactly on a line projective's segment is its own hit point: the sub-chain after the entry is the exit beam alone, and the cursor is reached at once on it (as at any departure point, K7).
+> - **Two projectives at one point (Stage 113, K14).** When the planned walk fires one projective and the physical walk another at the same point (both carriers through it), the frames after it differ: an epoch is identified by its firings (§10.7), so the walks are divergent there and the cursor beyond is not visible. Counting epochs read the two as one frame.
 >
 > **Firing:** the planned trace fires at the first crossing that matches id and side. If that crossing is not H, the anchored path ends there and the trace continues by the physical exit rule. That plan then does not reach the cursor.
 >
@@ -1209,7 +1212,7 @@ Back-propagation per effect:
 | Circle normal | H = intersection of line(center, T) with the arc. |
 | Semi-circle directional | H = intersection of line(T, −normal) with the arc, where normal is perpendicular to the segment's diameter line. |
 
-The hit point returned by `back_propagate()` must lie within the surface's segment bounds (checked using the same arc containment test as §11.1). If the carrier-level intersection exists but falls outside the segment, `back_propagate()` returns null.
+The hit point is taken on the **carrier**, on or off the segment (Stage 113, B8; as implemented since Stage 87): the planned walk fires the entry there even off-segment (§11.5) while the physical walk passes, so a cursor whose hit point falls off the segment diverges at `H` and lies outside the visibility region (§15). `back_propagate()` returns null only without a carrier-level candidate: a target at a circle normal's centre, or a directional normal parallel to its line carrier (§23).
 
 Back-propagation targets are in **visual space**, like everything in the beam model (§6.1).
 
@@ -1454,21 +1457,32 @@ There is no separate post-cursor computation. Both traces run the full path from
 
 ## 15. Visibility
 
-> **Status: implemented (Stage 110, `docs/TDD_14_VISIBILITY.md`)** for every plan without projective entries; for a plan through a projective surface the region is not drawn yet. The native construction is `rc/visibility.hpp`, its invariants `rc/visibility_checks.hpp`, the drawing `scripts/visual/visibility_renderer.gd`.
+> **Status: implemented (Stage 110, `docs/TDD_14_VISIBILITY.md`; projective plans Stage 113, `docs/TDD_18_PROJECTIVE_VISIBILITY.md`)** for every plan. The native construction is `rc/visibility.hpp`, its invariants `rc/visibility_checks.hpp`, the drawing `scripts/visual/visibility_renderer.gd`.
 
 ### 15.1 Purpose and definition
 
 The visibility region highlights the **set of cursor positions that will not cause divergence** for the current plan: if the cursor is placed there, the planned and the physical paths agree up to it. *(Principle 14: visibility shares the world.)*
 
-**Definition.** A cursor is in the region iff (V1) the preview's planned path reaches it, (V2) every merged step before it is ALIGNED (§14.2: the same frame ids, epoch, stack and flags), and (V3) both walks leave the cursor's own point in the same frame. V1 and V2 are what the preview shows: an all-green solid path from the player to the cursor. V3 counts the decisions made exactly at the cursor, which fall between the last step before it and the first after it (B4, Stage 110). When the physical walk has no event at the cursor's point, it passes the point in the frame it had. The region never depends on the cursor, only on the player, the plan (with its clicks and pieces), the game state's flags and the surfaces.
+**Definition.** A cursor is in the region iff (V1) the preview's planned path reaches it, (V2) every merged step before it is ALIGNED (§14.2: the same frame ids, epoch, stack and flags; an epoch is its projective firings, §10.7), and (V3) both walks leave the cursor's own point in the same frame. V1 and V2 are what the preview shows: an all-green solid path from the player to the cursor. V3 counts the decisions made exactly at the cursor, which fall between the last step before it and the first after it (B4, Stage 110). When the physical walk has no event at the cursor's point, it passes the point in the frame it had. The region never depends on the cursor, only on the player, the plan (with its clicks and pieces), the game state's flags and the surfaces.
 - A cursor that the trace never reaches (cut by the event limit, §12.6) is **outside**.
-- A cursor on the player (no aim), on the player's image `P_K` or on the frame's infinity `Q_K` is **not classified**: the aim degenerates there (§11.4).
+- A cursor on the player (no aim), on the player's image `P_K` or on the frame's infinity `Q_K` is **not classified**: the aim degenerates there (§11.4). After a projective the poles are the pencil's (§15.2): the image of a circle normal's centre (every exit line passes it) and the frame's infinity.
 - A cursor exactly where the last entry is crossed off its segment is **outside**: the planned walk applies the entry there and the physical one passes, so they leave the point in different frames (V3). Before B4 these departure points formed thin lines along the planned carrier.
 - The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4), and on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor). A whisker's end at exact data (a segment endpoint) belongs to the region exactly when the preview reaches a cursor there: at a planned terminal's endpoint the hit does not fire physically, so the walks diverge and the endpoint is outside (K7).
 
 ### 15.2 Members
 
 Every cursor whose aim at the player has the direction `d` lies on one beam of the plan's final frame: the circle through the player's image `P_K = F_K(player)`, the cursor and the frame's infinity `Q_K = F_K(∞)` (§13.1), run the way the plan's realization runs. It is a line when `Q_K` is infinity. This beam is the **member** of `d`. Every point of the plane lies on one member, on the arc from `P_K` to `Q_K` that `d` **owns** (the other arc belongs to the opposite direction).
+
+**After a projective (Stage 113).** The last epoch's beams are straight lines from the last projective's hit point `H` (§10.4, §13.3), one per `H` on its carrier, and the last epoch's transformatives map them to the final frame: a **pencil** (`Builder::PencilKind`), keyed by a real parameter, not by the aim:
+
+| Projective | The exit lines (the epoch's own frame) | The pencil | The key |
+|---|---|---|---|
+| Line normal, line directional, circle directional | all parallel (to the carrier's normal, or to the given normal `n`) | *parallel*: one pole, the frame's infinity `B = F'(∞)` (circles tangent there to `F'_*(n)`, lines when `B` is infinity) | the offset of `H` across the family's direction |
+| Circle normal | all through the centre `c` (converging and expanding alike) | *radial*: the poles `A = F'(c)` and `B = F'(∞)` (today's `P_K`/`Q_K` shape with `A` as `P_K`) | the line's direction, a diamond pseudo-angle folded to a half turn |
+
+A cursor's member is the line through its back-propagated hit point. The candidate of a circle (two per line, §13.3) is a property of the line, not of the cursor's place on it: the pair `c ± R·u` is the same for every cursor on a radial line, and every chord of a directional circle shares one perpendicular bisector. A **walk owns its whole member**: from `H` along the exit, through the frame's infinity, and round to `H` (there is no opposite aim). A directional normal along its own line carrier has no hit point at all: the region is empty.
+
+The members through a point of an earlier epoch are found by **pushing it through** the projectives: the earlier epoch's member through the point, mapped to the frame of the next projective, cut by its carrier (two points at most), and so on. The fork line of a circle normal (through `c`, across the click, §13.3) is **two members**, one per candidate, with the sheets they bound. The radial pencil's cells come in two **sheets** that wind opposite ways (toward the centre and away from it; a sheet beyond the wrap through infinity likewise), merged and checked apart (`Cell.wind`).
 
 On its member, the visible cursors form intervals of the walk:
 - from the departure point of the last plan entry (the player, for an empty plan; `Q_K` after an infinity entry);
@@ -1492,7 +1506,7 @@ The region is built from **casts**: ordinary pair traces (`Tracer::solve`, the s
    These points, in every frame of the plan, are mapped to the final frame. Each bounds two members, one each way along its line, since a walk passes the point after its wrap too. With no plan in the direct realization, the second way is not needed. The axes keep every gap below a quarter turn. Members are ordered by a pseudo-angle of `d`, a monotone key against the fixed reference +x with no trigonometry (§31.2).
 2. **Cells.** Each member is cast, and so are its two sides (±ε), and each gap between members is cast in its middle. Where a gap's casts disagree on the walk's shape, it is bisected and a member is inserted at the switch. A cell is a curvilinear quadrilateral: its two side members, the carrier arc its stops lie on, and the carrier arc its departures lie on. Its corners are where each side member crosses those carriers. Every cell that shares a corner computes it the same way, so shared corners are equal.
 3. **Clipping.** A cell through infinity runs outside the clip rectangle. Every cell is cut by the rectangle (which holds the level bounds grown by 50 and every finite corner), walking its boundary the way the cells wind. Each reflection or inversion of the final frame reverses that way, and so does the realization through infinity.
-4. **Regions.** Adjacent cells merge: shared member pieces cancel, and so do carrier pieces shared by two layers of one walk. What remains is chained into simple loops. A loop through one vertex twice (a pinched region) is cut there.
+4. **Regions.** Adjacent cells merge: shared member pieces cancel, and so do carrier pieces shared by two layers of one walk. What remains is chained into simple loops. A loop through one vertex twice (a pinched region) is cut there. A **dead member between two live cells** (the aim exactly tangent to the projective's circle at the member's hit point, Stage 113) is a **crack**: its pieces stay as a boundary, one edge each way, never inclusive.
 
 ### 15.4 Regions and membership
 
@@ -1507,7 +1521,8 @@ VisibilityRegion:
 
 `contains` is the even-odd rule over the loops. It is half-open at the test ray's height (arcs are cut into pieces monotone in y). A point on a boundary edge takes the edge's flag:
 - **stop and departure arcs** are inclusive;
-- **a member piece** is inclusive where that member's own cast sees it.
+- **a member piece** is inclusive where that member's own cast sees it (a point of interest on the projective's own carrier aims at the other candidate: its own cast decides a cursor exactly there, the member's walk is cast from a cursor along its exit);
+- **a crack** is never inclusive.
 
 A vertex at a member's own point of interest takes the solver's answer for a cursor exactly there. Cursors outside the level bounds grown by 50 are not classified.
 
@@ -2267,7 +2282,7 @@ Left open. The spec defines what a level is and how it loads, not the unlock ord
 
 **Deliverable:** all effect types work. Mixed plans with transformative and projective surfaces produce correct previews.
 
-### Phase 7: Visibility system *(Done, Stage 110; projective plans pending)*
+### Phase 7: Visibility system *(Done, Stage 110; projective plans Stage 113)*
 - Visibility polygon computation (multiple regions).
 - Rendering visibility regions.
 - Consistency with trajectory (same pipeline, same scene state).
@@ -2431,7 +2446,7 @@ The following invariants are tested by the sweep but not in the original specifi
 | `VIS_CONTAINS_MATCHES_POLYGON` | The merged loops and the cells agree away from the boundary |
 | `VIS_DRAWN_MATCHES` | The drawn fill (one mesh of the cells) covers a point once where the region contains it and never elsewhere; its area is the cells' (Stage 110, F8) |
 | `VIS_DETERMINISTIC` | The same inputs give the same region (S3) |
-| `VIS_REGULAR` | The region has area wherever it is: its only 1D parts are an arc of a member tangent at a frame's finite infinity point (`Q_j`) to a carrier through it and a piece of the last planned terminal's segment; no loop doubles back on itself (B4, Stage 110) |
+| `VIS_REGULAR` | The region has area wherever it is: its only 1D parts are an arc of a member tangent at a frame's finite infinity point (`Q_j`) to a carrier through it, a piece of the last planned terminal's segment, and (Stage 113) a crack along a dead member; no loop doubles back on itself (B4, Stage 110) |
 
 *Retired with the legacy frames (Stage 83):* `SHARED_RAY`, `RAY_ALIGNMENT`, `ARC_MIDPOINT_ALIGNMENT`, `POST_INVERSION_ARC`, `PARAMETER_MONOTONICITY`, `BACK_TRANSFORM_ALIGNMENT`, `S18_FRAME_DETERMINANT`.
 
@@ -2509,7 +2524,7 @@ Testing-layer tolerances (e.g., in `invariant_checker.gd`, and the 0.01 px trace
 *Historical (legacy `Tracer`/`intersection.gd`, deleted in Stage 84):* endpoints were detected by (1) exact match with the ray's defining points, (2) exact cross product `== 0`, and (3) quadratic roots snapped to the endpoint.
 
 **Beam solver equivalent:**
-- **Known points:** every segment endpoint and via lying exactly on an exact line is a **known point** of the beam. The player, the cursor and exact departure points are known points too (§31.4).
+- **Known points:** every segment endpoint and via lying exactly on an exact line is a **known point** of the beam. The player, the cursor and exact departure points are known points too (§31.4), and so is a planned projective's hit point that is a data point of its segment (K11, §13.3), on every beam whose exact line or circle passes it.
 - **Incidence:** a surface whose carrier contains a known point exactly takes that point's parameter and exact coordinates for its nearest root (§11.1). Endpoint identity is therefore decided by provenance or exact sign, never by distance.
 - **Endpoint blockage:** at an exact endpoint, a side is blocked according to the sign of the beam tangent × the tangent into the segment. Blocked sides accumulate over all segments sharing that exact endpoint, **for that hit point only**. An effect fires in PHYSICAL mode only when both sides are blocked (§14.1).
 
@@ -2523,7 +2538,8 @@ In the beam solver, provenance takes three forms (`beam_solver.gd` header, `trac
   - the cursor, whenever it is a candidate, and on every beam whose exact circle (§31.4) passes it (K7: a carrier through the cursor is crossed exactly there, so a departure point at the cursor is the cursor exactly and the cursor is reached at once);
   - the departure point of a beam born at an exact hit point;
   - every known point of the previous beam lying on the carrier of the surface applied (an effect fixes its carrier pointwise);
-  - every segment endpoint and via on an exact line.
+  - every segment endpoint and via on an exact line;
+  - a planned projective's hit point that is a data point of its segment (K11, Stage 113), on every beam whose exact line or circle passes it.
 
   Pops restore the earlier beam's known points.
 - **Exact lines:** a straight beam defined by exact data is kept in implicit form `a x + b y = c` with exact coefficients. Sources:
@@ -2647,4 +2663,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.22.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.25.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

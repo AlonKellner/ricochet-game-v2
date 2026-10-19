@@ -575,7 +575,7 @@ class Walk:
     done: bool = False
     flags: dict = field(default_factory=dict)
     flags_before: dict = field(default_factory=dict)   # flags the current event resolved under
-    proj_hits: dict = field(default_factory=dict)      # projective entry index -> (H, exact exit line or None)
+    proj_hits: dict = field(default_factory=dict)      # projective entry index -> (H, exact exit line or None, exact-data H or None)
     on_plan: bool = True                               # on the planned beams: every projective fired at its H
     Q: object = None                                   # the current frame's image of infinity (None = inf)
     # Stage 105: the exact pole record (Qx, Qy, Dx, Dy), Fractions: the frame's
@@ -905,6 +905,16 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
         if walk.cursor is not None and walk.gc is not None and not any(k[0] == walk.cursor for k in walk.known) \
                 and gc_at(walk.gc, FC(walk.cursor)) == 0:
             walk.known.append((walk.cursor, beam.param_of(walk.cursor), None))
+        # Stage 113 (K11): a planned projective's hit point that is a data point
+        # of its segment (an endpoint, the via: exact, _exact_data_hit) is a
+        # known point of every beam whose exact circle passes it (an exact line
+        # has it through _add_line_endpoints), so the crossing there is the
+        # endpoint exactly -- blocked on one side, not fired physically
+        if walk.gc is not None:
+            for hj in walk.proj_hits.values():
+                D = hj[2] if len(hj) > 2 else None
+                if D is not None and not any(k[0] == D for k in walk.known) and gc_at(walk.gc, FC(D)) == 0:
+                    walk.known.append((D, beam.param_of(D), None))
         snapped = {}
         for kp, kt, skip in walk.known:
             for s in walk.surfaces:
@@ -1764,57 +1774,143 @@ def aim_image(surfaces, plan, cursor, flags=None, hints=None):
 
 
 def projective_hits(surfaces, plan, cursor, flags=None, hints=None):
-    """Plan entry index -> (H, exact exit line or None) of each projective
-    entry: the back-propagated hit point, and -- for the last projective, when
-    the cursor pulled back through the entries after it is exact data -- the
-    exact line it leaves along (through that point, along the exact axis)."""
-    hits = _backward(surfaces, plan, cursor, flags, hints)[1]
+    """Plan entry index -> (H, exact exit line or None, exact-data H or None)
+    of each projective entry: the back-propagated hit point; the exact line it
+    leaves along (through H, along the exact axis) when the target behind it
+    is exact data or H itself is (Stage 113, K11: a data point of the
+    segment); and that data point."""
+    _aim, hits, exact_hits, exact_targets, _xe = _backward(surfaces, plan, cursor, flags, hints)
     if not hits:
         return {}
     by_id = {s.id: s for s in surfaces}
-    j = max(hits)
-    X = exact_image(surfaces, cursor, plan, flags, start=j + 1)
-    line = None
-    if X is not None:
+    res = plan_resolved(surfaces, plan, flags)
+    out = {}
+    for j, H in hits.items():
         sid, side = plan[j]
         surf = by_id[sid]
-        etype = surf.effect(side, plan_resolved(surfaces, plan, flags)[j][1])
+        etype, f = res[j]
+        D = exact_hits.get(j)
+        X = exact_targets.get(j)
+        line = None
+        if D is not None or X is not None:
+            K = FC(D) if D is not None else X
+            if etype == "line_normal_projection":
+                Dd = _sub(FC(surf.seg.E), FC(surf.seg.S))
+                ax = (-Dd[1], Dd[0])
+            elif etype == "circle_normal_projection":
+                nx, ny, w, _rr = _center_h(surf.seg)
+                ax = (K[0] * w - nx, K[1] * w - ny)
+            else:
+                ax = FC(P(surf.cfg(side, f)["normal"]))
+            if ax != (0, 0):
+                a, b = -ax[1], ax[0]
+                line = (a, b, a * K[0] + b * K[1])
+        out[j] = (H, line, D)
+    return out
+
+
+def _exact_step(X, surf: Surface):
+    """The exact inverse map of a transformative entry on the exact rational
+    point X: a line reflection, an inversion (exact circumcenter and radius²)
+    or a translation portal. None for a rotation portal or an image at
+    infinity."""
+    if surf.portal() is not None:
+        cfg = surf.left if surf.left and surf.left.get("type") == "portal" else surf.right
+        if cfg["theta"] != 0:
+            return None
+        return (X[0] - F(cfg["d"][0]), X[1] - F(cfg["d"][1]))
+    if surf.seg.kind != "line":
+        # inversion: X' = c + r² (X - c) / |X - c|² (exact rationals)
+        nx, ny, w, rr = _center_h(surf.seg)
+        cx, cy = nx / w, ny / w
+        dx, dy = X[0] - cx, X[1] - cy
+        dd = dx * dx + dy * dy
+        if dd == 0:
+            return None
+        return (cx + rr * dx / dd, cy + rr * dy / dd)
+    S, E = FC(surf.seg.S), FC(surf.seg.E)
+    M = _sub(E, S)
+    mm = M[0] * M[0] + M[1] * M[1]
+    m2r, m2i = M[0] * M[0] - M[1] * M[1], 2 * M[0] * M[1]
+    wx, wy = X[0] - S[0], -(X[1] - S[1])
+    return (S[0] + (m2r * wx - m2i * wy) / mm, S[1] + (m2r * wy + m2i * wx) / mm)
+
+
+def _exact_data_hit(surf: Surface, etype, cfg, X, H):
+    """Stage 113 (K11): the data point of surf's segment (an endpoint, the via)
+    that is the back-propagated hit point of the exact target X -- decided
+    exactly on the data (never by the rounding of c + R u): the foot of X on
+    the line (line normal), a point collinear with X and the exact centre
+    (circle normal), a point X + s n (directional); of several (antipodal
+    endpoints) the one the numeric H is at. None for a full carrier (no
+    endpoints; its via plays no part in blocking) or when no data point is
+    the hit point."""
+    seg = surf.seg
+    if seg.full:
+        return None
+    found = []
+    for D in (seg.S, seg.E, seg.V):
+        if D is None:
+            continue
+        K = FC(D)
         if etype == "line_normal_projection":
-            D = _sub(FC(surf.seg.E), FC(surf.seg.S))
-            ax = (-D[1], D[0])
+            S, E = FC(seg.S), FC(seg.E)
+            d = _sub(E, S)
+            v = _sub(X, K)
+            ok = v[0] * d[0] + v[1] * d[1] == 0
         elif etype == "circle_normal_projection":
-            nx, ny, w, _rr = _center_h(surf.seg)
-            ax = (X[0] - nx / w, X[1] - ny / w)
+            nx, ny, w, _rr = _center_h(seg)
+            ok = (nx - w * X[0]) * (K[1] - X[1]) - (ny - w * X[1]) * (K[0] - X[0]) == 0
         else:
-            ax = FC(P(surf.cfg(side)["normal"]))
-        if ax != (0, 0):
-            a, b = -ax[1], ax[0]
-            line = (a, b, a * X[0] + b * X[1])
-    return {k: (hits[k], line if k == j else None) for k in hits}
+            ok = _cross(_sub(X, K), FC(P(cfg["normal"]))) == 0
+        if ok and not any(D == q for q in found):
+            found.append(D)
+    if not found:
+        return None
+    return min(found, key=lambda D: abs(H - D))
 
 
-def _backward(surfaces, plan, cursor, flags=None, hints=None):
-    """(aim point or None, {projective entry index: H}): the backward pass.
+def _backward(surfaces, plan, cursor, flags=None, hints=None, start=0):
+    """(aim point or None, {projective entry index: H}, {index: its
+    exact-data hit point}, {index: the exact target behind it}, the exact
+    image or None): the backward pass over the entries from `start`.
     A circle projective whose target lies inside the circle has two
     candidate hit points (both exits reach the target): the fork is settled
     at planning time by back_propagate -- the candidate nearer the point the
     player clicked (hints: plan entry index -> click point), by default the
-    segment's midpoint. An entry without a candidate is skipped."""
+    segment's midpoint. An entry without a candidate is skipped.
+    Stage 113 (K11): alongside, the cursor's exact image as rationals, while
+    every entry's inverse map is rational -- a projective's when its hit point
+    is a data point of its segment (_exact_data_hit): H is then that point
+    exactly, and the aim image behind it stays exact data."""
     by_id = {s.id: s for s in surfaces}
     plan = list(plan)
     hints = hints or {}
     res = plan_resolved(surfaces, plan, flags)
     hits = {}
+    exact_hits = {}
+    exact_targets = {}
     z = P(cursor)
+    Xe = FC(P(cursor))
     on_sid = None        # the surface whose carrier z lies on (provenance)
-    for j in range(len(plan) - 1, -1, -1):
+    for j in range(len(plan) - 1, start - 1, -1):
         sid, side = plan[j]
         eff, f = res[j]
         if eff in PROJECTIVE:
             on = on_sid == sid or (on_sid is None and incident(z, by_id[sid]))
             H = back_propagate(by_id[sid], side, z, f, on, hints.get(j))
             if H is None:
+                Xe = None
                 continue
+            if Xe is not None:
+                exact_targets[j] = Xe
+                D = _exact_data_hit(by_id[sid], eff, by_id[sid].cfg(side, f), Xe, H)
+                if D is not None:
+                    H = D
+                    exact_hits[j] = D
+                    Xe = FC(D)
+                else:
+                    Xe = None
             z = H
             on_sid = sid
             hits[j] = H
@@ -1823,9 +1919,11 @@ def _backward(surfaces, plan, cursor, flags=None, hints=None):
             continue
         on_sid = -1
         z = map_point(z, by_id[sid], inverse=True)
+        if Xe is not None:
+            Xe = _exact_step(Xe, by_id[sid])
         if z is None:
-            return None, hits
-    return z, hits
+            return None, hits, exact_hits, exact_targets, None
+    return z, hits, exact_hits, exact_targets, Xe
 
 
 def exact_direction(surfaces, plan, player, cursor, flags=None, hints=None):
@@ -1836,49 +1934,19 @@ def exact_direction(surfaces, plan, player, cursor, flags=None, hints=None):
     return None if d == 0 else d
 
 
-def exact_image(surfaces, cursor, plan, flags=None, start=0):
+def exact_image(surfaces, cursor, plan, flags=None, start=0, hints=None):
     """The aim image F_K^-1(cursor) as exact rationals, when every frame
     change of the plan is a rational map of exact data -- a line reflection,
-    an inversion in a circle (exact circumcenter and radius²) or a
-    translation portal. None for a rotation portal, or an image at infinity."""
-    by_id = {s.id: s for s in surfaces}
-    effs = plan_effects(surfaces, plan, flags)[start:]
-    plan = list(plan)[start:]
-    if any(e in PROJECTIVE for e in effs):
-        return None      # a back-propagated hit point is not exact data
-    X = FC(P(cursor))
-    for (sid, side), eff in reversed(list(zip(plan, effs))):
-        surf = by_id.get(sid)
-        if surf is None or eff not in TRANSFORMATIVE:
-            continue
-        if surf.portal() is not None:
-            cfg = surf.left if surf.left and surf.left.get("type") == "portal" else surf.right
-            if cfg["theta"] != 0:
-                return None
-            X = (X[0] - F(cfg["d"][0]), X[1] - F(cfg["d"][1]))
-            continue
-        if surf.seg.kind != "line":
-            # inversion: X' = c + r² (X - c) / |X - c|² (exact rationals)
-            nx, ny, w, rr = _center_h(surf.seg)
-            cx, cy = nx / w, ny / w
-            dx, dy = X[0] - cx, X[1] - cy
-            dd = dx * dx + dy * dy
-            if dd == 0:
-                return None
-            X = (cx + rr * dx / dd, cy + rr * dy / dd)
-            continue
-        S, E = FC(surf.seg.S), FC(surf.seg.E)
-        M = _sub(E, S)
-        mm = M[0] * M[0] + M[1] * M[1]
-        m2r, m2i = M[0] * M[0] - M[1] * M[1], 2 * M[0] * M[1]
-        wx, wy = X[0] - S[0], -(X[1] - S[1])
-        X = (S[0] + (m2r * wx - m2i * wy) / mm, S[1] + (m2r * wy + m2i * wx) / mm)
-    return X
+    an inversion in a circle (exact circumcenter and radius²), a translation
+    portal, or (Stage 113, K11) a projective whose hit point is a data point
+    of its segment. None for a rotation portal, an image at infinity, or a
+    back-propagated hit point that is not exact data."""
+    return _backward(surfaces, plan, cursor, flags, hints, start)[4]
 
 
-def initial_line(surfaces, player, cursor, plan, flags=None):
+def initial_line(surfaces, player, cursor, plan, flags=None, hints=None):
     """Exact implicit line of the initial beam: player -> the exact aim image."""
-    X = exact_image(surfaces, cursor, plan, flags)
+    X = exact_image(surfaces, cursor, plan, flags, hints=hints)
     if X is None:
         return None
     Pp = FC(P(player))
@@ -1994,7 +2062,7 @@ def realization(surfaces, player, cursor, plan, flags=None, hints=None):
     pole = None
     if q0 is None:
         b = Beam(p, d / abs(d), mp.mpf(0))
-        line = initial_line(surfaces, player, cursor, plan, flags)
+        line = initial_line(surfaces, player, cursor, plan, flags, hints)
     else:
         if q0 == p:
             return fallback     # the player at the frame's infinity: every aim degenerates
@@ -2003,7 +2071,7 @@ def realization(surfaces, player, cursor, plan, flags=None, hints=None):
         # the exact pole record of the start (Stage 105): the circle through
         # the player, the exact aim image and Q0
         q0e = pre_q_exact(surfaces)
-        xe = exact_image(surfaces, cursor, plan, flags)
+        xe = exact_image(surfaces, cursor, plan, flags, hints=hints)
         if q0e is not None and xe is not None:
             pole = pole_start_aimed(FC(p), xe, q0e)
     by_id = {s.id: s for s in surfaces}
@@ -2068,7 +2136,7 @@ def _aim_oriented(surfaces, player, cursor, plan, flags, hints, away):
         d = P(cursor) - P(player)
         line, known = "direction", []
     else:
-        line = initial_line(surfaces, player, cursor, plan, flags)
+        line = initial_line(surfaces, player, cursor, plan, flags, hints)
         known = [P(cursor)] if plan and fixes_cursor(surfaces, cursor, plan, flags) else []
     q0 = pre_q(surfaces)
     if q0 is None:
@@ -2081,7 +2149,7 @@ def _aim_oriented(surfaces, player, cursor, plan, flags, hints, away):
     if straight_at_cursor:
         xe = FC(P(cursor))
     else:
-        xe = exact_image(surfaces, cursor, plan, flags) if line != "direction" else None
+        xe = exact_image(surfaces, cursor, plan, flags, hints=hints) if line != "direction" else None
     return d, None, known, (reversed_beam(b) if away else b), xe
 
 

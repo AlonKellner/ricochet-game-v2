@@ -54,6 +54,22 @@ if [ "$combos" != 0 ]; then
 	echo "== dumping them from both builds"
 	RC_SWEEP_DUMP="$OUT/combos.txt" "$bld/rc_tests" -tc="goldens: the sweep combos*" 2>/dev/null | grep "^DUMP	" > "$OUT/old.txt" || true
 	RC_SWEEP_DUMP="$OUT/combos.txt" "$NEW" -tc="goldens: the sweep combos*" 2>/dev/null | grep "^DUMP	" > "$OUT/new.txt" || true
+	# the reference's display canon of the same combos (Stage 113, K14: a rule
+	# tells a frame-id relabelling from a trace change by the canon, which the
+	# dumps do not carry): the reference binary prints it for a mismatching
+	# hash, so its worktree's goldens copy is blanked for the run and restored
+	echo "== the reference's canon of them"
+	$PY -I - "$src/bench/goldens/sweeps.json" <<-'PYEOF'
+		import json, sys
+		p = sys.argv[1]
+		d = json.load(open(p))
+		for v in d.values():
+		    if isinstance(v, dict) and "hashes" in v:
+		        v["hashes"] = ""
+		json.dump(d, open(p, "w"))
+	PYEOF
+	RC_SWEEP_REBLESS=1 RC_SWEEP_DUMP="$OUT/combos.txt" "$bld/rc_tests" -tc="goldens: the sweep combos*" 2>/dev/null | grep "^REBLESS	" > "$OUT/old_canon.raw" || true
+	git -C "$src" checkout -- bench/goldens/sweeps.json
 else
 	: > "$OUT/old.txt"
 	: > "$OUT/new.txt"

@@ -256,7 +256,7 @@ TEST_CASE("sweeps timing" * doctest::skip(true)) {
 				time("2 CLOSED+SIMPLE", [&] { inv::check_VIS_CLOSED(r); inv::check_VIS_SIMPLE(r); });
 				time("2 ORIENTED+DISJOINT", [&] {
 					if (!r.split) { inv::check_VIS_ORIENTED(r); inv::check_VIS_DISJOINT(r); }
-					else for (int half : {1, 2}) { const vis::Result h = vis::half_of(r, half); inv::check_VIS_ORIENTED(h); inv::check_VIS_DISJOINT(h); }
+					else for (const auto &[half, wind] : vis::parts_of(r)) { const vis::Result h = vis::part_of(r, half, wind); inv::check_VIS_ORIENTED(h); inv::check_VIS_DISJOINT(h); }
 				});
 				time("2 geometry (EDGE,VERTEX,SHADOW,BLOCKER,REGULAR)", [&] {
 					inv::check_VIS_EDGE_ON_GEOMETRY(r, scene); inv::check_VIS_VERTEX_PROVENANCE(r, scene); inv::check_VIS_SHADOW_ANCHORED(r, scene);

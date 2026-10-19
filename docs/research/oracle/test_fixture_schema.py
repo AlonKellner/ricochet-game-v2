@@ -89,5 +89,7 @@ def test_visibility_labels_schema():
         assert set(c) == {"name", "scene", "player", "plan", "cursors"}, c["name"]
         assert os.path.exists(os.path.join(ROOT, "bench", "scenes", c["scene"] + ".surfaces.json")), c["scene"]
         for p in c["plan"]:
-            assert {"surface_id", "side"} == set(p), c["name"]
+            assert {"surface_id", "side"} <= set(p) <= {"surface_id", "side", "click"}, c["name"]
+            if "click" in p:  # Stage 113: the fork of a circle projective
+                assert len(p["click"]) == 2, c["name"]
         assert c["cursors"] and all(len(x) == 3 and isinstance(x[2], bool) for x in c["cursors"]), c["name"]

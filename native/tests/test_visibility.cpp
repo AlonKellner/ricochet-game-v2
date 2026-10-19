@@ -134,13 +134,11 @@ TEST_CASE("visibility: the region and the traces agree with the oracle's labels"
 		Tracer t;
 		t.set_emit_infinity(true);
 		t.set_defs(defs_from_json(d["surfaces"]));
-		std::vector<PlanItem> plan;
-		for (const ojson &p : c["plan"]) {
-			plan.push_back(PlanItem{p["surface_id"].get<int>(), p["side"].get<std::string>() == "LEFT", std::nullopt, std::nullopt});
-		}
+		const std::vector<PlanItem> plan = plan_from_json(c["plan"]); // (Stage 113: with the clicks)
 		const V2 player{float(c["player"][0].get<double>()), float(c["player"][1].get<double>())};
 		const vis::Result r = vis::compute(t, vis::Pt{player.x, player.y}, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
-		REQUIRE_MESSAGE(r.supported, name);
+		// Stage 113: every case builds its region (the projective plans included)
+		REQUIRE_MESSAGE(r.supported, name << ": " << r.reason);
 		for (const ojson &x : c["cursors"]) {
 			const V2 cur{float(x[0].get<double>()), float(x[1].get<double>())};
 			const bool label = x[2].get<bool>();
@@ -245,6 +243,27 @@ std::vector<std::vector<PlanItem>> level_plans(const std::vector<SurfaceDef> &de
 			}
 		}
 	}
+	// Stage 113: every projective side as a plan of its own, and the first two
+	// projectives as one plan (after the pairs: the digest's indices of the
+	// plans above stay)
+	std::vector<PlanItem> projs;
+	for (const SurfaceDef &d : defs) {
+		if (d.pre_transform) {
+			continue;
+		}
+		for (const bool left : {true, false}) {
+			const std::optional<SideDef> &side = left ? d.left : d.right;
+			if (side && is_projective(side->type)) {
+				projs.push_back(PlanItem{d.id, left, std::nullopt, std::nullopt});
+			}
+		}
+	}
+	for (const PlanItem &p : projs) {
+		plans.push_back({p});
+	}
+	if (projs.size() >= 3) {
+		plans.push_back({projs[0], projs[2]});
+	}
 	plans.push_back({PlanItem{INFINITY_ID, true, std::nullopt, std::nullopt}});
 	return plans;
 }
@@ -344,8 +363,13 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 	}
 	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + scene + ".surfaces.json");
 	Tracer t;
-	t.set_emit_infinity(true);
+	// RC_VIS_EMIT=0: no infinity events (as a sweep manifest without them); RC_VIS_BOUNDS="x0,y0,x1,y1": the level bounds
+	t.set_emit_infinity(std::getenv("RC_VIS_EMIT") == nullptr || std::string(std::getenv("RC_VIS_EMIT")) != "0");
 	t.set_defs(defs_from_json(d["surfaces"]));
+	vis::Rect vbounds{0, 0, 1920, 1080};
+	if (const char *pb = std::getenv("RC_VIS_BOUNDS")) {
+		std::sscanf(pb, "%lf,%lf,%lf,%lf", &vbounds.x0, &vbounds.y0, &vbounds.x1, &vbounds.y1);
+	}
 	std::vector<PlanItem> plan;
 	if (const char *ps = std::getenv("RC_VIS_PLAN")) {
 		std::string str = ps;
@@ -369,7 +393,7 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 		std::sscanf(pc, "%lf,%lf", &c.x, &c.y);
 		// RC_VIS_HALF=1|2: the cast in that forced orientation (Stage 111)
 		const char *ph = std::getenv("RC_VIS_HALF");
-		vis::Builder b(t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080}, ph ? vis::Half(std::atoi(ph)) : vis::Half::Single);
+		vis::Builder b(t, P, plan, Flags(), vbounds, ph ? vis::Half(std::atoi(ph)) : vis::Half::Single);
 		const std::optional<vis::Cast> k = b.probe(c);
 		const vis::Result &rr = b.result();
 		std::printf("P_K (%.3f,%.3f) Q_K %s (%.3f,%.3f)\n", rr.pk.x, rr.pk.y, rr.qk_inf ? "inf" : "", rr.qk.x, rr.qk.y);
@@ -390,12 +414,12 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 			}
 		}
 	}
-	const vis::Result r = vis::compute(t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
+	const vis::Result r = vis::compute(t, P, plan, Flags(), vbounds);
 	std::printf("supported %d %s casts %d refinements %d members %zu cells %zu loops %zu\n", int(r.supported), r.reason.c_str(), r.casts,
 		r.refinements, r.members.size(), r.cells.size(), r.loops.size());
 	for (const std::string &n : r.notes) std::printf("note: %s\n", n.c_str());
 	{
-		inv::VisInput in{&r, &t, P, plan, Flags(), vis::Rect{0, 0, 1920, 1080}};
+		inv::VisInput in{&r, &t, P, plan, Flags(), vbounds};
 		int shown = 0;
 		for (const inv::Violation &vi : inv::check_visibility(in)) {
 			if (shown++ < 25) std::printf("check: %s\n", render(vi).c_str());
@@ -414,12 +438,41 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 		PinStats st;
 		pin(t, r, V2{float(P.x), float(P.y)}, cursors, plan, st, std::string(scene));
 		for (const std::string &sm : st.samples) std::printf("pin: %s\n", sm.c_str());
+		// the boundary edge at a mismatch on the boundary, with its member's walk data
+		for (const std::string &sm : st.samples) {
+			double cx, cy;
+			const char *at = std::strstr(sm.c_str(), "cursor (");
+			if (at == nullptr || std::sscanf(at, "cursor (%lf, %lf)", &cx, &cy) != 2) continue;
+			const vis::Pt c{cx, cy};
+			if (vis::margin(r, c) > 1e-6) continue;
+			for (size_t li = 0; li < r.loops.size(); li++) {
+				for (size_t ei = 0; ei < r.loops[li].edges.size(); ei++) {
+					const vis::Edge &e = r.loops[li].edges[ei];
+					if (vis::edge_dist(e, c) > 1e-6) continue;
+					std::printf("  at (%g,%g): loop %zu edge %zu kind %d m%d s%d %s ta %.6g tb %.6g incl %d incl_a %d crack %d\n", cx, cy, li, ei, int(e.kind), e.member,
+						e.surface, vis::end_name(e.role), e.ta, e.tb, int(e.inclusive), int(e.incl_a), int(e.crack));
+					if (e.member >= 0) {
+						const vis::Member &m = r.members[size_t(e.member)];
+						std::printf("    member %d key %.9g t0 %.6g tq %.6g tp %.6g own_a %d crit %s near_pt (%.3f,%.3f) beam p (%.3f,%.3f) tau (%.4f,%.4f) kappa %.6g\n", e.member, m.key, m.t0, m.tq, m.tp, int(m.own_a), m.crit.shape().c_str(),
+							m.crit.near_pt.x, m.crit.near_pt.y, m.beam.p.fx(), m.beam.p.fy(), m.beam.tau.fx(), m.beam.tau.fy(), m.beam.kappa.v);
+						const Scene<F64> sc = Scene<F64>::from_defs(t.defs(), F64{1.0});
+						if (const Surf<F64> *ns = sc.find(m.crit.near_sid)) {
+							for (const F64 &rt : geom::hits(m.beam, ns->seg, false)) {
+								const CN<F64> q = m.beam.at(rt);
+								std::printf("      root on %d: t %.6g at (%.3f,%.3f)\n", m.crit.near_sid, rt.v, q.fx(), q.fy());
+							}
+						}
+						for (const auto &iv : m.crit.iv) std::printf("      interval %s %.6g -> %s %.6g\n", vis::end_name(iv.a.kind), iv.a.t, vis::end_name(iv.b.kind), iv.b.t);
+					}
+				}
+			}
+		}
 		std::printf("pin: %d cursors, %d mismatches\n", st.checked, st.mismatches);
 	}
 	for (size_t i = 0; i < r.members.size() && std::getenv("RC_VIS_PIN") == nullptr; i++) {
 		const auto &m = r.members[i];
-		std::printf("member %zu dir(%.6f,%.6f) %s cursor(%.3f,%.3f) ok %d chosen %d tie %d\n  crit %s\n  minus %s\n  plus %s\n", i, m.dir.x, m.dir.y, m.why.c_str(), m.cursor.x,
-			m.cursor.y, int(m.crit.cursor_ok), int(m.crit.chosen), int(m.crit.has_tie), m.crit.shape().c_str(), m.minus.shape().c_str(), m.plus.shape().c_str());
+		std::printf("member %zu dir(%.6f,%.6f) key %.9g sub %g sigma %g %s cursor(%.3f,%.3f) beam p(%.3f,%.3f) tau(%.4f,%.4f) t0 %.4g ok %d chosen %d tie %d\n  crit %s\n  minus %s\n  plus %s\n", i, m.dir.x, m.dir.y, m.key, m.sub, m.sigma, m.why.c_str(), m.cursor.x,
+			m.cursor.y, m.beam.p.fx(), m.beam.p.fy(), m.beam.tau.fx(), m.beam.tau.fy(), m.t0, int(m.crit.cursor_ok), int(m.crit.chosen), int(m.crit.has_tie), m.crit.shape().c_str(), m.minus.shape().c_str(), m.plus.shape().c_str());
 	}
 	if (const char *cl = std::getenv("RC_VIS_CELLS")) {
 		std::string str = cl;
@@ -431,8 +484,8 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 		for (size_t ci = 0; ci < r.cells.size(); ci++) {
 			if (str.find("," + std::to_string(ci) + ",") == std::string::npos) continue;
 			const auto &c = r.cells[ci];
-			std::printf("cell %zu members %d-%d loops %zu mid %s cursor (%.3f,%.3f) near (%.3f,%.3f) end (%.3f,%.3f)\n", ci, c.left, c.right, c.loops.size(),
-				c.mid.shape().c_str(), c.mid.cursor.x, c.mid.cursor.y, c.mid.near_pt.x, c.mid.near_pt.y, c.mid.end_pt.x, c.mid.end_pt.y);
+			std::printf("cell %zu members %d-%d half %d wind %d loops %zu mid %s cursor (%.3f,%.3f) key %.9g chosen %d near (%.3f,%.3f) end (%.3f,%.3f)\n", ci, c.left, c.right, c.half, c.wind, c.loops.size(),
+				c.mid.shape().c_str(), c.mid.cursor.x, c.mid.cursor.y, c.mid.key, int(c.mid.chosen), c.mid.near_pt.x, c.mid.near_pt.y, c.mid.end_pt.x, c.mid.end_pt.y);
 			for (const auto &iv : c.mid.iv) std::printf("  interval %s %.6g -> %s %.6g\n", vis::end_name(iv.a.kind), iv.a.t, vis::end_name(iv.b.kind), iv.b.t);
 			for (const auto &e : c.edges()) {
 				std::printf("  kind %d m%d s%d %s (%.3f,%.3f) via (%.3f,%.3f) -> (%.3f,%.3f) arc%d\n", int(e.kind), e.member, e.surface, vis::end_name(e.role), e.a.x,
@@ -657,8 +710,8 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 	for (size_t li = 0; li < r.loops.size(); li++) {
 		std::printf("loop %zu area %.1f edges %zu\n", li, r.loops[li].area, r.loops[li].edges.size());
 		for (const auto &e : r.loops[li].edges) {
-			std::printf("  kind %d m%d s%d %s (%.3f,%.3f)->(%.3f,%.3f) arc%d incl%d\n", int(e.kind), e.member, e.surface, vis::end_name(e.role), e.a.x, e.a.y,
-				e.b.x, e.b.y, int(e.arc), int(e.inclusive));
+			std::printf("  kind %d m%d s%d %s (%.3f,%.3f) via (%.3f,%.3f) ->(%.3f,%.3f) arc%d incl%d crack%d\n", int(e.kind), e.member, e.surface, vis::end_name(e.role), e.a.x, e.a.y, e.via.x, e.via.y,
+				e.b.x, e.b.y, int(e.arc), int(e.inclusive), int(e.crack));
 		}
 	}
 	if (const char *png = std::getenv("RC_VIS_PNG")) {
@@ -1308,6 +1361,7 @@ TEST_CASE("visibility: every region check detects its corruption") {
 					 for (vis::Member &o : r.members) {
 						 if (o.cursor == c) {
 							 o.crit.cursor_ok = !o.crit.cursor_ok;
+							 o.poi_ok = !o.poi_ok;
 						 }
 					 }
 					 return;

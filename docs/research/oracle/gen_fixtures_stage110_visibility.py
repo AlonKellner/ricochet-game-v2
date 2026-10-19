@@ -5,6 +5,13 @@ Each case: a level, a player, a plan; its cursors: a grid over the level, every
 segment endpoint, and the points beyond each endpoint on the line from the
 player (2e - P: exactly on a shadow's edge).
 
+Stage 113: plans through projective entries (GAME_SPEC 15, 13.3). A plan entry
+may carry the player's click ("click": the fork of a circle projective's
+back-propagation). Such cases add cursors that probe the pencil of exit lines:
+the projective's endpoints and via point (exact points on its carrier), the
+centre of a circle normal (every member passes it), and points along the exit
+lines through those anchors, on both sides of the carrier.
+
 Usage:
   docs/research/.venv/bin/python docs/research/oracle/gen_fixtures_stage110_visibility.py
 Writes bench/fixtures/stage110_visibility.json.
@@ -22,6 +29,8 @@ import visibility as V  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 TRANSFORMATIVE = ("reflection", "inversion", "portal")
+PROJECTIVE = ("line_normal_projection", "circle_normal_projection", "line_directional_projection",
+              "circle_directional_projection")
 
 
 def dump(name):
@@ -70,8 +79,49 @@ def carrier_extension(surfs, plan):
     return out
 
 
-def cursors(surfs, player, plan=()):
-    pts = carrier_extension(surfs, plan)
+def _unit(z):
+    return z / abs(z)
+
+
+def projective_cursors(sc, plan):
+    """Cursors probing a planned projective's pencil (Stage 113): its endpoints
+    and via (on the carrier), a circle normal's centre, and the points
+    h + k u along the exit line through each anchor h (u: the carrier's normal,
+    the radius, or the fixed normal), k on both sides of the carrier."""
+    by_id = {s.id: s for s in sc}
+    out = []
+    for sid, side in plan:
+        s = by_id.get(sid)
+        if s is None:
+            continue
+        cfg = s.cfg(side)
+        if not cfg or cfg.get("type") not in PROJECTIVE:
+            continue
+        seg = s.seg
+        anchors = [seg.S, seg.V, seg.E]
+        if cfg["type"] == "circle_normal_projection":
+            out.append(seg.c)
+        for h in anchors:
+            if cfg["type"] == "line_normal_projection":
+                d = seg.E - seg.S
+                u = _unit(mp.mpc(-d.imag, d.real))
+            elif cfg["type"] == "circle_normal_projection":
+                u = _unit(h - seg.c)
+            else:
+                u = _unit(mp.mpc(cfg["normal"][0], cfg["normal"][1]))
+            ks = (-400, -150, -60, 60, 150, 400)
+            if cfg["type"] == "circle_normal_projection":
+                r = mp.sqrt(seg.R2)
+                ks = ks + (-float(r) / 2, float(r) / 2, -float(2 * r))
+            for k in ks:
+                z = h + k * u
+                out.append(z)
+            out.append(h)
+    return [(float(z.real), float(z.imag)) for z in out]
+
+
+def cursors(surfs, player, plan=(), extra=()):
+    pts = carrier_extension(surfs, plan) + list(extra)
     for i in range(14):
         for j in range(8):
             pts.append((40.0 + i * 140.0, 40.0 + j * 140.0))
@@ -91,11 +141,11 @@ def cursors(surfs, player, plan=()):
 CANDIDATES = [(760.0, 400.0), (1200.0, 400.0), (950.0, 700.0), (650.0, 650.0), (1250.0, 700.0)]
 
 
-def planned_case(name, scene, plan):
+def planned_case(name, scene, plan, players=None, hints=None):
     """The case at the first candidate player from which the plan shows some cursors."""
     best = None
-    for player in CANDIDATES:
-        c = case(name, scene, player, plan)
+    for player in (players or CANDIDATES):
+        c = case(name, scene, player, plan, hints)
         n = sum(1 for x in c["cursors"] if x[2])
         if best is None or n > best[0]:
             best = (n, c)
@@ -104,16 +154,105 @@ def planned_case(name, scene, plan):
     return best[1]
 
 
-def case(name, scene, player, plan):
+def best_case(name, scene, plans, players):
+    """Over the plans (side combinations) and players: the first showing at least
+    10 cursors, else the one showing the most."""
+    best = None
+    for plan in plans:
+        for player in players:
+            c = case(name, scene, player, plan)
+            n = sum(1 for x in c["cursors"] if x[2])
+            if best is None or n > best[0]:
+                best = (n, c)
+            if n >= 10:
+                return c
+    return best[1]
+
+
+def case(name, scene, player, plan, hints=None, extra=()):
+    """hints: plan entry index -> the click (x, y), the fork of a circle projective;
+    extra: cursors added to the grid."""
     surfs = dump(scene)
     sc = T.scene_from_json(surfs)
     labelled = []
-    for c in cursors(surfs, player, plan):
-        v = V.visible(sc, player, c, plan)
+    for c in cursors(surfs, player, plan, projective_cursors(sc, plan) + list(extra)):
+        v = V.visible(sc, player, c, plan, None, hints)
         if v is not None:
             labelled.append([c[0], c[1], bool(v)])
-    return {"name": name, "scene": scene, "player": list(player),
-            "plan": [{"surface_id": a, "side": b} for a, b in plan], "cursors": labelled}
+    entries = []
+    for i, (a, b) in enumerate(plan):
+        e = {"surface_id": a, "side": b}
+        if hints and i in hints:
+            e["click"] = [float(hints[i][0]), float(hints[i][1])]
+        entries.append(e)
+    return {"name": name, "scene": scene, "player": list(player), "plan": entries, "cursors": labelled}
+
+
+def projective_cases():
+    """Stage 113: plans through projective entries, one case per projective side
+    of the projective playgrounds, the inner sides of the arcs from a player
+    inside the circle, the fork settled by a click, the degenerate directional,
+    and the compositions (a mirror or an inversion before or after a
+    projective; two projectives)."""
+    out = []
+    sides_of = lambda scene: sides(dump(scene), PROJECTIVE)  # noqa: E731
+    for sid, side in sides_of("playground__projective_lines"):
+        out.append(planned_case("projective_lines_%d%s" % (sid, side[0]), "playground__projective_lines", [(sid, side)]))
+    # circle normals 5 (through) and 6 (back): the right halves of the circles
+    # centred (850, 540) and (1100, 540), r 150. LEFT is the outer side: from a
+    # player left of the circle the planned walk fires off-segment at the far
+    # half, so the outer side is approached from above or below; the inner side
+    # from the left (through the far half, a pass) or from inside.
+    arc_players = {(5, "LEFT"): [(960.0, 300.0), (960.0, 780.0)], (5, "RIGHT"): [(760.0, 400.0), (900.0, 540.0)],
+                   (6, "LEFT"): [(1250.0, 300.0), (1250.0, 780.0)], (6, "RIGHT"): [(1000.0, 400.0), (1150.0, 540.0)]}
+    for scene in ("playground__projective_arcs", "playground__directional_arcs"):
+        tag = scene.split("__")[1]
+        for sid, side in sides_of(scene):
+            out.append(planned_case("%s_%d%s" % (tag, sid, side[0]), scene, [(sid, side)], arc_players[(sid, side)]))
+        # the inner side from inside the circle
+        out.append(case("%s_5R_inside" % tag, scene, (900.0, 540.0), [(5, "RIGHT")]))
+        out.append(case("%s_6R_inside" % tag, scene, (1150.0, 540.0), [(6, "RIGHT")]))
+    # the fork of a converging circle normal (both candidates reach a cursor
+    # inside the circle): the click picks the candidate; the clicks are off the
+    # axis of symmetry so that no cursor's candidates tie
+    for tag, click in (("top", (880.0, 395.0)), ("bottom", (880.0, 685.0))):
+        out.append(case("projective_arcs_5L_click_" + tag, "playground__projective_arcs", (960.0, 300.0), [(5, "LEFT")], {0: click}))
+    for tag, click in (("top", (1130.0, 395.0)), ("bottom", (1130.0, 685.0))):
+        out.append(case("projective_arcs_6R_inside_click_" + tag, "playground__projective_arcs", (1150.0, 540.0), [(6, "RIGHT")],
+                        {0: click}))
+    for sid, side in sides_of("playground__directional_lines"):
+        out.append(planned_case("directional_lines_%d%s" % (sid, side[0]), "playground__directional_lines", [(sid, side)]))
+    # a directional normal parallel to its carrier: no exit family, nothing is reached
+    out.append(case("directional_degenerate_5L", "playground__directional_degenerate", (760.0, 400.0), [(5, "LEFT")]))
+    # the mixed playground: 11 line directional (x = 500, n = +x), 6 line normal
+    # (x = 700); the portals 12 and 13 span y 300..700, so the rays run above them
+    pg = "playground__projective"
+    # (the grid misses the band above the portals: cursors along y = 230 and 280)
+    band = [(x, y) for y in (230.0, 280.0) for x in (520.0, 650.0, 720.0, 745.0, 760.0, 900.0, 1300.0, 1600.0)]
+    out.append(case("two_projectives", pg, (300.0, 230.0), [(11, "RIGHT"), (6, "RIGHT")], None, band))
+    # projective_inversion: 5 mirror (x = 1300, y 460..500, reflective toward -x),
+    # 6 inversion circle (1200, 600) r 100, 7 line normal back (x = 700, y
+    # 300..700: its exits run +x), 8 circle normal back (centre (1000, 380) r 70,
+    # right half)
+    pi = "playground__projective_inversion"
+    out.append(best_case("line_normal_then_mirror", pi, [[(7, s), (5, "LEFT")] for s in ("LEFT", "RIGHT")],
+                         [(960.0, 640.0), (960.0, 540.0)]))
+    out.append(best_case("circle_normal_then_mirror", pi, [[(8, s), (5, "LEFT")] for s in ("LEFT", "RIGHT")],
+                         [(1150.0, 300.0), (1250.0, 380.0)]))
+    out.append(best_case("mirror_then_line_normal", pi, [[(5, "LEFT"), (7, s)] for s in ("LEFT", "RIGHT")],
+                         [(1230.0, 620.0), (1160.0, 570.0), (1200.0, 650.0)]))
+    out.append(best_case("line_normal_then_inversion", pi, [[(7, s), (6, "LEFT")] for s in ("LEFT", "RIGHT")],
+                         [(960.0, 480.0), (1100.0, 480.0)]))
+    out.append(best_case("inversion_then_line_normal", pi, [[(6, "LEFT"), (7, s)] for s in ("LEFT", "RIGHT")],
+                         [(1000.0, 480.0), (1100.0, 470.0)]))
+    out.append(best_case("line_normal_then_circle_normal", pi, [[(7, s), (8, t)] for s in ("LEFT", "RIGHT") for t in ("LEFT", "RIGHT")],
+                         [(960.0, 380.0), (900.0, 420.0)]))
+    # K14: line 6 of the mixed playground runs through arc 9's centre: the fork
+    # line of the default click is line 6's carrier, where the physical walk fires
+    # 6 and the planned walk 9 at one point (two frames, not one epoch count)
+    out.append(case("projective_9R_fork_on_line_6", "playground__projective", (676.666687, 390.0), [(9, "RIGHT")], None,
+                    [(700.0, 200.0), (700.0, 800.0), (700.0, 100.0), (700.0, 240.0), (700.0, 760.0), (700.0, 900.0)]))
+    return out
 
 
 def main():
@@ -136,6 +275,7 @@ def main():
     # B4: the reported thin lines -- departures off the planned segment (float32 player)
     three = (V._f32(914.4775), V._f32(425.2639))
     out.append(case("three_mirrors_departures", "test_levels__three_mirrors", three, [(4, "LEFT"), (6, "RIGHT")]))
+    out += projective_cases()
     path = os.path.join(ROOT, "bench", "fixtures", "stage110_visibility.json")
     json.dump({"dps": mp.mp.dps, "cases": out}, open(path, "w"), indent=1)
     for c in out:

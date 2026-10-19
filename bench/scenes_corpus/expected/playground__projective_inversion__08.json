@@ -1,0 +1,175 @@
+{
+ "planned": [
+  {
+   "kind": "hit",
+   "surface_id": 8,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1061.511640840489425470916427552109404810",
+   "y": "413.4113459936985083867937159980720458176"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 8,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1059.119691452997560111717036012050339190",
+   "y": "342.5185101349697247700250092592579518259"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 8,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "940.8803085470024398882829639879496608099",
+   "y": "417.4814898650302752299749907407420481741"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 7,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "700.0000000000000000000000000000000000000",
+   "y": "570.1979980468750000000000000000000000000"
+  },
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1065.073120117187500000000000000000000000",
+   "y": "570.1979980468750000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 6,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1104.544038009216345830668002986919096169",
+   "y": "570.1979980468750000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 8,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1032.510537780749815055347169296750625165",
+   "y": "441.9924586801204303567531078687957967219"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 6,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1102.879585881597635086850817697240788399",
+   "y": "576.1751146598765225433689436954019060315"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 6,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1164.376255248145293987408834297908777745",
+   "y": "693.4395462845079545302698063647284954608"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 3,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1241.236558406427488393801513132899326487",
+   "y": "840.0000000000000000000000000000000000000"
+  }
+ ],
+ "physical": [
+  {
+   "kind": "hit",
+   "surface_id": 8,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1061.511640840489425470916427552109404810",
+   "y": "413.4113459936985083867937159980720458176"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 6,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1228.633222419055393080776296972484039159",
+   "y": "504.1869603138440053403156055023309553021"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 6,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1264.786152693372797901849690085521413397",
+   "y": "523.8241874399033104467804604746572745919"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1300.000000000000000000000000000000000000",
+   "y": "542.9513318316774068308195862712022428526"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 2,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1360.000000000000000000000000000000000000",
+   "y": "575.5415981980128881969835035254426914231"
+  }
+ ],
+ "planned_targets": [],
+ "physical_targets": [],
+ "name": "playground__projective_inversion__08",
+ "dps": 120
+}

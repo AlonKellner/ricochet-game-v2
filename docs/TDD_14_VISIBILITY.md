@@ -13,7 +13,7 @@ Specification: GAME_SPEC §15 (rewritten in this stage), §29.3. Background: TDD
 | 110.2 | Native region: members, casts, cells, clipping, regions, `contains` | Done |
 | 110.3 | Invariants: the pin and the structure checks; native tests, oracle labels | Done |
 | 110.4 | Bindings, `VisibilityRenderer`, the level hook, the V toggle, the GUT sweep | Done; signed off (user, 2026-10-17) |
-| 110.5 | Projective plan entries | Not started: the region is not drawn for such plans |
+| 110.5 | Projective plan entries | Done in Stage 113 (`docs/TDD_18_PROJECTIVE_VISIBILITY.md`) |
 | 110.6 | Follow-up: B3, B4, B5; the region drawn as one mesh; K8; VIS-REGULAR, VIS-DRAWN-MATCHES, the cursor-reading NO-POST check, carrier cursors in the sweeps, a detection case per region check | Done; signed off (user, 2026-10-17) |
 
 **Workflow:** branch `stage110-visibility`, small green commits. Before every commit: the full GUT suite (`./run_tests_parallel.sh`), ctest in RelWithDebInfo and under ASan (`make native-asan`, run alone), `make oracle-test`, and `git diff --stat bench/goldens` empty. (Since 2026-10-18: `make gate` / `make gates`, `docs/WORKFLOW.md`.)
@@ -42,7 +42,7 @@ Specification: GAME_SPEC §15 (rewritten in this stage), §29.3. Background: TDD
 
 **Drawing: one generalized polygon.** The renderer draws the whole region as one triangle array (`vis::fill_triangles`, on the worker thread). Drawn cell by cell, two cells tessellated their shared arc independently, and the differing chord points (T-junctions: 106 on `pre_inverted`, 66 on `tangent_infinity`, empty plan) showed as hairline cracks and double-tinted slivers between shapes, mostly with circle inversions (user, 2026-10-17). The fill tessellates every edge on one circle or line -- the same member or carrier, exactly the same canonical geometry -- at the same points: a common angular grid of a whole number of steps per turn, plus every cell corner lying on it. Cells sharing a piece therefore share its vertices, and the cells (simple rings) are triangulated with earcut (`rc/earcut.hpp`) into one watertight mesh. The merged loops are not triangulated directly: their holes pinch at `P_K` and `Q_K`, where every member meets, and ear clipping is unreliable with touching holes. Where a member is nearly tangent to a carrier, two arcs' chords can cross within the tessellation's tolerance though the exact cell is simple: a ring is first cut at such crossings and the lobes wound against it are dropped (`vis::simple_rings`; without it the fill overlapped itself in a thin triangle, user's report on `pre_inverted.tscn`). VIS-DRAWN-MATCHES checks the result; a test checks there are no seams wider than 0.1 px (thin cells where members converge at a pole leave gaps of hundredths of a pixel).
 
-**What stays out.** Projective plan entries (110.5): `BeamTracer.visibility` reports such plans as unsupported and nothing is drawn. The arrow's flight cue at the event limit (§12.6).
+**What stays out.** The arrow's flight cue at the event limit (§12.6). (Projective plan entries, 110.5, were Stage 113's.)
 
 ## What Is Introduced
 

@@ -243,6 +243,7 @@ template <Num N>
 struct AnchorChain {
 	std::vector<BeamPtr<N>> beams;
 	std::map<int, CN<N>> hits;                                 // projective entry index -> its back-propagated H
+	std::map<int, CN<N>> exact_hits;                           // Stage 113 (K11): -> H when it is a data point of its segment (exact)
 	std::map<int, std::shared_ptr<const exact::Line>> exit_lines; // projective entry index -> exact exit line
 	bool reversed = false; // the first epoch runs the other way round (Stage 111: the plan's realization)
 	RealizationKind kind = RealizationKind::NoEntry;
@@ -307,6 +308,9 @@ struct Walk {
 	// K7: whether the record's circle passes the cursor (cached per record)
 	std::shared_ptr<const exact::BeamRec> rec_cursor_of;
 	bool rec_cursor_on = false;
+	// Stage 113 (K11): the chain's exact hit points the current exact circle passes (cached per record)
+	std::shared_ptr<const exact::BeamRec> rec_hits_of;
+	std::vector<CN<N>> rec_hits;
 	Flags flags;
 	bool on_plan = true;
 	// Stage 101: the current frame's image of infinity (nullopt = infinity):
@@ -867,46 +871,149 @@ public:
 		return true;
 	}
 
-	// The aim image F_K^-1(cursor) as an exact homogeneous point, when every
-	// frame change of the plan is a rational map of exact data; nullopt for a
-	// rotation portal, an image at infinity, or beyond max_limbs (0 = no budget).
-	std::optional<exact::Point3> exact_image_h(const CN<N> &cursor, const std::vector<PlanItem> &plan, int max_limbs,
-			const Flags &flags, size_t from_index = 0) const {
-		exact::Point3 X = {exact::of(cursor.fx()), exact::of(cursor.fy()), exact::of(1.0)};
-		const std::vector<EffectType> effs = plan_effects(plan, flags);
-		for (size_t j = from_index; j < effs.size(); j++) {
-			if (is_projective(effs[j])) {
+	// The exact inverse map of one transformative entry on an exact homogeneous
+	// point: a line reflection, an inversion (exact circumcenter and radius²)
+	// or a translation portal; nullopt for a rotation portal, an image at
+	// infinity, or beyond max_limbs (0 = no budget).
+	static std::optional<exact::Point3> exact_step_h(const exact::Point3 &X, const Surf<N> &surf, int max_limbs) {
+		if (surf.portal) {
+			if (surf.theta != 0.0) {
 				return std::nullopt;
 			}
+			// T^-1(X) = X - d (homogeneous: X - d w)
+			return exact::Point3{exact::sub(X[0], exact::mul(exact::of(surf.dx), X[2])), exact::sub(X[1], exact::mul(exact::of(surf.dy), X[2])), X[2]};
 		}
+		if (!surf.line) {
+			const auto &ec = surf.exact_circle();
+			std::optional<exact::Point3> inv = exact::invert_point_h(X, ec.C, ec.rw2);
+			if (!inv || (max_limbs > 0 && (*inv)[2].precision_limbs() > max_limbs)) {
+				return std::nullopt;
+			}
+			return inv;
+		}
+		return exact::reflect_point_h(X, surf.sx, surf.sy, surf.ex, surf.ey);
+	}
+
+	// Stage 113 (K11): the data point of surf's segment (an endpoint, the via)
+	// that is the back-propagated hit point of the exact target X -- decided
+	// exactly on the data, never by the rounding of c + R u: the foot of X on
+	// the line (line normal), a point collinear with X and the exact centre
+	// (circle normal), a point X + s n (directional); of several (antipodal
+	// endpoints) the one the numeric H is at. nullopt for a full carrier (no
+	// endpoints; its via plays no part in blocking) or when no data point is
+	// the hit point. (Oracle: trace2._exact_data_hit.)
+	std::optional<std::pair<CN<N>, exact::Point3>> exact_data_hit(const Surf<N> &surf, EffectType etype, bool left, const exact::Point3 &X,
+			const CN<N> &H) const {
+		if (surf.full) {
+			return std::nullopt;
+		}
+		std::vector<std::pair<double, double>> pts = {{surf.sx, surf.sy}, {surf.ex, surf.ey}};
+		if (surf.has_v) {
+			pts.emplace_back(surf.vx, surf.vy);
+		}
+		std::optional<std::pair<CN<N>, exact::Point3>> best;
+		double best_d = INF_D;
+		for (const auto &[dx, dy] : pts) {
+			// X - D w (homogeneous)
+			const BigFloat vx = exact::sub(X[0], exact::mul(exact::of(dx), X[2]));
+			const BigFloat vy = exact::sub(X[1], exact::mul(exact::of(dy), X[2]));
+			bool ok;
+			if (etype == EffectType::LineNormalProjection) {
+				const BigFloat ux = exact::sub(exact::of(surf.ex), exact::of(surf.sx));
+				const BigFloat uy = exact::sub(exact::of(surf.ey), exact::of(surf.sy));
+				ok = exact::add(exact::mul(vx, ux), exact::mul(vy, uy)).is_zero();
+			} else if (etype == EffectType::CircleNormalProjection) {
+				// X, the centre C and D collinear: det [[x, y, w], [cx, cy, cw], [dx, dy, 1]] = 0
+				const exact::Point3 &C = surf.exact_circle().C;
+				const BigFloat D1 = exact::of(dx);
+				const BigFloat D2 = exact::of(dy);
+				const BigFloat t1 = exact::mul(X[0], exact::sub(C[1], exact::mul(C[2], D2)));
+				const BigFloat t2 = exact::mul(X[1], exact::sub(C[0], exact::mul(C[2], D1)));
+				const BigFloat t3 = exact::mul(X[2], exact::sub(exact::mul(C[0], D2), exact::mul(C[1], D1)));
+				ok = exact::sub(exact::add(t1, t3), t2).is_zero();
+			} else {
+				const Projective &pr = surf.proj(left);
+				ok = exact::sub(exact::mul(vx, exact::of(pr.ny)), exact::mul(vy, exact::of(pr.nx))).is_zero();
+			}
+			if (!ok) {
+				continue;
+			}
+			const double d = std::hypot(H.fx() - dx, H.fy() - dy);
+			if (d < best_d) {
+				best_d = d;
+				best = std::make_pair(CN<N>{H.re.like(dx), H.re.like(dy)}, exact::Point3{exact::of(dx), exact::of(dy), exact::of(1.0)});
+			}
+		}
+		return best;
+	}
+
+	// The backward pass (GAME_SPEC 13.3): the sub-chains' targets, and alongside
+	// the cursor's exact image while every entry's inverse map is rational -- a
+	// projective's when its hit point is a data point of its segment (Stage
+	// 113, K11): H is then that point exactly, and the image behind it stays
+	// exact data. (Oracle: trace2._backward.)
+	struct Backward {
+		std::map<size_t, CN<N>> hits;       // projective entry index -> H
+		std::map<size_t, CN<N>> exact_hits; // -> H when exact data (K11)
+		std::optional<exact::Point3> image; // the exact aim image (nullopt: not exact data)
+		bool at_infinity = false;           // a transformative image at infinity: no aim
+	};
+	Backward backward_pass(const std::vector<PlanItem> &plan, const std::vector<EffectType> &effs, const CN<N> &cursor, int max_limbs,
+			size_t from_index = 0) const {
+		Backward out;
+		std::optional<CN<N>> X = cursor;
+		std::optional<exact::Point3> Xe = exact::Point3{exact::of(cursor.fx()), exact::of(cursor.fy()), exact::of(1.0)};
+		int on_sid = -2; // the surface whose carrier X lies on (provenance)
 		for (size_t jj = plan.size(); jj-- > from_index;) {
 			const Surf<N> *surf = scene_.find(plan[jj].surface_id);
-			if (surf == nullptr || !is_transformative(effs[jj])) {
+			if (surf == nullptr) {
 				continue;
 			}
-			if (surf->portal) {
-				if (surf->theta != 0.0) {
-					return std::nullopt;
+			if (is_projective(effs[jj])) {
+				const bool on = on_sid == surf->id || (on_sid == -2 && on_carrier(*surf, *X));
+				const effects::F32Point *hint = plan[jj].hint ? &*plan[jj].hint : nullptr;
+				std::optional<CN<N>> Hc = effects::back_propagate(*surf, plan[jj].left, *X, on, hint);
+				if (!Hc) {
+					Xe.reset();
+					continue;
 				}
-				// T^-1(X) = X - d (homogeneous: X - d w)
-				X = {exact::sub(X[0], exact::mul(exact::of(surf->dx), X[2])), exact::sub(X[1], exact::mul(exact::of(surf->dy), X[2])), X[2]};
-				continue;
+				if (Xe) {
+					if (const auto d = exact_data_hit(*surf, effs[jj], plan[jj].left, *Xe, *Hc)) {
+						Hc = d->first;
+						out.exact_hits.emplace(jj, d->first);
+						Xe = d->second;
+					} else {
+						Xe.reset();
+					}
+				}
+				X = Hc;
+				out.hits.emplace(jj, *Hc);
+				on_sid = surf->id;
+			} else if (is_transformative(effs[jj])) {
+				on_sid = -1;
+				X = effects::map_point(X, *surf, true);
+				if (Xe) {
+					Xe = exact_step_h(*Xe, *surf, max_limbs);
+				}
+				if (!X) {
+					out.at_infinity = true;
+					out.image.reset();
+					return out;
+				}
 			}
-			if (!surf->line) {
-				const auto &ec = surf->exact_circle();
-				std::optional<exact::Point3> inv = exact::invert_point_h(X, ec.C, ec.rw2);
-				if (!inv) {
-					return std::nullopt;
-				}
-				X = *inv;
-				if (max_limbs > 0 && X[2].precision_limbs() > max_limbs) {
-					return std::nullopt;
-				}
-				continue;
-			}
-			X = exact::reflect_point_h(X, surf->sx, surf->sy, surf->ex, surf->ey);
 		}
-		return X;
+		out.image = Xe;
+		return out;
+	}
+
+	// The aim image F_K^-1(cursor) as an exact homogeneous point, when every
+	// frame change of the plan is a rational map of exact data (Stage 113: a
+	// projective's hit point that is a data point counts); nullopt for a
+	// rotation portal, an image at infinity, a back-propagated hit point that
+	// is not exact data, or beyond max_limbs (0 = no budget).
+	std::optional<exact::Point3> exact_image_h(const CN<N> &cursor, const std::vector<PlanItem> &plan, int max_limbs,
+			const Flags &flags, size_t from_index = 0) const {
+		return backward_pass(plan, plan_effects(plan, flags), cursor, max_limbs, from_index).image;
 	}
 
 	// The aim image as float64 homogeneous coordinates with rigorous bounds,
@@ -1037,11 +1144,22 @@ private:
 			return nullptr; // a pre-transform frame: the initial beam is a circle
 		}
 		std::optional<std::array<EB, 3>> X = exact_image_approx(cursor, plan, flags);
-		if (!X) {
-			return nullptr;
-		}
 		const double px = player.fx();
 		const double py = player.fy();
+		if (!X) {
+			// Stage 113 (K11): through a projective whose hit point is a data point
+			// of its segment the image is exact data (never approximated): the
+			// line through it, or none
+			for (EffectType e : plan_effects(plan, flags)) {
+				if (is_projective(e)) {
+					if (const std::optional<exact::Point3> Xh = exact_image_cached(cursor, plan, flags)) {
+						return exact::Line::from_exact(exact::line_through_h(px, py, *Xh));
+					}
+					break;
+				}
+			}
+			return nullptr;
+		}
 		// a = -(y - py w), b = x - px w, c = a px + b py
 		const EB a = exact::esub(exact::emul(EB{py, 0.0}, (*X)[2]), (*X)[1]);
 		const EB b = exact::esub((*X)[0], exact::emul(EB{px, 0.0}, (*X)[2]));
@@ -1147,16 +1265,16 @@ private:
 			return build_simple(player, cursor, plan, effs, effects::scene_pre_q(scene_));
 		}
 		// backward: the targets of the sub-chains (a fork settled by the click)
-		std::optional<std::map<size_t, CN<N>>> H = backward_hits(plan, effs, cursor);
-		if (!H) {
+		const Backward bw = backward_pass(plan, effs, cursor, EXACT_IMAGE_LIMBS);
+		if (bw.at_infinity) {
 			return nullptr;
 		}
 		for (size_t j : proj) {
-			if (!H->count(j)) {
+			if (!bw.hits.count(j)) {
 				return nullptr; // an entry without a hit point: the greedy aim
 			}
 		}
-		return from_hits(player, cursor, plan, flags, effs, *H);
+		return from_hits(player, cursor, plan, flags, effs, bw);
 	}
 
 	// Exact: the point k lies on surf's carrier.
@@ -1176,38 +1294,17 @@ private:
 	// The backward pass: {projective entry index: H}, or nullopt when an image is at infinity.
 	std::optional<std::map<size_t, CN<N>>> backward_hits(const std::vector<PlanItem> &plan, const std::vector<EffectType> &effs,
 			const CN<N> &cursor) const {
-		std::map<size_t, CN<N>> hits;
-		std::optional<CN<N>> X = cursor;
-		int on_sid = -2; // the surface whose carrier X lies on (provenance)
-		for (size_t jj = plan.size(); jj-- > 0;) {
-			const Surf<N> *surf = scene_.find(plan[jj].surface_id);
-			if (surf == nullptr) {
-				continue;
-			}
-			if (is_projective(effs[jj])) {
-				const bool on = on_sid == surf->id || (on_sid == -2 && on_carrier(*surf, *X));
-				const effects::F32Point *hint = plan[jj].hint ? &*plan[jj].hint : nullptr;
-				std::optional<CN<N>> Hc = effects::back_propagate(*surf, plan[jj].left, *X, on, hint);
-				if (!Hc) {
-					continue;
-				}
-				X = Hc;
-				hits.emplace(jj, *Hc);
-				on_sid = surf->id;
-			} else if (is_transformative(effs[jj])) {
-				on_sid = -1;
-				X = effects::map_point(X, *surf, true);
-				if (!X) {
-					return std::nullopt;
-				}
-			}
+		const Backward b = backward_pass(plan, effs, cursor, EXACT_IMAGE_LIMBS);
+		if (b.at_infinity) {
+			return std::nullopt;
 		}
-		return hits;
+		return b.hits;
 	}
 
 	// The chain of sub-chains through the given projective hit points.
 	std::shared_ptr<const AnchorChain<N>> from_hits(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
-			const Flags &flags, const std::vector<EffectType> &effs, const std::map<size_t, CN<N>> &H) const {
+			const Flags &flags, const std::vector<EffectType> &effs, const Backward &bw) const {
+		const std::map<size_t, CN<N>> &H = bw.hits;
 		std::vector<size_t> proj;
 		for (size_t j = 0; j < plan.size(); j++) {
 			if (is_projective(effs[j])) {
@@ -1215,6 +1312,9 @@ private:
 			}
 		}
 		auto chain = std::make_shared<AnchorChain<N>>();
+		for (const auto &kv : bw.exact_hits) {
+			chain->exact_hits.emplace(int(kv.first), kv.second);
+		}
 		size_t a = 0;
 		CN<N> origin = player;
 		std::optional<CN<N>> exit_dir; // the exit at origin of the previous projective
@@ -1224,14 +1324,22 @@ private:
 			const CN<N> target = b < plan.size() ? H.at(b) : cursor;
 			std::vector<PlanItem> sub_plan(plan.begin() + long(a), plan.begin() + long(b));
 			std::vector<EffectType> sub_effs(effs.begin() + long(a), effs.begin() + long(b));
-			// the first epoch starts in the pre-transform's frame; after a projective the beam is straight
-			std::shared_ptr<const AnchorChain<N>> sub = build_simple(origin, target, sub_plan, sub_effs,
-				exit_dir ? std::nullopt : effects::scene_pre_q(scene_));
-			if (!sub) {
-				return nullptr;
+			std::vector<BeamPtr<N>> beams;
+			if (exit_dir && sub_plan.empty() && target.sub(origin).is_zero()) {
+				// Stage 113 (K12): the cursor exactly at the projective's departure
+				// point (its own hit point): the sub-chain is the exit beam alone,
+				// and the cursor on it is reached at once
+				beams = {std::make_shared<const Beam<N>>(Beam<N>{origin, exit_dir->unit(), origin.re.like(0.0)})};
+			} else {
+				// the first epoch starts in the pre-transform's frame; after a projective the beam is straight
+				std::shared_ptr<const AnchorChain<N>> sub = build_simple(origin, target, sub_plan, sub_effs,
+					exit_dir ? std::nullopt : effects::scene_pre_q(scene_));
+				if (!sub) {
+					return nullptr;
+				}
+				beams = sub->beams;
 			}
-			std::vector<BeamPtr<N>> beams = sub->beams;
-			if (exit_dir) {
+			if (exit_dir && !(sub_plan.empty() && target.sub(origin).is_zero())) {
 				// after a projective the beam leaves along its exit; when that
 				// points away from the target, the target is reached through
 				// infinity: the sub-chain's beams run the other way round
@@ -1255,11 +1363,10 @@ private:
 			chain->beams.insert(chain->beams.end(), beams.begin(), beams.end());
 			if (b < plan.size()) {
 				chain->hits.emplace(int(b), H.at(b));
-				if (b == proj.back()) {
-					std::shared_ptr<const exact::Line> L = exit_line(cursor, plan, flags, b);
-					if (L) {
-						chain->exit_lines.emplace(int(b), L);
-					}
+				// the exit line is exact when the target behind the projective is
+				// exact data (Stage 113: through later projectives at data points too)
+				if (std::shared_ptr<const exact::Line> L = exit_line(cursor, plan, flags, b)) {
+					chain->exit_lines.emplace(int(b), L);
 				}
 				origin = H.at(b);
 				exit_dir = effects::projective_exit(*scene_.find(plan[b].surface_id), plan[b].left, H.at(b));
@@ -1775,6 +1882,33 @@ private:
 	// Exact (K7): the current beam's exact circle passes the cursor. A float64
 	// distance first (an exact pass is a rounding away; the filter only spares
 	// the exact test), cached per record.
+	// The chain's exact hit points the beam's exact circle passes (K11; cached per record).
+	static const std::vector<CN<N>> &exact_hits_on_beam(Walk<N> &w, const Beam<N> &beam) {
+		if (w.rec_hits_of == w.rec) {
+			return w.rec_hits;
+		}
+		w.rec_hits_of = w.rec;
+		w.rec_hits.clear();
+		std::optional<exact::GCircle> g;
+		bool tried = false;
+		for (const auto &kv : w.chain->exact_hits) {
+			const CN<N> &c = kv.second;
+			const CN<N> q = beam.at(Backend<N>::param_of(beam, c));
+			const double scale = gd_maxf(1.0, gd_maxf(std::fabs(c.fx()), std::fabs(c.fy())));
+			if (!(q.sub(c).abs2().to_float() <= (1e-6 * scale) * (1e-6 * scale))) {
+				continue;
+			}
+			if (!tried) {
+				g = w.rec->exact();
+				tried = true;
+			}
+			if (g && exact::gc_passes(*g, c.fx(), c.fy())) {
+				w.rec_hits.push_back(c);
+			}
+		}
+		return w.rec_hits;
+	}
+
 	static bool cursor_on_beam(Walk<N> &w, const Beam<N> &beam) {
 		if (w.rec_cursor_of == w.rec) {
 			return w.rec_cursor_on;
@@ -1914,6 +2048,17 @@ private:
 		// departure point after it is the cursor exactly: reached at once)
 		if (w.cursor && w.rec && known_index(w.known, *w.cursor) < 0 && cursor_on_beam(w, beam)) {
 			w.known.push_back(Known<N>{*w.cursor, Backend<N>::param_of(beam, *w.cursor), -1, std::nullopt});
+		}
+		// Stage 113 (K11): a planned projective's hit point that is a data point
+		// of its segment is a known point of every beam whose exact circle
+		// passes it (an exact line has it through add_line_endpoints): the
+		// crossing there is the endpoint exactly, blocked on one side
+		if (w.chain && w.rec && !w.chain->exact_hits.empty()) {
+			for (const CN<N> &D : exact_hits_on_beam(w, beam)) {
+				if (known_index(w.known, D) < 0) {
+					w.known.push_back(Known<N>{D, Backend<N>::param_of(beam, D), -1, std::nullopt});
+				}
+			}
 		}
 		for (Known<N> &kp : w.known) {
 			snap(w, beam, cands, kp);
