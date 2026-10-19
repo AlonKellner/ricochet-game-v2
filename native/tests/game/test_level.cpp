@@ -90,12 +90,9 @@ TEST_CASE("level data: every level built natively equals the game's level dump")
 			continue;
 		}
 		const std::string rel = fs::relative(e.path(), ROOT / "data" / "levels").replace_extension("").generic_string();
-		std::string dump_name = rel;
-		for (char &c : dump_name) {
-			if (c == '/') {
-				c = '_';
-				dump_name.insert(size_t(&c - dump_name.data()), "_");
-			}
+		std::string dump_name;
+		for (const char c : rel) {
+			dump_name += c == '/' ? std::string("__") : std::string(1, c);
 		}
 		const fs::path dump = ROOT / "bench" / "scenes" / (dump_name + ".surfaces.json");
 		CAPTURE(rel);
