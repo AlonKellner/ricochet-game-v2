@@ -7,6 +7,7 @@
 #include "rc/arc_geom.hpp"
 #include "rc/ladder.hpp"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -671,5 +672,34 @@ private:
 		return through_infinity(bf, tf, tt, start, end, fid);
 	}
 };
+
+// Stage 116: the physical hits by surface (TracePath.physical_hits: the plan
+// overlays read them): for every step ending on a surface -- or on the wrap
+// through infinity (INFINITY_ID, the infinity plan entry's record) -- its side,
+// whether on the segment, whether the path goes on, and where.
+struct PhysicalHit {
+	int side = -1;
+	bool on_segment = false;
+	bool has_continuation = false;
+	V2 point;
+};
+
+// (the surfaces in the order first hit, as the GDScript Dictionary kept them)
+inline std::vector<std::pair<int, std::vector<PhysicalHit>>> physical_hits(const std::vector<TraceStep> &steps) {
+	std::vector<std::pair<int, std::vector<PhysicalHit>>> out;
+	for (size_t i = 0; i < steps.size(); i++) {
+		const TraceStep &s = steps[i];
+		if (s.surface_id < 0 && s.surface_id != INFINITY_ID) {
+			continue;
+		}
+		auto it = std::find_if(out.begin(), out.end(), [&](const auto &e) { return e.first == s.surface_id; });
+		if (it == out.end()) {
+			out.push_back({s.surface_id, {}});
+			it = out.end() - 1;
+		}
+		it->second.push_back({s.hit_side, s.hit_on_segment, i + 1 < steps.size(), s.end});
+	}
+	return out;
+}
 
 } // namespace rc

@@ -333,23 +333,24 @@ void TracePath::_bind_methods() {
 }
 
 Dictionary TracePath::physical_hits() const {
-	Dictionary result;
+	std::vector<rc::TraceStep> rs;
+	rs.reserve(size_t(steps.size()));
 	for (int64_t i = 0; i < steps.size(); i++) {
 		const Ref<TraceStep> s = steps[i];
-		// surfaces, and the wrap through infinity (INFINITY_ID: the infinity plan entry's record)
-		if (s.is_null() || (s->surface_id < 0 && s->surface_id != rc::INFINITY_ID)) {
-			continue;
+		rs.push_back(s.is_valid() ? s->to_rc() : rc::TraceStep{});
+	}
+	Dictionary result;
+	for (const auto &[sid, of_surface] : rc::physical_hits(rs)) {
+		Array list;
+		for (const rc::PhysicalHit &h : of_surface) {
+			Dictionary d;
+			d["side"] = h.side;
+			d["on_segment"] = h.on_segment;
+			d["has_continuation"] = h.has_continuation;
+			d["point"] = to_vec(h.point); // Stage 108: where (a planned piece checks it)
+			list.push_back(d);
 		}
-		if (!result.has(s->surface_id)) {
-			result[s->surface_id] = Array();
-		}
-		Dictionary h;
-		h["side"] = s->hit_side;
-		h["on_segment"] = s->hit_on_segment;
-		h["has_continuation"] = i < steps.size() - 1;
-		h["point"] = s->end; // Stage 108: where (a planned piece checks it)
-		Array list = result[s->surface_id];
-		list.push_back(h);
+		result[sid] = list;
 	}
 	return result;
 }
