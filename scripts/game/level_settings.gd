@@ -60,6 +60,7 @@ var _prefix := {}   # surface id -> its node name prefix (no entry: not drawn)
 # Stage 115.2: the specs of a level built from its data (LevelData.surfaces)
 var level_specs: Array = []
 var _blocks := false
+var _colliders = null   # the data's player-only colliders (PackedVector2Array: ends in pairs)
 
 # A level's data sets its fields before the children's _ready (they read the
 # bounds); its surfaces are built in _ready, as the arrays are.
@@ -74,6 +75,24 @@ func _enter_tree() -> void:
 	room_rect = LevelData.rect(data["room"]["rect"])
 	build_room = data["room"]["built"]
 	level_specs = LevelData.surfaces(data)
+	_colliders = PackedVector2Array()
+	for c: Dictionary in data["colliders"]:
+		_colliders.append(LevelData.vec(c["a"]))
+		_colliders.append(LevelData.vec(c["b"]))
+
+# Stage 117: the segments only the player collides with (floors), ends in
+# pairs: the level data's, else the scene's StaticBody2D segment shapes.
+func player_colliders() -> PackedVector2Array:
+	if _colliders != null:
+		return _colliders
+	var out := PackedVector2Array()
+	for child in get_children():
+		if child is StaticBody2D:
+			for c in child.get_children():
+				if c is CollisionShape2D and c.shape is SegmentShape2D:
+					out.append(child.position + c.position + c.shape.a)
+					out.append(child.position + c.position + c.shape.b)
+	return out
 
 # Whether the level has blocks (the sweeps bound their positions by its room then).
 func has_blocks() -> bool:

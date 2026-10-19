@@ -1,6 +1,6 @@
 // Stage 116.5: the native session (rcg::Session) against the session replay
-// golden: every teleport session (data/sessions) replays byte for byte to its
-// recording (bench/sessions, made by the GDScript game). RCG_SESSIONS_PART=k/n
+// golden: every session (data/sessions; the kinematic ones since Stage 117,
+// the native player controller) replays byte for byte to its recording (bench/sessions, made by the GDScript game). RCG_SESSIONS_PART=k/n
 // plays the k-th of every n sessions (the ctest entries rcg_sessions_{k}).
 #include "rcg/replay.hpp"
 
@@ -16,7 +16,7 @@
 
 namespace fs = std::filesystem;
 
-TEST_CASE("sessions: every teleport session replays natively, byte for byte") {
+TEST_CASE("sessions: every session replays natively, byte for byte") {
 	const fs::path root = RC_REPO_ROOT;
 	int part = 0, parts = 1;
 	if (const char *p = std::getenv("RCG_SESSIONS_PART")) {
@@ -36,9 +36,6 @@ TEST_CASE("sessions: every teleport session replays natively, byte for byte") {
 		}
 		std::ifstream in(scripts[k]);
 		const nlohmann::json script = nlohmann::json::parse(in);
-		if (script.value("kind", "teleport") != "teleport") {
-			continue;
-		}
 		const std::string name = scripts[k].stem().string();
 		CAPTURE(name);
 		std::ifstream gin(root / "bench" / "sessions" / (name + ".jsonl"));

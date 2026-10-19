@@ -58,6 +58,16 @@ std::vector<std::string> replay_session(const json &script, const std::string &l
 			}
 			extra["flight"] = {{"frames", f.frames}, {"stream", digest::sha(stream)},
 				{"end", f.stream.empty() ? json(nullptr) : digest::vec(f.stream.back().first)}};
+		} else if (op == "hold") {
+			std::vector<std::string> actions;
+			for (const json &a : step["actions"]) {
+				actions.push_back(a.get<std::string>());
+			}
+			json traj = json::array();
+			for (const V2 &p : s.hold(actions, step["ticks"].get<int>())) {
+				traj.push_back(digest::vec(p));
+			}
+			extra["trajectory"] = traj;
 		} else {
 			throw std::runtime_error("unsupported op " + op);
 		}

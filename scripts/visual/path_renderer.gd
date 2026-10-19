@@ -22,7 +22,7 @@ enum DisplayMode { MERGED, PHYSICAL, PLANNED }
 const DISPLAY_MODE_NAMES := ["MERGED", "PHYSICAL", "PLANNED"]
 
 var display_mode: int = DisplayMode.MERGED
-var _player: CharacterBody2D
+var _player: Node2D
 var _cursor: Node2D
 var _traced_path: TracePath = null
 var _planned_path: TracePath = null

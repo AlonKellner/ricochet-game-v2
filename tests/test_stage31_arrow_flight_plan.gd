@@ -98,7 +98,7 @@ func test_stage31_camera_returns_to_player() -> void:
 	var scene := _create_scene()
 	await get_tree().process_frame
 	var game_mgr: Node = scene.get_node("GameManager")
-	var player: CharacterBody2D = scene.get_node("Player")
+	var player: Node2D = scene.get_node("Player")
 	var camera: Camera2D = scene.get_node("Camera")
 	var cursor: Node2D = scene.get_node("Cursor")
 	cursor.global_position = Vector2(1200, 540)
@@ -138,7 +138,7 @@ func test_stage31_camera_returns_after_escape_flight() -> void:
 	var scene := _create_scene()
 	await get_tree().process_frame
 	var game_mgr: Node = scene.get_node("GameManager")
-	var player: CharacterBody2D = scene.get_node("Player")
+	var player: Node2D = scene.get_node("Player")
 	var camera: Camera2D = scene.get_node("Camera")
 	var cursor: Node2D = scene.get_node("Cursor")
 	var arrow: Node2D = scene.get_node("ArrowAnimator")

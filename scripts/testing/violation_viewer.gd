@@ -7,7 +7,7 @@ var _current_index: int = 0
 var _current_scene: Node = null
 var _current_scene_path: String = ""
 var _current_combo: Dictionary = {}
-var _player: CharacterBody2D
+var _player: Node2D
 var _cursor: Node2D
 var _path_renderer: Node2D
 var _game_mgr: Node

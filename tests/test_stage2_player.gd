@@ -1,6 +1,6 @@
 extends GutTest
 
-var _player: CharacterBody2D
+var _player: Node2D
 var _main_scene: Node
 
 func before_each() -> void:
@@ -13,9 +13,11 @@ func test_stage2_player_speed_constant() -> void:
 	assert_eq(_player.SPEED, 200.0, "Player speed should be 200")
 
 func test_stage2_player_collision_radius() -> void:
-	var collision_shape := _player.get_node("CollisionShape2D") as CollisionShape2D
-	var circle := collision_shape.shape as CircleShape2D
-	assert_eq(circle.radius, 12.0, "Player collision radius should be 12")
+	# Stage 117: the native controller's circle (rcg/kinematics.hpp)
+	assert_eq(_player.COLLISION_RADIUS, 12.0, "Player collision radius should be 12")
+	assert_eq(RcgKinematics.radius(), 12.0)
+	assert_eq(RcgKinematics.speed(), _player.SPEED)
+	assert_eq(RcgKinematics.jump_velocity(), _player.JUMP_VELOCITY)
 
 func test_stage2_player_initial_position() -> void:
 	assert_eq(_player.position, Vector2(960, 540), "Player should spawn at configured position")

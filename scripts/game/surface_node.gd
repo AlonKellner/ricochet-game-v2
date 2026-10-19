@@ -44,11 +44,6 @@ func setup(p_surface: Surface, p_piece = null) -> void:
 	_arc_cache = {}
 	add_to_group("surface_nodes")   # redrawn when the game state changes
 	_cached_left_outer = _is_left_outer()
-	if surface.player_solid:
-		if segment.is_line():
-			_add_collision_shape()
-		else:
-			_add_arc_collision_shape()
 	queue_redraw()
 
 func clear_hover() -> void:
@@ -362,51 +357,3 @@ static func arc_sample(center: Vector2, radius: float, start_angle: float, span:
 func _effect_color(config: SideConfig) -> Color:
 	return config_color(config)
 
-func _add_arc_collision_shape() -> void:
-	var ctr: Vector2
-	var r: float
-	var span: float
-	var seg_count: int
-	var sa: float
-	var ccw: bool
-	if segment.full:
-		var carrier := segment.get_carrier()
-		ctr = carrier.center()
-		r = carrier.radius()
-		span = TAU
-		seg_count = 16
-		sa = 0.0
-		ccw = true
-	else:
-		var p := _arc_params()
-		ctr = p["center"]
-		r = p["radius"]
-		span = p["span"]
-		seg_count = maxi(3, int(16.0 * span / TAU))
-		sa = (segment.start.coords - ctr).angle()
-		ccw = not p["clockwise"]
-	var body := StaticBody2D.new()
-	for i in seg_count:
-		var t0 := float(i) / seg_count
-		var t1 := float(i + 1) / seg_count
-		var a0 := sa + (t0 * span * (1.0 if ccw else -1.0))
-		var a1 := sa + (t1 * span * (1.0 if ccw else -1.0))
-		var p0 := ctr + Vector2(cos(a0), sin(a0)) * r
-		var p1 := ctr + Vector2(cos(a1), sin(a1)) * r
-		var collision := CollisionShape2D.new()
-		var shape := SegmentShape2D.new()
-		shape.a = p0
-		shape.b = p1
-		collision.shape = shape
-		body.add_child(collision)
-	add_child(body)
-
-func _add_collision_shape() -> void:
-	var body := StaticBody2D.new()
-	var collision := CollisionShape2D.new()
-	var shape := SegmentShape2D.new()
-	shape.a = segment.start.coords
-	shape.b = segment.end.coords
-	collision.shape = shape
-	body.add_child(collision)
-	add_child(body)

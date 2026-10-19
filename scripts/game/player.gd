@@ -1,8 +1,17 @@
-extends CharacterBody2D
+extends Node2D
+
+# Stage 117: the player moves by the native controller (rcg/kinematics.hpp,
+# RcgKinematics): a circle of COLLISION_RADIUS against the present
+# player-solid surfaces and the level's colliders, top-down or with gravity
+# (GAME_SPEC 25). The velocity and the floor state are the player's own.
 
 const SPEED := 200.0
 const COLLISION_RADIUS := 12.0
 const JUMP_VELOCITY := 400.0
+
+var velocity := Vector2.ZERO
+var _on_floor := false
+var _defs_cache := SceneDefsCache.new()
 
 func get_level_gravity() -> Vector2:
 	var parent := get_parent()
@@ -12,6 +21,9 @@ func get_level_gravity() -> Vector2:
 
 func has_level_gravity() -> bool:
 	return get_level_gravity().length_squared() > 0.0
+
+func is_on_floor() -> bool:
+	return _on_floor
 
 # The player faces the way the arrow will leave: the preview's first step
 # (a plan's second realization or a curved frame may point away from the
@@ -30,27 +42,19 @@ func _process(_delta: float) -> void:
 	if cursor:
 		visual.rotation = (cursor.global_position - global_position).angle()
 
-func _physics_process(delta: float) -> void:
-	var gravity_vec := get_level_gravity()
-
-	if has_level_gravity():
-		if not is_on_floor():
-			velocity += gravity_vec * delta
-		else:
-			velocity.y = 0.0
-
-		var horizontal := Input.get_axis("move_left", "move_right")
-		velocity.x = horizontal * SPEED
-
-		if is_on_floor() and Input.is_action_just_pressed("move_up"):
-			velocity.y = -JUMP_VELOCITY
-	else:
-		var input_dir := Vector2(
-			Input.get_axis("move_left", "move_right"),
-			Input.get_axis("move_up", "move_down"),
-		)
-		if input_dir.length_squared() > 0.0:
-			input_dir = input_dir.normalized()
-		velocity = input_dir * SPEED
-
-	move_and_slide()
+func _physics_process(_delta: float) -> void:
+	var level := get_parent()
+	var surfaces: Array = level.surfaces if level and "surfaces" in level else []
+	var gm := get_node_or_null("../GameManager")
+	var flags: Dictionary = gm.game_state.flags if gm != null and "game_state" in gm else {}
+	var colliders: PackedVector2Array = level.player_colliders() if level and level.has_method("player_colliders") else PackedVector2Array()
+	var input := {
+		"axis_x": Input.get_axis("move_left", "move_right"),
+		"axis_y": Input.get_axis("move_up", "move_down"),
+		"jump": Input.is_action_just_pressed("move_up"),
+	}
+	var body: Dictionary = RcgKinematics.step({"pos": global_position, "vel": velocity, "on_floor": _on_floor}, input,
+		get_level_gravity(), _defs_cache.defs(surfaces), flags, colliders)
+	global_position = body["pos"]
+	velocity = body["vel"]
+	_on_floor = body["on_floor"]

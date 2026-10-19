@@ -70,7 +70,7 @@ func test_stage32_undo_pops_from_stack() -> void:
 	var scene := _create_scene()
 	await get_tree().process_frame
 	var game_mgr: Node = scene.get_node("GameManager")
-	var player: CharacterBody2D = scene.get_node("Player")
+	var player: Node2D = scene.get_node("Player")
 	var cursor: Node2D = scene.get_node("Cursor")
 	var arrow: Node2D = scene.get_node("ArrowAnimator")
 
@@ -99,7 +99,7 @@ func test_stage32_full_reset_clears_stack() -> void:
 	var scene := _create_scene()
 	await get_tree().process_frame
 	var game_mgr: Node = scene.get_node("GameManager")
-	var player: CharacterBody2D = scene.get_node("Player")
+	var player: Node2D = scene.get_node("Player")
 	var cursor: Node2D = scene.get_node("Cursor")
 	var arrow: Node2D = scene.get_node("ArrowAnimator")
 	var initial_pos := player.global_position
@@ -125,7 +125,7 @@ func test_stage32_full_reset_restores_initial_state() -> void:
 	var scene := _create_scene()
 	await get_tree().process_frame
 	var game_mgr: Node = scene.get_node("GameManager")
-	var player: CharacterBody2D = scene.get_node("Player")
+	var player: Node2D = scene.get_node("Player")
 	var cursor: Node2D = scene.get_node("Cursor")
 	var arrow: Node2D = scene.get_node("ArrowAnimator")
 	var initial_pos := player.global_position
@@ -147,7 +147,7 @@ func test_stage32_checkpoint_saved_before_shot() -> void:
 	var scene := _create_scene()
 	await get_tree().process_frame
 	var game_mgr: Node = scene.get_node("GameManager")
-	var player: CharacterBody2D = scene.get_node("Player")
+	var player: Node2D = scene.get_node("Player")
 	var cursor: Node2D = scene.get_node("Cursor")
 	var arrow: Node2D = scene.get_node("ArrowAnimator")
 	var pre_fire_pos := player.global_position
@@ -166,12 +166,12 @@ func test_stage32_undo_indistinguishable_from_pre_shot() -> void:
 	var scene := _create_scene()
 	await get_tree().process_frame
 	var game_mgr: Node = scene.get_node("GameManager")
-	var player: CharacterBody2D = scene.get_node("Player")
+	var player: Node2D = scene.get_node("Player")
 	var cursor: Node2D = scene.get_node("Cursor")
 	var arrow: Node2D = scene.get_node("ArrowAnimator")
 
 	var pre_pos := player.global_position
-	var pre_vel := player.velocity
+	var pre_vel: Vector2 = player.velocity
 	var pre_plan_size: int = game_mgr.plan.entries.size()
 	var pre_targets_size: int = game_mgr.targets_hit.size()
 

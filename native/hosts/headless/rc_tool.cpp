@@ -8,7 +8,7 @@
 //   rc_tool replay <sessions dir> <levels dir> <out dir> [--only <substring>]
 //                                             the session scripts played natively (rcg::Session): one
 //                                             record per step, as the golden (bench/sessions) holds them;
-//                                             kinematic sessions are skipped (no native controller yet)
+//                                             (every session: the kinematic ones on the native controller)
 //
 // Exit status: 0 done, 1 a check failed or a file is invalid, 2 usage.
 #include "rcg/build.hpp"
@@ -163,26 +163,26 @@ int manifests(const std::vector<std::string> &args) {
 
 int replay(std::vector<std::string> args) {
 	std::string only;
-	if (args.size() == 5 && args[3] == "--only") {
-		only = args[4];
-		args.resize(3);
+	for (size_t i = 3; i < args.size();) {
+		if (args[i] == "--only" && i + 1 < args.size()) {
+			only = args[i + 1];
+			args.erase(args.begin() + long(i), args.begin() + long(i) + 2);
+		} else {
+			i++;
+		}
 	}
 	if (args.size() != 3) {
 		return usage();
 	}
 	const fs::path in = args[0], levels = args[1], out = args[2];
 	fs::create_directories(out);
-	int n = 0, skipped = 0;
+	int n = 0;
 	for (const fs::path &p : json_files({in.string()})) {
 		const std::string name = p.stem().string();
 		if (!only.empty() && name.find(only) == std::string::npos) {
 			continue;
 		}
 		const json script = json::parse(read(p));
-		if (script.value("kind", "teleport") != "teleport") {
-			skipped++;
-			continue;
-		}
 		try {
 			std::string text;
 			for (const std::string &l : rcg::replay_session(script, levels.string())) {
@@ -197,7 +197,7 @@ int replay(std::vector<std::string> args) {
 		}
 		n++;
 	}
-	std::cout << n << " sessions replayed, " << skipped << " kinematic skipped\n";
+	std::cout << n << " sessions replayed\n";
 	return 0;
 }
 

@@ -467,6 +467,26 @@ Flight Session::fire(int speedup_at, double frame_dt) {
 	return f;
 }
 
+std::vector<V2> Session::hold(const std::vector<std::string> &actions, int ticks) {
+	auto held = [&](const char *a) { return std::find(actions.begin(), actions.end(), a) != actions.end(); };
+	kinematics::Input in;
+	in.axis_x = float(held("move_right")) - float(held("move_left"));
+	in.axis_y = float(held("move_down")) - float(held("move_up"));
+	const std::vector<kinematics::Collider> colliders = kinematics::colliders_of(world_->surfaces(), flags_, level_);
+	kinematics::Body body{player_, velocity_, on_floor_};
+	std::vector<V2> out;
+	for (int k = 0; k < ticks; k++) {
+		// the engine reports the up action just pressed on the tick after the press
+		in.jump = k == 1 && held("move_up");
+		kinematics::step(body, in, gravity_, colliders);
+		out.push_back(body.pos);
+	}
+	player_ = body.pos;
+	velocity_ = body.vel;
+	on_floor_ = body.on_floor;
+	return out;
+}
+
 void Session::sync_nodes() {
 	const Pieces &pieces = world_->pieces();
 	std::vector<Node> kept;

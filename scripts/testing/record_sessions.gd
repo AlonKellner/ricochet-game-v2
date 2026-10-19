@@ -112,8 +112,7 @@ func _play(name: String, session: Dictionary) -> PackedStringArray:
 		match step["op"]:
 			"teleport":
 				player.global_position = _vec(step["at"], name)
-				if player is CharacterBody2D:
-					player.velocity = Vector2.ZERO
+				player.velocity = Vector2.ZERO
 			"cursor":
 				cursor.global_position = _vec(step["at"], name)
 			"click":

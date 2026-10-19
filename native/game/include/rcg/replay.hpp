@@ -10,8 +10,7 @@
 
 namespace rcg {
 
-// The records of a teleport session (throws std::runtime_error on an op it does
-// not play: a kinematic session's hold).
+// The records of a session (throws std::runtime_error on an op it does not know).
 std::vector<std::string> replay_session(const nlohmann::json &script, const std::string &levels_dir);
 
 } // namespace rcg
