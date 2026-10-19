@@ -169,32 +169,6 @@ def best_case(name, scene, plans, players):
     return best[1]
 
 
-def bare_carrier_cursor(surfs, plan, c):
-    """B6: a cursor exactly on a circle projective's carrier that is not one of its
-    data points aims at the other candidate (x_on_carrier), which the region
-    cannot follow off its points of interest: not a label (until the fork rule
-    prefers the on-segment candidate)."""
-    for sid, _side in plan:
-        s = next((x for x in surfs if x["id"] == sid), None)
-        if s is None or s["line"] or not s["left"]["type"].startswith("circle_"):
-            continue
-        if any(tuple(map(float, s[k])) == (float(c[0]), float(c[1])) for k in ("start", "end", "via")):
-            continue
-        x0, y0 = (Fraction(str(v)) for v in s["start"])
-        x1, y1 = (Fraction(str(v)) for v in s["end"])
-        x2, y2 = (Fraction(str(v)) for v in s["via"])
-        # the exact centre of the circle through the three points
-        d = 2 * (x0 * (y1 - y2) + x1 * (y2 - y0) + x2 * (y0 - y1))
-        if d == 0:
-            continue
-        ux = ((x0 * x0 + y0 * y0) * (y1 - y2) + (x1 * x1 + y1 * y1) * (y2 - y0) + (x2 * x2 + y2 * y2) * (y0 - y1)) / d
-        uy = ((x0 * x0 + y0 * y0) * (x2 - x1) + (x1 * x1 + y1 * y1) * (x0 - x2) + (x2 * x2 + y2 * y2) * (x1 - x0)) / d
-        cx, cy = Fraction(str(float(c[0]))), Fraction(str(float(c[1])))
-        if (cx - ux) ** 2 + (cy - uy) ** 2 == (x0 - ux) ** 2 + (y0 - uy) ** 2:
-            return True
-    return False
-
-
 def case(name, scene, player, plan, hints=None, extra=()):
     """hints: plan entry index -> the click (x, y), the fork of a circle projective;
     extra: cursors added to the grid."""
@@ -202,8 +176,6 @@ def case(name, scene, player, plan, hints=None, extra=()):
     sc = T.scene_from_json(surfs)
     labelled = []
     for c in cursors(surfs, player, plan, projective_cursors(sc, plan) + list(extra)):
-        if bare_carrier_cursor(surfs, plan, c):
-            continue
         v = V.visible(sc, player, c, plan, None, hints)
         if v is not None:
             labelled.append([c[0], c[1], bool(v)])

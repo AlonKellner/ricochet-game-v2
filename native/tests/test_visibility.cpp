@@ -420,7 +420,17 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 			if (comma == std::string::npos) comma = str.size();
 			const std::string tok = str.substr(pos, comma - pos);
 			if (!tok.empty()) {
-				plan.push_back(PlanItem{std::stoi(tok.substr(0, tok.size() - 1)), tok.back() == 'L', std::nullopt, std::nullopt});
+				// "5L" or "5L@650;370" (the click, Stage 114)
+				const size_t at = tok.find('@');
+				const std::string head = at == std::string::npos ? tok : tok.substr(0, at);
+				PlanItem item{std::stoi(head.substr(0, head.size() - 1)), head.back() == 'L', std::nullopt, std::nullopt};
+				if (at != std::string::npos) {
+					float hx = 0.0f;
+					float hy = 0.0f;
+					std::sscanf(tok.c_str() + at + 1, "%f;%f", &hx, &hy);
+					item.hint = effects::F32Point{hx, hy};
+				}
+				plan.push_back(item);
 			}
 			pos = comma + 1;
 		}

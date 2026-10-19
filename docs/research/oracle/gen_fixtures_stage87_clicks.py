@@ -112,17 +112,23 @@ def main():
         lp.add(str(f["hits"]["0"]))
     assert len(lp) == 1, lp
     # --- provenance: two entries on the same circle (the cursor beyond it);
-    # the first entry's target is the second's hit point, on the carrier: the
-    # candidate at it is excluded, even when clicked
-    for tag, click in (("at_target", None), ("clicked_target", "H2")):
+    # the first entry's target is the second's hit point, on the carrier: that
+    # candidate is the target exactly, and the fork rule chooses (Stage 114;
+    # before, it was excluded): clicked, the first hit is the second's point
+    # (the beam meets the entry again after its loop); clicked away, the other
+    for tag in ("clicked_other", "clicked_target"):
         base = fixture("tmp", [cn] + walls, player, plan=[(1, "LEFT"), (1, "RIGHT")], mode="planned",
                        cursor=(900.0, 100.0))
         h2 = complex(*[float(v) for v in with_hits(base)["hits"]["1"]])
-        c1 = (h2.real, h2.imag) if click == "H2" else (390.0, -160.0)
+        other = complex(1000.0, 0.0) - h2          # the antipode on this circle (centre (500, 0))
+        c1 = (h2.real, h2.imag) if tag == "clicked_target" else (other.real, other.imag)
         f = with_hits(fixture("cn_twice_%s_planned" % tag, [cn] + walls, player,
                               plan=[(1, "LEFT", c1), (1, "RIGHT")], mode="planned", cursor=(900.0, 100.0)))
         fx.append(f)
-        assert abs(hit(f, 0) - hit(f, 1)) > 1, "the first hit is never the second one"
+        if tag == "clicked_target":
+            assert abs(hit(f, 0) - hit(f, 1)) == 0, "clicked at the second's point: the first hit is that point exactly"
+        else:
+            assert abs(hit(f, 0) - hit(f, 1)) > 1, "clicked at the antipode: the other candidate"
     # --- a fork after a mirror (a chord inside the circle): the target pulled
     # back through the mirror lies inside the circle. The candidate whose exit
     # crosses the mirror before the pulled-back point realizes the plan; the

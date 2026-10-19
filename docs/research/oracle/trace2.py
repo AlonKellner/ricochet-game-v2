@@ -550,6 +550,7 @@ class StackEntry:
     q: object = None            # the frame's image of infinity before the push (restored by the pop)
     pole: object = None         # the exact pole record before the push (Stage 105)
     gc: object = None           # the exact generalized circle before the push (Perf P2b)
+    through_c: object = None
 
 
 @dataclass
@@ -576,6 +577,7 @@ class Walk:
     flags: dict = field(default_factory=dict)
     flags_before: dict = field(default_factory=dict)   # flags the current event resolved under
     proj_hits: dict = field(default_factory=dict)      # projective entry index -> (H, exact exit line or None, exact-data H or None)
+    through_c: object = None                           # K15: the exact homogeneous centre (nx, ny, w) the current beam passes by provenance (a circle normal's exit), or None
     on_plan: bool = True                               # on the planned beams: every projective fired at its H
     Q: object = None                                   # the current frame's image of infinity (None = inf)
     # Stage 105: the exact pole record (Qx, Qy, Dx, Dy), Fractions: the frame's
@@ -1177,6 +1179,8 @@ def _project(walk: Walk, beam, t, surf: Surface, side, pt, pt_exact):
     walk.known = [(pt, mp.mpf(0), surf.id)] if pt_exact else []
     walk.line = None
     walk.gc = None
+    # K15: the exit of a circle normal passes the circle's centre, exactly, whatever the rounding of pt
+    walk.through_c = _center_h(seg)[:3] if etype == "circle_normal_projection" else None
     if pt_exact:
         # exact data line: through pt along the axis (exact for line normals,
         # full-circle radii and directional normals)
@@ -1330,12 +1334,13 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
         walk.gc = top.gc
         walk.Q = top.q
         walk.pole = top.pole
+        walk.through_c = top.through_c
         return top.beam, top.sid, t_res, False
     other = _other_root(beam, surf, t, fresh, depart, t0, pt)
     portal = surf.portal()
     pop_id = portal[2] if portal is not None else surf.id
     walk.stack.append(StackEntry(beam, surf.id, t, other, walk.known, walk.line, pop_id, map_kind(surf, etype), walk.Q,
-                                 walk.pole, walk.gc))
+                                 walk.pole, walk.gc, walk.through_c))
     walk.pole = _pole_apply(walk.pole, walk.Q, walk.line, surf)
     walk.Q = map_point(walk.Q, surf)
     nb = apply_effect(beam, t, surf, etype, pt)
@@ -1345,6 +1350,13 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
         return nb, pop_id, mp.mpf(0), True
     walk.known = [(pt, mp.mpf(0), surf.id)] if pt_exact else []
     walk.known += [(k, nb.param_of(k), None) for k, _, _ in old_known if k != pt and incident(k, surf)]
+    through_c = walk.through_c
+    walk.through_c = None
+    if through_c is not None and surf.seg.kind != "line" and _same_center_h(through_c, _center_h(surf.seg)[:3]):
+        # K15: an inversion centred on a point the beam passes by provenance maps
+        # the line to itself (the centre becoming the frame's image of infinity):
+        # straight, never the circle of enormous radius the rounded beam gives
+        nb = Beam(nb.p, nb.tau, mp.mpf(0))
     if walk.line is not None and surf.seg.kind == "line":
         walk.line = reflect_line_data(walk.line, surf.seg)
         walk.gc = gc_from_line(walk.line)
@@ -1362,6 +1374,11 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
             # known point): its image is exactly a line
             nb = Beam(nb.p, nb.tau, mp.mpf(0))
     return nb, surf.id, mp.mpf(0), True
+
+
+def _same_center_h(a, b):
+    """Exact: two homogeneous centres (nx, ny, w) are one point."""
+    return a[0] * b[2] == b[0] * a[2] and a[1] * b[2] == b[1] * a[2]
 
 
 def _center_h(seg):
@@ -1627,16 +1644,31 @@ def projective_exit(surf, side, cfg, H, axis):
     return axis * sgn
 
 
-def back_propagate(surf, side, X, flags=None, x_on_carrier=False, click=None):
-    """The hit point: the candidate nearest the point the player clicked --
-    by default the segment's midpoint (its via point). A circle projective
-    has two candidates (both exit lines pass through X; one may reach X only
-    through infinity): a fork, settled at planning time by the click. None
-    without a candidate."""
+def back_propagate(surf, side, X, flags=None, x_on_carrier=False, click=None, exact_target=None):
+    """The hit point (GAME_SPEC 13.3, the fork rule of Stage 114): of the
+    candidates, those on the segment are preferred; among what remains, the one
+    nearest the point the player clicked -- by default the segment's midpoint
+    (its via point). With no candidate on the segment the click picks an
+    off-segment one (a planned-only firing). A circle projective has two
+    candidates (both exit lines pass through X; one may reach X only through
+    infinity): a fork, settled at planning time. exact_target: X as exact data
+    (K11): a candidate that is a data point of the segment is that point
+    exactly before the on-segment test, never its rounding. None without a
+    candidate."""
     c = back_propagate_candidates(surf, side, X, flags, x_on_carrier)
     if not c:
         return None
     pool = [H for H, _ in c]
+    if exact_target is not None:
+        cfg = surf.cfg(side, flags)
+        snapped = []
+        for H in pool:
+            D = _exact_data_hit(surf, cfg["type"], cfg, exact_target, H)
+            snapped.append(H if D is None else D)
+        pool = snapped
+    on = [H for H in pool if on_segment(surf.seg, H)]
+    if on:
+        pool = on
     if len(pool) == 1:
         return pool[0]
     point = P(click) if click is not None else surf.seg.V
@@ -1652,7 +1684,7 @@ def back_propagate_candidates(surf, side, X, flags=None, x_on_carrier=False):
     side and the exact exit rule, reaches X directly). x_on_carrier
     (provenance: X is the hit point of a later projective entry on this
     surface, or the cursor exactly on its carrier): X is itself a candidate
-    and is excluded -- the beam must reach X from the other one."""
+    and is X exactly (Stage 114; before, it was excluded)."""
     cfg = surf.cfg(side, flags)
     etype = cfg["type"]
     seg = surf.seg
@@ -1694,7 +1726,10 @@ def back_propagate_candidates(surf, side, X, flags=None, x_on_carrier=False):
         return P(cfg["normal"])
 
     if x_on_carrier and len(cands) == 2:
-        cands = [max(cands, key=lambda H: abs(X - H))]
+        # provenance: X is itself a candidate -- that one is X exactly (Stage 114:
+        # the fork rule chooses between X and the other, as for any fork)
+        i = min(range(2), key=lambda k: abs(X - cands[k]))
+        cands[i] = X
 
     def direct(H):
         return dot(X - H, projective_exit(surf, side, cfg, H, axis_at(H))) > 0
@@ -1898,7 +1933,7 @@ def _backward(surfaces, plan, cursor, flags=None, hints=None, start=0):
         eff, f = res[j]
         if eff in PROJECTIVE:
             on = on_sid == sid or (on_sid is None and incident(z, by_id[sid]))
-            H = back_propagate(by_id[sid], side, z, f, on, hints.get(j))
+            H = back_propagate(by_id[sid], side, z, f, on, hints.get(j), Xe)
             if H is None:
                 Xe = None
                 continue
@@ -1909,6 +1944,10 @@ def _backward(surfaces, plan, cursor, flags=None, hints=None, start=0):
                     H = D
                     exact_hits[j] = D
                     Xe = FC(D)
+                elif on and H == z:
+                    # the target itself, exactly (provenance): an exact hit point, the
+                    # exact image through it unchanged (Stage 114, K12 for circles)
+                    exact_hits[j] = H
                 else:
                     Xe = None
             z = H

@@ -188,7 +188,9 @@ func test_click_settles_fork():
 			assert_eq(ce.size(), 1, n + ": the cursor is reached")
 			if ce.size() == 1:
 				assert_almost_eq(Vector2(ce[0].point.fx(), ce[0].point.fy()), cur, Vector2(1e-6, 1e-6), n + ": exactly at the cursor")
-	# a click on the other half takes the other candidate (as the oracle)
+	# Stage 114 (the fork rule): arc 9 is a semicircle, so the other candidate is
+	# off it -- a click on the other half changes nothing (as the oracle; before,
+	# the click took the off-arc candidate and lost the cursor)
 	_check_fixture("fork_other_click_planned")
 	var a := _walk("user_capture_1_planned", NumCtx.f64())
 	var b := _walk("fork_other_click_planned", NumCtx.f64())
@@ -197,7 +199,7 @@ func test_click_settles_fork():
 			if e.kind == "hit" and e.surface_id == 9 and e.applied:
 				return Vector2(e.point.fx(), e.point.fy())
 		return null
-	assert_ne(hit9.call(a), hit9.call(b), "the click picks the hit point")
+	assert_eq(hit9.call(a), hit9.call(b), "the on-arc candidate, whatever the click")
 	# no click: the segment's midpoint is the default click -- here it picks
 	# the on-arc candidate too (one pick, no search)
 	var ctx := NumCtx.f64()
