@@ -177,12 +177,15 @@ std::vector<Candidate<N>> back_propagate_candidates(const Surf<N> &surf, bool le
 			cands = {X.sub(n.scale(b.neg().add(sq).div(two_a))), X.sub(n.scale(b.neg().sub(sq).div(two_a)))};
 		}
 	}
-	if (x_on_carrier && cands.size() == 2) {
-		// provenance: X is itself a candidate -- that one is X exactly (Stage 114:
-		// the fork rule chooses between X and the other; before, X was excluded)
-		const double d0 = X.sub(cands[0]).abs2().to_float();
-		const double d1 = X.sub(cands[1]).abs2().to_float();
-		cands[d0 <= d1 ? 0 : 1] = X;
+	if (x_on_carrier && !cands.empty()) {
+		// provenance: X is itself a candidate -- that one is X exactly, in every
+		// tier (Stage 114: the fork rule chooses between X and the other; before,
+		// X was excluded)
+		size_t i = 0;
+		if (cands.size() == 2 && X.sub(cands[1]).abs2().to_float() < X.sub(cands[0]).abs2().to_float()) {
+			i = 1;
+		}
+		cands[i] = X;
 	}
 	std::vector<Candidate<N>> out;
 	for (const CN<N> &H : cands) {
