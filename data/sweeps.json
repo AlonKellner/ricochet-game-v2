@@ -1,0 +1,25 @@
+{
+ "schema": "rc-sweeps/1",
+ "about": "The invariant sweeps' inputs (Workflow W2): every group a sweep call site of the GUT sweep files, in the order make manifests ran them (test_invariant_sweep, test_invariant_combos, test_stage107_level_sweep, test_stage108_level_sweep, test_visibility_sweep). rc_tool manifests expands them into bench/sweeps/<level>__<seq>.json (seq counts the manifests of a level's base name, in order). docs/TDD_21_NATIVE_GAME_MODEL.md.",
+ "lists": {
+  "plan_levels": ["test_levels/three_mirrors", "test_levels/mirror_and_wall", "test_levels/parallel_mirrors", "test_levels/divergence_room", "test_levels/room_with_mirror", "test_levels/two_mirrors", "test_levels/room_with_inversion", "test_levels/full_circle_mirror"],
+  "playground_plan_levels": ["playground/plannable_inversion", "playground/portals", "playground/two_sided", "playground/pre_inverted", "playground/tangent_infinity"],
+  "projective_levels": ["playground/projective", "playground/projective_lines", "playground/projective_arcs", "playground/directional_lines", "playground/directional_arcs"],
+  "projective_playground_levels": ["playground/projective", "playground/projective_lines", "playground/projective_arcs", "playground/directional_lines", "playground/directional_arcs", "playground/projective_inversion", "playground/projective_concentric"]
+ },
+ "groups": [
+  {"name": "every test level", "levels": [{"dir": "test_levels"}], "plans": "empty", "positions": {"rule": "sweep", "grid": 5, "fuzz": 10, "seed": 42}, "skip_equal": false},
+  {"name": "plans", "levels": [{"list": "plan_levels"}], "plans": "reflective+inversion", "skip_if_no_plans": true, "positions": {"rule": "bounded", "grid": 5, "fuzz": 10, "seed": 42, "poi": true}},
+  {"name": "playground plans", "levels": [{"list": "playground_plan_levels"}], "plans": "empty+scene", "positions": {"rule": "bounded", "grid": 4, "fuzz": 6, "seed": 103, "q0": true, "on_surface": true}, "carrier_cursors": true},
+  {"name": "infinity plans", "levels": [{"list": "plan_levels"}, {"list": "playground_plan_levels"}], "plans": "infinity", "positions": {"rule": "bounded", "grid": 4, "fuzz": 6, "seed": 88, "q0": true, "on_surface": true}, "carrier_cursors": true},
+  {"name": "projective plans", "levels": [{"list": "projective_levels"}], "plans": "projective", "positions": {"rule": "bounded", "grid": 4, "fuzz": 6, "seed": 87}},
+  {"name": "combos", "combos": true, "plans": "empty", "positions": {"rule": "bounded", "grid": 5, "fuzz": 10, "seed": 42, "poi": true}},
+  {"name": "hit_effects after spawns", "levels": ["test_levels/hit_effects"], "shots": [[[300, 220], [400, 220]], [[300, 390], [400, 390]], [[300, 560], [400, 560]], [[800, 400], [900, 400]]], "plans": "empty", "positions": {"rule": "sweep", "grid": 3, "fuzz": 4, "seed": 108}, "skip_equal": false},
+  {"name": "crossings after the spawn", "levels": ["test_levels/crossings"], "shots": [[[300, 800], [400, 800]]], "plans": "empty", "positions": {"rule": "sweep", "grid": 3, "fuzz": 4, "seed": 209}, "skip_equal": false},
+  {"name": "visibility, no plan", "levels": [{"dir": "test_levels"}, {"list": "playground_plan_levels"}], "plans": "empty", "skip_if_no_plans": true, "positions": {"rule": "bounded", "grid": 4, "fuzz": 6, "seed": 110, "q0": true, "on_surface": true}, "visibility": true, "carrier_cursors": true},
+  {"name": "visibility, plans", "levels": [{"list": "plan_levels"}], "plans": "reflective+inversion", "skip_if_no_plans": true, "positions": {"rule": "bounded", "grid": 4, "fuzz": 6, "seed": 111, "q0": true, "on_surface": true}, "visibility": true, "carrier_cursors": true},
+  {"name": "visibility, playground plans", "levels": [{"list": "playground_plan_levels"}], "plans": "scene", "skip_if_no_plans": true, "positions": {"rule": "bounded", "grid": 4, "fuzz": 6, "seed": 112, "q0": true, "on_surface": true}, "visibility": true, "carrier_cursors": true},
+  {"name": "visibility, infinity plans", "levels": [{"list": "plan_levels"}, {"list": "playground_plan_levels"}], "plans": "infinity", "skip_if_no_plans": true, "positions": {"rule": "bounded", "grid": 4, "fuzz": 6, "seed": 113, "q0": true, "on_surface": true}, "visibility": true, "carrier_cursors": true},
+  {"name": "visibility, projective plans", "levels": [{"list": "projective_playground_levels"}], "plans": "empty+projective+composition", "skip_if_no_plans": true, "positions": {"rule": "bounded", "grid": 4, "fuzz": 6, "seed": 114, "q0": true, "on_surface": true}, "visibility": true, "carrier_cursors": true}
+ ]
+}

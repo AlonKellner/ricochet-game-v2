@@ -3,6 +3,8 @@
 //   rc_tool fmt [--check] <file or dir>...    the canonical spelling (rcg/canon.hpp) of JSON data;
 //                                             --check: list the files not in it, exit 1 if any
 //   rc_tool dumps <levels dir> <out dir>       every level's scene defs (bench/scenes/<dir>__<name>.surfaces.json)
+//   rc_tool manifests <sweeps recipes> <levels dir> <out dir>
+//                                             the sweep manifests (bench/sweeps) from data/sweeps.json
 //   rc_tool replay <sessions dir> <levels dir> <out dir> [--only <substring>]
 //                                             the session scripts played natively (rcg::Session): one
 //                                             record per step, as the golden (bench/sessions) holds them;
@@ -14,6 +16,7 @@
 #include "rcg/level.hpp"
 #include "rcg/digest.hpp"
 #include "rcg/replay.hpp"
+#include "rcg/sweeps.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -33,6 +36,7 @@ namespace {
 int usage() {
 	std::cerr << "usage: rc_tool fmt [--check] <file or dir>...\n"
 				 "       rc_tool dumps <levels dir> <out dir>\n"
+				 "       rc_tool manifests <sweeps recipes> <levels dir> <out dir>\n"
 				 "       rc_tool replay <sessions dir> <levels dir> <out dir> [--only <substring>]\n";
 	return 2;
 }
@@ -138,6 +142,25 @@ int dumps(const std::vector<std::string> &args) {
 	return 0;
 }
 
+int manifests(const std::vector<std::string> &args) {
+	if (args.size() != 3) {
+		return usage();
+	}
+	try {
+		const auto ms = rcg::sweeps::manifests(json::parse(read(args[0])), args[1]);
+		for (const auto &[name, m] : ms) {
+			if (!write(fs::path(args[2]) / name, rcg::canonical(m))) {
+				return 1;
+			}
+		}
+		std::cout << ms.size() << " sweep manifests in " << args[2] << "\n";
+	} catch (const std::exception &e) {
+		std::cerr << e.what() << "\n";
+		return 1;
+	}
+	return 0;
+}
+
 int replay(std::vector<std::string> args) {
 	std::string only;
 	if (args.size() == 5 && args[3] == "--only") {
@@ -191,6 +214,9 @@ int main(int argc, char **argv) {
 	}
 	if (cmd == "dumps") {
 		return dumps(args);
+	}
+	if (cmd == "manifests") {
+		return manifests(args);
 	}
 	if (cmd == "replay") {
 		return replay(args);

@@ -71,3 +71,32 @@ TEST_CASE("numerics: Transform2D and the spawn frame's vector expressions, as th
 	}
 	CHECK(n == 200);
 }
+
+#include "rcg/rng.hpp"
+
+TEST_CASE("numerics: Godot's RandomNumberGenerator, as the engine draws it") {
+	std::ifstream in(std::string(RC_REPO_ROOT) + "/tests/data/godot_rng.json");
+	REQUIRE(in.good());
+	const json doc = json::parse(in);
+	const json &bounds = doc["bounds"];
+	int n = 0;
+	for (const json &c : doc["cases"]) {
+		const auto seed = std::uint64_t(c["seed"].get<std::int64_t>());
+		CAPTURE(seed);
+		rcg::GodotRng a(seed);
+		for (const json &v : c["randi"]) {
+			CHECK(a.randi() == v.get<std::uint32_t>());
+		}
+		rcg::GodotRng b(seed);
+		for (const json &v : c["randf"]) {
+			CHECK(double(b.randf()) == hexf(v));
+		}
+		rcg::GodotRng r(seed);
+		for (size_t i = 0; i < c["randf_range"].size(); i++) {
+			const json &bd = bounds[i % bounds.size()];
+			CHECK(double(r.randf_range(float(hexf(bd[0])), float(hexf(bd[1])))) == hexf(c["randf_range"][i]));
+		}
+		n++;
+	}
+	CHECK(n == 17);
+}
