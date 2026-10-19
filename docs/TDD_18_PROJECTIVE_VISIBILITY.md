@@ -15,7 +15,7 @@ Specification: GAME_SPEC §15 (§15.1 the pencil's poles, §15.2 the pencil, §1
 | 113.4 | Compositions: a mirror or an inversion after the projective, before it, two projectives, projective-first plans (two halves) | Done |
 | 113.5 | GUT: the visibility sweep without its projective filter plus a projective sweep; the native level loops with projective plans; the Stage 113 GUT test (`tests/test_stage113_projective_visibility.gd`); the seven new sweep manifests | Done |
 | 113.6 | Goldens: `regions.json` grown (26 projective regions, 12 for the new dumps; no existing hash changed); the K11 sweep and corpus goldens and K14's frame-id relabelling judged (`make judge RULES=stage113`: 22 exact-exit combos, 5702 frame-id combos, 42 corpus fields, 0 findings) -- re-blessed with the user's approval (2026-10-19), B11's four digests too; docs | Done |
-| 113.7 | Interactive sign-off | Not started |
+| 113.7 | Interactive sign-off (user, 2026-10-19) | Done |
 
 **Workflow:** branch `projective-visibility`, `make gate` per commit, `make gates` per phase (docs/WORKFLOW.md).
 
