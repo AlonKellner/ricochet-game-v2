@@ -200,9 +200,11 @@ TEST_CASE("infinity: with the switch on every older fixture differs from its gol
 	// ones (docs/research/stage88b_fixture_diff.md, updated for Stage 101): 32
 	// of the 115 fixtures change, 83 infinity events, 8 traces cut earlier;
 	// since Stage 111's re-bless (11 fixtures realized by the plan's first
-	// entry, GAME_SPEC 13.1) 87 infinity events and 9 cuts
-	CHECK(changed == 32);
-	CHECK(inserted == 87);
+	// entry, GAME_SPEC 13.1) 87 infinity events and 9 cuts; since Stage 114's
+	// (the fork rule: fork_other_click_planned and the two cn_twice cases take
+	// the on-segment or the clicked candidate) 31 fixtures, 84 events
+	CHECK(changed == 31);
+	CHECK(inserted == 84);
 	CHECK(cut == 9);
 }
 

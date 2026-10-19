@@ -302,11 +302,14 @@ def test_back_propagate_click_decides_outside_too():
         assert T.back_propagate(s, T.LEFT, X, click=(float(H.real), float(H.imag))) == H
 
 
-def test_back_propagate_provenance_excludes_target_even_when_clicked():
+def test_back_propagate_provenance_makes_the_target_its_own_candidate():
+    # Stage 114: a target on the carrier is one of its candidates, exactly; the
+    # fork rule chooses between it and the other (before, it was excluded)
     s = _circle_normal()
     X = P((500.0, 200.0))                    # on the carrier
-    H = T.back_propagate(s, T.LEFT, X, x_on_carrier=True, click=(500.0, 200.0))
-    assert abs(H - X) > 100
+    assert T.back_propagate(s, T.LEFT, X, x_on_carrier=True, click=(500.0, 200.0)) == X
+    other = T.back_propagate(s, T.LEFT, X, x_on_carrier=True, click=(500.0, -200.0))
+    assert abs(other - X) > 100
 
 
 def test_line_projective_ignores_click():

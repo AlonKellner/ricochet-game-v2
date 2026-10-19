@@ -93,10 +93,12 @@ func test_a_circle_normal_fork_follows_the_click():
 	near_upper.click = Vector2(650, 230)
 	var r_lower := _region(surfaces, player, [near_lower])
 	var r_upper := _region(surfaces, player, [near_upper])
+	# Stage 114 (the fork rule): the upper candidate is off the arc, so the lower
+	# one wins whatever the click (before, the click near the upper one lost the cursor)
 	assert_eq(r_lower.contains(cursor), 1, "the click near the lower candidate: the cursor on its converging ray")
-	assert_eq(r_upper.contains(cursor), 0, "the click near the upper candidate (off the arc): the plan never reaches it")
+	assert_eq(r_upper.contains(cursor), 1, "the click near the upper candidate (off the arc): the on-arc one wins anyway")
 	assert_eq(_preview_visible(surfaces, player, cursor, [near_lower]), true, "the preview agrees (lower)")
-	assert_eq(_preview_visible(surfaces, player, cursor, [near_upper]), false, "the preview agrees (upper)")
+	assert_eq(_preview_visible(surfaces, player, cursor, [near_upper]), true, "the preview agrees (upper)")
 	_assert_pinned(surfaces, player, [near_lower], "circle normal, click lower")
 	_assert_pinned(surfaces, player, [near_upper], "circle normal, click upper")
 

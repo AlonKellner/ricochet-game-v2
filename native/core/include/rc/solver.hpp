@@ -216,6 +216,7 @@ struct StackEntry {
 	std::optional<exact::ExactPole> pole; // the exact pole record before the push (Stage 105)
 	int pole_serial = 0;
 	std::shared_ptr<const exact::BeamRec> rec; // the exact beam before the push (Perf P2b)
+	const Surf<N> *through_c = nullptr;        // K15: the provenance before the push (restored by the pop)
 };
 
 template <Num N>
@@ -293,6 +294,7 @@ struct Walk {
 	int epoch = 0;
 	std::vector<Known<N>> known;
 	std::shared_ptr<const exact::Line> line;
+	const Surf<N> *through_c = nullptr; // K15 (Stage 114): the circle normal whose centre the current beam passes by provenance (its exit)
 	std::map<std::tuple<double, double, int>, bool> incidence;
 	std::shared_ptr<const exact::Line> tangent_line;
 	std::map<int, bool> tangent;
@@ -972,22 +974,42 @@ public:
 			if (is_projective(effs[jj])) {
 				const bool on = on_sid == surf->id || (on_sid == -2 && on_carrier(*surf, *X));
 				const effects::F32Point *hint = plan[jj].hint ? &*plan[jj].hint : nullptr;
-				std::optional<CN<N>> Hc = effects::back_propagate(*surf, plan[jj].left, *X, on, hint);
-				if (!Hc) {
+				const auto cands = effects::back_propagate_candidates(*surf, plan[jj].left, *X, on);
+				if (cands.empty()) {
 					Xe.reset();
 					continue;
 				}
+				// Stage 114: a candidate that is a data point of the segment is that
+				// point exactly (K11) before the fork rule's segment test
+				std::vector<CN<N>> pool;
+				std::vector<std::optional<std::pair<CN<N>, exact::Point3>>> snaps;
+				for (const effects::Candidate<N> &k : cands) {
+					std::optional<std::pair<CN<N>, exact::Point3>> d;
+					if (Xe) {
+						d = exact_data_hit(*surf, effs[jj], plan[jj].left, *Xe, k.h);
+					}
+					pool.push_back(d ? d->first : k.h);
+					snaps.push_back(d);
+				}
+				const CN<N> Hc = effects::choose_candidate(*surf, pool, hint);
+				size_t pick = 0;
+				while (pick + 1 < pool.size() && !pool[pick].sub(Hc).is_zero()) {
+					pick++;
+				}
 				if (Xe) {
-					if (const auto d = exact_data_hit(*surf, effs[jj], plan[jj].left, *Xe, *Hc)) {
-						Hc = d->first;
-						out.exact_hits.emplace(jj, d->first);
-						Xe = d->second;
+					if (snaps[pick]) {
+						out.exact_hits.emplace(jj, snaps[pick]->first);
+						Xe = snaps[pick]->second;
+					} else if (on && Hc.sub(*X).is_zero()) {
+						// the target itself, exactly (provenance): an exact hit point, the
+						// exact image through it unchanged (Stage 114, K12 for circles)
+						out.exact_hits.emplace(jj, Hc);
 					} else {
 						Xe.reset();
 					}
 				}
 				X = Hc;
-				out.hits.emplace(jj, *Hc);
+				out.hits.emplace(jj, Hc);
 				on_sid = surf->id;
 			} else if (is_transformative(effs[jj])) {
 				on_sid = -1;
@@ -1318,6 +1340,7 @@ private:
 		size_t a = 0;
 		CN<N> origin = player;
 		std::optional<CN<N>> exit_dir; // the exit at origin of the previous projective
+		const Surf<N> *through_c = nullptr; // K15: the circle normal the current epoch leaves
 		std::vector<size_t> bounds = proj;
 		bounds.push_back(plan.size());
 		for (size_t b : bounds) {
@@ -1333,7 +1356,7 @@ private:
 			} else {
 				// the first epoch starts in the pre-transform's frame; after a projective the beam is straight
 				std::shared_ptr<const AnchorChain<N>> sub = build_simple(origin, target, sub_plan, sub_effs,
-					exit_dir ? std::nullopt : effects::scene_pre_q(scene_));
+					exit_dir ? std::nullopt : effects::scene_pre_q(scene_), through_c);
 				if (!sub) {
 					return nullptr;
 				}
@@ -1369,15 +1392,19 @@ private:
 					chain->exit_lines.emplace(int(b), L);
 				}
 				origin = H.at(b);
-				exit_dir = effects::projective_exit(*scene_.find(plan[b].surface_id), plan[b].left, H.at(b));
+				const Surf<N> *ps = scene_.find(plan[b].surface_id);
+				exit_dir = effects::projective_exit(*ps, plan[b].left, H.at(b));
+				through_c = effs[b] == EffectType::CircleNormalProjection ? ps : nullptr; // K15
 			}
 			a = b + 1;
 		}
 		return chain;
 	}
 
+	// through_c (K15, Stage 114): the circle normal whose centre the epoch's beam
+	// passes by provenance (its exit); an inversion centred there keeps the line.
 	std::shared_ptr<const AnchorChain<N>> build_simple(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
-			const std::vector<EffectType> &effs, const std::optional<CN<N>> &base_q) const {
+			const std::vector<EffectType> &effs, const std::optional<CN<N>> &base_q, const Surf<N> *through_c = nullptr) const {
 		const size_t K = plan.size();
 		std::vector<std::vector<int>> stacks = {{}};
 		std::vector<int> st;
@@ -1394,6 +1421,28 @@ private:
 				}
 			}
 			stacks.push_back(st);
+		}
+		// K15: the frames whose beam is the exit line itself (an inversion centred
+		// on the passed centre, then line-keeping effects): Q is on the line, the
+		// beam is straight
+		std::map<std::string, bool> on_line;
+		on_line[""] = false;
+		for (const std::vector<int> &s : stacks) {
+			for (size_t n = 1; n <= s.size(); n++) {
+				const std::string key = stack_key(std::vector<int>(s.begin(), s.begin() + long(n)));
+				if (on_line.count(key)) {
+					continue;
+				}
+				const std::string parent = stack_key(std::vector<int>(s.begin(), s.begin() + long(n - 1)));
+				const Surf<N> *ps = scene_.find(s[n - 1]);
+				bool v = false;
+				if (ps != nullptr && through_c != nullptr && n == 1 && !ps->line && !ps->portal && same_exact_center(*through_c, *ps)) {
+					v = true;
+				} else if (ps != nullptr && on_line.at(parent) && (ps->line || ps->portal)) {
+					v = true;
+				}
+				on_line[key] = v;
+			}
 		}
 		// pole chain: key -> [P, Q or null, delta or null]
 		std::map<std::string, effects::Poles<N>> memo;
@@ -1442,8 +1491,19 @@ private:
 				if (!pc.P || !X[j] || X[j]->sub(*pc.P).is_zero()) {
 					return nullptr;
 				}
-				const CN<N> *delta = pc.delta ? &*pc.delta : nullptr;
-				it = beam_of.emplace(key, std::make_shared<const Beam<N>>(Beam<N>::through(*pc.P, *X[j], delta))).first;
+				Beam<N> b = Beam<N>::through(*pc.P, *X[j], pc.delta && !on_line.at(key) ? &*pc.delta : nullptr);
+				if (on_line.at(key) && pc.Q) {
+					// K15: the straight beam's orientation keeps the circle's order P -> X -> Q:
+					// when Q lies between P and X on the line, X is reached the other way
+					// round, through the real infinity
+					const CN<N> d = X[j]->sub(*pc.P);
+					const N tx = d.abs2();
+					const N tq = CN<N>::dot(pc.Q->sub(*pc.P), d);
+					if (!tq.is_negative() && !tq.is_zero() && tq.cmp(tx) < 0) {
+						b = Beam<N>{*pc.P, b.tau.neg(), b.kappa};
+					}
+				}
+				it = beam_of.emplace(key, std::make_shared<const Beam<N>>(b)).first;
 			}
 			chain->beams.push_back(it->second);
 		}
@@ -2880,11 +2940,13 @@ private:
 			w.Q = top.q;
 			w.pole = top.pole;
 			w.pole_serial = top.pole_serial;
+			w.through_c = top.through_c;
 			return Next{w.seeded ? Backend<N>::reseed(top.beam) : top.beam, top.sid, t_res, false};
 		}
 		const N other = other_root(*beam, surf, depart, t0, t, pt);
 		const int pop_id = surf.portal ? surf.pair : surf.id;
-		w.stack.push_back(StackEntry<N>{beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype), w.Q, w.pole, w.pole_serial, w.rec});
+		w.stack.push_back(StackEntry<N>{beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype), w.Q, w.pole, w.pole_serial, w.rec,
+			w.through_c});
 		set_pole(w, pole_after(w, surf));
 		w.Q = effects::map_point(w.Q, surf, false);
 		const std::vector<Known<N>> old_known = w.known;
@@ -2912,6 +2974,16 @@ private:
 		} else {
 			const CN<N> hp = Backend<N>::exact_point(*beam, t, pt);
 			res = Next{std::make_shared<const Beam<N>>(effects::apply(*beam, t, surf, &hp)), dsurf.id, beam->kappa.like(0.0), true};
+		}
+		// K15 (Stage 114): an inversion centred on a point the beam passes by
+		// provenance (a circle normal's centre, its exit) maps the line to itself:
+		// straight, the centre becoming the frame's image of infinity -- never the
+		// circle of enormous radius the rounded beam inverts into. The anchored
+		// beam is built straight by build_simple.
+		const Surf<N> *through_c = w.through_c;
+		w.through_c = nullptr;
+		if (through_c != nullptr && !surf.line && !surf.portal && !w.anchored && same_exact_center(*through_c, surf)) {
+			res.beam = std::make_shared<const Beam<N>>(Beam<N>{res.beam->p, res.beam->tau, res.beam->kappa.like(0.0)});
 		}
 		if (surf.portal) {
 			portal_known(w, surf, pt, pt_exact, old_known, res);
@@ -2975,6 +3047,14 @@ private:
 		}
 		return exact::sub(exact::mul(exact::of(kx), ec.C[2]), ec.C[0]).is_zero()
 			&& exact::sub(exact::mul(exact::of(ky), ec.C[2]), ec.C[1]).is_zero();
+	}
+
+	// Exact: two circles share their centre (on the data: the homogeneous circumcentres).
+	static bool same_exact_center(const Surf<N> &a, const Surf<N> &b) {
+		const auto &ea = a.exact_circle();
+		const auto &eb = b.exact_circle();
+		return exact::sub(exact::mul(ea.C[0], eb.C[2]), exact::mul(eb.C[0], ea.C[2])).is_zero()
+			&& exact::sub(exact::mul(ea.C[1], eb.C[2]), exact::mul(eb.C[1], ea.C[2])).is_zero();
 	}
 
 	static bool line_through_center(const exact::Line &L, const Surf<N> &surf) {
@@ -3075,6 +3155,7 @@ private:
 		}
 		w.line = nullptr;
 		w.rec = nullptr;
+		w.through_c = surf.effect(left) == EffectType::CircleNormalProjection ? &surf : nullptr; // K15
 		if (pt_exact) {
 			// an exact data line: through pt along the exact axis
 			const EffectType etype = surf.effect(left);

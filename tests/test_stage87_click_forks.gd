@@ -157,10 +157,14 @@ func test_line_projective_ignores_click():
 	assert_eq(_hit("ln_click_a_planned", 0), _hit("ln_click_b_planned", 0))
 
 # Provenance beats the click: the target on the carrier is never the hit.
-func test_provenance_exclusion_beats_click():
-	for name in ["cn_twice_at_target_planned", "cn_twice_clicked_target_planned"]:
-		assert_gt(_hit(name, 0).distance_to(_hit(name, 1)), 1.0, name)
-	assert_eq(_hit("cn_twice_at_target_planned", 0), _hit("cn_twice_clicked_target_planned", 0))
+# Stage 114: the target on the carrier is its own candidate, and the fork rule
+# chooses -- clicked at the second entry's point, the first hit is that point
+# (the beam meets the entry again after its loop); clicked at the antipode, the other.
+func test_provenance_makes_the_target_its_own_candidate():
+	assert_lt(_hit("cn_twice_clicked_target_planned", 0).distance_to(_hit("cn_twice_clicked_target_planned", 1)), 1e-6,
+		"clicked at the second's point")
+	assert_gt(_hit("cn_twice_clicked_other_planned", 0).distance_to(_hit("cn_twice_clicked_other_planned", 1)), 1.0,
+		"clicked at the antipode")
 
 # A fork after a mirror: the clicked branch is taken, realizable or not.
 func test_fork_after_mirror_honors_click():
@@ -213,12 +217,15 @@ func test_property_nearest_candidate():
 		var hd := Vector2(Hd.fx(), Hd.fy())
 		for o: Vector2 in others:
 			assert_true(hd.distance_to(Vector2(400, 150)) <= o.distance_to(Vector2(400, 150)) + 1e-9, "default: nearest the midpoint")
-	# provenance: X on the carrier excludes X, whatever the click
+	# provenance (Stage 114): X on the carrier is its own candidate, exactly; the
+	# click picks it or the antipode (a full circle: both on the segment)
 	for i in 50:
 		var a := rng.randf_range(0, TAU)
 		var X := c + Vector2(cos(a), sin(a)) * 200.0
 		var H = BeamEffects.back_propagate(surf, true, ctx.cn(X.x, X.y), true, X)
-		assert_gt(Vector2(H.fx(), H.fy()).distance_to(X), 1.0, "the excluded point is never picked")
+		assert_eq(Vector2(H.fx(), H.fy()), X, "clicked at X: X itself")
+		var Ho = BeamEffects.back_propagate(surf, true, ctx.cn(X.x, X.y), true, c - (X - c))
+		assert_gt(Vector2(Ho.fx(), Ho.fy()).distance_to(X), 300.0, "clicked at the antipode: the antipode")
 
 # The game: a plan click is stored, survives undo, reaches the solver, and is
 # part of the trace cache key.
@@ -248,12 +255,16 @@ func test_click_flows_through_the_game():
 	assert_not_null(a)
 	assert_not_null(b)
 	if a != null and b != null:
-		assert_ne(str(a.result.planned.map(func(e): return e.describe())), str(b.result.planned.map(func(e): return e.describe())),
-			"a different click is a different trace (not served from the cache)")
-		var ce := a.result.planned.filter(func(e): return e.kind == "cursor")
-		assert_eq(ce.size(), 1, "the on-arc click reaches the cursor")
-		if ce.size() == 1:
-			assert_almost_eq(Vector2(ce[0].point.fx(), ce[0].point.fy()), Vector2(146.1522, 559.0353), Vector2(1e-4, 1e-4), "exactly")
+		# Stage 114 (the fork rule): arc 9 is a semicircle, so both clicks take its
+		# on-arc candidate and the traces are one (before, the other half's click
+		# took the off-arc candidate: another trace, cached apart by the click)
+		assert_eq(str(a.result.planned.map(func(e): return e.describe())), str(b.result.planned.map(func(e): return e.describe())),
+			"the same walk for both clicks (the on-arc candidate)")
+		for pair in [a, b]:
+			var ce: Array = pair.result.planned.filter(func(e): return e.kind == "cursor")
+			assert_eq(ce.size(), 1, "the click reaches the cursor")
+			if ce.size() == 1:
+				assert_almost_eq(Vector2(ce[0].point.fx(), ce[0].point.fy()), Vector2(146.1522, 559.0353), Vector2(1e-4, 1e-4), "exactly")
 
 # Off the planned path the cursor is never "reached" at its projection: a
 # cursor event lies on the cursor.

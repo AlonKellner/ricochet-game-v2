@@ -178,10 +178,11 @@ std::vector<Candidate<N>> back_propagate_candidates(const Surf<N> &surf, bool le
 		}
 	}
 	if (x_on_carrier && cands.size() == 2) {
-		// provenance: X is itself a candidate -- the beam reaches it from the other
+		// provenance: X is itself a candidate -- that one is X exactly (Stage 114:
+		// the fork rule chooses between X and the other; before, X was excluded)
 		const double d0 = X.sub(cands[0]).abs2().to_float();
 		const double d1 = X.sub(cands[1]).abs2().to_float();
-		cands = {d0 > d1 ? cands[0] : cands[1]};
+		cands[d0 <= d1 ? 0 : 1] = X;
 	}
 	std::vector<Candidate<N>> out;
 	for (const CN<N> &H : cands) {
@@ -197,8 +198,44 @@ struct F32Point {
 	float y;
 };
 
-// The hit point: the candidate nearest the point the player clicked -- by
-// default the segment's midpoint (its via point); nullopt without a candidate.
+// The fork rule (GAME_SPEC 13.3, Stage 114): of the candidates, those on the
+// segment are preferred; among what remains, the one nearest the point the
+// player clicked -- by default the segment's midpoint (its via point). With
+// none on the segment the click picks an off-segment one (a planned-only
+// firing). The segment test is the rounded one on each candidate; a candidate
+// snapped to a data point (K11) is tested as that point.
+template <Num N>
+CN<N> choose_candidate(const Surf<N> &surf, const std::vector<CN<N>> &pool, const F32Point *click = nullptr) {
+	std::vector<CN<N>> on;
+	for (const CN<N> &h : pool) {
+		if (geom::on_segment(surf.seg, h)) {
+			on.push_back(h);
+		}
+	}
+	const std::vector<CN<N>> &p = on.empty() ? pool : on;
+	if (p.size() == 1) {
+		return p[0];
+	}
+	// F32-SEMANTICS: Vector2(H.fx(), H.fy()).distance_squared_to(point) in float32 (B7)
+	const float px = click != nullptr ? click->x : float(surf.vx);
+	const float py = click != nullptr ? click->y : float(surf.vy);
+	const CN<N> *best = &p[0];
+	float best_d = std::numeric_limits<float>::infinity();
+	for (const CN<N> &h : p) {
+		const float hx = float(h.fx());
+		const float hy = float(h.fy());
+		const float ddx = hx - px;
+		const float ddy = hy - py;
+		const float d = ddx * ddx + ddy * ddy;
+		if (d < best_d) {
+			best_d = d;
+			best = &h;
+		}
+	}
+	return *best;
+}
+
+// The hit point by the fork rule (choose_candidate); nullopt without a candidate.
 template <Num N>
 std::optional<CN<N>> back_propagate(const Surf<N> &surf, bool left, const CN<N> &X, bool x_on_carrier = false,
 		const F32Point *click = nullptr) {
@@ -206,26 +243,11 @@ std::optional<CN<N>> back_propagate(const Surf<N> &surf, bool left, const CN<N> 
 	if (c.empty()) {
 		return std::nullopt;
 	}
-	if (c.size() == 1) {
-		return c[0].h;
-	}
-	// F32-SEMANTICS: Vector2(H.fx(), H.fy()).distance_squared_to(point) in float32 (B7)
-	const float px = click != nullptr ? click->x : float(surf.vx);
-	const float py = click != nullptr ? click->y : float(surf.vy);
-	const CN<N> *best = &c[0].h;
-	float best_d = std::numeric_limits<float>::infinity();
+	std::vector<CN<N>> pool;
 	for (const Candidate<N> &k : c) {
-		const float hx = float(k.h.fx());
-		const float hy = float(k.h.fy());
-		const float ddx = hx - px;
-		const float ddy = hy - py;
-		const float d = ddx * ddx + ddy * ddy;
-		if (d < best_d) {
-			best_d = d;
-			best = &k.h;
-		}
+		pool.push_back(k.h);
 	}
-	return *best;
+	return choose_candidate(surf, pool, click);
 }
 
 // T(z) of a portal surface (inverse: T^-1(z) = conj(a)(z - d)).

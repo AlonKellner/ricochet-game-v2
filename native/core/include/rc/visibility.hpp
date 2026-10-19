@@ -889,6 +889,16 @@ private:
 	// The candidate a key's walk departs by the click's rule (the nearer of the
 	// two candidates of a circle: +1 / -1 across the click's line), +1 for a line.
 	double sigma_rule(double key) const {
+		if (kind_ == PencilKind::Radial || !psurf_->line) {
+			// Stage 114, the fork rule: the candidate on the segment first; the click's side when both or neither are
+			const std::optional<CN<F64>> hp = hit_at_key(key, 1.0);
+			const std::optional<CN<F64>> hm = hit_at_key(key, -1.0);
+			const bool onp = hp && geom::on_segment(psurf_->seg, *hp);
+			const bool onm = hm && geom::on_segment(psurf_->seg, *hm);
+			if (onp != onm) {
+				return onp ? 1.0 : -1.0;
+			}
+		}
 		if (kind_ == PencilKind::Radial) {
 			return dot(click_point() - pc_, diamond_dir(key)) >= 0.0 ? 1.0 : -1.0;
 		}
@@ -1829,16 +1839,32 @@ private:
 				}
 			}
 		}
+		// (c) the fork: where the chosen candidate switches (Stage 114, the fork
+		// rule): the click's line through the centre (where both antipodes are on
+		// the arc) and the radials through the arc's ends (one antipode leaves the
+		// arc there): one line, two members -- the sheet of the keys just below
+		// it, then the other
+		std::vector<double> switches;
 		if (kind_ == PencilKind::Radial) {
-			// (c) the fork line: through the centre, across the click (the click-nearest
-			// candidate switches there): one line, two members -- the sheet of the
-			// keys just below it, then the other
 			const Pt f = click_point() - pc_;
 			if (norm(f) > 0.0) {
-				const double k = line_key(unit(perp(f)));
-				add_key(pois, k, "the fork line", true, sigma_rule(k - 1e-9));
-				add_key(pois, k, "the fork line", true, -sigma_rule(k - 1e-9));
+				switches.push_back(line_key(unit(perp(f))));
 			}
+		}
+		if (!psurf_->line && !psurf_->full) {
+			for (const Pt &q : {Pt{psurf_->sx, psurf_->sy}, Pt{psurf_->ex, psurf_->ey}}) {
+				switches.push_back(key_of_hit(cn_of(q)));
+			}
+		}
+		for (double k : switches) {
+			const double s0 = sigma_rule(k - 1e-9);
+			const double s1 = sigma_rule(k + 1e-9);
+			if (s0 != s1) {
+				add_key(pois, k, "the fork", true, s0);
+				add_key(pois, k, "the fork", true, s1);
+			}
+		}
+		if (kind_ == PencilKind::Radial) {
 			// (e) the axes: every gap stays below a quarter turn
 			for (double k : {0.0, 0.5, 1.0, 1.5}) {
 				add_key(pois, k, "axis");
