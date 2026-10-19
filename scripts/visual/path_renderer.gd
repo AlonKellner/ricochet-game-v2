@@ -65,6 +65,12 @@ func _inputs() -> Array:
 
 # The level's bounds (the parent's `level_bounds`; the default 1920x1080
 # without one): the display clipping and the drawing bounds.
+# Whether the traces are the current inputs' (false between an input change
+# and the next _process: the tree is paused during a flight, so after a
+# landing the traces lag the new flags by a frame).
+func is_current() -> bool:
+	return _last_inputs != null and _player != null and _cursor != null and _inputs() == _last_inputs
+
 func _level_bounds() -> Rect2:
 	var parent := get_parent()
 	if parent and "level_bounds" in parent:
