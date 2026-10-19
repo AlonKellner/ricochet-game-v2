@@ -2,6 +2,8 @@
 
 #include "rcg/build.hpp"
 #include "rcg/level.hpp"
+#include "rcg/model.hpp"
+#include "gd_common.hpp"
 
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/array.hpp>
@@ -49,6 +51,54 @@ Variant to_variant(const nlohmann::json &j) {
 
 void RcgLevel::_bind_methods() {
 	ClassDB::bind_static_method("RcgLevel", D_METHOD("parse", "text"), &RcgLevel::parse);
+	ClassDB::bind_static_method("RcgLevel", D_METHOD("probe_model", "text", "flags"), &RcgLevel::probe_model);
+}
+
+namespace {
+Variant side_ref(const rcg::SideRef &r) {
+	Array a;
+	a.push_back(r.surface);
+	a.push_back(int(r.side));
+	return a;
+}
+} // namespace
+
+Array RcgLevel::probe_model(const String &text, const Dictionary &flags) {
+	Array out;
+	const CharString utf8 = text.utf8();
+	const rc::Flags f = rcgd::flags_from_dict(flags);
+	for (const rcg::BuiltSurface &s : rcg::build_level(rcg::parse_level(std::string_view(utf8.get_data(), size_t(utf8.length()))))) {
+		Dictionary d;
+		d["id"] = s.id;
+		d["present"] = rcg::present(s, f);
+		Array sides;
+		for (const rcg::Side side : {rcg::Side::Left, rcg::Side::Right}) {
+			Dictionary sd;
+			const rcg::BuiltSide *cfg = rcg::active_side(s, side, f);
+			sd["active"] = to_variant(rcg::describe_side(cfg, s.id));
+			Array landing;
+			if (cfg) {
+				for (const rc::StateChangeDef &w : rcg::writes(*cfg, s.id, true)) {
+					landing.push_back(to_variant(nlohmann::json{{"key", w.key}, {"op", w.toggle ? "toggle" : "set"},
+							{"value", w.toggle ? nlohmann::json(true) : std::visit([](const auto &x) -> nlohmann::json { return x; }, w.value)}}));
+				}
+			}
+			sd["landing"] = landing;
+			const std::optional<rcg::OverlayLink> link = rcg::overlay_link(s, side, f);
+			if (link) {
+				Array l;
+				l.push_back(side_ref(link->from));
+				l.push_back(link->outgoing ? side_ref(*link->outgoing) : Variant());
+				sd["link"] = l;
+			} else {
+				sd["link"] = Variant();
+			}
+			sides.push_back(sd);
+		}
+		d["sides"] = sides;
+		out.push_back(d);
+	}
+	return out;
 }
 
 Dictionary RcgLevel::parse(const String &text) {

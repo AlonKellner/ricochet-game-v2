@@ -27,9 +27,57 @@ rc::arc::SegGeom segment_of(const SurfaceSpec &s) {
 	return g;
 }
 
+std::vector<std::string> validate(const SurfaceSpec &s);
+
+// SpawnTemplate.validate: its surface, which cannot spawn (no nesting).
+void validate_template(const SpawnTemplateSpec *t, std::vector<std::string> &out) {
+	if (t == nullptr || !t->surface) {
+		out.push_back("a spawn template needs a surface");
+		return;
+	}
+	for (const std::string &e : validate(*t->surface)) {
+		out.push_back(e);
+	}
+	std::vector<const SideSpec *> sides;
+	for (const std::optional<SideSpec> *sd : {&t->surface->left, &t->surface->right}) {
+		if (*sd) {
+			sides.push_back(&**sd);
+		}
+	}
+	for (const ResolverRow &r : t->surface->resolver) {
+		for (const std::optional<SideSpec> *sd : {&r.left, &r.right}) {
+			if (*sd) {
+				sides.push_back(&**sd);
+			}
+		}
+	}
+	for (const SideSpec *sd : sides) {
+		for (const HitSpec &h : sd->hits) {
+			if (h.kind == "spawn") {
+				out.push_back("a spawned surface cannot spawn (no nesting, GAME_SPEC 10.6)");
+			}
+		}
+	}
+}
+
 // SideSpec.validate / EffectSpec.validate: the problems of a side on a carrier.
 void validate_side(const SideSpec &side, bool carrier_is_line, const V2 &carrier_dir, std::vector<std::string> &out) {
 	const std::string &t = side.effect.type;
+	for (const HitSpec &h : side.hits) {
+		if (h.kind == "spawn") {
+			if (h.channel.empty()) {
+				out.push_back("a spawn needs a channel");
+			}
+			if (!h.spawn_template) {
+				out.push_back("a spawn needs a template");
+			} else {
+				validate_template(h.spawn_template.get(), out);
+			}
+		}
+	}
+	if (t == "pass" && side.hits.empty() && side.interactive) {
+		out.push_back("a pass side without hit effects has nothing to plan (GAME_SPEC 9.1)");
+	}
 	if (!known_type(t)) {
 		out.push_back("unknown effect type '" + t + "'");
 		return;
@@ -184,6 +232,92 @@ json describe_config(const std::optional<BuiltSide> &cfg, int host_id) {
 }
 
 } // namespace
+
+namespace {
+
+std::optional<rc::SideDef> side_def(const std::optional<BuiltSide> &cfg, int host_id, int pair) {
+	if (!cfg) {
+		return std::nullopt;
+	}
+	const BuiltEffect &e = cfg->effect;
+	rc::SideDef d;
+	d.type = rc::effect_type_from_json(e.type);
+	d.interactive = cfg->interactive;
+	if (e.type == "line_normal_projection" || e.type == "circle_normal_projection" || e.type == "line_directional_projection" ||
+			e.type == "circle_directional_projection") {
+		d.back = e.back;
+	}
+	if (e.type == "line_directional_projection" || e.type == "circle_directional_projection") {
+		d.has_normal = true;
+		d.nx = e.normal.x;
+		d.ny = e.normal.y;
+	}
+	if (e.type == "portal") {
+		d.theta = e.theta;
+		d.dx = e.d.x;
+		d.dy = e.d.y;
+		d.pair = pair != 0 ? pair : -1;
+	}
+	for (const json &w : in_shot_writes(*cfg, host_id)) {
+		rc::StateChangeDef c;
+		c.key = w["key"].get<std::string>();
+		c.toggle = w["op"] == "toggle";
+		const json &v = w["value"];
+		c.value = v.is_boolean() ? rc::FlagValue(v.get<bool>()) : v.is_number() ? rc::FlagValue(v.get<double>()) : rc::FlagValue(v.get<std::string>());
+		d.states.push_back(std::move(c));
+	}
+	return d;
+}
+
+} // namespace
+
+std::vector<rc::SurfaceDef> defs_of(const std::vector<BuiltSurface> &surfaces) {
+	std::vector<rc::SurfaceDef> out;
+	for (const BuiltSurface &s : surfaces) {
+		const rc::arc::GeneralizedCircle &g = s.seg.get_carrier();
+		rc::SurfaceDef d;
+		d.id = s.id;
+		d.line = g.is_line();
+		d.sx = s.seg.s.x;
+		d.sy = s.seg.s.y;
+		d.ex = s.seg.e.x;
+		d.ey = s.seg.e.y;
+		d.has_via = !s.seg.v.is_inf();
+		if (d.has_via) {
+			d.vx = s.seg.v.x;
+			d.vy = s.seg.v.y;
+		}
+		d.full = s.seg.full;
+		if (s.seg.full && !g.is_line()) {
+			d.has_circle = true;
+			d.cx = g.center_x();
+			d.cy = g.center_y();
+			d.radius = g.radius();
+		}
+		if (s.resolver.empty()) {
+			d.left = side_def(s.left, s.id, s.portal_pair);
+			d.right = side_def(s.right, s.id, s.portal_pair);
+		} else {
+			rc::ResolverDef r;
+			r.key = s.resolver_key;
+			for (const BuiltRow &row : s.resolver) {
+				r.table.emplace_back(row.value, std::make_pair(side_def(row.left, s.id, 0), side_def(row.right, s.id, 0)));
+			}
+			d.resolver = r;
+		}
+		d.is_target = s.is_target();
+		d.pre_transform = s.pre_transform;
+		for (const PresenceSpec &c : s.presence) {
+			d.presence.push_back(rc::PresenceCond{c.key, c.values});
+		}
+		out.push_back(std::move(d));
+	}
+	return out;
+}
+
+json describe_side(const BuiltSide *cfg, int host_id) {
+	return describe_config(cfg ? std::optional<BuiltSide>(*cfg) : std::nullopt, host_id);
+}
 
 V2 apply_motion(const V2 &z, double theta, const V2 &d) {
 	const double c = std::cos(theta);

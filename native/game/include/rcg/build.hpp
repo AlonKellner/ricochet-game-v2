@@ -5,6 +5,7 @@
 // computed in float64 as the game computes them.
 #pragma once
 
+#include "rc/scene.hpp"
 #include "rc/visual.hpp"
 #include "rcg/level.hpp"
 
@@ -62,6 +63,14 @@ std::vector<BuiltSurface> build_level(const Level &level);
 // portal side's "pair": the surface with the inverse motion).
 nlohmann::json describe_surface(const BuiltSurface &s);
 nlohmann::json describe_level(const std::vector<BuiltSurface> &surfaces);
+
+// The solver's input (rc::SurfaceDef) of the surfaces: what the game hands
+// BeamScene through SceneDefs, built directly (a resolver keeps its level
+// order: the first-row fallback depends on it, a JSON object would sort it).
+std::vector<rc::SurfaceDef> defs_of(const std::vector<BuiltSurface> &surfaces);
+
+// SceneDefs.describe_config: a side config as scene defs (nullptr: null).
+nlohmann::json describe_side(const BuiltSide *cfg, int host_id);
 
 // The flag writes a side makes when it fires (SideConfig.in_shot_writes, as
 // scene defs: [{key, op, value}]); host_id: the surface carrying it.
