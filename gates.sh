@@ -2,8 +2,8 @@
 # The gates, in order, with one timed summary (docs/WORKFLOW.md):
 #   LEVEL=commit (make gate): the core build, the oracle, ctest (RelWithDebInfo,
 #     build-core; the native sweeps at one player in 4), the extension build,
-#     the sweep manifests current, the GUT suite (its sweeps sampled), the
-#     goldens unchanged.
+#     the level dumps current, the sweep manifests current, the session replay current, the GUT suite
+#     (its sweeps sampled), the goldens unchanged.
 #   LEVEL=merge (make gates): the same with every sweep player, then ctest under
 #     ASan+UBSan (build-asan).
 # Every gate runs even after a failure; the exit status is nonzero if any failed.
@@ -46,9 +46,26 @@ manifests_current() {
 	rm -rf "$d"
 }
 
+# the committed level dumps are what the level data builds (Stage 115: rc_tool)
+dumps_current() {
+	local d
+	d=$(mktemp -d "${TMPDIR:-/tmp}/ricochet_dumps.XXXXXX")
+	make -s dumps DUMPS_DIR="$d" > /dev/null || return 1
+	if ! diff -r bench/scenes "$d"; then
+		echo "!! bench/scenes is stale: make dumps"
+		return 1
+	fi
+	rm -rf "$d"
+}
+
+# the committed session replay golden is what the game plays now (Stage 115)
+sessions_current() {
+	make -s sessions-check
+}
+
 goldens_unchanged() {
 	local d
-	d=$(git diff --stat bench/goldens)
+	d=$(git diff --stat bench/goldens bench/sessions bench/scenes)
 	[ -z "$d" ] || { echo "$d"; return 1; }
 }
 
@@ -60,7 +77,9 @@ else
 	gate ctest make ctest
 fi
 gate native make native
+gate dumps dumps_current
 gate manifests manifests_current
+gate sessions sessions_current
 gate gut env SKIP_ORACLE=1 SKIP_BUILD=1 ./run_tests_parallel.sh
 if [ "$LEVEL" = merge ]; then
 	gate asan make native-asan

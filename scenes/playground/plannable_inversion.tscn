@@ -10,10 +10,7 @@
 
 [node name="Main" type="Node2D"]
 script = ExtResource("2")
-gravity = Vector2(0, 0)
-room_rect = Rect2(560, 240, 800, 600)
-build_room = true
-inversion_left_arcs = PackedFloat64Array(1100, 340, 1100, 740, 1230, 540)
+level_path = "res://data/levels/playground/plannable_inversion.json"
 
 [node name="Background" type="ColorRect" parent="."]
 offset_right = 1920.0

@@ -1,0 +1,203 @@
+{
+ "schema": "rc-session/1",
+ "level": "playground/inversion_grid",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    760.0,
+    560.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    687.25,
+    342.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    924.5,
+    348.5
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1135.25,
+    361.25
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    662.0,
+    527.25
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    939.5,
+    534.25
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1140.0,
+    537.75
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    684.25,
+    736.75
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    928.25,
+    728.25
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    694.0,
+    380.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    894.0,
+    380.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1094.0,
+    380.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  }
+ ]
+}

@@ -3,421 +3,277 @@
  "surfaces": [
   {
    "circle": {
-    "center": [
-     760.0,
-     380.0
-    ],
+    "center": [760.0, 380.0],
     "radius": 60.0
    },
+   "end": [730.0, 328.0400085449219],
+   "full": true,
    "id": 1,
-   "start": [
-    820.0,
-    380.0
-   ],
-   "end": [
-    730.0,
-    328.0400085449219
-   ],
-   "via": [
-    730.0,
-    431.9599914550781
-   ],
-   "full": true,
-   "line": false,
+   "is_target": false,
    "left": {
     "interactive": true,
     "type": "inversion"
    },
+   "line": false,
+   "player_solid": true,
    "right": {
     "interactive": true,
     "type": "inversion"
    },
-   "is_target": false,
-   "player_solid": true
+   "start": [820.0, 380.0],
+   "via": [730.0, 431.9599914550781]
   },
   {
    "circle": {
-    "center": [
-     960.0,
-     380.0
-    ],
+    "center": [960.0, 380.0],
     "radius": 60.0
    },
+   "end": [930.0, 328.0400085449219],
+   "full": true,
    "id": 2,
-   "start": [
-    1020.0,
-    380.0
-   ],
-   "end": [
-    930.0,
-    328.0400085449219
-   ],
-   "via": [
-    930.0,
-    431.9599914550781
-   ],
-   "full": true,
-   "line": false,
+   "is_target": false,
    "left": {
     "interactive": true,
     "type": "inversion"
    },
+   "line": false,
+   "player_solid": true,
    "right": {
     "interactive": true,
     "type": "inversion"
    },
-   "is_target": false,
-   "player_solid": true
+   "start": [1020.0, 380.0],
+   "via": [930.0, 431.9599914550781]
   },
   {
    "circle": {
-    "center": [
-     1160.0,
-     380.0
-    ],
+    "center": [1160.0, 380.0],
     "radius": 60.0
    },
+   "end": [1130.0, 328.0400085449219],
+   "full": true,
    "id": 3,
-   "start": [
-    1220.0,
-    380.0
-   ],
-   "end": [
-    1130.0,
-    328.0400085449219
-   ],
-   "via": [
-    1130.0,
-    431.9599914550781
-   ],
-   "full": true,
-   "line": false,
+   "is_target": false,
    "left": {
     "interactive": true,
     "type": "inversion"
    },
+   "line": false,
+   "player_solid": true,
    "right": {
     "interactive": true,
     "type": "inversion"
    },
-   "is_target": false,
-   "player_solid": true
+   "start": [1220.0, 380.0],
+   "via": [1130.0, 431.9599914550781]
   },
   {
    "circle": {
-    "center": [
-     760.0,
-     540.0
-    ],
+    "center": [760.0, 540.0],
     "radius": 60.0
    },
+   "end": [730.0, 488.0400085449219],
+   "full": true,
    "id": 4,
-   "start": [
-    820.0,
-    540.0
-   ],
-   "end": [
-    730.0,
-    488.0400085449219
-   ],
-   "via": [
-    730.0,
-    591.9600219726563
-   ],
-   "full": true,
-   "line": false,
+   "is_target": false,
    "left": {
     "interactive": true,
     "type": "inversion"
    },
+   "line": false,
+   "player_solid": true,
    "right": {
     "interactive": true,
     "type": "inversion"
    },
-   "is_target": false,
-   "player_solid": true
+   "start": [820.0, 540.0],
+   "via": [730.0, 591.9600219726562]
   },
   {
    "circle": {
-    "center": [
-     960.0,
-     540.0
-    ],
+    "center": [960.0, 540.0],
     "radius": 60.0
    },
+   "end": [930.0, 488.0400085449219],
+   "full": true,
    "id": 5,
-   "start": [
-    1020.0,
-    540.0
-   ],
-   "end": [
-    930.0,
-    488.0400085449219
-   ],
-   "via": [
-    930.0,
-    591.9600219726563
-   ],
-   "full": true,
-   "line": false,
+   "is_target": false,
    "left": {
     "interactive": true,
     "type": "inversion"
    },
+   "line": false,
+   "player_solid": true,
    "right": {
     "interactive": true,
     "type": "inversion"
    },
-   "is_target": false,
-   "player_solid": true
+   "start": [1020.0, 540.0],
+   "via": [930.0, 591.9600219726562]
   },
   {
    "circle": {
-    "center": [
-     1160.0,
-     540.0
-    ],
+    "center": [1160.0, 540.0],
     "radius": 60.0
    },
+   "end": [1130.0, 488.0400085449219],
+   "full": true,
    "id": 6,
-   "start": [
-    1220.0,
-    540.0
-   ],
-   "end": [
-    1130.0,
-    488.0400085449219
-   ],
-   "via": [
-    1130.0,
-    591.9600219726563
-   ],
-   "full": true,
-   "line": false,
+   "is_target": false,
    "left": {
     "interactive": true,
     "type": "inversion"
    },
+   "line": false,
+   "player_solid": true,
    "right": {
     "interactive": true,
     "type": "inversion"
    },
-   "is_target": false,
-   "player_solid": true
+   "start": [1220.0, 540.0],
+   "via": [1130.0, 591.9600219726562]
   },
   {
    "circle": {
-    "center": [
-     760.0,
-     700.0
-    ],
+    "center": [760.0, 700.0],
     "radius": 60.0
    },
+   "end": [730.0, 648.0399780273438],
+   "full": true,
    "id": 7,
-   "start": [
-    820.0,
-    700.0
-   ],
-   "end": [
-    730.0,
-    648.0399780273438
-   ],
-   "via": [
-    730.0,
-    751.9600219726563
-   ],
-   "full": true,
-   "line": false,
+   "is_target": false,
    "left": {
     "interactive": true,
     "type": "inversion"
    },
+   "line": false,
+   "player_solid": true,
    "right": {
     "interactive": true,
     "type": "inversion"
    },
-   "is_target": false,
-   "player_solid": true
+   "start": [820.0, 700.0],
+   "via": [730.0, 751.9600219726562]
   },
   {
    "circle": {
-    "center": [
-     960.0,
-     700.0
-    ],
+    "center": [960.0, 700.0],
     "radius": 60.0
    },
+   "end": [930.0, 648.0399780273438],
+   "full": true,
    "id": 8,
-   "start": [
-    1020.0,
-    700.0
-   ],
-   "end": [
-    930.0,
-    648.0399780273438
-   ],
-   "via": [
-    930.0,
-    751.9600219726563
-   ],
-   "full": true,
-   "line": false,
+   "is_target": false,
    "left": {
     "interactive": true,
     "type": "inversion"
    },
+   "line": false,
+   "player_solid": true,
    "right": {
     "interactive": true,
     "type": "inversion"
    },
-   "is_target": false,
-   "player_solid": true
+   "start": [1020.0, 700.0],
+   "via": [930.0, 751.9600219726562]
   },
   {
    "circle": {
-    "center": [
-     1160.0,
-     700.0
-    ],
+    "center": [1160.0, 700.0],
     "radius": 60.0
    },
-   "id": 9,
-   "start": [
-    1220.0,
-    700.0
-   ],
-   "end": [
-    1130.0,
-    648.0399780273438
-   ],
-   "via": [
-    1130.0,
-    751.9600219726563
-   ],
+   "end": [1130.0, 648.0399780273438],
    "full": true,
+   "id": 9,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "type": "inversion"
+   },
    "line": false,
-   "left": {
-    "interactive": true,
-    "type": "inversion"
-   },
+   "player_solid": true,
    "right": {
     "interactive": true,
     "type": "inversion"
    },
-   "is_target": false,
-   "player_solid": true
+   "start": [1220.0, 700.0],
+   "via": [1130.0, 751.9600219726562]
   },
   {
    "circle": null,
+   "end": [1920.0, 0.0],
+   "full": false,
    "id": 10,
-   "start": [
-    0.0,
-    0.0
-   ],
-   "end": [
-    1920.0,
-    0.0
-   ],
-   "via": [
-    960.0,
-    0.0
-   ],
-   "full": false,
-   "line": true,
+   "is_target": false,
    "left": {
     "interactive": false,
     "type": "pass"
    },
+   "line": true,
+   "player_solid": false,
    "right": {
     "interactive": false,
     "type": "pass"
    },
-   "is_target": false,
-   "player_solid": false
+   "start": [0.0, 0.0],
+   "via": [960.0, 0.0]
   },
   {
    "circle": null,
+   "end": [1920.0, 1080.0],
+   "full": false,
    "id": 11,
-   "start": [
-    1920.0,
-    0.0
-   ],
-   "end": [
-    1920.0,
-    1080.0
-   ],
-   "via": [
-    1920.0,
-    540.0
-   ],
-   "full": false,
-   "line": true,
+   "is_target": false,
    "left": {
     "interactive": false,
     "type": "pass"
    },
+   "line": true,
+   "player_solid": false,
    "right": {
     "interactive": false,
     "type": "pass"
    },
-   "is_target": false,
-   "player_solid": false
+   "start": [1920.0, 0.0],
+   "via": [1920.0, 540.0]
   },
   {
    "circle": null,
+   "end": [0.0, 1080.0],
+   "full": false,
    "id": 12,
-   "start": [
-    1920.0,
-    1080.0
-   ],
-   "end": [
-    0.0,
-    1080.0
-   ],
-   "via": [
-    960.0,
-    1080.0
-   ],
-   "full": false,
-   "line": true,
+   "is_target": false,
    "left": {
     "interactive": false,
     "type": "pass"
    },
+   "line": true,
+   "player_solid": false,
    "right": {
     "interactive": false,
     "type": "pass"
    },
-   "is_target": false,
-   "player_solid": false
+   "start": [1920.0, 1080.0],
+   "via": [960.0, 1080.0]
   },
   {
    "circle": null,
-   "id": 13,
-   "start": [
-    0.0,
-    1080.0
-   ],
-   "end": [
-    0.0,
-    0.0
-   ],
-   "via": [
-    0.0,
-    540.0
-   ],
+   "end": [0.0, 0.0],
    "full": false,
-   "line": true,
+   "id": 13,
+   "is_target": false,
    "left": {
     "interactive": false,
     "type": "pass"
    },
+   "line": true,
+   "player_solid": false,
    "right": {
     "interactive": false,
     "type": "pass"
    },
-   "is_target": false,
-   "player_solid": false
+   "start": [0.0, 1080.0],
+   "via": [0.0, 540.0]
   }
  ]
 }

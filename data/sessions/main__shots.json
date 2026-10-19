@@ -1,0 +1,170 @@
+{
+ "schema": "rc-session/1",
+ "level": "main",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    760.0,
+    600.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    465.25,
+    430.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1440.0,
+    547.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    977.5,
+    829.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    985.0,
+    318.75
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1269.75,
+    545.75
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    494.0,
+    450.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1394.0,
+    550.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    950.0,
+    806.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  }
+ ]
+}

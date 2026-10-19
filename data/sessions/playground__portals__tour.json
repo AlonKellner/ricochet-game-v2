@@ -1,0 +1,302 @@
+{
+ "schema": "rc-session/1",
+ "level": "playground/portals",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    394.0,
+    450.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    406.0,
+    450.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    954.0,
+    275.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    966.0,
+    275.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1394.0,
+    350.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1406.0,
+    350.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    826.0,
+    450.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    814.0,
+    450.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1200.0,
+    574.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1200.0,
+    586.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    544.0,
+    750.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    556.0,
+    750.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1344.0,
+    750.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1356.0,
+    750.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1424.0,
+    675.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1436.0,
+    675.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    324.0,
+    675.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    336.0,
+    675.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    394.0,
+    350.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    966.0,
+    325.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1394.0,
+    290.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "key",
+   "action": "toggle_visibility"
+  },
+  {
+   "op": "key",
+   "action": "toggle_visibility"
+  },
+  {
+   "op": "fire",
+   "speedup_at": 30
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    394.0,
+    450.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "click",
+   "button": "right"
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "right"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  },
+  {
+   "op": "key",
+   "action": "toggle_gravity"
+  },
+  {
+   "op": "key",
+   "action": "toggle_gravity"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1910.0,
+    540.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    10.0,
+    300.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  }
+ ]
+}

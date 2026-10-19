@@ -12,10 +12,7 @@ b = Vector2(1920, 0)
 
 [node name="Main" type="Node2D" unique_id=1606209940]
 script = ExtResource("2")
-room_rect = Rect2(160, 90, 1600, 900)
-mirror_lines = Array[Vector4]([Vector4(500, 200, 500, 700), Vector4(1400, 300, 1400, 800), Vector4(700, 800, 1200, 800)])
-mirror_right_lines = Array[Vector4]([Vector4(960, 200, 960, 500)])
-inversion_left_arcs = PackedFloat64Array(1100, 400, 1100, 700, 1230, 550)
+level_path = "res://data/levels/main.json"
 
 [node name="Background" type="ColorRect" parent="." unique_id=1610522736]
 offset_right = 1920.0

@@ -1,0 +1,218 @@
+{
+ "schema": "rc-session/1",
+ "level": "open_room_playable",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    794.0,
+    540.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    806.0,
+    540.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1194.0,
+    540.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1206.0,
+    540.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    994.0,
+    550.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1006.0,
+    550.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    794.0,
+    444.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1206.0,
+    636.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    994.0,
+    490.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "key",
+   "action": "toggle_visibility"
+  },
+  {
+   "op": "key",
+   "action": "toggle_visibility"
+  },
+  {
+   "op": "fire",
+   "speedup_at": 30
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    794.0,
+    540.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "click",
+   "button": "right"
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "right"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  },
+  {
+   "op": "key",
+   "action": "toggle_gravity"
+  },
+  {
+   "op": "key",
+   "action": "toggle_gravity"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1910.0,
+    540.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    10.0,
+    300.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  }
+ ]
+}

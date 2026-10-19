@@ -23,7 +23,8 @@ BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
 .PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test \
-	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps
+	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
+	sessions sessions-check
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -39,7 +40,7 @@ core:
 
 # The inner loop: core, then the ctest entries of an area, or one doctest filter.
 #   make check                      # every entry (~20 s)
-#   make check AREA=solver|vis|goldens
+#   make check AREA=solver|vis|goldens|sweeps|game
 #   make check TC="Stage 111*"      # rc_tests -tc=<filter> (--no-skip with SKIP=0)
 AREA ?= all
 TC ?=
@@ -48,6 +49,7 @@ check_re_solver := ^rc_tests$$|tier_independence|pop_tiers|sweep_goldens
 check_re_vis := visibility
 check_re_goldens := ^rc_tests$$|sweep_goldens
 check_re_sweeps := rc_sweeps
+check_re_game := ^rcg
 check: core
 	@if [ -n "$(TC)" ]; then $(BUILD_CORE)/rc_tests -tc="$(TC)" $(if $(filter 0,$(SKIP)),--no-skip,); \
 	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --output-on-failure -R '$(check_re_$(AREA))'; fi
@@ -113,6 +115,25 @@ manifests: native
 		-gtest=$(subst $(space),$(comma),$(addprefix res://tests/,$(SWEEP_MANIFEST_FILES))) -gexit > /dev/null
 	@ls "$(MANIFEST_DIR)" | wc -l | sed 's/^ *//; s/$$/ manifests/'
 
+# ------------------------------------------------------------- session replay
+# Stage 115 (docs/research/session_digest.md): the game played through the
+# session scripts (data/sessions, docs/research/sessions/gen_sessions.py), one
+# record of its observable state per step -> bench/sessions/*.jsonl, the
+# golden every engine-agnostic port reproduces. `sessions` re-records it (a
+# changed record is a behaviour change: the judge's report first),
+# `sessions-check` records into a temporary directory and compares
+# (docs/research/session_judge.py, exit 2 on a difference). The shards run in
+# parallel Godot processes.
+SESSIONS_DIR ?= $(CURDIR)/bench/sessions
+SESSION_JOBS ?= $(NCPU)
+sessions: native
+	rm -rf "$(SESSIONS_DIR)"
+	tools/record_sessions.sh "$(SESSIONS_DIR)" $(SESSION_JOBS)
+	@ls "$(SESSIONS_DIR)" | wc -l | sed 's/^ *//; s/$$/ sessions/'
+sessions-check: native
+	@d=$$(mktemp -d "$${TMPDIR:-/tmp}/ricochet_sessions.XXXXXX"); \
+	tools/record_sessions.sh "$$d" $(SESSION_JOBS) && python3 -I docs/research/session_judge.py bench/sessions "$$d" && rm -rf "$$d"
+
 # ------------------------------------------------------------- goldens judge
 # Workflow W4: what the tree changes against REF (default main), dumped from
 # a cached reference build and classified (tools/judge.sh, docs/research/judge.py)
@@ -141,10 +162,11 @@ regen:
 regen-apply:
 	$(ORACLE_PY) -I docs/research/regen.py --keep $(if $(ONLY),--only $(ONLY),)
 # the levels as surface defs (bench/scenes/*.surfaces.json): the generators'
-# and the native visibility tests' input; the GUT parity tests
-# (test_stage81_scene_switch, test_stage107_level_parity) fail while stale
-dumps: native
-	$(GODOT) --headless --path . -s res://scripts/testing/dump_scene_surfaces.gd
+# and the native visibility tests' input, built from the level data by the
+# headless host (Stage 115, no Godot); the dumps gate fails while they are stale
+DUMPS_DIR ?= $(CURDIR)/bench/scenes
+dumps: core
+	$(BUILD_CORE)/rc_tool dumps data/levels "$(DUMPS_DIR)"
 oracle-test:
 	@if [ -x $(ORACLE_PY) ]; then $(ORACLE_PY) -m pytest -q docs/research/oracle; \
 	else echo "!! oracle tests skipped: no docs/research/.venv (python3 -m venv docs/research/.venv && docs/research/.venv/bin/pip install mpmath numpy pytest)"; fi

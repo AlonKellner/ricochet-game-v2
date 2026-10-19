@@ -1,0 +1,148 @@
+{
+ "schema": "rc-session/1",
+ "level": "test_levels/three_mirrors",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    760.0,
+    600.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    822.25,
+    506.75
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1239.75,
+    534.5
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1039.25,
+    541.75
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    794.0,
+    540.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1194.0,
+    540.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    994.0,
+    550.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1160.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  }
+ ]
+}

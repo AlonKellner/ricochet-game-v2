@@ -38,6 +38,7 @@ Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. 
 | Hit effects as a second axis: any number per side (state change, target, spawn, reset), presence (§9.1, §9.6, §10.6; TDD_11 Stage 107) | Done (user sign-off 2026-10-16) |
 | Crossing surfaces: design surfaces split into pieces at crossings; spawned surfaces trimmed (§9.7, §10.6.3; TDD_12 Stage 108) | Done (user sign-off 2026-10-16) |
 | Plannable infinity — the ∞ plan entry, the `infinity` event (§4.2, §6.3, §12.5, §13.1; TDD_10 Stages 88, 101) | Done (B9 approved 2026-10-15): the frame's infinity `Q`, the edge or an on-screen point, plannable; the pre-transform (§9.5) |
+| Engine-agnostic port: the levels as data (`rc-level/1`, §19.1), the session replay golden, the headless host `rc_tool` (docs/TDD_20, Stage 115) | Done (the first of the program's stages; the game logic, rendering and physics move native next) |
 | Level editor | Planned |
 | Menus, HUD, save system | Planned |
 
@@ -1779,36 +1780,43 @@ Scene state = Scene + GameState. Both trajectory and visibility use the same sce
 
 ### 19.1 Level data format
 
-A level is a serialized resource (`.tres` in Godot) containing:
+A level is a JSON file, `data/levels/<dir>/<name>.json`, in the format `rc-level/1` (Stage 115; the full
+schema: `docs/LEVEL_FORMAT.md`). It is engine-neutral and the source of truth of the level: every host reads
+it through the native reader (`rcg::parse_level`), which is strict (an unknown key, a missing one or a value of
+the wrong type is an error naming its path) and correctly rounded (no engine's own decimal parser is used).
 
 ```
-LevelData:
-    name:            String
-    surfaces:        Array[SurfaceData]
-    spawn_point:     Vector2
-    gravity:         Vector2                 # default (0, 0) — no gravity
-    initial_flags:   Dictionary[StringName, Variant]  # initial game state (e.g. {"mirror_3_intact": true})
-    surface_names:   Dictionary[int, String]  # optional display names by surface ID, default "Surface N"
-    bounds:          Rect2                    # level bounds for camera, visibility, tests. Defaults to bounding box of all surfaces + **50 units** margin on each side. For arc segments, the bounding box is the axis-aligned bounding box of the arc path (computed from center, radius, and angular span), not just the three defining points.
-    cache_overrides: Array[CycleOverride]    # manual cycle identities
-    cached_carriers: Dictionary[int, Array]  # key = surface ID, value = [a, b, c, d] carrier coefficients
-    collision_bodies: Array[CollisionBodyData]  # optional, default empty. Player-only collision geometry (§25.1).
+Level:
+    schema:      "rc-level/1"
+    name:        String                      # its path under data/levels
+    bounds:      [x, y, w, h]                # the level's edge (default 0, 0, 1920, 1080)
+    gravity:     [gx, gy]                    # default (0, 0) -- no gravity
+    room:        {rect: [x, y, w, h], built: bool}
+    player:      {start: [x, y]}
+    camera:      {start, smoothing, smoothing_speed} or null
+    background:  {rect, color} or null
+    colliders:   [{a: [x, y], b: [x, y]}]    # player-only collision segments (§25.1)
+    features:    {game, preview, arrow, hud, cursor}
+    surfaces:    [Surface]                   # every surface the level builds, in build order
 
-CollisionBodyData:
-    shape:    String      # "segment" or "rectangle"
-    start:    Vector2     # for "segment": first endpoint. For "rectangle": top-left corner.
-    end:      Vector2     # for "segment": second endpoint. For "rectangle": bottom-right corner.
-
-CycleOverride:
-    surface_ids:     Array[int]          # surfaces in cycle order
-    sides:           Array[Side]         # which side at each surface
-    expected_result: Variant             # the declared composition result (typically identity); representation TBD — no Möbius matrix class exists since Stage 84 (§17.4)
-    test_positions:  Array[Vector2]          # custom off-grid test positions for invariant testing
+Surface:
+    ids:            [int]                    # a portal [source, image]: the image is built from the source
+    label:          String or null           # the node prefix; null: not drawn (the edge walls)
+    start, end, via | circle {center, radius}
+    straight:       bool                     # the exact line through start and end
+    pre_transform:  bool                     # a pre-transform circle (§9.5)
+    left, right:    {effect: {type, back, normal, theta, d}, interactive: bool, hits: [HitEffect]} or null
+    resolver:       {key, table: [[value, {left, right}], ...]}   # categorical sides (§9.4)
+    presence:       [{key, values}]          # §9.6
+    player_solid:   bool
 ```
 
-Each `SurfaceData` includes the segment geometry (start, end, via), per-side effect configuration, resolver, is_target flag, and player_solid flag.
+Every point is read as float32 (the game's vectors); other numbers stay float64. Surface ids are explicit and
+consecutive in build order (the room's walls, the surfaces, the four edge walls, the pre-transform circles).
+Initial flags are not part of the format yet (every level starts with none); cycle overrides (§17) are
+not either.
 
-**Level discovery:** available levels are discovered by scanning `resources/levels/` for `.tres` files. Level ordering in the level select screen is alphabetical by filename unless a manifest file (`resources/levels/manifest.cfg`) specifies a custom order.
+**Level discovery:** the levels are the files under `data/levels/`.
 
 ### 19.2 Editor requirements
 
@@ -1838,13 +1846,12 @@ Surface IDs are assigned by a monotonically incrementing counter persisted in th
 
 ### 19.3 Serialization
 
-Levels serialize to Godot `.tres` resources. The primary data for each surface is its three points (start, end, via) plus per-side effect configs, state key, and is_target flag. The **full computation cache** — including derived carrier coefficients and any other cached values — is serialized alongside the primary data. This avoids recalculation on deserialization and ensures exact values are preserved across save/load.
-
-Principle 21 (derive, don't duplicate) governs **runtime data flow**: the carrier is derived on demand from three points and cached. Serialization is a **persistence optimization** — it stores the cache so that loading is exact and fast. The three points remain the source of truth; the serialized cache is validated against them on load.
-
-If the stored carrier type disagrees with the geometric configuration of the three points on load, the geometric configuration wins and the cache is recomputed. A warning is logged.
-
-The format must be human-readable for debugging.
+Levels serialize to JSON (§19.1) in one canonical spelling: object keys sorted, one per line, indented by one
+space per level; an array of scalars on one line, any other array one element per line; every float as its
+shortest round-trip decimal (`rc_tool fmt`; ctest `rcg_levels_canonical`). The data is the authoring form:
+the three points of a surface (or its circle), its sides and resolver; the carriers and everything else are
+derived when the level is built (Principle 21). The scene defs the solver reads are derived from it too
+(`rc_tool dumps` -> `bench/scenes`).
 
 ---
 
@@ -1864,7 +1871,7 @@ The math layer has **zero Godot engine dependencies** beyond `Vector2`. Testable
 
 **GDScript performance note:** GDScript is significantly slower than C++ for tight numerical loops. For the intersection kernel (32 events × N surfaces per frame), avoid object allocation in hot loops. This is why `FastSolver` exists: a raw-float64 `PackedFloat64Array` backend, roughly 50× faster than the precision-generic code and bit-identical to it at float64. If profiling shows the intersection kernel is the bottleneck, consider moving it to a GDExtension (C++) module. The math layer's zero-dependency design makes this migration straightforward.
 
-**Resource mapping:** `LevelData`, `SurfaceData`, and effect configurations extend Godot `Resource`. Each has `@export` properties for serialization to `.tres`. Surfaces in the scene tree are `Node2D` instances that reference their `SurfaceData` resource.
+**Level data (Stage 115):** a level scene points at its data (`LevelSettings.level_path`); `LevelData` turns the natively read data into `SurfaceSpec` / `SideSpec` / `SpawnTemplate` resources in build order, and the surfaces in the scene tree are `Node2D` instances drawing them. The engine-free game layer (`native/game`, `rcg::`) reads, validates and builds the same data; the headless host `rc_tool` runs the data pipelines without Godot.
 
 ### 20.2 Project structure
 
@@ -2667,4 +2674,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.26.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.27.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

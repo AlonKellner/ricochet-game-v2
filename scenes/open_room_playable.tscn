@@ -1,4 +1,4 @@
-[gd_scene load_steps=8 format=3]
+[gd_scene load_steps=9 format=3]
 
 [ext_resource type="PackedScene" path="res://scenes/player.tscn" id="1"]
 [ext_resource type="Script" path="res://scripts/game/level_settings.gd" id="2"]
@@ -14,12 +14,7 @@ b = Vector2(1360, 0)
 
 [node name="Main" type="Node2D"]
 script = ExtResource("2")
-gravity = Vector2(0, 980)
-room_rect = Rect2(560, 240, 800, 600)
-build_room = false
-block_lines = [Vector4(560, 240, 1360, 240), Vector4(1360, 840, 560, 840), Vector4(560, 840, 560, 240)]
-mirror_lines = [Vector4(800, 300, 800, 780), Vector4(1200, 300, 1200, 780)]
-mirror_right_lines = [Vector4(1000, 400, 1000, 700)]
+level_path = "res://data/levels/open_room_playable.json"
 
 [node name="Background" type="ColorRect" parent="."]
 offset_right = 1920.0

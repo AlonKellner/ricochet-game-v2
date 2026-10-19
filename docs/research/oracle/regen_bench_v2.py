@@ -23,7 +23,7 @@ import mpmath as mp
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import trace2 as T                                          # noqa: E402
-from tscn_import import full_circle_carrier, full_circle_points  # noqa: E402
+from level_json import full_circle_carrier, full_circle_points  # noqa: E402
 
 ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", ".."))
 WALLS = [(0.0, 0.0, 1920.0, 0.0), (1920.0, 0.0, 1920.0, 1080.0), (1920.0, 1080.0, 0.0, 1080.0), (0.0, 1080.0, 0.0, 0.0)]

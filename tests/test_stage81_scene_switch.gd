@@ -79,4 +79,4 @@ func test_every_level_has_a_dump():
 				continue
 			var rel: String = (dir + "/" + fn).trim_prefix("res://scenes/").trim_suffix(".tscn").replace("/", "__")
 			assert_true(FileAccess.file_exists("res://bench/scenes/%s.surfaces.json" % rel),
-				"%s has a dump (godot --headless --path . -s res://scripts/testing/dump_scene_surfaces.gd)" % fn)
+				"%s has a dump (make dumps)" % fn)

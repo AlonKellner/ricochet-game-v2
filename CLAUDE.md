@@ -13,7 +13,10 @@ Three-layer architecture with strict dependency direction: Math -> Visual -> Gam
 - `scripts/math/` — Geometric primitives and algorithms. **Zero Godot dependencies beyond Vector2.** Classes must extend `RefCounted`, `Object`, or have no `extends`. Never `Node`, `Node2D`, `Control`, or any scene-tree type.
 - `scripts/math/effects/` — Effect definitions (reflection, inversion, rigid motion, projective): kind, self-inverse, display. The beam maps are native (`rc/beam_effects.hpp`).
 - `native/core/include/rc/` — The native core, header-only C++. The trajectory solver is the only solver: `solver.hpp` is the rule walker (spec: `docs/research/oracle/trace2.py`), `ladder.hpp` the dynamic precision, `tracer.hpp` turns events into `TracePath`/`TraceStep`, `exact.hpp` and `bigfloat.hpp` the exact predicates and arithmetic. Decisions use provenance and exact predicates, never epsilons. `invariants.hpp` and `sweep.hpp` are the invariant kernel; `visibility.hpp` and `visibility_checks.hpp` the visibility region and its invariants.
-- `native/gd/` — The GDExtension bindings (`BeamTracer`, `BeamSolver`, `InvariantKernel`, `SweepKernel`, `VisibilityRegion`, ...).
+- `native/game/include/rcg/` — The engine-free game layer (Stage 115 on, the engine-agnostic port): the level data (`level.hpp`: `rc-level/1`, `docs/LEVEL_FORMAT.md`), its builder and scene defs (`build.hpp`), the canonical JSON spelling (`canon.hpp`). Tests: `rcg_tests` (`make check AREA=game`).
+- `native/hosts/headless/` — `rc_tool`, the headless host: `rc_tool fmt [--check]`, `rc_tool dumps` (`make dumps`).
+- `native/gd/` — The GDExtension bindings (`BeamTracer`, `BeamSolver`, `InvariantKernel`, `SweepKernel`, `VisibilityRegion`, `RcgLevel`, ...).
+- `data/levels/` — The levels (JSON, the source of truth; a scene points at its data with `level_path`). `data/sessions/` — the session scripts of the replay golden (`bench/sessions`, `docs/research/session_digest.md`).
 - `scripts/visual/` — Rendering via `_draw()` and `queue_redraw()` (the visibility fill: `visibility_renderer.gd`).
 - `scripts/game/` — Scene-dependent game logic (player, surfaces, game manager).
 - `scripts/editor/` — Level editor scripts.
@@ -25,10 +28,11 @@ The protocol: `docs/WORKFLOW.md` (the three gates, the three build trees, the da
 ```bash
 # The inner loop: the rc_tests binary alone (no godot-cpp), then ctest entries of an area
 make check                      # every entry, ~18 s after the build
-make check AREA=vis             # solver | vis | goldens | sweeps | all
+make check AREA=vis             # solver | vis | goldens | sweeps | game | all
 make check TC="visibility digest" SKIP=0   # one doctest filter (--no-skip with SKIP=0)
 
-# Before every commit (core, oracle, ctest, the extension, GUT, goldens unchanged; timed summary)
+# Before every commit (core, oracle, ctest, the extension, the dumps/manifests/sessions current, GUT,
+# goldens unchanged; timed summary)
 make gate
 
 # Before a merge to main or a phase close: the same plus ASan+UBSan
@@ -41,6 +45,7 @@ make native-asan                # rc_tests under ASan+UBSan (native/build-asan)
 make oracle-test                # the mpmath oracle's pytest
 ./run_tests_parallel.sh         # the GUT suite, sweeps sharded over parallel processes
 make test-stage STAGE=3         # one stage's GUT files
+make sessions-check             # the session replay golden (make sessions re-records: a behaviour change)
 ```
 
 - Test files: `tests/test_stage{N}_{topic}.gd`

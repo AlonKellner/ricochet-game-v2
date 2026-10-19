@@ -10,13 +10,7 @@
 
 [node name="Main" type="Node2D"]
 script = ExtResource("2")
-gravity = Vector2(0, 0)
-room_rect = Rect2(460, 170, 1000, 700)
-build_room = true
-mirror_lines = Array[Vector4]([Vector4(1300, 300, 1300, 800)])
-mirror_both_lines = Array[Vector4]([Vector4(960, 380, 960, 700), Vector4(1110, 500, 1110, 580)])
-full_inversion_arcs = PackedFloat64Array(1160, 540, 100)
-pre_transform_inversions = PackedFloat64Array(960, 540, 200)
+level_path = "res://data/levels/playground/tangent_infinity.json"
 
 [node name="Background" type="ColorRect" parent="."]
 offset_right = 1920.0

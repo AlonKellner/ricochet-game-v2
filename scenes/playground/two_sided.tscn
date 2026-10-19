@@ -10,11 +10,7 @@
 
 [node name="Main" type="Node2D"]
 script = ExtResource("2")
-gravity = Vector2(0, 0)
-room_rect = Rect2(260, 140, 1400, 800)
-build_room = true
-mirror_both_lines = [Vector4(620, 300, 720, 780), Vector4(1250, 350, 1400, 680)]
-reflective_arcs = PackedFloat64Array(980, 320, 980, 760, 1140, 540, 400, 500, 500, 750, 350, 650)
+level_path = "res://data/levels/playground/two_sided.json"
 
 [node name="Background" type="ColorRect" parent="."]
 offset_right = 1920.0
