@@ -1,0 +1,98 @@
+{
+ "schema": "rc-session/1",
+ "level": "main",
+ "kind": "kinematic",
+ "steps": [
+  {
+   "op": "cursor",
+   "at": [
+    1200.0,
+    400.0
+   ]
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_right"
+   ],
+   "ticks": 45
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_left"
+   ],
+   "ticks": 90
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_down"
+   ],
+   "ticks": 45
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_up"
+   ],
+   "ticks": 90
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_right",
+    "move_up"
+   ],
+   "ticks": 60
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_left",
+    "move_down"
+   ],
+   "ticks": 60
+  },
+  {
+   "op": "key",
+   "action": "toggle_gravity"
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 30
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_right"
+   ],
+   "ticks": 45
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_up"
+   ],
+   "ticks": 30
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 60
+  },
+  {
+   "op": "key",
+   "action": "toggle_gravity"
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_down",
+    "move_left"
+   ],
+   "ticks": 60
+  }
+ ]
+}

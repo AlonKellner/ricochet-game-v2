@@ -1,0 +1,246 @@
+{
+ "schema": "rc-session/1",
+ "level": "main",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    494.0,
+    450.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    506.0,
+    450.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1394.0,
+    550.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1406.0,
+    550.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    950.0,
+    806.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    950.0,
+    794.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    954.0,
+    350.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    966.0,
+    350.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1236.0,
+    550.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1224.0,
+    550.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    494.0,
+    350.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1406.0,
+    650.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    850.0,
+    806.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "key",
+   "action": "toggle_visibility"
+  },
+  {
+   "op": "key",
+   "action": "toggle_visibility"
+  },
+  {
+   "op": "fire",
+   "speedup_at": 30
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    494.0,
+    450.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "click",
+   "button": "right"
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "right"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "key",
+   "action": "clear_plan"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  },
+  {
+   "op": "key",
+   "action": "toggle_gravity"
+  },
+  {
+   "op": "key",
+   "action": "toggle_gravity"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1910.0,
+    540.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    10.0,
+    300.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1180.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  }
+ ]
+}

@@ -23,7 +23,8 @@ BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
 .PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test \
-	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps
+	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
+	sessions sessions-check
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -112,6 +113,25 @@ manifests: native
 	SWEEP_MANIFEST_DIR="$(MANIFEST_DIR)" $(GODOT) --headless -s addons/gut/gut_cmdln.gd -gconfig= \
 		-gtest=$(subst $(space),$(comma),$(addprefix res://tests/,$(SWEEP_MANIFEST_FILES))) -gexit > /dev/null
 	@ls "$(MANIFEST_DIR)" | wc -l | sed 's/^ *//; s/$$/ manifests/'
+
+# ------------------------------------------------------------- session replay
+# Stage 115 (docs/research/session_digest.md): the game played through the
+# session scripts (data/sessions, docs/research/sessions/gen_sessions.py), one
+# record of its observable state per step -> bench/sessions/*.jsonl, the
+# golden every engine-agnostic port reproduces. `sessions` re-records it (a
+# changed record is a behaviour change: the judge's report first),
+# `sessions-check` records into a temporary directory and compares
+# (docs/research/session_judge.py, exit 2 on a difference). The shards run in
+# parallel Godot processes.
+SESSIONS_DIR ?= $(CURDIR)/bench/sessions
+SESSION_JOBS ?= $(NCPU)
+sessions: native
+	rm -rf "$(SESSIONS_DIR)"
+	tools/record_sessions.sh "$(SESSIONS_DIR)" $(SESSION_JOBS)
+	@ls "$(SESSIONS_DIR)" | wc -l | sed 's/^ *//; s/$$/ sessions/'
+sessions-check: native
+	@d=$$(mktemp -d "$${TMPDIR:-/tmp}/ricochet_sessions.XXXXXX"); \
+	tools/record_sessions.sh "$$d" $(SESSION_JOBS) && python3 -I docs/research/session_judge.py bench/sessions "$$d" && rm -rf "$$d"
 
 # ------------------------------------------------------------- goldens judge
 # Workflow W4: what the tree changes against REF (default main), dumped from

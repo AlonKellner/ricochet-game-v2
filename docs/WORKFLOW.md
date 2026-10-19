@@ -18,7 +18,7 @@ machine (6 performance, 6 efficiency cores) unless a row says otherwise.
 | Target | When | What | Time |
 |---|---|---|---|
 | `make check` | after every edit | `make core` (the `rc_tests` binary alone) then the ctest entries of an area: `AREA=all` (default) / `solver` / `vis` / `goldens` / `sweeps`, or one doctest filter `TC="..."` (`SKIP=0` adds `--no-skip`) | 18–24 s for a core header change + the entries (all: 18 s) |
-| `make gate` | before every commit | `gates.sh LEVEL=commit`: core, oracle, ctest (release; the native sweeps at one player in 4), the extension build, the manifests current, the GUT suite (its sweeps sampled), the goldens unchanged | see below |
+| `make gate` | before every commit | `gates.sh LEVEL=commit`: core, oracle, ctest (release; the native sweeps at one player in 4), the extension build, the manifests current, the session replay current (Stage 115), the GUT suite (its sweeps sampled), the goldens and the session golden unchanged | see below |
 | `make gates` | before a merge to main, at each phase close, and whenever a golden, a fixture or a dump changes | `LEVEL=merge`: the same with every sweep player, then ctest under ASan+UBSan | see below |
 
 Every gate runs even after a failure; the summary names the failed ones and the log directory.
@@ -158,6 +158,7 @@ while they are stale, and the generators read them.
 | `bench/scenes_corpus/{scenarios,expected}` | `docs/research/oracle/gen_scene_corpus.py` | `make regen` / `make regen-apply` | the GUT corpus test, `test_corpus_oracle.cpp`, the corpus goldens |
 | `bench/goldens/*.json` | dumped at tag `pre-native` (the script is gone); re-blessed only | `make judge`, the user's approval, `make rebless APPROVED=1` | `test_goldens.cpp`, `test_visibility.cpp` (regions) |
 | `bench/sweeps/*.json` | `SweepRunner.sweep_native` under `SWEEP_MANIFEST_DIR` | `make manifests` (the manifests gate fails while stale) | `test_sweeps.cpp` |
+| `bench/sessions/*.jsonl` (the session replay golden, `docs/research/session_digest.md`) | the game played through `data/sessions` (`scripts/testing/record_sessions.gd`, Godot, 12 shards, ~30 s) | `make sessions` after the user approved `docs/research/session_judge.py`'s report; `make sessions-check` (the sessions gate) | the engine-agnostic port (Stage 115 on): the native session and the C API hosts reproduce every record |
 
 ## Debugging variables
 
