@@ -102,18 +102,15 @@ gate:
 	LEVEL=commit ./gates.sh
 
 # ------------------------------------------------------------- sweep manifests
-# Workflow W2: the GUT sweeps' inputs (what SweepRunner.sweep_native hands
-# SweepKernel.run) as bench/sweeps/*.json, replayed natively by rc_tests
-# (sweeps:*). Regenerate after a change to the levels, SweepPlans or
-# SweepRunner; the manifests gate (gates.sh) fails while they are stale.
-SWEEP_MANIFEST_FILES := test_invariant_sweep.gd test_invariant_combos.gd test_stage107_level_sweep.gd \
-	test_stage108_level_sweep.gd test_visibility_sweep.gd
+# Workflow W2: the invariant sweeps' inputs as bench/sweeps/*.json, replayed
+# natively by rc_tests (sweeps:*): expanded from data/sweeps.json (the sweeps'
+# call sites) and data/levels by the headless host (Stage 116, no Godot).
+# Regenerate after a change to the levels or the recipes; the manifests gate
+# (gates.sh) fails while they are stale.
 MANIFEST_DIR ?= $(CURDIR)/bench/sweeps
-manifests: native
+manifests: core
 	rm -rf "$(MANIFEST_DIR)" && mkdir -p "$(MANIFEST_DIR)"
-	SWEEP_MANIFEST_DIR="$(MANIFEST_DIR)" $(GODOT) --headless -s addons/gut/gut_cmdln.gd -gconfig= \
-		-gtest=$(subst $(space),$(comma),$(addprefix res://tests/,$(SWEEP_MANIFEST_FILES))) -gexit > /dev/null
-	@ls "$(MANIFEST_DIR)" | wc -l | sed 's/^ *//; s/$$/ manifests/'
+	$(BUILD_CORE)/rc_tool manifests data/sweeps.json data/levels "$(MANIFEST_DIR)"
 
 # ------------------------------------------------------------- session replay
 # Stage 115 (docs/research/session_digest.md): the game played through the

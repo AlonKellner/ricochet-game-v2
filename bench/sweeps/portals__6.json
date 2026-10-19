@@ -1,1091 +1,695 @@
 {
-	"schema": "sweep-manifest/1",
-	"scene": "res://scenes/playground/portals.tscn",
-	"seq": 6,
-	"defs": [
-		{
-			"circle": null,
-			"id": 1,
-			"start": [
-				100.0,
-				80.0
-			],
-			"end": [
-				1820.0,
-				80.0
-			],
-			"via": [
-				960.0,
-				80.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"right": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": true
-		},
-		{
-			"circle": null,
-			"id": 2,
-			"start": [
-				1820.0,
-				80.0
-			],
-			"end": [
-				1820.0,
-				1000.0
-			],
-			"via": [
-				1820.0,
-				540.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"right": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": true
-		},
-		{
-			"circle": null,
-			"id": 3,
-			"start": [
-				1820.0,
-				1000.0
-			],
-			"end": [
-				100.0,
-				1000.0
-			],
-			"via": [
-				960.0,
-				1000.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"right": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": true
-		},
-		{
-			"circle": null,
-			"id": 4,
-			"start": [
-				100.0,
-				1000.0
-			],
-			"end": [
-				100.0,
-				80.0
-			],
-			"via": [
-				100.0,
-				540.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"right": {
-				"type": "terminal",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": true
-		},
-		{
-			"circle": null,
-			"id": 5,
-			"start": [
-				400.0,
-				200.0
-			],
-			"end": [
-				400.0,
-				700.0
-			],
-			"via": [
-				400.0,
-				450.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "reflection",
-				"interactive": true
-			},
-			"right": {
-				"type": "pass",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 6,
-			"start": [
-				960.0,
-				150.0
-			],
-			"end": [
-				960.0,
-				400.0
-			],
-			"via": [
-				960.0,
-				275.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "pass",
-				"interactive": false
-			},
-			"right": {
-				"type": "reflection",
-				"interactive": true
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 7,
-			"start": [
-				1400.0,
-				200.0
-			],
-			"end": [
-				1400.0,
-				500.0
-			],
-			"via": [
-				1400.0,
-				350.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "reflection",
-				"interactive": true
-			},
-			"right": {
-				"type": "reflection",
-				"interactive": true
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 8,
-			"start": [
-				700.0,
-				300.0
-			],
-			"end": [
-				700.0,
-				600.0
-			],
-			"via": [
-				820.0,
-				450.0
-			],
-			"full": false,
-			"line": false,
-			"left": {
-				"type": "inversion",
-				"interactive": true
-			},
-			"right": {
-				"type": "pass",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": true
-		},
-		{
-			"circle": null,
-			"id": 9,
-			"start": [
-				1100.0,
-				700.0
-			],
-			"end": [
-				1300.0,
-				700.0
-			],
-			"via": [
-				1200.0,
-				580.0
-			],
-			"full": false,
-			"line": false,
-			"left": {
-				"type": "reflection",
-				"interactive": true
-			},
-			"right": {
-				"type": "reflection",
-				"interactive": true
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 10,
-			"start": [
-				550.0,
-				600.0
-			],
-			"end": [
-				550.0,
-				900.0
-			],
-			"via": [
-				550.0,
-				750.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "portal",
-				"theta": 0.0,
-				"d": [
-					800.0,
-					0.0
-				],
-				"interactive": true,
-				"pair": 11
-			},
-			"right": {
-				"type": "portal",
-				"theta": 0.0,
-				"d": [
-					800.0,
-					0.0
-				],
-				"interactive": true,
-				"pair": 11
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 11,
-			"start": [
-				1350.0,
-				600.0
-			],
-			"end": [
-				1350.0,
-				900.0
-			],
-			"via": [
-				1350.0,
-				750.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "portal",
-				"theta": 0.0,
-				"d": [
-					-800.0,
-					0.0
-				],
-				"interactive": true,
-				"pair": 10
-			},
-			"right": {
-				"type": "portal",
-				"theta": 0.0,
-				"d": [
-					-800.0,
-					0.0
-				],
-				"interactive": true,
-				"pair": 10
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 12,
-			"start": [
-				1500.0,
-				550.0
-			],
-			"end": [
-				1500.0,
-				800.0
-			],
-			"via": [
-				1430.0,
-				675.0
-			],
-			"full": false,
-			"line": false,
-			"left": {
-				"type": "portal",
-				"theta": 0.0,
-				"d": [
-					-1100.0,
-					0.0
-				],
-				"interactive": true,
-				"pair": 13
-			},
-			"right": {
-				"type": "portal",
-				"theta": 0.0,
-				"d": [
-					-1100.0,
-					0.0
-				],
-				"interactive": true,
-				"pair": 13
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 13,
-			"start": [
-				400.0,
-				550.0
-			],
-			"end": [
-				400.0,
-				800.0
-			],
-			"via": [
-				330.0,
-				675.0
-			],
-			"full": false,
-			"line": false,
-			"left": {
-				"type": "portal",
-				"theta": 0.0,
-				"d": [
-					1100.0,
-					0.0
-				],
-				"interactive": true,
-				"pair": 12
-			},
-			"right": {
-				"type": "portal",
-				"theta": 0.0,
-				"d": [
-					1100.0,
-					0.0
-				],
-				"interactive": true,
-				"pair": 12
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 14,
-			"start": [
-				0.0,
-				0.0
-			],
-			"end": [
-				1920.0,
-				0.0
-			],
-			"via": [
-				960.0,
-				0.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "pass",
-				"interactive": false
-			},
-			"right": {
-				"type": "pass",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 15,
-			"start": [
-				1920.0,
-				0.0
-			],
-			"end": [
-				1920.0,
-				1080.0
-			],
-			"via": [
-				1920.0,
-				540.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "pass",
-				"interactive": false
-			},
-			"right": {
-				"type": "pass",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 16,
-			"start": [
-				1920.0,
-				1080.0
-			],
-			"end": [
-				0.0,
-				1080.0
-			],
-			"via": [
-				960.0,
-				1080.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "pass",
-				"interactive": false
-			},
-			"right": {
-				"type": "pass",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": false
-		},
-		{
-			"circle": null,
-			"id": 17,
-			"start": [
-				0.0,
-				1080.0
-			],
-			"end": [
-				0.0,
-				0.0
-			],
-			"via": [
-				0.0,
-				540.0
-			],
-			"full": false,
-			"line": true,
-			"left": {
-				"type": "pass",
-				"interactive": false
-			},
-			"right": {
-				"type": "pass",
-				"interactive": false
-			},
-			"is_target": false,
-			"player_solid": false
-		}
-	],
-	"infos": [
-		{
-			"id": 1,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					100.0,
-					80.0
-				],
-				"end": [
-					1820.0,
-					80.0
-				],
-				"via": [
-					960.0,
-					80.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 0.0,
-				"c": -1272112000.0,
-				"d": 101768960000.0
-			}
-		},
-		{
-			"id": 2,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					1820.0,
-					80.0
-				],
-				"end": [
-					1820.0,
-					1000.0
-				],
-				"via": [
-					1820.0,
-					540.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 194672000.0,
-				"c": 0.0,
-				"d": -354303040000.0
-			}
-		},
-		{
-			"id": 3,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					1820.0,
-					1000.0
-				],
-				"end": [
-					100.0,
-					1000.0
-				],
-				"via": [
-					960.0,
-					1000.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 0.0,
-				"c": 1272112000.0,
-				"d": -1272112000000.0
-			}
-		},
-		{
-			"id": 4,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					100.0,
-					1000.0
-				],
-				"end": [
-					100.0,
-					80.0
-				],
-				"via": [
-					100.0,
-					540.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": -194672000.0,
-				"c": 0.0,
-				"d": 19467200000.0
-			}
-		},
-		{
-			"id": 5,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					400.0,
-					200.0
-				],
-				"end": [
-					400.0,
-					700.0
-				],
-				"via": [
-					400.0,
-					450.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 31250000.0,
-				"c": 0.0,
-				"d": -12500000000.0
-			}
-		},
-		{
-			"id": 6,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					960.0,
-					150.0
-				],
-				"end": [
-					960.0,
-					400.0
-				],
-				"via": [
-					960.0,
-					275.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 3906250.0,
-				"c": 0.0,
-				"d": -3750000000.0
-			}
-		},
-		{
-			"id": 7,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					1400.0,
-					200.0
-				],
-				"end": [
-					1400.0,
-					500.0
-				],
-				"via": [
-					1400.0,
-					350.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 6750000.0,
-				"c": 0.0,
-				"d": -9450000000.0
-			}
-		},
-		{
-			"id": 8,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					700.0,
-					300.0
-				],
-				"end": [
-					700.0,
-					600.0
-				],
-				"via": [
-					820.0,
-					450.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 36000.0,
-				"b": -47970000.0,
-				"c": -32400000.0,
-				"d": 22419000000.0
-			}
-		},
-		{
-			"id": 9,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					1100.0,
-					700.0
-				],
-				"end": [
-					1300.0,
-					700.0
-				],
-				"via": [
-					1200.0,
-					580.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 24000.0,
-				"b": -57600000.0,
-				"c": -32720000.0,
-				"d": 45464000000.0
-			}
-		},
-		{
-			"id": 10,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					550.0,
-					600.0
-				],
-				"end": [
-					550.0,
-					900.0
-				],
-				"via": [
-					550.0,
-					750.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 6750000.0,
-				"c": 0.0,
-				"d": -3712500000.0
-			}
-		},
-		{
-			"id": 11,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					1350.0,
-					600.0
-				],
-				"end": [
-					1350.0,
-					900.0
-				],
-				"via": [
-					1350.0,
-					750.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 6750000.0,
-				"c": 0.0,
-				"d": -9112500000.0
-			}
-		},
-		{
-			"id": 12,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					1500.0,
-					550.0
-				],
-				"end": [
-					1500.0,
-					800.0
-				],
-				"via": [
-					1430.0,
-					675.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": -17500.0,
-				"b": 55181250.0,
-				"c": 23625000.0,
-				"d": -51096875000.0
-			}
-		},
-		{
-			"id": 13,
-			"has_effect": true,
-			"segment": {
-				"start": [
-					400.0,
-					550.0
-				],
-				"end": [
-					400.0,
-					800.0
-				],
-				"via": [
-					330.0,
-					675.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": -17500.0,
-				"b": 16681250.0,
-				"c": 23625000.0,
-				"d": -11572500000.0
-			}
-		},
-		{
-			"id": 14,
-			"has_effect": false,
-			"segment": {
-				"start": [
-					0.0,
-					0.0
-				],
-				"end": [
-					1920.0,
-					0.0
-				],
-				"via": [
-					960.0,
-					0.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 0.0,
-				"c": -1769472000.0,
-				"d": 0.0
-			}
-		},
-		{
-			"id": 15,
-			"has_effect": false,
-			"segment": {
-				"start": [
-					1920.0,
-					0.0
-				],
-				"end": [
-					1920.0,
-					1080.0
-				],
-				"via": [
-					1920.0,
-					540.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 314928000.0,
-				"c": 0.0,
-				"d": -604661760000.0
-			}
-		},
-		{
-			"id": 16,
-			"has_effect": false,
-			"segment": {
-				"start": [
-					1920.0,
-					1080.0
-				],
-				"end": [
-					0.0,
-					1080.0
-				],
-				"via": [
-					960.0,
-					1080.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": 0.0,
-				"c": 1769472000.0,
-				"d": -1911029760000.0
-			}
-		},
-		{
-			"id": 17,
-			"has_effect": false,
-			"segment": {
-				"start": [
-					0.0,
-					1080.0
-				],
-				"end": [
-					0.0,
-					0.0
-				],
-				"via": [
-					0.0,
-					540.0
-				],
-				"full": false
-			},
-			"carrier": {
-				"a": 0.0,
-				"b": -314928000.0,
-				"c": 0.0,
-				"d": 0.0
-			}
-		}
-	],
-	"positions": [
-		[
-			110.0,
-			90.0
-		],
-		[
-			676.6666870117188,
-			90.0
-		],
-		[
-			1243.3333740234375,
-			90.0
-		],
-		[
-			1810.0,
-			90.0
-		],
-		[
-			110.0,
-			390.0
-		],
-		[
-			676.6666870117188,
-			390.0
-		],
-		[
-			1243.3333740234375,
-			390.0
-		],
-		[
-			1810.0,
-			390.0
-		],
-		[
-			110.0,
-			690.0
-		],
-		[
-			676.6666870117188,
-			690.0
-		],
-		[
-			1243.3333740234375,
-			690.0
-		],
-		[
-			1810.0,
-			690.0
-		],
-		[
-			110.0,
-			990.0
-		],
-		[
-			676.6666870117188,
-			990.0
-		],
-		[
-			1243.3333740234375,
-			990.0
-		],
-		[
-			1810.0,
-			990.0
-		],
-		[
-			1046.68896484375,
-			138.5064697265625
-		],
-		[
-			458.37255859375,
-			301.9984130859375
-		],
-		[
-			173.120361328125,
-			363.6497802734375
-		],
-		[
-			635.5532836914063,
-			590.3082275390625
-		],
-		[
-			148.19927978515625,
-			501.9077453613281
-		],
-		[
-			1102.30224609375,
-			260.4962158203125
-		]
-	],
-	"plans": [
-		[
-			{
-				"surface_id": -3,
-				"side": "LEFT"
-			}
-		],
-		[
-			{
-				"surface_id": -3,
-				"side": "LEFT"
-			},
-			{
-				"surface_id": -3,
-				"side": "LEFT"
-			}
-		],
-		[
-			{
-				"surface_id": -3,
-				"side": "LEFT"
-			},
-			{
-				"surface_id": 5,
-				"side": "LEFT"
-			}
-		],
-		[
-			{
-				"surface_id": 5,
-				"side": "LEFT"
-			},
-			{
-				"surface_id": -3,
-				"side": "LEFT"
-			}
-		]
-	],
-	"flags": {},
-	"skip_equal": true,
-	"emit_infinity": true,
-	"visibility": true,
-	"carrier_cursors": true
+ "carrier_cursors": true,
+ "defs": [
+  {
+   "circle": null,
+   "end": [1820.0, 80.0],
+   "full": false,
+   "id": 1,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [100.0, 80.0],
+   "via": [960.0, 80.0]
+  },
+  {
+   "circle": null,
+   "end": [1820.0, 1000.0],
+   "full": false,
+   "id": 2,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1820.0, 80.0],
+   "via": [1820.0, 540.0]
+  },
+  {
+   "circle": null,
+   "end": [100.0, 1000.0],
+   "full": false,
+   "id": 3,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1820.0, 1000.0],
+   "via": [960.0, 1000.0]
+  },
+  {
+   "circle": null,
+   "end": [100.0, 80.0],
+   "full": false,
+   "id": 4,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [100.0, 1000.0],
+   "via": [100.0, 540.0]
+  },
+  {
+   "circle": null,
+   "end": [400.0, 700.0],
+   "full": false,
+   "id": 5,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [400.0, 200.0],
+   "via": [400.0, 450.0]
+  },
+  {
+   "circle": null,
+   "end": [960.0, 400.0],
+   "full": false,
+   "id": 6,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "start": [960.0, 150.0],
+   "via": [960.0, 275.0]
+  },
+  {
+   "circle": null,
+   "end": [1400.0, 500.0],
+   "full": false,
+   "id": 7,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "start": [1400.0, 200.0],
+   "via": [1400.0, 350.0]
+  },
+  {
+   "circle": null,
+   "end": [700.0, 600.0],
+   "full": false,
+   "id": 8,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "type": "inversion"
+   },
+   "line": false,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [700.0, 300.0],
+   "via": [820.0, 450.0]
+  },
+  {
+   "circle": null,
+   "end": [1300.0, 700.0],
+   "full": false,
+   "id": 9,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "line": false,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "start": [1100.0, 700.0],
+   "via": [1200.0, 580.0]
+  },
+  {
+   "circle": null,
+   "end": [550.0, 900.0],
+   "full": false,
+   "id": 10,
+   "is_target": false,
+   "left": {
+    "d": [800.0, 0.0],
+    "interactive": true,
+    "pair": 11,
+    "theta": 0.0,
+    "type": "portal"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "d": [800.0, 0.0],
+    "interactive": true,
+    "pair": 11,
+    "theta": 0.0,
+    "type": "portal"
+   },
+   "start": [550.0, 600.0],
+   "via": [550.0, 750.0]
+  },
+  {
+   "circle": null,
+   "end": [1350.0, 900.0],
+   "full": false,
+   "id": 11,
+   "is_target": false,
+   "left": {
+    "d": [-800.0, -0.0],
+    "interactive": true,
+    "pair": 10,
+    "theta": -0.0,
+    "type": "portal"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "d": [-800.0, -0.0],
+    "interactive": true,
+    "pair": 10,
+    "theta": -0.0,
+    "type": "portal"
+   },
+   "start": [1350.0, 600.0],
+   "via": [1350.0, 750.0]
+  },
+  {
+   "circle": null,
+   "end": [1500.0, 800.0],
+   "full": false,
+   "id": 12,
+   "is_target": false,
+   "left": {
+    "d": [-1100.0, 0.0],
+    "interactive": true,
+    "pair": 13,
+    "theta": 0.0,
+    "type": "portal"
+   },
+   "line": false,
+   "player_solid": false,
+   "right": {
+    "d": [-1100.0, 0.0],
+    "interactive": true,
+    "pair": 13,
+    "theta": 0.0,
+    "type": "portal"
+   },
+   "start": [1500.0, 550.0],
+   "via": [1430.0, 675.0]
+  },
+  {
+   "circle": null,
+   "end": [400.0, 800.0],
+   "full": false,
+   "id": 13,
+   "is_target": false,
+   "left": {
+    "d": [1100.0, -0.0],
+    "interactive": true,
+    "pair": 12,
+    "theta": -0.0,
+    "type": "portal"
+   },
+   "line": false,
+   "player_solid": false,
+   "right": {
+    "d": [1100.0, -0.0],
+    "interactive": true,
+    "pair": 12,
+    "theta": -0.0,
+    "type": "portal"
+   },
+   "start": [400.0, 550.0],
+   "via": [330.0, 675.0]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 0.0],
+   "full": false,
+   "id": 14,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [0.0, 0.0],
+   "via": [960.0, 0.0]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 1080.0],
+   "full": false,
+   "id": 15,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1920.0, 0.0],
+   "via": [1920.0, 540.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 1080.0],
+   "full": false,
+   "id": 16,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1920.0, 1080.0],
+   "via": [960.0, 1080.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 0.0],
+   "full": false,
+   "id": 17,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [0.0, 1080.0],
+   "via": [0.0, 540.0]
+  }
+ ],
+ "emit_infinity": true,
+ "flags": {},
+ "infos": [
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -0.0,
+    "c": -1272112000.0,
+    "d": 101768960000.0
+   },
+   "has_effect": true,
+   "id": 1,
+   "segment": {
+    "end": [1820.0, 80.0],
+    "full": false,
+    "start": [100.0, 80.0],
+    "via": [960.0, 80.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": 194672000.0,
+    "c": 0.0,
+    "d": -354303040000.0
+   },
+   "has_effect": true,
+   "id": 2,
+   "segment": {
+    "end": [1820.0, 1000.0],
+    "full": false,
+    "start": [1820.0, 80.0],
+    "via": [1820.0, 540.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -0.0,
+    "c": 1272112000.0,
+    "d": -1272112000000.0
+   },
+   "has_effect": true,
+   "id": 3,
+   "segment": {
+    "end": [100.0, 1000.0],
+    "full": false,
+    "start": [1820.0, 1000.0],
+    "via": [960.0, 1000.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -194672000.0,
+    "c": 0.0,
+    "d": 19467200000.0
+   },
+   "has_effect": true,
+   "id": 4,
+   "segment": {
+    "end": [100.0, 80.0],
+    "full": false,
+    "start": [100.0, 1000.0],
+    "via": [100.0, 540.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": 31250000.0,
+    "c": 0.0,
+    "d": -12500000000.0
+   },
+   "has_effect": true,
+   "id": 5,
+   "segment": {
+    "end": [400.0, 700.0],
+    "full": false,
+    "start": [400.0, 200.0],
+    "via": [400.0, 450.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": 3906250.0,
+    "c": 0.0,
+    "d": -3750000000.0
+   },
+   "has_effect": true,
+   "id": 6,
+   "segment": {
+    "end": [960.0, 400.0],
+    "full": false,
+    "start": [960.0, 150.0],
+    "via": [960.0, 275.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": 6750000.0,
+    "c": 0.0,
+    "d": -9450000000.0
+   },
+   "has_effect": true,
+   "id": 7,
+   "segment": {
+    "end": [1400.0, 500.0],
+    "full": false,
+    "start": [1400.0, 200.0],
+    "via": [1400.0, 350.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 36000.0,
+    "b": -47970000.0,
+    "c": -32400000.0,
+    "d": 22419000000.0
+   },
+   "has_effect": true,
+   "id": 8,
+   "segment": {
+    "end": [700.0, 600.0],
+    "full": false,
+    "start": [700.0, 300.0],
+    "via": [820.0, 450.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 24000.0,
+    "b": -57600000.0,
+    "c": -32720000.0,
+    "d": 45464000000.0
+   },
+   "has_effect": true,
+   "id": 9,
+   "segment": {
+    "end": [1300.0, 700.0],
+    "full": false,
+    "start": [1100.0, 700.0],
+    "via": [1200.0, 580.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": 6750000.0,
+    "c": 0.0,
+    "d": -3712500000.0
+   },
+   "has_effect": true,
+   "id": 10,
+   "segment": {
+    "end": [550.0, 900.0],
+    "full": false,
+    "start": [550.0, 600.0],
+    "via": [550.0, 750.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": 6750000.0,
+    "c": 0.0,
+    "d": -9112500000.0
+   },
+   "has_effect": true,
+   "id": 11,
+   "segment": {
+    "end": [1350.0, 900.0],
+    "full": false,
+    "start": [1350.0, 600.0],
+    "via": [1350.0, 750.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": -17500.0,
+    "b": 55181250.0,
+    "c": 23625000.0,
+    "d": -51096875000.0
+   },
+   "has_effect": true,
+   "id": 12,
+   "segment": {
+    "end": [1500.0, 800.0],
+    "full": false,
+    "start": [1500.0, 550.0],
+    "via": [1430.0, 675.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": -17500.0,
+    "b": 16681250.0,
+    "c": 23625000.0,
+    "d": -11572500000.0
+   },
+   "has_effect": true,
+   "id": 13,
+   "segment": {
+    "end": [400.0, 800.0],
+    "full": false,
+    "start": [400.0, 550.0],
+    "via": [330.0, 675.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -0.0,
+    "c": -1769472000.0,
+    "d": -0.0
+   },
+   "has_effect": false,
+   "id": 14,
+   "segment": {
+    "end": [1920.0, 0.0],
+    "full": false,
+    "start": [0.0, 0.0],
+    "via": [960.0, 0.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": 314928000.0,
+    "c": 0.0,
+    "d": -604661760000.0
+   },
+   "has_effect": false,
+   "id": 15,
+   "segment": {
+    "end": [1920.0, 1080.0],
+    "full": false,
+    "start": [1920.0, 0.0],
+    "via": [1920.0, 540.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -0.0,
+    "c": 1769472000.0,
+    "d": -1911029760000.0
+   },
+   "has_effect": false,
+   "id": 16,
+   "segment": {
+    "end": [0.0, 1080.0],
+    "full": false,
+    "start": [1920.0, 1080.0],
+    "via": [960.0, 1080.0]
+   }
+  },
+  {
+   "carrier": {
+    "a": 0.0,
+    "b": -314928000.0,
+    "c": 0.0,
+    "d": -0.0
+   },
+   "has_effect": false,
+   "id": 17,
+   "segment": {
+    "end": [0.0, 0.0],
+    "full": false,
+    "start": [0.0, 1080.0],
+    "via": [0.0, 540.0]
+   }
+  }
+ ],
+ "plans": [
+  [
+   {
+    "side": "LEFT",
+    "surface_id": -3
+   }
+  ],
+  [
+   {
+    "side": "LEFT",
+    "surface_id": -3
+   },
+   {
+    "side": "LEFT",
+    "surface_id": -3
+   }
+  ],
+  [
+   {
+    "side": "LEFT",
+    "surface_id": -3
+   },
+   {
+    "side": "LEFT",
+    "surface_id": 5
+   }
+  ],
+  [
+   {
+    "side": "LEFT",
+    "surface_id": 5
+   },
+   {
+    "side": "LEFT",
+    "surface_id": -3
+   }
+  ]
+ ],
+ "positions": [
+  [110.0, 90.0],
+  [676.6666870117188, 90.0],
+  [1243.3333740234375, 90.0],
+  [1810.0, 90.0],
+  [110.0, 390.0],
+  [676.6666870117188, 390.0],
+  [1243.3333740234375, 390.0],
+  [1810.0, 390.0],
+  [110.0, 690.0],
+  [676.6666870117188, 690.0],
+  [1243.3333740234375, 690.0],
+  [1810.0, 690.0],
+  [110.0, 990.0],
+  [676.6666870117188, 990.0],
+  [1243.3333740234375, 990.0],
+  [1810.0, 990.0],
+  [1046.68896484375, 138.5064697265625],
+  [458.37255859375, 301.9984130859375],
+  [173.120361328125, 363.6497802734375],
+  [635.5532836914062, 590.3082275390625],
+  [148.19927978515625, 501.9077453613281],
+  [1102.30224609375, 260.4962158203125]
+ ],
+ "scene": "res://scenes/playground/portals.tscn",
+ "schema": "sweep-manifest/1",
+ "seq": 6,
+ "skip_equal": true,
+ "visibility": true
 }
