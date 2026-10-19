@@ -117,7 +117,10 @@ there is a behaviour change, and the rule is: evidence first, the user's approva
    `native/build-ref/` (gitignored, `.gdignore`d) builds `rc_tests` without the extension, cached by commit;
    the current `rc_tests` lists every changed sweep combo and golden field (`RC_SWEEP_REBLESS=1`,
    `RC_GOLDEN_REBLESS=1` → `native/build-ref/judge/rebless.txt`); both binaries dump those combos
-   (`RC_SWEEP_DUMP`); `docs/research/judge.py` classifies them → `native/build-ref/judge/report.md`.
+   (`RC_SWEEP_DUMP`), and the reference prints their display canon too (`old_canon.raw`: run against a
+   goldens copy with blank hashes in its worktree, restored after; Stage 113, for a rule that tells a
+   frame-id relabelling from a trace change); `docs/research/judge.py` classifies them →
+   `native/build-ref/judge/report.md`.
    Generic classes from the dumps alone: the planned aim (same, reversed, other), the first differing
    event of each trace, the cursor reached or lost, the tiers; a stage's rule module
    (`docs/research/<name>_judge.py`, `judge_trace(old, new, segs, portal_src)`) adds its own classes.
@@ -166,6 +169,8 @@ while they are stale, and the generators read them.
 | `RC_REALIZE_TRACE=1` | `Solver::realize`, `first_firing`, `project` | the realization rule's decisions (R1-R3) |
 | `RC_VIS_SCENE`, `RC_VIS_PLAN`, `RC_VIS_PLAYER`, `RC_VIS_PROBE`, `RC_VIS_HALF`, `RC_VIS_NEAR`, `RC_VIS_PIN`, `RC_VIS_CELLS`, `RC_VIS_FILL*`, `RC_VIS_PNG`, `RC_VIS_SVG`, `RC_VIS_VIEW`, `RC_VIS_POLYS` | the skipped `visibility debug` case (`make check TC="visibility debug" SKIP=0`) | one region, probed, drawn (plan ∞ is `-3L`) |
 | `RC_VIS_THREADS` | `vis::compute` | cast threads per region (the sweeps set 1: the parts are the parallelism) |
+| `RC_VIS_MERGE=1` | `vis::Builder` | Stage 113: the merge's groups (winding, cells), the member pieces before and after the cancellation, the breakpoints |
+| `RC_VIS_HALF`, `RC_VIS_PIN` (the debug case) | `visibility debug` | a pin mismatch on the boundary prints the edge, its member's key, start parameter, beam and intervals (Stage 113) |
 | `RC_VIS_FULL=1` | the level loops | every plan and two players |
 | `RC_VIS_PART`, `RC_SWEEP_PART`, `RC_SWEEPS_PART`, `RC_CASE_PART` | ctest entries | the k-th item of every n |
 | `RC_SWEEPS_STRIDE`, `RC_SWEEPS_FILTER`, `RC_SWEEPS_VIOLATIONS` | `test_sweeps.cpp` | one player in n; a manifest name; the violations as JSON |
