@@ -3,8 +3,8 @@
 
 Writes data/sessions/<level>__<name>.json (rc-session/1) for every level with
 a GameManager, from the level dumps (bench/scenes/*.surfaces.json): engine-
-neutral input scripts that the Godot recorder (scripts/testing/record_sessions.gd)
-and, later, the native hosts play. Run once; the scripts are committed input
+neutral input scripts that the game's hosts play (rc_tool replay records the
+golden since Stage 119; the GDScript recorder did until then). Run once; the scripts are committed input
 data (a new level gets its own by a rerun with --only).
 
     python3 -I docs/research/sessions/gen_sessions.py [--only <substring>]

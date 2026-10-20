@@ -2,7 +2,7 @@
 
 This is the single source of truth for the ricochet game: design, principles, architecture, data structures, algorithms, game loop, player interaction, level editing, implementation phasing, and testing strategy. It is self-contained — no other document is required to implement the full game.
 
-Engine: **Godot 4.7+** with **GDScript**. Developed against Godot 4.7.x stable. IDE: **VSCode**.
+Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`, `native/game`) behind a C API (`native/capi/include/rc_api.h`); an engine hosts it (docs/PORTING.md). The shipped host is **Godot 4.7+** (`engines/godot`: one GDExtension node, `native/hosts/godot`). IDE: **VSCode**.
 
 > **At a glance:** A 2D puzzle game where the player plans ricochet shots through mirrors, portals, and lenses. The core loop: aim → plan a sequence of surface bounces → fire → watch the arrow follow (or diverge from) the plan. The engine uses Möbius geometry to unify lines and circles. The hardest implementation areas are: the planning algorithm (§13), the visibility system (§15), and the precision beam solver with its exactness rules (§6, §11–12, §31). Start with Phase 0 (§28).
 
@@ -1859,17 +1859,20 @@ derived when the level is built (Principle 21). The scene defs the solver reads 
 
 # Part VI: Implementation
 
-## 20. Godot architecture
+## 20. Architecture
 
 ### 20.1 Layer separation
 
-| Layer | Responsibility | Godot types used |
-|-------|---------------|------------------|
-| **Math** | Geometry primitives, effect descriptions, the precision beam solver (intersection, effect maps, anchored planning, exact predicates, dynamic precision), step types and merge, (future) visibility | **None.** Pure GDScript with `Vector2`, `float` and packed arrays. |
-| **Visual** | Math→visual conversion, drawing, input | `Node2D`, `_draw()`, `draw_line()`, `draw_arc()`, `Color`. |
-| **Game** | Scene management, state, shot lifecycle, player | `CharacterBody2D`, autoload singletons, scene tree. |
+Since Stage 119 every layer but the host is native and engine-free (lints: `*_no_engine`, `godot_adapter_includes`, `gdscript_budget`):
 
-The math layer has **zero Godot engine dependencies** beyond `Vector2`. Testable in isolation.
+| Layer | Directory | Responsibility | Engine types used |
+|-------|-----------|----------------|-------------------|
+| **Core** (`rc::`) | `native/core` | Geometry, effects, the precision beam solver (intersection, effect maps, anchored planning, exact predicates, dynamic precision), the tracer, step merge, visibility, invariants | **None** |
+| **Game** (`rcg::`) | `native/game` | Level data, the surface model, crossings and pieces, landing, the world, the player's movement, the session (plan, clicks, preview, overlays, flight, undo), the draw list | **None** |
+| **C API** | `native/capi` | `rc_api.h`: the game for any engine or language | **None** |
+| **Hosts** | `native/hosts` | `headless` (`rc_tool`: data pipelines, replay, bench); `godot` (`RicochetGame`: input, frame, camera, drawing the list) | Godot in `hosts/godot` only |
+
+The historical layer table (GDScript Math / Visual / Game) described the game before the port; its GDScript was deleted in Stage 119 (docs/TDD_24_ENGINE_SWITCH.md).
 
 **GDScript performance note:** GDScript is significantly slower than C++ for tight numerical loops. For the intersection kernel (32 events × N surfaces per frame), avoid object allocation in hot loops. This is why `FastSolver` exists: a raw-float64 `PackedFloat64Array` backend, roughly 50× faster than the precision-generic code and bit-identical to it at float64. If profiling shows the intersection kernel is the bottleneck, consider moving it to a GDExtension (C++) module. The math layer's zero-dependency design makes this migration straightforward.
 
@@ -1879,55 +1882,25 @@ The math layer has **zero Godot engine dependencies** beyond `Vector2`. Testable
 
 ### 20.2 Project structure
 
-Current layout (Stage 84). Files marked *(planned)* do not exist yet.
+Current layout (Stage 119).
 
 ```
 ricochet-game-v2/
-├── project.godot
-├── GAME_SPEC.md, CHANGELOG.md
-├── scripts/
-│   ├── math/
-│   │   ├── point.gd, direction.gd, ray.gd, segment.gd, generalized_circle.gd, side.gd
-│   │   ├── trace_step.gd, trace_hit.gd, trace_path.gd, trace_mode.gd   # neutral trace types
-│   │   ├── step_types.gd, step_tree_merge.gd
-│   │   ├── chevron_overlay.gd, chevron_overlay_builder.gd
-│   │   ├── effects/
-│   │   │   ├── effect.gd, transformative_effect.gd, terminal.gd
-│   │   │   ├── reflection_effect.gd, circle_inversion.gd, rigid_motion_effect.gd
-│   │   │   └── line_normal_projection.gd, circle_normal_projection.gd,
-│   │   │       line_directional_projection.gd, circle_directional_projection.gd
-│   │   ├── precision/                     # the beam solver (§6, §11–13, §31)
-│   │   │   ├── beam_solver.gd             # BeamSolver: rule walker, anchored chain, provenance stack
-│   │   │   ├── fast_solver.gd             # FastSolver: raw float64 twin (bit-identical) + tangent-linear
-│   │   │   ├── precision_ladder.gd        # dynamic precision driver
-│   │   │   ├── error_estimate.gd          # a-priori error envelope, decision reliability
-│   │   │   ├── beam_tracer.gd             # adapter: events → TracePath / TraceStep
-│   │   │   ├── beam_scene.gd, beam_effects.gd, beam_geom.gd, hp_beam.gd, exact.gd
-│   │   │   └── num_ctx.gd, f64_num.gd, dual_num.gd, big_float.gd, cn.gd
-│   │   └── (visibility: native, rc/visibility.hpp, Stage 110)
-│   ├── visual/
-│   │   ├── visual_converter.gd
-│   │   ├── path_renderer.gd
-│   │   └── visibility_renderer.gd         # the visibility region's fill (Stage 110)
-│   ├── game/
-│   │   ├── game_manager.gd, player.gd, cursor.gd, arrow_animator.gd
-│   │   ├── surface.gd, surface_node.gd, side_config.gd, side_link.gd, room_builder.gd
-│   │   ├── plan_manager.gd, plan_hud.gd, click_detector.gd
-│   │   ├── game_state.gd, checkpoint.gd, checkpoint_stack.gd, level_settings.gd
-│   │   └── debug_dumper.gd
-│   └── testing/                           # invariant checker, sweeps, TestTrace, precision bench
-├── tests/                                 # GUT tests (test_stage{N}_*.gd and others)
-├── docs/                                  # TDDs; docs/research/oracle/ (mpmath oracle, trace2.py = trace spec)
-├── bench/                                 # oracle fixtures and scene corpora
-├── scenes/
-│   ├── main.tscn, player.tscn, violation_viewer.tscn, …
-│   ├── test_levels/, playground/
-│   ├── ui/, editor/                       # (empty; planned)
-└── resources/
-    └── levels/                            # (empty; planned)
+├── GAME_SPEC.md, CHANGELOG.md, CLAUDE.md, Makefile, gates.sh
+├── native/
+│   ├── core/include/rc/       # the solver, tracer, visibility, invariants (header-only C++)
+│   ├── game/                  # rcg::: level data, model, geom, landing, world, kinematics, session, render
+│   ├── capi/include/rc_api.h  # the C API
+│   ├── hosts/headless/        # rc_tool: fmt, dumps, manifests, replay (on the C API), bench
+│   ├── hosts/godot/           # the Godot host: RicochetGame (includes only rc_api.h)
+│   └── tests/                 # rc_tests, rcg_tests (doctest), the C11 smoke host
+├── data/levels/, data/sessions/   # the levels (rc-level/1), the session scripts
+├── bench/                     # goldens, fixtures, corpora, sweeps, sessions, gut_traces
+├── tests/host_py/             # the Python host (ctypes): the C API end to end
+├── engines/godot/             # the Godot project: project.godot, scenes (one RicochetGame each), the host's GUT suite
+├── docs/                      # TDDs, PORTING.md, LEVEL_FORMAT.md, research/ (oracle, judges, ledger)
+└── tools/                     # lints, the ledger check
 ```
-
-*Removed in Stage 84:* `scripts/math/{tracer, planner, transform_cache, tracked_transform, mobius_transform, intersection}.gd`.
 
 ### 20.3 Data flow per frame
 
@@ -2220,7 +2193,7 @@ Simple shape (triangle pointing toward cursor, or circle). Wireframe aesthetic.
 - Settings (audio, controls, display).
 - Last played level (for "continue" functionality).
 
-Save data uses Godot `ConfigFile` format (`.cfg`). Human-readable, simple key-value pairs.
+The host persists the save data in its engine's own storage (Stage 119: the game is engine-free; the Godot host would use `ConfigFile`). Human-readable, simple key-value pairs.
 
 ### 27.2 Progression structure
 
@@ -2352,7 +2325,7 @@ Minimal sound events for Phase 8: `fire`, `bounce`, `break`, `target_hit`, `leve
 
 ## 29. Testing strategy
 
-**Testing framework:** use GUT (Godot Unit Test) as the test framework. Invariant sweeps run as GUT test cases that iterate over the position grid programmatically.
+**Testing (Stage 119):** the game is tested natively -- doctest (`rc_tests`, `rcg_tests`) with ctest, the mpmath oracle (pytest), the goldens and fixtures, the native invariant sweeps over the sweep manifests, the session golden replayed through the C API in C++ and in Python (`tests/host_py`). GUT tests only the Godot host (`engines/godot/tests`). The GUT suite's former tests are accounted for row by row in `docs/research/gut_ledger.tsv`. The sections below describe what is tested; where they name GUT, read the native equivalent.
 
 ### 29.1 Math layer unit tests
 
@@ -2683,4 +2656,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.30.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.31.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -1,20 +1,23 @@
 # The session replay golden
 
 Stage 115 (docs/TDD_20_ENGINE_AGNOSTIC_DATA.md). The game played through scripted sessions, one record of
-its observable state per step: `bench/sessions/<session>.jsonl`. It is recorded from the GDScript game
-(`scripts/testing/record_sessions.gd`, `make sessions`) and is the oracle of the engine-agnostic port: the
-native session (`rcg::Session`), `rc_tool replay` and the C API hosts must reproduce every record byte for
-byte. A changed record is a behaviour change (the judge's report, the user's approval, then `make sessions`).
+its observable state per step: `bench/sessions/<session>.jsonl`. It was recorded from the GDScript game and
+was the oracle of the engine-agnostic port: the native session (`rcg::Session`), `rc_tool replay` and the C
+API hosts reproduce every record byte for byte. Since Stage 119 (the GDScript game deleted) the native game
+records it (`rc_tool replay`, `make sessions`); "The run" below describes the GDScript recorder, whose
+semantics the native replay keeps. A changed record is a behaviour change (the judge's report, the user's
+approval, then `make sessions`).
 
 | Piece | Path |
 |---|---|
 | Session scripts (input data, committed) | `data/sessions/<level>__<name>.json` |
 | Their generator (run once per new level) | `docs/research/sessions/gen_sessions.py` |
-| Recorder (Godot headless) | `scripts/testing/record_sessions.gd`, `tools/record_sessions.sh` |
-| Record encoder | `scripts/testing/session_digest.gd` (`SessionDigest`) |
+| Recorder | `rc_tool replay` (the C API; Stage 119; until then the GDScript game's `record_sessions.gd`) |
+| Record encoder | `rcg/digest.hpp` (`rcg::digest`; the GDScript `SessionDigest` until Stage 119) |
+| Hand-written scripts (the GUT ports, Stage 119) | `docs/research/sessions/ported_sessions.py` (`*__ported_*`) |
 | Golden | `bench/sessions/<session>.jsonl` |
 | Judge | `docs/research/session_judge.py <ref dir> <candidate dir>` |
-| Targets | `make sessions` (re-record), `make sessions-check` (the `sessions` gate) |
+| Targets | `make sessions` (re-record), `make sessions-check` (also ctest `capi_sessions_*`, `rcg_sessions_*`) |
 
 ## Session scripts (`rc-session/1`)
 
@@ -97,11 +100,14 @@ A path step (TraceStep) is `[start, end, via, is_arc, type, surface id, hit side
 after portal, ghost]`. Solver internals that are not game state (frame ids, error estimates, precision bits,
 timings) are not recorded.
 
-## Coverage (40 sessions, 18 levels with a GameManager)
+## Coverage (48 sessions, 18 levels with a GameManager)
 
 `tour` (hover both sides of every interactive surface, plan clicks on pieces, the display / visibility /
 gravity toggles, fire with a speed-up, undo, remove and clear clicks, reset, the infinity entry and a shot
 through it), `shots` (the player at a free point, a shot at every interactive surface in turn so the hit
 effects accumulate, undo, reset, shots along one-entry plans) and `walk` (kinematic: main,
-open_room_playable, plannable_inversion, inversion_grid). Not covered: the B7 snap band (no level with a
-GameManager has a circle directional; `tests/test_stage113_*` keep it).
+open_room_playable, plannable_inversion, inversion_grid). Stage 119 adds 8 `ported` sessions (the GUT
+tests' interactions: undo after moving, the cursor on the player, Q0 on screen, the edge band and its right
+clicks, the infinity switch off, ghost refusal, hit effects armed / registered / re-armed, a spawn trimmed by
+the floor, a landing that changes the flags). The B7 snap band is tested natively ("ported:
+test_stage113_projective_visibility: test_b7_..." in rcg_tests).

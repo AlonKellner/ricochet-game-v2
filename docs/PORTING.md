@@ -11,9 +11,10 @@ A host does four things:
 - It calls one function per frame.
 - It draws the draw list it gets back with its own 2D primitives.
 
-The Godot host (`engines/godot`) is one GDExtension node of about 400 lines of C++. The Python host
-(`tests/host_py/rc_host.py`, ctypes) is under 300 lines and plays every recorded session bit for bit; use it
-as the reference.
+The Godot host is one GDExtension node: `native/hosts/godot`, about 500 lines of C++ that include only
+`rc_api.h` (a lint checks it), with its project in `engines/godot`. The Python host
+(`tests/host_py/rc_host.py`, ctypes, about 300 lines) plays every recorded session bit for bit; use it as the
+reference.
 
 ## What you build and link
 
@@ -154,8 +155,8 @@ before the next call that mutates the game.
 it is in world units.
 
 **Pixel-identical Godot.** The Godot host maps each command onto the CanvasItem call with the same name and
-parameters, and so draws the original game's pixels. That was checked against the old scenes with
-screenshots: `make shots`, 36 pairs, 0 differing pixels.
+parameters, and so draws the original game's pixels. Before the GDScript game was retired, this was
+checked against its scenes with screenshots: 36 pairs, 0 differing pixels (docs/TDD_23_ENGINE_BOUNDARY.md).
 
 **Other engines.** Stroke and fill with your own primitives. Pixel identity with Godot is not required; the
 geometry is exact.
@@ -181,8 +182,11 @@ engine's log. The default writes to stderr.
 
 ## Verifying a port
 
+`SKIP_GODOT=1 make gate` runs every engine-free check: the native tests, the oracle, the session golden
+through the C API in C++ and in Python, and the lints that keep the game engine-free.
+
 **The session golden.** `bench/sessions/*.jsonl` records the game's full observable state after every step
-of 40 scripted sessions (`data/sessions/*.json`, documented in `docs/research/session_digest.md`). A host
+of 48 scripted sessions (`data/sessions/*.json`, documented in `docs/research/session_digest.md`). A host
 that replays them through the C API and gets the same records drives the game correctly:
 
 - `rc_tool replay data/sessions data/levels --check bench/sessions` does this in C++;
@@ -235,11 +239,13 @@ text) or with a procedural mesh per node. The draw list is in pixels, with Y dow
 Drive the loop above from your main loop. Draw the list with your renderer: a line and triangle batcher, an
 arc tessellator (or `rc_tessellate_arc`), and a font.
 
-For a host that only needs to run the game, with no rendering, `rc_tool replay` is a complete example in
+For a host that only needs to run the game, with no rendering, `rc_tool replay`
+(`native/hosts/headless/replay_capi.cpp`) is a complete example in
 under 200 lines.
 
 ## Files and data
 
-- **Levels:** `data/levels/**/*.json` (`rc-level/1`). The Godot host copies `data/` into its project, because
-  an exported Godot game reads only `res://`. Package them however your engine ships assets.
+- **Levels:** `data/levels/**/*.json` (`rc-level/1`). The Godot host's build (`make native`) copies them into
+  `engines/godot/data/`, because an exported Godot game reads only `res://`. Package them however your engine
+  ships assets.
 - **Saves:** GAME_SPEC §27 keeps progression on the host side.
