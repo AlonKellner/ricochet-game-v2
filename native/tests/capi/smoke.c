@@ -124,6 +124,16 @@ int main(void) {
 		CHECK(c->index_first + c->index_count <= list.index_count);
 	}
 
+	/* 1.1: ids and versions; a second rc_game_draw_changes with nothing changed sends no commands */
+	CHECK(list.node_ids != NULL && list.node_versions != NULL && list.node_unchanged != NULL);
+	CHECK(rc_game_draw_changes(game, &list) == RC_OK);
+	CHECK(list.cmd_count > 0);
+	CHECK(rc_game_draw_changes(game, &list) == RC_OK);
+	CHECK(list.cmd_count == 0 && list.node_count > 0);
+	for (i = 0; i < list.node_count; i++) {
+		CHECK(list.node_unchanged[i] == 1);
+	}
+
 	/* a smaller struct (an older host) is filled as far as it reaches */
 	{
 		rc_frame small;

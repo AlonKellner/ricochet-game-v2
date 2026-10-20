@@ -132,6 +132,9 @@ public:
 	// Stage 118: what the level's nodes draw (after settle()): the draw list
 	// (rcg/render.hpp), one node per thing drawn, in the GDScript nodes' calls
 	std::vector<render::Node> draw() const;
+	// Stage 120: the same list for a host's frame -- the painters' calls shared and
+	// cached by their inputs, each node with its id and content version
+	std::vector<render::FrameNode> draw_frame() const;
 
 	const std::vector<PlanEntry> &plan() const { return plan_; }
 	const rc::Flags &flags() const { return flags_; }
@@ -296,6 +299,22 @@ private:
 	double physics_time_ = 0.0; // the physics ticks' time not yet run
 	bool jump_ = false;         // a jump pressed, not yet ticked
 	void tick(const kinematics::Input &in);
+	// the painters' cached output (draw_frame): a surface piece's by its inputs,
+	// the path, the region and the spawn preview by their versions
+	struct SurfaceDraw {
+		int flags = -1;
+		std::vector<Overlay> hover, plan;
+		std::vector<int> indices;
+		render::Calls calls;
+		uint64_t version = 0;
+	};
+	struct CachedDraw {
+		std::array<int, 3> key{-1, -1, -1};
+		render::Calls calls;
+		uint64_t version = 0;
+	};
+	mutable std::map<int, SurfaceDraw> surface_draw_; // by node serial
+	mutable CachedDraw path_draw_, vis_draw_, spawn_draw_, static_draw_[3];
 	void clear_hover();
 };
 

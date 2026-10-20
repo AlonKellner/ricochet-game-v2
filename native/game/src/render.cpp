@@ -21,6 +21,44 @@ json pts_json(const std::vector<V2> &pts) {
 
 } // namespace
 
+uint64_t NodeKey::id() const {
+	return (uint64_t(kind) << 56) | (uint64_t(uint32_t(a)) << 20) | uint64_t(uint32_t(b + 1) & 0xFFFFF);
+}
+
+json NodeKey::json() const {
+	static const char *const NAMES[] = {"background", "player", "cursor", "path", "arrow", "hud", "surface", "edge", "visibility", "spawn"};
+	nlohmann::json k = nlohmann::json::array({NAMES[size_t(kind)]});
+	if (kind == NodeKind::Surface) {
+		k.push_back(a);
+		k.push_back(b);
+	}
+	return k;
+}
+
+uint64_t content_hash(const std::vector<Call> &calls) {
+	uint64_t h = 0xcbf29ce484222325ull;
+	auto mix = [&](const void *p, size_t n) {
+		const unsigned char *c = static_cast<const unsigned char *>(p);
+		for (size_t i = 0; i < n; i++) {
+			h = (h ^ c[i]) * 0x100000001b3ull;
+		}
+	};
+	for (const Call &c : calls) {
+		mix(&c.kind, sizeof c.kind);
+		mix(c.pts.data(), c.pts.size() * sizeof(V2));
+		mix(c.colors.data(), c.colors.size() * sizeof(Color));
+		mix(c.indices.data(), c.indices.size() * sizeof(int));
+		for (const double d : {c.radius, c.start, c.end, c.width, c.dash, c.rotation}) {
+			mix(&d, sizeof d);
+		}
+		for (const int v : {c.point_count, c.alignment, c.font_size, int(c.pts.size()), int(c.text.size())}) {
+			mix(&v, sizeof v);
+		}
+		mix(c.text.data(), c.text.size());
+	}
+	return h;
+}
+
 Color hex(std::uint32_t p) {
 	const float a = float(p & 0xFF) / 255.0f;
 	p >>= 8;

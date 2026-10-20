@@ -74,7 +74,10 @@ class DrawList(ctypes.Structure):
                 ("points", ctypes.POINTER(ctypes.c_float)), ("point_count", ctypes.c_uint32),
                 ("colors", ctypes.POINTER(ctypes.c_float)), ("color_count", ctypes.c_uint32),
                 ("indices", ctypes.POINTER(ctypes.c_int32)), ("index_count", ctypes.c_uint32),
-                ("text", ctypes.POINTER(ctypes.c_char)), ("text_length", ctypes.c_uint32)]
+                ("text", ctypes.POINTER(ctypes.c_char)), ("text_length", ctypes.c_uint32),
+                # 1.1
+                ("node_ids", ctypes.POINTER(ctypes.c_uint64)), ("node_versions", ctypes.POINTER(ctypes.c_uint64)),
+                ("node_unchanged", ctypes.POINTER(ctypes.c_uint8))]
 
 
 LOG_FN = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_int32, ctypes.c_char_p)
@@ -104,6 +107,7 @@ def _load():
         "rc_game_teleport": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_float, ctypes.c_float]),
         "rc_game_frame": (ctypes.c_int32, [ctypes.c_void_p, P(Frame)]),
         "rc_game_draw_list": (ctypes.c_int32, [ctypes.c_void_p, P(DrawList)]),
+        "rc_game_draw_changes": (ctypes.c_int32, [ctypes.c_void_p, P(DrawList)]),
         "rc_game_hud": (ctypes.c_int32, [ctypes.c_void_p, P(ctypes.c_char_p), P(ctypes.c_size_t)]),
         "rc_game_record": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t, ctypes.c_uint32,
                                             P(ctypes.c_void_p), P(ctypes.c_size_t)]),
@@ -214,11 +218,15 @@ class Game:
                                  ctypes.byref(out), ctypes.byref(n)))
         return ctypes.string_at(out, n.value).decode()
 
-    def draw_list(self):
+    def draw_changes(self):
+        """[(id, version, unchanged, key, z, (x, y), modulate, [command dict])] (rc_game_draw_changes)."""
+        return self.draw_list(changes=True)
+
+    def draw_list(self, changes=False):
         """[(key, z, (x, y), modulate, [command dict])]: a copy of the borrowed view."""
         dl = DrawList()
         dl.size = ctypes.sizeof(DrawList)
-        check(lib.rc_game_draw_list(self._h, ctypes.byref(dl)))
+        check((lib.rc_game_draw_changes if changes else lib.rc_game_draw_list)(self._h, ctypes.byref(dl)))
         text = ctypes.string_at(dl.text, dl.text_length) if dl.text_length else b""
         pts = [(dl.points[2 * i], dl.points[2 * i + 1]) for i in range(dl.point_count)]
         cols = [tuple(dl.colors[4 * i + k] for k in range(4)) for i in range(dl.color_count)]
@@ -240,7 +248,10 @@ class Game:
                     "width": c.width, "dash": c.dash, "rotation": c.rotation,
                 })
             key = json.loads(text[n.key_first:n.key_first + n.key_length])
-            out.append((key, n.z, (n.x, n.y), tuple(n.modulate), cmds))
+            if changes:
+                out.append((dl.node_ids[i], dl.node_versions[i], bool(dl.node_unchanged[i]), key, n.z, (n.x, n.y), tuple(n.modulate), cmds))
+            else:
+                out.append((key, n.z, (n.x, n.y), tuple(n.modulate), cmds))
         return out
 
 

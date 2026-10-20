@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 0
+#define RC_API_VERSION_MINOR 1
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -181,10 +181,23 @@ typedef struct rc_draw_list {
 	const float *colors; uint32_t color_count;      /* color_count (r, g, b, a) */
 	const int32_t *indices; uint32_t index_count;
 	const char *text; uint32_t text_length;         /* UTF-8, not terminated */
+	/* 1.1: per node (node_count entries each): a stable id, a content version
+	 * (equal versions, equal commands), and (rc_game_draw_changes) whether the
+	 * node is unchanged since the previous rc_game_draw_changes call -- an
+	 * unchanged node comes without commands (cmd_count 0): keep what you drew */
+	const uint64_t *node_ids;
+	const uint64_t *node_versions;
+	const uint8_t *node_unchanged;
 } rc_draw_list;
 
 /* What the game draws now. Borrowed (see the rules). */
 RC_API rc_status rc_game_draw_list(rc_game *game, rc_draw_list *out);
+
+/* 1.1: the same list for a host that keeps what it drew: a node whose id and
+ * version are those of the previous rc_game_draw_changes call is marked
+ * unchanged and carries no commands (its position, z and modulate are given,
+ * they may change); a node missing from the list is gone. Borrowed. */
+RC_API rc_status rc_game_draw_changes(rc_game *game, rc_draw_list *out);
 
 /* The HUD's text (UTF-8, terminated). Borrowed. */
 RC_API rc_status rc_game_hud(rc_game *game, const char **text, size_t *length);

@@ -13,6 +13,8 @@
 #include <nlohmann/json.hpp>
 
 #include <array>
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <vector>
 
@@ -54,6 +56,28 @@ struct Node {
 	Color modulate{1, 1, 1, 1};
 	std::vector<Call> calls;
 };
+
+// Stage 120: a node's identity without JSON -- its kind and ids -- and a node
+// of a frame whose calls are shared (a painter's cached output) with the
+// content version a host compares to skip what did not change.
+enum class NodeKind : uint8_t { Background, Player, Cursor, Path, Arrow, Hud, Surface, Edge, Visibility, Spawn };
+struct NodeKey {
+	NodeKind kind = NodeKind::Background;
+	int a = 0, b = 0; // a surface's id and piece
+	uint64_t id() const;              // stable while the node lives
+	nlohmann::json json() const;      // ["surface", 3, -1], ["path"], ... (the digest's key)
+	bool operator==(const NodeKey &) const = default;
+};
+using Calls = std::shared_ptr<const std::vector<Call>>;
+struct FrameNode {
+	NodeKey key;
+	int z = 0;
+	V2 position;
+	Color modulate{1, 1, 1, 1};
+	Calls calls;
+	uint64_t version = 0; // a hash of the calls (equal calls, equal version)
+};
+uint64_t content_hash(const std::vector<Call> &calls);
 
 // The draw order: by z, the game's order (Session::draw: the level's tree
 // order) within a z (stable).

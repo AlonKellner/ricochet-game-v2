@@ -14,6 +14,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <functional>
 
 namespace rcg {
 namespace {
@@ -642,10 +643,45 @@ struct PathPainter {
 } // namespace
 
 std::vector<render::Node> Session::draw() const {
+	std::vector<render::Node> nodes;
+	for (const render::FrameNode &f : draw_frame()) {
+		nodes.push_back(render::Node{f.key.json(), f.z, f.position, f.modulate, *f.calls});
+	}
+	// (the cache keeps the surface pieces still shown)
+	if (surface_draw_.size() > 2 * nodes_.size() + 8) {
+		std::map<int, SurfaceDraw> kept;
+		for (const Node &n : nodes_) {
+			if (auto it = surface_draw_.find(n.serial); it != surface_draw_.end()) {
+				kept.emplace(n.serial, std::move(it->second));
+			}
+		}
+		surface_draw_ = std::move(kept);
+	}
+	return nodes;
+}
+
+std::vector<render::FrameNode> Session::draw_frame() const {
 	// in the level's tree order (a scene's nodes, then the ones its _ready adds):
 	// the order the engine draws nodes of one z-index in
-	std::vector<render::Node> nodes;
+	using render::NodeKind;
+	std::vector<render::FrameNode> nodes;
 	const rc::Rect2f b = bounds();
+	// a node whose calls are made this frame / taken from a painter's cache
+	auto fresh = [&](NodeKind kind, int z, const V2 &pos, const Color &mod, std::vector<Call> calls, int a = 0, int bb = 0) {
+		const uint64_t v = render::content_hash(calls);
+		nodes.push_back(render::FrameNode{render::NodeKey{kind, a, bb}, z, pos, mod, std::make_shared<const std::vector<Call>>(std::move(calls)), v});
+	};
+	auto cached = [&](CachedDraw &c, const std::array<int, 3> &key, NodeKind kind, int z, const V2 &pos, const Color &mod,
+					  const std::function<void(std::vector<Call> &)> &paint) {
+		if (!c.calls || c.key != key) {
+			std::vector<Call> calls;
+			paint(calls);
+			c.version = render::content_hash(calls);
+			c.calls = std::make_shared<const std::vector<Call>>(std::move(calls));
+			c.key = key;
+		}
+		nodes.push_back(render::FrameNode{render::NodeKey{kind, 0, 0}, z, pos, mod, c.calls, c.version});
+	};
 	// the background, by its properties
 	if (level_.background) {
 		const Level::Background &bg = *level_.background;
@@ -653,7 +689,7 @@ std::vector<render::Node> Session::draw() const {
 		k.kind = Kind::Rect;
 		k.pts = {V2::of(bg.rect.x, bg.rect.y), V2::of(bg.rect.w, bg.rect.h)};
 		k.colors = {rgba(bg.color[0], bg.color[1], bg.color[2], bg.color[3])};
-		nodes.push_back(render::Node{{"background"}, 0, V2::of(bg.rect.x, bg.rect.y), WHITE, {k}});
+		cached(static_draw_[0], {0, 0, 0}, NodeKind::Background, 0, V2::of(bg.rect.x, bg.rect.y), WHITE, [&](std::vector<Call> &out) { out.push_back(k); });
 	}
 	if (level_.player_start) {
 		Call k;
@@ -661,16 +697,18 @@ std::vector<render::Node> Session::draw() const {
 		k.pts = {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}};
 		k.colors = {WHITE};
 		k.rotation = double(facing_);
-		nodes.push_back(render::Node{{"player"}, 0, player_, WHITE, {k}});
+		fresh(NodeKind::Player, 0, player_, WHITE, {k});
 	}
 	if (level_.features.cursor) {
-		nodes.push_back(render::Node{{"cursor"}, 0, cursor_, WHITE,
-			{line(V2{-10, 0}, V2{10, 0}, WHITE, 1.5), line(V2{0, -10}, V2{0, 10}, WHITE, 1.5)}});
+		cached(static_draw_[1], {0, 0, 0}, NodeKind::Cursor, 0, cursor_, WHITE, [&](std::vector<Call> &out) {
+			out.push_back(line(V2{-10, 0}, V2{10, 0}, WHITE, 1.5));
+			out.push_back(line(V2{0, -10}, V2{0, 10}, WHITE, 1.5));
+		});
 	}
 	const Color dim{1, 1, 1, flying_ ? 0.25f : 1.0f};
 	if (level_.features.preview) {
-		render::Node path{{"path"}, 20, V2{}, dim, {}};
-		PathPainter pp{b.grow(50.0f), path.calls};
+		cached(path_draw_, {trace_version_, display_mode_, 0}, NodeKind::Path, 20, V2{}, dim, [&](std::vector<Call> &out) {
+		PathPainter pp{b.grow(50.0f), out};
 		if (preview_.has_paths || !preview_.merged.empty()) {
 			if (display_mode_ == 0) {
 				if (!preview_.merged.empty()) {
@@ -694,25 +732,25 @@ std::vector<render::Node> Session::draw() const {
 				}
 			}
 		}
-		nodes.push_back(std::move(path));
+		});
 	}
 	if (level_.features.arrow && flying_) { // (the arrow's node is hidden between flights)
-		render::Node a{{"arrow"}, 30, V2{}, WHITE, {}};
+		std::vector<Call> a;
 		const V2 tip = arrow_pos_;
 		const V2 tail = tip - arrow_dir_ * 40.0f;
-		a.calls.push_back(line(tail, tip, WHITE, 2.0));
+		a.push_back(line(tail, tip, WHITE, 2.0));
 		const float angle = float(30.0 * (PI / 180.0)); // deg_to_rad
 		const V2 hl = tip - arrow_dir_.rotated(angle) * 16.0f;
 		const V2 hr = tip - arrow_dir_.rotated(-angle) * 16.0f;
-		a.calls.push_back(polygon({tip, hl, hr}, WHITE));
-		nodes.push_back(std::move(a));
+		a.push_back(polygon({tip, hl, hr}, WHITE));
+		fresh(NodeKind::Arrow, 30, V2{}, WHITE, std::move(a));
 	}
 	// the HUD (a Label at (10, 10) of a Control at the origin)
 	if (level_.features.hud) {
 		Call k;
 		k.kind = Kind::Label;
 		k.text = hud_;
-		nodes.push_back(render::Node{{"hud"}, 0, V2{}, WHITE, {k}});
+		fresh(NodeKind::Hud, 0, V2{}, WHITE, {k});
 	}
 	// the surfaces, one node per piece
 	for (const Node &n : nodes_) {
@@ -720,14 +758,18 @@ std::vector<render::Node> Session::draw() const {
 		if (s == nullptr) {
 			continue;
 		}
-		render::Node node{{"surface", n.surface, n.piece}, 0, V2{}, WHITE, {}};
-		SurfacePainter{*s, n.segment, n.piece, flags_, node.calls}.draw(n.hover, n.plan, n.plan_indices);
-		nodes.push_back(std::move(node));
+		SurfaceDraw &c = surface_draw_[n.serial];
+		if (!c.calls || c.flags != flags_version_ || c.hover != n.hover || c.plan != n.plan || c.indices != n.plan_indices) {
+			std::vector<Call> calls;
+			SurfacePainter{*s, n.segment, n.piece, flags_, calls}.draw(n.hover, n.plan, n.plan_indices);
+			c = SurfaceDraw{flags_version_, n.hover, n.plan, n.plan_indices, nullptr, render::content_hash(calls)};
+			c.calls = std::make_shared<const std::vector<Call>>(std::move(calls));
+		}
+		nodes.push_back(render::FrameNode{render::NodeKey{NodeKind::Surface, n.surface, n.piece}, 0, V2{}, WHITE, c.calls, c.version});
 	}
 	// the edge
 	{
-		render::Node node{{"edge"}, 5, V2{}, WHITE, {}};
-		std::vector<Call> &out = node.calls;
+		std::vector<Call> out;
 		for (const auto &m : edge_marks_) {
 			const Color color = m.valid ? PLAN_VALID_COLOR : PLAN_INVALID_COLOR;
 			const V2 mp = m.point;
@@ -779,11 +821,11 @@ std::vector<render::Node> Session::draw() const {
 				edge_chevrons(out, (sd[0] + sd[1]) * 0.5f, sd[2], HOVER_COLOR);
 			}
 		}
-		nodes.push_back(std::move(node));
+		fresh(NodeKind::Edge, 5, V2{}, WHITE, std::move(out));
 	}
 	if (level_.features.preview) {
 		// the visibility region
-		render::Node vis{{"visibility"}, 10, V2{}, dim, {}};
+		cached(vis_draw_, {visibility_version_, 0, 0}, NodeKind::Visibility, 10, V2{}, dim, [&](std::vector<Call> &out) {
 		if (region_ && region_->supported && !fill_.indices.empty()) {
 			Call k;
 			k.kind = Kind::Triangles;
@@ -794,28 +836,39 @@ std::vector<render::Node> Session::draw() const {
 				k.indices.push_back(int(i));
 			}
 			k.colors = {FILL};
-			vis.calls.push_back(k);
+			out.push_back(k);
 		}
 		const Color whisker{FILL[0] * 1.0f, FILL[1] * 1.0f, FILL[2] * 1.0f, FILL[3] * 3.0f};
 		for (const std::vector<V2> &l : whiskers_) {
-			vis.calls.push_back(stroke(Kind::Polyline, l, whisker, 1.5));
+			out.push_back(stroke(Kind::Polyline, l, whisker, 1.5));
 		}
-		nodes.push_back(std::move(vis));
+		});
 	}
 	if (spawn_preview_) {
-		render::Node sp{{"spawn"}, 19, V2{}, dim, {}};
+		const int sv = spawn_inputs_ ? spawn_inputs_->trace : -1, sw = spawn_inputs_ ? spawn_inputs_->world : -1;
+		cached(spawn_draw_, {sv, sw, 0}, NodeKind::Spawn, 19, V2{}, dim, [&](std::vector<Call> &out) {
 		for (const Placed &p : spawn_specs_) {
-			dashed(sp.calls, segment_of(p.spec), GHOST_SPAWN_COLOR, 2.0);
+			dashed(out, segment_of(p.spec), GHOST_SPAWN_COLOR, 2.0);
 			if (p.spec.is_portal()) {
-				dashed(sp.calls, build_spec(p.spec, 0, std::nullopt).at(1).seg, GHOST_SPAWN_COLOR, 2.0);
+				dashed(out, build_spec(p.spec, 0, std::nullopt).at(1).seg, GHOST_SPAWN_COLOR, 2.0);
 			}
 		}
 		for (int id : spawn_vanishing_) {
 			if (const BuiltSurface *s = world_->by_id(id)) {
-				dashed(sp.calls, s->seg, VANISH_COLOR, 2.0);
+				dashed(out, s->seg, VANISH_COLOR, 2.0);
 			}
 		}
-		nodes.push_back(std::move(sp));
+		});
+	}
+	// (the cache keeps the surface pieces still shown)
+	if (surface_draw_.size() > 2 * nodes_.size() + 8) {
+		std::map<int, SurfaceDraw> kept;
+		for (const Node &n : nodes_) {
+			if (auto it = surface_draw_.find(n.serial); it != surface_draw_.end()) {
+				kept.emplace(n.serial, std::move(it->second));
+			}
+		}
+		surface_draw_ = std::move(kept);
 	}
 	return nodes;
 }
