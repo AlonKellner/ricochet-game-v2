@@ -23,7 +23,7 @@ Background: TDD_20–TDD_23.
 | 119.4 | The switch: the scenes on the adapter; the GDScript game, `native/gd` and the retired GUT files deleted; the final Godot suite; the native recorder and frame bench | Done |
 | 119.5 | Gates and lints: `SKIP_GODOT=1 make gate`, `check_no_engine`, the GDScript budget, the ledger check | Done |
 | 119.6 | `engines/godot/`; `docs/PORTING.md`; docs (GAME_SPEC 2.31.0, CLAUDE.md, WORKFLOW, CHANGELOG); `make gates` (938 s, green) | Done |
-| 119.7 | Interactive sign-off: the game from `engines/godot/` | |
+| 119.7 | Interactive sign-off: the game from `engines/godot/` | Done (user, 2026-10-20) |
 
 ### 119.0 The ledger
 
