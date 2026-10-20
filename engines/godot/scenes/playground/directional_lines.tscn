@@ -1,0 +1,4 @@
+[gd_scene format=3]
+
+[node name="Main" type="RicochetGame"]
+level_path = "res://data/levels/playground/directional_lines.json"

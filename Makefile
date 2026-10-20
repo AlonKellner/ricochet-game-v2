@@ -1,4 +1,6 @@
 GODOT ?= $(if $(GODOT_BIN),$(GODOT_BIN),godot)
+# Stage 119: the Godot project, a host of the native game (docs/PORTING.md)
+GODOT_PROJECT := engines/godot
 CMAKE ?= cmake
 CTEST ?= ctest
 NCPU := $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
@@ -22,9 +24,9 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test pyhost shots \
+.PHONY: test run test-verbose frame-bench oracle-test pyhost \
 	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
-	sessions sessions-check
+	sessions sessions-check godot-data
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -59,18 +61,27 @@ check: core
 # is missing or older than ricochet.gdextension (2 s otherwise saved).
 native:
 	$(CMAKE) -S native -B $(BUILD_EXT) $(call gen,$(BUILD_EXT)) -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-		-DRC_BUILD_EXTENSION=ON -DRC_BUILD_TESTS=OFF
+		-DRC_BUILD_EXTENSION=ON -DRC_BUILD_TESTS=OFF -DRC_EXTENSION_OUTPUT_DIR=$(CURDIR)/$(GODOT_PROJECT)/bin
 	$(CMAKE) --build $(BUILD_EXT) -j $(JOBS_EXT)
-	@if [ ! -s .godot/extension_list.cfg ] || [ ricochet.gdextension -nt .godot/extension_list.cfg ]; then \
-		$(GODOT) --headless --import --path .; else echo "import: extension_list.cfg current"; fi
+	@$(MAKE) -s godot-data
+	@if [ ! -s $(GODOT_PROJECT)/.godot/extension_list.cfg ] || [ $(GODOT_PROJECT)/ricochet.gdextension -nt $(GODOT_PROJECT)/.godot/extension_list.cfg ]; then \
+		$(GODOT) --headless --import --path $(GODOT_PROJECT); else echo "import: extension_list.cfg current"; fi
+
+# Stage 119: the Godot project (engines/godot) reads only res://: the levels,
+# the session scripts and their golden are copied in (gitignored).
+godot-data:
+	mkdir -p $(GODOT_PROJECT)/data
+	rsync -a --delete data/levels data/sessions $(GODOT_PROJECT)/data/
+	rsync -a --delete bench/sessions/ $(GODOT_PROJECT)/data/golden/
 
 # Debug extension (RC_ASSERT aborts). Writes the same library name into native/bin,
 # so it replaces the RelWithDebInfo one until the next `make native`.
 native-debug:
 	$(CMAKE) -S native -B native/build-debug $(call gen,native/build-debug) -DCMAKE_BUILD_TYPE=Debug \
-		-DRC_BUILD_EXTENSION=ON -DRC_BUILD_TESTS=OFF
+		-DRC_BUILD_EXTENSION=ON -DRC_BUILD_TESTS=OFF -DRC_EXTENSION_OUTPUT_DIR=$(CURDIR)/$(GODOT_PROJECT)/bin
 	$(CMAKE) --build native/build-debug -j $(JOBS_EXT)
-	$(GODOT) --headless --import --path .
+	@$(MAKE) -s godot-data
+	$(GODOT) --headless --import --path $(GODOT_PROJECT)
 
 # ASan+UBSan rc_tests (no godot-cpp: nothing loads a sanitized extension), the
 # ctest entries in parallel. Debug (assertions on) at -O1: the sanitizers catch
@@ -116,20 +127,16 @@ manifests: core
 # Stage 115 (docs/research/session_digest.md): the game played through the
 # session scripts (data/sessions, docs/research/sessions/gen_sessions.py), one
 # record of its observable state per step -> bench/sessions/*.jsonl, the
-# golden every engine-agnostic port reproduces. `sessions` re-records it (a
-# changed record is a behaviour change: the judge's report first),
-# `sessions-check` records into a temporary directory and compares
-# (docs/research/session_judge.py, exit 2 on a difference). The shards run in
-# parallel Godot processes.
+# golden every host reproduces. Since Stage 119 the native game records it
+# (rc_tool replay, through the C API). `sessions` re-records it (a changed
+# record is a behaviour change: docs/research/session_judge.py's report first),
+# `sessions-check` compares a replay with it (also ctest capi_sessions_*).
 SESSIONS_DIR ?= $(CURDIR)/bench/sessions
-SESSION_JOBS ?= $(NCPU)
-sessions: native
+sessions: core
 	rm -rf "$(SESSIONS_DIR)"
-	tools/record_sessions.sh "$(SESSIONS_DIR)" $(SESSION_JOBS)
-	@ls "$(SESSIONS_DIR)" | wc -l | sed 's/^ *//; s/$$/ sessions/'
-sessions-check: native
-	@d=$$(mktemp -d "$${TMPDIR:-/tmp}/ricochet_sessions.XXXXXX"); \
-	tools/record_sessions.sh "$$d" $(SESSION_JOBS) && python3 -I docs/research/session_judge.py bench/sessions "$$d" && rm -rf "$$d"
+	$(BUILD_CORE)/rc_tool replay data/sessions data/levels "$(SESSIONS_DIR)"
+sessions-check: core
+	$(BUILD_CORE)/rc_tool replay data/sessions data/levels --check bench/sessions
 
 # ------------------------------------------------------------- goldens judge
 # Workflow W4: what the tree changes against REF (default main), dumped from
@@ -164,13 +171,6 @@ regen-apply:
 DUMPS_DIR ?= $(CURDIR)/bench/scenes
 dumps: core
 	$(BUILD_CORE)/rc_tool dumps data/levels "$(DUMPS_DIR)"
-# Stage 118: screenshots of every played level, the GDScript scene against the
-# Godot adapter (RicochetGame) in the same state; report.md counts the differing
-# pixels. Opens a window (the headless renderer draws nothing).
-SHOTS_DIR ?= $(or $(TMPDIR),/tmp)/ricochet_shots
-shots: native
-	$(GODOT) --path . --fixed-fps 60 --resolution 1920x1080 -s res://scripts/testing/shots.gd -- --out "$(SHOTS_DIR)"
-	@cat "$(SHOTS_DIR)/report.md"
 
 # Stage 118: the Python host (tests/host_py, ctypes over the C API's shared
 # library): every session through the C API equals the golden, the errors, the draw list
@@ -181,44 +181,21 @@ oracle-test:
 	@if [ -x $(ORACLE_PY) ]; then $(ORACLE_PY) -m pytest -q docs/research/oracle; \
 	else echo "!! oracle tests skipped: no docs/research/.venv (python3 -m venv docs/research/.venv && docs/research/.venv/bin/pip install mpmath numpy pytest)"; fi
 
-# ------------------------------------------------------------------ GUT tests
+# ------------------------------------------------------------------ the Godot suite
+# Stage 119: the Godot host alone (tests/test_adapter_smoke.gd, tests/test_session_replay.gd)
 test: native oracle-test
-	$(GODOT) --headless -s addons/gut/gut_cmdln.gd
+	SKIP_BUILD=1 SKIP_ORACLE=1 ./run_tests_parallel.sh
 
 run:
-	$(GODOT)
+	$(GODOT) --path $(GODOT_PROJECT)
 
 test-verbose:
-	$(GODOT) --headless -s addons/gut/gut_cmdln.gd -glog=3
-
-# Exact stage files (tests/test_stage<N>_*.gd), not a substring match.
-test-stage:
-	@if [ -z "$(STAGE)" ]; then echo "Usage: make test-stage STAGE=1"; exit 1; fi
-	@files="$$(ls tests/test_stage$(STAGE)_*.gd 2>/dev/null | sed 's#^#res://#' | paste -sd, -)"; \
-	if [ -z "$$files" ]; then echo "No tests match tests/test_stage$(STAGE)_*.gd"; exit 1; fi; \
-	echo "$$files" | tr ',' '\n'; \
-	$(GODOT) --headless -s addons/gut/gut_cmdln.gd -gconfig= -gtest="$$files" -gexit
-
-# ctest plus every non-sweep GUT file in one process (the sweeps are the slow
-# tests; run_tests_parallel.sh shards them).
-SWEEPS := test_invariant_sweep.gd test_invariant_combos.gd test_precision_invariant_sweep.gd test_stage107_level_sweep.gd test_stage108_level_sweep.gd test_visibility_sweep.gd
-FAST_TESTS := $(filter-out $(addprefix tests/,$(SWEEPS)),$(wildcard tests/test_*.gd)) \
-	$(wildcard tests/native/test_*.gd)
-test-fast: core native ctest oracle-test
-	$(GODOT) --headless -s addons/gut/gut_cmdln.gd -gconfig= \
-		-gtest=$(subst $(space),$(comma),$(addprefix res://,$(FAST_TESTS))) -gexit
+	$(GODOT) --headless --path $(GODOT_PROJECT) -s addons/gut/gut_cmdln.gd -glog=3
 
 # ------------------------------------------------------------------ benchmarks
-# Precision benchmark: GDScript strategies vs the mpmath oracle corpus
-bench:
-	$(GODOT) --headless --path . -s res://scripts/testing/run_precision_bench.gd -- --strategies=beam_f64,beam_big112,ladder,ladder_verify --tag=main
-
-# Stage 100: the per-frame cost of a live scene, headless; static phases must
-# not recompute the trace (dirty flags) and the mean frame stays under budget.
-SCENE ?= res://scenes/main.tscn
+# The game's per-frame cost on a level (Stage 119, rc_tool bench): still and
+# moving phases; a still frame must not recompute, a mean frame stays under budget.
+LEVEL ?= data/levels/main.json
 FRAMES ?= 250
-frame-bench: native
-	$(GODOT) --headless --path . -s res://scripts/testing/frame_bench.gd -- --scene=$(SCENE) --frames=$(FRAMES)
-
-bench-stress:
-	$(GODOT) --headless --path . -s res://scripts/testing/run_precision_bench.gd -- --dir=stress --strategies=beam_f64,ladder,ladder_verify --tag=stress
+frame-bench: core
+	$(BUILD_CORE)/rc_tool bench $(LEVEL) --frames $(FRAMES)

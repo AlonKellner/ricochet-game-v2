@@ -1,0 +1,4 @@
+[gd_scene format=3 uid="uid://c7pre1nv3rt3d"]
+
+[node name="Main" type="RicochetGame"]
+level_path = "res://data/levels/playground/pre_inverted.json"

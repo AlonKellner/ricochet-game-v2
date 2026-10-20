@@ -1,0 +1,4 @@
+[gd_scene format=3 uid="uid://bru25try0j4yd"]
+
+[node name="Main" type="RicochetGame"]
+level_path = "res://data/levels/main.json"

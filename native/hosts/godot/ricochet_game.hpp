@@ -65,7 +65,7 @@ public:
 	void _input(const godot::Ref<godot::InputEvent> &event) override;
 
 	// for tools and tests: a fixed cursor (the mouse no longer moves it), the
-	// player moved, the physics off (the player stays put; frames still settle)
+	// player moved, the physics off (the player stays put; frames still settle, a flight flies)
 	void aim(const godot::Vector2 &at);
 	void teleport(const godot::Vector2 &at);
 	void set_physics(bool on) { physics_ = on; }

@@ -416,6 +416,53 @@ void Session::land() {
 	refresh_ui();
 }
 
+std::vector<std::pair<int, Overlay>> plan_overlays(const std::vector<PlanEntry> &plan,
+		const std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> &hits, const World &world, const rc::Flags &flags) {
+	std::vector<std::pair<int, Overlay>> overlays;
+	auto hits_of = [&](int id) -> const std::vector<rc::PhysicalHit> * {
+		for (const auto &e : hits) {
+			if (e.first == id) {
+				return &e.second;
+			}
+		}
+		return nullptr;
+	};
+	for (const PlanEntry &e : plan) {
+		const BuiltSurface *s = world.by_id(e.surface_id);
+		if (s == nullptr) {
+			continue;
+		}
+		const std::optional<OverlayLink> link = overlay_link(*s, e.side, flags);
+		if (!link) {
+			continue;
+		}
+		bool in_ok = false, out_ok = false;
+		if (const std::vector<rc::PhysicalHit> *hs = hits_of(e.surface_id)) {
+			for (const rc::PhysicalHit &h : *hs) {
+				const bool on_piece = !e.span || span_contains(*s, *e.span, h.point);
+				if (h.side == int(e.side) && h.on_segment && on_piece) {
+					in_ok = true;
+					out_ok = out_ok || h.has_continuation;
+				}
+			}
+		}
+		const Color in_c = in_ok ? PLAN_VALID_COLOR : PLAN_INVALID_COLOR;
+		const Color out_c = out_ok ? PLAN_VALID_COLOR : PLAN_INVALID_COLOR;
+		const int side = int(e.side);
+		const int out_piece = link->outgoing && link->outgoing->surface == s->id ? e.piece : -1;
+		if (!link->outgoing) {
+			overlays.push_back({s->id, Overlay{side, true, false, -1, in_c, out_c, in_c, e.piece}});
+		} else if (*link->outgoing == link->from) {
+			overlays.push_back({s->id, Overlay{side, true, true, side, in_c, out_c, in_c, e.piece}});
+		} else {
+			const int os = int(link->outgoing->side);
+			overlays.push_back({s->id, Overlay{side, true, false, -1, in_c, out_c, in_c, e.piece}});
+			overlays.push_back({link->outgoing->surface, Overlay{os, false, true, os, in_c, out_c, in_c, out_piece}});
+		}
+	}
+	return overlays;
+}
+
 bool Session::start_fire() {
 	if (flying_ || player_ == cursor_) {
 		return false;
@@ -715,50 +762,7 @@ void Session::update_overlays(bool force) {
 		return;
 	}
 	overlay_inputs_ = inputs;
-	// ChevronOverlayBuilder.build_plan_overlays
-	std::vector<std::pair<int, Overlay>> overlays;
-	auto hits_of = [&](int id) -> const std::vector<rc::PhysicalHit> * {
-		for (const auto &e : preview_.hits) {
-			if (e.first == id) {
-				return &e.second;
-			}
-		}
-		return nullptr;
-	};
-	for (size_t i = 0; i < plan_.size(); i++) {
-		const PlanEntry &e = plan_[i];
-		const BuiltSurface *s = world_->by_id(e.surface_id);
-		if (s == nullptr) {
-			continue;
-		}
-		const std::optional<OverlayLink> link = overlay_link(*s, e.side, flags_);
-		if (!link) {
-			continue;
-		}
-		bool in_ok = false, out_ok = false;
-		if (const std::vector<rc::PhysicalHit> *hs = hits_of(e.surface_id)) {
-			for (const rc::PhysicalHit &h : *hs) {
-				const bool on_piece = !e.span || span_contains(*s, *e.span, h.point);
-				if (h.side == int(e.side) && h.on_segment && on_piece) {
-					in_ok = true;
-					out_ok = out_ok || h.has_continuation;
-				}
-			}
-		}
-		const Color in_c = in_ok ? PLAN_VALID_COLOR : PLAN_INVALID_COLOR;
-		const Color out_c = out_ok ? PLAN_VALID_COLOR : PLAN_INVALID_COLOR;
-		const int side = int(e.side);
-		const int out_piece = link->outgoing && link->outgoing->surface == s->id ? e.piece : -1;
-		if (!link->outgoing) {
-			overlays.push_back({s->id, Overlay{side, true, false, -1, in_c, out_c, in_c, e.piece}});
-		} else if (*link->outgoing == link->from) {
-			overlays.push_back({s->id, Overlay{side, true, true, side, in_c, out_c, in_c, e.piece}});
-		} else {
-			const int os = int(link->outgoing->side);
-			overlays.push_back({s->id, Overlay{side, true, false, -1, in_c, out_c, in_c, e.piece}});
-			overlays.push_back({link->outgoing->surface, Overlay{os, false, true, os, in_c, out_c, in_c, out_piece}});
-		}
-	}
+	const std::vector<std::pair<int, Overlay>> overlays = plan_overlays(plan_, preview_.hits, *world_, flags_);
 	auto for_piece = [](int of, int node) { return of < 0 || node < 0 || of == node; };
 	for (Node &n : nodes_) {
 		std::vector<int> indices;
@@ -811,6 +815,7 @@ void Session::update_visibility() {
 	}
 	vis_inputs_ = inputs;
 	vis_computed_ = true;
+	visibility_version_++;
 	region_.reset();
 	fill_ = rc::vis::Fill{};
 	whiskers_.clear();

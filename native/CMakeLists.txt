@@ -2,7 +2,8 @@
 #
 #   ricochet_core  static, Godot-free (namespace rc)        core/
 #   ricochet_game  static, engine-free (namespace rcg)      game/  (Stage 115: levels, ...)
-#   ricochet_gd    shared GDExtension, links core+godot-cpp gd/   -> native/bin/
+#   rc_capi        the C API (rc_api.h), static and shared       capi/
+#   ricochet_gd    shared GDExtension: the Godot host on the C API  hosts/godot/ -> native/bin/
 #   rc_tests       doctest executable, registered with ctest tests/
 #   rcg_tests      doctest executable for the game layer       tests/game/
 #   rc_tool        the headless host (data pipelines)           hosts/headless/
@@ -18,8 +19,8 @@ project(ricochet_native LANGUAGES CXX)
 option(RC_BUILD_TESTS "Build the doctest executable and register ctest tests" ON)
 option(RC_BUILD_EXTENSION "Build godot-cpp and the ricochet_gd GDExtension library" ON)
 set(RC_SANITIZE "" CACHE STRING "Comma-separated -fsanitize= list for every target, e.g. address,undefined")
-set(RC_EXTENSION_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/bin" CACHE PATH
-    "Where the GDExtension library is written (ricochet.gdextension points at native/bin)")
+set(RC_EXTENSION_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/../engines/godot/bin" CACHE PATH
+    "Where the GDExtension library is written (engines/godot/ricochet.gdextension points at engines/godot/bin)")
 
 # ccache when installed (the Makefile passes nothing: a tree configured before
 # ccache was installed keeps its rules). Content-keyed, so a branch switch or a
@@ -118,11 +119,10 @@ if(RC_BUILD_EXTENSION)
     set(GODOTCPP_SYSTEM_HEADERS ON CACHE BOOL "godot-cpp headers are not held to the rc warning flags")
     add_subdirectory(extern/godot-cpp SYSTEM)
 
-    # (Stage 118: with the adapter, hosts/godot -- on the C API alone)
-    file(GLOB RC_GD_SOURCES CONFIGURE_DEPENDS gd/*.cpp hosts/godot/*.cpp)
+    # Stage 119: the Godot host (hosts/godot), on the C API alone
+    file(GLOB RC_GD_SOURCES CONFIGURE_DEPENDS hosts/godot/*.cpp)
     add_library(ricochet_gd SHARED ${RC_GD_SOURCES})
-    target_include_directories(ricochet_gd PRIVATE hosts/godot)
-    target_link_libraries(ricochet_gd PRIVATE ricochet_core ricochet_game rc_capi godot-cpp)
+    target_link_libraries(ricochet_gd PRIVATE rc_capi godot-cpp)
 
     get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
     set_target_properties(ricochet_gd PROPERTIES
@@ -219,20 +219,17 @@ if(RC_BUILD_TESTS)
         set_tests_properties(rc_sweeps_vis_${part} PROPERTIES ENVIRONMENT "RC_SWEEPS_PART=${part}/${RC_SWEEPS_VIS_PARTS};RC_VIS_THREADS=1")
     endforeach()
 
-    # ricochet_core must stay Godot-free: fails if any file under core/ names godot-cpp.
-    add_test(NAME rc_core_no_godot
-        COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/core
-                -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)
-    add_test(NAME rcg_game_no_godot
-        COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/game
-                -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)
+    # The engine-free layers name no game engine (Stage 119: core, game, the C API, the headless host).
+    foreach(layer core game capi hosts/headless)
+        string(REPLACE "/" "_" layer_name "${layer}")
+        add_test(NAME ${layer_name}_no_engine
+            COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/${layer}
+                    -P ${CMAKE_SOURCE_DIR}/tools/check_no_engine.cmake)
+    endforeach()
     # the Godot adapter knows the game through rc_api.h alone
     add_test(NAME godot_adapter_includes
         COMMAND "${CMAKE_COMMAND}" -DRC_ADAPTER_DIR=${CMAKE_SOURCE_DIR}/hosts/godot
                 -P ${CMAKE_SOURCE_DIR}/tools/check_adapter_includes.cmake)
-    add_test(NAME capi_no_godot
-        COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/capi
-                -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)
 
     # Stage 115: the game layer's tests (make check AREA=game)
     file(GLOB RCG_TEST_SOURCES CONFIGURE_DEPENDS tests/game/*.cpp)
@@ -271,7 +268,10 @@ if(RC_BUILD_TESTS)
 
     # The API file godot-cpp generated its bindings from must describe the installed binary.
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
-    add_test(NAME rc_api_matches_binary
+    # Stage 119: the GUT retirement ledger holds; the Godot host's GDScript stays under budget
+    add_test(NAME gut_ledger COMMAND Python3::Interpreter -I ${RC_REPO_ROOT}/tools/gut_ledger_check.py)
+    add_test(NAME gdscript_budget COMMAND Python3::Interpreter -I ${RC_REPO_ROOT}/tools/check_gdscript_budget.py)
+    add_test(NAME godot_api_matches_binary
         COMMAND Python3::Interpreter -I ${CMAKE_SOURCE_DIR}/tools/check_api.py
                 ${CMAKE_SOURCE_DIR}/godot-api/extension_api.json
                 ${CMAKE_SOURCE_DIR}/extern/godot-cpp/gdextension/extension_api-4-7.json)

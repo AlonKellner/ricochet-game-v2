@@ -1,0 +1,36 @@
+{
+ "schema": "rc-session/1",
+ "level": "test_levels/flag_switches",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    700.0,
+    520.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1100.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1100.0,
+    560.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  }
+ ]
+}

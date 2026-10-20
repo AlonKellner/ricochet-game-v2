@@ -1,4 +1,0 @@
-[gd_scene format=3]
-
-[node name="RcLevel" type="RicochetGame"]
-level_path = "res://data/levels/main.json"

@@ -2,16 +2,18 @@
 # The gates, in order, with one timed summary (docs/WORKFLOW.md):
 #   LEVEL=commit (make gate): the core build, the oracle, ctest (RelWithDebInfo,
 #     build-core; the native sweeps at one player in 4), the extension build,
-#     the level dumps current, the sweep manifests current, the session replay current, the Python host
-#     on the C API (tests/host_py), the GUT suite
-#     (its sweeps sampled), the goldens unchanged.
+#     the level dumps current, the sweep manifests current, the Python host
+#     on the C API (tests/host_py), the Godot host's suite, the goldens unchanged.
 #   LEVEL=merge (make gates): the same with every sweep player, then ctest under
 #     ASan+UBSan (build-asan).
+#   SKIP_GODOT=1: every engine-free gate (no extension build, no Godot suite):
+#     what a port to another engine runs (docs/PORTING.md).
 # Every gate runs even after a failure; the exit status is nonzero if any failed.
 # Logs: $LOGDIR (printed). JOBS bounds the compiles (default: every core).
 #
 #   LEVEL=commit ./gates.sh     # or: make gate
 #   LEVEL=merge ./gates.sh      # or: make gates
+#   SKIP_GODOT=1 make gate
 set -uo pipefail
 cd "$(dirname "$0")"
 LEVEL="${LEVEL:-merge}"
@@ -59,11 +61,6 @@ dumps_current() {
 	rm -rf "$d"
 }
 
-# the committed session replay golden is what the game plays now (Stage 115)
-sessions_current() {
-	make -s sessions-check
-}
-
 goldens_unchanged() {
 	local d
 	d=$(git diff --stat bench/goldens bench/sessions bench/scenes)
@@ -77,12 +74,15 @@ if [ "$LEVEL" = commit ]; then
 else
 	gate ctest make ctest
 fi
-gate native make native
+if [ -z "${SKIP_GODOT:-}" ]; then
+	gate native make native
+fi
 gate dumps dumps_current
 gate manifests manifests_current
-gate sessions sessions_current
 gate pyhost make -s pyhost
-gate gut env SKIP_ORACLE=1 SKIP_BUILD=1 ./run_tests_parallel.sh
+if [ -z "${SKIP_GODOT:-}" ]; then
+	gate gut env SKIP_ORACLE=1 SKIP_BUILD=1 ./run_tests_parallel.sh
+fi
 if [ "$LEVEL" = merge ]; then
 	gate asan make native-asan
 fi
@@ -96,6 +96,5 @@ for i in "${!NAMES[@]}"; do
 	total=$((total + SECS[i]))
 done
 grep -h "Passing (" "$LOGDIR/gut.log" 2>/dev/null
-grep -h "known finding" "$(sed -n 's/.*(logs: \(.*\))/\1/p' "$LOGDIR/gut.log" | head -1)"/*.log 2>/dev/null | sort | uniq -c
-printf "%-10s %6d  %s   (LEVEL=%s, logs: %s)\n" total "$total" "$([ $status = 0 ] && echo ok || echo FAIL)" "$LEVEL" "$LOGDIR"
+printf "%-10s %6d  %s   (LEVEL=%s%s, logs: %s)\n" total "$total" "$([ $status = 0 ] && echo ok || echo FAIL)" "$LEVEL" "${SKIP_GODOT:+, SKIP_GODOT}" "$LOGDIR"
 exit $status

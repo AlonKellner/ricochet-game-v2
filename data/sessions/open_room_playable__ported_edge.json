@@ -1,0 +1,94 @@
+{
+ "schema": "rc-session/1",
+ "level": "open_room_playable",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    960.0,
+    270.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1910.0,
+    270.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1880.0,
+    540.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1930.0,
+    540.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    806.0,
+    540.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1910.0,
+    270.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1205.0,
+    540.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    960.0,
+    1075.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1910.0,
+    270.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "right"
+  },
+  {
+   "op": "click",
+   "button": "right"
+  },
+  {
+   "op": "click",
+   "button": "right"
+  }
+ ]
+}
