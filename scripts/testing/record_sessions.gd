@@ -5,7 +5,7 @@ extends SceneTree
 # writes one SessionDigest record per step to bench/sessions/<name>.jsonl.
 #
 #   godot --headless --fixed-fps 60 --path . -s res://scripts/testing/record_sessions.gd \
-#       -- [--in data/sessions] [--out bench/sessions] [--only <substring>] [--shard i/n] [--full] [--draw]
+#       -- [--in data/sessions] [--out bench/sessions] [--only <substring>] [--shard i/n] [--full]
 #
 # --shard i/n plays the sessions with sorted index % n == i (make sessions runs
 # the shards in parallel processes).
@@ -42,7 +42,7 @@ func _run() -> void:
 	var only: String = args.get("only", "")
 	var shard: PackedStringArray = String(args.get("shard", "0/1")).split("/")
 	_full = args.has("full")
-	DrawRec.enabled = args.has("draw")   # Stage 118: the records also hold what is drawn
+	DrawRec.enabled = true   # Stage 118: the records also hold what is drawn (the draw list)
 	DirAccess.make_dir_recursive_absolute(_abs(out_dir))
 	var names := Array(DirAccess.get_files_at(_abs(in_dir))).filter(func(f): return f.ends_with(".json"))
 	names.sort()

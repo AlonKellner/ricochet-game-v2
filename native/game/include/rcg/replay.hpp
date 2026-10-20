@@ -10,11 +10,11 @@
 
 namespace rcg {
 
-// What a record holds of the draw list (Stage 118, the record's "draw"): none,
-// its sha, or the list itself (the recorder's --draw / --draw --full).
+// What a record holds of the draw list (Stage 118, the record's "draw"): its
+// sha (the golden's), the list itself (the recorder's --full), or nothing.
 enum class DrawRecord { None, Sha, Full };
 
 // The records of a session (throws std::runtime_error on an op it does not know).
-std::vector<std::string> replay_session(const nlohmann::json &script, const std::string &levels_dir, DrawRecord draw = DrawRecord::None);
+std::vector<std::string> replay_session(const nlohmann::json &script, const std::string &levels_dir, DrawRecord draw = DrawRecord::Sha);
 
 } // namespace rcg
