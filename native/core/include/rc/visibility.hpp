@@ -28,6 +28,7 @@
 #include "rc/earcut.hpp"
 #include "rc/exact.hpp"
 #include "rc/solver.hpp"
+#include "rc/thread_pool.hpp"
 #include "rc/tracer.hpp"
 
 #include <algorithm>
@@ -2109,20 +2110,10 @@ private:
 		for (size_t k = 1; k < nt; k++) {
 			tracers.push_back(&tracer_.helper(k - 1));
 		}
-		std::atomic<size_t> next{0};
-		auto work = [&](Tracer *t) {
-			for (size_t i = next++; i < jobs.size(); i = next++) {
-				out[i] = cast_on(*t, jobs[i].c, jobs[i].q, jobs[i].member);
-			}
-		};
-		std::vector<std::thread> threads;
-		for (size_t k = 1; k < nt; k++) {
-			threads.emplace_back(work, tracers[k]);
-		}
-		work(tracers[0]);
-		for (std::thread &th : threads) {
-			th.join();
-		}
+		// (Stage 120: on the persistent pool, not threads made per batch; worker k casts with tracers[k])
+		ThreadPool::shared().parallel_for(jobs.size(), nt - 1, [&](size_t worker, size_t i) {
+			out[i] = cast_on(*tracers[worker], jobs[i].c, jobs[i].q, jobs[i].member);
+		});
 		return out;
 	}
 
