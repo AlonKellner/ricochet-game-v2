@@ -3,6 +3,7 @@
 #include "rcg/digest.hpp"
 
 #include <algorithm>
+#include <cmath>
 
 namespace rcg::render {
 namespace {
@@ -71,19 +72,40 @@ json call_json(const Call &c) {
 	return nullptr;
 }
 
-json list_json(const std::vector<Node> &nodes) {
-	std::vector<const Node *> sorted;
-	for (const Node &n : nodes) {
-		sorted.push_back(&n);
+void sort(std::vector<Node> &nodes) {
+	std::vector<std::pair<std::string, size_t>> keys;
+	for (size_t i = 0; i < nodes.size(); i++) {
+		keys.push_back({digest::encode(nodes[i].key), i});
 	}
-	std::stable_sort(sorted.begin(), sorted.end(), [](const Node *a, const Node *b) {
-		if (a->z != b->z) {
-			return a->z < b->z;
-		}
-		return digest::encode(a->key) < digest::encode(b->key);
+	std::stable_sort(keys.begin(), keys.end(), [&](const auto &a, const auto &b) {
+		const int za = nodes[a.second].z, zb = nodes[b.second].z;
+		return za != zb ? za < zb : a.first < b.first;
 	});
+	std::vector<Node> out;
+	out.reserve(nodes.size());
+	for (const auto &k : keys) {
+		out.push_back(std::move(nodes[k.second]));
+	}
+	nodes = std::move(out);
+}
+
+std::vector<V2> tessellate_arc(const V2 &center, double radius, double start, double end, int point_count) {
+	std::vector<V2> pts;
+	const float tau = 6.28318530717958647692f;
+	const float delta = std::clamp(float(end) - float(start), -tau, tau);
+	for (int i = 0; i < point_count; i++) {
+		const float theta = (float(i) / (float(point_count) - 1.0f)) * delta + float(start);
+		pts.push_back(center + V2{std::cos(theta), std::sin(theta)} * float(radius));
+	}
+	return pts;
+}
+
+json list_json(const std::vector<Node> &unsorted) {
+	std::vector<Node> nodes = unsorted;
+	sort(nodes);
 	json out = json::array();
-	for (const Node *n : sorted) {
+	for (const Node &node : nodes) {
+		const Node *n = &node;
 		json calls = json::array();
 		for (const Call &c : n->calls) {
 			calls.push_back(call_json(c));

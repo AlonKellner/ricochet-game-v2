@@ -55,9 +55,17 @@ struct Node {
 	std::vector<Call> calls;
 };
 
-// A call / the draw list as the session digest records them (DrawRec's logs).
+// The draw order: by z, then by the key's encoding (stable).
+void sort(std::vector<Node> &nodes);
+
+// A call / the draw list (sorted) as the session digest records them (DrawRec's logs).
 nlohmann::json call_json(const Call &c);
 nlohmann::json list_json(const std::vector<Node> &nodes);
+
+// An arc as Godot's CanvasItem::draw_arc strokes it: point_count points from
+// the start angle to the end (the span clamped to a full turn), float32
+// arithmetic (a host without an arc primitive draws this polyline).
+std::vector<V2> tessellate_arc(const V2 &center, double radius, double start, double end, int point_count);
 
 // Godot's named colours (Color::hex) and helpers
 Color hex(std::uint32_t rgba);

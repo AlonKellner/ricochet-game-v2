@@ -22,7 +22,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test \
+.PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test pyhost \
 	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
 	sessions sessions-check
 
@@ -40,7 +40,7 @@ core:
 
 # The inner loop: core, then the ctest entries of an area, or one doctest filter.
 #   make check                      # every entry (~20 s)
-#   make check AREA=solver|vis|goldens|sweeps|game
+#   make check AREA=solver|vis|goldens|sweeps|game (game: rcg_* and the C API's capi_*)
 #   make check TC="Stage 111*"      # rc_tests -tc=<filter> (--no-skip with SKIP=0)
 AREA ?= all
 TC ?=
@@ -49,7 +49,7 @@ check_re_solver := ^rc_tests$$|tier_independence|pop_tiers|sweep_goldens
 check_re_vis := visibility
 check_re_goldens := ^rc_tests$$|sweep_goldens
 check_re_sweeps := rc_sweeps
-check_re_game := ^rcg
+check_re_game := ^rcg|^capi
 check: core
 	@if [ -n "$(TC)" ]; then $(BUILD_CORE)/rc_tests -tc="$(TC)" $(if $(filter 0,$(SKIP)),--no-skip,); \
 	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --output-on-failure -R '$(check_re_$(AREA))'; fi
@@ -164,6 +164,11 @@ regen-apply:
 DUMPS_DIR ?= $(CURDIR)/bench/scenes
 dumps: core
 	$(BUILD_CORE)/rc_tool dumps data/levels "$(DUMPS_DIR)"
+# Stage 118: the Python host (tests/host_py, ctypes over the C API's shared
+# library): every session through the C API equals the golden, the errors, the draw list
+pyhost: core
+	@if [ -x $(ORACLE_PY) ]; then $(ORACLE_PY) -m pytest -q tests/host_py; \
+	else echo "!! pyhost tests skipped: no docs/research/.venv (see oracle-test)"; fi
 oracle-test:
 	@if [ -x $(ORACLE_PY) ]; then $(ORACLE_PY) -m pytest -q docs/research/oracle; \
 	else echo "!! oracle tests skipped: no docs/research/.venv (python3 -m venv docs/research/.venv && docs/research/.venv/bin/pip install mpmath numpy pytest)"; fi
