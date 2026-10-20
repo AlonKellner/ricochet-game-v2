@@ -25,7 +25,7 @@ Background: TDD_20 (the session golden), TDD_21 (`rcg::Session`), TDD_22 (the na
 | 118.3 | `rc_tool replay` on the C API alone; the Python ctypes host (`tests/host_py`, `make pyhost`, gate `pyhost`) | Done |
 | 118.4 | The Godot adapter (`RicochetGame`, `native/hosts/godot`, `scenes/rc_level.tscn`); the screenshot comparison | Done |
 | 118.5 | Docs (GAME_SPEC 2.30.0 §20.1, §20.4, §21.1; CHANGELOG; WORKFLOW), `make gates` (964 s, green) | Done |
-| 118.6 | Interactive sign-off: `scenes/rc_level.tscn` (the adapter) side by side with `scenes/main.tscn` | |
+| 118.6 | Interactive sign-off: `scenes/rc_level.tscn` (the adapter) side by side with `scenes/main.tscn` | Done (user, 2026-10-20) |
 
 ### 118.1 The draw list
 
