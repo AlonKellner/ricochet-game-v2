@@ -52,6 +52,7 @@ struct Row {
 	std::string name;
 	std::vector<double> ms;
 	long long previews = 0, regions = 0, climbs = 0, region_climbs = 0;
+	long long unreliable = 0, over_tol = 0; // why the preview's walks climbed
 	std::string check; // empty: ok
 };
 
@@ -120,6 +121,7 @@ std::vector<Row> run_level(const std::string &path, const Options &o) {
 		setup();
 		const int p0 = s.preview_version(), v0 = s.visibility_version();
 		const long long c0 = climbs(s.preview_stats()), rc0 = climbs(s.region_stats());
+		const long long u0 = s.preview_stats().unreliable, o0 = s.preview_stats().over_tol;
 		for (int k = 0; k < frames; k++) {
 			const auto t0 = clk::now();
 			step(k);
@@ -133,6 +135,8 @@ std::vector<Row> run_level(const std::string &path, const Options &o) {
 		r.regions = s.visibility_version() - v0;
 		r.climbs = std::max(0LL, climbs(s.preview_stats()) - c0);
 		r.region_climbs = std::max(0LL, climbs(s.region_stats()) - rc0);
+		r.unreliable = std::max(0LL, s.preview_stats().unreliable - u0);
+		r.over_tol = std::max(0LL, s.preview_stats().over_tol - o0);
 		return r;
 	};
 	const int n = o.frames;
@@ -234,15 +238,16 @@ std::vector<Row> run_level(const std::string &path, const Options &o) {
 json row_json(const Row &r) {
 	return {{"frames", r.ms.size()}, {"mean", mean(r.ms)}, {"p50", pct(r.ms, 0.5)}, {"p95", pct(r.ms, 0.95)}, {"p99", pct(r.ms, 0.99)},
 		{"max", pct(r.ms, 1.0)}, {"previews", r.previews}, {"regions", r.regions}, {"climbs", r.climbs}, {"region_climbs", r.region_climbs},
-		{"check", r.check.empty() ? "ok" : r.check}};
+		{"unreliable", r.unreliable}, {"over_tol", r.over_tol}, {"check", r.check.empty() ? "ok" : r.check}};
 }
 
 void print_rows(const std::string &level, const std::vector<Row> &rows, double budget) {
-	std::printf("%s\n%-13s %8s %8s %8s %8s %6s %6s %7s %9s\n", level.c_str(), "phase", "mean ms", "p95", "p99", "max", "prev", "regs",
-		"climbs", "reg.climb");
+	std::printf("%s\n%-13s %8s %8s %8s %8s %6s %6s %7s %9s %6s %6s\n", level.c_str(), "phase", "mean ms", "p95", "p99", "max", "prev",
+		"regs", "climbs", "reg.climb", "unrel", ">tol");
 	for (const Row &r : rows) {
-		std::printf("%-13s %8.3f %8.3f %8.3f %8.3f %6lld %6lld %7lld %9lld %s%s\n", r.name.c_str(), mean(r.ms), pct(r.ms, 0.95),
-			pct(r.ms, 0.99), pct(r.ms, 1.0), r.previews, r.regions, r.climbs, r.region_climbs, mean(r.ms) > budget ? "(over budget) " : "",
+		std::printf("%-13s %8.3f %8.3f %8.3f %8.3f %6lld %6lld %7lld %9lld %6lld %6lld %s%s\n", r.name.c_str(), mean(r.ms), pct(r.ms, 0.95),
+			pct(r.ms, 0.99), pct(r.ms, 1.0), r.previews, r.regions, r.climbs, r.region_climbs, r.unreliable, r.over_tol,
+			mean(r.ms) > budget ? "(over budget) " : "",
 			r.check.empty() ? "" : ("FAIL: " + r.check).c_str());
 	}
 }

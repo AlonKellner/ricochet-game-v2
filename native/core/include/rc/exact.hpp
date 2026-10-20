@@ -77,6 +77,9 @@ struct ExactPole {
 // infinity for pole_invert).
 std::optional<ExactPole> pole_reflect(const ExactPole &p, double sx, double sy, double ex, double ey);
 std::optional<ExactPole> pole_invert(const ExactPole &p, const Point3 &C, const BigFloat &rw2);
+// pole_invert with Q's image given (invert_point_h(p.Q, C, rw2): it depends on Q
+// alone, so a caller may memoize it -- Stage 120); the same result bit for bit.
+std::optional<ExactPole> pole_invert_from(const ExactPole &p, const std::optional<Point3> &Q, const Point3 &C);
 ExactPole pole_translate(const ExactPole &p, double dx, double dy);
 // A straight beam on the exact line L (Q at infinity) inverted in the circle
 // centered at C: Q becomes C, the direction there L's.
