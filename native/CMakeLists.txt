@@ -219,20 +219,17 @@ if(RC_BUILD_TESTS)
         set_tests_properties(rc_sweeps_vis_${part} PROPERTIES ENVIRONMENT "RC_SWEEPS_PART=${part}/${RC_SWEEPS_VIS_PARTS};RC_VIS_THREADS=1")
     endforeach()
 
-    # ricochet_core must stay Godot-free: fails if any file under core/ names godot-cpp.
-    add_test(NAME rc_core_no_godot
-        COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/core
-                -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)
-    add_test(NAME rcg_game_no_godot
-        COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/game
-                -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)
+    # The engine-free layers name no game engine (Stage 119: core, game, the C API, the headless host).
+    foreach(layer core game capi hosts/headless)
+        string(REPLACE "/" "_" layer_name "${layer}")
+        add_test(NAME ${layer_name}_no_engine
+            COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/${layer}
+                    -P ${CMAKE_SOURCE_DIR}/tools/check_no_engine.cmake)
+    endforeach()
     # the Godot adapter knows the game through rc_api.h alone
     add_test(NAME godot_adapter_includes
         COMMAND "${CMAKE_COMMAND}" -DRC_ADAPTER_DIR=${CMAKE_SOURCE_DIR}/hosts/godot
                 -P ${CMAKE_SOURCE_DIR}/tools/check_adapter_includes.cmake)
-    add_test(NAME capi_no_godot
-        COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/capi
-                -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)
 
     # Stage 115: the game layer's tests (make check AREA=game)
     file(GLOB RCG_TEST_SOURCES CONFIGURE_DEPENDS tests/game/*.cpp)
@@ -271,7 +268,10 @@ if(RC_BUILD_TESTS)
 
     # The API file godot-cpp generated its bindings from must describe the installed binary.
     find_package(Python3 COMPONENTS Interpreter REQUIRED)
-    add_test(NAME rc_api_matches_binary
+    # Stage 119: the GUT retirement ledger holds; the Godot host's GDScript stays under budget
+    add_test(NAME gut_ledger COMMAND Python3::Interpreter -I ${RC_REPO_ROOT}/tools/gut_ledger_check.py)
+    add_test(NAME gdscript_budget COMMAND Python3::Interpreter -I ${RC_REPO_ROOT}/tools/check_gdscript_budget.py)
+    add_test(NAME godot_api_matches_binary
         COMMAND Python3::Interpreter -I ${CMAKE_SOURCE_DIR}/tools/check_api.py
                 ${CMAKE_SOURCE_DIR}/godot-api/extension_api.json
                 ${CMAKE_SOURCE_DIR}/extern/godot-cpp/gdextension/extension_api-4-7.json)
