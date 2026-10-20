@@ -213,6 +213,8 @@ private:
 	std::vector<std::pair<int, bool>> targets_; // targets_of(flags), in the flags' order
 	std::vector<PlanEntry> plan_;
 	int plan_version_ = 0;
+	int flags_version_ = 0; // bumped when the flags change (their encoding: the record's)
+	void set_flags(const rc::Flags &f);
 	std::vector<Checkpoint> checkpoints_;
 	Checkpoint initial_;
 	int display_mode_ = 0;
@@ -224,12 +226,51 @@ private:
 	int hovered_serial_ = 0, partner_serial_ = 0;
 	bool edge_hovered_ = false;
 	std::optional<V2> edge_point_;
-	nlohmann::json edge_marks_ = nlohmann::json::array();
+	// an infinity entry's mark on the edge (EdgeOverlayNode's marks)
+	struct EdgeMark {
+		int index = 0;
+		V2 point;
+		bool on_point = false;
+		bool valid = false;
+	};
+	std::vector<EdgeMark> edge_marks_;
 	// the derived state and the inputs it was made from
 	Preview preview_;
-	nlohmann::json preview_inputs_;
+	// what each derived part was made from (Stage 120: typed keys, not JSON; the
+	// plan and the flags by their versions, positions by value as JSON compared them)
+	struct PreviewKey {
+		V2 player, cursor;
+		int plan = 0, flags = 0, world = 0;
+		bool operator==(const PreviewKey &) const = default;
+	};
+	struct HoverKey {
+		V2 cursor;
+		int plan = 0, flags = 0;
+		bool operator==(const HoverKey &) const = default;
+	};
+	struct OverlayKey {
+		int trace = 0, plan = 0, flags = 0;
+		bool operator==(const OverlayKey &) const = default;
+	};
+	struct VisKey {
+		V2 player;
+		int plan = 0, flags = 0, world = 0;
+		bool infinity = false, visibility = false;
+		bool operator==(const VisKey &) const = default;
+	};
+	struct SpawnKey {
+		int trace = 0, world = 0;
+		bool operator==(const SpawnKey &) const = default;
+	};
+	std::optional<PreviewKey> preview_inputs_;
 	int trace_version_ = 0;
-	nlohmann::json hover_inputs_, overlay_inputs_, vis_inputs_, spawn_inputs_;
+	std::optional<HoverKey> hover_inputs_;
+	std::optional<OverlayKey> overlay_inputs_;
+	std::optional<VisKey> vis_inputs_;
+	std::optional<SpawnKey> spawn_inputs_;
+	// pole(n) for the current plan, flags and world (it is asked several times a settle)
+	std::vector<std::optional<std::optional<V2>>> pole_cache_;
+	std::array<int, 3> pole_key_{-1, -1, -1};
 	bool vis_computed_ = false;
 	int visibility_version_ = 0;
 	std::optional<rc::vis::Result> region_;

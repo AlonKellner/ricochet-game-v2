@@ -729,10 +729,10 @@ std::vector<render::Node> Session::draw() const {
 		render::Node node{{"edge"}, 5, V2{}, WHITE, {}};
 		std::vector<Call> &out = node.calls;
 		for (const auto &m : edge_marks_) {
-			const Color color = m["valid"].get<bool>() ? PLAN_VALID_COLOR : PLAN_INVALID_COLOR;
-			const V2 mp = V2::of(m["point"][0].get<double>(), m["point"][1].get<double>());
-			const std::string idx = std::to_string(m["index"].get<int>());
-			if (m["on_point"].get<bool>()) {
+			const Color color = m.valid ? PLAN_VALID_COLOR : PLAN_INVALID_COLOR;
+			const V2 mp = m.point;
+			const std::string idx = std::to_string(m.index);
+			if (m.on_point) {
 				point_overlay(out, mp, color);
 				point_marker(out, mp, render::with_alpha(color, 0.9), false);
 				out.push_back(text(mp + V2::of(POINT_RADIUS + OUTER_CHEVRON_DIST, -POINT_RADIUS - 4.0), idx, 0, 14, WHITE));

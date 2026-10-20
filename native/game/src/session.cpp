@@ -136,6 +136,7 @@ Session::Session(const Level &level, const SessionConfig &config)
 	gravity_ = level_.gravity;
 	for (rc::Tracer *t : {&gm_tracer_, &renderer_tracer_, &vis_tracer_}) {
 		t->set_emit_infinity(infinity_on());
+		t->set_pair_cache(false); // the session caches by its own inputs
 	}
 	// the initial checkpoint: taken before the level built its world (GameManager._ready)
 	initial_ = Checkpoint{player_, V2{}, rc::Flags{}, {}, {}, std::nullopt};
@@ -200,8 +201,27 @@ std::optional<V2> Session::pole(size_t n) {
 	if (!infinity_on()) {
 		return std::nullopt;
 	}
+	const std::array<int, 3> key{plan_version_, flags_version_, world_->version()};
+	if (key != pole_key_) {
+		pole_key_ = key;
+		pole_cache_.assign(plan_.size() + 1, std::nullopt);
+	}
+	if (n < pole_cache_.size() && pole_cache_[n]) {
+		return *pole_cache_[n];
+	}
 	use_defs(gm_tracer_, gm_defs_);
-	return gm_tracer_.infinity_point(items(n), flags_);
+	const std::optional<V2> q = gm_tracer_.infinity_point(items(n), flags_);
+	if (n < pole_cache_.size()) {
+		pole_cache_[n] = q;
+	}
+	return q;
+}
+
+void Session::set_flags(const rc::Flags &f) {
+	if (digest::encode(flags_json(f)) != digest::encode(flags_json(flags_))) {
+		flags_version_++;
+	}
+	flags_ = f;
 }
 
 // ClickDetector.detect_click (with the game manager's accept, bounds, switch, pole, pieces)
@@ -337,7 +357,7 @@ Session::Checkpoint Session::capture() const {
 void Session::restore(const Checkpoint &c) {
 	player_ = c.player;
 	velocity_ = c.velocity;
-	flags_ = c.flags;
+	set_flags(c.flags);
 	world_->restore(c.world ? *c.world : world_->initial_snapshot());
 	sync_nodes();
 	plan_ = c.plan;
@@ -390,7 +410,7 @@ void Session::land() {
 	sync_nodes();
 	rc::Flags kept = l.flags;
 	kept.erase("ghost");
-	flags_ = kept;
+	set_flags(kept);
 	targets_.clear();
 	for (const auto &[k, v] : flags_.entries()) {
 		const bool *b = std::get_if<bool>(&v);
@@ -511,7 +531,7 @@ void Session::clear_hover() {
 	}
 	hovered_serial_ = partner_serial_ = 0;
 	edge_hovered_ = false;
-	hover_inputs_ = nullptr;
+	hover_inputs_.reset();
 }
 
 void Session::advance(double dt, const kinematics::Input &in) {
@@ -665,11 +685,7 @@ void Session::update_preview() {
 	if (!level_.features.preview) {
 		return;
 	}
-	json entries = json::array();
-	for (const PlanEntry &e : plan_) {
-		entries.push_back(json::array({e.surface_id, int(e.side), digest::vec(e.click)}));
-	}
-	const json inputs = json::array({digest::vec(player_), digest::vec(cursor_), entries, digest::encode(flags_json(flags_)), world_->version()});
+	const PreviewKey inputs{player_, cursor_, plan_version_, flags_version_, world_->version()};
 	if (preview_.computed && inputs == preview_inputs_) {
 		return;
 	}
@@ -690,10 +706,10 @@ void Session::update_preview() {
 		preview_.merged.clear();
 		return;
 	}
-	preview_.last_result = preview_.pair->result;
+	preview_.last_result = std::move(preview_.pair->result); // (nothing else reads the pair's)
 	const std::vector<rc::inv::SurfaceInfo> in = infos();
 	preview_.physical = rc::sweep::prepare_for_display(preview_.pair->physical, bounds(), in);
-	preview_.planned = rc::sweep::prepare_for_display(preview_.pair->shared ? preview_.pair->physical : preview_.pair->planned, bounds(), in);
+	preview_.planned = preview_.pair->shared ? preview_.physical : rc::sweep::prepare_for_display(preview_.pair->planned, bounds(), in);
 	preview_.has_paths = true;
 	int ci = preview_.planned.cursor_index;
 	if (ci < 0) {
@@ -704,7 +720,7 @@ void Session::update_preview() {
 }
 
 void Session::update_hover() {
-	const json inputs = json::array({digest::vec(cursor_), plan_version_, digest::encode(flags_json(flags_))});
+	const HoverKey inputs{cursor_, plan_version_, flags_version_};
 	if (hover_inputs_ == inputs) {
 		return;
 	}
@@ -757,7 +773,7 @@ void Session::update_hover() {
 }
 
 void Session::update_overlays(bool force) {
-	const json inputs = json::array({trace_version_, plan_version_, digest::encode(flags_json(flags_))});
+	const OverlayKey inputs{trace_version_, plan_version_, flags_version_};
 	if (!force && overlay_inputs_ == inputs) {
 		return;
 	}
@@ -782,7 +798,7 @@ void Session::update_overlays(bool force) {
 	}
 	// the edge: the infinity entries' marks
 	const int wraps = preview_.last_result ? count_infinity(preview_.last_result->physical) : 0;
-	edge_marks_ = json::array();
+	edge_marks_.clear();
 	int k = 0;
 	const rc::Rect2f b = bounds();
 	for (size_t i = 0; i < plan_.size(); i++) {
@@ -793,7 +809,7 @@ void Session::update_overlays(bool force) {
 		k++;
 		const std::optional<V2> q = pole(i);
 		const bool on_point = q && b.has_point(*q);
-		edge_marks_.push_back({{"index", int(i + 1)}, {"point", digest::vec(on_point ? *q : e.click)}, {"on_point", on_point}, {"valid", k <= wraps}});
+		edge_marks_.push_back(EdgeMark{int(i + 1), on_point ? *q : e.click, on_point, k <= wraps});
 	}
 	edge_point_ = std::nullopt;
 	if (const std::optional<V2> q = pole(plan_.size()); q && b.has_point(*q)) {
@@ -805,11 +821,7 @@ void Session::update_visibility() {
 	if (!level_.features.preview) {
 		return;
 	}
-	json entries = json::array();
-	for (const PlanEntry &e : plan_) {
-		entries.push_back(json::array({e.surface_id, int(e.side), digest::vec(e.click), e.piece}));
-	}
-	const json inputs = json::array({digest::vec(player_), entries, digest::encode(flags_json(flags_)), world_->version(), infinity_on(), visibility_on()});
+	const VisKey inputs{player_, plan_version_, flags_version_, world_->version(), infinity_on(), visibility_on()};
 	if (vis_computed_ && vis_inputs_ == inputs) {
 		return;
 	}
@@ -846,7 +858,7 @@ void Session::update_spawn_preview() {
 	if (!spawn_preview_) {
 		return;
 	}
-	const json inputs = json::array({trace_version_, world_->version()});
+	const SpawnKey inputs{trace_version_, world_->version()};
 	if (spawn_inputs_ == inputs) {
 		return;
 	}
@@ -1039,7 +1051,13 @@ json Session::record(const json &extra) const {
 		rows.push_back(json::array({n->surface, n->piece, hov, pl, idx}));
 	}
 	r["overlays"] = digest::sha(rows);
-	r["edge"] = {{"hovered", edge_hovered_}, {"point", edge_point_ ? digest::vec(*edge_point_) : json(nullptr)}, {"marks", edge_marks_}};
+	r["edge"] = {{"hovered", edge_hovered_}, {"point", edge_point_ ? digest::vec(*edge_point_) : json(nullptr)}, {"marks", [&] {
+		json marks = json::array();
+		for (const EdgeMark &m : edge_marks_) {
+			marks.push_back({{"index", m.index}, {"point", digest::vec(m.point)}, {"on_point", m.on_point}, {"valid", m.valid}});
+		}
+		return marks;
+	}()}};
 	// the visibility region
 	if (!level_.features.preview) {
 		r["visibility"] = nullptr;
