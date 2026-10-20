@@ -334,6 +334,21 @@ private:
 	int provisional_version_ = 0;
 	long long vis_ticket_ = 0, preview_ticket_ = 0;
 	long long vis_applied_ = 0; // the newest region request applied
+	// Stage 121: the region a hovered side's plan entry would make, computed while
+	// the frame is idle (the click then shows it at once); cancelled by any real region work
+	std::optional<VisJobIn> prefetch_in_;
+	long long prefetch_ticket_ = 0;
+	std::optional<PlanEntry> entry_for(const Hit &r) const; // the entry a left click on r adds
+	struct PrefetchKey {
+		V2 cursor, player;
+		int plan = -1, flags = -1, world = -1;
+		long long region = -1;
+		bool operator==(const PrefetchKey &) const = default;
+	};
+	PrefetchKey prefetch_key_;
+	void update_prefetch();
+	static rc::PlanItem item_of(const PlanEntry &e);
+	static bool same_inputs(const VisJobIn &a, const VisJobIn &b);
 	std::shared_ptr<const std::vector<rc::SurfaceDef>> job_defs_;
 	int job_defs_world_ = -1;
 	std::shared_ptr<const std::vector<rc::SurfaceDef>> defs_snapshot();
@@ -371,6 +386,7 @@ private:
 	// (last: destroyed first, before the state their results go to)
 	std::unique_ptr<LatestJob<VisJobIn, VisJobOut>> vis_job_;
 	std::unique_ptr<LatestJob<PreviewJobIn, std::optional<rc::TracePair>>> preview_job_;
+	std::unique_ptr<LatestJob<VisJobIn, VisJobOut>> prefetch_job_;
 };
 
 } // namespace rcg

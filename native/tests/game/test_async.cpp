@@ -147,3 +147,36 @@ TEST_CASE("async: a preview that must climb shows provisionally, then the exact 
 	}
 	CHECK(provisional > 0);
 }
+
+TEST_CASE("async: the hovered side's region is prefetched, shown at the click") {
+	const rcg::Level lv = level("test_levels/crossings.json");
+	rcg::SessionConfig cfg;
+	cfg.async = true;
+	rcg::Session a(lv, cfg);
+	rcg::Session s(lv);
+	// a plannable side: 6 px off the middle of an interactive surface
+	std::optional<rc::V2> hover;
+	for (const rcg::BuiltSurface &b : a.world().surfaces()) {
+		if (b.label && b.left && b.left->interactive && !b.pre_transform && b.seg.is_line()) {
+			const rc::V2 d = (b.seg.e - b.seg.s).normalized();
+			hover = b.seg.v + rc::V2{-d.y, d.x} * 6.0f;
+			break;
+		}
+	}
+	REQUIRE(hover);
+	for (rcg::Session *x : {&a, &s}) {
+		x->set_cursor(*hover);
+		x->settle();
+	}
+	a.drain(); // the region of now, and the prefetch of the hovered entry
+	const int v0 = a.visibility_version();
+	a.click(false);
+	a.settle();
+	CHECK(a.plan().size() == 1);
+	CHECK_FALSE(a.region_pending()); // shown at once: no wait for the click's region
+	CHECK(a.visibility_version() == v0 + 1);
+	s.click(false);
+	s.settle();
+	a.drain();
+	CHECK(record_of(a) == record_of(s));
+}

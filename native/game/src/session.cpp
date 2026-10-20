@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
 
 namespace rcg {
 namespace {
@@ -170,6 +171,13 @@ Session::Session(const Level &level, const SessionConfig &config)
 			false);
 		auto pt = std::make_shared<std::pair<rc::Tracer, int>>();
 		pt->second = -1;
+		// the prefetch: a superseded one is cancelled (it must not hold the pool from real work)
+		auto ft = std::make_shared<std::pair<rc::Tracer, int>>();
+		ft->second = -1;
+		prefetch_job_ = std::make_unique<LatestJob<VisJobIn, VisJobOut>>([ft, tracer_for](const VisJobIn &in, const std::atomic<bool> &cancel) {
+			tracer_for(ft->first, ft->second, in.world, *in.defs);
+			return run_visibility(ft->first, in.player, in.items, in.flags, in.bounds, &cancel);
+		});
 		// the exact preview: only the current inputs' is applied (a stale one is dropped)
 		preview_job_ = std::make_unique<LatestJob<PreviewJobIn, std::optional<rc::TracePair>>>(
 			[pt, tracer_for](const PreviewJobIn &in, const std::atomic<bool> &) {
@@ -219,8 +227,11 @@ void Session::drain() {
 		if (vis_job_) {
 			vis_job_->wait_idle();
 		}
+		if (prefetch_job_) {
+			prefetch_job_->wait_idle(); // (a hovered entry's region: ready for its click)
+		}
 		settle();
-		if (!(preview_job_ && (preview_job_->busy() || preview_job_->ready())) && !region_pending()) {
+		if (!(preview_job_ && (preview_job_->busy() || preview_job_->ready())) && !region_pending() && !(prefetch_job_ && prefetch_job_->busy())) {
 			return;
 		}
 	}
@@ -240,17 +251,89 @@ rc::Rect2f Session::bounds() const { return rc::Rect2f::of(level_.bounds.x, leve
 std::vector<rc::PlanItem> Session::items(size_t n) const {
 	std::vector<rc::PlanItem> out;
 	for (size_t i = 0; i < n && i < plan_.size(); i++) {
-		const PlanEntry &e = plan_[i];
-		rc::PlanItem p;
-		p.surface_id = e.surface_id;
-		p.left = e.side == Side::Left;
-		if (std::isfinite(e.click.x) && std::isfinite(e.click.y)) {
-			p.hint = rc::effects::F32Point{e.click.x, e.click.y};
-		}
-		p.span = e.span;
-		out.push_back(p);
+		out.push_back(item_of(plan_[i]));
 	}
 	return out;
+}
+
+rc::PlanItem Session::item_of(const PlanEntry &e) {
+	rc::PlanItem p;
+	p.surface_id = e.surface_id;
+	p.left = e.side == Side::Left;
+	if (std::isfinite(e.click.x) && std::isfinite(e.click.y)) {
+		p.hint = rc::effects::F32Point{e.click.x, e.click.y};
+	}
+	p.span = e.span;
+	return p;
+}
+
+// Stage 121: while no region is computing, the region the hovered entry would
+// make (a left click's entry there), so its click shows it at once
+void Session::update_prefetch() {
+	if (!async_ || !visibility_on() || !level_.features.preview || region_pending()) {
+		return;
+	}
+	const PrefetchKey key{cursor_, player_, plan_version_, flags_version_, world_->version(), vis_applied_};
+	if (key == prefetch_key_) {
+		return;
+	}
+	prefetch_key_ = key;
+	const std::optional<PlanEntry> e = entry_for(detect_click());
+	if (!e) {
+		return;
+	}
+	std::vector<rc::PlanItem> it = items();
+	it.push_back(item_of(*e));
+	const rc::Rect2f b = bounds();
+	VisJobIn in{defs_snapshot(), world_->version(), infinity_on(), player_, std::move(it), flags_,
+		rc::vis::Rect{double(b.position.x), double(b.position.y), double(b.position.x) + double(b.size.x), double(b.position.y) + double(b.size.y)}};
+	if (!prefetch_in_ || !same_inputs(*prefetch_in_, in)) {
+		prefetch_in_ = in;
+		prefetch_job_->submit(std::move(in), ++prefetch_ticket_);
+	}
+}
+
+std::optional<PlanEntry> Session::entry_for(const Hit &r) const {
+	if (!r.infinity && !r.has_surface) {
+		return std::nullopt;
+	}
+	const int sid = r.infinity ? rc::INFINITY_ID : r.surface;
+	const Side side = r.infinity ? Side::Left : r.side;
+	V2 click = cursor_;
+	if (!r.infinity) {
+		click = snap_click(*world_->by_id(r.surface), side, click);
+	}
+	PlanEntry e{sid, side, click, -1, std::nullopt};
+	if (r.piece) {
+		e.piece = r.piece->index;
+		e.span = r.piece->span;
+	}
+	return e;
+}
+
+bool Session::same_inputs(const VisJobIn &a, const VisJobIn &b) {
+	// exact: the same bits (a -0 is not a 0 here)
+	auto same_f = [](double x, double y) { return std::memcmp(&x, &y, sizeof x) == 0; };
+	auto same_v = [&](const V2 &x, const V2 &y) { return same_f(x.x, y.x) && same_f(x.y, y.y); };
+	if (a.world != b.world || a.infinity != b.infinity || !same_v(a.player, b.player) || a.items.size() != b.items.size()
+		|| digest::encode(flags_json(a.flags)) != digest::encode(flags_json(b.flags))) {
+		return false;
+	}
+	for (size_t i = 0; i < a.items.size(); i++) {
+		const rc::PlanItem &x = a.items[i], &y = b.items[i];
+		if (x.surface_id != y.surface_id || x.left != y.left || x.hint.has_value() != y.hint.has_value() || x.span.has_value() != y.span.has_value()) {
+			return false;
+		}
+		if (x.hint && !(same_f(x.hint->x, y.hint->x) && same_f(x.hint->y, y.hint->y))) {
+			return false;
+		}
+		for (size_t k = 0; x.span && k < 6; k++) {
+			if (!same_f((*x.span)[k], (*y.span)[k])) {
+				return false;
+			}
+		}
+	}
+	return same_f(a.bounds.x0, b.bounds.x0) && same_f(a.bounds.y0, b.bounds.y0) && same_f(a.bounds.x1, b.bounds.x1) && same_f(a.bounds.y1, b.bounds.y1);
 }
 
 std::vector<rc::inv::SurfaceInfo> Session::infos() const {
@@ -950,7 +1033,22 @@ void Session::update_visibility() {
 	const rc::vis::Rect vb{double(b.position.x), double(b.position.y), double(b.position.x) + double(b.size.x), double(b.position.y) + double(b.size.y)};
 	if (async_ && visibility_on()) {
 		// Stage 121: in the background; the last region shows meanwhile
-		vis_job_->submit(VisJobIn{defs_snapshot(), world_->version(), infinity_on(), player_, items(), flags_, vb}, vis_ticket_);
+		VisJobIn in{defs_snapshot(), world_->version(), infinity_on(), player_, items(), flags_, vb};
+		if (prefetch_in_ && same_inputs(*prefetch_in_, in)) {
+			// the hovered side's region, prefetched: shown now if it is ready
+			if (auto r = prefetch_job_->take(); r && r->first == prefetch_ticket_) {
+				vis_applied_ = vis_ticket_;
+				region_ = std::move(r->second.region);
+				fill_ = std::move(r->second.fill);
+				whiskers_ = std::move(r->second.whiskers);
+				visibility_version_++;
+				prefetch_in_.reset();
+				return;
+			}
+		}
+		prefetch_job_->cancel();
+		prefetch_in_.reset();
+		vis_job_->submit(std::move(in), vis_ticket_);
 		return;
 	}
 	vis_applied_ = vis_ticket_; // (no older region computing in the background may show after this one)
@@ -1023,6 +1121,7 @@ void Session::settle() {
 	update_overlays(false);
 	update_visibility();
 	update_spawn_preview();
+	update_prefetch();
 	// the player faces the way the arrow will leave: the preview's first step, else the cursor
 	facing_ = (cursor_ - player_).angle();
 	if (const Preview &sp = shown(); sp.has_paths && !sp.planned.steps.empty()) {

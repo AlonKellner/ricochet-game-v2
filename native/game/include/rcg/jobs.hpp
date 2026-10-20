@@ -52,6 +52,14 @@ public:
 		cv_.notify_all();
 	}
 
+	// drop the waiting input and a finished result; cancel the running computation
+	void cancel() {
+		std::lock_guard<std::mutex> lock(m_);
+		pending_.reset();
+		result_.reset();
+		cancel_ = running_;
+	}
+
 	// the newest finished result (once), if any (its ticket says which input)
 	std::optional<std::pair<long long, Out>> take() {
 		std::lock_guard<std::mutex> lock(m_);
