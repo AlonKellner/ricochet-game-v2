@@ -23,7 +23,7 @@ The following stages build on this one:
 | 120.3 | The solver: the exact pole predicates memoized across walks (`rc::PoleMemo`); the ladder moves events instead of copying them | Done |
 | 120.4 | A persistent thread pool (`rc::ThreadPool`) for the region's cast batches | Done |
 | 120.5 | The draw list tracks changes: cached painters, node ids and versions, `rc_game_draw_changes` (C API 1.1); the Godot host skips unchanged nodes | Done |
-| 120.6 | Docs, `make gates` (1013 s, green, ASan included), sign-off | Docs and gates done; sign-off pending |
+| 120.6 | Docs, `make gates` (1013 s, green, ASan included), sign-off | Done (user, 2026-10-21) |
 
 ## 120.1 The harness
 
