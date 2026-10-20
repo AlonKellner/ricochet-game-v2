@@ -69,12 +69,13 @@ func set_plan_overlays(overlays: Array, indices: Array[int]) -> void:
 const PRE_TRANSFORM_COLOR := Color(0.55, 0.45, 0.85, 0.35)
 
 func _draw() -> void:
+	DrawRec.begin(self)
 	if not surface:
 		return
 	if surface.pre_transform:
 		# the frame the shot starts in (Stage 101): a faint circle, no sides, no chevrons
 		var carrier := segment.get_carrier()
-		draw_arc(carrier.center(), carrier.radius(), 0, TAU, VisualConverter.POINTS_PER_FULL_CIRCLE, PRE_TRANSFORM_COLOR, 1.0)
+		DrawRec.arc(self, carrier.center(), carrier.radius(), 0, TAU, VisualConverter.POINTS_PER_FULL_CIRCLE, PRE_TRANSFORM_COLOR, 1.0)
 		return
 	# the configs under the current game state (categorical surfaces)
 	var gm := get_node_or_null("../GameManager")
@@ -93,7 +94,7 @@ func _draw() -> void:
 		if is_arc:
 			_draw_surface_arc(left_color, LINE_WIDTH)
 		else:
-			draw_line(segment.start.coords, segment.end.coords, left_color, LINE_WIDTH)
+			DrawRec.line(self, segment.start.coords, segment.end.coords, left_color, LINE_WIDTH)
 	else:
 		var left_alpha := 1.0 if left_config.interactive else 0.5
 		var right_alpha := 1.0 if right_config.interactive else 0.5
@@ -119,13 +120,13 @@ func _draw() -> void:
 				pc = p["point_count"]
 			var outer_color := Color(left_color, left_alpha) if _cached_left_outer else Color(right_color, right_alpha)
 			var inner_color := Color(right_color, right_alpha) if _cached_left_outer else Color(left_color, left_alpha)
-			draw_arc(ctr, r + SIDE_OFFSET, sa, ea, pc, outer_color, LINE_WIDTH * 0.5)
-			draw_arc(ctr, r - SIDE_OFFSET, sa, ea, pc, inner_color, LINE_WIDTH * 0.5)
+			DrawRec.arc(self, ctr, r + SIDE_OFFSET, sa, ea, pc, outer_color, LINE_WIDTH * 0.5)
+			DrawRec.arc(self, ctr, r - SIDE_OFFSET, sa, ea, pc, inner_color, LINE_WIDTH * 0.5)
 		else:
 			var left_offset := _line_side_offset(Side.Value.LEFT, SIDE_OFFSET)
 			var right_offset := _line_side_offset(Side.Value.RIGHT, SIDE_OFFSET)
-			draw_line(segment.start.coords + left_offset, segment.end.coords + left_offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
-			draw_line(segment.start.coords + right_offset, segment.end.coords + right_offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
+			DrawRec.line(self, segment.start.coords + left_offset, segment.end.coords + left_offset, Color(left_color, left_alpha), LINE_WIDTH * 0.5)
+			DrawRec.line(self, segment.start.coords + right_offset, segment.end.coords + right_offset, Color(right_color, right_alpha), LINE_WIDTH * 0.5)
 
 	var _hover_sides_set := {}
 	for ov in _hover_overlays:
@@ -147,7 +148,7 @@ func _draw() -> void:
 		# a piece's crossing ends (Stage 108): a small dot where it meets another
 		for end in [segment.start.coords, segment.end.coords]:
 			if end != surface.segment.start.coords and end != surface.segment.end.coords:
-				draw_circle(end, CROSSING_DOT, CROSSING_COLOR)
+				DrawRec.circle(self, end, CROSSING_DOT, CROSSING_COLOR)
 
 	if _plan_indices.size() > 0:
 		var mid := segment.via.coords
@@ -156,7 +157,7 @@ func _draw() -> void:
 			if label_text != "":
 				label_text += ","
 			label_text += str(idx)
-		draw_string(ThemeDB.fallback_font, mid + Vector2(-5, -10), label_text, HORIZONTAL_ALIGNMENT_CENTER, -1, 14, Color.WHITE)
+		DrawRec.text(self, mid + Vector2(-5, -10), label_text, HORIZONTAL_ALIGNMENT_CENTER, 14, Color.WHITE)
 
 const ABSENT_COLOR := Color(0.6, 0.6, 0.6, 0.35)
 const CROSSING_DOT := 2.5
@@ -191,19 +192,19 @@ func _draw_hit_markers(left_config: SideConfig, right_config: SideConfig) -> voi
 func _draw_marker(h: HitEffect, at: Vector2) -> void:
 	var s := MARKER_SIZE
 	if h is TargetHit:
-		draw_arc(at, s, 0, TAU, 16, TARGET_COLOR, 1.5)
-		draw_circle(at, 1.5, TARGET_COLOR)
+		DrawRec.arc(self, at, s, 0, TAU, 16, TARGET_COLOR, 1.5)
+		DrawRec.circle(self, at, 1.5, TARGET_COLOR)
 	elif h is SpawnHit:
-		draw_line(at - Vector2(s, 0), at + Vector2(s, 0), SPAWN_COLOR, 2.0)
-		draw_line(at - Vector2(0, s), at + Vector2(0, s), SPAWN_COLOR, 2.0)
+		DrawRec.line(self, at - Vector2(s, 0), at + Vector2(s, 0), SPAWN_COLOR, 2.0)
+		DrawRec.line(self, at - Vector2(0, s), at + Vector2(0, s), SPAWN_COLOR, 2.0)
 	elif h is ResetHit:
-		draw_line(at - Vector2(s, s), at + Vector2(s, s), RESET_COLOR, 2.0)
-		draw_line(at - Vector2(s, -s), at + Vector2(s, -s), RESET_COLOR, 2.0)
+		DrawRec.line(self, at - Vector2(s, s), at + Vector2(s, s), RESET_COLOR, 2.0)
+		DrawRec.line(self, at - Vector2(s, -s), at + Vector2(s, -s), RESET_COLOR, 2.0)
 	else:
-		draw_colored_polygon(PackedVector2Array([at + Vector2(0, -s), at + Vector2(s, 0), at + Vector2(0, s), at + Vector2(-s, 0)]),
+		DrawRec.colored_polygon(self, PackedVector2Array([at + Vector2(0, -s), at + Vector2(s, 0), at + Vector2(0, s), at + Vector2(-s, 0)]),
 			FLAG_TOGGLER_COLOR)
 	if h.deferred:
-		draw_circle(at, 2.0, Color(0.1, 0.1, 0.1))
+		DrawRec.circle(self, at, 2.0, Color(0.1, 0.1, 0.1))
 
 # The unit tangent of the segment at a point on it (for the marker row).
 func _marker_tangent(at: Vector2) -> Vector2:
@@ -220,10 +221,10 @@ func _marker_normal(side: Side.Value, at: Vector2) -> Vector2:
 func _draw_surface_arc(color: Color, width: float) -> void:
 	if segment.full:
 		var carrier := segment.get_carrier()
-		draw_arc(carrier.center(), carrier.radius(), 0, TAU, VisualConverter.POINTS_PER_FULL_CIRCLE, color, width)
+		DrawRec.arc(self, carrier.center(), carrier.radius(), 0, TAU, VisualConverter.POINTS_PER_FULL_CIRCLE, color, width)
 		return
 	var p := _arc_params()
-	draw_arc(p["center"], p["radius"], p["start_angle"], p["end_angle"], p["point_count"], color, width)
+	DrawRec.arc(self, p["center"], p["radius"], p["start_angle"], p["end_angle"], p["point_count"], color, width)
 
 const GRADIENT_STRIPS := 6
 const CHEVRON_SIZE := 8.0
@@ -260,7 +261,7 @@ func _draw_gradient_for_side(side: int, is_arc: bool, base_color: Color) -> void
 			var frac := (float(i) + 0.5) / GRADIENT_STRIPS
 			var alpha := base_color.a * (1.0 - frac)
 			var offset := frac * HOVER_WIDTH * sign_val
-			draw_arc(h_ctr, h_r + offset, h_sa, h_ea, h_pc, Color(base_color, alpha), strip_width)
+			DrawRec.arc(self, h_ctr, h_r + offset, h_sa, h_ea, h_pc, Color(base_color, alpha), strip_width)
 	else:
 		var s := segment.start.coords
 		var e := segment.end.coords
@@ -268,7 +269,7 @@ func _draw_gradient_for_side(side: int, is_arc: bool, base_color: Color) -> void
 			var frac := (float(i) + 0.5) / GRADIENT_STRIPS
 			var alpha := base_color.a * (1.0 - frac)
 			var offset := _line_side_offset(side, frac * HOVER_WIDTH)
-			draw_line(s + offset, e + offset, Color(base_color, alpha), strip_width)
+			DrawRec.line(self, s + offset, e + offset, Color(base_color, alpha), strip_width)
 
 func _draw_overlay(ov: ChevronOverlay, is_arc: bool) -> void:
 	if ov.has_incoming:
@@ -310,7 +311,7 @@ func _draw_directed_chevrons(side: int, is_arc: bool, base_color: Color, dist: f
 			var side_dir := outward if is_outer else -outward
 			var dir := side_dir if point_away else -side_dir
 			var tip := pos + side_dir * dist
-			draw_polygon(chevron_vertices(tip, dir, CHEVRON_SIZE), colors)
+			DrawRec.polygon(self, chevron_vertices(tip, dir, CHEVRON_SIZE), colors)
 	else:
 		var s := segment.start.coords
 		var e := segment.end.coords
@@ -322,7 +323,7 @@ func _draw_directed_chevrons(side: int, is_arc: bool, base_color: Color, dist: f
 			var side_dir := normal if side_at_normal == side else -normal
 			var dir := side_dir if point_away else -side_dir
 			var tip := pos + side_dir * dist
-			draw_polygon(chevron_vertices(tip, dir, CHEVRON_SIZE), colors)
+			DrawRec.polygon(self, chevron_vertices(tip, dir, CHEVRON_SIZE), colors)
 
 func _arc_params() -> Dictionary:
 	if _arc_cache.is_empty():

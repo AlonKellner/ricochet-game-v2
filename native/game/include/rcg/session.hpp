@@ -18,6 +18,7 @@
 #include "rcg/kinematics.hpp"
 #include "rcg/landing.hpp"
 #include "rcg/model.hpp"
+#include "rcg/render.hpp"
 #include "rcg/world.hpp"
 
 #include <nlohmann/json.hpp>
@@ -86,10 +87,36 @@ public:
 	// pressed on the second tick (the engine's input timing: a jump with gravity).
 	std::vector<V2> hold(const std::vector<std::string> &actions, int ticks);
 
+	// Stage 118: live play, frame by frame (what a host drives; fire() and
+	// hold() are these at a fixed frame time). start_fire(): the fire action --
+	// false when no shot is fired (the player on the cursor; no trace); a level
+	// without the arrow lands at once. While the arrow flies, advance() moves
+	// it one frame (the game is paused: no physics, no settling) and
+	// speed_up() (any key) makes it ten times faster; otherwise advance() runs
+	// the physics ticks due (kinematics::STEP, accumulated) with the input --
+	// its jump on the first of them (kept until a tick runs) -- then settles.
+	bool start_fire();
+	void speed_up();
+	void advance(double dt, const kinematics::Input &in);
+	bool flying() const { return flying_; }
+	V2 player() const { return player_; }
+	float facing() const { return facing_; }
+	V2 arrow_position() const { return arrow_pos_; }
+	V2 arrow_direction() const { return arrow_dir_; }
+	int display_mode() const { return display_mode_; }
+	V2 gravity() const { return gravity_; }
+	const std::string &hud() const { return hud_; }
+	const Level &level() const { return level_; }
+	// the camera's target: the arrow in flight, else the player
+	V2 camera_target() const { return flying_ ? arrow_pos_ : player_; }
+
 	// the derived state as the game's nodes reach it after their frames
 	void settle();
 	// the digest record (after settle()); extra: the step's own fields
 	nlohmann::json record(const nlohmann::json &extra) const;
+	// Stage 118: what the level's nodes draw (after settle()): the draw list
+	// (rcg/render.hpp), one node per thing drawn, in the GDScript nodes' calls
+	std::vector<render::Node> draw() const;
 
 	const std::vector<PlanEntry> &plan() const { return plan_; }
 	const rc::Flags &flags() const { return flags_; }
@@ -193,6 +220,7 @@ private:
 	rc::vis::Fill fill_;
 	std::vector<std::vector<V2>> whiskers_;
 	nlohmann::json spawn_placed_ = nlohmann::json::array();
+	std::vector<Placed> spawn_specs_; // the placed specs (the spawn preview's ghosts)
 	std::vector<int> spawn_vanishing_;
 	bool spawn_preview_ = false;
 	float facing_ = 0.0f;
@@ -200,8 +228,18 @@ private:
 	std::optional<rc::Flags> pending_flags_;
 	rc::TracePath pending_path_;
 	bool on_floor_ = false;
+	bool flying_ = false; // an arrow in flight (the path and its kin dimmed; the arrow drawn)
 	V2 arrow_pos_;
 	V2 arrow_dir_{1.0f, 0.0f};
+	// the flight (ArrowAnimator): the displayed path's steps, where the arrow is along them, its speed
+	std::vector<rc::arc::StepGeom> flight_geoms_;
+	int flight_index_ = 0;
+	double flight_progress_ = 0.0;
+	double flight_multiplier_ = 1.0;
+	double physics_time_ = 0.0; // the physics ticks' time not yet run
+	bool jump_ = false;         // a jump pressed, not yet ticked
+	void tick(const kinematics::Input &in);
+	void clear_hover();
 };
 
 } // namespace rcg

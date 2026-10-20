@@ -416,52 +416,104 @@ void Session::land() {
 	refresh_ui();
 }
 
-Flight Session::fire(int speedup_at, double frame_dt) {
-	Flight f;
-	if (player_ == cursor_) {
-		return f;
+bool Session::start_fire() {
+	if (flying_ || player_ == cursor_) {
+		return false;
 	}
 	checkpoints_.push_back(capture());
 	use_defs(gm_tracer_, gm_defs_);
 	const std::optional<rc::TracePair> pair = gm_tracer_.trace_pair(player_, cursor_, items(), flags_);
 	if (!pair) {
 		checkpoints_.pop_back();
-		return f;
+		return false;
 	}
 	pending_flags_ = pair->final_flags;
 	pending_path_ = pair->physical;
 	if (!level_.features.arrow) {
 		land(); // no arrow to animate: the shot lands at once
-		return f;
+		return true;
 	}
 	const rc::TracePath path = rc::sweep::prepare_for_display(pair->physical, bounds(), infos());
-	std::vector<rc::arc::StepGeom> geoms;
+	flight_geoms_.clear();
 	for (const rc::TraceStep &s : path.steps) {
-		geoms.push_back(rc::sweep::step_geom(s));
+		flight_geoms_.push_back(rc::sweep::step_geom(s));
 	}
 	if (!path.steps.empty()) {
 		arrow_pos_ = path.steps.front().start;
 		arrow_dir_ = start_direction(path.steps.front());
 	}
-	int index = 0;
-	double progress = 0.0;
-	double multiplier = 1.0;
-	while (true) {
-		f.stream.push_back({arrow_pos_, arrow_dir_});
-		f.frames++;
-		const bool speed_up = f.frames == speedup_at;
-		const double distance = ARROW_SPEED * multiplier * frame_dt;
-		const rc::arc::AdvanceResult r = rc::arc::advance(geoms, index, progress, arrow_pos_, distance, bounds());
-		index = r.step_index;
-		progress = r.progress;
+	flight_index_ = 0;
+	flight_progress_ = 0.0;
+	flight_multiplier_ = 1.0;
+	flying_ = true;
+	clear_hover(); // (the hover stands down during a flight)
+	return true;
+}
+
+void Session::speed_up() {
+	if (flying_) {
+		flight_multiplier_ *= 10.0;
+	}
+}
+
+void Session::clear_hover() {
+	for (Node &n : nodes_) {
+		if (n.serial == hovered_serial_ || n.serial == partner_serial_) {
+			n.hover.clear();
+		}
+	}
+	hovered_serial_ = partner_serial_ = 0;
+	edge_hovered_ = false;
+	hover_inputs_ = nullptr;
+}
+
+void Session::advance(double dt, const kinematics::Input &in) {
+	if (flying_) {
+		const double distance = ARROW_SPEED * flight_multiplier_ * dt;
+		const rc::arc::AdvanceResult r = rc::arc::advance(flight_geoms_, flight_index_, flight_progress_, arrow_pos_, distance, bounds());
+		flight_index_ = r.step_index;
+		flight_progress_ = r.progress;
 		arrow_pos_ = r.position;
 		arrow_dir_ = r.direction;
-		if (speed_up) {
-			multiplier *= 10.0;
-		}
 		if (r.finished) {
+			flying_ = false;
+			flight_geoms_.clear();
 			land();
-			break;
+			settle();
+		}
+		return;
+	}
+	physics_time_ += dt;
+	jump_ = jump_ || in.jump; // a press waits for the next tick
+	while (physics_time_ >= kinematics::STEP) {
+		kinematics::Input t = in;
+		t.jump = jump_;
+		tick(t);
+		jump_ = false;
+		physics_time_ -= kinematics::STEP;
+	}
+	settle();
+}
+
+void Session::tick(const kinematics::Input &in) {
+	kinematics::Body body{player_, velocity_, on_floor_};
+	kinematics::step(body, in, gravity_, kinematics::colliders_of(world_->surfaces(), flags_, level_));
+	player_ = body.pos;
+	velocity_ = body.vel;
+	on_floor_ = body.on_floor;
+}
+
+Flight Session::fire(int speedup_at, double frame_dt) {
+	Flight f;
+	if (!start_fire()) {
+		return f;
+	}
+	while (flying_) {
+		f.stream.push_back({arrow_pos_, arrow_dir_});
+		f.frames++;
+		advance(frame_dt, {});
+		if (f.frames == speedup_at) {
+			speed_up();
 		}
 	}
 	return f;
@@ -472,18 +524,13 @@ std::vector<V2> Session::hold(const std::vector<std::string> &actions, int ticks
 	kinematics::Input in;
 	in.axis_x = float(held("move_right")) - float(held("move_left"));
 	in.axis_y = float(held("move_down")) - float(held("move_up"));
-	const std::vector<kinematics::Collider> colliders = kinematics::colliders_of(world_->surfaces(), flags_, level_);
-	kinematics::Body body{player_, velocity_, on_floor_};
 	std::vector<V2> out;
 	for (int k = 0; k < ticks; k++) {
 		// the engine reports the up action just pressed on the tick after the press
 		in.jump = k == 1 && held("move_up");
-		kinematics::step(body, in, gravity_, colliders);
-		out.push_back(body.pos);
+		tick(in);
+		out.push_back(player_);
 	}
-	player_ = body.pos;
-	velocity_ = body.vel;
-	on_floor_ = body.on_floor;
 	return out;
 }
 
@@ -800,11 +847,13 @@ void Session::update_spawn_preview() {
 	}
 	spawn_inputs_ = inputs;
 	spawn_placed_ = json::array();
+	spawn_specs_.clear();
 	spawn_vanishing_.clear();
 	if (!preview_.pair) {
 		return;
 	}
 	const Landing l = fold(preview_.pair->physical.hits, world_->surfaces(), preview_.pair->final_flags, world_->generations());
+	spawn_specs_ = l.placed;
 	for (const Placed &p : l.placed) {
 		spawn_placed_.push_back({{"channel", p.channel}, {"generation", p.generation}, {"spec", digest::spec_data(p.spec)}});
 	}

@@ -168,6 +168,7 @@ static func ghost_color(col: Color) -> Color:
 	return c
 
 func _draw() -> void:
+	DrawRec.begin(self)
 	if display_mode == DisplayMode.MERGED:
 		_draw_merged()
 	elif display_mode == DisplayMode.PHYSICAL:
@@ -217,8 +218,8 @@ func _draw_stop_marker(at: Vector2, col: Color) -> void:
 	for k in 9:
 		# an octagon (a stop sign), flat on top: vertices at 22.5 + 45 k degrees
 		pts.append(at + Vector2.from_angle(PI / 8.0 + k * PI / 4.0) * STOP_MARKER_RADIUS)
-	draw_polyline(pts, col, LINE_WIDTH)
-	draw_line(at + Vector2(-0.5, 0) * STOP_MARKER_RADIUS, at + Vector2(0.5, 0) * STOP_MARKER_RADIUS, col, LINE_WIDTH)
+	DrawRec.polyline(self, pts, col, LINE_WIDTH)
+	DrawRec.line(self, at + Vector2(-0.5, 0) * STOP_MARKER_RADIUS, at + Vector2(0.5, 0) * STOP_MARKER_RADIUS, col, LINE_WIDTH)
 
 func _draw_raw_trace(path: TracePath, base_color: Color, label_prefix: String) -> void:
 	if path == null or path.steps.size() == 0:
@@ -245,7 +246,7 @@ func _draw_raw_trace(path: TracePath, base_color: Color, label_prefix: String) -
 			var lbl := "%s%d" % [label_prefix, i]
 			if step.hit == null:
 				lbl += "*"
-			draw_string(font, mid, lbl, HORIZONTAL_ALIGNMENT_CENTER, -1, 11, col)
+			DrawRec.text(self, mid, lbl, HORIZONTAL_ALIGNMENT_CENTER, 11, col)
 
 # by_type: each step's type colour (the merged view), else base_color (Perf P4:
 # no Callable per step)
@@ -256,9 +257,9 @@ func _draw_endpoint_circles(steps: Array, by_type: bool, base_color: Color) -> v
 		var s_local := step.start - global_position
 		var e_local := step.end - global_position
 		if _draw_bounds.has_point(s_local):
-			draw_circle(s_local, 4.0, col)
+			DrawRec.circle(self, s_local, 4.0, col)
 		if _draw_bounds.has_point(e_local):
-			draw_circle(e_local, 4.0, col)
+			DrawRec.circle(self, e_local, 4.0, col)
 
 func _draw_step(step: TraceStep, col: Color, dashed: bool) -> void:
 	# (Perf P4: is_arc and arc_params in one call, no Dictionary)
@@ -268,7 +269,7 @@ func _draw_step(step: TraceStep, col: Color, dashed: bool) -> void:
 		if dashed:
 			_draw_dashed_arc(arc_center, a[2], a[3], a[4], int(a[5]), col)
 		else:
-			draw_arc(arc_center, a[2], a[3], a[4], int(a[5]), col, LINE_WIDTH)
+			DrawRec.arc(self, arc_center, a[2], a[3], a[4], int(a[5]), col, LINE_WIDTH)
 	else:
 		var from := step.start - global_position
 		var to := step.end - global_position
@@ -280,19 +281,19 @@ func _draw_step(step: TraceStep, col: Color, dashed: bool) -> void:
 		if dashed:
 			_draw_dashed(from, to, col)
 		else:
-			draw_line(from, to, col, LINE_WIDTH)
+			DrawRec.line(self, from, to, col, LINE_WIDTH)
 
 # One draw call per dashed step (Perf P4): the dashes' segments, computed
 # natively (VisualConverter.dash_arc / dash_line), in one multiline.
 func _draw_dashed_arc(center: Vector2, radius: float, start_angle: float, end_angle: float, point_count: int, col: Color) -> void:
 	var pts := VisualConverter.dash_arc(center, radius, start_angle, end_angle, point_count, DASH_ON, DASH_OFF, 4000.0)
 	if pts.size() > 0:
-		draw_multiline(pts, col, LINE_WIDTH)
+		DrawRec.multiline(self, pts, col, LINE_WIDTH)
 
 func _draw_dashed(from: Vector2, to: Vector2, col: Color) -> void:
 	var pts := VisualConverter.dash_line(from, to, DASH_ON, DASH_OFF, MAX_DASH_LEN)
 	if pts.size() > 0:
-		draw_multiline(pts, col, LINE_WIDTH)
+		DrawRec.multiline(self, pts, col, LINE_WIDTH)
 
 func has_line() -> bool:
 	return _merged_steps.size() > 0

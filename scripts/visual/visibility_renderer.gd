@@ -168,10 +168,11 @@ func recompute() -> void:
 	_apply(r, current_inputs())
 
 func _draw() -> void:
+	DrawRec.begin(self)
 	if not _fill_indices.is_empty():
-		RenderingServer.canvas_item_add_triangle_array(get_canvas_item(), _fill_indices, _fill_points, PackedColorArray([FILL]))
+		DrawRec.triangles(self, _fill_indices, _fill_points, FILL)
 	for line: PackedVector2Array in _whiskers:
-		draw_polyline(line, FILL * Color(1, 1, 1, 3.0), WHISKER_WIDTH)
+		DrawRec.polyline(self, line, FILL * Color(1, 1, 1, 3.0), WHISKER_WIDTH)
 
 # The preview at the cursor: aligned up to it and reaching it (GAME_SPEC 15.1).
 static func preview_visible(renderer: Node) -> bool:

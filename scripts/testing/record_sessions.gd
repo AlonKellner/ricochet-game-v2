@@ -42,6 +42,7 @@ func _run() -> void:
 	var only: String = args.get("only", "")
 	var shard: PackedStringArray = String(args.get("shard", "0/1")).split("/")
 	_full = args.has("full")
+	DrawRec.enabled = true   # Stage 118: the records also hold what is drawn (the draw list)
 	DirAccess.make_dir_recursive_absolute(_abs(out_dir))
 	var names := Array(DirAccess.get_files_at(_abs(in_dir))).filter(func(f): return f.ends_with(".json"))
 	names.sort()

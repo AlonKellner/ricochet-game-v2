@@ -65,12 +65,13 @@ func _finish_flight() -> void:
 	flight_completed.emit()
 
 func _draw() -> void:
+	DrawRec.begin(self)
 	if not _flying:
 		return
 
 	var tip := _arrow_position
 	var tail := tip - _arrow_direction * ARROW_LENGTH
-	draw_line(tail - global_position, tip - global_position, Color.WHITE, 2.0)
+	DrawRec.line(self, tail - global_position, tip - global_position, Color.WHITE, 2.0)
 
 	var head_left := tip - _arrow_direction.rotated(ARROW_HEAD_ANGLE) * ARROW_HEAD_LENGTH
 	var head_right := tip - _arrow_direction.rotated(-ARROW_HEAD_ANGLE) * ARROW_HEAD_LENGTH
@@ -79,4 +80,4 @@ func _draw() -> void:
 		head_left - global_position,
 		head_right - global_position,
 	])
-	draw_polygon(head_points, PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE]))
+	DrawRec.polygon(self, head_points, PackedColorArray([Color.WHITE, Color.WHITE, Color.WHITE]))

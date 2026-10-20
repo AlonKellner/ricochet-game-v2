@@ -5,22 +5,26 @@
 //   rc_tool dumps <levels dir> <out dir>       every level's scene defs (bench/scenes/<dir>__<name>.surfaces.json)
 //   rc_tool manifests <sweeps recipes> <levels dir> <out dir>
 //                                             the sweep manifests (bench/sweeps) from data/sweeps.json
-//   rc_tool replay <sessions dir> <levels dir> <out dir> [--only <substring>]
-//                                             the session scripts played natively (rcg::Session): one
-//                                             record per step, as the golden (bench/sessions) holds them;
-//                                             (every session: the kinematic ones on the native controller)
+//   rc_tool replay <sessions dir> <levels dir> (<out dir> | --check <golden dir>)
+//                  [--only <substring>] [--shard i/n] [--full]
+//                                             the session scripts played through the C API (rc_api.h, as any
+//                                             engine's host): one record per step, as the golden
+//                                             (bench/sessions) holds them; --check: compare with the golden
+//                                             instead of writing; --full: the records hold the draw list
+//                                             itself, not its sha
 //
 // Exit status: 0 done, 1 a check failed or a file is invalid, 2 usage.
 #include "rcg/build.hpp"
 #include "rcg/canon.hpp"
 #include "rcg/level.hpp"
 #include "rcg/digest.hpp"
-#include "rcg/replay.hpp"
+#include "replay_capi.hpp"
 #include "rcg/sweeps.hpp"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cstdio>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -37,7 +41,7 @@ int usage() {
 	std::cerr << "usage: rc_tool fmt [--check] <file or dir>...\n"
 				 "       rc_tool dumps <levels dir> <out dir>\n"
 				 "       rc_tool manifests <sweeps recipes> <levels dir> <out dir>\n"
-				 "       rc_tool replay <sessions dir> <levels dir> <out dir> [--only <substring>]\n";
+				 "       rc_tool replay <sessions dir> <levels dir> (<out dir> | --check <golden dir>) [--only <substring>] [--shard i/n] [--full]\n";
 	return 2;
 }
 
@@ -162,33 +166,53 @@ int manifests(const std::vector<std::string> &args) {
 }
 
 int replay(std::vector<std::string> args) {
-	std::string only;
-	for (size_t i = 3; i < args.size();) {
-		if (args[i] == "--only" && i + 1 < args.size()) {
+	std::string only, check;
+	bool full = false;
+	int shard = 0, shards = 1;
+	for (size_t i = 0; i < args.size();) {
+		const bool value = i + 1 < args.size();
+		if (args[i] == "--only" && value) {
 			only = args[i + 1];
-			args.erase(args.begin() + long(i), args.begin() + long(i) + 2);
+		} else if (args[i] == "--check" && value) {
+			check = args[i + 1];
+		} else if (args[i] == "--shard" && value && std::sscanf(args[i + 1].c_str(), "%d/%d", &shard, &shards) == 2 && shards > 0) {
+		} else if (args[i] == "--full") {
+			full = true;
+			args.erase(args.begin() + long(i));
+			continue;
 		} else {
 			i++;
+			continue;
 		}
+		args.erase(args.begin() + long(i), args.begin() + long(i) + 2);
 	}
-	if (args.size() != 3) {
+	if (args.size() != (check.empty() ? 3u : 2u)) {
 		return usage();
 	}
-	const fs::path in = args[0], levels = args[1], out = args[2];
-	fs::create_directories(out);
-	int n = 0;
+	const fs::path in = args[0], levels = args[1];
+	const fs::path out = check.empty() ? fs::path(args[2]) : fs::path();
+	int n = 0, differ = 0, index = -1;
 	for (const fs::path &p : json_files({in.string()})) {
 		const std::string name = p.stem().string();
 		if (!only.empty() && name.find(only) == std::string::npos) {
 			continue;
 		}
+		if (++index % shards != shard) {
+			continue;
+		}
 		const json script = json::parse(read(p));
 		try {
 			std::string text;
-			for (const std::string &l : rcg::replay_session(script, levels.string())) {
+			const std::string level = read(levels / (script["level"].get<std::string>() + ".json"));
+			for (const std::string &l : capi_replay::replay(script, level, full)) {
 				text += l + "\n";
 			}
-			if (!write(out / (name + ".jsonl"), text)) {
+			if (!check.empty()) {
+				if (read(fs::path(check) / (name + ".jsonl")) != text) {
+					std::cerr << name << ": differs from " << check << " (docs/research/session_judge.py tells where)\n";
+					differ++;
+				}
+			} else if (!write(out / (name + ".jsonl"), text)) {
 				return 1;
 			}
 		} catch (const std::exception &e) {
@@ -197,8 +221,8 @@ int replay(std::vector<std::string> args) {
 		}
 		n++;
 	}
-	std::cout << n << " sessions replayed\n";
-	return 0;
+	std::cout << n << " sessions replayed through the C API" << (check.empty() ? "" : differ ? ", some differ" : ", all equal the golden") << "\n";
+	return differ ? 1 : 0;
 }
 
 } // namespace

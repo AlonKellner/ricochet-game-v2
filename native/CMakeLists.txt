@@ -88,9 +88,24 @@ target_link_libraries(ricochet_game PUBLIC ricochet_core)
 set_target_properties(ricochet_game PROPERTIES POSITION_INDEPENDENT_CODE ON)
 rc_apply_flags(ricochet_game)
 
-# Stage 115: the headless host -- the data pipelines without an engine
-add_executable(rc_tool hosts/headless/rc_tool.cpp)
-target_link_libraries(rc_tool PRIVATE ricochet_game)
+# Stage 118: the C API (rc_api.h) -- the game for any engine or host: static
+# (rc_tool, the Godot adapter) and shared (ctypes / P/Invoke hosts)
+file(GLOB RC_CAPI_SOURCES CONFIGURE_DEPENDS capi/src/*.cpp)
+add_library(rc_capi STATIC ${RC_CAPI_SOURCES})
+target_include_directories(rc_capi PUBLIC capi/include)
+target_link_libraries(rc_capi PRIVATE ricochet_game)
+set_target_properties(rc_capi PROPERTIES POSITION_INDEPENDENT_CODE ON)
+rc_apply_flags(rc_capi)
+add_library(rc_capi_shared SHARED ${RC_CAPI_SOURCES})
+target_include_directories(rc_capi_shared PUBLIC capi/include)
+target_link_libraries(rc_capi_shared PRIVATE ricochet_game)
+set_target_properties(rc_capi_shared PROPERTIES OUTPUT_NAME ricochet_capi CXX_VISIBILITY_PRESET hidden)
+rc_apply_flags(rc_capi_shared)
+
+# Stage 115: the headless host -- the data pipelines without an engine (Stage
+# 118: its replay plays the game through the C API alone)
+add_executable(rc_tool hosts/headless/rc_tool.cpp hosts/headless/replay_capi.cpp)
+target_link_libraries(rc_tool PRIVATE ricochet_game rc_capi)
 rc_apply_flags(rc_tool)
 
 # ------------------------------------------------------------------ ricochet_gd
@@ -103,9 +118,11 @@ if(RC_BUILD_EXTENSION)
     set(GODOTCPP_SYSTEM_HEADERS ON CACHE BOOL "godot-cpp headers are not held to the rc warning flags")
     add_subdirectory(extern/godot-cpp SYSTEM)
 
-    file(GLOB RC_GD_SOURCES CONFIGURE_DEPENDS gd/*.cpp)
+    # (Stage 118: with the adapter, hosts/godot -- on the C API alone)
+    file(GLOB RC_GD_SOURCES CONFIGURE_DEPENDS gd/*.cpp hosts/godot/*.cpp)
     add_library(ricochet_gd SHARED ${RC_GD_SOURCES})
-    target_link_libraries(ricochet_gd PRIVATE ricochet_core ricochet_game godot-cpp)
+    target_include_directories(ricochet_gd PRIVATE hosts/godot)
+    target_link_libraries(ricochet_gd PRIVATE ricochet_core ricochet_game rc_capi godot-cpp)
 
     get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
     set_target_properties(ricochet_gd PROPERTIES
@@ -209,6 +226,13 @@ if(RC_BUILD_TESTS)
     add_test(NAME rcg_game_no_godot
         COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/game
                 -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)
+    # the Godot adapter knows the game through rc_api.h alone
+    add_test(NAME godot_adapter_includes
+        COMMAND "${CMAKE_COMMAND}" -DRC_ADAPTER_DIR=${CMAKE_SOURCE_DIR}/hosts/godot
+                -P ${CMAKE_SOURCE_DIR}/tools/check_adapter_includes.cmake)
+    add_test(NAME capi_no_godot
+        COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/capi
+                -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)
 
     # Stage 115: the game layer's tests (make check AREA=game)
     file(GLOB RCG_TEST_SOURCES CONFIGURE_DEPENDS tests/game/*.cpp)
@@ -226,6 +250,22 @@ if(RC_BUILD_TESTS)
         add_test(NAME rcg_sessions_${part} COMMAND rcg_tests "--test-case=sessions:*")
         set_tests_properties(rcg_sessions_${part} PROPERTIES ENVIRONMENT "RCG_SESSIONS_PART=${part}/${RCG_SESSIONS_PARTS}")
     endforeach()
+    # Stage 118: the C API -- a C11 host compiles against rc_api.h and plays a
+    # level; every session replayed through the C API equals the golden
+    enable_language(C)
+    add_executable(capi_c_smoke tests/capi/smoke.c)
+    set_target_properties(capi_c_smoke PROPERTIES C_STANDARD 11 C_STANDARD_REQUIRED ON C_EXTENSIONS OFF)
+    target_compile_options(capi_c_smoke PRIVATE -Wall -Wextra -Wpedantic -Werror)
+    target_link_libraries(capi_c_smoke PRIVATE rc_capi_shared)
+    target_compile_definitions(capi_c_smoke PRIVATE "RC_REPO_ROOT=\"${RC_REPO_ROOT}\"")
+    add_test(NAME capi_c_smoke COMMAND capi_c_smoke)
+    set(CAPI_SESSIONS_PARTS 6 CACHE STRING "ctest entries the C API session replay runs in")
+    math(EXPR CAPI_SESSIONS_LAST "${CAPI_SESSIONS_PARTS} - 1")
+    foreach(part RANGE ${CAPI_SESSIONS_LAST})
+        add_test(NAME capi_sessions_${part} COMMAND rc_tool replay ${RC_REPO_ROOT}/data/sessions ${RC_REPO_ROOT}/data/levels
+                 --check ${RC_REPO_ROOT}/bench/sessions --shard ${part}/${CAPI_SESSIONS_PARTS})
+    endforeach()
+
     # the level data is in its canonical spelling (rc_tool fmt)
     add_test(NAME rcg_levels_canonical COMMAND rc_tool fmt --check ${RC_REPO_ROOT}/data/levels)
 
