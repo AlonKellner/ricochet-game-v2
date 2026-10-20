@@ -15,6 +15,7 @@
 #include "rc/sweep.hpp"
 #include "rc/tracer.hpp"
 #include "rc/visibility.hpp"
+#include "rcg/jobs.hpp"
 #include "rcg/kinematics.hpp"
 #include "rcg/landing.hpp"
 #include "rcg/model.hpp"
@@ -69,6 +70,11 @@ std::optional<Action> action_of(const std::string &name);
 struct SessionConfig {
 	std::optional<bool> infinity;   // the switches (default: the game's: on)
 	std::optional<bool> visibility;
+	// Stage 121: a live host's session -- the visibility region and the preview's
+	// exact climbs are computed in the background (the frame shows the last
+	// region, a provisional float64 preview meanwhile); off (the default): all in
+	// the frame, in order (replays, tests: the session golden)
+	bool async = false;
 };
 
 struct Flight {
@@ -124,6 +130,12 @@ public:
 	const Level &level() const { return level_; }
 	// the camera's target: the arrow in flight, else the player
 	V2 camera_target() const { return flying_ ? arrow_pos_ : player_; }
+
+	// Stage 121 (async): the background work's state; drain() waits for it and
+	// applies its results (then the session is what a synchronous one is)
+	bool region_pending() const;
+	bool preview_exact() const { return !provisional_.has_value(); }
+	void drain();
 
 	// the derived state as the game's nodes reach it after their frames
 	void settle();
@@ -201,7 +213,13 @@ private:
 	Checkpoint capture() const;
 	void restore(const Checkpoint &c);
 	std::string hud_text() const;
-	std::vector<std::pair<V2, std::array<float, 4>>> truncation_markers() const;
+	std::vector<std::pair<V2, std::array<float, 4>>> truncation_markers(const Preview &p) const;
+	std::vector<std::pair<V2, std::array<float, 4>>> truncation_markers() const { return truncation_markers(preview_); }
+	// the preview a path is drawn from: the provisional one while an exact climb runs
+	const Preview &shown() const { return provisional_ ? *provisional_ : preview_; }
+	// a traced pair made into a preview (its display paths, merge, hits)
+	void make_preview(Preview &p, std::optional<rc::TracePair> pair) const;
+	void collect_jobs();
 
 	Level level_;
 	std::unique_ptr<World> world_;
@@ -288,6 +306,40 @@ private:
 	std::optional<rc::Flags> pending_flags_;
 	rc::TracePath pending_path_;
 	bool on_floor_ = false;
+	// Stage 121: the background jobs (async): their inputs, and what they make
+	struct VisJobIn {
+		std::shared_ptr<const std::vector<rc::SurfaceDef>> defs;
+		int world = 0;
+		bool infinity = true;
+		V2 player;
+		std::vector<rc::PlanItem> items;
+		rc::Flags flags;
+		rc::vis::Rect bounds;
+	};
+	struct VisJobOut {
+		std::optional<rc::vis::Result> region;
+		rc::vis::Fill fill;
+		std::vector<std::vector<V2>> whiskers;
+	};
+	struct PreviewJobIn {
+		std::shared_ptr<const std::vector<rc::SurfaceDef>> defs;
+		int world = 0;
+		bool infinity = true;
+		V2 player, cursor;
+		std::vector<rc::PlanItem> items;
+		rc::Flags flags;
+	};
+	bool async_ = false;
+	std::optional<Preview> provisional_; // shown while the exact climb runs
+	int provisional_version_ = 0;
+	long long vis_ticket_ = 0, preview_ticket_ = 0;
+	long long vis_applied_ = 0; // the newest region request applied
+	std::shared_ptr<const std::vector<rc::SurfaceDef>> job_defs_;
+	int job_defs_world_ = -1;
+	std::shared_ptr<const std::vector<rc::SurfaceDef>> defs_snapshot();
+	// the region, its fill and its whiskers (the synchronous update and the job alike)
+	static VisJobOut run_visibility(rc::Tracer &t, const V2 &player, const std::vector<rc::PlanItem> &items, const rc::Flags &flags,
+			const rc::vis::Rect &bounds, const std::atomic<bool> *cancel);
 	bool flying_ = false; // an arrow in flight (the path and its kin dimmed; the arrow drawn)
 	V2 arrow_pos_;
 	V2 arrow_dir_{1.0f, 0.0f};
@@ -316,6 +368,9 @@ private:
 	mutable std::map<int, SurfaceDraw> surface_draw_; // by node serial
 	mutable CachedDraw path_draw_, vis_draw_, spawn_draw_, static_draw_[3];
 	void clear_hover();
+	// (last: destroyed first, before the state their results go to)
+	std::unique_ptr<LatestJob<VisJobIn, VisJobOut>> vis_job_;
+	std::unique_ptr<LatestJob<PreviewJobIn, std::optional<rc::TracePair>>> preview_job_;
 };
 
 } // namespace rcg

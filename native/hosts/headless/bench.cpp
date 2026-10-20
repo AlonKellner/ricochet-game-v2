@@ -46,6 +46,7 @@ struct Options {
 	int click_frames = 10;
 	double budget_ms = 8.0;
 	bool strict = false; // a mean over the budget fails too
+	bool async = false;  // Stage 121: the live host's session (the region and climbs in the background)
 };
 
 struct Row {
@@ -84,7 +85,9 @@ std::string read(const fs::path &p) {
 
 std::vector<Row> run_level(const std::string &path, const Options &o) {
 	const rcg::Level level = rcg::load_level(path);
-	rcg::Session s(level);
+	rcg::SessionConfig cfg;
+	cfg.async = o.async;
+	rcg::Session s(level, cfg);
 	const rc::V2 home = s.player();
 	const rc::V2 aim = home + rc::V2{300.0f, -100.0f};
 	// the plannable sides: 6 px off the middle of a surface, on its left
@@ -202,7 +205,8 @@ std::vector<Row> run_level(const std::string &path, const Options &o) {
 		const std::string text = read(path);
 		rc_level *lv = nullptr;
 		rc_game *g = nullptr;
-		if (rc_level_parse(text.data(), text.size(), &lv) == RC_OK && rc_game_create(lv, nullptr, &g) == RC_OK) {
+		const rc_game_config gc{sizeof(rc_game_config), -1, -1, o.async ? 1 : 0};
+		if (rc_level_parse(text.data(), text.size(), &lv) == RC_OK && rc_game_create(lv, &gc, &g) == RC_OK) {
 			rc_game_teleport(g, home.x, home.y);
 			rc_game_advance(g, 0.0, 0, 0);
 			for (int k = 0; k < n; k++) {
@@ -270,8 +274,8 @@ int run(std::vector<std::string> args) {
 			json_out = args[i + 1];
 		} else if (args[i] == "--md" && value) {
 			md_out = args[i + 1];
-		} else if (args[i] == "--all" || args[i] == "--strict") {
-			(args[i] == "--all" ? all : o.strict) = true;
+		} else if (args[i] == "--all" || args[i] == "--strict" || args[i] == "--async") {
+			(args[i] == "--all" ? all : args[i] == "--strict" ? o.strict : o.async) = true;
 			args.erase(args.begin() + long(i));
 			continue;
 		} else {
@@ -282,7 +286,7 @@ int run(std::vector<std::string> args) {
 	}
 	if (args.size() != 1) {
 		std::fprintf(stderr, "usage: rc_tool bench (<level json> | --all <levels dir>) [--frames N] [--click-frames N] [--budget ms] "
-							 "[--strict] [--json out] [--md out]\n");
+							 "[--strict] [--async] [--json out] [--md out]\n");
 		return 2;
 	}
 	std::vector<std::string> levels;

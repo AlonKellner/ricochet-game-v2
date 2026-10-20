@@ -69,6 +69,10 @@ public:
 	void aim(const godot::Vector2 &at);
 	void teleport(const godot::Vector2 &at);
 	void set_physics(bool on) { physics_ = on; }
+	// Stage 121: the region and the preview's exact climbs in the background (the
+	// default); off, everything in the frame (the session replay test)
+	void set_asynchronous(bool on) { asynchronous_ = on; }
+	bool get_asynchronous() const { return asynchronous_; }
 	bool get_physics() const { return physics_; }
 	// the game's session record (docs/research/session_digest.md), the HUD
 	godot::String record() const;
@@ -88,6 +92,7 @@ private:
 	int infinity_ = -1;
 	int visibility_ = -1;
 	bool physics_ = true;
+	bool asynchronous_ = true;
 	bool aimed_ = false;
 	godot::Vector2 aim_;
 	rc_game *game_ = nullptr;

@@ -15,6 +15,9 @@ namespace rcg {
 enum class DrawRecord { None, Sha, Full };
 
 // The records of a session (throws std::runtime_error on an op it does not know).
-std::vector<std::string> replay_session(const nlohmann::json &script, const std::string &levels_dir, DrawRecord draw = DrawRecord::Sha);
+// async (Stage 121): the session computes in the background (SessionConfig::async)
+// and is drained before each record -- its records must be the synchronous ones.
+std::vector<std::string> replay_session(const nlohmann::json &script, const std::string &levels_dir, DrawRecord draw = DrawRecord::Sha,
+		bool async = false);
 
 } // namespace rcg

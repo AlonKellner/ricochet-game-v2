@@ -16,7 +16,9 @@
 
 namespace fs = std::filesystem;
 
-TEST_CASE("sessions: every session replays natively, byte for byte") {
+namespace {
+
+void replay_all(bool async) {
 	const fs::path root = RC_REPO_ROOT;
 	int part = 0, parts = 1;
 	if (const char *p = std::getenv("RCG_SESSIONS_PART")) {
@@ -46,7 +48,7 @@ TEST_CASE("sessions: every session replays natively, byte for byte") {
 				golden.push_back(line);
 			}
 		}
-		const std::vector<std::string> got = rcg::replay_session(script, (root / "data" / "levels").string());
+		const std::vector<std::string> got = rcg::replay_session(script, (root / "data" / "levels").string(), rcg::DrawRecord::Sha, async);
 		REQUIRE(got.size() == golden.size());
 		for (size_t i = 0; i < got.size(); i++) {
 			CAPTURE(i);
@@ -59,3 +61,11 @@ TEST_CASE("sessions: every session replays natively, byte for byte") {
 	}
 	CHECK(n > 0);
 }
+
+} // namespace
+
+TEST_CASE("sessions: every session replays natively, byte for byte") { replay_all(false); }
+
+// Stage 121: the asynchronous session (the region and the preview's climbs in
+// the background), drained before each record, is the synchronous session
+TEST_CASE("sessions: the asynchronous session, drained, replays byte for byte") { replay_all(true); }

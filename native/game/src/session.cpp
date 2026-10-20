@@ -130,7 +130,7 @@ std::optional<Action> action_of(const std::string &name) {
 }
 
 Session::Session(const Level &level, const SessionConfig &config)
-	: level_(level), infinity_override_(config.infinity), visibility_override_(config.visibility) {
+	: level_(level), infinity_override_(config.infinity), visibility_override_(config.visibility), async_(config.async) {
 	world_ = std::make_unique<World>(build_level(level_));
 	player_ = level_.player_start.value_or(V2{});
 	gravity_ = level_.gravity;
@@ -148,6 +148,82 @@ Session::Session(const Level &level, const SessionConfig &config)
 		}
 	}
 	sync_nodes();
+	if (async_) {
+		// each job keeps its own tracer (its caches, its helpers), its defs swapped when the world changes
+		const bool inf = infinity_on();
+		auto tracer_for = [inf](rc::Tracer &t, int &held, int world, const std::vector<rc::SurfaceDef> &defs) {
+			if (held != world) {
+				t.set_emit_infinity(inf);
+				t.set_pair_cache(false);
+				t.set_defs(defs);
+				held = world;
+			}
+		};
+		auto vt = std::make_shared<std::pair<rc::Tracer, int>>();
+		vt->second = -1;
+		// the region: a running one finishes (it shows while the newest computes)
+		vis_job_ = std::make_unique<LatestJob<VisJobIn, VisJobOut>>(
+			[vt, tracer_for](const VisJobIn &in, const std::atomic<bool> &cancel) {
+				tracer_for(vt->first, vt->second, in.world, *in.defs);
+				return run_visibility(vt->first, in.player, in.items, in.flags, in.bounds, &cancel);
+			},
+			false);
+		auto pt = std::make_shared<std::pair<rc::Tracer, int>>();
+		pt->second = -1;
+		// the exact preview: only the current inputs' is applied (a stale one is dropped)
+		preview_job_ = std::make_unique<LatestJob<PreviewJobIn, std::optional<rc::TracePair>>>(
+			[pt, tracer_for](const PreviewJobIn &in, const std::atomic<bool> &) {
+				tracer_for(pt->first, pt->second, in.world, *in.defs);
+				return pt->first.trace_pair(in.player, in.cursor, in.items, in.flags);
+			},
+			false);
+	}
+}
+
+std::shared_ptr<const std::vector<rc::SurfaceDef>> Session::defs_snapshot() {
+	if (job_defs_world_ != world_->version()) {
+		job_defs_ = std::make_shared<const std::vector<rc::SurfaceDef>>(world_->defs());
+		job_defs_world_ = world_->version();
+	}
+	return job_defs_;
+}
+
+bool Session::region_pending() const { return vis_job_ && (vis_applied_ < vis_ticket_ || vis_job_->busy() || vis_job_->ready()); }
+
+void Session::collect_jobs() {
+	if (preview_job_) {
+		if (auto r = preview_job_->take(); r && r->first == preview_ticket_) {
+			make_preview(preview_, std::move(r->second));
+			provisional_.reset();
+			provisional_version_++;
+			trace_version_++;
+		}
+	}
+	if (vis_job_) {
+		// a newer region than the one shown (the newest request's, or one before it)
+		if (auto r = vis_job_->take(); r && r->first > vis_applied_ && r->first <= vis_ticket_) {
+			vis_applied_ = r->first;
+			region_ = std::move(r->second.region);
+			fill_ = std::move(r->second.fill);
+			whiskers_ = std::move(r->second.whiskers);
+			visibility_version_++;
+		}
+	}
+}
+
+void Session::drain() {
+	for (int round = 0; round < 64; round++) {
+		if (preview_job_) {
+			preview_job_->wait_idle();
+		}
+		if (vis_job_) {
+			vis_job_->wait_idle();
+		}
+		settle();
+		if (!(preview_job_ && (preview_job_->busy() || preview_job_->ready())) && !region_pending()) {
+			return;
+		}
+	}
 }
 
 void Session::use_defs(rc::Tracer &t, int &held) {
@@ -488,8 +564,23 @@ bool Session::start_fire() {
 		return false;
 	}
 	checkpoints_.push_back(capture());
-	use_defs(gm_tracer_, gm_defs_);
-	const std::optional<rc::TracePair> pair = gm_tracer_.trace_pair(player_, cursor_, items(), flags_);
+	std::optional<rc::TracePair> pair;
+	if (async_) {
+		// Stage 121: the exact preview of these inputs is the shot's trace (waiting
+		// for its climb if one runs); never a provisional one
+		if (provisional_ && preview_job_) {
+			preview_job_->wait_idle();
+			collect_jobs();
+		}
+		const PreviewKey now{player_, cursor_, plan_version_, flags_version_, world_->version()};
+		if (!provisional_ && preview_.computed && preview_inputs_ == now && preview_.pair) {
+			pair = preview_.pair;
+		}
+	}
+	if (!pair) {
+		use_defs(gm_tracer_, gm_defs_);
+		pair = gm_tracer_.trace_pair(player_, cursor_, items(), flags_);
+	}
 	if (!pair) {
 		checkpoints_.pop_back();
 		return false;
@@ -691,32 +782,59 @@ void Session::update_preview() {
 	}
 	preview_inputs_ = inputs;
 	preview_.computed = true;
-	trace_version_++;
+	preview_ticket_++; // (an exact climb still running is for older inputs now)
+	if (provisional_) {
+		provisional_.reset();
+		provisional_version_++;
+	}
 	if (player_ == cursor_) {
+		trace_version_++;
 		preview_.pair.reset();
 		preview_.has_paths = false;
 		preview_.merged.clear();
 		return; // (the last result and physical hits stay: PathRenderer keeps them)
 	}
 	use_defs(renderer_tracer_, renderer_defs_);
-	preview_.pair = renderer_tracer_.trace_pair(player_, cursor_, items(), flags_);
-	if (!preview_.pair) {
-		preview_.last_result.reset();
-		preview_.has_paths = false;
-		preview_.merged.clear();
+	if (!async_) {
+		trace_version_++;
+		make_preview(preview_, renderer_tracer_.trace_pair(player_, cursor_, items(), flags_));
 		return;
 	}
-	preview_.last_result = std::move(preview_.pair->result); // (nothing else reads the pair's)
-	const std::vector<rc::inv::SurfaceInfo> in = infos();
-	preview_.physical = rc::sweep::prepare_for_display(preview_.pair->physical, bounds(), in);
-	preview_.planned = preview_.pair->shared ? preview_.physical : rc::sweep::prepare_for_display(preview_.pair->planned, bounds(), in);
-	preview_.has_paths = true;
-	int ci = preview_.planned.cursor_index;
-	if (ci < 0) {
-		ci = int(preview_.planned.steps.size());
+	// Stage 121: the float64 tier on the frame; when the ladder would climb, that
+	// result shows provisionally and the exact one is computed in the background
+	bool exact = true;
+	std::optional<rc::TracePair> pair = renderer_tracer_.trace_pair_provisional(player_, cursor_, items(), flags_, &exact);
+	if (exact) {
+		trace_version_++;
+		make_preview(preview_, std::move(pair));
+		return;
 	}
-	preview_.merged = rc::sweep::merge(preview_.planned.steps, preview_.physical.steps, ci);
-	preview_.hits = rc::physical_hits(preview_.physical.steps);
+	Preview p;
+	make_preview(p, std::move(pair));
+	provisional_ = std::move(p);
+	provisional_version_++;
+	preview_job_->submit(PreviewJobIn{defs_snapshot(), world_->version(), infinity_on(), player_, cursor_, items(), flags_}, preview_ticket_);
+}
+
+void Session::make_preview(Preview &p, std::optional<rc::TracePair> pair) const {
+	p.pair = std::move(pair);
+	if (!p.pair) {
+		p.last_result.reset();
+		p.has_paths = false;
+		p.merged.clear();
+		return;
+	}
+	p.last_result = std::move(p.pair->result); // (nothing else reads the pair's)
+	const std::vector<rc::inv::SurfaceInfo> in = infos();
+	p.physical = rc::sweep::prepare_for_display(p.pair->physical, bounds(), in);
+	p.planned = p.pair->shared ? p.physical : rc::sweep::prepare_for_display(p.pair->planned, bounds(), in);
+	p.has_paths = true;
+	int ci = p.planned.cursor_index;
+	if (ci < 0) {
+		ci = int(p.planned.steps.size());
+	}
+	p.merged = rc::sweep::merge(p.planned.steps, p.physical.steps, ci);
+	p.hits = rc::physical_hits(p.physical.steps);
 }
 
 void Session::update_hover() {
@@ -827,6 +945,15 @@ void Session::update_visibility() {
 	}
 	vis_inputs_ = inputs;
 	vis_computed_ = true;
+	vis_ticket_++; // (a region still computing is for older inputs now)
+	const rc::Rect2f b = bounds();
+	const rc::vis::Rect vb{double(b.position.x), double(b.position.y), double(b.position.x) + double(b.size.x), double(b.position.y) + double(b.size.y)};
+	if (async_ && visibility_on()) {
+		// Stage 121: in the background; the last region shows meanwhile
+		vis_job_->submit(VisJobIn{defs_snapshot(), world_->version(), infinity_on(), player_, items(), flags_, vb}, vis_ticket_);
+		return;
+	}
+	vis_applied_ = vis_ticket_; // (no older region computing in the background may show after this one)
 	visibility_version_++;
 	region_.reset();
 	fill_ = rc::vis::Fill{};
@@ -835,14 +962,21 @@ void Session::update_visibility() {
 		return;
 	}
 	use_defs(vis_tracer_, vis_defs_);
-	const rc::Rect2f b = bounds();
-	const rc::vis::Rect vb{double(b.position.x), double(b.position.y), double(b.position.x) + double(b.size.x), double(b.position.y) + double(b.size.y)};
-	region_ = rc::vis::compute(vis_tracer_, rc::vis::Pt{player_.x, player_.y}, items(), flags_, vb);
-	if (!region_->supported) {
-		return;
+	VisJobOut out = run_visibility(vis_tracer_, player_, items(), flags_, vb, nullptr);
+	region_ = std::move(out.region);
+	fill_ = std::move(out.fill);
+	whiskers_ = std::move(out.whiskers);
+}
+
+Session::VisJobOut Session::run_visibility(rc::Tracer &t, const V2 &player, const std::vector<rc::PlanItem> &items, const rc::Flags &flags,
+		const rc::vis::Rect &vb, const std::atomic<bool> *cancel) {
+	VisJobOut out;
+	out.region = rc::vis::compute(t, rc::vis::Pt{player.x, player.y}, items, flags, vb, cancel);
+	if (out.region->cancelled || !out.region->supported) {
+		return out;
 	}
-	fill_ = rc::vis::fill_triangles(*region_);
-	for (const rc::vis::Edge &e : region_->whiskers) {
+	out.fill = rc::vis::fill_triangles(*out.region);
+	for (const rc::vis::Edge &e : out.region->whiskers) {
 		std::vector<rc::vis::Pt> pts;
 		rc::vis::tessellate(e, pts);
 		pts.push_back(e.b);
@@ -850,8 +984,9 @@ void Session::update_visibility() {
 		for (const rc::vis::Pt &p : pts) {
 			line.push_back(V2::of(p.x, p.y));
 		}
-		whiskers_.push_back(line);
+		out.whiskers.push_back(line);
 	}
+	return out;
 }
 
 void Session::update_spawn_preview() {
@@ -882,6 +1017,7 @@ void Session::update_spawn_preview() {
 }
 
 void Session::settle() {
+	collect_jobs();
 	update_preview();
 	update_hover();
 	update_overlays(false);
@@ -889,20 +1025,20 @@ void Session::settle() {
 	update_spawn_preview();
 	// the player faces the way the arrow will leave: the preview's first step, else the cursor
 	facing_ = (cursor_ - player_).angle();
-	if (preview_.has_paths && !preview_.planned.steps.empty()) {
-		const V2 d = start_direction(preview_.planned.steps.front());
+	if (const Preview &sp = shown(); sp.has_paths && !sp.planned.steps.empty()) {
+		const V2 d = start_direction(sp.planned.steps.front());
 		if (d.length_squared() > 0.0f) {
 			facing_ = d.angle();
 		}
 	}
 }
 
-std::vector<std::pair<V2, Color>> Session::truncation_markers() const {
+std::vector<std::pair<V2, Color>> Session::truncation_markers(const Preview &pv) const {
 	std::vector<std::pair<V2, Color>> out;
-	if (!preview_.has_paths) {
+	if (!pv.has_paths) {
 		return out;
 	}
-	for (const rc::TracePath *path : {&preview_.physical, &preview_.planned}) {
+	for (const rc::TracePath *path : {&pv.physical, &pv.planned}) {
 		if (!path->truncated || path->steps.empty()) {
 			continue;
 		}
@@ -911,7 +1047,7 @@ std::vector<std::pair<V2, Color>> Session::truncation_markers() const {
 			continue;
 		}
 		Color col = WHITE;
-		for (const rc::TraceStep &ms : preview_.merged) {
+		for (const rc::TraceStep &ms : pv.merged) {
 			if (ms.end == end) {
 				col = step_color(ms.type);
 			}

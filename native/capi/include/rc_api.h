@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 1
+#define RC_API_VERSION_MINOR 2
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -73,6 +73,12 @@ typedef struct rc_game_config {
 	uint32_t size;
 	int32_t infinity;   /* the infinity switch: -1 the game's default (on), 0 off, 1 on */
 	int32_t visibility; /* the visibility region: -1 default (on), 0 off, 1 on */
+	/* 1.2: 1 for a live host -- the visibility region and the preview's exact
+	 * climbs are computed in the background, the frame never waits for them
+	 * (the last region shows meanwhile, a provisional preview): see rc_frame's
+	 * region_pending / preview_exact. 0 (the default, and an older host's
+	 * config): everything in the frame, in order (replays: the session golden). */
+	int32_t async;
 } rc_game_config;
 
 /* A game on a level (config may be null: the defaults). The game keeps its
@@ -126,6 +132,8 @@ typedef struct rc_frame {
 	float bounds_x, bounds_y, bounds_w, bounds_h; /* the level's bounds (the camera's limits) */
 	int32_t display_mode;    /* 0 merged, 1 physical, 2 planned; -1 no preview */
 	float gravity_x, gravity_y;
+	int32_t region_pending; /* 1.2 (async): a newer visibility region is being computed */
+	int32_t preview_exact;  /* 1.2 (async): 0 while the path shown is provisional (its exact climb runs) */
 } rc_frame;
 RC_API rc_status rc_game_frame(const rc_game *game, rc_frame *out);
 

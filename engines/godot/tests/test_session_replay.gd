@@ -66,6 +66,7 @@ func test_the_host_plays_the_golden() -> void:
 		game.infinity = int(sw["infinity"]) if sw.has("infinity") else -1
 		game.visibility = int(sw["visibility"]) if sw.has("visibility") else -1
 		game.physics = false   # teleport sessions: the player moves only by teleport
+		game.asynchronous = false   # every step's state at once (the golden's)
 		game.aim(Vector2.ZERO)
 		add_child(game)
 		await wait_process_frames(1)
