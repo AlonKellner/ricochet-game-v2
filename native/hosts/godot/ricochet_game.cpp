@@ -123,6 +123,10 @@ void RicochetGame::_ready() {
 		return;
 	}
 	rc_set_log(log_to_godot, nullptr);
+	if (!FileAccess::file_exists(level_path_)) {
+		UtilityFunctions::push_error(String("RicochetGame: no level at ") + level_path_);
+		return;
+	}
 	const CharString text = FileAccess::get_file_as_string(level_path_).utf8();
 	rc_level *level = nullptr;
 	if (rc_level_parse(text.get_data(), size_t(text.length()), &level) != RC_OK) {
@@ -174,7 +178,8 @@ void RicochetGame::_process(double delta) {
 		held |= in->is_action_pressed(k.action) ? k.key : 0;
 		pressed |= in->is_action_just_pressed(k.action) ? k.key : 0;
 	}
-	if (rc_game_advance(game_, physics_ ? delta : 0.0, held, pressed) != RC_OK) {
+	// the physics off: no tick for the player (a flight still flies)
+	if (rc_game_advance(game_, physics_ || is_flying() ? delta : 0.0, held, pressed) != RC_OK) {
 		report("rc_game_advance");
 	}
 	sync();

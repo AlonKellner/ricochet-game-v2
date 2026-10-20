@@ -11,7 +11,7 @@ Every row has a disposition and, where the GUT test went, the native column:
 - keep: a test of the Godot suite that exists ("<gut file>::<function>");
 - covered: its citation (target_or_reason) is non-empty; drop: its reason is.
 And every GUT test function in tests/ is either a ledger row (not yet retired)
-or a test of the final Godot suite a `keep` row points at.
+or a test of the final Godot suite (FINAL).
 Exit status 1 with the offending rows listed.
 """
 import pathlib
@@ -20,6 +20,8 @@ import sys
 
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 LEDGER = ROOT / "docs" / "research" / "gut_ledger.tsv"
+# the final Godot suite: its tests need no ledger row
+FINAL = {"tests/test_adapter_smoke.gd", "tests/test_session_replay.gd"}
 
 
 def test_cases():
@@ -86,7 +88,7 @@ def main():
         if "host_py" in rel:
             continue
         for fn in re.findall(r"^func (test_\w+)\(", p.read_text(), re.M):
-            if (rel, fn) not in listed and (rel, fn) not in kept:
+            if (rel, fn) not in listed and (rel, fn) not in kept and rel not in FINAL:
                 bad.append("%s::%s: a GUT test the ledger does not account for" % (rel, fn))
     counts = {}
     for _, _, disp, nat in rows:
