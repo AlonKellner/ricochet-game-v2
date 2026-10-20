@@ -94,7 +94,7 @@ public:
 	// it one frame (the game is paused: no physics, no settling) and
 	// speed_up() (any key) makes it ten times faster; otherwise advance() runs
 	// the physics ticks due (kinematics::STEP, accumulated) with the input --
-	// its jump on the first of them -- then settles.
+	// its jump on the first of them (kept until a tick runs) -- then settles.
 	bool start_fire();
 	void speed_up();
 	void advance(double dt, const kinematics::Input &in);
@@ -237,6 +237,7 @@ private:
 	double flight_progress_ = 0.0;
 	double flight_multiplier_ = 1.0;
 	double physics_time_ = 0.0; // the physics ticks' time not yet run
+	bool jump_ = false;         // a jump pressed, not yet ticked
 	void tick(const kinematics::Input &in);
 	void clear_hover();
 };

@@ -34,7 +34,7 @@ enum class Kind {
 	Text,           // pts {position}, text, alignment (0 left, 1 center), font_size, color
 	Triangles,      // pts, indices, color
 	Polygon2D,      // pts (the polygon, in the node's frame), color, rotation
-	Label,          // text (screen space, top left)
+	Label,          // text: the HUD, a Label at (10, 10) (the default theme font, white)
 };
 
 struct Call {
@@ -55,10 +55,12 @@ struct Node {
 	std::vector<Call> calls;
 };
 
-// The draw order: by z, then by the key's encoding (stable).
+// The draw order: by z, the game's order (Session::draw: the level's tree
+// order) within a z (stable).
 void sort(std::vector<Node> &nodes);
 
-// A call / the draw list (sorted) as the session digest records them (DrawRec's logs).
+// A call / the draw list as the session digest records them (DrawRec's logs;
+// sorted by z, then the key's encoding).
 nlohmann::json call_json(const Call &c);
 nlohmann::json list_json(const std::vector<Node> &nodes);
 

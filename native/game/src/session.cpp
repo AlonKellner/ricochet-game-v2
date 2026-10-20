@@ -484,10 +484,12 @@ void Session::advance(double dt, const kinematics::Input &in) {
 		return;
 	}
 	physics_time_ += dt;
-	kinematics::Input first = in;
+	jump_ = jump_ || in.jump; // a press waits for the next tick
 	while (physics_time_ >= kinematics::STEP) {
-		tick(first);
-		first.jump = false;
+		kinematics::Input t = in;
+		t.jump = jump_;
+		tick(t);
+		jump_ = false;
 		physics_time_ -= kinematics::STEP;
 	}
 	settle();

@@ -118,9 +118,11 @@ if(RC_BUILD_EXTENSION)
     set(GODOTCPP_SYSTEM_HEADERS ON CACHE BOOL "godot-cpp headers are not held to the rc warning flags")
     add_subdirectory(extern/godot-cpp SYSTEM)
 
-    file(GLOB RC_GD_SOURCES CONFIGURE_DEPENDS gd/*.cpp)
+    # (Stage 118: with the adapter, hosts/godot -- on the C API alone)
+    file(GLOB RC_GD_SOURCES CONFIGURE_DEPENDS gd/*.cpp hosts/godot/*.cpp)
     add_library(ricochet_gd SHARED ${RC_GD_SOURCES})
-    target_link_libraries(ricochet_gd PRIVATE ricochet_core ricochet_game godot-cpp)
+    target_include_directories(ricochet_gd PRIVATE hosts/godot)
+    target_link_libraries(ricochet_gd PRIVATE ricochet_core ricochet_game rc_capi godot-cpp)
 
     get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
     set_target_properties(ricochet_gd PROPERTIES
@@ -224,6 +226,10 @@ if(RC_BUILD_TESTS)
     add_test(NAME rcg_game_no_godot
         COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/game
                 -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)
+    # the Godot adapter knows the game through rc_api.h alone
+    add_test(NAME godot_adapter_includes
+        COMMAND "${CMAKE_COMMAND}" -DRC_ADAPTER_DIR=${CMAKE_SOURCE_DIR}/hosts/godot
+                -P ${CMAKE_SOURCE_DIR}/tools/check_adapter_includes.cmake)
     add_test(NAME capi_no_godot
         COMMAND "${CMAKE_COMMAND}" -DRC_CORE_DIR=${CMAKE_SOURCE_DIR}/capi
                 -P ${CMAKE_SOURCE_DIR}/tools/check_no_godot.cmake)

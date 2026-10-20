@@ -73,20 +73,7 @@ json call_json(const Call &c) {
 }
 
 void sort(std::vector<Node> &nodes) {
-	std::vector<std::pair<std::string, size_t>> keys;
-	for (size_t i = 0; i < nodes.size(); i++) {
-		keys.push_back({digest::encode(nodes[i].key), i});
-	}
-	std::stable_sort(keys.begin(), keys.end(), [&](const auto &a, const auto &b) {
-		const int za = nodes[a.second].z, zb = nodes[b.second].z;
-		return za != zb ? za < zb : a.first < b.first;
-	});
-	std::vector<Node> out;
-	out.reserve(nodes.size());
-	for (const auto &k : keys) {
-		out.push_back(std::move(nodes[k.second]));
-	}
-	nodes = std::move(out);
+	std::stable_sort(nodes.begin(), nodes.end(), [](const Node &a, const Node &b) { return a.z < b.z; });
 }
 
 std::vector<V2> tessellate_arc(const V2 &center, double radius, double start, double end, int point_count) {
@@ -100,12 +87,17 @@ std::vector<V2> tessellate_arc(const V2 &center, double radius, double start, do
 	return pts;
 }
 
-json list_json(const std::vector<Node> &unsorted) {
-	std::vector<Node> nodes = unsorted;
-	sort(nodes);
+json list_json(const std::vector<Node> &nodes) {
+	// the digest's order: by z, then the key's encoding (independent of the tree order)
+	std::vector<std::pair<std::string, const Node *>> sorted;
+	for (const Node &n : nodes) {
+		sorted.push_back({digest::encode(n.key), &n});
+	}
+	std::stable_sort(sorted.begin(), sorted.end(), [](const auto &a, const auto &b) {
+		return a.second->z != b.second->z ? a.second->z < b.second->z : a.first < b.first;
+	});
 	json out = json::array();
-	for (const Node &node : nodes) {
-		const Node *n = &node;
+	for (const auto &[key, n] : sorted) {
 		json calls = json::array();
 		for (const Call &c : n->calls) {
 			calls.push_back(call_json(c));

@@ -46,7 +46,13 @@ def check_level(level, steps):
         game.event(rc_host.EVENT_PLAN_ADD)
         game.advance(0)
         want = dec(json.loads(game.record(draw_list=True))["draw"])
-        got = game.draw_list()
+        drawn = game.draw_list()
+        # the draw order: by z, the scene's tree order within a z
+        assert [n[1] for n in drawn] == sorted(n[1] for n in drawn)
+        zero = [n[0][0] for n in drawn if n[1] == 0]
+        assert zero[:3] == ["background", "player", "cursor"] and zero[-1] == "surface"
+        # the record's order: by z, then the key's encoding
+        got = sorted(drawn, key=lambda n: (n[1], json.dumps(n[0], separators=(",", ":"))))
         assert len(got) == len(want)
         for (key, z, pos, mod, cmds), w in zip(got, want):
             assert [key, z, list(pos), list(mod)] == w[:4]

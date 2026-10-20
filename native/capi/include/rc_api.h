@@ -99,7 +99,8 @@ RC_API rc_status rc_game_event(rc_game *game, int32_t event);
 /* The cursor, in world coordinates. */
 RC_API rc_status rc_game_set_cursor(rc_game *game, float x, float y);
 
-/* Movement keys: held this frame, and pressed this frame (just pressed). */
+/* Movement keys: held this frame, and pressed this frame (just pressed; a
+ * press is kept until the next physics tick runs). */
 enum { RC_KEY_LEFT = 1, RC_KEY_RIGHT = 2, RC_KEY_UP = 4, RC_KEY_DOWN = 8 };
 
 /* One frame of dt seconds: the arrow's flight, else the player's physics (a
@@ -146,7 +147,7 @@ enum {
 	RC_DRAW_TEXT = 9,            /* points [baseline position], text, alignment (0 left, 1 center), font_size, color */
 	RC_DRAW_TRIANGLES = 10,      /* points, indices (triples), color */
 	RC_DRAW_POLYGON2D = 11,      /* points (in the node's frame, rotated by rotation), color: filled */
-	RC_DRAW_LABEL = 12           /* text: the HUD, screen space, top left */
+	RC_DRAW_LABEL = 12           /* text: the HUD, a Label at (10, 10) (the default theme font, white) */
 };
 
 typedef struct rc_draw_cmd {
@@ -174,7 +175,7 @@ typedef struct rc_draw_node {
 
 typedef struct rc_draw_list {
 	uint32_t size;
-	const rc_draw_node *nodes; uint32_t node_count; /* sorted by z, then key */
+	const rc_draw_node *nodes; uint32_t node_count; /* in draw order: by z, then the scene's order */
 	const rc_draw_cmd *cmds; uint32_t cmd_count;
 	const float *points; uint32_t point_count;      /* point_count (x, y) pairs */
 	const float *colors; uint32_t color_count;      /* color_count (r, g, b, a) */

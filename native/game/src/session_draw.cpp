@@ -642,6 +642,8 @@ struct PathPainter {
 } // namespace
 
 std::vector<render::Node> Session::draw() const {
+	// in the level's tree order (a scene's nodes, then the ones its _ready adds):
+	// the order the engine draws nodes of one z-index in
 	std::vector<render::Node> nodes;
 	const rc::Rect2f b = bounds();
 	// the background, by its properties
@@ -652,6 +654,65 @@ std::vector<render::Node> Session::draw() const {
 		k.pts = {V2::of(bg.rect.x, bg.rect.y), V2::of(bg.rect.w, bg.rect.h)};
 		k.colors = {rgba(bg.color[0], bg.color[1], bg.color[2], bg.color[3])};
 		nodes.push_back(render::Node{{"background"}, 0, V2::of(bg.rect.x, bg.rect.y), WHITE, {k}});
+	}
+	if (level_.player_start) {
+		Call k;
+		k.kind = Kind::Polygon2D;
+		k.pts = {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}};
+		k.colors = {WHITE};
+		k.rotation = double(facing_);
+		nodes.push_back(render::Node{{"player"}, 0, player_, WHITE, {k}});
+	}
+	if (level_.features.cursor) {
+		nodes.push_back(render::Node{{"cursor"}, 0, cursor_, WHITE,
+			{line(V2{-10, 0}, V2{10, 0}, WHITE, 1.5), line(V2{0, -10}, V2{0, 10}, WHITE, 1.5)}});
+	}
+	const Color dim{1, 1, 1, flying_ ? 0.25f : 1.0f};
+	if (level_.features.preview) {
+		render::Node path{{"path"}, 20, V2{}, dim, {}};
+		PathPainter pp{b.grow(50.0f), path.calls};
+		if (preview_.has_paths || !preview_.merged.empty()) {
+			if (display_mode_ == 0) {
+				if (!preview_.merged.empty()) {
+					for (const rc::TraceStep &ms : preview_.merged) {
+						if (ms.start == ms.end) {
+							continue;
+						}
+						const Color col = step_color(ms.type);
+						pp.step(ms, ms.ghost ? ghost_color(col) : col, !is_solid(ms.type));
+					}
+					pp.endpoint_circles(preview_.merged, true, WHITE);
+					for (const auto &[pt, col] : truncation_markers()) {
+						pp.stop_marker(pt, col);
+					}
+				}
+			} else if (preview_.has_paths) {
+				if (display_mode_ == 1) {
+					pp.raw(preview_.physical, CYAN, "P");
+				} else {
+					pp.raw(preview_.planned, MAGENTA, "L");
+				}
+			}
+		}
+		nodes.push_back(std::move(path));
+	}
+	if (level_.features.arrow && flying_) { // (the arrow's node is hidden between flights)
+		render::Node a{{"arrow"}, 30, V2{}, WHITE, {}};
+		const V2 tip = arrow_pos_;
+		const V2 tail = tip - arrow_dir_ * 40.0f;
+		a.calls.push_back(line(tail, tip, WHITE, 2.0));
+		const float angle = float(30.0 * (PI / 180.0)); // deg_to_rad
+		const V2 hl = tip - arrow_dir_.rotated(angle) * 16.0f;
+		const V2 hr = tip - arrow_dir_.rotated(-angle) * 16.0f;
+		a.calls.push_back(polygon({tip, hl, hr}, WHITE));
+		nodes.push_back(std::move(a));
+	}
+	// the HUD (a Label at (10, 10) of a Control at the origin)
+	if (level_.features.hud) {
+		Call k;
+		k.kind = Kind::Label;
+		k.text = hud_;
+		nodes.push_back(render::Node{{"hud"}, 0, V2{}, WHITE, {k}});
 	}
 	// the surfaces, one node per piece
 	for (const Node &n : nodes_) {
@@ -720,7 +781,6 @@ std::vector<render::Node> Session::draw() const {
 		}
 		nodes.push_back(std::move(node));
 	}
-	const Color dim{1, 1, 1, flying_ ? 0.25f : 1.0f};
 	if (level_.features.preview) {
 		// the visibility region
 		render::Node vis{{"visibility"}, 10, V2{}, dim, {}};
@@ -756,63 +816,6 @@ std::vector<render::Node> Session::draw() const {
 			}
 		}
 		nodes.push_back(std::move(sp));
-	}
-	if (level_.features.preview) {
-		render::Node path{{"path"}, 20, V2{}, dim, {}};
-		PathPainter pp{b.grow(50.0f), path.calls};
-		if (preview_.has_paths || !preview_.merged.empty()) {
-			if (display_mode_ == 0) {
-				if (!preview_.merged.empty()) {
-					for (const rc::TraceStep &ms : preview_.merged) {
-						if (ms.start == ms.end) {
-							continue;
-						}
-						const Color col = step_color(ms.type);
-						pp.step(ms, ms.ghost ? ghost_color(col) : col, !is_solid(ms.type));
-					}
-					pp.endpoint_circles(preview_.merged, true, WHITE);
-					for (const auto &[pt, col] : truncation_markers()) {
-						pp.stop_marker(pt, col);
-					}
-				}
-			} else if (preview_.has_paths) {
-				if (display_mode_ == 1) {
-					pp.raw(preview_.physical, CYAN, "P");
-				} else {
-					pp.raw(preview_.planned, MAGENTA, "L");
-				}
-			}
-		}
-		nodes.push_back(std::move(path));
-	}
-	if (level_.features.arrow && flying_) { // (the arrow's node is hidden between flights)
-		render::Node a{{"arrow"}, 30, V2{}, WHITE, {}};
-		const V2 tip = arrow_pos_;
-		const V2 tail = tip - arrow_dir_ * 40.0f;
-		a.calls.push_back(line(tail, tip, WHITE, 2.0));
-		const float angle = float(30.0 * PI / 180.0);
-		const V2 hl = tip - arrow_dir_.rotated(angle) * 16.0f;
-		const V2 hr = tip - arrow_dir_.rotated(-angle) * 16.0f;
-		a.calls.push_back(polygon({tip, hl, hr}, WHITE));
-		nodes.push_back(std::move(a));
-	}
-	if (level_.features.cursor) {
-		nodes.push_back(render::Node{{"cursor"}, 0, cursor_, WHITE,
-			{line(V2{-10, 0}, V2{10, 0}, WHITE, 1.5), line(V2{0, -10}, V2{0, 10}, WHITE, 1.5)}});
-	}
-	if (level_.player_start) {
-		Call k;
-		k.kind = Kind::Polygon2D;
-		k.pts = {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}};
-		k.colors = {WHITE};
-		k.rotation = double(facing_);
-		nodes.push_back(render::Node{{"player"}, 0, player_, WHITE, {k}});
-	}
-	if (level_.features.hud) {
-		Call k;
-		k.kind = Kind::Label;
-		k.text = hud_;
-		nodes.push_back(render::Node{{"hud"}, 0, V2{}, WHITE, {k}});
 	}
 	return nodes;
 }

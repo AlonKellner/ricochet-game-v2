@@ -13,6 +13,7 @@
 #include "gd_level.hpp"
 #include "gd_kinematics.hpp"
 #include "rc/error.hpp"
+#include "ricochet_game.hpp"
 
 #include <gdextension_interface.h>
 #include <godot_cpp/core/class_db.hpp>
@@ -31,6 +32,8 @@ void initialize_ricochet_module(godot::ModuleInitializationLevel p_level) {
         godot::UtilityFunctions::push_error(godot::String(message));
     });
 
+    // Stage 118: the Godot adapter on the C API (native/hosts/godot)
+    rc_godot::register_adapter();
     // Stage 115: the level data, read natively
     GDREGISTER_CLASS(RcgLevel);
     GDREGISTER_CLASS(RcgKinematics);
