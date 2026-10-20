@@ -1,4 +1,6 @@
 GODOT ?= $(if $(GODOT_BIN),$(GODOT_BIN),godot)
+# Stage 119: the Godot project, a host of the native game (docs/PORTING.md)
+GODOT_PROJECT := engines/godot
 CMAKE ?= cmake
 CTEST ?= ctest
 NCPU := $(shell sysctl -n hw.ncpu 2>/dev/null || nproc 2>/dev/null || echo 4)
@@ -24,7 +26,7 @@ BUILD_ASAN := native/build-asan
 
 .PHONY: test run test-verbose frame-bench oracle-test pyhost \
 	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
-	sessions sessions-check
+	sessions sessions-check godot-data
 
 # ---------------------------------------------------------------- native (C++)
 # The three trees (docs/WORKFLOW.md):
@@ -59,18 +61,27 @@ check: core
 # is missing or older than ricochet.gdextension (2 s otherwise saved).
 native:
 	$(CMAKE) -S native -B $(BUILD_EXT) $(call gen,$(BUILD_EXT)) -DCMAKE_BUILD_TYPE=RelWithDebInfo \
-		-DRC_BUILD_EXTENSION=ON -DRC_BUILD_TESTS=OFF
+		-DRC_BUILD_EXTENSION=ON -DRC_BUILD_TESTS=OFF -DRC_EXTENSION_OUTPUT_DIR=$(CURDIR)/$(GODOT_PROJECT)/bin
 	$(CMAKE) --build $(BUILD_EXT) -j $(JOBS_EXT)
-	@if [ ! -s .godot/extension_list.cfg ] || [ ricochet.gdextension -nt .godot/extension_list.cfg ]; then \
-		$(GODOT) --headless --import --path .; else echo "import: extension_list.cfg current"; fi
+	@$(MAKE) -s godot-data
+	@if [ ! -s $(GODOT_PROJECT)/.godot/extension_list.cfg ] || [ $(GODOT_PROJECT)/ricochet.gdextension -nt $(GODOT_PROJECT)/.godot/extension_list.cfg ]; then \
+		$(GODOT) --headless --import --path $(GODOT_PROJECT); else echo "import: extension_list.cfg current"; fi
+
+# Stage 119: the Godot project (engines/godot) reads only res://: the levels,
+# the session scripts and their golden are copied in (gitignored).
+godot-data:
+	mkdir -p $(GODOT_PROJECT)/data
+	rsync -a --delete data/levels data/sessions $(GODOT_PROJECT)/data/
+	rsync -a --delete bench/sessions/ $(GODOT_PROJECT)/data/golden/
 
 # Debug extension (RC_ASSERT aborts). Writes the same library name into native/bin,
 # so it replaces the RelWithDebInfo one until the next `make native`.
 native-debug:
 	$(CMAKE) -S native -B native/build-debug $(call gen,native/build-debug) -DCMAKE_BUILD_TYPE=Debug \
-		-DRC_BUILD_EXTENSION=ON -DRC_BUILD_TESTS=OFF
+		-DRC_BUILD_EXTENSION=ON -DRC_BUILD_TESTS=OFF -DRC_EXTENSION_OUTPUT_DIR=$(CURDIR)/$(GODOT_PROJECT)/bin
 	$(CMAKE) --build native/build-debug -j $(JOBS_EXT)
-	$(GODOT) --headless --import --path .
+	@$(MAKE) -s godot-data
+	$(GODOT) --headless --import --path $(GODOT_PROJECT)
 
 # ASan+UBSan rc_tests (no godot-cpp: nothing loads a sanitized extension), the
 # ctest entries in parallel. Debug (assertions on) at -O1: the sanitizers catch
@@ -176,10 +187,10 @@ test: native oracle-test
 	SKIP_BUILD=1 SKIP_ORACLE=1 ./run_tests_parallel.sh
 
 run:
-	$(GODOT)
+	$(GODOT) --path $(GODOT_PROJECT)
 
 test-verbose:
-	$(GODOT) --headless -s addons/gut/gut_cmdln.gd -glog=3
+	$(GODOT) --headless --path $(GODOT_PROJECT) -s addons/gut/gut_cmdln.gd -glog=3
 
 # ------------------------------------------------------------------ benchmarks
 # The game's per-frame cost on a level (Stage 119, rc_tool bench): still and

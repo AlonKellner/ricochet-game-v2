@@ -1,0 +1,26 @@
+[configuration]
+
+entry_symbol = "ricochet_library_init"
+compatibility_minimum = "4.7"
+; Not hot-reloadable: during the migration every rebuild changes the set of
+; registered classes (classes appear, N*-prefixed ones went away), and Godot's
+; GDExtension hot reload cannot swap a class set while scripts and scenes
+; reference the old one: the open editor reloaded a wholly different library on
+; 2026-10-15 and reset itself with errors. With reloadable = false the editor
+; asks for a restart instead. Set it back to true once the class set is stable.
+reloadable = false
+
+[libraries]
+
+; File names are exactly what native/CMakeLists.txt produces:
+; libricochet_gd${GODOTCPP_SUFFIX}.<ext>, where GODOTCPP_SUFFIX is
+; .<platform>.<template_debug|template_release>.<arch>, written to engines/godot/bin.
+; Build with `make native` (from the repository root).
+macos.debug.arm64 = "res://bin/libricochet_gd.macos.template_debug.arm64.dylib"
+macos.release.arm64 = "res://bin/libricochet_gd.macos.template_release.arm64.dylib"
+macos.debug.x86_64 = "res://bin/libricochet_gd.macos.template_debug.x86_64.dylib"
+macos.release.x86_64 = "res://bin/libricochet_gd.macos.template_release.x86_64.dylib"
+linux.debug.x86_64 = "res://bin/libricochet_gd.linux.template_debug.x86_64.so"
+linux.release.x86_64 = "res://bin/libricochet_gd.linux.template_release.x86_64.so"
+windows.debug.x86_64 = "res://bin/libricochet_gd.windows.template_debug.x86_64.dll"
+windows.release.x86_64 = "res://bin/libricochet_gd.windows.template_release.x86_64.dll"

@@ -45,9 +45,11 @@ violations.json
 bench/results/
 violations.*.shard*.json
 
-# Native (C++ GDExtension) build outputs; native/godot-api/ is tracked on purpose
-native/bin/
+# Native build outputs; native/godot-api/ is tracked on purpose
 native/build*/
+# The Godot project's build output and copied data (make native)
+engines/godot/bin/
+engines/godot/data/
 
 # Shadow-run mismatch dumps (native vs GDScript solver)
 shadow_mismatches.json

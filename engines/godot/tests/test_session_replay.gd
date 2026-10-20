@@ -1,6 +1,7 @@
 extends GutTest
 
-# The Godot host plays the session golden (data/sessions -> bench/sessions,
+# The Godot host plays the session golden (data/sessions -> bench/sessions, copied
+# by make native into this project's data/sessions and data/golden;
 # docs/research/session_digest.md) through Godot's own input: mouse clicks
 # and key presses parsed as InputEvents reach RicochetGame._input, which maps
 # them onto the game's events -- every record equals the golden's (but the
@@ -58,7 +59,7 @@ func test_the_host_plays_the_golden() -> void:
 	assert_gt(names.size(), 5, "sessions sampled")
 	for name in names:
 		var script: Dictionary = JSON.parse_string(FileAccess.get_file_as_string("res://data/sessions/%s.json" % name))
-		var golden := FileAccess.get_file_as_string("res://bench/sessions/%s.jsonl" % name).strip_edges().split("\n")
+		var golden := FileAccess.get_file_as_string("res://data/golden/%s.jsonl" % name).strip_edges().split("\n")
 		var game := RicochetGame.new()
 		game.level_path = "res://data/levels/%s.json" % script["level"]
 		var sw: Dictionary = script.get("switches", {})

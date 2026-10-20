@@ -19,8 +19,8 @@ project(ricochet_native LANGUAGES CXX)
 option(RC_BUILD_TESTS "Build the doctest executable and register ctest tests" ON)
 option(RC_BUILD_EXTENSION "Build godot-cpp and the ricochet_gd GDExtension library" ON)
 set(RC_SANITIZE "" CACHE STRING "Comma-separated -fsanitize= list for every target, e.g. address,undefined")
-set(RC_EXTENSION_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/bin" CACHE PATH
-    "Where the GDExtension library is written (ricochet.gdextension points at native/bin)")
+set(RC_EXTENSION_OUTPUT_DIR "${CMAKE_SOURCE_DIR}/../engines/godot/bin" CACHE PATH
+    "Where the GDExtension library is written (engines/godot/ricochet.gdextension points at engines/godot/bin)")
 
 # ccache when installed (the Makefile passes nothing: a tree configured before
 # ccache was installed keeps its rules). Content-keyed, so a branch switch or a

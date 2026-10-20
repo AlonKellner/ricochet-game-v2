@@ -21,7 +21,7 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 LEDGER = ROOT / "docs" / "research" / "gut_ledger.tsv"
 # the final Godot suite: its tests need no ledger row
-FINAL = {"tests/test_adapter_smoke.gd", "tests/test_session_replay.gd"}
+FINAL = {"engines/godot/tests/test_adapter_smoke.gd", "engines/godot/tests/test_session_replay.gd"}
 
 
 def test_cases():
@@ -83,7 +83,7 @@ def main():
                 bad.append("%s: keep target %r not found" % (where, nat))
     listed = {(f, fn) for f, fn, _, _ in rows}
     kept = {tuple(nat.split("::", 1)) for _, _, disp, nat in rows if disp == "keep" and "::" in nat}
-    for p in sorted((ROOT / "tests").rglob("*.gd")):
+    for p in sorted(list((ROOT / "tests").rglob("*.gd")) + list((ROOT / "engines" / "godot" / "tests").rglob("*.gd"))):
         rel = str(p.relative_to(ROOT))
         if "host_py" in rel:
             continue

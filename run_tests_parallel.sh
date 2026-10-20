@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
-# The Godot suite (Stage 119: the Godot host alone -- tests/test_adapter_smoke.gd,
-# tests/test_session_replay.gd; the game is tested natively: make check, make pyhost).
+# The Godot suite (Stage 119: the Godot host alone -- engines/godot/tests/test_adapter_smoke.gd,
+# test_session_replay.gd; the game is tested natively: make check, make pyhost).
 # Exit status nonzero if a test fails, a script does not load, or an object leaks.
 #
 #   ./run_tests_parallel.sh
@@ -22,7 +22,7 @@ fi
 
 start=$(date +%s)
 LOG=$(mktemp "${TMPDIR:-/tmp}/ricochet_gut.XXXXXX")
-"$GODOT" --headless -s addons/gut/gut_cmdln.gd -gconfig= -gdir=res://tests -gprefix=test_ -gsuffix=.gd -gexit > "$LOG" 2>&1
+"$GODOT" --headless --path engines/godot -s addons/gut/gut_cmdln.gd -gconfig= -gdir=res://tests -gprefix=test_ -gsuffix=.gd -gexit > "$LOG" 2>&1
 clean=$(sed 's/\x1b\[[0-9;]*m//g' "$LOG")
 pass=$(grep -E "^Passing Tests" <<< "$clean" | awk '{print $3}')
 fail=$(grep -E "^Failing Tests" <<< "$clean" | awk '{print $3}')
