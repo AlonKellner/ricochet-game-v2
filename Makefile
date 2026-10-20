@@ -22,7 +22,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test pyhost \
+.PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test pyhost shots \
 	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
 	sessions sessions-check
 
@@ -164,6 +164,14 @@ regen-apply:
 DUMPS_DIR ?= $(CURDIR)/bench/scenes
 dumps: core
 	$(BUILD_CORE)/rc_tool dumps data/levels "$(DUMPS_DIR)"
+# Stage 118: screenshots of every played level, the GDScript scene against the
+# Godot adapter (RicochetGame) in the same state; report.md counts the differing
+# pixels. Opens a window (the headless renderer draws nothing).
+SHOTS_DIR ?= $(or $(TMPDIR),/tmp)/ricochet_shots
+shots: native
+	$(GODOT) --path . --fixed-fps 60 --resolution 1920x1080 -s res://scripts/testing/shots.gd -- --out "$(SHOTS_DIR)"
+	@cat "$(SHOTS_DIR)/report.md"
+
 # Stage 118: the Python host (tests/host_py, ctypes over the C API's shared
 # library): every session through the C API equals the golden, the errors, the draw list
 pyhost: core

@@ -100,6 +100,10 @@ void RicochetGame::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("get_infinity"), &RicochetGame::get_infinity);
 	ClassDB::bind_method(D_METHOD("set_visibility", "value"), &RicochetGame::set_visibility);
 	ClassDB::bind_method(D_METHOD("get_visibility"), &RicochetGame::get_visibility);
+	ClassDB::bind_method(D_METHOD("aim", "at"), &RicochetGame::aim);
+	ClassDB::bind_method(D_METHOD("teleport", "at"), &RicochetGame::teleport);
+	ClassDB::bind_method(D_METHOD("set_physics", "on"), &RicochetGame::set_physics);
+	ClassDB::bind_method(D_METHOD("get_physics"), &RicochetGame::get_physics);
 	ClassDB::bind_method(D_METHOD("record"), &RicochetGame::record);
 	ClassDB::bind_method(D_METHOD("hud"), &RicochetGame::hud);
 	ClassDB::bind_method(D_METHOD("layer_count"), &RicochetGame::layer_count);
@@ -107,6 +111,7 @@ void RicochetGame::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "level_path", PROPERTY_HINT_FILE, "*.json"), "set_level_path", "get_level_path");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "infinity", PROPERTY_HINT_ENUM, "Default:-1,Off:0,On:1"), "set_infinity", "get_infinity");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "visibility", PROPERTY_HINT_ENUM, "Default:-1,Off:0,On:1"), "set_visibility", "get_visibility");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "physics"), "set_physics", "get_physics");
 }
 
 void RicochetGame::_ready() {
@@ -157,7 +162,7 @@ void RicochetGame::_process(double delta) {
 	if (game_ == nullptr) {
 		return;
 	}
-	const Vector2 m = get_global_mouse_position();
+	const Vector2 m = cursor();
 	rc_game_set_cursor(game_, m.x, m.y);
 	Input *in = Input::get_singleton();
 	uint32_t held = 0, pressed = 0;
@@ -169,7 +174,7 @@ void RicochetGame::_process(double delta) {
 		held |= in->is_action_pressed(k.action) ? k.key : 0;
 		pressed |= in->is_action_just_pressed(k.action) ? k.key : 0;
 	}
-	if (rc_game_advance(game_, delta, held, pressed) != RC_OK) {
+	if (rc_game_advance(game_, physics_ ? delta : 0.0, held, pressed) != RC_OK) {
 		report("rc_game_advance");
 	}
 	sync();
@@ -219,7 +224,7 @@ void RicochetGame::_input(const Ref<InputEvent> &ev) {
 
 void RicochetGame::event(int32_t e) {
 	// the cursor where the event happened, the game settled before the next frame shows it
-	const Vector2 m = get_global_mouse_position();
+	const Vector2 m = cursor();
 	rc_game_set_cursor(game_, m.x, m.y);
 	if (rc_game_event(game_, e) != RC_OK || rc_game_advance(game_, 0.0, 0, 0) != RC_OK) {
 		report("rc_game_event");
@@ -314,6 +319,26 @@ void RicochetGame::sync() {
 		} else {
 			++it;
 		}
+	}
+}
+
+Vector2 RicochetGame::cursor() const { return aimed_ ? aim_ : get_global_mouse_position(); }
+
+void RicochetGame::aim(const Vector2 &at) {
+	aimed_ = true;
+	aim_ = at;
+	if (game_ != nullptr) {
+		rc_game_set_cursor(game_, at.x, at.y);
+		rc_game_advance(game_, 0.0, 0, 0);
+		sync();
+	}
+}
+
+void RicochetGame::teleport(const Vector2 &at) {
+	if (game_ != nullptr) {
+		rc_game_teleport(game_, at.x, at.y);
+		rc_game_advance(game_, 0.0, 0, 0);
+		sync();
 	}
 }
 

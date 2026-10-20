@@ -10,15 +10,17 @@ machine (6 performance, 6 efficiency cores) unless a row says otherwise.
 |---|---|---|---|
 | Spec | `GAME_SPEC.md`, the oracle (`docs/research/oracle/trace2.py`, `visibility.py`) | pytest (`make oracle-test`, 149 tests, 2 s) | Python |
 | Kernel (`native/core`) | the headers | the oracle fixtures and corpus (differential), the invariant kernels over the sweeps, the goldens (bit identity), ASan+UBSan | `rc_tests` (ctest), no Godot |
-| Bindings and glue (`native/gd`, `scripts/`) | GDScript + the bindings | GUT: the extension loads, the dumps' parity, the game logic, the renderers, the LIVE sweep combos | Godot headless |
+| Game layer (`native/game`, `rcg::`) | the headers and sources | `rcg_tests` (doctest), the session golden (`rcg_sessions_*`: byte for byte, the draw list included) | `rcg_tests` (ctest), no Godot |
+| Engine boundary (`native/capi`, `rc_api.h`; Stage 118) | the header | `capi_c_smoke` (a C11 host), `capi_sessions_*` (`rc_tool replay` through the C API alone `--check`s the golden), the Python ctypes host (`make pyhost`, `tests/host_py`: every session, the errors, the draw list), the lints `capi_no_godot` and `godot_adapter_includes` | ctest and pytest, no Godot |
+| Bindings and glue (`native/gd`, `native/hosts/godot`, `scripts/`) | GDScript + the bindings | GUT: the extension loads, the dumps' parity, the game logic, the renderers, the LIVE sweep combos, the adapter's smoke test; the screenshot comparison (`scripts/testing/shots.gd`, a window: the GDScript scenes against the adapter) | Godot headless (the shots: windowed) |
 | Game | the scenes | interactive sign-off per behavioural phase | Godot |
 
 ## The three gates
 
 | Target | When | What | Time |
 |---|---|---|---|
-| `make check` | after every edit | `make core` (the `rc_tests` binary alone) then the ctest entries of an area: `AREA=all` (default) / `solver` / `vis` / `goldens` / `sweeps`, or one doctest filter `TC="..."` (`SKIP=0` adds `--no-skip`) | 18–24 s for a core header change + the entries (all: 18 s) |
-| `make gate` | before every commit | `gates.sh LEVEL=commit`: core, oracle, ctest (release; the native sweeps at one player in 4), the extension build, the level dumps current (Stage 115), the manifests current, the session replay current (Stage 115), the GUT suite (its sweeps sampled), the goldens and the session golden unchanged | see below |
+| `make check` | after every edit | `make core` (the `rc_tests` binary alone) then the ctest entries of an area: `AREA=all` (default) / `solver` / `vis` / `goldens` / `sweeps` / `game` (`rcg_*`, `capi_*`), or one doctest filter `TC="..."` (`SKIP=0` adds `--no-skip`) | 18–24 s for a core header change + the entries (all: 18 s) |
+| `make gate` | before every commit | `gates.sh LEVEL=commit`: core, oracle, ctest (release; the native sweeps at one player in 4), the extension build, the level dumps current (Stage 115), the manifests current, the session replay current (Stage 115), the Python host on the C API (`pyhost`, Stage 118, ~33 s), the GUT suite (its sweeps sampled), the goldens and the session golden unchanged | see below |
 | `make gates` | before a merge to main, at each phase close, and whenever a golden, a fixture or a dump changes | `LEVEL=merge`: the same with every sweep player, then ctest under ASan+UBSan | see below |
 
 Every gate runs even after a failure; the summary names the failed ones and the log directory.
@@ -27,8 +29,8 @@ Every gate runs even after a failure; the summary names the failed ones and the 
 
 | Tree | Target | Contents | Why |
 |---|---|---|---|
-| `native/build-core` | `make core` | `ricochet_core` + `rc_tests`, RelWithDebInfo, no godot-cpp | the inner loop and every ctest gate: a core header change rebuilds about 11 test TUs |
-| `native/build` | `make native` | `ricochet_core` + godot-cpp + `ricochet_gd` → `native/bin`, no tests | what Godot loads |
+| `native/build-core` | `make core` | `ricochet_core` + `rc_tests`, `ricochet_game` + `rcg_tests`, the C API (`librc_capi.a`, `libricochet_capi.dylib`: the Python host's) + `capi_c_smoke`, `rc_tool`; RelWithDebInfo, no godot-cpp | the inner loop and every ctest gate: a core header change rebuilds about 11 test TUs |
+| `native/build` | `make native` | `ricochet_core` + godot-cpp + `ricochet_gd` (with the adapter, `native/hosts/godot`) → `native/bin`, no tests | what Godot loads |
 | `native/build-asan` | `make native-asan` | `ricochet_core` + `rc_tests`, Debug `-O1`, `-fsanitize=address,undefined`, no godot-cpp | nothing loads a sanitized extension, so the sanitizers run on the tests alone |
 
 - A tree configured for the first time gets Ninja when installed (`brew install ninja ccache`); an existing
@@ -159,7 +161,7 @@ while they are stale, and the generators read them.
 | `bench/scenes_corpus/{scenarios,expected}` | `docs/research/oracle/gen_scene_corpus.py` | `make regen` / `make regen-apply` | the GUT corpus test, `test_corpus_oracle.cpp`, the corpus goldens |
 | `bench/goldens/*.json` | dumped at tag `pre-native` (the script is gone); re-blessed only | `make judge`, the user's approval, `make rebless APPROVED=1` | `test_goldens.cpp`, `test_visibility.cpp` (regions) |
 | `bench/sweeps/*.json` | `rc_tool manifests` from `data/sweeps.json` and `data/levels` (Stage 116, no Godot) | `make manifests` (the manifests gate fails while stale) | `test_sweeps.cpp` |
-| `bench/sessions/*.jsonl` (the session replay golden, `docs/research/session_digest.md`) | the game played through `data/sessions` (`scripts/testing/record_sessions.gd`, Godot, 12 shards, ~30 s) | `make sessions` after the user approved `docs/research/session_judge.py`'s report; `make sessions-check` (the sessions gate) | the engine-agnostic port (Stage 115 on): the native session and the C API hosts reproduce every record |
+| `bench/sessions/*.jsonl` (the session replay golden, `docs/research/session_digest.md`; Stage 118: each record holds the draw list's sha) | the game played through `data/sessions` (`scripts/testing/record_sessions.gd`, Godot, 12 shards, ~30 s; `RECORD_ARGS="--full"`: the draw lists themselves, against `rc_tool replay <sessions> <levels> <out> --full`) | `make sessions` after the user approved `docs/research/session_judge.py`'s report; `make sessions-check` (the sessions gate) | the engine-agnostic port (Stage 115 on): the native session and the C API hosts reproduce every record |
 
 ## Debugging variables
 

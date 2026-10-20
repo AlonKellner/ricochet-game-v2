@@ -1875,6 +1875,8 @@ The math layer has **zero Godot engine dependencies** beyond `Vector2`. Testable
 
 **Level data (Stage 115):** a level scene points at its data (`LevelSettings.level_path`); `LevelData` turns the natively read data into `SurfaceSpec` / `SideSpec` / `SpawnTemplate` resources in build order, and the surfaces in the scene tree are `Node2D` instances drawing them. The engine-free game layer (`native/game`, `rcg::`) reads, validates and builds the same data; the headless host `rc_tool` runs the data pipelines without Godot. Stage 116: the game's model and session are native too (`rcg::Session`: the plan, clicks, overlays, preview, visibility, spawn preview, fire / flight / landing, undo, reset; `rcg/world.hpp`, `rcg/landing.hpp`, `rcg/geom.hpp`), checked against the GDScript game by the session replay golden; the GDScript game still runs the shipped build until the engine boundary (a C API) replaces it.
 
+**The engine boundary (Stage 118, docs/TDD_23_ENGINE_BOUNDARY.md):** the whole game sits behind a C API, `native/capi/include/rc_api.h` (`extern "C"`; size-prefixed structs, int32 enums, borrowed views, statuses and a per-thread last error, a log sink). A host hands it a level's JSON text, semantic input events (plan add / remove at the cursor, fire, undo, reset, clear plan, cycle display, toggle gravity / visibility, any key), the cursor, and once per frame the frame time with the held and just-pressed movement keys; it gets back the frame (player, facing, the arrow in flight, the camera's target, smoothing and limits, display mode, gravity), the draw list (§20.4), the HUD text and the session record. Hosts on it: the headless `rc_tool` (its replay), a Python ctypes host (`tests/host_py`), and the Godot adapter `RicochetGame` (`native/hosts/godot`, which includes only `rc_api.h`; `scenes/rc_level.tscn`).
+
 ### 20.2 Project structure
 
 Current layout (Stage 84). Files marked *(planned)* do not exist yet.
@@ -1964,9 +1966,9 @@ player_position + cursor_position + plan
 - Visibility: filled polygon regions (tessellated for arc edges).
 - Preview updates via `queue_redraw()` every frame the cursor moves.
 
-**Z-order (back to front):** surfaces → visibility regions (semi-transparent) → step tree preview → arrow (during flight) → player. Within surfaces, order is by surface ID (lower ID draws first).
+**Z-order (back to front):** z 0, then the edge overlay (z 5), visibility regions (semi-transparent, z 10), the spawn preview (z 19), the step tree preview (z 20), the arrow (during flight, z 30). Within z 0, in the level's node order: the background, the player, the cursor, the HUD, then the surfaces (one node per piece, by surface in build order; spawned surfaces after). The player and the cursor draw under the surfaces (Stage 118 states the order the game has always drawn: an earlier revision gave the player z 40, never implemented).
 
-Explicit z_index values: surfaces=0, visibility=10, step tree preview=20, arrow=30, player=40.
+**The draw list (Stage 118, `rcg/render.hpp`):** what the game draws is decided natively, as a list of nodes -- a key (`["surface", id, piece]`, `["edge"]`, `["visibility"]`, `["spawn"]`, `["path"]`, `["arrow"]`, `["cursor"]`, `["player"]`, `["background"]`, `["hud"]`), a z-index, a position, a modulate -- each with its calls in CanvasItem terms (line, arc with `draw_arc`'s parameters, polygon, coloured polygon, filled circle, rect, polyline, multiline, dashed line, text, a triangle array, the player's rotated polygon, the HUD label), in draw order. A host maps each call onto its own 2D drawing; `rc_tessellate_arc` gives an arc as `draw_arc`'s polyline. The session record holds the list's sha (`draw`).
 
 Surfaces are drawn in visual coordinates using their defining geometry (start, via, end → derive carrier → draw_line or draw_arc). The beam solver also works on surfaces in visual coordinates (§6.1). No transform is needed anywhere.
 
@@ -1980,7 +1982,7 @@ Within the step tree preview, draw order (back to front): DIVERGED_PLANNED → D
 
 When the player fires, **game time freezes**. All physics, surface movement, and timers stop. The shot is logically instant — the full physical trace is computed before animation begins.
 
-**Godot mechanism:** use `get_tree().paused = true`. The arrow animator node has `process_mode = PROCESS_MODE_ALWAYS` so it continues running during pause. All other game nodes use the default process mode and freeze automatically. During arrow flight, the preview is **hidden** — only the arrow animation is shown. After the shot completes, the tree is unpaused and the preview reappears for the retained plan.
+**Native (Stage 118):** the game session pauses itself: while the arrow flies, `advance` moves only the arrow (no physics, no preview), any key event speeds it up, clicks are ignored; the host keeps calling it every frame. **Godot mechanism (the GDScript game):** use `get_tree().paused = true`. The arrow animator node has `process_mode = PROCESS_MODE_ALWAYS` so it continues running during pause. All other game nodes use the default process mode and freeze automatically. During arrow flight, the preview is **hidden** — only the arrow animation is shown. After the shot completes, the tree is unpaused and the preview reappears for the retained plan.
 
 **Animation skip:** the player can skip the flight animation by pressing any non-movement key during flight. Skip instantly completes the animation: all remaining state changes are applied, all visual state changes are applied, and the camera jumps back to the player. Movement keys (WASD) pressed during flight are ignored — they do not queue movement or trigger skip. Fire during animation only skips — it does not queue a new shot. A new shot requires a separate Fire press after the animation completes and game time unfreezes.
 
@@ -2681,4 +2683,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.29.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.30.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

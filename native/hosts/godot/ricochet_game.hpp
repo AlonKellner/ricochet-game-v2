@@ -64,7 +64,13 @@ public:
 	void _process(double delta) override;
 	void _input(const godot::Ref<godot::InputEvent> &event) override;
 
-	// for tests: the game's session record (docs/research/session_digest.md), the HUD
+	// for tools and tests: a fixed cursor (the mouse no longer moves it), the
+	// player moved, the physics off (the player stays put; frames still settle)
+	void aim(const godot::Vector2 &at);
+	void teleport(const godot::Vector2 &at);
+	void set_physics(bool on) { physics_ = on; }
+	bool get_physics() const { return physics_; }
+	// the game's session record (docs/research/session_digest.md), the HUD
 	godot::String record() const;
 	godot::String hud() const;
 	int layer_count() const;
@@ -76,10 +82,14 @@ protected:
 private:
 	void event(int32_t e);
 	void sync();
+	godot::Vector2 cursor() const;
 
 	godot::String level_path_;
 	int infinity_ = -1;
 	int visibility_ = -1;
+	bool physics_ = true;
+	bool aimed_ = false;
+	godot::Vector2 aim_;
 	rc_game *game_ = nullptr;
 	godot::Node2D *layers_ = nullptr;
 	godot::Camera2D *camera_ = nullptr;
