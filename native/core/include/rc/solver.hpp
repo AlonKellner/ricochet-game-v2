@@ -21,6 +21,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <unordered_map>
 #include <vector>
 
 namespace rc {
@@ -89,6 +90,57 @@ struct Event {
 	Flags flags;            // the trace's flags after this event (hits)
 	bool anchored = false;  // cursor: reached on the anchored path
 	int beam_view = -1;     // identity of the beam as the events see it (Backend::views_per_run)
+};
+
+// Stage 120: the exact predicates of a frame's infinity point that depend on Q
+// alone -- its carrier incidences and its images under the circle inversions --
+// memoized across walks and solves (one memo per SolveCache: per tracer tier,
+// per defs). Keyed on Q's exact representation, the scene and the surface: an
+// equal key gives the identical result, so the walks are unchanged bit for bit.
+struct PoleMemo {
+	struct Entry {
+		exact::Point3 Q;
+		const void *scene = nullptr;
+		int surf = 0;
+		std::optional<bool> on;                            // pole_on: the carrier passes Q
+		std::optional<std::optional<exact::Point3>> image; // invert_point_h(Q, the surface's circle)
+	};
+	std::unordered_map<uint64_t, std::vector<Entry>> by_hash;
+	size_t count = 0;
+
+	static bool same(const BigFloat &a, const BigFloat &b) {
+		if (a.sign != b.sign || a.exp != b.exp || a.limbs.size() != b.limbs.size()) {
+			return false;
+		}
+		for (size_t i = 0; i < a.limbs.size(); i++) {
+			if (a.limbs[i] != b.limbs[i]) {
+				return false;
+			}
+		}
+		return true;
+	}
+	Entry &entry(const exact::Point3 &Q, const void *scene, int surf) {
+		uint64_t h = uint64_t(reinterpret_cast<uintptr_t>(scene)) * 0x9E3779B97F4A7C15ull ^ uint64_t(uint32_t(surf));
+		for (const BigFloat &x : Q) {
+			h = (h ^ uint64_t(int64_t(x.sign) + 7)) * 0x100000001B3ull;
+			h = (h ^ uint64_t(x.exp)) * 0x100000001B3ull;
+			for (size_t i = 0; i < x.limbs.size(); i++) {
+				h = (h ^ uint64_t(x.limbs[i])) * 0x100000001B3ull;
+			}
+		}
+		std::vector<Entry> &bucket = by_hash[h];
+		for (Entry &e : bucket) {
+			if (e.scene == scene && e.surf == surf && same(e.Q[0], Q[0]) && same(e.Q[1], Q[1]) && same(e.Q[2], Q[2])) {
+				return e;
+			}
+		}
+		if (++count > 65536) { // bounded: a long session's distinct frames
+			by_hash.clear();
+			count = 1;
+			return by_hash[h].emplace_back(Entry{Q, scene, surf, std::nullopt, std::nullopt});
+		}
+		return bucket.emplace_back(Entry{Q, scene, surf, std::nullopt, std::nullopt});
+	}
 };
 
 template <Num N>
@@ -331,6 +383,7 @@ struct Walk {
 	int pole_tangent_serial = -1;
 	std::map<int, bool> pole_tangent;   // surf id -> tangent at Q
 	std::map<int, bool> pole_on;        // surf id -> its carrier passes Q
+	PoleMemo *pole_memo = nullptr;      // Stage 120: across walks (the solver's cache's), or none
 	// tests only: the record beside each beam loop (record_poles)
 	bool record_poles = false;
 	std::vector<std::pair<BeamPtr<N>, std::optional<exact::ExactPole>>> pole_trace;
@@ -363,6 +416,7 @@ struct SolveCache {
 	std::shared_ptr<const AnchorChain<N>> chain;
 	bool chain_null = false;
 	std::map<std::string, std::optional<exact::Point3>> images;
+	PoleMemo poles; // Stage 120
 };
 
 // ---------------------------------------------------------------- the solver
@@ -1568,6 +1622,7 @@ private:
 		w.max_events = max_events;
 		w.Q = effects::scene_pre_q(scene_);
 		w.record_poles = record_poles_;
+		w.pole_memo = cache_ ? &cache_->poles : nullptr;
 		return w;
 	}
 
@@ -1863,7 +1918,17 @@ private:
 			const std::optional<exact::Line3> L = w.line->exact();
 			return L ? exact::pole_from_line(*L, ec.C) : std::nullopt;
 		}
-		return w.pole ? exact::pole_invert(*w.pole, ec.C, ec.rw2) : std::nullopt;
+		if (!w.pole) {
+			return std::nullopt;
+		}
+		if (w.pole_memo) {
+			PoleMemo::Entry &e = w.pole_memo->entry(w.pole->Q, w.scene, surf.id);
+			if (!e.image) {
+				e.image = exact::invert_point_h(w.pole->Q, ec.C, ec.rw2);
+			}
+			return exact::pole_invert_from(*w.pole, *e.image, ec.C);
+		}
+		return exact::pole_invert(*w.pole, ec.C, ec.rw2);
 	}
 
 	static void pole_cache(Walk<N> &w) {
@@ -1881,12 +1946,18 @@ private:
 		if (it != w.pole_on.end()) {
 			return it->second;
 		}
+		PoleMemo::Entry *e = w.pole_memo ? &w.pole_memo->entry(w.pole->Q, w.scene, surf.id) : nullptr;
 		bool r;
-		if (surf.line) {
+		if (e && e->on) {
+			r = *e->on;
+		} else if (surf.line) {
 			r = exact::pole_on_line(*w.pole, surf.sx, surf.sy, surf.ex, surf.ey);
 		} else {
 			const auto &ec = surf.exact_circle();
 			r = exact::pole_on_circle(*w.pole, ec.C, ec.rw2);
+		}
+		if (e) {
+			e->on = r;
 		}
 		w.pole_on[surf.id] = r;
 		return r;

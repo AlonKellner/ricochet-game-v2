@@ -115,6 +115,9 @@ public:
 	// the preview's traces and the visibility region's computations so far (a
 	// still frame computes neither; a cursor move no region)
 	int preview_version() const { return trace_version_; }
+	// the ladder's counters of the preview's and the region's tracers (benches; they never steer a solve)
+	rc::LadderStats preview_stats() const { return renderer_tracer_.ladder_stats(); }
+	rc::LadderStats region_stats() const { return vis_tracer_.ladder_stats(); }
 	int visibility_version() const { return visibility_version_; }
 	bool has_region() const { return region_.has_value(); }
 	const std::string &hud() const { return hud_; }
@@ -129,6 +132,9 @@ public:
 	// Stage 118: what the level's nodes draw (after settle()): the draw list
 	// (rcg/render.hpp), one node per thing drawn, in the GDScript nodes' calls
 	std::vector<render::Node> draw() const;
+	// Stage 120: the same list for a host's frame -- the painters' calls shared and
+	// cached by their inputs, each node with its id and content version
+	std::vector<render::FrameNode> draw_frame() const;
 
 	const std::vector<PlanEntry> &plan() const { return plan_; }
 	const rc::Flags &flags() const { return flags_; }
@@ -210,6 +216,8 @@ private:
 	std::vector<std::pair<int, bool>> targets_; // targets_of(flags), in the flags' order
 	std::vector<PlanEntry> plan_;
 	int plan_version_ = 0;
+	int flags_version_ = 0; // bumped when the flags change (their encoding: the record's)
+	void set_flags(const rc::Flags &f);
 	std::vector<Checkpoint> checkpoints_;
 	Checkpoint initial_;
 	int display_mode_ = 0;
@@ -221,12 +229,51 @@ private:
 	int hovered_serial_ = 0, partner_serial_ = 0;
 	bool edge_hovered_ = false;
 	std::optional<V2> edge_point_;
-	nlohmann::json edge_marks_ = nlohmann::json::array();
+	// an infinity entry's mark on the edge (EdgeOverlayNode's marks)
+	struct EdgeMark {
+		int index = 0;
+		V2 point;
+		bool on_point = false;
+		bool valid = false;
+	};
+	std::vector<EdgeMark> edge_marks_;
 	// the derived state and the inputs it was made from
 	Preview preview_;
-	nlohmann::json preview_inputs_;
+	// what each derived part was made from (Stage 120: typed keys, not JSON; the
+	// plan and the flags by their versions, positions by value as JSON compared them)
+	struct PreviewKey {
+		V2 player, cursor;
+		int plan = 0, flags = 0, world = 0;
+		bool operator==(const PreviewKey &) const = default;
+	};
+	struct HoverKey {
+		V2 cursor;
+		int plan = 0, flags = 0;
+		bool operator==(const HoverKey &) const = default;
+	};
+	struct OverlayKey {
+		int trace = 0, plan = 0, flags = 0;
+		bool operator==(const OverlayKey &) const = default;
+	};
+	struct VisKey {
+		V2 player;
+		int plan = 0, flags = 0, world = 0;
+		bool infinity = false, visibility = false;
+		bool operator==(const VisKey &) const = default;
+	};
+	struct SpawnKey {
+		int trace = 0, world = 0;
+		bool operator==(const SpawnKey &) const = default;
+	};
+	std::optional<PreviewKey> preview_inputs_;
 	int trace_version_ = 0;
-	nlohmann::json hover_inputs_, overlay_inputs_, vis_inputs_, spawn_inputs_;
+	std::optional<HoverKey> hover_inputs_;
+	std::optional<OverlayKey> overlay_inputs_;
+	std::optional<VisKey> vis_inputs_;
+	std::optional<SpawnKey> spawn_inputs_;
+	// pole(n) for the current plan, flags and world (it is asked several times a settle)
+	std::vector<std::optional<std::optional<V2>>> pole_cache_;
+	std::array<int, 3> pole_key_{-1, -1, -1};
 	bool vis_computed_ = false;
 	int visibility_version_ = 0;
 	std::optional<rc::vis::Result> region_;
@@ -252,6 +299,22 @@ private:
 	double physics_time_ = 0.0; // the physics ticks' time not yet run
 	bool jump_ = false;         // a jump pressed, not yet ticked
 	void tick(const kinematics::Input &in);
+	// the painters' cached output (draw_frame): a surface piece's by its inputs,
+	// the path, the region and the spawn preview by their versions
+	struct SurfaceDraw {
+		int flags = -1;
+		std::vector<Overlay> hover, plan;
+		std::vector<int> indices;
+		render::Calls calls;
+		uint64_t version = 0;
+	};
+	struct CachedDraw {
+		std::array<int, 3> key{-1, -1, -1};
+		render::Calls calls;
+		uint64_t version = 0;
+	};
+	mutable std::map<int, SurfaceDraw> surface_draw_; // by node serial
+	mutable CachedDraw path_draw_, vis_draw_, spawn_draw_, static_draw_[3];
 	void clear_hover();
 };
 

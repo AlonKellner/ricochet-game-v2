@@ -91,3 +91,24 @@ def test_tessellate_arc_is_godots_polyline():
     assert abs(pts[0][0] - 15) < 1e-5 and abs(pts[0][1] - 20) < 1e-5
     assert abs(pts[2][0] - 10) < 1e-5 and abs(pts[2][1] - 25) < 1e-5
     assert abs(pts[4][0] - 5) < 1e-5
+
+
+def test_draw_changes_sends_only_what_changed():
+    game = rc_host.Game(rc_host.Level((rc_host.ROOT / "data" / "levels" / "main.json").read_text()))
+    game.teleport(760, 600)
+    game.set_cursor(1180, 520)
+    game.advance(0)
+    first = game.draw_changes()
+    assert first and not any(n[2] for n in first), "the first call sends everything"
+    again = game.draw_changes()
+    assert all(n[2] and not n[7] for n in again), "nothing changed: every node unchanged, no commands"
+    assert [n[0] for n in again] == [n[0] for n in first], "the same ids, in the same order"
+    game.set_cursor(1180, 560)
+    game.advance(0)
+    moved = {json.dumps(n[3]): n for n in game.draw_changes()}
+    assert not moved['["path"]'][2], "the aim moved: the path is sent"
+    assert moved['["cursor"]'][2] and moved['["cursor"]'][5] == (1180, 560), "the cursor's drawing is the same, only its position moved"
+    assert all(n[2] for k, n in moved.items() if k.startswith('["surface"')), "the surfaces are unchanged"
+    # the full list is unaffected and carries the versions too
+    full = {json.dumps(n[0]): n for n in game.draw_list()}
+    assert set(full) == set(moved)

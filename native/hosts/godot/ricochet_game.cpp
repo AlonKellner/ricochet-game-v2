@@ -244,9 +244,10 @@ void RicochetGame::sync() {
 	if (camera_ != nullptr) {
 		camera_->set_position(Vector2(f.camera_x, f.camera_y));
 	}
+	// (Stage 120: only what changed carries commands; an unchanged layer keeps its drawing)
 	rc_draw_list l{};
 	l.size = sizeof l;
-	if (rc_game_draw_list(game_, &l) != RC_OK) {
+	if (rc_game_draw_changes(game_, &l) != RC_OK) {
 		report("rc_game_draw_list");
 		return;
 	}
@@ -265,9 +266,18 @@ void RicochetGame::sync() {
 		if (layer->get_index() != int(i)) {
 			layers_->move_child(layer, int(i));
 		}
-		layer->set_z_index(n.z);
-		layer->set_position(Vector2(n.x, n.y));
-		layer->set_modulate(color_at(n.modulate));
+		if (layer->get_z_index() != n.z) {
+			layer->set_z_index(n.z);
+		}
+		if (layer->get_position() != Vector2(n.x, n.y)) {
+			layer->set_position(Vector2(n.x, n.y));
+		}
+		if (layer->get_modulate() != color_at(n.modulate)) {
+			layer->set_modulate(color_at(n.modulate));
+		}
+		if (l.node_unchanged[i]) {
+			continue;
+		}
 		std::vector<LayerCmd> cmds;
 		std::string blob;
 		for (uint32_t j = n.cmd_first; j < n.cmd_first + n.cmd_count; j++) {

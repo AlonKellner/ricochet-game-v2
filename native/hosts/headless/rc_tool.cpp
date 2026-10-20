@@ -12,26 +12,24 @@
 //                                             (bench/sessions) holds them; --check: compare with the golden
 //                                             instead of writing; --full: the records hold the draw list
 //                                             itself, not its sha
-//   rc_tool bench <level json> [--frames N] [--budget ms]
-//                                             the game's per-frame cost on a level (phases: still,
-//                                             cursor and player orbits, a plan, a hover); fails when
-//                                             a still frame recomputes or a mean frame is over budget
+//   rc_tool bench (<level json> | --all <levels dir>) [--frames N] [--click-frames N] [--budget ms]
+//                 [--strict] [--json out] [--md out]
+//                                             the game's per-frame cost (bench.cpp): phases still, cursor,
+//                                             plan, hover, player, click, walk, flight, C API; fails when a
+//                                             still frame recomputes (--strict: a mean over budget too)
 //
 // Exit status: 0 done, 1 a check failed or a file is invalid, 2 usage.
 #include "rcg/build.hpp"
 #include "rcg/canon.hpp"
 #include "rcg/level.hpp"
 #include "rcg/digest.hpp"
+#include "bench.hpp"
 #include "replay_capi.hpp"
-#include "rcg/session.hpp"
 #include "rcg/sweeps.hpp"
 
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
-#include <chrono>
-#include <functional>
-#include <cmath>
 #include <cstdio>
 #include <filesystem>
 #include <fstream>
@@ -50,7 +48,7 @@ int usage() {
 				 "       rc_tool dumps <levels dir> <out dir>\n"
 				 "       rc_tool manifests <sweeps recipes> <levels dir> <out dir>\n"
 				 "       rc_tool replay <sessions dir> <levels dir> (<out dir> | --check <golden dir>) [--only <substring>] [--shard i/n] [--full]\n"
-				 "       rc_tool bench <level json> [--frames N] [--budget ms]\n";
+				 "       rc_tool bench (<level json> | --all <levels dir>) [--frames N] [--click-frames N] [--budget ms] [--strict] [--json out] [--md out]\n";
 	return 2;
 }
 
@@ -235,108 +233,6 @@ int replay(std::vector<std::string> args) {
 }
 
 
-// rc_tool bench: the per-frame cost of the game on a level (Stage 119; the
-// port of the GDScript frame bench). Phases of `frames` frames, each frame a
-// settle and the draw list (what a host's frame costs the game): still (no
-// input), the cursor orbiting the player, a two-entry plan still and with the
-// orbit, the cursor hovering a surface, the player orbiting. A still phase
-// may compute the preview and the region once (its first frame), never again;
-// the cursor orbits compute no region after their first frame; the mean frame
-// of every phase but the player's orbit (a region a frame, computed in the
-// frame here) stays under the budget. Exit 1 when a phase fails.
-int bench(std::vector<std::string> args) {
-	int frames = 250;
-	double budget_ms = 8.0;
-	for (size_t i = 0; i + 1 < args.size();) {
-		if (args[i] == "--frames") {
-			frames = std::stoi(args[i + 1]);
-		} else if (args[i] == "--budget") {
-			budget_ms = std::stod(args[i + 1]);
-		} else {
-			i++;
-			continue;
-		}
-		args.erase(args.begin() + long(i), args.begin() + long(i) + 2);
-	}
-	if (args.size() != 1) {
-		return usage();
-	}
-	const rcg::Level level = rcg::load_level(args[0]);
-	rcg::Session s(level);
-	const rc::V2 home = s.player();
-	const rc::V2 aim = home + rc::V2{300.0f, -100.0f};
-	// the first two plannable sides: 6 px off the middle of a surface, on its left
-	std::vector<rc::V2> plannable;
-	for (const rcg::BuiltSurface &b : s.world().surfaces()) {
-		if (b.label && b.left && b.left->interactive && !b.pre_transform) {
-			const rc::V2 d = (b.seg.e - b.seg.s).normalized();
-			plannable.push_back(b.seg.v + rc::V2{-d.y, d.x} * 6.0f);
-		}
-	}
-	auto orbit = [&](const rc::V2 &c, double r, int k) {
-		const double a = 6.283185307179586 * k / frames;
-		return rc::V2::of(double(c.x) + r * std::cos(a), double(c.y) + r * std::sin(a));
-	};
-	struct Phase {
-		const char *name;
-		bool still;
-		std::function<void(int)> setup, step;
-	};
-	auto reset = [&](int) {
-		s.key(rcg::Action::Reset);
-		s.teleport(home);
-		s.set_cursor(aim);
-	};
-	auto plan_two = [&](int k) {
-		reset(k);
-		for (size_t i = 0; i < plannable.size() && i < 2; i++) {
-			s.set_cursor(plannable[i]);
-			s.settle();
-			s.click(false);
-		}
-		s.set_cursor(aim);
-	};
-	const std::vector<Phase> phases = {
-		{"static", true, reset, [](int) {}},
-		{"cursor_orbit", false, reset, [&](int k) { s.set_cursor(orbit(home, 420.0, k)); }},
-		{"plan_static", true, plan_two, [](int) {}},
-		{"plan_orbit", false, plan_two, [&](int k) { s.set_cursor(orbit(home, 420.0, k)); }},
-		{"hover_static", true, [&](int k) { reset(k); if (!plannable.empty()) s.set_cursor(plannable[0]); }, [](int) {}},
-		{"player_orbit", false, reset, [&](int k) { s.teleport(orbit(home, 60.0, k)); }},
-	};
-	std::printf("%-14s %8s %8s %8s %9s %9s  (%s, %d frames, budget %.1f ms)\n", "phase", "mean ms", "p95 ms", "max ms", "previews",
-		"regions", args[0].c_str(), frames, budget_ms);
-	bool failed = false;
-	for (const Phase &ph : phases) {
-		ph.setup(0);
-		const int p0 = s.preview_version(), v0 = s.visibility_version();
-		std::vector<double> ms;
-		for (int k = 0; k < frames; k++) {
-			const auto t0 = std::chrono::steady_clock::now();
-			ph.step(k);
-			s.settle();
-			const std::vector<rcg::render::Node> list = s.draw();
-			ms.push_back(std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count());
-		}
-		const int previews = s.preview_version() - p0, regions = s.visibility_version() - v0;
-		std::vector<double> sorted = ms;
-		std::sort(sorted.begin(), sorted.end());
-		double mean = 0.0;
-		for (double m : ms) {
-			mean += m / double(ms.size());
-		}
-		bool bad = false;
-		bad = bad || (ph.still && (previews > 1 || regions > 1));
-		bad = bad || ((ph.still || std::string(ph.name) == "cursor_orbit") && regions > 1);
-		bad = bad || (std::string(ph.name) != "player_orbit" && mean > budget_ms);
-		failed = failed || bad;
-		std::printf("%-14s %8.3f %8.3f %8.3f %9d %9d %s\n", ph.name, mean, sorted[size_t(double(sorted.size() - 1) * 0.95)], sorted.back(),
-			previews, regions, bad ? "FAIL" : "");
-	}
-	std::printf("rc_tool bench: %s\n", failed ? "FAIL (a still phase recomputed, or a mean frame exceeded the budget)" : "ok");
-	return failed ? 1 : 0;
-}
-
 } // namespace
 
 int main(int argc, char **argv) {
@@ -355,7 +251,7 @@ int main(int argc, char **argv) {
 		return manifests(args);
 	}
 	if (cmd == "bench") {
-		return bench(args);
+		return bench::run(args);
 	}
 	if (cmd == "replay") {
 		return replay(args);

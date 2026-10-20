@@ -128,9 +128,12 @@ public:
 		}
 		// ghost is per shot: every trace starts solid
 		flags.erase(GHOST);
-		CacheKey key{player, cursor, plan_key(plan), flags.canonical_key()};
-		if (cache_valid_ && key == cache_key_) {
-			return cache_pair_;
+		CacheKey key;
+		if (pair_cache_) {
+			key = CacheKey{player, cursor, plan_key(plan), flags.canonical_key()};
+			if (cache_valid_ && key == cache_key_) {
+				return cache_pair_;
+			}
 		}
 		Ladder ladder(*ctx_, clock_);
 		LadderResult res = ladder.solve(player.x, player.y, cursor.x, cursor.y, plan, MAX_HITS, MAX_HITS, TRACE_TOL, false, flags);
@@ -163,9 +166,11 @@ public:
 		pair.shared = shared;
 		pair.cursor_point_agrees = shared || cursor_point_agrees(pair.planned, pair.physical);
 		pair.result = std::move(res);
-		cache_key_ = key;
-		cache_pair_ = pair;
-		cache_valid_ = true;
+		if (pair_cache_) {
+			cache_key_ = key;
+			cache_pair_ = pair;
+			cache_valid_ = true;
+		}
 		return pair;
 	}
 
@@ -275,6 +280,14 @@ public:
 	}
 
 	void set_clock(Ladder::Clock clock) { clock_ = std::move(clock); }
+
+	// Stage 120: trace_pair keeps its last result for an identical call (on by
+	// default); a caller that never repeats a call (it caches by its own inputs)
+	// turns it off and saves the copy.
+	void set_pair_cache(bool on) {
+		pair_cache_ = on;
+		cache_valid_ = false;
+	}
 
 	// The ladder's counters since the context was built or reset (benches),
 	// the helpers' included.
@@ -464,6 +477,7 @@ private:
 	std::vector<std::unique_ptr<Tracer>> helpers_;
 	Ladder::Clock clock_ = Ladder::steady_usec;
 	bool cache_valid_ = false;
+	bool pair_cache_ = true;
 	CacheKey cache_key_;
 	std::optional<TracePair> cache_pair_;
 

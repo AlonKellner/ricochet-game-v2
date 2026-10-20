@@ -11,6 +11,7 @@
 #include <cmath>
 #include <cstring>
 #include <exception>
+#include <map>
 #include <memory>
 #include <mutex>
 #include <string>
@@ -29,6 +30,10 @@ struct rc_game {
 	std::vector<float> points, colors;
 	std::vector<int32_t> indices;
 	std::string text;
+	std::vector<uint64_t> node_ids, node_versions;
+	std::vector<uint8_t> node_unchanged;
+	std::map<uint64_t, uint64_t> sent;        // rc_game_draw_changes: id -> the version last sent
+	std::map<uint64_t, std::string> key_text; // id -> its key's JSON
 	std::string hud;
 	std::string record;
 };
@@ -269,81 +274,114 @@ rc_status rc_game_frame(const rc_game *game, rc_frame *out) {
 	});
 }
 
-rc_status rc_game_draw_list(rc_game *game, rc_draw_list *out) {
-	return guarded([&]() -> rc_status {
-		if (game == nullptr || !sized(out)) {
-			return fail(RC_E_ARGUMENT, "rc_game_draw_list: null game or unsized list");
+namespace {
+
+// The draw list into the game's pools; changes_only: unchanged nodes (since the
+// last such call) without their commands.
+rc_status draw_list(rc_game *game, rc_draw_list *out, bool changes_only) {
+	if (game == nullptr || !sized(out)) {
+		return fail(RC_E_ARGUMENT, "rc_game_draw_list: null game or unsized list");
+	}
+	std::vector<rcg::render::FrameNode> nodes = game->session->draw_frame();
+	std::stable_sort(nodes.begin(), nodes.end(), [](const auto &a, const auto &b) { return a.z < b.z; });
+	game->nodes.clear();
+	game->cmds.clear();
+	game->points.clear();
+	game->colors.clear();
+	game->indices.clear();
+	game->text.clear();
+	game->node_ids.clear();
+	game->node_versions.clear();
+	game->node_unchanged.clear();
+	std::map<uint64_t, uint64_t> sent;
+	for (const rcg::render::FrameNode &n : nodes) {
+		const uint64_t id = n.key.id();
+		auto kt = game->key_text.find(id);
+		if (kt == game->key_text.end()) {
+			kt = game->key_text.emplace(id, n.key.json().dump()).first;
 		}
-		std::vector<rcg::render::Node> nodes = game->session->draw();
-		rcg::render::sort(nodes);
-		game->nodes.clear();
-		game->cmds.clear();
-		game->points.clear();
-		game->colors.clear();
-		game->indices.clear();
-		game->text.clear();
-		for (const rcg::render::Node &n : nodes) {
-			rc_draw_node dn{};
-			const std::string key = n.key.dump();
-			dn.key_first = u32(game->text.size());
-			dn.key_length = u32(key.size());
-			game->text += key;
-			dn.z = n.z;
-			dn.x = n.position.x;
-			dn.y = n.position.y;
-			std::copy(n.modulate.begin(), n.modulate.end(), dn.modulate);
-			dn.cmd_first = u32(game->cmds.size());
-			dn.cmd_count = u32(n.calls.size());
-			for (const rcg::render::Call &c : n.calls) {
-				rc_draw_cmd dc{};
-				dc.kind = int32_t(c.kind);
-				dc.point_first = u32(game->points.size() / 2);
-				dc.point_count = u32(c.pts.size());
-				for (const rc::V2 &p : c.pts) {
-					game->points.push_back(p.x);
-					game->points.push_back(p.y);
-				}
-				dc.color_first = u32(game->colors.size() / 4);
-				dc.color_count = u32(c.colors.size());
-				for (const rcg::render::Color &k : c.colors) {
-					game->colors.insert(game->colors.end(), k.begin(), k.end());
-				}
-				dc.index_first = u32(game->indices.size());
-				dc.index_count = u32(c.indices.size());
-				game->indices.insert(game->indices.end(), c.indices.begin(), c.indices.end());
-				dc.text_first = u32(game->text.size());
-				dc.text_length = u32(c.text.size());
-				game->text += c.text;
-				dc.arc_point_count = c.point_count;
-				dc.alignment = c.alignment;
-				dc.font_size = c.font_size;
-				dc.radius = c.radius;
-				dc.start_angle = c.start;
-				dc.end_angle = c.end;
-				dc.width = c.width;
-				dc.dash = c.dash;
-				dc.rotation = c.rotation;
-				game->cmds.push_back(dc);
+		const std::string &key = kt->second;
+		const bool unchanged = changes_only && game->sent.count(id) && game->sent[id] == n.version;
+		sent[id] = n.version;
+		rc_draw_node dn{};
+		dn.key_first = u32(game->text.size());
+		dn.key_length = u32(key.size());
+		game->text += key;
+		dn.z = n.z;
+		dn.x = n.position.x;
+		dn.y = n.position.y;
+		std::copy(n.modulate.begin(), n.modulate.end(), dn.modulate);
+		dn.cmd_first = u32(game->cmds.size());
+		dn.cmd_count = unchanged ? 0 : u32(n.calls->size());
+		for (size_t ci = 0; !unchanged && ci < n.calls->size(); ci++) {
+			const rcg::render::Call &c = (*n.calls)[ci];
+			rc_draw_cmd dc{};
+			dc.kind = int32_t(c.kind);
+			dc.point_first = u32(game->points.size() / 2);
+			dc.point_count = u32(c.pts.size());
+			for (const rc::V2 &p : c.pts) {
+				game->points.push_back(p.x);
+				game->points.push_back(p.y);
 			}
-			game->nodes.push_back(dn);
+			dc.color_first = u32(game->colors.size() / 4);
+			dc.color_count = u32(c.colors.size());
+			for (const rcg::render::Color &k : c.colors) {
+				game->colors.insert(game->colors.end(), k.begin(), k.end());
+			}
+			dc.index_first = u32(game->indices.size());
+			dc.index_count = u32(c.indices.size());
+			game->indices.insert(game->indices.end(), c.indices.begin(), c.indices.end());
+			dc.text_first = u32(game->text.size());
+			dc.text_length = u32(c.text.size());
+			game->text += c.text;
+			dc.arc_point_count = c.point_count;
+			dc.alignment = c.alignment;
+			dc.font_size = c.font_size;
+			dc.radius = c.radius;
+			dc.start_angle = c.start;
+			dc.end_angle = c.end;
+			dc.width = c.width;
+			dc.dash = c.dash;
+			dc.rotation = c.rotation;
+			game->cmds.push_back(dc);
 		}
-		rc_draw_list l{};
-		l.size = sizeof(rc_draw_list);
-		l.nodes = game->nodes.data();
-		l.node_count = u32(game->nodes.size());
-		l.cmds = game->cmds.data();
-		l.cmd_count = u32(game->cmds.size());
-		l.points = game->points.data();
-		l.point_count = u32(game->points.size() / 2);
-		l.colors = game->colors.data();
-		l.color_count = u32(game->colors.size() / 4);
-		l.indices = game->indices.data();
-		l.index_count = u32(game->indices.size());
-		l.text = game->text.data();
-		l.text_length = u32(game->text.size());
-		fill(out, l);
-		return RC_OK;
-	});
+		game->nodes.push_back(dn);
+		game->node_ids.push_back(id);
+		game->node_versions.push_back(n.version);
+		game->node_unchanged.push_back(unchanged ? 1 : 0);
+	}
+	if (changes_only) {
+		game->sent = std::move(sent);
+	}
+	rc_draw_list l{};
+	l.size = sizeof(rc_draw_list);
+	l.nodes = game->nodes.data();
+	l.node_count = u32(game->nodes.size());
+	l.cmds = game->cmds.data();
+	l.cmd_count = u32(game->cmds.size());
+	l.points = game->points.data();
+	l.point_count = u32(game->points.size() / 2);
+	l.colors = game->colors.data();
+	l.color_count = u32(game->colors.size() / 4);
+	l.indices = game->indices.data();
+	l.index_count = u32(game->indices.size());
+	l.text = game->text.data();
+	l.text_length = u32(game->text.size());
+	l.node_ids = game->node_ids.data();
+	l.node_versions = game->node_versions.data();
+	l.node_unchanged = game->node_unchanged.data();
+	fill(out, l);
+	return RC_OK;
+}
+
+} // namespace
+
+rc_status rc_game_draw_list(rc_game *game, rc_draw_list *out) {
+	return guarded([&]() -> rc_status { return draw_list(game, out, false); });
+}
+
+rc_status rc_game_draw_changes(rc_game *game, rc_draw_list *out) {
+	return guarded([&]() -> rc_status { return draw_list(game, out, true); });
 }
 
 rc_status rc_game_hud(rc_game *game, const char **text, size_t *length) {

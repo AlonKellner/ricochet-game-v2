@@ -256,11 +256,11 @@ public:
 		const long long t0 = clock_();
 		LadderResult r;
 		// ---- physical
-		const Climb cp = solve_physical_into(r, px, py, cx, cy, plan, max_physical, tol, verify, flags);
+		solve_physical_into(r, px, py, cx, cy, plan, max_physical, tol, verify, flags);
+		const Climb &cp = r.physical;
 		const long long t1 = clock_();
 		r.usec_physical = t1 - t0;
 		if (cp.empty()) {
-			r.physical = Climb{};
 			return r;
 		}
 		// ---- planned: the physical walk that reached the cursor anchored decided
@@ -305,7 +305,7 @@ public:
 				const BigFloat l = BigFloat::from_int(1, limbs);
 				return big.planned(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, max_planned, flags);
 			};
-			r.planned = decide(sq, wq->events, est_q, tol, verify, planned_fn);
+			r.planned = decide(sq, std::move(wq->events), est_q, tol, verify, planned_fn);
 		}
 		r.usec_planned = clock_() - t1;
 		r.usec = clock_() - t0;
@@ -395,15 +395,16 @@ private:
 
 	using Compute = std::function<std::vector<Event<BigFloat>>(int)>;
 
-	Climb solve_physical_into(LadderResult &r, double px, double py, double cx, double cy, const std::vector<PlanItem> &plan,
+	// (Stage 120: the walk's events moved, not copied, into the estimate and the result)
+	void solve_physical_into(LadderResult &r, double px, double py, double cx, double cy, const std::vector<PlanItem> &plan,
 			int max_physical, double tol, bool verify, const Flags &flags) {
 		Solver<Dual> fast(ctx_.dual_scene(), &ctx_.dual_cache());
 		fast.force_reversed = force_;
 		const CN<Dual> P{Dual{px, 0.0}, Dual{py, 0.0}};
 		const CN<Dual> Cc{Dual{cx, 0.0}, Dual{cy, 0.0}};
 		std::optional<Walk<Dual>> wp = fast.run(P, Cc, plan, Mode::Physical, max_physical, flags);
-		F64Events ev = wp ? wp->events : F64Events{};
-		std::vector<double> gains = wp ? wp->gains : std::vector<double>{};
+		F64Events ev = wp ? std::move(wp->events) : F64Events{};
+		std::vector<double> gains = wp ? std::move(wp->gains) : std::vector<double>{};
 		const estimate::Sensitivity sp = estimate::collect(ev, gains);
 		const std::vector<double> est_p = estimate::estimate(sp, tier_eps(0));
 		auto physical_fn = [&](int limbs) -> std::vector<Event<BigFloat>> {
@@ -412,10 +413,8 @@ private:
 			const BigFloat l = BigFloat::from_int(1, limbs);
 			return big.physical(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, max_physical, flags);
 		};
-		const Climb cp = decide(sp, ev, est_p, tol, verify, physical_fn);
-		r.physical = cp;
+		r.physical = decide(sp, std::move(ev), est_p, tol, verify, physical_fn);
 		r.physical_sens = sp;
-		return cp;
 	}
 
 	static int cursor_index_of(const F64Events &events) {
@@ -464,7 +463,7 @@ private:
 		return w;
 	}
 
-	Climb decide(const estimate::Sensitivity &sens, const F64Events &events, const std::vector<double> &est, double tol, bool verify,
+	Climb decide(const estimate::Sensitivity &sens, F64Events events, const std::vector<double> &est, double tol, bool verify,
 			const Compute &compute) {
 		const bool reliable = sens.unreliable_from < 0 && !events.empty();
 		LadderStats &st = ctx_.stats();
@@ -480,7 +479,7 @@ private:
 		}
 		if (reliable && worst(est) <= tol && !verify) {
 			Climb c;
-			c.f64_events = events;
+			c.f64_events = std::move(events);
 			c.err = est;
 			c.limbs = 0;
 			c.converged = true;

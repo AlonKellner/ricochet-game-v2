@@ -212,7 +212,10 @@ std::optional<ExactPole> pole_reflect(const ExactPole &p, double sx, double sy, 
 }
 
 std::optional<ExactPole> pole_invert(const ExactPole &p, const Point3 &C, const BigFloat &rw2) {
-	const std::optional<Point3> Q = invert_point_h(p.Q, C, rw2);
+	return pole_invert_from(p, invert_point_h(p.Q, C, rw2), C);
+}
+
+std::optional<ExactPole> pole_invert_from(const ExactPole &p, const std::optional<Point3> &Q, const Point3 &C) {
 	if (!Q) {
 		return std::nullopt; // Q was the center: it goes to infinity
 	}
