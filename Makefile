@@ -22,7 +22,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: test run test-verbose test-stage test-fast bench bench-stress frame-bench oracle-test pyhost shots \
+.PHONY: test run test-verbose bench bench-stress frame-bench oracle-test pyhost shots \
 	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
 	sessions sessions-check
 
@@ -181,32 +181,16 @@ oracle-test:
 	@if [ -x $(ORACLE_PY) ]; then $(ORACLE_PY) -m pytest -q docs/research/oracle; \
 	else echo "!! oracle tests skipped: no docs/research/.venv (python3 -m venv docs/research/.venv && docs/research/.venv/bin/pip install mpmath numpy pytest)"; fi
 
-# ------------------------------------------------------------------ GUT tests
+# ------------------------------------------------------------------ the Godot suite
+# Stage 119: the Godot host alone (tests/test_adapter_smoke.gd, tests/test_session_replay.gd)
 test: native oracle-test
-	$(GODOT) --headless -s addons/gut/gut_cmdln.gd
+	SKIP_BUILD=1 SKIP_ORACLE=1 ./run_tests_parallel.sh
 
 run:
 	$(GODOT)
 
 test-verbose:
 	$(GODOT) --headless -s addons/gut/gut_cmdln.gd -glog=3
-
-# Exact stage files (tests/test_stage<N>_*.gd), not a substring match.
-test-stage:
-	@if [ -z "$(STAGE)" ]; then echo "Usage: make test-stage STAGE=1"; exit 1; fi
-	@files="$$(ls tests/test_stage$(STAGE)_*.gd 2>/dev/null | sed 's#^#res://#' | paste -sd, -)"; \
-	if [ -z "$$files" ]; then echo "No tests match tests/test_stage$(STAGE)_*.gd"; exit 1; fi; \
-	echo "$$files" | tr ',' '\n'; \
-	$(GODOT) --headless -s addons/gut/gut_cmdln.gd -gconfig= -gtest="$$files" -gexit
-
-# ctest plus every non-sweep GUT file in one process (the sweeps are the slow
-# tests; run_tests_parallel.sh shards them).
-SWEEPS := test_invariant_sweep.gd test_invariant_combos.gd test_precision_invariant_sweep.gd test_stage107_level_sweep.gd test_stage108_level_sweep.gd test_visibility_sweep.gd
-FAST_TESTS := $(filter-out $(addprefix tests/,$(SWEEPS)),$(wildcard tests/test_*.gd)) \
-	$(wildcard tests/native/test_*.gd)
-test-fast: core native ctest oracle-test
-	$(GODOT) --headless -s addons/gut/gut_cmdln.gd -gconfig= \
-		-gtest=$(subst $(space),$(comma),$(addprefix res://,$(FAST_TESTS))) -gexit
 
 # ------------------------------------------------------------------ benchmarks
 # Precision benchmark: GDScript strategies vs the mpmath oracle corpus
