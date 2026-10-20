@@ -1,0 +1,25 @@
+{
+ "schema": "rc-session/1",
+ "level": "test_levels/crossings",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    300.0,
+    800.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    400.0,
+    800.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  }
+ ]
+}

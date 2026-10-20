@@ -1,0 +1,69 @@
+{
+ "schema": "rc-session/1",
+ "level": "test_levels/ghost_room",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    900.0,
+    540.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    995.0,
+    540.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    745.0,
+    530.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    655.0,
+    550.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    745.0,
+    530.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1300.0,
+    540.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  }
+ ]
+}

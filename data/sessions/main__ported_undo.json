@@ -1,0 +1,146 @@
+{
+ "schema": "rc-session/1",
+ "level": "main",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    400.0,
+    600.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    500.0,
+    600.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "teleport",
+   "at": [
+    200.0,
+    400.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    300.0,
+    400.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "teleport",
+   "at": [
+    300.0,
+    400.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    400.0,
+    400.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "teleport",
+   "at": [
+    999.0,
+    999.0
+   ]
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "teleport",
+   "at": [
+    500.0,
+    500.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    500.0,
+    500.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "key",
+   "action": "cycle_display"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1200.0,
+    540.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "cursor",
+   "at": [
+    500.0,
+    1075.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "teleport",
+   "at": [
+    600.0,
+    450.0
+   ]
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  }
+ ]
+}

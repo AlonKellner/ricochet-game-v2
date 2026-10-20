@@ -1,0 +1,61 @@
+{
+ "schema": "rc-session/1",
+ "level": "test_levels/hit_effects",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    300.0,
+    220.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    400.0,
+    220.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "teleport",
+   "at": [
+    800.0,
+    690.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    900.0,
+    690.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "teleport",
+   "at": [
+    350.0,
+    800.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    450.0,
+    900.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  }
+ ]
+}

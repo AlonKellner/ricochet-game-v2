@@ -55,6 +55,13 @@ struct Overlay {
 	bool operator==(const Overlay &) const = default;
 };
 
+// ChevronOverlayBuilder.build_plan_overlays: the plan entries' chevrons, as
+// (surface id, overlay) in plan order -- incoming valid when the physical
+// preview hits the planned side on the segment (and on the entry's piece),
+// outgoing valid when such a hit continues; hits: the physical hits by surface.
+std::vector<std::pair<int, Overlay>> plan_overlays(const std::vector<PlanEntry> &plan,
+		const std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> &hits, const World &world, const rc::Flags &flags);
+
 enum class Action { Undo, Reset, ClearPlan, CycleDisplay, ToggleGravity, ToggleVisibility, Any, Fire };
 // the session scripts' names (undo, reset, clear_plan, cycle_display, toggle_gravity, toggle_visibility, any)
 std::optional<Action> action_of(const std::string &name);
@@ -105,6 +112,9 @@ public:
 	V2 arrow_direction() const { return arrow_dir_; }
 	int display_mode() const { return display_mode_; }
 	V2 gravity() const { return gravity_; }
+	// the visibility region's computations so far (a still frame, a cursor move compute none)
+	int visibility_version() const { return visibility_version_; }
+	bool has_region() const { return region_.has_value(); }
 	const std::string &hud() const { return hud_; }
 	const Level &level() const { return level_; }
 	// the camera's target: the arrow in flight, else the player
@@ -216,6 +226,7 @@ private:
 	int trace_version_ = 0;
 	nlohmann::json hover_inputs_, overlay_inputs_, vis_inputs_, spawn_inputs_;
 	bool vis_computed_ = false;
+	int visibility_version_ = 0;
 	std::optional<rc::vis::Result> region_;
 	rc::vis::Fill fill_;
 	std::vector<std::vector<V2>> whiskers_;

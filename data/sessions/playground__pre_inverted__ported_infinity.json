@@ -1,0 +1,98 @@
+{
+ "schema": "rc-session/1",
+ "level": "playground/pre_inverted",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    620.0,
+    420.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    968.0,
+    534.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1910.0,
+    540.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "right"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    760.0,
+    470.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    968.0,
+    534.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    760.0,
+    470.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  },
+  {
+   "op": "teleport",
+   "at": [
+    620.0,
+    420.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    968.0,
+    534.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1300.0,
+    420.0
+   ]
+  },
+  {
+   "op": "fire",
+   "speedup_at": 20
+  }
+ ]
+}
