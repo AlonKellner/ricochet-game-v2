@@ -21,6 +21,15 @@ if [ -z "${SKIP_ORACLE:-}" ] && ! make -s oracle-test; then
 fi
 
 start=$(date +%s)
+# every script of the project parses (one nothing loads, e.g. a tool script, is
+# checked too: the editor parses them all at startup)
+for f in $(cd engines/godot && find scripts tests -name "*.gd"); do
+	if out=$("$GODOT" --headless --path engines/godot --check-only -s "res://$f" 2>&1 | grep -E "Parse Error|SCRIPT ERROR"); then
+		echo "!! res://$f does not parse:"
+		echo "$out" | sed 's/^/   /'
+		exit 1
+	fi
+done
 LOG=$(mktemp "${TMPDIR:-/tmp}/ricochet_gut.XXXXXX")
 "$GODOT" --headless --path engines/godot -s addons/gut/gut_cmdln.gd -gconfig= -gdir=res://tests -gprefix=test_ -gsuffix=.gd -gexit > "$LOG" 2>&1
 clean=$(sed 's/\x1b\[[0-9;]*m//g' "$LOG")

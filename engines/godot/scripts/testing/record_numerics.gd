@@ -4,10 +4,10 @@ extends SceneTree
 # native port to pin (tests/data/godot_xf2.json; rcg_tests): Transform2D
 # (the rotation constructor, xform, basis_xform, *, affine_inverse,
 # determinant) and the vector expressions of the spawn frame, on seeded random
-# inputs. Floats are written as "f" + their float64 bytes (SessionDigest);
+# inputs. Floats are written as "f" + their float64 bytes (HexJson, hex_json.gd);
 # Godot never prints or parses a number of this file.
 #
-#   godot --headless --path . -s res://scripts/testing/record_numerics.gd -- tests/data/godot_xf2.json
+#   godot --headless --path engines/godot -s res://scripts/testing/record_numerics.gd -- "$PWD/tests/data/godot_xf2.json"
 
 const N := 200
 
@@ -39,7 +39,7 @@ func _initialize() -> void:
 			"cross": (p - pos).cross(u),
 		})
 	var f := FileAccess.open(out_path, FileAccess.WRITE)
-	f.store_string(SessionDigest.encode({"schema": "godot-numerics/1", "engine": Engine.get_version_info()["string"], "cases": cases}) + "\n")
+	f.store_string(HexJson.encode({"schema": "godot-numerics/1", "engine": Engine.get_version_info()["string"], "cases": cases}) + "\n")
 	f.close()
 	print("recorded %d cases" % N)
 	quit()
