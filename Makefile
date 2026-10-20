@@ -22,7 +22,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: test run test-verbose bench bench-stress frame-bench oracle-test pyhost shots \
+.PHONY: test run test-verbose frame-bench oracle-test pyhost \
 	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
 	sessions sessions-check
 
@@ -116,20 +116,16 @@ manifests: core
 # Stage 115 (docs/research/session_digest.md): the game played through the
 # session scripts (data/sessions, docs/research/sessions/gen_sessions.py), one
 # record of its observable state per step -> bench/sessions/*.jsonl, the
-# golden every engine-agnostic port reproduces. `sessions` re-records it (a
-# changed record is a behaviour change: the judge's report first),
-# `sessions-check` records into a temporary directory and compares
-# (docs/research/session_judge.py, exit 2 on a difference). The shards run in
-# parallel Godot processes.
+# golden every host reproduces. Since Stage 119 the native game records it
+# (rc_tool replay, through the C API). `sessions` re-records it (a changed
+# record is a behaviour change: docs/research/session_judge.py's report first),
+# `sessions-check` compares a replay with it (also ctest capi_sessions_*).
 SESSIONS_DIR ?= $(CURDIR)/bench/sessions
-SESSION_JOBS ?= $(NCPU)
-sessions: native
+sessions: core
 	rm -rf "$(SESSIONS_DIR)"
-	tools/record_sessions.sh "$(SESSIONS_DIR)" $(SESSION_JOBS)
-	@ls "$(SESSIONS_DIR)" | wc -l | sed 's/^ *//; s/$$/ sessions/'
-sessions-check: native
-	@d=$$(mktemp -d "$${TMPDIR:-/tmp}/ricochet_sessions.XXXXXX"); \
-	tools/record_sessions.sh "$$d" $(SESSION_JOBS) && python3 -I docs/research/session_judge.py bench/sessions "$$d" && rm -rf "$$d"
+	$(BUILD_CORE)/rc_tool replay data/sessions data/levels "$(SESSIONS_DIR)"
+sessions-check: core
+	$(BUILD_CORE)/rc_tool replay data/sessions data/levels --check bench/sessions
 
 # ------------------------------------------------------------- goldens judge
 # Workflow W4: what the tree changes against REF (default main), dumped from
@@ -164,13 +160,6 @@ regen-apply:
 DUMPS_DIR ?= $(CURDIR)/bench/scenes
 dumps: core
 	$(BUILD_CORE)/rc_tool dumps data/levels "$(DUMPS_DIR)"
-# Stage 118: screenshots of every played level, the GDScript scene against the
-# Godot adapter (RicochetGame) in the same state; report.md counts the differing
-# pixels. Opens a window (the headless renderer draws nothing).
-SHOTS_DIR ?= $(or $(TMPDIR),/tmp)/ricochet_shots
-shots: native
-	$(GODOT) --path . --fixed-fps 60 --resolution 1920x1080 -s res://scripts/testing/shots.gd -- --out "$(SHOTS_DIR)"
-	@cat "$(SHOTS_DIR)/report.md"
 
 # Stage 118: the Python host (tests/host_py, ctypes over the C API's shared
 # library): every session through the C API equals the golden, the errors, the draw list
@@ -193,16 +182,9 @@ test-verbose:
 	$(GODOT) --headless -s addons/gut/gut_cmdln.gd -glog=3
 
 # ------------------------------------------------------------------ benchmarks
-# Precision benchmark: GDScript strategies vs the mpmath oracle corpus
-bench:
-	$(GODOT) --headless --path . -s res://scripts/testing/run_precision_bench.gd -- --strategies=beam_f64,beam_big112,ladder,ladder_verify --tag=main
-
-# Stage 100: the per-frame cost of a live scene, headless; static phases must
-# not recompute the trace (dirty flags) and the mean frame stays under budget.
-SCENE ?= res://scenes/main.tscn
+# The game's per-frame cost on a level (Stage 119, rc_tool bench): still and
+# moving phases; a still frame must not recompute, a mean frame stays under budget.
+LEVEL ?= data/levels/main.json
 FRAMES ?= 250
-frame-bench: native
-	$(GODOT) --headless --path . -s res://scripts/testing/frame_bench.gd -- --scene=$(SCENE) --frames=$(FRAMES)
-
-bench-stress:
-	$(GODOT) --headless --path . -s res://scripts/testing/run_precision_bench.gd -- --dir=stress --strategies=beam_f64,ladder,ladder_verify --tag=stress
+frame-bench: core
+	$(BUILD_CORE)/rc_tool bench $(LEVEL) --frames $(FRAMES)

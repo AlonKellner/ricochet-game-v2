@@ -112,7 +112,9 @@ public:
 	V2 arrow_direction() const { return arrow_dir_; }
 	int display_mode() const { return display_mode_; }
 	V2 gravity() const { return gravity_; }
-	// the visibility region's computations so far (a still frame, a cursor move compute none)
+	// the preview's traces and the visibility region's computations so far (a
+	// still frame computes neither; a cursor move no region)
+	int preview_version() const { return trace_version_; }
 	int visibility_version() const { return visibility_version_; }
 	bool has_region() const { return region_.has_value(); }
 	const std::string &hud() const { return hud_; }

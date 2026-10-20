@@ -2,7 +2,8 @@
 #
 #   ricochet_core  static, Godot-free (namespace rc)        core/
 #   ricochet_game  static, engine-free (namespace rcg)      game/  (Stage 115: levels, ...)
-#   ricochet_gd    shared GDExtension, links core+godot-cpp gd/   -> native/bin/
+#   rc_capi        the C API (rc_api.h), static and shared       capi/
+#   ricochet_gd    shared GDExtension: the Godot host on the C API  hosts/godot/ -> native/bin/
 #   rc_tests       doctest executable, registered with ctest tests/
 #   rcg_tests      doctest executable for the game layer       tests/game/
 #   rc_tool        the headless host (data pipelines)           hosts/headless/
@@ -118,11 +119,10 @@ if(RC_BUILD_EXTENSION)
     set(GODOTCPP_SYSTEM_HEADERS ON CACHE BOOL "godot-cpp headers are not held to the rc warning flags")
     add_subdirectory(extern/godot-cpp SYSTEM)
 
-    # (Stage 118: with the adapter, hosts/godot -- on the C API alone)
-    file(GLOB RC_GD_SOURCES CONFIGURE_DEPENDS gd/*.cpp hosts/godot/*.cpp)
+    # Stage 119: the Godot host (hosts/godot), on the C API alone
+    file(GLOB RC_GD_SOURCES CONFIGURE_DEPENDS hosts/godot/*.cpp)
     add_library(ricochet_gd SHARED ${RC_GD_SOURCES})
-    target_include_directories(ricochet_gd PRIVATE hosts/godot)
-    target_link_libraries(ricochet_gd PRIVATE ricochet_core ricochet_game rc_capi godot-cpp)
+    target_link_libraries(ricochet_gd PRIVATE rc_capi godot-cpp)
 
     get_target_property(GODOTCPP_SUFFIX godot-cpp GODOTCPP_SUFFIX)
     set_target_properties(ricochet_gd PROPERTIES

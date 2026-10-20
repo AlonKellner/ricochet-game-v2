@@ -2,7 +2,7 @@
 # The gates, in order, with one timed summary (docs/WORKFLOW.md):
 #   LEVEL=commit (make gate): the core build, the oracle, ctest (RelWithDebInfo,
 #     build-core; the native sweeps at one player in 4), the extension build,
-#     the level dumps current, the sweep manifests current, the session replay current, the Python host
+#     the level dumps current, the sweep manifests current, the Python host
 #     on the C API (tests/host_py), the GUT suite
 #     (its sweeps sampled), the goldens unchanged.
 #   LEVEL=merge (make gates): the same with every sweep player, then ctest under
@@ -59,11 +59,6 @@ dumps_current() {
 	rm -rf "$d"
 }
 
-# the committed session replay golden is what the game plays now (Stage 115)
-sessions_current() {
-	make -s sessions-check
-}
-
 goldens_unchanged() {
 	local d
 	d=$(git diff --stat bench/goldens bench/sessions bench/scenes)
@@ -80,7 +75,6 @@ fi
 gate native make native
 gate dumps dumps_current
 gate manifests manifests_current
-gate sessions sessions_current
 gate pyhost make -s pyhost
 gate gut env SKIP_ORACLE=1 SKIP_BUILD=1 ./run_tests_parallel.sh
 if [ "$LEVEL" = merge ]; then
