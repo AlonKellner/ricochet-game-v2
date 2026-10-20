@@ -133,6 +133,11 @@ before the next call that mutates the game.
   retained draw object per node, and redraw a node only when its commands change. The Godot host compares
   the commands' bytes.
 
+**Changes only (C API 1.1).** `rc_game_draw_changes` returns the same list, with each node's stable id
+(`node_ids`) and content version (`node_versions`). A node whose commands are the same as at the previous call is
+marked `node_unchanged` and carries no commands: keep what you drew for it, and update only its position, z and
+modulate. A node missing from the list is gone. The Godot host draws this way.
+
 **Commands.** Each kind uses the fields listed:
 
 | Kind | Fields | Meaning |
