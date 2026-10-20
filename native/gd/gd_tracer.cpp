@@ -2,6 +2,11 @@
 #include "gd_visibility.hpp"
 
 #include "rc/error.hpp"
+#include "rcg/digest.hpp"
+#include "rcg/trace_json.hpp"
+
+#include <cstdlib>
+#include <fstream>
 
 #include <godot_cpp/core/class_db.hpp>
 
@@ -460,10 +465,37 @@ void BeamTracer::use_defs(const Array &defs) {
 	converted_key = defs_key;
 }
 
+// Stage 119: RC_CAPTURE=<file> appends every trace_pair call (its inputs as
+// the solver takes them, its output) under RC_CAPTURE_KEY: the GUT suite's
+// solver scenarios, recorded before the GDScript game is deleted
+// (bench/gut_traces, replayed by rcg_tests "gut traces").
+static void capture(const rc::Tracer &t, const std::vector<rc::SurfaceDef> &defs, const rc::V2 &player, const rc::V2 &cursor,
+		const std::vector<rc::PlanItem> &plan, const rc::Flags &flags, const std::optional<rc::TracePair> &pair) {
+	const char *path = std::getenv("RC_CAPTURE");
+	if (path == nullptr || *path == '\0') {
+		return;
+	}
+	const char *key = std::getenv("RC_CAPTURE_KEY");
+	nlohmann::ordered_json line;
+	line["key"] = key != nullptr ? key : "";
+	line["emit_infinity"] = t.emit_infinity();
+	line["defs"] = rcg::trace_json::defs(defs);
+	line["player"] = {double(player.x), double(player.y)};
+	line["cursor"] = {double(cursor.x), double(cursor.y)};
+	line["plan"] = rcg::trace_json::plan(plan);
+	line["flags"] = rcg::trace_json::flags(flags);
+	line["out"] = rcg::digest::encode(rcg::trace_json::pair(pair)); // (the digest encoding: an infinite end point, a signed zero)
+	std::ofstream out(path, std::ios::app);
+	out << line.dump() << "\n";
+}
+
 Ref<BeamTracerPair> BeamTracer::trace_pair(const Array &defs, const Vector2 &player, const Vector2 &cursor, const Array &plan_entries,
 		const Dictionary &flags, const Dictionary &segments) {
 	use_defs(defs);
 	const std::optional<rc::TracePair> pair = tracer.trace_pair(to_v2(player), to_v2(cursor), plan_from_items(plan_entries), flags_from_dict(flags));
+	if (std::getenv("RC_CAPTURE") != nullptr) {
+		capture(tracer, defs_from_array(defs), to_v2(player), to_v2(cursor), plan_from_items(plan_entries), flags_from_dict(flags), pair);
+	}
 	if (!pair) {
 		return Ref<BeamTracerPair>();
 	}

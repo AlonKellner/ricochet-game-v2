@@ -34,6 +34,19 @@ func test_every_levels_pieces_are_the_games():
 
 var _rng := RandomNumberGenerator.new()
 
+# Stage 119: RC_CAPTURE records each pair and the GDScript game's answers
+# (tools/capture_gut_traces.py -> bench/gut_traces; rcg_tests "gut traces")
+func _capture(row: Dictionary) -> void:
+	var path := OS.get_environment("RC_CAPTURE")
+	if path == "":
+		return
+	var f := FileAccess.open(path, FileAccess.READ_WRITE if FileAccess.file_exists(path) else FileAccess.WRITE)
+	f.seek_end()
+	row["key"] = OS.get_environment("RC_CAPTURE_KEY")
+	row["kind"] = "crossings"
+	f.store_string(SessionDigest.encode(row) + "\n")
+	f.close()
+
 func _pt() -> Vector2:
 	return Vector2(_rng.randf_range(0, 1000), _rng.randf_range(0, 1000))
 
@@ -77,6 +90,7 @@ func test_random_crossings_are_the_games():
 			params.append(Crossings.param(sa, p))
 			inc.append(Crossings.incident(sa, p))
 		var gd := {"crossings": gd_x, "params": params, "incident": inc, "span_a": Crossings.span(sa), "span_b": Crossings.span(sb)}
+		_capture({"a": a, "b": b, "points": points, "gd": gd})
 		if native != gd:
 			assert_eq(native, gd, "pair %d: %s / %s" % [i, a, b])
 			return
