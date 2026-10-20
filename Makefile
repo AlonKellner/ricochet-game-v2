@@ -24,7 +24,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: test run test-verbose frame-bench oracle-test pyhost \
+.PHONY: test run test-verbose frame-bench perf perf-diff oracle-test pyhost \
 	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
 	sessions sessions-check godot-data
 
@@ -199,3 +199,13 @@ LEVEL ?= data/levels/main.json
 FRAMES ?= 250
 frame-bench: core
 	$(BUILD_CORE)/rc_tool bench $(LEVEL) --frames $(FRAMES)
+
+# Stage 120: every level's phases -> build/perf/perf.{json,md} (not committed:
+# timing is evidence, never a gate); compare two reports with perf-diff.
+PERF_DIR ?= build/perf
+PERF_FRAMES ?= 120
+perf: core
+	$(BUILD_CORE)/rc_tool bench --all data/levels --frames $(PERF_FRAMES) --json $(PERF_DIR)/perf.json --md $(PERF_DIR)/perf.md
+perf-diff:
+	@if [ -z "$(A)" ] || [ -z "$(B)" ]; then echo "usage: make perf-diff A=old.json B=new.json"; exit 2; fi
+	python3 -I tools/perf_diff.py $(A) $(B)

@@ -23,7 +23,7 @@ fi
 start=$(date +%s)
 # every script of the project parses (one nothing loads, e.g. a tool script, is
 # checked too: the editor parses them all at startup)
-for f in $(cd engines/godot && find scripts tests -name "*.gd"); do
+for f in $(cd engines/godot && find scripts tests tools -name "*.gd"); do
 	if out=$("$GODOT" --headless --path engines/godot --check-only -s "res://$f" 2>&1 | grep -E "Parse Error|SCRIPT ERROR"); then
 		echo "!! res://$f does not parse:"
 		echo "$out" | sed 's/^/   /'

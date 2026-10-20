@@ -115,6 +115,9 @@ public:
 	// the preview's traces and the visibility region's computations so far (a
 	// still frame computes neither; a cursor move no region)
 	int preview_version() const { return trace_version_; }
+	// the ladder's counters of the preview's and the region's tracers (benches; they never steer a solve)
+	rc::LadderStats preview_stats() const { return renderer_tracer_.ladder_stats(); }
+	rc::LadderStats region_stats() const { return vis_tracer_.ladder_stats(); }
 	int visibility_version() const { return visibility_version_; }
 	bool has_region() const { return region_.has_value(); }
 	const std::string &hud() const { return hud_; }

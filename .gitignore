@@ -40,6 +40,8 @@ __pycache__/
 
 # Generated test output
 violations.json
+# make perf reports (timing is evidence, not committed)
+build/
 
 # Precision benchmark outputs (regenerate with make bench)
 bench/results/
