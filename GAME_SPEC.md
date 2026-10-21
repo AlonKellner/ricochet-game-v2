@@ -1519,7 +1519,8 @@ VisibilityRegion:
     loops:    closed loops of edges (member arcs, carrier arcs, the clip rectangle)
     whiskers: the region's 1D parts (no area; see 15.1)
     cells:    the cells (a partition of the region; the checks read them)
-    fill:     one triangle mesh of the cells, tessellated conformingly -- what is drawn
+    fill:     one triangle mesh of the cells, tessellated conformingly
+    outline:  the union of the cells (outer rings and holes) and its triangulation -- what is drawn (Stage 123)
     contains(c) -> Inside | Outside | Unclassified
 ```
 
@@ -2474,6 +2475,7 @@ Preview must update **every frame at 60fps** (~16.6ms per frame). Target: previe
 - **Recompute only on change** *(implemented, Stage 100)*: the preview, the hover and the plan overlays are recomputed only when their inputs changed (player, cursor, plan entries, state flags, surfaces); a frame in which nothing moved does no solver or draw work. Scene defs for the solver are built once per level.
 - **The frame never waits for the solver** *(implemented, Stage 121, docs/TDD_26_ASYNC.md)*: in a live game (asynchronous) the visibility region is computed in the background and the frame shows the last finished one meanwhile (while the player keeps moving a running region finishes and shows; only a newer one replaces it). When the float64 preview cannot decide exactly, the frame shows it provisionally while the exact climb runs in the background; only the exact preview drives the rules (hover and plan overlays, the spawn preview, the record, a fire, which waits for it). While the cursor rests on a plannable side and nothing else computes, the region that side's click would make is computed ahead (prefetch), so the click shows its region at once. Replays and tests run synchronously (everything in the frame, in order): the asynchronous game, once its work is done, reaches the synchronous game's state byte for byte.
 - **Every visual change is animated** *(Stage 122, docs/TDD_27_PRESENTATION.md; presentation only: the game's state, its record and every result are unchanged)*: the player is drawn between its last two physics ticks, so motion is smooth at any display rate. The smoothing covers lateness only: an asynchronous frame waits for the work it started up to its budget (`rc_game_config.budget_ms`), and what finishes in time is drawn as it is, with no smoothing. Only a late visibility region morphs in from the shape on screen, in about 100 ms (ease-out), as a diff of shapes, with crisp straight edges and no blending: its pieces (the cells) pair by place, each pair's vertices are aligned like a diff (a vertex on the same surfaces before and after pairs with itself), and an unpaired vertex moves to (from) the closest point of the other shape between its paired neighbours; a piece with no partner grows out of the other shape's closest edge. While a region is late, the shown one, when its rays leave the player, follows the drawn player: its shadows' far ends recast through their occluding corners. A newer region retargets the morph from the shape shown; every morph ends on the exact region.
+- **Regions on time** *(Stage 123, docs/TDD_28_FAST_REGIONS.md)*: the target is at least 120 Hz (an 8.3 ms frame; the Godot host waits up to 4 ms for a frame's work), so that the smoothing above does not trigger. Precision is spent only where a decision can differ (§31.4 ties by identity, §31.5 what a caller reads). A region with no plan is built within 4 ms on every shipped level; a region with a plan is not yet (4–35 ms on 14 levels), and is smoothed meanwhile.
 - **Spatial indexing**: broad-phase rejection of distant surfaces.
 - **Precision on demand** *(implemented)*: the float64 `FastSolver` pass is accepted when its `ErrorEstimate` is ≤ 0.01 px and every decision margin exceeds its error. Only otherwise does `PrecisionLadder` climb BigFloat tiers (§31.5). The float64 scene and the last trace pair are cached (§17.2). *(Replaces the legacy "frame transform caching" of `M⁻¹`, which no longer exists.)*
 
@@ -2534,7 +2536,8 @@ In the beam solver, provenance takes three forms (`beam_solver.gd` header, `trac
   - the departure point of a beam born at an exact hit point;
   - every known point of the previous beam lying on the carrier of the surface applied (an effect fixes its carrier pointwise);
   - every segment endpoint and via on an exact line;
-  - a planned projective's hit point that is a data point of its segment (K11, Stage 113), on every beam whose exact line or circle passes it.
+  - a planned projective's hit point that is a data point of its segment (K11, Stage 113), on every beam whose exact line or circle passes it;
+  - for a visibility cast along a member through a segment's endpoint found in the player's frame (§15.3), that endpoint on the walk's first beam, when the beam passes it to rounding (Stage 123: the member passes it by construction, both ways).
 
   Pops restore the earlier beam's known points.
 - **Exact lines:** a straight beam defined by exact data is kept in implicit form `a x + b y = c` with exact coefficients. Sources:
@@ -2543,6 +2546,7 @@ In the beam solver, provenance takes three forms (`beam_solver.gd` header, `trac
   - an exact line inverted in a circle whose center it contains;
   - an exact projective exit.
 - **Exact circles** (Perf P2b): every beam of an epoch is the image of a line under the frame's maps, so a beam that had an exact line (or, K9, an aimed pre-transform start: the circle through the player, the exact aim image and `Q0`) keeps an exact **generalized circle** `A (x² + y²) + B x + C y + D = 0` through every reflection, inversion and portal translation since. It is carried lazily: the exact line and the maps, made exact only when a decision needs it, within an exact-data budget. The stack saves and restores it. A projective, a rotated portal or a beam that never had an exact line has none, and makes no exact claim.
+- **Ties by identity** (Stage 123: points equal by definition are never decided by precision): crossings of carriers concurrent at one point of an exact beam are one tie group, ordered by id, however many carriers meet there; a cursor at a known point is that point (its parameter and position); surfaces on one carrier cross it at one shared root, the same parameter, one decision ordered by id.
 - **The provenance stack:** re-applying the surface on top of the stack (or hitting a portal's pair) pops it and restores the earlier beam *object*. A projective clears the stack and starts a new epoch. `frame_id` identifies `(epoch, stack)`.
 
 ### 31.5 Precision and stability (formerly: frame composition stability)
@@ -2552,7 +2556,8 @@ There is no frame composition. Numerical stability of long effect chains (invers
 - **Dynamic precision** (`PrecisionLadder`):
   1. A float64 pass (`FastSolver`, with tangent-linear derivatives) yields the trace and its a-priori error envelope (`ErrorEstimate`: `est_i = C·eps·max_{j≤i} G_j`).
   2. The pass is accepted if the estimate is ≤ 0.01 px and every decision margin exceeds its error.
-  3. Otherwise BigFloat tiers (from at least 112 bits, up to 1792) are climbed until two consecutive tiers agree within tolerance with identical event structure.
+  3. Otherwise BigFloat tiers (from at least 112 bits, up to 1792) are climbed until two consecutive tiers agree within tolerance with identical event structure. A tier measures a gap within float64's reach of zero at its own precision.
+  4. A caller that reads only part of the walks asks for precision only there (Stage 123): a visibility cast reads its physical walk through the first stop after the plan's entries (a hit applied or changing the flags) and its planned walk through the events at its cursor; a decision past them is not climbed for, and a climb walks only a little past them. The preview and the fire read whole walks.
 - **Provenance stack:** cancelling re-hits restore earlier beams exactly instead of recomputing through the chain.
 - **32-event limit** bounds chain length.
 - **Projectives** clear the stack and start from an exact line when the hit and axis are exact.
@@ -2658,4 +2663,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.34.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.35.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
