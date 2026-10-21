@@ -87,3 +87,4 @@ record or fixture is a behaviour change: bring the evidence (the judge's report)
 - `docs/TDD_01_FOUNDATION.md` through `docs/TDD_08_EDITOR_AND_POLISH.md` — Stage-by-stage implementation guide (TDD_06 is history)
 - `docs/TDD_09_PRECISION_INTEGRATION.md` through `docs/TDD_19_FORK_RULE.md` — The beam solver, the native core, hit effects, crossings, spec import, visibility
 - `docs/TDD_20_ENGINE_AGNOSTIC_DATA.md` through `docs/TDD_24_ENGINE_SWITCH.md` — The engine-agnostic port
+- `docs/TDD_25_FRAME_COST.md` onward — Smoother frames: the measurement harness, asynchrony (`rcg/jobs.hpp`), presentation
