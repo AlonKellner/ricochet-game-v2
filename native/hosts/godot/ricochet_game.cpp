@@ -105,6 +105,10 @@ void RicochetGame::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_physics", "on"), &RicochetGame::set_physics);
 	ClassDB::bind_method(D_METHOD("set_asynchronous", "on"), &RicochetGame::set_asynchronous);
 	ClassDB::bind_method(D_METHOD("get_asynchronous"), &RicochetGame::get_asynchronous);
+	ClassDB::bind_method(D_METHOD("set_animate", "on"), &RicochetGame::set_animate);
+	ClassDB::bind_method(D_METHOD("get_animate"), &RicochetGame::get_animate);
+	ClassDB::bind_method(D_METHOD("set_solve_budget_ms", "ms"), &RicochetGame::set_solve_budget_ms);
+	ClassDB::bind_method(D_METHOD("get_solve_budget_ms"), &RicochetGame::get_solve_budget_ms);
 	ClassDB::bind_method(D_METHOD("get_physics"), &RicochetGame::get_physics);
 	ClassDB::bind_method(D_METHOD("record"), &RicochetGame::record);
 	ClassDB::bind_method(D_METHOD("hud"), &RicochetGame::hud);
@@ -115,6 +119,8 @@ void RicochetGame::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "visibility", PROPERTY_HINT_ENUM, "Default:-1,Off:0,On:1"), "set_visibility", "get_visibility");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "physics"), "set_physics", "get_physics");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "asynchronous"), "set_asynchronous", "get_asynchronous");
+	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "animate"), "set_animate", "get_animate");
+	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "solve_budget_ms"), "set_solve_budget_ms", "get_solve_budget_ms");
 }
 
 void RicochetGame::_ready() {
@@ -136,7 +142,7 @@ void RicochetGame::_ready() {
 		report(level_path_.utf8().get_data());
 		return;
 	}
-	const rc_game_config cfg{sizeof(rc_game_config), infinity_, visibility_, asynchronous_ ? 1 : 0};
+	const rc_game_config cfg{sizeof(rc_game_config), infinity_, visibility_, asynchronous_ ? 1 : 0, animate_ ? 1 : 0, float(solve_budget_ms_)};
 	const rc_status s = rc_game_create(level, &cfg, &game_);
 	rc_level_release(level);
 	if (s != RC_OK) {

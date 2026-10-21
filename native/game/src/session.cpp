@@ -4,6 +4,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <chrono>
 #include <cstring>
 
 namespace rcg {
@@ -131,9 +132,11 @@ std::optional<Action> action_of(const std::string &name) {
 }
 
 Session::Session(const Level &level, const SessionConfig &config)
-	: level_(level), infinity_override_(config.infinity), visibility_override_(config.visibility), async_(config.async) {
+	: level_(level), infinity_override_(config.infinity), visibility_override_(config.visibility), async_(config.async), budget_(config.budget) {
 	world_ = std::make_unique<World>(build_level(level_));
 	player_ = level_.player_start.value_or(V2{});
+	tick_from_ = player_;
+	settled_player_ = player_; // (a new session is standing still)
 	gravity_ = level_.gravity;
 	for (rc::Tracer *t : {&gm_tracer_, &renderer_tracer_, &vis_tracer_}) {
 		t->set_emit_infinity(infinity_on());
@@ -181,10 +184,13 @@ Session::Session(const Level &level, const SessionConfig &config)
 			});
 		}
 		// the exact preview: only the current inputs' is applied (a stale one is dropped)
-		preview_job_ = std::make_unique<LatestJob<PreviewJobIn, std::optional<rc::TracePair>>>(
+		preview_job_ = std::make_unique<LatestJob<PreviewJobIn, PreviewJobOut>>(
 			[pt, tracer_for](const PreviewJobIn &in, const std::atomic<bool> &) {
+				const auto t0 = std::chrono::steady_clock::now();
 				tracer_for(pt->first, pt->second, in.world, *in.defs);
-				return pt->first.trace_pair(in.player, in.cursor, in.items, in.flags);
+				PreviewJobOut out{pt->first.trace_pair(in.player, in.cursor, in.items, in.flags), 0.0};
+				out.seconds = std::chrono::duration<double>(std::chrono::steady_clock::now() - t0).count();
+				return out;
 			},
 			false);
 	}
@@ -203,7 +209,8 @@ bool Session::region_pending() const { return vis_job_ && (vis_applied_ < vis_ti
 void Session::collect_jobs() {
 	if (preview_job_) {
 		if (auto r = preview_job_->take(); r && r->first == preview_ticket_) {
-			make_preview(preview_, std::move(r->second));
+			climb_times_.add(r->second.seconds);
+			make_preview(preview_, std::move(r->second.pair));
 			provisional_.reset();
 			provisional_version_++;
 			trace_version_++;
@@ -233,6 +240,9 @@ void Session::apply_region(long long ticket, VisJobOut &&out) {
 		return;
 	}
 	vis_applied_ = ticket;
+	if (out.region) {
+		region_times_.add(double(out.region->build_usec) / 1e6); // (how long a region takes now: the budget's guess)
+	}
 	region_ = std::move(out.region);
 	fill_ = std::move(out.fill);
 	whiskers_ = std::move(out.whiskers);
@@ -290,7 +300,10 @@ rc::PlanItem Session::item_of(const PlanEntry &e) {
 // Stage 121: while no region is computing, the region the hovered entry would
 // make (a left click's entry there), so its click shows it at once
 void Session::update_prefetch() {
-	if (!prefetch_job_ || !visibility_on() || !level_.features.preview || region_pending()) {
+	// (not while the player moves -- still for 100 ms: the prefetch would be stale at
+	// once, and its casts would hold the pool from the region the next frame needs)
+	if (!prefetch_job_ || std::chrono::steady_clock::now() - moved_at_ < std::chrono::milliseconds(100) || !visibility_on() ||
+		!level_.features.preview || region_pending()) {
 		return;
 	}
 	const PrefetchKey key{cursor_, player_, plan_version_, flags_version_, world_->version(), vis_applied_};
@@ -373,6 +386,7 @@ std::vector<rc::inv::SurfaceInfo> Session::infos() const {
 
 void Session::teleport(const V2 &p) {
 	player_ = p;
+	tick_from_ = p;
 	velocity_ = V2{};
 }
 
@@ -535,6 +549,7 @@ Session::Checkpoint Session::capture() const {
 
 void Session::restore(const Checkpoint &c) {
 	player_ = c.player;
+	tick_from_ = c.player;
 	velocity_ = c.velocity;
 	set_flags(c.flags);
 	world_->restore(c.world ? *c.world : world_->initial_snapshot());
@@ -757,6 +772,7 @@ void Session::advance(double dt, const kinematics::Input &in) {
 }
 
 void Session::tick(const kinematics::Input &in) {
+	tick_from_ = player_;
 	kinematics::Body body{player_, velocity_, on_floor_};
 	kinematics::step(body, in, gravity_, kinematics::colliders_of(world_->surfaces(), flags_, level_));
 	player_ = body.pos;
@@ -1136,7 +1152,39 @@ void Session::update_spawn_preview() {
 	}
 }
 
+// Stage 122: an asynchronous frame gives the background work it started its
+// budget: what finishes in time is shown this frame, as a synchronous one would
+// (on time: nothing for the presenter to smooth); the rest arrives later, and
+// later frames do not wait for it again
 void Session::settle() {
+	if (!(player_ == settled_player_)) {
+		moved_at_ = std::chrono::steady_clock::now();
+		settled_player_ = player_;
+	}
+	const long long vis0 = vis_ticket_, preview0 = preview_ticket_;
+	settle_once();
+	if (!async_ || budget_ <= 0.0) {
+		return;
+	}
+	// only the work this frame started (work already late is not waited for again)
+	const bool preview_busy = preview_ticket_ != preview0 && preview_job_ && preview_job_->busy() && climb_times_.typical() <= budget_;
+	// (regions that typically take longer than the budget: no use waiting for this one;
+	// one slow region among fast ones is not typical)
+	const bool region_busy = vis_ticket_ != vis0 && vis_job_ && vis_job_->busy() && region_times_.typical() <= budget_;
+	if (!preview_busy && !region_busy) {
+		return;
+	}
+	const auto deadline = std::chrono::steady_clock::now() + std::chrono::duration_cast<std::chrono::steady_clock::duration>(std::chrono::duration<double>(budget_));
+	if (preview_busy) {
+		preview_job_->wait_idle_until(deadline);
+	}
+	if (region_busy) {
+		vis_job_->wait_idle_until(deadline);
+	}
+	settle_once();
+}
+
+void Session::settle_once() {
 	collect_jobs();
 	update_preview();
 	update_hover();

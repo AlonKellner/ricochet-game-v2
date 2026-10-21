@@ -5,6 +5,7 @@
 #include "rcg/digest.hpp"
 #include "rcg/level.hpp"
 #include "rcg/render.hpp"
+#include "rcg/present.hpp"
 #include "rcg/session.hpp"
 
 #include <algorithm>
@@ -24,6 +25,7 @@ struct rc_level {
 struct rc_game {
 	std::shared_ptr<const rcg::Level> level;
 	std::unique_ptr<rcg::Session> session;
+	std::unique_ptr<rcg::Presenter> presenter; // 1.3: animate
 	// the borrowed views (valid until the next non-const call)
 	std::vector<rc_draw_node> nodes;
 	std::vector<rc_draw_cmd> cmds;
@@ -155,7 +157,7 @@ rc_status rc_game_create(const rc_level *level, const rc_game_config *config, rc
 			return fail(RC_E_ARGUMENT, "rc_game_create: null argument or unsized config");
 		}
 		*out = nullptr;
-		rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0};
+		rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0, 0, 0.0f};
 		if (config != nullptr) {
 			std::memcpy(&cfg, config, std::min<size_t>(config->size, sizeof(rc_game_config)));
 		}
@@ -167,10 +169,14 @@ rc_status rc_game_create(const rc_level *level, const rc_game_config *config, rc
 			sc.visibility = cfg.visibility != 0;
 		}
 		sc.async = cfg.async != 0;
+		sc.budget = cfg.budget_ms > 0.0f && std::isfinite(cfg.budget_ms) ? double(cfg.budget_ms) / 1000.0 : 0.0;
 		auto game = std::make_unique<rc_game>();
 		game->level = level->level;
 		game->session = std::make_unique<rcg::Session>(*game->level, sc);
 		game->session->settle();
+		if (cfg.animate != 0) {
+			game->presenter = std::make_unique<rcg::Presenter>();
+		}
 		*out = game.release();
 		return RC_OK;
 	});
@@ -227,6 +233,9 @@ rc_status rc_game_advance(rc_game *game, double dt, uint32_t held, uint32_t pres
 		in.axis_y = float((held & RC_KEY_DOWN) != 0) - float((held & RC_KEY_UP) != 0);
 		in.jump = (pressed & RC_KEY_UP) != 0;
 		game->session->advance(dt, in);
+		if (game->presenter) {
+			game->presenter->advance(dt);
+		}
 		return RC_OK;
 	});
 }
@@ -259,8 +268,9 @@ rc_status rc_game_frame(const rc_game *game, rc_frame *out) {
 		f.arrow_dx = s.arrow_direction().x;
 		f.arrow_dy = s.arrow_direction().y;
 		f.camera = l.camera ? 1 : 0;
-		f.camera_x = s.camera_target().x;
-		f.camera_y = s.camera_target().y;
+		const rc::V2 target = game->presenter && !s.flying() ? game->presenter->player(s) : s.camera_target();
+		f.camera_x = target.x;
+		f.camera_y = target.y;
 		f.camera_smoothing = l.camera && l.camera->smoothing ? 1 : 0;
 		f.camera_smoothing_speed = l.camera ? float(l.camera->smoothing_speed) : 0.0f;
 		f.bounds_x = float(l.bounds.x);
@@ -286,6 +296,9 @@ rc_status draw_list(rc_game *game, rc_draw_list *out, bool changes_only) {
 		return fail(RC_E_ARGUMENT, "rc_game_draw_list: null game or unsized list");
 	}
 	std::vector<rcg::render::FrameNode> nodes = game->session->draw_frame();
+	if (game->presenter) {
+		nodes = game->presenter->frame(std::move(nodes), *game->session);
+	}
 	std::stable_sort(nodes.begin(), nodes.end(), [](const auto &a, const auto &b) { return a.z < b.z; });
 	game->nodes.clear();
 	game->cmds.clear();

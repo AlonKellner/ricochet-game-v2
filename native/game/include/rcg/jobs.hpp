@@ -11,6 +11,7 @@
 #pragma once
 
 #include <atomic>
+#include <chrono>
 #include <condition_variable>
 #include <functional>
 #include <mutex>
@@ -84,6 +85,12 @@ public:
 	void wait_idle() {
 		std::unique_lock<std::mutex> lock(m_);
 		idle_.wait(lock, [&] { return !running_ && !pending_; });
+	}
+
+	// ... or until the deadline (Stage 122: a frame's budget); true when idle
+	bool wait_idle_until(std::chrono::steady_clock::time_point deadline) {
+		std::unique_lock<std::mutex> lock(m_);
+		return idle_.wait_until(lock, deadline, [&] { return !running_ && !pending_; });
 	}
 
 private:

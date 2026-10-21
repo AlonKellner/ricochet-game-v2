@@ -112,3 +112,41 @@ def test_draw_changes_sends_only_what_changed():
     # the full list is unaffected and carries the versions too
     full = {json.dumps(n[0]): n for n in game.draw_list()}
     assert set(full) == set(moved)
+
+
+def test_an_animated_game_smooths_only_a_late_region():
+    """C API 1.3 (animate, budget_ms): a region on time is drawn as the game's;
+    a late one (an asynchronous game with no budget) morphs in, then is the game's."""
+    import time
+    text = (rc_host.ROOT / "data" / "levels" / "main.json").read_text()
+
+    def region(game):
+        return [n for n in game.draw_list() if n[0] == ["visibility"]][0][4]
+
+    def ready(game):
+        for _ in range(5000):
+            game.advance(0.0)
+            region(game)  # (a host draws every frame)
+            if not game.frame().region_pending:
+                return
+            time.sleep(0.001)
+        raise AssertionError("the region never arrived")
+
+    plain = rc_host.Game(rc_host.Level(text))
+    on_time = rc_host.Game(rc_host.Level(text), animate=1)  # synchronous: always on time
+    late = rc_host.Game(rc_host.Level(text), animate=1, asynchronous=1)  # no budget: late
+    for g in (plain, on_time, late):
+        g.teleport(760.0, 600.0)
+        g.set_cursor(1406.0, 550.0)  # 6 px off the mirror at x = 1400, on its interactive side
+        g.advance(0.0)
+    ready(late)
+    for g in (plain, on_time, late):
+        region(g)
+        g.event(rc_host.EVENT_PLAN_ADD)
+        g.advance(0.0)
+    assert region(on_time) == region(plain)
+    ready(late)  # its arrival frame drawn: the morph begins
+    late.advance(0.016)
+    assert region(late) != region(plain)
+    late.advance(0.5)
+    assert region(late) == region(plain)

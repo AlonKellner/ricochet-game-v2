@@ -66,7 +66,7 @@ uint32_t key_of(const std::string &action) {
 std::vector<std::string> replay(const json &script, const std::string &level_text, bool draw_list) {
 	LevelHandle level;
 	check(rc_level_parse(level_text.data(), level_text.size(), &level.p), "rc_level_parse");
-	rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0}; // (synchronous: the replay is the golden's)
+	rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0, 0, 0.0f}; // (synchronous, unanimated: the replay is the golden's)
 	if (script.contains("switches")) {
 		const json &sw = script["switches"];
 		if (sw.contains("infinity")) {

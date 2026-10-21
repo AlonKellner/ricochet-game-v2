@@ -213,3 +213,44 @@ TEST_CASE("async: a click on a side whose prefetch still runs shows that prefetc
 	s.settle();
 	CHECK(record_of(a) == record_of(s));
 }
+
+TEST_CASE("async: a frame with a budget shows the work that finishes in it, as a synchronous frame") {
+	const rcg::Level lv = level("test_levels/crossings.json");
+	rcg::SessionConfig cfg;
+	cfg.async = true;
+	cfg.budget = 5.0; // (generous: every region and climb in time)
+	rcg::Session a(lv, cfg);
+	rcg::Session s(lv);
+	for (int k = 0; k < 6; k++) {
+		for (rcg::Session *x : {&a, &s}) {
+			x->teleport(x->player() + rc::V2{11, -4});
+			x->set_cursor(x->player() + rc::V2::of(300.0 * std::cos(k), 300.0 * std::sin(k)));
+			x->settle();
+		}
+		CHECK_FALSE(a.region_pending());
+		CHECK(a.preview_exact());
+		CHECK(record_of(a) == record_of(s)); // no drain: on time
+	}
+}
+
+TEST_CASE("async: no prefetch while the player moves") {
+	// (a prefetch while walking is stale at once and holds the pool from the next frame's region)
+	const rcg::Level lv = level("main.json");
+	rcg::SessionConfig cfg;
+	cfg.async = true;
+	rcg::Session a(lv, cfg);
+	a.set_cursor(rc::V2{1406, 550}); // on a mirror's plannable side
+	a.settle();
+	a.drain();
+	const long long before = a.prefetches();
+	rcg::kinematics::Input in;
+	in.axis_x = 1.0f;
+	for (int k = 0; k < 20; k++) {
+		a.advance(rcg::kinematics::STEP, in); // a tick each frame: always moving
+		a.drain();
+	}
+	CHECK(a.prefetches() == before);
+	std::this_thread::sleep_for(std::chrono::milliseconds(120)); // standing still: the hovered side's region is prefetched again
+	a.settle();
+	CHECK(a.prefetches() > before);
+}
