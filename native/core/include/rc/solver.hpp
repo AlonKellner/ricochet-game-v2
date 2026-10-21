@@ -2897,7 +2897,7 @@ private:
 						const Classified ca = classify(*w.scene, *beam, t, *surf, rehit && fresh, cand.pt, w.flags);
 						point_step(w, surf, false, ca.left, ca.pt);
 						if (point_sync(w)) {
-							late_cursor(w, *beam, cands, gp, ci, t, t0);
+							late_cursor(w, *beam, cands, gp, gw, ci, t, t0);
 						}
 					}
 					ci++; // absent under the current flags (Stage 107): no crossing at all
@@ -2942,7 +2942,7 @@ private:
 						consumed = point_sync(w) || consumed;
 					}
 					if (consumed) {
-						late_cursor(w, *beam, cands, gp, ci, t, t0);
+						late_cursor(w, *beam, cands, gp, gw, ci, t, t0);
 					}
 					ci++;
 					continue;
@@ -3109,7 +3109,7 @@ private:
 					}
 					break;
 				}
-				late_cursor(w, *beam, cands, gp, ci, t, t0);
+				late_cursor(w, *beam, cands, gp, gw, ci, t, t0);
 				ci++;
 			}
 			if (restart) {
@@ -3149,8 +3149,8 @@ private:
 	// (an entry that resolves to a pass / state change, an unapplied
 	// projective, or the infinity entry): the cursor is on this same beam -- a
 	// candidate if it lies ahead, inserted in order among the remaining ones.
-	static void late_cursor(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands, std::vector<double> &gp, size_t ci,
-			const N &t, const N &t0) {
+	static void late_cursor(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands, std::vector<double> &gp, std::vector<uint8_t> &gw,
+			size_t ci, const N &t, const N &t0) {
 		if (!w.cursor_done && w.cursor && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan && !(w.point && w.point->pending)
 				&& std::none_of(cands.begin(), cands.end(), [](const Candidate<N> &c) { return c.surf == nullptr && !c.inf; })) {
 			const N tc = Backend<N>::param_of(beam, *w.cursor);
@@ -3162,6 +3162,7 @@ private:
 				}
 				cands.insert(cands.begin() + long(j), Candidate<N>{tc, nullptr, false, std::nullopt, -1});
 				gp.insert(gp.begin() + long(j), INF_D);
+				gw.insert(gw.begin() + long(j), uint8_t(WHY_NONE)); // (Stage 123: the margins' classes stay aligned)
 				if (known_index(w.known, *w.cursor) < 0) {
 					w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
 				}
