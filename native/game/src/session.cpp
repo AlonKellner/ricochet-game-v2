@@ -210,6 +210,7 @@ void Session::collect_jobs() {
 	if (preview_job_) {
 		if (auto r = preview_job_->take(); r && r->first == preview_ticket_) {
 			climb_times_.add(r->second.seconds);
+			preview_climb_seconds_ = r->second.seconds;
 			make_preview(preview_, std::move(r->second.pair));
 			provisional_.reset();
 			provisional_version_++;
@@ -903,6 +904,7 @@ void Session::update_preview() {
 	preview_inputs_ = inputs;
 	preview_.computed = true;
 	preview_ticket_++; // (an exact climb still running is for older inputs now)
+	preview_climb_seconds_ = 0.0;
 	if (provisional_) {
 		provisional_.reset();
 		provisional_version_++;

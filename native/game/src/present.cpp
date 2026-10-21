@@ -819,6 +819,84 @@ void fill_with(const Shape &s, const std::vector<std::vector<Pt>> &also, std::ve
 
 } // namespace shape_morph
 
+namespace path_morph {
+
+namespace {
+
+bool finite_step(const rc::TraceStep &s) {
+	return std::isfinite(s.start.x) && std::isfinite(s.start.y) && std::isfinite(s.end.x) && std::isfinite(s.end.y) && std::isfinite(s.via.x)
+		&& std::isfinite(s.via.y);
+}
+
+// a step shrunk to the point p (the partner of a step that has none)
+rc::TraceStep point_step(const rc::TraceStep &like, const rc::V2 &p) {
+	rc::TraceStep s = like;
+	s.start = s.end = s.via = p;
+	s.is_arc_step = false;
+	return s;
+}
+
+rc::V2 lerp(const rc::V2 &a, const rc::V2 &b, double e) {
+	return rc::V2::of(double(a.x) + (double(b.x) - double(a.x)) * e, double(a.y) + (double(b.y) - double(a.y)) * e);
+}
+
+} // namespace
+
+std::vector<Pair> plan(const std::vector<rc::TraceStep> &from, const std::vector<rc::TraceStep> &to) {
+	// the longest common subsequence of the steps' hit surfaces (-1: none)
+	const size_t n = from.size(), m = to.size();
+	std::vector<std::vector<int>> L(n + 1, std::vector<int>(m + 1, 0));
+	for (size_t i = n; i-- > 0;) {
+		for (size_t j = m; j-- > 0;) {
+			L[i][j] = from[i].surface_id == to[j].surface_id ? L[i + 1][j + 1] + 1 : std::max(L[i + 1][j], L[i][j + 1]);
+		}
+	}
+	std::vector<Pair> out;
+	// the points the two paths have reached (a partnerless step attaches there)
+	rc::V2 at_from = n ? from[0].start : (m ? to[0].start : rc::V2{});
+	rc::V2 at_to = m ? to[0].start : at_from;
+	size_t i = 0, j = 0;
+	while (i < n || j < m) {
+		if (i < n && j < m && from[i].surface_id == to[j].surface_id) {
+			out.push_back(Pair{from[i], to[j]});
+			at_from = from[i].end;
+			at_to = to[j].end;
+			i++;
+			j++;
+		} else if (j < m && (i >= n || L[i][j + 1] >= L[i + 1][j])) {
+			out.push_back(Pair{point_step(to[j], std::isfinite(at_from.x) ? at_from : to[j].start), to[j]}); // grows out
+			at_to = to[j].end;
+			j++;
+		} else {
+			out.push_back(Pair{from[i], point_step(from[i], std::isfinite(at_to.x) ? at_to : from[i].start)}); // shrinks in
+			at_from = from[i].end;
+			i++;
+		}
+	}
+	return out;
+}
+
+std::vector<rc::TraceStep> at(const std::vector<Pair> &pairs, double e) {
+	std::vector<rc::TraceStep> out;
+	out.reserve(pairs.size());
+	for (const Pair &p : pairs) {
+		const rc::TraceStep &near = e < 0.5 ? p.from : p.to; // (its kind and colour)
+		if (!finite_step(p.from) || !finite_step(p.to)) {
+			out.push_back(near); // (a step to or from infinity: a direction, not points -- switched)
+			continue;
+		}
+		rc::TraceStep s = near;
+		s.start = lerp(p.from.start, p.to.start, e);
+		s.end = lerp(p.from.end, p.to.end, e);
+		s.via = lerp(p.from.via, p.to.via, e);
+		s.is_arc_step = p.from.is_arc_step || p.to.is_arc_step; // (an arc through three points; straight when they are collinear)
+		out.push_back(std::move(s));
+	}
+	return out;
+}
+
+} // namespace path_morph
+
 namespace {
 
 double ease_out(double x) {
@@ -863,22 +941,22 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 		if (n.key.kind == render::NodeKind::Player) {
 			n.position = drawn;
 		}
+		if (n.key.kind == render::NodeKind::Path) {
+			frame_path(n, s);
+			continue;
+		}
 		if (n.key.kind != render::NodeKind::Visibility) {
 			continue;
 		}
 		const render::Call *mesh = mesh_of(n);
 		const int version = s.visibility_version();
-		// Stage 124: a region is late when its request is late_seconds old -- the one
-		// arriving (morphed in), or the one shown while a newer computes (followed);
-		// a region faster than that is drawn as it is
-		requested_at_.try_emplace(s.region_requested(), now_);
-		auto age = [&](long long ticket) {
-			const auto it = requested_at_.find(ticket);
-			return it == requested_at_.end() ? 0.0 : now_ - it->second;
-		};
-		const double shown_age = age(s.region_shown());
-		requested_at_.erase(requested_at_.begin(), requested_at_.lower_bound(s.region_shown()));
-		const bool late = (s.region_pending() && shown_age >= config_.late_seconds) || config_.smooth_on_time;
+		// Stage 124: smoothing only for regions slower than 30 Hz -- Stage 126: by their
+		// computation (build time), and only those that missed their frame (seen
+		// pending); a region computed faster is drawn as it is
+		const bool pending = s.region_pending();
+		auto slow = [&]() { return s.region() && double(s.region()->build_usec) / 1e6 >= config_.late_seconds; };
+		const bool late = (pending && slow()) || config_.smooth_on_time;
+		missed_ = missed_ || pending;
 		if (version != region_version_) {
 			std::vector<sm::Carrier> carriers;
 			std::optional<sm::Pt> apex;
@@ -892,7 +970,7 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 			if (apex) {
 				sm::mark_shadows(next, *apex);
 			}
-			if (config_.region_seconds > 0.0 && region_version_ >= 0 && (shown_age >= config_.late_seconds || config_.smooth_on_time)) {
+			if (config_.region_seconds > 0.0 && region_version_ >= 0 && ((missed_ && slow()) || config_.smooth_on_time)) {
 				// it was late: morph in from what was shown
 				morph_ = Morph{sm::plan(shown_, next, here), now_, config_.region_seconds, sm::common(shown_, next)};
 			} else if (morph_) {
@@ -906,6 +984,7 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 				}
 			}
 			region_version_ = version;
+			missed_ = pending; // (a newer one already computing counts for its own arrival)
 			target_ = std::move(next);
 			if (!morph_) {
 				shown_ = target_;
@@ -964,6 +1043,49 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 		n.version = 0x5052455345000000ull + ++frame_serial_;
 	}
 	return nodes;
+}
+
+// Stage 126: the path node -- a preview that missed its frame (shown
+// provisionally while its exact climb ran) and whose climb took late_seconds or
+// more morphs in from the path shown; any other is drawn as it is
+void Presenter::frame_path(render::FrameNode &n, const Session &s) {
+	path_missed_ = path_missed_ || !s.preview_exact();
+	if (!has_path_ || n.version != path_version_) {
+		const std::vector<rc::TraceStep> &next = s.preview_steps();
+		const bool slow = path_missed_ && s.preview_exact() && s.preview_seconds() >= config_.late_seconds;
+		if (config_.path_seconds > 0.0 && has_path_ && s.display_mode() == 0 && (slow || config_.smooth_on_time)) {
+			path_morph_ = PathMorph{path_morph::plan(path_shown_, next), now_, config_.path_seconds};
+		} else if (path_morph_) {
+			// on time during a morph: retargeted from what is shown over the time it has left
+			const double left = path_morph_->start + path_morph_->seconds - now_;
+			if (left > 0.0 && s.display_mode() == 0) {
+				path_morph_ = PathMorph{path_morph::plan(path_shown_, next), now_, left};
+			} else {
+				path_morph_.reset();
+			}
+		}
+		has_path_ = true;
+		path_version_ = n.version;
+		path_missed_ = !s.preview_exact();
+		path_target_ = next;
+		if (!path_morph_) {
+			path_shown_ = path_target_;
+		}
+	}
+	if (!path_morph_) {
+		return; // the path as the session drew it
+	}
+	const double x = (now_ - path_morph_->start) / path_morph_->seconds;
+	if (x >= 1.0) {
+		path_morph_.reset();
+		path_shown_ = path_target_;
+		return;
+	}
+	path_shown_ = path_morph::at(path_morph_->pairs, ease_out(x));
+	auto calls = std::make_shared<std::vector<render::Call>>();
+	s.paint_steps(path_shown_, *calls);
+	n.calls = std::move(calls);
+	n.version = 0x5041544800000000ull + ++frame_serial_;
 }
 
 } // namespace rcg

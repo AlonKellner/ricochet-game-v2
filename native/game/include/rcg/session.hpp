@@ -154,6 +154,12 @@ public:
 	long long region_requested() const { return vis_ticket_; }
 	long long region_shown() const { return vis_applied_; }
 	bool preview_exact() const { return !provisional_.has_value(); }
+	// Stage 126 (the presenter's path morph): the preview's display steps (the
+	// provisional ones while its climb runs), how long the shown exact preview's
+	// climb took (0: computed in its frame), and the path's painter for steps
+	const std::vector<rc::TraceStep> &preview_steps() const { return shown().merged; }
+	double preview_seconds() const { return provisional_ ? 0.0 : preview_climb_seconds_; }
+	void paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<render::Call> &out) const;
 	void set_budget(double seconds) { budget_ = seconds; } // (SessionConfig::budget; tests)
 	long long prefetches() const { return prefetch_ticket_; } // the prefetches started (tests, benches)
 	void drain();
@@ -373,6 +379,7 @@ private:
 	};
 	Times region_times_, climb_times_;
 	std::optional<Preview> provisional_; // shown while the exact climb runs
+	double preview_climb_seconds_ = 0.0;  // Stage 126: the shown exact preview's climb (preview_seconds)
 	int provisional_version_ = 0;
 	long long vis_ticket_ = 0, preview_ticket_ = 0;
 	long long vis_applied_ = 0; // the newest region request applied

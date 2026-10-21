@@ -42,10 +42,13 @@ class World;
 // follow the player, and the late one, when it arrives, morphs in.
 struct PresentConfig {
 	double region_seconds = 0.1; // a late region's morph (0: none)
-	// Stage 124 (the user): a region is late -- smoothed: followed while it computes,
-	// morphed in when it arrives -- only once it has computed this long (slower
-	// than 30 Hz); one that arrives sooner is drawn as it is
+	// Stage 124 (the user): a region is smoothed -- followed while the next one
+	// computes, morphed in when it arrives -- only when it missed its frame and its
+	// computation took this long (slower than 30 Hz). Stage 126: the computation
+	// itself (Result::build_usec), not its latency -- a request made while another
+	// region computes waits for it first, so latency ran ~1.5x the computation
 	double late_seconds = 1.0 / 30.0;
+	double path_seconds = 0.08;   // Stage 126: a late preview's morph (0: none)
 	bool interpolate = true;     // the player between physics ticks
 	bool follow = true;          // while a region is late, the shown one's shadows follow the drawn player
 	bool smooth_on_time = false; // (tests) smooth as if every region were late
@@ -133,6 +136,22 @@ std::vector<int> parents_of(const Shape &s);
 
 } // namespace shape_morph
 
+// Stage 126: the path preview's morph -- the two paths' steps aligned like a
+// diff by the surface each step hits (the user: points move along the same
+// surfaces); a step without a partner grows out of (shrinks into) the point it
+// attaches to, so the path stays joined; every frame's steps are straight
+// segments or arcs through three points, and a step's colour switches at the
+// midpoint (no blending)
+namespace path_morph {
+
+struct Pair {
+	rc::TraceStep from, to; // (a partnerless step's other side: a point at its attachment)
+};
+std::vector<Pair> plan(const std::vector<rc::TraceStep> &from, const std::vector<rc::TraceStep> &to);
+std::vector<rc::TraceStep> at(const std::vector<Pair> &pairs, double e);
+
+} // namespace path_morph
+
 class Presenter {
 public:
 	explicit Presenter(PresentConfig config = {});
@@ -141,11 +160,24 @@ public:
 	// its region morphing (an unchanged node keeps its version)
 	std::vector<render::FrameNode> frame(std::vector<render::FrameNode> nodes, const Session &s);
 	bool animating() const { return morph_.has_value(); }
+	bool animating_path() const { return path_morph_.has_value(); } // Stage 126
 	// where the player is drawn
 	rc::V2 player(const Session &s) const;
 	const PresentConfig &config() const { return config_; }
 
 private:
+	// Stage 126: the path's morph
+	struct PathMorph {
+		std::vector<path_morph::Pair> pairs;
+		double start = 0.0;
+		double seconds = 0.0;
+	};
+	void frame_path(render::FrameNode &n, const Session &s);
+	std::optional<PathMorph> path_morph_;
+	bool has_path_ = false;
+	uint64_t path_version_ = 0;        // the session's path node shown (or morphed to)
+	std::vector<rc::TraceStep> path_shown_, path_target_;
+	bool path_missed_ = false;         // a provisional preview was shown since the last path
 	struct Morph {
 		shape_morph::Plan plan;
 		double start = 0.0;
@@ -158,8 +190,7 @@ private:
 	shape_morph::Shape target_; // its outline
 	shape_morph::Shape shown_;  // the outline on screen (the last frame's)
 	std::optional<Morph> morph_;
-	// Stage 124: when each region request was first seen (the clock), from the shown one on
-	std::map<long long, double> requested_at_;
+	bool missed_ = false; // Stage 126: a region was seen pending since the last one arrived
 	uint64_t frame_serial_ = 0;
 };
 

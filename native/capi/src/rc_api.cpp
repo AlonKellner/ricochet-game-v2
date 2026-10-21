@@ -157,7 +157,7 @@ rc_status rc_game_create(const rc_level *level, const rc_game_config *config, rc
 			return fail(RC_E_ARGUMENT, "rc_game_create: null argument or unsized config");
 		}
 		*out = nullptr;
-		rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0, 0, 0.0f};
+		rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0, 0, 0.0f, 0.0f};
 		if (config != nullptr) {
 			std::memcpy(&cfg, config, std::min<size_t>(config->size, sizeof(rc_game_config)));
 		}
@@ -175,7 +175,11 @@ rc_status rc_game_create(const rc_level *level, const rc_game_config *config, rc
 		game->session = std::make_unique<rcg::Session>(*game->level, sc);
 		game->session->settle();
 		if (cfg.animate != 0) {
-			game->presenter = std::make_unique<rcg::Presenter>();
+			rcg::PresentConfig pc;
+			if (cfg.late_ms > 0.0f && std::isfinite(cfg.late_ms)) {
+				pc.late_seconds = double(cfg.late_ms) / 1000.0;
+			}
+			game->presenter = std::make_unique<rcg::Presenter>(pc);
 		}
 		*out = game.release();
 		return RC_OK;
