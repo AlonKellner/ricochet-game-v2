@@ -16,7 +16,7 @@ the drawing stays exact; a changed golden is brought with its evidence for appro
 | 124.2 | A region cast's walks end two events past what the cast reads (bit-exact) | Done |
 | 124.3 | A member's exact point is known to its cast after its own plan entries; an exact crossing is exact data (re-blessed, approved) | Done |
 | 124.4 | Projective members know their exact points too; a cast's paths are converted lean (results unchanged) | Done |
-| 124.5 | Docs, `make gates`, sign-off | In progress |
+| 124.5 | A frame collects the work it started even when it finished before the budget's check (F17); docs, `make gates`, sign-off | In progress |
 
 ## Where the time was
 
@@ -137,6 +137,7 @@ those regions are smoothed when late.
 | F14 | What remains is the number of casts: about 1400 per region on crossings, because every crossing of two carriers bounds a member, and each member costs a crit cast, two side casts and a mid cast in each of a split plan's two halves. Per cast, the work is now spread thin: candidates, emitting events, path conversion | Open: fewer casts is a change to the region's construction (which members can matter), for a later stage |
 | F15 | A projective's own planned hit point H is exact data only when it is a data point of its segment (K11). For an exact cursor and an axis-aligned projection, H is exact in double precision too, and a tie there still climbs (projective_lines: 1212 climbs per 120 regions) | Open: K11 is the solver's provenance for previews too (oracle, fixtures), a spec change |
 | F16 | More cast threads (10 or 12 instead of 8) gain 0–10% | Kept at 8 |
+| F17 | A region (or preview) that finished between its submission and the budget's busy check was not collected that frame: it showed a frame late (the merge gate's load exposed it once the regions got fast) | Resolved (124.5): work started this frame and typically within the budget is always waited for and collected |
 
 ## Tests
 
