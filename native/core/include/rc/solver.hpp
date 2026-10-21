@@ -21,6 +21,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <bit>
 #include <unordered_map>
 #include <vector>
 
@@ -91,6 +92,39 @@ struct Event {
 	Flags flags;            // the trace's flags after this event (hits)
 	bool anchored = false;  // cursor: reached on the anchored path
 	int beam_view = -1;     // identity of the beam as the events see it (Backend::views_per_run)
+};
+
+// Stage 123: the exact incidence of a point on a surface's carrier (Solver::
+// incident: a known point -- an endpoint, the cursor -- against every surface,
+// in every walk), memoized across walks and solves like PoleMemo: keyed on the
+// scene, the point's float64 bits and the surface, so an equal key gives the
+// identical answer and the walks are unchanged bit for bit.
+struct IncidenceMemo {
+	struct Key {
+		const void *scene;
+		uint64_t x, y;
+		int surf;
+		bool operator==(const Key &) const = default;
+	};
+	struct Hash {
+		size_t operator()(const Key &k) const {
+			uint64_t h = uint64_t(reinterpret_cast<uintptr_t>(k.scene)) * 0x9E3779B97F4A7C15ull;
+			h = (h ^ k.x) * 0x100000001B3ull;
+			h = (h ^ k.y) * 0x100000001B3ull;
+			return size_t((h ^ uint64_t(uint32_t(k.surf))) * 0x100000001B3ull);
+		}
+	};
+	std::unordered_map<Key, bool, Hash> map;
+	bool *find(const Key &k) {
+		auto it = map.find(k);
+		return it == map.end() ? nullptr : &it->second;
+	}
+	void put(const Key &k, bool v) {
+		if (map.size() > (1u << 18)) { // bounded: a long session's cursors
+			map.clear();
+		}
+		map.emplace(k, v);
+	}
 };
 
 // Stage 120: the exact predicates of a frame's infinity point that depend on Q
@@ -385,6 +419,7 @@ struct Walk {
 	std::map<int, bool> pole_tangent;   // surf id -> tangent at Q
 	std::map<int, bool> pole_on;        // surf id -> its carrier passes Q
 	PoleMemo *pole_memo = nullptr;      // Stage 120: across walks (the solver's cache's), or none
+	IncidenceMemo *incidence_memo = nullptr; // Stage 123: likewise
 	// tests only: the record beside each beam loop (record_poles)
 	bool record_poles = false;
 	std::vector<std::pair<BeamPtr<N>, std::optional<exact::ExactPole>>> pole_trace;
@@ -419,6 +454,7 @@ struct SolveCache {
 	bool chain_null = false;
 	std::map<std::string, std::optional<exact::Point3>> images;
 	PoleMemo poles; // Stage 120
+	IncidenceMemo incidence; // Stage 123
 };
 
 // ---------------------------------------------------------------- the solver
@@ -1625,6 +1661,7 @@ private:
 		w.Q = effects::scene_pre_q(scene_);
 		w.record_poles = record_poles_;
 		w.pole_memo = cache_ ? &cache_->poles : nullptr;
+		w.incidence_memo = cache_ ? &cache_->incidence : nullptr;
 		return w;
 	}
 
@@ -1846,6 +1883,12 @@ private:
 		}
 		const double kx = k.fx();
 		const double ky = k.fy();
+		const IncidenceMemo::Key mk{w.scene, std::bit_cast<uint64_t>(kx), std::bit_cast<uint64_t>(ky), surf.id};
+		if (w.incidence_memo) {
+			if (const bool *hit = w.incidence_memo->find(mk)) {
+				return *hit;
+			}
+		}
 		const std::tuple<double, double, int> key{kx, ky, surf.id};
 		auto it = w.incidence.find(key);
 		if (it != w.incidence.end()) {
@@ -1859,7 +1902,11 @@ private:
 		} else {
 			r = exact::incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, kx, ky);
 		}
-		w.incidence[key] = r;
+		if (w.incidence_memo) {
+			w.incidence_memo->put(mk, r);
+		} else {
+			w.incidence[key] = r;
+		}
 		return r;
 	}
 

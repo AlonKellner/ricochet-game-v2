@@ -495,6 +495,9 @@ struct Result {
 	// the benches: casts per CastKind, and the build's wall time
 	std::array<int, 6> casts_by_kind{};
 	long long build_usec = 0;
+	std::array<long long, 5> phase_usec{}; // Stage 123 (benches): prepare, members, their casts, cells, merge
+	long long batch_max_usec = 0;  // ... the parallel batches' slowest casts, summed (each batch waits for its slowest)
+	long long batch_sum_usec = 0;  // ... and all their casts' time
 };
 
 // Angular order of aim directions, counterclockwise from the fixed reference
@@ -694,16 +697,28 @@ public:
 	}
 
 	Result build() {
-		if (!prepare()) {
+		auto t = std::chrono::steady_clock::now();
+		auto lap = [&](int k) {
+			const auto now = std::chrono::steady_clock::now();
+			res_.phase_usec[size_t(k)] += std::chrono::duration_cast<std::chrono::microseconds>(now - t).count();
+			t = now;
+		};
+		const bool ok = prepare();
+		lap(0);
+		if (!ok) {
 			return std::move(res_);
 		}
 		if (empty_) {
 			return std::move(res_); // (supported, nothing visible)
 		}
 		collect_members();
+		lap(1);
 		cast_members();
+		lap(2);
 		build_cells();
+		lap(3);
 		merge_cells();
+		lap(4);
 		for (Cell &c : res_.cells) {
 			c.half = int(half_);
 		}
@@ -2124,13 +2139,22 @@ private:
 		}
 		// (Stage 120: on the persistent pool, not threads made per batch; worker k casts with tracers[k])
 		check_cancel();
+		std::vector<long long> usec(jobs.size(), 0);
 		ThreadPool::shared().parallel_for(jobs.size(), nt - 1, [&](size_t worker, size_t i) {
 			if (cancel_ != nullptr && cancel_->load(std::memory_order_relaxed)) {
 				return; // (cancelled: the caller throws below, never a pool thread)
 			}
+			const auto t0 = std::chrono::steady_clock::now();
 			out[i] = cast_on(*tracers[worker], jobs[i].c, jobs[i].q, jobs[i].member);
+			usec[i] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
 		});
 		check_cancel();
+		long long mx = 0;
+		for (long long u : usec) {
+			mx = std::max(mx, u);
+			res_.batch_sum_usec += u;
+		}
+		res_.batch_max_usec += mx;
 		return out;
 	}
 
