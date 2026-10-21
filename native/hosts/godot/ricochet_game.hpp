@@ -102,7 +102,7 @@ private:
 	bool physics_ = true;
 	bool asynchronous_ = true;
 	bool animate_ = true;
-	double solve_budget_ms_ = 5.0;
+	double solve_budget_ms_ = 4.0; // (120 Hz: an 8.3 ms frame)
 	bool aimed_ = false;
 	godot::Vector2 aim_;
 	rc_game *game_ = nullptr;
