@@ -135,7 +135,7 @@ def test_an_animated_game_smooths_only_a_late_region():
 
     plain = rc_host.Game(rc_host.Level(text))
     on_time = rc_host.Game(rc_host.Level(text), animate=1)  # synchronous: always on time
-    late = rc_host.Game(rc_host.Level(text), animate=1, asynchronous=1)  # no budget: late
+    late = rc_host.Game(rc_host.Level(text), animate=1, asynchronous=1, late_ms=0.001)  # no budget: late (1.4: main's fast regions count as slow)
     for g in (plain, on_time, late):
         g.teleport(760.0, 600.0)
         g.set_cursor(1406.0, 550.0)  # 6 px off the mirror at x = 1400, on its interactive side

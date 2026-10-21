@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 3
+#define RC_API_VERSION_MINOR 4
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -90,6 +90,11 @@ typedef struct rc_game_config {
 	 * exact, and nothing is smoothed; what is late shows later (animated: morphed
 	 * in). 0 (the default): never wait. */
 	float budget_ms;
+	/* 1.4 (animate): a late region is smoothed only when its computation took at
+	 * least this many milliseconds (slower than 30 Hz by default); one computed
+	 * faster is drawn as it arrives. 0 or less (the default, and an older host's
+	 * config): 1000 / 30. */
+	float late_ms;
 } rc_game_config;
 
 /* A game on a level (config may be null: the defaults). The game keeps its

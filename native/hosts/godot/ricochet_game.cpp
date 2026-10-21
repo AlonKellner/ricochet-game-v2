@@ -142,7 +142,7 @@ void RicochetGame::_ready() {
 		report(level_path_.utf8().get_data());
 		return;
 	}
-	const rc_game_config cfg{sizeof(rc_game_config), infinity_, visibility_, asynchronous_ ? 1 : 0, animate_ ? 1 : 0, float(solve_budget_ms_)};
+	const rc_game_config cfg{sizeof(rc_game_config), infinity_, visibility_, asynchronous_ ? 1 : 0, animate_ ? 1 : 0, float(solve_budget_ms_), 0.0f};
 	const rc_status s = rc_game_create(level, &cfg, &game_);
 	rc_level_release(level);
 	if (s != RC_OK) {
