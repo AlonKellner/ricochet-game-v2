@@ -117,7 +117,8 @@ which still calls `rc_game_advance` every frame (that is when finished work is c
 **Animation (C API 1.3).** With `rc_game_config.animate = 1` the draw list is what should be on screen
 now: the player drawn between physics ticks and, when a region is late (it missed its frame and its
 computation took `rc_game_config.late_ms` or more -- by default 1000/30: slower than 30 Hz; C API 1.4), the
-shown region following the player, then the late one morphing in (about 100 ms). With `rc_game_config.budget_ms` (async), a frame waits
+shown region following the player, then the late one morphing in (about 100 ms); a preview whose exact climb was
+that slow morphs in from the path shown (about 80 ms). With `rc_game_config.budget_ms` (async), a frame waits
 up to that long for the work it started. What finishes in time is drawn that frame as it is, with no
 smoothing. The Godot host uses 4 ms; pick what your frame can spare. `frame.camera_x/y` then follows the drawn player. Nothing else changes for the host, but
 it must draw every frame: the presenter animates from what the last list showed, and its clock is the `dt`
