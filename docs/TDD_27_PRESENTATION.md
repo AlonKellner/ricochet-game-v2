@@ -26,7 +26,7 @@ overlays, the spawn preview and the flight's dimming.
 | 122.2 | The player drawn between its last two physics ticks (`Session::tick_from`, `tick_alpha`) | Done |
 | 122.3 | The region morph: first per ray (rejected interactively), then a diff of shapes (`rcg::shape_morph`) with the shadows following the player; C API 1.3 (`rc_game_config.animate`); the Godot host animates | Done |
 | 122.4 | Smoothing only for late work: the frame's budget (`SessionConfig::budget`, C API `budget_ms`); the presenter morphs and follows only a late region | Done |
-| 122.5 | Docs, `make gates`, sign-off | In progress |
+| 122.5 | Docs, `make gates`, sign-off | Done (user, 2026-10-21) |
 
 ## 122.1 The presenter
 
