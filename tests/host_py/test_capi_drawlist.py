@@ -112,3 +112,26 @@ def test_draw_changes_sends_only_what_changed():
     # the full list is unaffected and carries the versions too
     full = {json.dumps(n[0]): n for n in game.draw_list()}
     assert set(full) == set(moved)
+
+
+def test_an_animated_game_morphs_its_region_then_draws_the_game():
+    """C API 1.3 (animate): after a plan click the region node morphs for a
+    moment; then it is the unanimated game's."""
+    text = (rc_host.ROOT / "data" / "levels" / "main.json").read_text()
+
+    def region(game):
+        return [n for n in game.draw_list() if n[0] == ["visibility"]][0][4]
+
+    games = [rc_host.Game(rc_host.Level(text), animate=a) for a in (0, 1)]
+    for g in games:
+        g.teleport(760.0, 600.0)
+        g.set_cursor(1406.0, 550.0)  # 6 px off the mirror at x = 1400, on its interactive side
+        g.advance(0.0)
+        region(g)  # a frame drawn: the region shown (the presenter morphs from what a frame showed)
+        g.event(rc_host.EVENT_PLAN_ADD)
+        g.advance(0.0)
+    plain, animated = games
+    assert region(animated) != region(plain)
+    animated.advance(0.5)
+    plain.advance(0.5)
+    assert region(animated) == region(plain)

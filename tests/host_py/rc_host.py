@@ -32,7 +32,8 @@ DRAW_KINDS = ["line", "arc", "polygon", "colored_polygon", "circle", "rect", "po
 
 
 class GameConfig(ctypes.Structure):
-    _fields_ = [("size", ctypes.c_uint32), ("infinity", ctypes.c_int32), ("visibility", ctypes.c_int32)]
+    _fields_ = [("size", ctypes.c_uint32), ("infinity", ctypes.c_int32), ("visibility", ctypes.c_int32),
+                ("async_", ctypes.c_int32), ("animate", ctypes.c_int32)]  # 1.2, 1.3
 
 
 class Frame(ctypes.Structure):
@@ -177,8 +178,8 @@ class Level:
 
 
 class Game:
-    def __init__(self, level, infinity=-1, visibility=-1):
-        cfg = GameConfig(ctypes.sizeof(GameConfig), infinity, visibility)
+    def __init__(self, level, infinity=-1, visibility=-1, animate=0):
+        cfg = GameConfig(ctypes.sizeof(GameConfig), infinity, visibility, 0, animate)
         self._h = ctypes.c_void_p()
         check(lib.rc_game_create(level._h, ctypes.byref(cfg), ctypes.byref(self._h)))
 

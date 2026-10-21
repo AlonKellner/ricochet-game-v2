@@ -73,6 +73,10 @@ public:
 	// default); off, everything in the frame (the session replay test)
 	void set_asynchronous(bool on) { asynchronous_ = on; }
 	bool get_asynchronous() const { return asynchronous_; }
+	// Stage 122: the draw list animated (the default): the player between physics
+	// ticks, the region morphing; off, the game's state as it is
+	void set_animate(bool on) { animate_ = on; }
+	bool get_animate() const { return animate_; }
 	bool get_physics() const { return physics_; }
 	// the game's session record (docs/research/session_digest.md), the HUD
 	godot::String record() const;
@@ -93,6 +97,7 @@ private:
 	int visibility_ = -1;
 	bool physics_ = true;
 	bool asynchronous_ = true;
+	bool animate_ = true;
 	bool aimed_ = false;
 	godot::Vector2 aim_;
 	rc_game *game_ = nullptr;

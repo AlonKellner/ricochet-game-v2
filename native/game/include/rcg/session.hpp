@@ -115,6 +115,10 @@ public:
 	void advance(double dt, const kinematics::Input &in);
 	bool flying() const { return flying_; }
 	V2 player() const { return player_; }
+	// Stage 122: the player before the last physics tick, and how far the time
+	// not yet ticked is into the next (the presenter draws the player between)
+	V2 tick_from() const { return tick_from_; }
+	double tick_alpha() const { return physics_time_ / kinematics::STEP; }
 	float facing() const { return facing_; }
 	V2 arrow_position() const { return arrow_pos_; }
 	V2 arrow_direction() const { return arrow_dir_; }
@@ -128,6 +132,7 @@ public:
 	rc::LadderStats region_stats() const { return vis_tracer_.ladder_stats(); }
 	int visibility_version() const { return visibility_version_; }
 	bool has_region() const { return region_.has_value(); }
+	const std::optional<rc::vis::Result> &region() const { return region_; } // the region shown (Stage 122: the presenter's)
 	const std::string &hud() const { return hud_; }
 	const Level &level() const { return level_; }
 	// the camera's target: the arrow in flight, else the player
@@ -368,6 +373,7 @@ private:
 	double flight_progress_ = 0.0;
 	double flight_multiplier_ = 1.0;
 	double physics_time_ = 0.0; // the physics ticks' time not yet run
+	V2 tick_from_;              // the player before the last tick (Stage 122)
 	bool jump_ = false;         // a jump pressed, not yet ticked
 	void tick(const kinematics::Input &in);
 	// the painters' cached output (draw_frame): a surface piece's by its inputs,

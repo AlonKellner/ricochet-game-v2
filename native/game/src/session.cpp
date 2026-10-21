@@ -134,6 +134,7 @@ Session::Session(const Level &level, const SessionConfig &config)
 	: level_(level), infinity_override_(config.infinity), visibility_override_(config.visibility), async_(config.async) {
 	world_ = std::make_unique<World>(build_level(level_));
 	player_ = level_.player_start.value_or(V2{});
+	tick_from_ = player_;
 	gravity_ = level_.gravity;
 	for (rc::Tracer *t : {&gm_tracer_, &renderer_tracer_, &vis_tracer_}) {
 		t->set_emit_infinity(infinity_on());
@@ -373,6 +374,7 @@ std::vector<rc::inv::SurfaceInfo> Session::infos() const {
 
 void Session::teleport(const V2 &p) {
 	player_ = p;
+	tick_from_ = p;
 	velocity_ = V2{};
 }
 
@@ -535,6 +537,7 @@ Session::Checkpoint Session::capture() const {
 
 void Session::restore(const Checkpoint &c) {
 	player_ = c.player;
+	tick_from_ = c.player;
 	velocity_ = c.velocity;
 	set_flags(c.flags);
 	world_->restore(c.world ? *c.world : world_->initial_snapshot());
@@ -757,6 +760,7 @@ void Session::advance(double dt, const kinematics::Input &in) {
 }
 
 void Session::tick(const kinematics::Input &in) {
+	tick_from_ = player_;
 	kinematics::Body body{player_, velocity_, on_floor_};
 	kinematics::step(body, in, gravity_, kinematics::colliders_of(world_->surfaces(), flags_, level_));
 	player_ = body.pos;
