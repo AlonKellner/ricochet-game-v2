@@ -1,7 +1,9 @@
 // Stage 116.5: the native session (rcg::Session) against the session replay
 // golden: every session (data/sessions; the kinematic ones since Stage 117,
 // the native player controller) replays byte for byte to its recording (bench/sessions, made by the GDScript game). RCG_SESSIONS_PART=k/n
-// plays the k-th of every n sessions (the ctest entries rcg_sessions_{k}).
+// plays the k-th of every n sessions (the ctest entries rcg_sessions_{k} and,
+// asynchronous, rcg_sessions_async_{k}). RC_SESSIONS_SAMPLE=n: the asynchronous
+// replay plays every n-th session (the commit gate, docs/WORKFLOW.md).
 #include "rcg/replay.hpp"
 
 #include <doctest/doctest.h>
@@ -31,6 +33,13 @@ void replay_all(bool async) {
 		}
 	}
 	std::sort(scripts.begin(), scripts.end());
+	if (const char *s = std::getenv("RC_SESSIONS_SAMPLE"); s && async) {
+		std::vector<fs::path> kept;
+		for (size_t k = 0; k < scripts.size(); k += size_t(std::max(1, std::atoi(s)))) {
+			kept.push_back(scripts[k]);
+		}
+		scripts = kept;
+	}
 	int n = 0;
 	for (size_t k = 0; k < scripts.size(); k++) {
 		if (int(k % size_t(parts)) != part) {
@@ -59,7 +68,7 @@ void replay_all(bool async) {
 		}
 		n++;
 	}
-	CHECK(n > 0);
+	CHECK((n > 0 || std::getenv("RC_SESSIONS_SAMPLE")));
 }
 
 } // namespace

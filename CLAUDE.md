@@ -32,12 +32,15 @@ make check                      # every entry, ~18 s after the build
 make check AREA=vis             # solver | vis | goldens | sweeps | game | all
 make check TC="visibility digest" SKIP=0   # one doctest filter (--no-skip with SKIP=0)
 
+# Between commits: only the ctest entries a change can affect (the result cache, tools/gate_cache.py)
+make quick
+
 # Before every commit (core, oracle, ctest, the extension, the dumps/manifests current, the Python host,
-# the Godot host's suite, goldens unchanged; timed summary)
+# the Godot host's suite, goldens unchanged; through the result cache, redundant hosts sampled; timed summary)
 make gate
 SKIP_GODOT=1 make gate          # every engine-free gate (what a port runs)
 
-# Before a merge to main or a phase close: the same plus ASan+UBSan
+# Before a merge to main or a phase close: everything, uncached and unsampled, plus ASan+UBSan
 make gates
 
 # The pieces

@@ -124,7 +124,7 @@ Appended to size-prefixed structs, so older hosts keep working:
 | `async: a preview that must climb shows provisionally, then the exact one` | hit_effects: provisional frames happen; each drained preview equals the synchronous one |
 | `async: the hovered side's region is prefetched, shown at the click` | the finished-prefetch path |
 | `async: a click on a side whose prefetch still runs shows that prefetch's region` | the adoption path |
-| `sessions: the asynchronous session, drained, replays byte for byte` | all 48 sessions, in the `rcg_sessions_*` ctest entries |
+| `sessions: the asynchronous session, drained, replays byte for byte` | all 48 sessions, in the `rcg_sessions_async_*` ctest entries (12 parts of their own) |
 
 The async tests and an async session part run clean under ThreadSanitizer (`native/build-tsan`,
 `RC_SANITIZE=thread`).
