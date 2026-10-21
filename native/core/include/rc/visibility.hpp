@@ -436,7 +436,7 @@ struct Member {
 	int tangent_q_sid = -1; // tangent at a finite Q_K to this surface's carrier (they meet at Q_K only)
 	bool tangent_pole = false; // tangent at some frame's finite infinity point to a carrier through it (VIS-REGULAR)
 	bool exact = false;    // its cursor is exact data of the final frame (a segment's endpoint, a piece's end)
-	std::optional<Pt> aim_known; // Stage 123: exact data of the player's frame its aim line passes (both ways): Solver::aim_known
+	std::optional<AimKnown> aim_known; // Stage 123: exact data its aim line passes (both ways), after j plan entries: Solver::aim_known
 	Cast crit;            // the member itself (Stage 113: cast along the member off the projective's carrier when its point of interest lies on it)
 	Cast minus;           // just before it (direction rotated by -eps)
 	Cast plus;            // just after it
@@ -612,7 +612,7 @@ struct SolveMemo {
 		uint64_t x = 0, y = 0;
 		int force = 2; // 0 direct, 1 reversed, 2 the solver's own choice
 		uint64_t kx = 0, ky = 0; // Stage 123: the cast's known point (Solver::aim_known; 0: none)
-		bool has_k = false;
+		int kj = -1;             // ... after this many plan entries (-1: none)
 		bool operator==(const Key &o) const = default;
 	};
 	struct Hash {
@@ -620,9 +620,9 @@ struct SolveMemo {
 			return size_t((k.x * 1099511628211ULL) ^ (k.y * 14695981039346656037ULL) ^ uint64_t(k.force) ^ (k.kx * 31) ^ (k.ky * 131));
 		}
 	};
-	static Key key(const Pt &c, std::optional<bool> force, const std::optional<Pt> &known = std::nullopt) {
+	static Key key(const Pt &c, std::optional<bool> force, const std::optional<AimKnown> &known = std::nullopt) {
 		return Key{std::bit_cast<uint64_t>(c.x), std::bit_cast<uint64_t>(c.y), force ? (*force ? 1 : 0) : 2, known ? std::bit_cast<uint64_t>(known->x) : 0,
-			known ? std::bit_cast<uint64_t>(known->y) : 0, known.has_value()};
+			known ? std::bit_cast<uint64_t>(known->y) : 0, known ? known->j : -1};
 	}
 	std::mutex mutex;
 	std::unordered_map<Key, std::optional<LadderResult>, Hash> solves;
@@ -1437,7 +1437,7 @@ private:
 	}
 
 	void add_poi(std::vector<Member> &out, const CN<F64> &z, size_t j, const std::string &why, int tangent_sid = -1, bool exact = false,
-			const std::optional<Pt> &other = std::nullopt) {
+			const std::optional<Pt> &other = std::nullopt, bool exact_point = false) {
 		const std::optional<CN<F64>> c = forward(std::optional<CN<F64>>(z), j, K);
 		const std::optional<CN<F64>> X0 = aim() ? backward(std::optional<CN<F64>>(z), j) : c;
 		if (!c || !X0) {
@@ -1484,8 +1484,12 @@ private:
 		m.dir = *d;
 		m.cursor = cp;
 		m.poi = true;
-		if (exact && j == 0) {
-			m.aim_known = pt_of(z);
+		// (Stage 124: in any frame -- but not on the carrier the beam departs there,
+		// whose departure point is its own -- and a crossing exactly on both carriers)
+		const Surf<F64> *dep = j > 0 && !plan_[j - 1].is_infinity() ? scene_.find(plan_[j - 1].surface_id) : nullptr;
+		if ((exact || exact_point) && !(dep != nullptr && on_carrier_exact(*dep, z))) {
+			const Pt e = pt_of(z);
+			m.aim_known = AimKnown{int(j), e.x, e.y};
 		}
 		m.why = why + (j < K ? " (frame " + std::to_string(j) + ")" : "");
 		m.tangent_sid = j == K || (tangent_sid >= 0 && carrier_fixed(tangent_sid, j)) ? tangent_sid : -1;
@@ -1852,7 +1856,8 @@ private:
 						continue;
 					}
 					for (const Pt &x : carrier_points(s, *surfs[b])) {
-						add_poi(pois, cn_of(x), j, "crossing of " + std::to_string(s.id) + " and " + std::to_string(surfs[b]->id));
+						add_poi(pois, cn_of(x), j, "crossing of " + std::to_string(s.id) + " and " + std::to_string(surfs[b]->id), -1, false, std::nullopt,
+							on_carrier_exact(s, cn_of(x)) && on_carrier_exact(*surfs[b], cn_of(x)));
 					}
 				}
 			}
@@ -2006,7 +2011,8 @@ private:
 						continue; // one carrier (K6)
 					}
 					for (const Pt &x : carrier_points(s, *surfs[b])) {
-						add_poi(pois, cn_of(x), j, "crossing of " + std::to_string(s.id) + " and " + std::to_string(surfs[b]->id));
+						add_poi(pois, cn_of(x), j, "crossing of " + std::to_string(s.id) + " and " + std::to_string(surfs[b]->id), -1, false, std::nullopt,
+							on_carrier_exact(s, cn_of(x)) && on_carrier_exact(*surfs[b], cn_of(x)));
 					}
 				}
 			}
@@ -2128,7 +2134,7 @@ private:
 		Param q;
 		Beam<F64> member;
 		CastKind kind = CastKind::Other;
-		std::optional<Pt> known = {}; // Stage 123: the member's Member::aim_known (its own cast)
+		std::optional<AimKnown> known = {}; // Stage 123: the member's Member::aim_known (its own cast)
 	};
 	std::vector<Cast> cast_batch(const std::vector<CastJob> &jobs) {
 		std::vector<Cast> out(jobs.size());
@@ -2186,7 +2192,7 @@ private:
 			int(r.met), r.ek, int(r.has_depart), end_name(r.near_kind), end_name(r.end_kind), r.has_tie ? (r.tie_after_q ? " tie-cut after Q" : " tie-cut") : "");
 	}
 
-	Cast cast_on(Tracer &tracer, const Pt &c, const Param &q, const Beam<F64> &member, const std::optional<Pt> &known = std::nullopt) const {
+	Cast cast_on(Tracer &tracer, const Pt &c, const Param &q, const Beam<F64> &member, const std::optional<AimKnown> &known = std::nullopt) const {
 		const Pt &dir = q.dir;
 		if (half_ == Half::Single) {
 			Cast r = cast_core(tracer, c, q, member, std::nullopt, nullptr, known);
@@ -2224,9 +2230,9 @@ private:
 	// (Stage 123: a cast reads its physical walk through the stop after the plan's
 	// K entries and its planned walk through its cursor, cast_core: the ladder's
 	// horizon, int(K))
-	std::optional<LadderResult> memo_solve(Tracer &tracer, const Pt &c, std::optional<bool> force, const std::optional<Pt> &known = std::nullopt) const {
+	std::optional<LadderResult> memo_solve(Tracer &tracer, const Pt &c, std::optional<bool> force, const std::optional<AimKnown> &known = std::nullopt) const {
 		const Pt P = res_.player;
-		const std::optional<std::pair<double, double>> kp = known ? std::optional<std::pair<double, double>>({known->x, known->y}) : std::nullopt;
+		const std::optional<AimKnown> &kp = known;
 		if (memo_ == nullptr) {
 			return tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K), kp);
 		}
@@ -2296,7 +2302,7 @@ private:
 	}
 
 	Cast cast_core(Tracer &tracer, const Pt &c, const Param &q, const Beam<F64> &member, std::optional<bool> force, const Cast *tie,
-			const std::optional<Pt> &known = std::nullopt) const {
+			const std::optional<AimKnown> &known = std::nullopt) const {
 		Cast r;
 		r.cursor = c;
 		r.dir = q.dir;

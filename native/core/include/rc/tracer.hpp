@@ -199,7 +199,7 @@ public:
 	// cache; nullopt where trace_pair returns none. Stage 123: stops, what the
 	// cast reads (Ladder::solve's horizon); known, Solver::aim_known.
 	std::optional<LadderResult> solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags,
-			std::optional<bool> force_reversed = std::nullopt, int stops = -1, const std::optional<std::pair<double, double>> &known = std::nullopt) {
+			std::optional<bool> force_reversed = std::nullopt, int stops = -1, const std::optional<AimKnown> &known = std::nullopt) {
 		if (!ctx_ || !scene_supported(defs_) || (px == cx && py == cy)) {
 			return std::nullopt;
 		}

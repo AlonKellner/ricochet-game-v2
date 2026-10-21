@@ -54,6 +54,14 @@ inline const char *event_kind_name(EventKind k) {
 	return "";
 }
 
+// Stage 123: exact data a region's cast passes by construction: its member's
+// point of interest, found after the plan's first j entries (Solver::aim_known)
+struct AimKnown {
+	int j = 0;
+	double x = 0.0, y = 0.0;
+	bool operator==(const AimKnown &) const = default;
+};
+
 struct PlanItem {
 	int surface_id = 0;
 	bool left = true;
@@ -844,10 +852,11 @@ public:
 	// Stage 111: the region casts a member in a forced orientation (nullopt: the plan's realization).
 	std::optional<bool> force_reversed;
 	// Stage 123: a region's cast along a member through exact data (a segment's
-	// endpoint, found in the player's frame): the first beam passes it by
-	// construction, so it is a known point there (add_aim_known), and a hit at it
-	// is decided by identity, never by the ladder
-	std::optional<std::pair<double, double>> aim_known;
+	// endpoint; Stage 124: or an exact crossing, found after j plan entries): the
+	// walk's beam after those entries passes it by construction, so it is a known
+	// point there (add_aim_known), and a hit at it is decided by identity, never
+	// by the ladder
+	std::optional<AimKnown> aim_known;
 	// Stage 124: the caller reads only the first events of a walk (a region's cast,
 	// Ladder::horizon): the walk ends two events past them
 	const std::function<size_t(const std::vector<Event<N>> &)> *read_horizon = nullptr;
@@ -1869,21 +1878,22 @@ private:
 		return w;
 	}
 
-	// Stage 123: the caller's known point of the first beam (aim_known), when the
-	// beam passes it to rounding (the beam is the member's own, rounded)
+	// Stage 123: the caller's known point (aim_known) of the beam after its plan
+	// entries, when the beam passes it to rounding (the beam is the member's own,
+	// rounded)
 	void add_aim_known(Walk<N> &w, const Beam<N> &b) const {
-		if (!aim_known) {
+		if (!aim_known || aim_known->j != w.plan_index) {
 			return;
 		}
-		const CN<N> k{w.known[0].p.re.like(aim_known->first), w.known[0].p.re.like(aim_known->second)};
+		const CN<N> k{b.p.re.like(aim_known->x), b.p.re.like(aim_known->y)};
 		if (known_index(w.known, k) >= 0) {
 			return;
 		}
 		const N t = Backend<N>::param_of(b, k);
 		double x, y;
 		Backend<N>::f64_point(b, t, x, y);
-		const double scale = gd_maxf(1.0, gd_maxf(std::fabs(aim_known->first), std::fabs(aim_known->second)));
-		if (d64(x, y, aim_known->first, aim_known->second) <= 1e-6 * scale) {
+		const double scale = gd_maxf(1.0, gd_maxf(std::fabs(aim_known->x), std::fabs(aim_known->y)));
+		if (d64(x, y, aim_known->x, aim_known->y) <= 1e-6 * scale) {
 			w.known.push_back(Known<N>{k, t, -1, std::nullopt});
 		}
 	}
@@ -3154,6 +3164,9 @@ private:
 			}
 			fired_state = false;
 			beam = next->beam;
+			if (aim_known && aim_known->j > 0) {
+				add_aim_known(w, *beam); // (Stage 124: the beam after the member's own entries)
+			}
 			depart = next->depart;
 			t0 = next->t0;
 			fresh = next->fresh;

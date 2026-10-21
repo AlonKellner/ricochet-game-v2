@@ -270,7 +270,7 @@ public:
 	// little past them (Stage 124, Solver::read_horizon).
 	LadderResult solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, int max_planned,
 			int max_physical, double tol, bool verify = false, const Flags &flags = Flags(), std::optional<bool> force = std::nullopt,
-			int stops = -1, const std::optional<std::pair<double, double>> &known = std::nullopt) {
+			int stops = -1, const std::optional<AimKnown> &known = std::nullopt) {
 		force_ = force;
 		stops_ = stops;
 		plan_ = &plan;
@@ -426,7 +426,7 @@ private:
 	const std::function<size_t(const std::vector<Event<BigFloat>> &)> read_physical_big_ = [this](const std::vector<Event<BigFloat>> &ev) { return horizon(ev, true); };
 	const std::function<size_t(const std::vector<Event<BigFloat>> &)> read_planned_big_ = [this](const std::vector<Event<BigFloat>> &ev) { return horizon(ev, false); };
 	Flags flags0_;   // the walks' flags at the start (the horizon's flag changes)
-	std::optional<std::pair<double, double>> known_; // Stage 123: Solver::aim_known (solve)
+	std::optional<AimKnown> known_; // Stage 123: Solver::aim_known (solve)
 	std::optional<bool> force_; // Stage 111: the orientation the caller forces on every tier
 
 	using Compute = std::function<std::vector<Event<BigFloat>>(int)>;
