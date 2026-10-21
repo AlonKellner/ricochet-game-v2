@@ -83,7 +83,7 @@ should rarely show.
 |---|---|---|
 | F8 (TDD_27) | The preview arrives later than its input and replaces what was shown at once | Resolved: the path's morph (126.2) |
 | F18 | Latency is about 1.5× the computation while walking (a request waits behind the running region) | Recorded: the smoothing rule uses the computation (126.1); a faster region is the cure |
-| F19 | crossings with its inversion circle planned: about 27 ms a region (the stage tool's default plan measured 18) | Open: the worst planned region on the shipped levels |
+| F19 | crossings with its inversion circle planned: about 27 ms a region (the stage tool's default plan measured 18) | Reduced by Stage 127 (TDD_32): 22 ms |
 
 ## Tests
 
