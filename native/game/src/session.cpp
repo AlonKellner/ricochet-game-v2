@@ -172,12 +172,14 @@ Session::Session(const Level &level, const SessionConfig &config)
 		auto pt = std::make_shared<std::pair<rc::Tracer, int>>();
 		pt->second = -1;
 		// the prefetch: a superseded one is cancelled (it must not hold the pool from real work)
-		auto ft = std::make_shared<std::pair<rc::Tracer, int>>();
-		ft->second = -1;
-		prefetch_job_ = std::make_unique<LatestJob<VisJobIn, VisJobOut>>([ft, tracer_for](const VisJobIn &in, const std::atomic<bool> &cancel) {
-			tracer_for(ft->first, ft->second, in.world, *in.defs);
-			return run_visibility(ft->first, in.player, in.items, in.flags, in.bounds, &cancel);
-		});
+		if (config.prefetch) {
+			auto ft = std::make_shared<std::pair<rc::Tracer, int>>();
+			ft->second = -1;
+			prefetch_job_ = std::make_unique<LatestJob<VisJobIn, VisJobOut>>([ft, tracer_for](const VisJobIn &in, const std::atomic<bool> &cancel) {
+				tracer_for(ft->first, ft->second, in.world, *in.defs);
+				return run_visibility(ft->first, in.player, in.items, in.flags, in.bounds, &cancel);
+			});
+		}
 		// the exact preview: only the current inputs' is applied (a stale one is dropped)
 		preview_job_ = std::make_unique<LatestJob<PreviewJobIn, std::optional<rc::TracePair>>>(
 			[pt, tracer_for](const PreviewJobIn &in, const std::atomic<bool> &) {
@@ -207,16 +209,34 @@ void Session::collect_jobs() {
 			trace_version_++;
 		}
 	}
-	if (vis_job_) {
-		// a newer region than the one shown (the newest request's, or one before it)
-		if (auto r = vis_job_->take(); r && r->first > vis_applied_ && r->first <= vis_ticket_) {
-			vis_applied_ = r->first;
-			region_ = std::move(r->second.region);
-			fill_ = std::move(r->second.fill);
-			whiskers_ = std::move(r->second.whiskers);
-			visibility_version_++;
+	if (adopted_) {
+		// a prefetch that became a click's region (older than any region job's request)
+		if (auto r = prefetch_job_->take()) {
+			if (r->first == adopted_->first) {
+				apply_region(adopted_->second, std::move(r->second));
+			}
+			adopted_.reset();
+		} else if (!prefetch_job_->busy()) {
+			adopted_.reset();
 		}
 	}
+	if (vis_job_) {
+		if (auto r = vis_job_->take()) {
+			apply_region(r->first, std::move(r->second));
+		}
+	}
+}
+
+// a newer region than the one shown (the newest request's, or one before it)
+void Session::apply_region(long long ticket, VisJobOut &&out) {
+	if (ticket <= vis_applied_ || ticket > vis_ticket_) {
+		return;
+	}
+	vis_applied_ = ticket;
+	region_ = std::move(out.region);
+	fill_ = std::move(out.fill);
+	whiskers_ = std::move(out.whiskers);
+	visibility_version_++;
 }
 
 void Session::drain() {
@@ -270,7 +290,7 @@ rc::PlanItem Session::item_of(const PlanEntry &e) {
 // Stage 121: while no region is computing, the region the hovered entry would
 // make (a left click's entry there), so its click shows it at once
 void Session::update_prefetch() {
-	if (!async_ || !visibility_on() || !level_.features.preview || region_pending()) {
+	if (!prefetch_job_ || !visibility_on() || !level_.features.preview || region_pending()) {
 		return;
 	}
 	const PrefetchKey key{cursor_, player_, plan_version_, flags_version_, world_->version(), vis_applied_};
@@ -1035,18 +1055,20 @@ void Session::update_visibility() {
 		// Stage 121: in the background; the last region shows meanwhile
 		VisJobIn in{defs_snapshot(), world_->version(), infinity_on(), player_, items(), flags_, vb};
 		if (prefetch_in_ && same_inputs(*prefetch_in_, in)) {
-			// the hovered side's region, prefetched: shown now if it is ready
+			// the hovered side's region, prefetched: shown now if it is ready, when it is if it runs
+			prefetch_in_.reset();
 			if (auto r = prefetch_job_->take(); r && r->first == prefetch_ticket_) {
-				vis_applied_ = vis_ticket_;
-				region_ = std::move(r->second.region);
-				fill_ = std::move(r->second.fill);
-				whiskers_ = std::move(r->second.whiskers);
-				visibility_version_++;
-				prefetch_in_.reset();
+				apply_region(vis_ticket_, std::move(r->second));
+				return;
+			}
+			if (prefetch_job_->busy()) {
+				adopted_ = std::make_pair(prefetch_ticket_, vis_ticket_);
 				return;
 			}
 		}
-		prefetch_job_->cancel();
+		if (prefetch_job_ && !adopted_) {
+			prefetch_job_->cancel(); // (an adopted one runs on, like a region job)
+		}
 		prefetch_in_.reset();
 		vis_job_->submit(std::move(in), vis_ticket_);
 		return;

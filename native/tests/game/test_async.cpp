@@ -180,3 +180,36 @@ TEST_CASE("async: the hovered side's region is prefetched, shown at the click") 
 	a.drain();
 	CHECK(record_of(a) == record_of(s));
 }
+
+TEST_CASE("async: a click on a side whose prefetch still runs shows that prefetch's region") {
+	// hit_effects: a region takes about a second (TDD_25, F7), so the click comes while its prefetch runs
+	const rcg::Level lv = level("test_levels/hit_effects.json");
+	rcg::SessionConfig cfg;
+	cfg.async = true;
+	rcg::Session a(lv, cfg);
+	rcg::Session s(lv);
+	std::optional<rc::V2> hover;
+	for (const rcg::BuiltSurface &b : a.world().surfaces()) {
+		if (b.label && b.left && b.left->interactive && !b.pre_transform && b.seg.is_line()) {
+			const rc::V2 d = (b.seg.e - b.seg.s).normalized();
+			hover = b.seg.v + rc::V2{-d.y, d.x} * 6.0f;
+			break;
+		}
+	}
+	REQUIRE(hover);
+	a.settle();
+	a.drain(); // idle, away from the side
+	const int v0 = a.visibility_version();
+	a.set_cursor(*hover);
+	a.settle(); // the prefetch starts
+	a.click(false);
+	a.settle(); // taken as the click's region (not started again)
+	CHECK(a.region_pending());
+	a.drain();
+	CHECK(a.visibility_version() == v0 + 1); // one region shown: the click's
+	s.set_cursor(*hover);
+	s.settle();
+	s.click(false);
+	s.settle();
+	CHECK(record_of(a) == record_of(s));
+}

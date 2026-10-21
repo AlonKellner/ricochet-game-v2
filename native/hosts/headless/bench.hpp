@@ -6,8 +6,8 @@
 
 namespace bench {
 
-// rc_tool bench (<level json> | --all <levels dir>) [--frames N] [--click-frames N] [--budget ms] [--strict] [--async]
-//               [--json out] [--md out]; exit 1 when a check fails, 2 on usage
+// rc_tool bench (<level json> | --all <levels dir>) [--frames N] [--click-frames N] [--budget ms] [--strict]
+//               [--async [--no-prefetch] [--dwell ms]] [--json out] [--md out]; exit 1 when a check fails, 2 on usage
 int run(std::vector<std::string> args);
 
 } // namespace bench

@@ -75,6 +75,8 @@ struct SessionConfig {
 	// region, a provisional float64 preview meanwhile); off (the default): all in
 	// the frame, in order (replays, tests: the session golden)
 	bool async = false;
+	// Stage 121 (async): the hovered side's region computed while idle, for its click
+	bool prefetch = true;
 };
 
 struct Flight {
@@ -346,7 +348,9 @@ private:
 		bool operator==(const PrefetchKey &) const = default;
 	};
 	PrefetchKey prefetch_key_;
+	std::optional<std::pair<long long, long long>> adopted_; // a running prefetch taken as a region: (its ticket, the region's)
 	void update_prefetch();
+	void apply_region(long long ticket, VisJobOut &&out);
 	static rc::PlanItem item_of(const PlanEntry &e);
 	static bool same_inputs(const VisJobIn &a, const VisJobIn &b);
 	std::shared_ptr<const std::vector<rc::SurfaceDef>> job_defs_;
