@@ -136,6 +136,7 @@ Session::Session(const Level &level, const SessionConfig &config)
 	world_ = std::make_unique<World>(build_level(level_));
 	player_ = level_.player_start.value_or(V2{});
 	tick_from_ = player_;
+	settled_player_ = player_; // (a new session is standing still)
 	gravity_ = level_.gravity;
 	for (rc::Tracer *t : {&gm_tracer_, &renderer_tracer_, &vis_tracer_}) {
 		t->set_emit_infinity(infinity_on());
@@ -208,7 +209,7 @@ bool Session::region_pending() const { return vis_job_ && (vis_applied_ < vis_ti
 void Session::collect_jobs() {
 	if (preview_job_) {
 		if (auto r = preview_job_->take(); r && r->first == preview_ticket_) {
-			climb_seconds_ = r->second.seconds;
+			climb_times_.add(r->second.seconds);
 			make_preview(preview_, std::move(r->second.pair));
 			provisional_.reset();
 			provisional_version_++;
@@ -240,7 +241,7 @@ void Session::apply_region(long long ticket, VisJobOut &&out) {
 	}
 	vis_applied_ = ticket;
 	if (out.region) {
-		region_seconds_ = double(out.region->build_usec) / 1e6; // (how long a region takes now: the budget's guess)
+		region_times_.add(double(out.region->build_usec) / 1e6); // (how long a region takes now: the budget's guess)
 	}
 	region_ = std::move(out.region);
 	fill_ = std::move(out.fill);
@@ -299,7 +300,10 @@ rc::PlanItem Session::item_of(const PlanEntry &e) {
 // Stage 121: while no region is computing, the region the hovered entry would
 // make (a left click's entry there), so its click shows it at once
 void Session::update_prefetch() {
-	if (!prefetch_job_ || !visibility_on() || !level_.features.preview || region_pending()) {
+	// (not while the player moves -- still for 100 ms: the prefetch would be stale at
+	// once, and its casts would hold the pool from the region the next frame needs)
+	if (!prefetch_job_ || std::chrono::steady_clock::now() - moved_at_ < std::chrono::milliseconds(100) || !visibility_on() ||
+		!level_.features.preview || region_pending()) {
 		return;
 	}
 	const PrefetchKey key{cursor_, player_, plan_version_, flags_version_, world_->version(), vis_applied_};
@@ -1153,15 +1157,20 @@ void Session::update_spawn_preview() {
 // (on time: nothing for the presenter to smooth); the rest arrives later, and
 // later frames do not wait for it again
 void Session::settle() {
+	if (!(player_ == settled_player_)) {
+		moved_at_ = std::chrono::steady_clock::now();
+		settled_player_ = player_;
+	}
 	const long long vis0 = vis_ticket_, preview0 = preview_ticket_;
 	settle_once();
 	if (!async_ || budget_ <= 0.0) {
 		return;
 	}
 	// only the work this frame started (work already late is not waited for again)
-	const bool preview_busy = preview_ticket_ != preview0 && preview_job_ && preview_job_->busy() && climb_seconds_ <= budget_;
-	// (a region that took longer than the budget last time: no use waiting for it)
-	const bool region_busy = vis_ticket_ != vis0 && vis_job_ && vis_job_->busy() && region_seconds_ <= budget_;
+	const bool preview_busy = preview_ticket_ != preview0 && preview_job_ && preview_job_->busy() && climb_times_.typical() <= budget_;
+	// (regions that typically take longer than the budget: no use waiting for this one;
+	// one slow region among fast ones is not typical)
+	const bool region_busy = vis_ticket_ != vis0 && vis_job_ && vis_job_->busy() && region_times_.typical() <= budget_;
 	if (!preview_busy && !region_busy) {
 		return;
 	}

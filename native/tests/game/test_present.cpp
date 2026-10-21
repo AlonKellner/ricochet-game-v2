@@ -401,3 +401,25 @@ TEST_CASE("present: one late region does not keep on-time regions morphing") {
 	CHECK(morphing <= 6); // (the first morph's 100 ms, at most)
 	CHECK_FALSE(p.animating());
 }
+
+TEST_CASE("present: cells that do not overlap morph as one outline (no edge between cells to part)") {
+	rcg::Session s(level("main.json"));
+	s.settle();
+	const sm::Shape a = outline(s);
+	CHECK(a.outline);
+	CHECK(a.rings.size() == 1);
+	CHECK(a.pieces.size() > 1);
+	s.teleport(s.player() + rc::V2{-12, 6});
+	s.settle();
+	const sm::Plan p = sm::plan(a, outline(s), sm::Pt{0, 0});
+	CHECK(p.outline);
+	CHECK(sm::at(p, 0.5).rings.size() == 1);
+	// a planned inversion's cells overlap: its shape is its pieces
+	rcg::Session v(level("playground/inversion_grid.json"));
+	plan_side(v, "FullInversion", 3, 0);
+	v.teleport(v.player() + rc::V2{0, 7});
+	v.settle();
+	const sm::Shape inv = outline(v);
+	CHECK_FALSE(inv.outline);
+	CHECK(inv.rings.size() == inv.pieces.size());
+}

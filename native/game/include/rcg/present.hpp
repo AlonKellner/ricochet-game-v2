@@ -77,16 +77,19 @@ using Ring = std::vector<Vertex>;
 // A region's pieces: closed simple polygons (its cells), their carriers, and the
 // apex the shadows lie on rays from (has_apex: the player).
 struct Shape {
-	std::vector<Ring> rings;
+	std::vector<Ring> rings;  // what is drawn: the outline when there is one, else the pieces
+	std::vector<Ring> pieces; // a region's cells (a diff with a shape that has no outline uses them)
+	bool outline = false;     // rings is an outline (its cells do not overlap)
 	std::vector<Carrier> carriers;
 	bool has_apex = false;
 	Pt apex;
 };
 
-// A region as pieces: its cells' rings as its fill makes them (each a simple
-// polygon, counterclockwise; cells of a pencil's two sheets may overlap, as the
-// fill draws them), straight runs merged and arcs reduced to chords within
-// `tol`, every vertex tagged by the carriers.
+// A region's shape: the outline of its cells' union (outer rings counterclockwise,
+// holes clockwise: no edge between two cells to part mid-morph) when its cells do
+// not overlap, else the cells' rings themselves (a pencil's two sheets overlap
+// as the fill draws them); straight runs merged and arcs reduced to chords
+// within `tol`, every vertex tagged by the carriers.
 Shape shape_of(const rc::vis::Result &r, std::vector<Carrier> carriers, double tol = 0.5);
 // The carriers of a region (its cells' carrier edges; a straight surface's segment from the world, if given).
 std::vector<Carrier> carriers_of(const rc::vis::Result &r, const World *world = nullptr);
@@ -106,6 +109,7 @@ struct Track {
 };
 struct Plan {
 	std::vector<std::vector<Track>> rings;
+	bool outline = false; // the rings are outlines (both shapes had one)
 	std::vector<int> parent;
 };
 // The diff of two shapes: rings paired by place, then each pair aligned; a
@@ -116,7 +120,8 @@ Plan plan(const Shape &a, const Shape &b, const Pt &anchor);
 Shape at(const Plan &p, double e);
 // A shape's fill: triangles (points, three indices a triangle).
 void fill_of(const Shape &s, std::vector<rc::V2> &pts, std::vector<int> &indices);
-// The holes' outer rings, by containment (-1: an outer ring).
+// The holes' outer rings: a clockwise ring is a hole of the smallest counterclockwise
+// ring around it (-1: an outer ring; -2: a hole of nothing).
 std::vector<int> parents_of(const Shape &s);
 
 } // namespace shape_morph

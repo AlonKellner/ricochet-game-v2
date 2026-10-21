@@ -22,6 +22,9 @@
 #include "rcg/render.hpp"
 #include "rcg/world.hpp"
 
+#include <algorithm>
+#include <array>
+#include <chrono>
 #include <nlohmann/json.hpp>
 
 #include <map>
@@ -146,6 +149,7 @@ public:
 	bool region_pending() const;
 	bool preview_exact() const { return !provisional_.has_value(); }
 	void set_budget(double seconds) { budget_ = seconds; } // (SessionConfig::budget; tests)
+	long long prefetches() const { return prefetch_ticket_; } // the prefetches started (tests, benches)
 	void drain();
 
 	// the derived state as the game's nodes reach it after their frames
@@ -346,8 +350,20 @@ private:
 	};
 	bool async_ = false;
 	double budget_ = 0.0;
-	double region_seconds_ = 0.0;  // the last region's build time
-	double climb_seconds_ = 0.0;   // the last exact climb's
+	// the last few regions' build times and exact climbs' (Stage 122: the budget's
+	// guess whether this one can be on time: their median)
+	struct Times {
+		std::array<double, 5> last{};
+		int n = 0;
+		void add(double t) { last[size_t(n++ % 5)] = t; }
+		double typical() const {
+			std::array<double, 5> s = last;
+			const size_t k = size_t(std::min(n, 5));
+			std::sort(s.begin(), s.begin() + long(k));
+			return k == 0 ? 0.0 : s[k / 2];
+		}
+	};
+	Times region_times_, climb_times_;
 	std::optional<Preview> provisional_; // shown while the exact climb runs
 	int provisional_version_ = 0;
 	long long vis_ticket_ = 0, preview_ticket_ = 0;
@@ -364,6 +380,8 @@ private:
 		bool operator==(const PrefetchKey &) const = default;
 	};
 	PrefetchKey prefetch_key_;
+	V2 settled_player_;     // where the player was at the last settle, and when it last moved
+	std::chrono::steady_clock::time_point moved_at_{};
 	std::optional<std::pair<long long, long long>> adopted_; // a running prefetch taken as a region: (its ticket, the region's)
 	void update_prefetch();
 	void settle_once(); // the derived state from what is known now (settle: then the budget's wait)

@@ -167,6 +167,24 @@ smoothing covers them on every frame. Making those regions fit the frame is the 
 N+3: the solver's ties, the region's refinement), after which the smoothing will rarely trigger there either. The player drawn between
 physics ticks is separate (motion at display rates that are not 60 Hz) and stays.
 
+### What still made main smooth (the user, 2026-10-21: "I can still sometimes see morphing and hairline artifacts on main")
+
+Measured on main (walking 600 frames at 60 Hz, the cursor resting on a mirror, a 5 ms budget):
+
+| Cause | Late frames | Fix |
+|---|---|---|
+| The prefetch (Stage 121) ran between frames while the player walked; its casts held the shared pool, so the next region missed its budget | 86–115 / 600 | No prefetch until the player has stood still for 100 ms: 6–11 / 600 |
+| One slow region (OS scheduling: 2–7 ms instead of 1 ms) made the next frame skip its wait | (of the rest) | The wait is skipped only when the last 5 regions' median exceeds the budget: 0–2 / 600 |
+| On-time regions renewed a running morph | (all, after one late region) | A morph is retargeted but never extended on time (122.4b) |
+
+**The hairlines** came from morphing a region cell by cell: two neighbouring cells' shared edge could part or
+overlap mid-morph (F11). A region whose cells do not overlap now morphs as the outline of their union: the
+edges two cells share cancel (points identified on a 1e-4 px grid), the rest chain into rings (outer
+counterclockwise, holes clockwise). There is no edge between cells left to part. A region whose cells overlap
+(the outline would cross itself, as a planned inversion's does) still morphs cell by cell. A shape carries
+both forms; a diff uses outlines when both shapes have one, else pieces for both. On main and crossings the
+outline is one ring of 11 and 36 vertices, and the diff costs about 0.1 ms.
+
 ## The C API (1.3)
 
 | Field | Meaning |
@@ -191,6 +209,9 @@ property, on by default); its session-replay test turns it off.
 | `present: regions on time are drawn as they are: no morph, no following` | an asynchronous session with a budget, walking between ticks: every region node is the session's, nothing animates |
 | `present: a region that misses its frame follows, then morphs in` | no budget: while pending the region follows; on arrival it morphs; then it is the session's |
 | `async: a frame with a budget shows the work that finishes in it, as a synchronous frame` | with a budget, nothing pending and the record equals the synchronous session's without a drain |
+| `present: one late region does not keep on-time regions morphing` | one late region, then 30 on-time walking frames: the morph ends within its 100 ms |
+| `present: cells that do not overlap morph as one outline (no edge between cells to part)` | main: one outline ring, its diff one ring mid-morph; a planned inversion: pieces |
+| `async: no prefetch while the player moves` | 20 walking frames start no prefetch; standing still 100 ms starts one |
 | `test_an_animated_game_smooths_only_a_late_region` (Python host) | through the C API: a synchronous animated game draws the game's region; an asynchronous one with no budget morphs its late region in, then draws the game's |
 
 ## Findings
@@ -200,4 +221,4 @@ property, on by default); its session-replay test turns it off.
 | F8 | A region and the preview arrive later than their input and replace what was shown at once | The region: resolved here (the morph). The path: Stage 123 |
 | F9 | The first morph (per ray) bent straight edges and collapsed a planned inversion's region on every update | Resolved: the diff of shapes (any pencil, straight edges) |
 | F10 | A planned inversion's diff costs about 4 ms per new region on the frame thread (2773 vertices) | Open (only when late, since 122.4): the diff could run beside the region's job |
-| F11 | Mid-morph, two cells' shared edges can part or overlap by a hairline (each pair is aligned on its own) | Open, minor since 122.4 (only when late): align shared vertices once for both cells |
+| F11 | Mid-morph, two cells' shared edges can part or overlap by a hairline (each pair is aligned on its own) | Resolved where the cells do not overlap (one outline); open for overlapping cells (a planned inversion), only when late |
