@@ -2210,10 +2210,13 @@ private:
 	}
 
 	// the three solver calls of a cast, through the shared memo when there is one
+	// (Stage 123: a cast reads its physical walk through the stop after the plan's
+	// K entries and its planned walk through its cursor, cast_core: the ladder's
+	// horizon, int(K))
 	std::optional<LadderResult> memo_solve(Tracer &tracer, const Pt &c, std::optional<bool> force) const {
 		const Pt P = res_.player;
 		if (memo_ == nullptr) {
-			return tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force);
+			return tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K));
 		}
 		const SolveMemo::Key key = SolveMemo::key(c, force);
 		{
@@ -2225,7 +2228,7 @@ private:
 			}
 		}
 		const auto t0 = std::chrono::steady_clock::now();
-		std::optional<LadderResult> lr = tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force);
+		std::optional<LadderResult> lr = tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K));
 		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 		std::lock_guard<std::mutex> lock(memo_->mutex);
 		memo_->solves.emplace(key, lr);
@@ -2390,6 +2393,9 @@ private:
 				}
 			}
 		}
+		// (Stage 123: nothing here reads past that stop, or the planned walk past
+		// the events at its cursor's point -- the ladder decides no further,
+		// memo_solve's horizon -- but a walk with no such stop is read whole)
 		// the far end: the first physical event past the last entry's point (a
 		// step beyond it) that changes the frame or ends the walk, or the budget
 		int stop_i = -1;
