@@ -323,6 +323,16 @@ public:
 				s.tier_solves[q] += x.tier_solves[q];
 			}
 			s.big_usec += x.big_usec;
+			for (size_t q = 0; q < 32; q++) {
+				s.why[q] += x.why[q];
+			}
+			for (size_t q = 0; q < 8; q++) {
+				s.why_kind[q] += x.why_kind[q];
+			}
+			s.why_zero += x.why_zero;
+			s.why_unbounded += x.why_unbounded;
+			s.why_empty += x.why_empty;
+			s.why_beyond += x.why_beyond;
 		}
 		return s;
 	}

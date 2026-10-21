@@ -84,6 +84,7 @@ struct Event {
 	std::optional<N> t_from;
 	std::optional<N> t_to;  // nullopt = infinity
 	double margin = INF_D;  // px gap to the nearest competing decision
+	uint8_t why = 0;        // Stage 123: what set the margin (Why: an instrument, the ladder's stats)
 	bool seeded = false;    // lies on the sensitive forward continuation
 	bool state = false;     // the side's state change fired
 	bool fired = false;     // Stage 107: the side fired, ghost aside (its hit effects fire)
@@ -2183,7 +2184,16 @@ private:
 						ki >= 0 ? w.known[size_t(ki)].skip : -9, depart, int(cursor_now), int(w.mode));
 				}
 			}
-			cands.push_back(Candidate<N>{tc, nullptr, false, std::nullopt, -1});
+			// Stage 123: a cursor that is a known point (a segment's endpoint, a corner
+			// two surfaces share) is that point, by provenance: its exact parameter and
+			// position, so the carriers through it tie with it exactly (the cursor
+			// first), never by the rounding of its own parameter
+			std::optional<CN<N>> cursor_pt;
+			if (ki >= 0 && !cursor_now) {
+				tc = w.known[size_t(ki)].t;
+				cursor_pt = w.known[size_t(ki)].p;
+			}
+			cands.push_back(Candidate<N>{tc, nullptr, false, cursor_pt, -1});
 			if (ki < 0) {
 				w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
 			}
@@ -2310,8 +2320,11 @@ private:
 			const N t = x.t;
 			const std::optional<CN<N>> pt = x.pt ? x.pt : y.pt;
 			const bool at_q = x.at_q || y.at_q; // concurrent at Q: both pinned there
-			cands[i] = Candidate<N>{t, lo, false, pt, int(i), false, at_q};
-			cands[i + 1] = Candidate<N>{t, hi, false, pt, int(i), false, at_q};
+			// Stage 123: three or more carriers at one point are one tie group (a pair
+			// whose first is grouped joins it): no margin between them, never a climb
+			const int group = x.tie >= 0 ? x.tie : int(i);
+			cands[i] = Candidate<N>{t, lo, false, pt, group, false, at_q};
+			cands[i + 1] = Candidate<N>{t, hi, false, pt, group, false, at_q};
 		}
 	}
 
@@ -2414,7 +2427,19 @@ private:
 	// Per candidate: px distance to its neighbours in the walk order (and, for
 	// a segment, to its endpoints). The two roots of a carrier the beam touches
 	// exactly (beam_tangent) are one decision: not each other's neighbour.
-	static std::vector<double> gaps(Walk<N> &w, const Beam<N> &beam, const std::vector<Candidate<N>> &cands) {
+	// Stage 123: what set a candidate's margin (the ladder counts the declined
+	// decisions by it): the term, and how close. An instrument: no decision reads it.
+	enum Why : uint8_t {
+		WHY_NONE = 0,
+		WHY_NEIGHBOUR_CORNER = 1, // another surface's hit, at an endpoint the two share
+		WHY_NEIGHBOUR = 2,        // another surface's hit, elsewhere
+		WHY_END_CORNER = 3,       // its own segment's endpoint, which another surface shares
+		WHY_END = 4,              // its own segment's endpoint, a free one
+		WHY_SAME_SURFACE = 5,     // its own surface's other root (a beam touching its carrier, not found tangent)
+		WHY_ZERO = 0 << 3, WHY_ROUNDING = 1 << 3, WHY_SMALL = 2 << 3, WHY_WIDE = 3 << 3 // how close
+	};
+
+	static std::vector<double> gaps(Walk<N> &w, const Beam<N> &beam, const std::vector<Candidate<N>> &cands, std::vector<uint8_t> *why = nullptr) {
 		std::vector<std::pair<double, double>> pts;
 		for (const Candidate<N> &cand : cands) {
 			if (cand.inf && !cand.pt) {
@@ -2450,9 +2475,36 @@ private:
 			}
 		}
 		auto same_root = [&](size_t i, long k) { return dbl[i] >= 0 && dbl[size_t(k)] == dbl[i]; };
+		// (the instrument) an endpoint of `s` at (x, y) that another surface shares
+		auto shared_end = [&](const Surf<N> *s, double x, double y, const Surf<N> *with) {
+			const double tol = 1e-6 * gd_maxf(1.0, gd_maxf(std::fabs(x), std::fabs(y)));
+			for (const auto &[px, py] : {std::pair{s->sx, s->sy}, std::pair{s->ex, s->ey}}) {
+				if (s->full || d64(px, py, x, y) > tol) {
+					continue;
+				}
+				for (const auto &o : w.scene->surfaces) {
+					if (o.get() == s || o->full || (with != nullptr && o.get() != with)) {
+						continue;
+					}
+					if (d64(o->sx, o->sy, px, py) <= tol || d64(o->ex, o->ey, px, py) <= tol) {
+						return true;
+					}
+				}
+			}
+			return false;
+		};
+		auto closeness = [](double g, double x, double y) -> uint8_t {
+			const double scale = gd_maxf(1.0, gd_maxf(std::fabs(x), std::fabs(y)));
+			return g == 0.0 ? WHY_ZERO : g <= 1e-6 * scale ? WHY_ROUNDING : g <= 1e-2 ? WHY_SMALL : WHY_WIDE;
+		};
+		if (why) {
+			why->assign(cands.size(), WHY_NONE);
+		}
 		std::vector<double> out;
 		for (size_t i = 0; i < cands.size(); i++) {
 			double g = INF_D;
+			uint8_t term = WHY_NONE;
+			const Surf<N> *other = nullptr; // (the instrument) the neighbour that set it
 			const Surf<N> *s = cands[i].surf;
 			if (s != nullptr) {
 				const bool exact_i = cands[i].pt.has_value();
@@ -2462,26 +2514,51 @@ private:
 					l--;
 				}
 				if (l >= 0) {
-					g = gd_minf(g, d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second));
+					const double d = d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second);
+					if (d < g) {
+						g = d;
+						term = cands[size_t(l)].surf == s ? WHY_SAME_SURFACE : WHY_NEIGHBOUR;
+						other = cands[size_t(l)].surf;
+					}
 				}
 				size_t r = i + 1;
 				while (r < cands.size() && (cands[r].surf == nullptr || (exact_i && cands[r].pt) || (tie_i >= 0 && cands[r].tie == tie_i) || same_root(i, long(r)))) {
 					r++;
 				}
 				if (r < cands.size()) {
-					g = gd_minf(g, d64(pts[i].first, pts[i].second, pts[r].first, pts[r].second));
+					const double d = d64(pts[i].first, pts[i].second, pts[r].first, pts[r].second);
+					if (d < g) {
+						g = d;
+						term = cands[r].surf == s ? WHY_SAME_SURFACE : WHY_NEIGHBOUR;
+						other = cands[r].surf;
+					}
 				}
 				if (!s->seg.full) {
 					const double ds = d64(pts[i].first, pts[i].second, s->sx, s->sy);
 					const double de = d64(pts[i].first, pts[i].second, s->ex, s->ey);
 					// an exact endpoint hit is decided by provenance, not by a margin
-					if (ds > 0.0) {
-						g = gd_minf(g, ds);
+					if (ds > 0.0 && ds < g) {
+						g = ds;
+						term = WHY_END;
+						other = nullptr;
 					}
-					if (de > 0.0) {
-						g = gd_minf(g, de);
+					if (de > 0.0 && de < g) {
+						g = de;
+						term = WHY_END;
+						other = nullptr;
 					}
 				}
+			}
+			if (why && term != WHY_NONE) {
+				const uint8_t close = closeness(g, pts[i].first, pts[i].second);
+				if (close <= WHY_SMALL) { // (a corner is looked for only where the margin is small)
+					if (term == WHY_NEIGHBOUR && other && shared_end(s, pts[i].first, pts[i].second, other)) {
+						term = WHY_NEIGHBOUR_CORNER;
+					} else if (term == WHY_END && shared_end(s, pts[i].first, pts[i].second, nullptr)) {
+						term = WHY_END_CORNER;
+					}
+				}
+				(*why)[i] = uint8_t(term | close);
 			}
 			out.push_back(g);
 		}
@@ -2686,7 +2763,8 @@ private:
 			}
 			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0, keep_cursor);
 			keep_cursor = false;
-			std::vector<double> gp = gaps(w, *beam, cands);
+			std::vector<uint8_t> gw;
+			std::vector<double> gp = gaps(w, *beam, cands, &gw);
 			std::optional<Next> next;
 			bool restart = false;
 			size_t ci = skip;
@@ -2744,6 +2822,7 @@ private:
 						w.plan_index++;
 					}
 					Event<N> &ie = emit(w, EventKind::Infinity, beam, t_prev, cand.pt ? std::optional<N>(t) : std::nullopt, gp[ci]);
+					ie.why = gw[ci];
 					ie.surface_id = INFINITY_ID;
 					if (cand.pt) {
 						ie.point = cand.pt; // the frame's image of infinity, exact by provenance
@@ -2763,6 +2842,10 @@ private:
 				}
 				if (surf == nullptr) {
 					Event<N> &ce = emit(w, EventKind::Cursor, beam, t_prev, t, gp[ci]);
+					ce.why = gw[ci];
+					if (cand.pt) {
+						ce.point = cand.pt; // (a known point: exact by provenance)
+					}
 					ce.anchored = w.anchored;
 					t_prev = t;
 					w.cursor_done = true;
@@ -2848,6 +2931,7 @@ private:
 					fired_state = true;
 				}
 				Event<N> &e = emit(w, EventKind::Hit, beam, t_prev, t, gp[ci]);
+				e.why = gw[ci];
 				e.surface_id = surf->id;
 				e.left = left;
 				e.state = fires_state;

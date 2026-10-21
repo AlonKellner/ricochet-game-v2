@@ -189,6 +189,12 @@ struct LadderStats {
 	long long verify = 0;     // verified by a climb
 	long long tier_solves[6] = {}; // BigFloat walks computed per tier (index into TIERS)
 	long long big_usec = 0;   // time in those walks
+	long long why[32] = {};   // Stage 123: the declined decisions by what set the margin (Solver::Why)
+	long long why_zero = 0;   // ... of which the margin was exactly 0
+	long long why_kind[8] = {}; // ... by the declined event's kind (EventKind)
+	long long why_unbounded = 0; // ... whose margin is unbounded (no competitor: the estimate blew up)
+	long long why_empty = 0;     // ... a walk with no events
+	long long why_beyond = 0;    // ... the first unreliable index past the events given
 };
 
 // The scenes of one solve at every tier, built on demand, plus the solve caches.
@@ -477,6 +483,15 @@ private:
 			st.verify++;
 		} else if (!reliable) {
 			st.unreliable++;
+			st.why_empty += events.empty() ? 1 : 0;
+			st.why_beyond += !events.empty() && (sens.unreliable_from < 0 || size_t(sens.unreliable_from) >= events.size()) ? 1 : 0;
+			if (sens.unreliable_from >= 0 && size_t(sens.unreliable_from) < events.size()) {
+				const auto &ev = events[size_t(sens.unreliable_from)];
+				st.why[ev.why & 31]++;
+				st.why_zero += ev.margin == 0.0 ? 1 : 0;
+				st.why_kind[size_t(ev.kind) & 7]++;
+				st.why_unbounded += std::isinf(ev.margin) ? 1 : 0;
+			}
 		} else if (worst(est) > tol) {
 			st.over_tol++;
 		} else {
