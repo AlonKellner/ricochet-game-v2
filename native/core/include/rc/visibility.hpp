@@ -436,6 +436,7 @@ struct Member {
 	int tangent_q_sid = -1; // tangent at a finite Q_K to this surface's carrier (they meet at Q_K only)
 	bool tangent_pole = false; // tangent at some frame's finite infinity point to a carrier through it (VIS-REGULAR)
 	bool exact = false;    // its cursor is exact data of the final frame (a segment's endpoint, a piece's end)
+	std::optional<Pt> aim_known; // Stage 123: exact data of the player's frame its aim line passes (both ways): Solver::aim_known
 	Cast crit;            // the member itself (Stage 113: cast along the member off the projective's carrier when its point of interest lies on it)
 	Cast minus;           // just before it (direction rotated by -eps)
 	Cast plus;            // just after it
@@ -495,6 +496,9 @@ struct Result {
 	// the benches: casts per CastKind, and the build's wall time
 	std::array<int, 6> casts_by_kind{};
 	long long build_usec = 0;
+	std::array<long long, 5> phase_usec{}; // Stage 123 (benches): prepare, members, their casts, cells, merge
+	long long batch_max_usec = 0;  // ... the parallel batches' slowest casts, summed (each batch waits for its slowest)
+	long long batch_sum_usec = 0;  // ... and all their casts' time
 };
 
 // Angular order of aim directions, counterclockwise from the fixed reference
@@ -607,13 +611,18 @@ struct SolveMemo {
 	struct Key {
 		uint64_t x = 0, y = 0;
 		int force = 2; // 0 direct, 1 reversed, 2 the solver's own choice
-		bool operator==(const Key &o) const { return x == o.x && y == o.y && force == o.force; }
+		uint64_t kx = 0, ky = 0; // Stage 123: the cast's known point (Solver::aim_known; 0: none)
+		bool has_k = false;
+		bool operator==(const Key &o) const = default;
 	};
 	struct Hash {
-		size_t operator()(const Key &k) const { return size_t((k.x * 1099511628211ULL) ^ (k.y * 14695981039346656037ULL) ^ uint64_t(k.force)); }
+		size_t operator()(const Key &k) const {
+			return size_t((k.x * 1099511628211ULL) ^ (k.y * 14695981039346656037ULL) ^ uint64_t(k.force) ^ (k.kx * 31) ^ (k.ky * 131));
+		}
 	};
-	static Key key(const Pt &c, std::optional<bool> force) {
-		return Key{std::bit_cast<uint64_t>(c.x), std::bit_cast<uint64_t>(c.y), force ? (*force ? 1 : 0) : 2};
+	static Key key(const Pt &c, std::optional<bool> force, const std::optional<Pt> &known = std::nullopt) {
+		return Key{std::bit_cast<uint64_t>(c.x), std::bit_cast<uint64_t>(c.y), force ? (*force ? 1 : 0) : 2, known ? std::bit_cast<uint64_t>(known->x) : 0,
+			known ? std::bit_cast<uint64_t>(known->y) : 0, known.has_value()};
 	}
 	std::mutex mutex;
 	std::unordered_map<Key, std::optional<LadderResult>, Hash> solves;
@@ -694,16 +703,28 @@ public:
 	}
 
 	Result build() {
-		if (!prepare()) {
+		auto t = std::chrono::steady_clock::now();
+		auto lap = [&](int k) {
+			const auto now = std::chrono::steady_clock::now();
+			res_.phase_usec[size_t(k)] += std::chrono::duration_cast<std::chrono::microseconds>(now - t).count();
+			t = now;
+		};
+		const bool ok = prepare();
+		lap(0);
+		if (!ok) {
 			return std::move(res_);
 		}
 		if (empty_) {
 			return std::move(res_); // (supported, nothing visible)
 		}
 		collect_members();
+		lap(1);
 		cast_members();
+		lap(2);
 		build_cells();
+		lap(3);
 		merge_cells();
+		lap(4);
 		for (Cell &c : res_.cells) {
 			c.half = int(half_);
 		}
@@ -1463,6 +1484,9 @@ private:
 		m.dir = *d;
 		m.cursor = cp;
 		m.poi = true;
+		if (exact && j == 0) {
+			m.aim_known = pt_of(z);
+		}
 		m.why = why + (j < K ? " (frame " + std::to_string(j) + ")" : "");
 		m.tangent_sid = j == K || (tangent_sid >= 0 && carrier_fixed(tangent_sid, j)) ? tangent_sid : -1;
 		m.exact = exact && same_frame_as_final(j);
@@ -1482,6 +1506,7 @@ private:
 		// point's image otherwise
 		Member o;
 		o.dir = *d * -1.0;
+		o.aim_known = m.aim_known;
 		o.why = m.why + ", the other way";
 		const std::optional<CN<F64>> exact_c = other ? forward(std::optional<CN<F64>>(cn_of(*other)), j, K) : std::nullopt;
 		if (exact_c && pt_of(*exact_c).finite()) {
@@ -2103,6 +2128,7 @@ private:
 		Param q;
 		Beam<F64> member;
 		CastKind kind = CastKind::Other;
+		std::optional<Pt> known = {}; // Stage 123: the member's Member::aim_known (its own cast)
 	};
 	std::vector<Cast> cast_batch(const std::vector<CastJob> &jobs) {
 		std::vector<Cast> out(jobs.size());
@@ -2114,7 +2140,7 @@ private:
 		if (nt <= 1) {
 			for (size_t i = 0; i < jobs.size(); i++) {
 				check_cancel();
-				out[i] = cast_on(tracer_, jobs[i].c, jobs[i].q, jobs[i].member);
+				out[i] = cast_on(tracer_, jobs[i].c, jobs[i].q, jobs[i].member, jobs[i].known);
 			}
 			return out;
 		}
@@ -2124,13 +2150,22 @@ private:
 		}
 		// (Stage 120: on the persistent pool, not threads made per batch; worker k casts with tracers[k])
 		check_cancel();
+		std::vector<long long> usec(jobs.size(), 0);
 		ThreadPool::shared().parallel_for(jobs.size(), nt - 1, [&](size_t worker, size_t i) {
 			if (cancel_ != nullptr && cancel_->load(std::memory_order_relaxed)) {
 				return; // (cancelled: the caller throws below, never a pool thread)
 			}
-			out[i] = cast_on(*tracers[worker], jobs[i].c, jobs[i].q, jobs[i].member);
+			const auto t0 = std::chrono::steady_clock::now();
+			out[i] = cast_on(*tracers[worker], jobs[i].c, jobs[i].q, jobs[i].member, jobs[i].known);
+			usec[i] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
 		});
 		check_cancel();
+		long long mx = 0;
+		for (long long u : usec) {
+			mx = std::max(mx, u);
+			res_.batch_sum_usec += u;
+		}
+		res_.batch_max_usec += mx;
 		return out;
 	}
 
@@ -2151,10 +2186,10 @@ private:
 			int(r.met), r.ek, int(r.has_depart), end_name(r.near_kind), end_name(r.end_kind), r.has_tie ? (r.tie_after_q ? " tie-cut after Q" : " tie-cut") : "");
 	}
 
-	Cast cast_on(Tracer &tracer, const Pt &c, const Param &q, const Beam<F64> &member) const {
+	Cast cast_on(Tracer &tracer, const Pt &c, const Param &q, const Beam<F64> &member, const std::optional<Pt> &known = std::nullopt) const {
 		const Pt &dir = q.dir;
 		if (half_ == Half::Single) {
-			Cast r = cast_core(tracer, c, q, member, std::nullopt, nullptr);
+			Cast r = cast_core(tracer, c, q, member, std::nullopt, nullptr, known);
 			trace_cast(r, std::nullopt);
 			return r;
 		}
@@ -2168,12 +2203,12 @@ private:
 		}
 		std::optional<Cast> tie;
 		if (tq && *tq != rev) {
-			tie = cast_core(tracer, c, q, Beam<F64>{member.p, member.tau.neg(), member.kappa.neg()}, *tq, nullptr);
+			tie = cast_core(tracer, c, q, Beam<F64>{member.p, member.tau.neg(), member.kappa.neg()}, *tq, nullptr, known);
 			if (!tie->valid) {
 				tie.reset();
 			}
 		}
-		Cast r = cast_core(tracer, c, q, member, rev, tie ? &*tie : nullptr);
+		Cast r = cast_core(tracer, c, q, member, rev, tie ? &*tie : nullptr, known);
 		if (r.valid) {
 			const std::optional<bool> own = memo_realization(tracer, c);
 			r.chosen = own && *own == rev;
@@ -2186,12 +2221,16 @@ private:
 	}
 
 	// the three solver calls of a cast, through the shared memo when there is one
-	std::optional<LadderResult> memo_solve(Tracer &tracer, const Pt &c, std::optional<bool> force) const {
+	// (Stage 123: a cast reads its physical walk through the stop after the plan's
+	// K entries and its planned walk through its cursor, cast_core: the ladder's
+	// horizon, int(K))
+	std::optional<LadderResult> memo_solve(Tracer &tracer, const Pt &c, std::optional<bool> force, const std::optional<Pt> &known = std::nullopt) const {
 		const Pt P = res_.player;
+		const std::optional<std::pair<double, double>> kp = known ? std::optional<std::pair<double, double>>({known->x, known->y}) : std::nullopt;
 		if (memo_ == nullptr) {
-			return tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force);
+			return tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K), kp);
 		}
-		const SolveMemo::Key key = SolveMemo::key(c, force);
+		const SolveMemo::Key key = SolveMemo::key(c, force, known);
 		{
 			std::lock_guard<std::mutex> lock(memo_->mutex);
 			const auto it = memo_->solves.find(key);
@@ -2201,7 +2240,7 @@ private:
 			}
 		}
 		const auto t0 = std::chrono::steady_clock::now();
-		std::optional<LadderResult> lr = tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force);
+		std::optional<LadderResult> lr = tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K), kp);
 		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
 		std::lock_guard<std::mutex> lock(memo_->mutex);
 		memo_->solves.emplace(key, lr);
@@ -2256,13 +2295,14 @@ private:
 		return q;
 	}
 
-	Cast cast_core(Tracer &tracer, const Pt &c, const Param &q, const Beam<F64> &member, std::optional<bool> force, const Cast *tie) const {
+	Cast cast_core(Tracer &tracer, const Pt &c, const Param &q, const Beam<F64> &member, std::optional<bool> force, const Cast *tie,
+			const std::optional<Pt> &known = std::nullopt) const {
 		Cast r;
 		r.cursor = c;
 		r.dir = q.dir;
 		r.key = q.key;
 		const Pt P = res_.player;
-		const std::optional<LadderResult> lr = memo_solve(tracer, c, force);
+		const std::optional<LadderResult> lr = memo_solve(tracer, c, force, known);
 		if (!lr) {
 			return r;
 		}
@@ -2366,6 +2406,9 @@ private:
 				}
 			}
 		}
+		// (Stage 123: nothing here reads past that stop, or the planned walk past
+		// the events at its cursor's point -- the ladder decides no further,
+		// memo_solve's horizon -- but a walk with no such stop is read whole)
 		// the far end: the first physical event past the last entry's point (a
 		// step beyond it) that changes the frame or ends the walk, or the budget
 		int stop_i = -1;
@@ -2643,7 +2686,7 @@ private:
 			if (!aim() && m.poi && on_carrier_exact(*psurf_, cn_of(m.cursor))) {
 				wc = cursor_at(m.key, m.sigma);
 			}
-			jobs.push_back(CastJob{wc ? *wc : m.cursor, m.param(), m.beam, CastKind::Crit});
+			jobs.push_back(CastJob{wc ? *wc : m.cursor, m.param(), m.beam, CastKind::Crit, m.aim_known});
 			slot.emplace_back(i, 0);
 			if (wc) {
 				jobs.push_back(CastJob{m.cursor, m.param(), m.beam, CastKind::Probe});

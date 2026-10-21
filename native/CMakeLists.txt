@@ -78,8 +78,18 @@ include(cmake/fp.cmake)
 
 # ---------------------------------------------------------------- ricochet_core
 file(GLOB RC_CORE_SOURCES CONFIGURE_DEPENDS core/src/*.cpp)
+# Stage 123: Clipper2's engine (native/extern/clipper2, Boost Software License):
+# the visibility region drawn as the union of its cells. Third-party code: our
+# warnings aside, our floating-point rules kept (no contraction: bit-exact fills).
+add_library(rc_clipper2 STATIC extern/clipper2/src/clipper.engine.cpp)
+target_include_directories(rc_clipper2 SYSTEM PUBLIC extern/clipper2/include)
+target_compile_features(rc_clipper2 PUBLIC cxx_std_17)
+target_compile_options(rc_clipper2 PRIVATE -ffp-contract=off -fno-fast-math)
+set_target_properties(rc_clipper2 PROPERTIES POSITION_INDEPENDENT_CODE ON)
+
 add_library(ricochet_core STATIC ${RC_CORE_SOURCES})
 target_include_directories(ricochet_core PUBLIC core/include)
+target_link_libraries(ricochet_core PUBLIC rc_clipper2)
 set_target_properties(ricochet_core PROPERTIES POSITION_INDEPENDENT_CODE ON)
 # RC_ASSERT policy (core/include/rc/error.hpp): abort in Debug, report through
 # the error sink and continue otherwise. PUBLIC so every consumer agrees with core.

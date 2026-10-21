@@ -196,15 +196,16 @@ public:
 	// Stage 110: one cast of the visibility region -- the ladder's planned and
 	// physical events for a float64 player and cursor, as trace_pair solves them
 	// (ghost erased, the same tolerance), without the display conversion or the
-	// cache; nullopt where trace_pair returns none.
+	// cache; nullopt where trace_pair returns none. Stage 123: stops, what the
+	// cast reads (Ladder::solve's horizon); known, Solver::aim_known.
 	std::optional<LadderResult> solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags,
-			std::optional<bool> force_reversed = std::nullopt) {
+			std::optional<bool> force_reversed = std::nullopt, int stops = -1, const std::optional<std::pair<double, double>> &known = std::nullopt) {
 		if (!ctx_ || !scene_supported(defs_) || (px == cx && py == cy)) {
 			return std::nullopt;
 		}
 		flags.erase(GHOST);
 		Ladder ladder(*ctx_, clock_);
-		LadderResult res = ladder.solve(px, py, cx, cy, plan, MAX_HITS, MAX_HITS, TRACE_TOL, false, flags, force_reversed);
+		LadderResult res = ladder.solve(px, py, cx, cy, plan, MAX_HITS, MAX_HITS, TRACE_TOL, false, flags, force_reversed, stops, known);
 		if (res.planned.empty() || res.physical.empty() || !finite(res.planned) || !finite(res.physical)) {
 			return std::nullopt;
 		}
@@ -323,6 +324,17 @@ public:
 				s.tier_solves[q] += x.tier_solves[q];
 			}
 			s.big_usec += x.big_usec;
+			for (size_t q = 0; q < 32; q++) {
+				s.why[q] += x.why[q];
+			}
+			for (size_t q = 0; q < 8; q++) {
+				s.why_kind[q] += x.why_kind[q];
+			}
+			s.why_zero += x.why_zero;
+			s.why_unbounded += x.why_unbounded;
+			s.why_empty += x.why_empty;
+			s.why_beyond += x.why_beyond;
+			s.unconverged += x.unconverged;
 		}
 		return s;
 	}

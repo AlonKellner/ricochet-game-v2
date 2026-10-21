@@ -21,6 +21,7 @@
 #include <optional>
 #include <string>
 #include <tuple>
+#include <bit>
 #include <unordered_map>
 #include <vector>
 
@@ -84,12 +85,46 @@ struct Event {
 	std::optional<N> t_from;
 	std::optional<N> t_to;  // nullopt = infinity
 	double margin = INF_D;  // px gap to the nearest competing decision
+	uint8_t why = 0;        // Stage 123: what set the margin (Why: an instrument, the ladder's stats)
 	bool seeded = false;    // lies on the sensitive forward continuation
 	bool state = false;     // the side's state change fired
 	bool fired = false;     // Stage 107: the side fired, ghost aside (its hit effects fire)
 	Flags flags;            // the trace's flags after this event (hits)
 	bool anchored = false;  // cursor: reached on the anchored path
 	int beam_view = -1;     // identity of the beam as the events see it (Backend::views_per_run)
+};
+
+// Stage 123: the exact incidence of a point on a surface's carrier (Solver::
+// incident: a known point -- an endpoint, the cursor -- against every surface,
+// in every walk), memoized across walks and solves like PoleMemo: keyed on the
+// scene, the point's float64 bits and the surface, so an equal key gives the
+// identical answer and the walks are unchanged bit for bit.
+struct IncidenceMemo {
+	struct Key {
+		const void *scene;
+		uint64_t x, y;
+		int surf;
+		bool operator==(const Key &) const = default;
+	};
+	struct Hash {
+		size_t operator()(const Key &k) const {
+			uint64_t h = uint64_t(reinterpret_cast<uintptr_t>(k.scene)) * 0x9E3779B97F4A7C15ull;
+			h = (h ^ k.x) * 0x100000001B3ull;
+			h = (h ^ k.y) * 0x100000001B3ull;
+			return size_t((h ^ uint64_t(uint32_t(k.surf))) * 0x100000001B3ull);
+		}
+	};
+	std::unordered_map<Key, bool, Hash> map;
+	bool *find(const Key &k) {
+		auto it = map.find(k);
+		return it == map.end() ? nullptr : &it->second;
+	}
+	void put(const Key &k, bool v) {
+		if (map.size() > (1u << 18)) { // bounded: a long session's cursors
+			map.clear();
+		}
+		map.emplace(k, v);
+	}
 };
 
 // Stage 120: the exact predicates of a frame's infinity point that depend on Q
@@ -384,6 +419,7 @@ struct Walk {
 	std::map<int, bool> pole_tangent;   // surf id -> tangent at Q
 	std::map<int, bool> pole_on;        // surf id -> its carrier passes Q
 	PoleMemo *pole_memo = nullptr;      // Stage 120: across walks (the solver's cache's), or none
+	IncidenceMemo *incidence_memo = nullptr; // Stage 123: likewise
 	// tests only: the record beside each beam loop (record_poles)
 	bool record_poles = false;
 	std::vector<std::pair<BeamPtr<N>, std::optional<exact::ExactPole>>> pole_trace;
@@ -396,6 +432,7 @@ struct Walk {
 	int view_count = 0;
 	std::map<const Beam<N> *, int> beam_views;
 	std::optional<PointGroup<N>> point; // B5: the point being crossed (physical walk)
+	std::vector<uint8_t> gap_why; // Stage 123: the step's margins' classes (Solver::gaps, the instrument; reused)
 };
 
 // Caches owned by the caller (one per solve / tracer): the anchored chain of
@@ -417,6 +454,7 @@ struct SolveCache {
 	bool chain_null = false;
 	std::map<std::string, std::optional<exact::Point3>> images;
 	PoleMemo poles; // Stage 120
+	IncidenceMemo incidence; // Stage 123
 };
 
 // ---------------------------------------------------------------- the solver
@@ -796,6 +834,11 @@ public:
 
 	// Stage 111: the region casts a member in a forced orientation (nullopt: the plan's realization).
 	std::optional<bool> force_reversed;
+	// Stage 123: a region's cast along a member through exact data (a segment's
+	// endpoint, found in the player's frame): the first beam passes it by
+	// construction, so it is a known point there (add_aim_known), and a hit at it
+	// is decided by identity, never by the ladder
+	std::optional<std::pair<double, double>> aim_known;
 
 	// Stage 111: the realization the order against Q_0 (or today's rule) picks
 	// without the walk: what a cursor both planned walks reach gets; the region
@@ -1623,6 +1666,7 @@ private:
 		w.Q = effects::scene_pre_q(scene_);
 		w.record_poles = record_poles_;
 		w.pole_memo = cache_ ? &cache_->poles : nullptr;
+		w.incidence_memo = cache_ ? &cache_->incidence : nullptr;
 		return w;
 	}
 
@@ -1661,6 +1705,7 @@ private:
 				}
 			}
 		}
+		add_aim_known(w, *b0);
 		walk_from(w, b0, -1, std::nullopt);
 		return w;
 	}
@@ -1806,8 +1851,28 @@ private:
 			}
 			add_line_endpoints(w, *b0);
 		}
+		add_aim_known(w, *b0);
 		walk_from(w, b0, -1, std::nullopt);
 		return w;
+	}
+
+	// Stage 123: the caller's known point of the first beam (aim_known), when the
+	// beam passes it to rounding (the beam is the member's own, rounded)
+	void add_aim_known(Walk<N> &w, const Beam<N> &b) const {
+		if (!aim_known) {
+			return;
+		}
+		const CN<N> k{w.known[0].p.re.like(aim_known->first), w.known[0].p.re.like(aim_known->second)};
+		if (known_index(w.known, k) >= 0) {
+			return;
+		}
+		const N t = Backend<N>::param_of(b, k);
+		double x, y;
+		Backend<N>::f64_point(b, t, x, y);
+		const double scale = gd_maxf(1.0, gd_maxf(std::fabs(aim_known->first), std::fabs(aim_known->second)));
+		if (d64(x, y, aim_known->first, aim_known->second) <= 1e-6 * scale) {
+			w.known.push_back(Known<N>{k, t, -1, std::nullopt});
+		}
 	}
 
 	// Segment data points (endpoints, via) exactly on the current exact line are known points.
@@ -1844,6 +1909,12 @@ private:
 		}
 		const double kx = k.fx();
 		const double ky = k.fy();
+		const IncidenceMemo::Key mk{w.scene, std::bit_cast<uint64_t>(kx), std::bit_cast<uint64_t>(ky), surf.id};
+		if (w.incidence_memo) {
+			if (const bool *hit = w.incidence_memo->find(mk)) {
+				return *hit;
+			}
+		}
 		const std::tuple<double, double, int> key{kx, ky, surf.id};
 		auto it = w.incidence.find(key);
 		if (it != w.incidence.end()) {
@@ -1857,7 +1928,11 @@ private:
 		} else {
 			r = exact::incircle_zero(surf.sx, surf.sy, surf.vx, surf.vy, surf.ex, surf.ey, kx, ky);
 		}
-		w.incidence[key] = r;
+		if (w.incidence_memo) {
+			w.incidence_memo->put(mk, r);
+		} else {
+			w.incidence[key] = r;
+		}
 		return r;
 	}
 
@@ -2183,7 +2258,16 @@ private:
 						ki >= 0 ? w.known[size_t(ki)].skip : -9, depart, int(cursor_now), int(w.mode));
 				}
 			}
-			cands.push_back(Candidate<N>{tc, nullptr, false, std::nullopt, -1});
+			// Stage 123: a cursor that is a known point (a segment's endpoint, a corner
+			// two surfaces share) is that point, by provenance: its exact parameter and
+			// position, so the carriers through it tie with it exactly (the cursor
+			// first), never by the rounding of its own parameter
+			std::optional<CN<N>> cursor_pt;
+			if (ki >= 0 && !cursor_now) {
+				tc = w.known[size_t(ki)].t;
+				cursor_pt = w.known[size_t(ki)].p;
+			}
+			cands.push_back(Candidate<N>{tc, nullptr, false, cursor_pt, -1});
 			if (ki < 0) {
 				w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
 			}
@@ -2310,8 +2394,11 @@ private:
 			const N t = x.t;
 			const std::optional<CN<N>> pt = x.pt ? x.pt : y.pt;
 			const bool at_q = x.at_q || y.at_q; // concurrent at Q: both pinned there
-			cands[i] = Candidate<N>{t, lo, false, pt, int(i), false, at_q};
-			cands[i + 1] = Candidate<N>{t, hi, false, pt, int(i), false, at_q};
+			// Stage 123: three or more carriers at one point are one tie group (a pair
+			// whose first is grouped joins it): no margin between them, never a climb
+			const int group = x.tie >= 0 ? x.tie : int(i);
+			cands[i] = Candidate<N>{t, lo, false, pt, group, false, at_q};
+			cands[i + 1] = Candidate<N>{t, hi, false, pt, group, false, at_q};
 		}
 	}
 
@@ -2414,7 +2501,19 @@ private:
 	// Per candidate: px distance to its neighbours in the walk order (and, for
 	// a segment, to its endpoints). The two roots of a carrier the beam touches
 	// exactly (beam_tangent) are one decision: not each other's neighbour.
-	static std::vector<double> gaps(Walk<N> &w, const Beam<N> &beam, const std::vector<Candidate<N>> &cands) {
+	// Stage 123: what set a candidate's margin (the ladder counts the declined
+	// decisions by it): the term, and how close. An instrument: no decision reads it.
+	enum Why : uint8_t {
+		WHY_NONE = 0,
+		WHY_NEIGHBOUR_CORNER = 1, // another surface's hit, at an endpoint the two share
+		WHY_NEIGHBOUR = 2,        // another surface's hit, elsewhere
+		WHY_END_CORNER = 3,       // its own segment's endpoint, which another surface shares
+		WHY_END = 4,              // its own segment's endpoint, a free one
+		WHY_SAME_SURFACE = 5,     // its own surface's other root (a beam touching its carrier, not found tangent)
+		WHY_ZERO = 0 << 3, WHY_ROUNDING = 1 << 3, WHY_SMALL = 2 << 3, WHY_WIDE = 3 << 3 // how close
+	};
+
+	static std::vector<double> gaps(Walk<N> &w, const Beam<N> &beam, const std::vector<Candidate<N>> &cands, std::vector<uint8_t> *why = nullptr) {
 		std::vector<std::pair<double, double>> pts;
 		for (const Candidate<N> &cand : cands) {
 			if (cand.inf && !cand.pt) {
@@ -2427,6 +2526,29 @@ private:
 				pts.emplace_back(x, y);
 			}
 		}
+		// Stage 123: at a BigFloat tier a gap within float64's reach of 0 is measured
+		// at the tier's precision (the points above are float64 views of the beam):
+		// two hits a few 1e-13 px apart are told apart at 4 limbs, not left a
+		// rounding apart at every tier (a climb to 64 limbs that never converges).
+		// The float64 walks are untouched.
+		std::vector<std::optional<CN<N>>> at_tier(std::is_same_v<N, BigFloat> ? cands.size() : 0); // (BigFloat tiers only)
+		auto point_at_tier = [&](size_t i) -> const CN<N> & {
+			if (!at_tier[i]) {
+				at_tier[i] = cands[i].pt ? *cands[i].pt : beam.at(cands[i].t);
+			}
+			return *at_tier[i];
+		};
+		auto finer = [&](double d, size_t i, const CN<N> *other_pt, size_t k) -> double {
+			if constexpr (std::is_same_v<N, BigFloat>) {
+				const double scale = gd_maxf(1.0, gd_maxf(std::fabs(pts[i].first), std::fabs(pts[i].second)));
+				if (std::isfinite(d) && d <= 1e-6 * scale && !(cands[i].inf && !cands[i].pt)) {
+					const CN<N> &a = point_at_tier(i);
+					const CN<N> &b = other_pt ? *other_pt : point_at_tier(k);
+					return std::sqrt(a.sub(b).abs2().to_float());
+				}
+			}
+			return d;
+		};
 		// double roots: consecutive candidates on one surface, a rounding apart,
 		// where the beam touches its carrier exactly
 		std::vector<int> dbl(cands.size(), -1);
@@ -2450,38 +2572,100 @@ private:
 			}
 		}
 		auto same_root = [&](size_t i, long k) { return dbl[i] >= 0 && dbl[size_t(k)] == dbl[i]; };
+		// Stage 123: surfaces on one carrier cross it at one shared root (K6): the
+		// same parameter, ordered by id -- one decision, not two neighbours
+		auto shared_root = [&](size_t i, long k) {
+			const Candidate<N> &a = cands[i];
+			const Candidate<N> &b = cands[size_t(k)];
+			return a.surf != nullptr && b.surf != nullptr && a.surf != b.surf && !a.rehit && !b.rehit && !a.inf && !b.inf
+				&& a.surf->carrier_rep == b.surf->carrier_rep && a.t.cmp(b.t) == 0;
+		};
+		// (the instrument) an endpoint of `s` at (x, y) that another surface shares
+		auto shared_end = [&](const Surf<N> *s, double x, double y, const Surf<N> *with) {
+			const double tol = 1e-6 * gd_maxf(1.0, gd_maxf(std::fabs(x), std::fabs(y)));
+			for (const auto &[px, py] : {std::pair{s->sx, s->sy}, std::pair{s->ex, s->ey}}) {
+				if (s->full || d64(px, py, x, y) > tol) {
+					continue;
+				}
+				for (const auto &o : w.scene->surfaces) {
+					if (o.get() == s || o->full || (with != nullptr && o.get() != with)) {
+						continue;
+					}
+					if (d64(o->sx, o->sy, px, py) <= tol || d64(o->ex, o->ey, px, py) <= tol) {
+						return true;
+					}
+				}
+			}
+			return false;
+		};
+		auto closeness = [](double g, double x, double y) -> uint8_t {
+			const double scale = gd_maxf(1.0, gd_maxf(std::fabs(x), std::fabs(y)));
+			return g == 0.0 ? WHY_ZERO : g <= 1e-6 * scale ? WHY_ROUNDING : g <= 1e-2 ? WHY_SMALL : WHY_WIDE;
+		};
+		if (why) {
+			why->assign(cands.size(), WHY_NONE);
+		}
 		std::vector<double> out;
 		for (size_t i = 0; i < cands.size(); i++) {
 			double g = INF_D;
+			uint8_t term = WHY_NONE;
+			const Surf<N> *other = nullptr; // (the instrument) the neighbour that set it
 			const Surf<N> *s = cands[i].surf;
 			if (s != nullptr) {
 				const bool exact_i = cands[i].pt.has_value();
 				const int tie_i = cands[i].tie;
 				long l = long(i) - 1;
-				while (l >= 0 && (cands[size_t(l)].surf == nullptr || (exact_i && cands[size_t(l)].pt) || (tie_i >= 0 && cands[size_t(l)].tie == tie_i) || same_root(i, l))) {
+				while (l >= 0 && (cands[size_t(l)].surf == nullptr || (exact_i && cands[size_t(l)].pt) || (tie_i >= 0 && cands[size_t(l)].tie == tie_i) || same_root(i, l) || shared_root(i, l))) {
 					l--;
 				}
 				if (l >= 0) {
-					g = gd_minf(g, d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second));
+					const double d = cands[size_t(l)].inf && !cands[size_t(l)].pt ? d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second)
+						: finer(d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second), i, nullptr, size_t(l));
+					if (d < g) {
+						g = d;
+						term = cands[size_t(l)].surf == s ? WHY_SAME_SURFACE : WHY_NEIGHBOUR;
+						other = cands[size_t(l)].surf;
+					}
 				}
 				size_t r = i + 1;
-				while (r < cands.size() && (cands[r].surf == nullptr || (exact_i && cands[r].pt) || (tie_i >= 0 && cands[r].tie == tie_i) || same_root(i, long(r)))) {
+				while (r < cands.size() && (cands[r].surf == nullptr || (exact_i && cands[r].pt) || (tie_i >= 0 && cands[r].tie == tie_i) || same_root(i, long(r)) || shared_root(i, long(r)))) {
 					r++;
 				}
 				if (r < cands.size()) {
-					g = gd_minf(g, d64(pts[i].first, pts[i].second, pts[r].first, pts[r].second));
+					const double d = cands[r].inf && !cands[r].pt ? d64(pts[i].first, pts[i].second, pts[r].first, pts[r].second)
+						: finer(d64(pts[i].first, pts[i].second, pts[r].first, pts[r].second), i, nullptr, r);
+					if (d < g) {
+						g = d;
+						term = cands[r].surf == s ? WHY_SAME_SURFACE : WHY_NEIGHBOUR;
+						other = cands[r].surf;
+					}
 				}
 				if (!s->seg.full) {
-					const double ds = d64(pts[i].first, pts[i].second, s->sx, s->sy);
-					const double de = d64(pts[i].first, pts[i].second, s->ex, s->ey);
+					const double ds = finer(d64(pts[i].first, pts[i].second, s->sx, s->sy), i, &s->seg.s, 0);
+					const double de = finer(d64(pts[i].first, pts[i].second, s->ex, s->ey), i, &s->seg.e, 0);
 					// an exact endpoint hit is decided by provenance, not by a margin
-					if (ds > 0.0) {
-						g = gd_minf(g, ds);
+					if (ds > 0.0 && ds < g) {
+						g = ds;
+						term = WHY_END;
+						other = nullptr;
 					}
-					if (de > 0.0) {
-						g = gd_minf(g, de);
+					if (de > 0.0 && de < g) {
+						g = de;
+						term = WHY_END;
+						other = nullptr;
 					}
 				}
+			}
+			if (why && term != WHY_NONE) {
+				const uint8_t close = closeness(g, pts[i].first, pts[i].second);
+				if (close <= WHY_SMALL) { // (a corner is looked for only where the margin is small)
+					if (term == WHY_NEIGHBOUR && other && shared_end(s, pts[i].first, pts[i].second, other)) {
+						term = WHY_NEIGHBOUR_CORNER;
+					} else if (term == WHY_END && shared_end(s, pts[i].first, pts[i].second, nullptr)) {
+						term = WHY_END_CORNER;
+					}
+				}
+				(*why)[i] = uint8_t(term | close);
 			}
 			out.push_back(g);
 		}
@@ -2686,7 +2870,8 @@ private:
 			}
 			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0, keep_cursor);
 			keep_cursor = false;
-			std::vector<double> gp = gaps(w, *beam, cands);
+			std::vector<uint8_t> &gw = w.gap_why; // (reused across the walk's steps)
+			std::vector<double> gp = gaps(w, *beam, cands, &gw);
 			std::optional<Next> next;
 			bool restart = false;
 			size_t ci = skip;
@@ -2712,7 +2897,7 @@ private:
 						const Classified ca = classify(*w.scene, *beam, t, *surf, rehit && fresh, cand.pt, w.flags);
 						point_step(w, surf, false, ca.left, ca.pt);
 						if (point_sync(w)) {
-							late_cursor(w, *beam, cands, gp, ci, t, t0);
+							late_cursor(w, *beam, cands, gp, gw, ci, t, t0);
 						}
 					}
 					ci++; // absent under the current flags (Stage 107): no crossing at all
@@ -2744,6 +2929,7 @@ private:
 						w.plan_index++;
 					}
 					Event<N> &ie = emit(w, EventKind::Infinity, beam, t_prev, cand.pt ? std::optional<N>(t) : std::nullopt, gp[ci]);
+					ie.why = gw[ci];
 					ie.surface_id = INFINITY_ID;
 					if (cand.pt) {
 						ie.point = cand.pt; // the frame's image of infinity, exact by provenance
@@ -2756,13 +2942,17 @@ private:
 						consumed = point_sync(w) || consumed;
 					}
 					if (consumed) {
-						late_cursor(w, *beam, cands, gp, ci, t, t0);
+						late_cursor(w, *beam, cands, gp, gw, ci, t, t0);
 					}
 					ci++;
 					continue;
 				}
 				if (surf == nullptr) {
 					Event<N> &ce = emit(w, EventKind::Cursor, beam, t_prev, t, gp[ci]);
+					ce.why = gw[ci];
+					if (cand.pt) {
+						ce.point = cand.pt; // (a known point: exact by provenance)
+					}
 					ce.anchored = w.anchored;
 					t_prev = t;
 					w.cursor_done = true;
@@ -2848,6 +3038,7 @@ private:
 					fired_state = true;
 				}
 				Event<N> &e = emit(w, EventKind::Hit, beam, t_prev, t, gp[ci]);
+				e.why = gw[ci];
 				e.surface_id = surf->id;
 				e.left = left;
 				e.state = fires_state;
@@ -2918,7 +3109,7 @@ private:
 					}
 					break;
 				}
-				late_cursor(w, *beam, cands, gp, ci, t, t0);
+				late_cursor(w, *beam, cands, gp, gw, ci, t, t0);
 				ci++;
 			}
 			if (restart) {
@@ -2958,8 +3149,8 @@ private:
 	// (an entry that resolves to a pass / state change, an unapplied
 	// projective, or the infinity entry): the cursor is on this same beam -- a
 	// candidate if it lies ahead, inserted in order among the remaining ones.
-	static void late_cursor(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands, std::vector<double> &gp, size_t ci,
-			const N &t, const N &t0) {
+	static void late_cursor(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands, std::vector<double> &gp, std::vector<uint8_t> &gw,
+			size_t ci, const N &t, const N &t0) {
 		if (!w.cursor_done && w.cursor && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan && !(w.point && w.point->pending)
 				&& std::none_of(cands.begin(), cands.end(), [](const Candidate<N> &c) { return c.surf == nullptr && !c.inf; })) {
 			const N tc = Backend<N>::param_of(beam, *w.cursor);
@@ -2971,6 +3162,7 @@ private:
 				}
 				cands.insert(cands.begin() + long(j), Candidate<N>{tc, nullptr, false, std::nullopt, -1});
 				gp.insert(gp.begin() + long(j), INF_D);
+				gw.insert(gw.begin() + long(j), uint8_t(WHY_NONE)); // (Stage 123: the margins' classes stay aligned)
 				if (known_index(w.known, *w.cursor) < 0) {
 					w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
 				}

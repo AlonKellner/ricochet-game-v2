@@ -15,7 +15,7 @@ The decisions this stage follows (user):
   points along the same surface".
 
 The plan's presentation stage is split in two. This stage builds the presenter, the player's motion and
-the region morph. Stage 123 brings the path morph (the same surface matching, over the path's hits), the
+the region morph. A later stage brings the path morph (the same surface matching, over the path's hits), the
 overlays, the spawn preview and the flight's dimming.
 
 ## Phase table
@@ -218,7 +218,7 @@ property, on by default); its session-replay test turns it off.
 
 | # | Finding | Status |
 |---|---|---|
-| F8 | A region and the preview arrive later than their input and replace what was shown at once | The region: resolved here (the morph). The path: Stage 123 |
+| F8 | A region and the preview arrive later than their input and replace what was shown at once | The region: resolved here (the morph). The path: a later stage (Stage 123 made the regions fast instead, TDD_28) |
 | F9 | The first morph (per ray) bent straight edges and collapsed a planned inversion's region on every update | Resolved: the diff of shapes (any pencil, straight edges) |
 | F10 | A planned inversion's diff costs about 4 ms per new region on the frame thread (2773 vertices) | Open (only when late, since 122.4): the diff could run beside the region's job |
-| F11 | Mid-morph, two cells' shared edges can part or overlap by a hairline (each pair is aligned on its own) | Resolved where the cells do not overlap (one outline); open for overlapping cells (a planned inversion), only when late |
+| F11 | Mid-morph, two cells' shared edges can part or overlap by a hairline (each pair is aligned on its own) | Resolved where the cells do not overlap (one outline); for overlapping cells by Stage 123.4 (the union of the cells, TDD_28) |

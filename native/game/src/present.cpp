@@ -2,11 +2,14 @@
 #include "rcg/present.hpp"
 
 #include "rc/earcut.hpp"
+
+#include <clipper2/clipper.engine.h>
 #include "rcg/session.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <tuple>
 
@@ -448,190 +451,25 @@ std::vector<Pt> simplified(const std::vector<Pt> &ring, double tol) {
 	return kept;
 }
 
-// the union of rings that do not overlap (counterclockwise, conforming): an edge two
-// rings share runs both ways and cancels; the rest chains into the outline's
-// rings (outer counterclockwise, holes clockwise; where rings touch at a vertex,
-// the rightmost turn, each stays simple). Points are one on a 1e-4 px grid (two
-// cells tessellate a shared arc from its two ends).
-std::vector<std::vector<Pt>> union_of(const std::vector<std::vector<Pt>> &rings) {
-	using Q = std::pair<long long, long long>;
-	auto q_of = [](const Pt &p) { return Q{std::llround(p.x * 1e4), std::llround(p.y * 1e4)}; };
-	std::map<Q, Pt> at_q;
-	std::map<std::pair<Q, Q>, int> edges;
-	for (const std::vector<Pt> &r : rings) {
-		for (size_t k = 0; k < r.size(); k++) {
-			const Q u = q_of(r[k]), v = q_of(r[(k + 1) % r.size()]);
-			at_q.emplace(u, r[k]);
-			if (u == v) {
-				continue;
-			}
-			if (auto it = edges.find({v, u}); it != edges.end()) {
-				if (--it->second == 0) {
-					edges.erase(it);
-				}
-			} else {
-				edges[{u, v}]++;
-			}
-		}
-	}
-	std::vector<std::pair<Q, Q>> list;
-	for (const auto &[e, n] : edges) {
-		for (int k = 0; k < n; k++) {
-			list.push_back(e);
-		}
-	}
-	std::map<Q, std::vector<size_t>> outgoing;
-	for (size_t k = 0; k < list.size(); k++) {
-		outgoing[list[k].first].push_back(k);
-	}
-	std::vector<std::vector<Pt>> out;
-	std::vector<bool> used(list.size(), false);
-	for (size_t e0 = 0; e0 < list.size(); e0++) {
-		if (used[e0]) {
-			continue;
-		}
-		used[e0] = true;
-		std::vector<Pt> ring{at_q[list[e0].first]};
-		Q prev = list[e0].first, cur = list[e0].second;
-		const Q start = prev;
-		for (size_t guard = 0; cur != start && guard <= list.size(); guard++) {
-			ring.push_back(at_q[cur]);
-			size_t pick = list.size();
-			double best = INFINITY;
-			const Pt din = sub(at_q[cur], at_q[prev]);
-			for (size_t ei : outgoing[cur]) {
-				if (used[ei]) {
-					continue;
-				}
-				const Pt dout = sub(at_q[list[ei].second], at_q[cur]);
-				const double turn = std::atan2(rc::vis::cross(din, dout), rc::vis::dot(din, dout));
-				if (turn < best) {
-					best = turn;
-					pick = ei;
-				}
-			}
-			if (pick == list.size()) {
-				break;
-			}
-			used[pick] = true;
-			prev = cur;
-			cur = list[pick].second;
-		}
-		if (ring.size() >= 3) {
-			out.push_back(std::move(ring));
-		}
-	}
-	return out;
-}
-
-// whether rings' edges cross one another properly (touching at a vertex is not
-// crossing): a sweep over x
-bool crossing(const std::vector<std::vector<Pt>> &rings) {
-	struct Seg {
-		Pt a, b;
-		double x0, x1;
-	};
-	std::vector<Seg> segs;
-	for (const std::vector<Pt> &r : rings) {
-		for (size_t k = 0; k < r.size(); k++) {
-			const Pt &a = r[k], &b = r[(k + 1) % r.size()];
-			segs.push_back(Seg{a, b, std::min(a.x, b.x), std::max(a.x, b.x)});
-		}
-	}
-	std::sort(segs.begin(), segs.end(), [](const Seg &x, const Seg &y) { return x.x0 < y.x0; });
-	auto orient = [](const Pt &p, const Pt &q, const Pt &t) { return rc::vis::cross(sub(q, p), sub(t, p)); };
-	for (size_t i = 0; i < segs.size(); i++) {
-		for (size_t j = i + 1; j < segs.size() && segs[j].x0 <= segs[i].x1; j++) {
-			const Seg &u = segs[i], &v = segs[j];
-			if (std::max(u.a.y, u.b.y) < std::min(v.a.y, v.b.y) || std::max(v.a.y, v.b.y) < std::min(u.a.y, u.b.y)) {
-				continue;
-			}
-			const double eps = 1e-9 * (1.0 + std::abs(u.x1) + std::abs(v.x1));
-			const double o1 = orient(u.a, u.b, v.a), o2 = orient(u.a, u.b, v.b), o3 = orient(v.a, v.b, u.a), o4 = orient(v.a, v.b, u.b);
-			if (((o1 > eps && o2 < -eps) || (o1 < -eps && o2 > eps)) && ((o3 > eps && o4 < -eps) || (o3 < -eps && o4 > eps))) {
-				return true;
-			}
-		}
-	}
-	return false;
-}
-
-Shape shape_of(const rc::vis::Result &r, std::vector<Carrier> carriers, double tol) {
-	using namespace rc::vis::fill_detail;
+Shape shape_of(const rc::vis::Outline &o, std::vector<Carrier> carriers, double tol) {
 	Shape out;
 	out.carriers = std::move(carriers);
-	if (!r.supported) {
-		return out;
-	}
-	// the cells' rings as the fill makes them (conforming: a corner of one cell on
-	// another's edge is a vertex of both), each counterclockwise
-	std::map<GeomKey, std::vector<Pt>> corners;
-	for (const rc::vis::Cell &c : r.cells) {
-		for (const auto &l : c.loops) {
-			for (const rc::vis::Edge &e : l) {
-				const GeomKey k = key_of(e);
-				if (k.kind != 0) {
-					corners[k].push_back(e.a);
-					corners[k].push_back(e.b);
-				}
-			}
+	// the union's rings (outer counterclockwise, holes clockwise), straight runs
+	// merged and arcs to chords within tol, every vertex tagged
+	for (const std::vector<Pt> &ring : o.rings) {
+		const std::vector<Pt> kept = ring.size() > 3 ? simplified(ring, tol) : ring;
+		if (kept.size() < 3 || std::abs(area(kept)) < 0.01) {
+			continue;
 		}
-	}
-	std::vector<std::vector<Pt>> exact; // the cells' rings, counterclockwise
-	for (const rc::vis::Cell &c : r.cells) {
-		for (const auto &l : c.loops) {
-			std::vector<Pt> poly;
-			for (const rc::vis::Edge &e : l) {
-				conforming(e, corners, poly);
-			}
-			std::vector<Pt> ring;
-			for (const Pt &q : rc::vis::clip_polygon(poly, r.domain)) {
-				if (ring.empty() || !(ring.back() == q)) {
-					ring.push_back(q);
-				}
-			}
-			while (ring.size() > 1 && ring.back() == ring.front()) {
-				ring.pop_back();
-			}
-			const double a0 = ring.size() >= 3 ? area(ring) : 0.0;
-			if (std::abs(a0) <= 1e-9) {
-				continue;
-			}
-			std::vector<std::vector<Pt>> simple;
-			rc::vis::simple_rings(std::move(ring), a0 > 0.0 ? 1.0 : -1.0, simple);
-			for (std::vector<Pt> &sr : simple) {
-				if (area(sr) < 0.0) {
-					std::reverse(sr.begin(), sr.end());
-				}
-				exact.push_back(std::move(sr));
-			}
+		Ring rr;
+		for (const Pt &q : kept) {
+			Vertex v;
+			v.p = q;
+			tag(v, out.carriers);
+			rr.push_back(v);
 		}
+		out.rings.push_back(std::move(rr));
 	}
-	// cells that do not overlap morph as their union's outline: no edge between two
-	// cells to part mid-morph; overlapping ones (a pencil of circles can) as pieces.
-	// (Overlapping cells leave an outline that crosses itself.)
-	auto rings_of = [&](const std::vector<std::vector<Pt>> &from) {
-		std::vector<Ring> rings;
-		for (const std::vector<Pt> &e : from) {
-			const std::vector<Pt> kept = e.size() > 3 ? simplified(e, tol) : e;
-			if (kept.size() < 3 || std::abs(area(kept)) < 0.01) {
-				continue;
-			}
-			Ring rr;
-			for (const Pt &q : kept) {
-				Vertex v;
-				v.p = q;
-				tag(v, out.carriers);
-				rr.push_back(v);
-			}
-			rings.push_back(std::move(rr));
-		}
-		return rings;
-	};
-	const std::vector<std::vector<Pt>> outline = union_of(exact);
-	out.pieces = rings_of(exact);
-	out.outline = !crossing(outline);
-	out.rings = out.outline ? rings_of(outline) : out.pieces;
 	return out;
 }
 
@@ -684,12 +522,8 @@ void mark_shadows(Shape &s, const Pt &apex) {
 			corners.push_back({s.carriers[k].e, int(k)});
 		}
 	}
-	auto mark_ring = [&](Ring &r) { mark_ring_shadows(r, s.carriers, corners, apex); };
 	for (Ring &r : s.rings) {
-		mark_ring(r);
-	}
-	for (Ring &r : s.pieces) {
-		mark_ring(r);
+		mark_ring_shadows(r, s.carriers, corners, apex);
 	}
 }
 
@@ -721,11 +555,9 @@ Shape follow(const Shape &s, const Pt &apex) {
 	if (!s.has_apex) {
 		return out;
 	}
-	for (auto *rings : {&out.rings, &out.pieces}) {
-		for (Ring &r : *rings) {
-			for (Vertex &v : r) {
-				v = recast(v, s.carriers, apex);
-			}
+	for (Ring &r : out.rings) {
+		for (Vertex &v : r) {
+			v = recast(v, s.carriers, apex);
 		}
 	}
 	return out;
@@ -772,15 +604,8 @@ std::vector<Track> grow(const Ring &piece, const Shape &other, const Pt &anchor,
 	return out;
 }
 
-Plan plan(const Shape &a_in, const Shape &b_in, const Pt &anchor) {
-	// outlines when both have one (no edge between cells to part), else both as pieces
-	// (a shape with no pieces -- one on screen mid-morph -- as its rings)
-	const bool outlines = a_in.outline && b_in.outline;
-	Shape a, b;
-	a.rings = outlines || a_in.pieces.empty() ? a_in.rings : a_in.pieces;
-	b.rings = outlines || b_in.pieces.empty() ? b_in.rings : b_in.pieces;
+Plan plan(const Shape &a, const Shape &b, const Pt &anchor) {
 	Plan out;
-	out.outline = outlines;
 	// the pieces paired by place (how far each one's vertices lie from the other's
 	// outline, for their size), greedily
 	struct Cand {
@@ -870,7 +695,6 @@ Plan plan(const Shape &a_in, const Shape &b_in, const Pt &anchor) {
 
 Shape at(const Plan &p, double e) {
 	Shape out;
-	out.outline = p.outline;
 	for (const std::vector<Track> &ring : p.rings) {
 		Ring r;
 		r.reserve(ring.size());
@@ -910,6 +734,86 @@ void fill_of(const Shape &s, std::vector<rc::V2> &pts, std::vector<int> &indices
 		for (uint32_t i : tri.run(rings)) {
 			indices.push_back(base + int(i));
 		}
+	}
+}
+
+namespace {
+
+Clipper2Lib::PathsD paths_of(const Shape &s) {
+	Clipper2Lib::PathsD out;
+	for (const Ring &r : s.rings) {
+		Clipper2Lib::PathD p;
+		p.reserve(r.size());
+		for (const Vertex &v : r) {
+			p.push_back(Clipper2Lib::PointD(v.p.x, v.p.y));
+		}
+		out.push_back(std::move(p));
+	}
+	return out;
+}
+
+} // namespace
+
+std::vector<std::vector<Pt>> common(const Shape &a, const Shape &b) {
+	if (a.rings.empty() || b.rings.empty()) {
+		return {};
+	}
+	Clipper2Lib::ClipperD c(4);
+	c.AddSubject(paths_of(a));
+	c.AddClip(paths_of(b));
+	Clipper2Lib::PathsD both;
+	c.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::Positive, both);
+	std::vector<std::vector<Pt>> out;
+	for (const Clipper2Lib::PathD &p : both) {
+		std::vector<Pt> ring;
+		for (const Clipper2Lib::PointD &q : p) {
+			ring.push_back(Pt{q.x, q.y});
+		}
+		out.push_back(std::move(ring));
+	}
+	return out;
+}
+
+void fill_with(const Shape &s, const std::vector<std::vector<Pt>> &also, std::vector<rc::V2> &pts, std::vector<int> &indices) {
+	if (also.empty()) {
+		fill_of(s, pts, indices);
+		return;
+	}
+	Clipper2Lib::PathsD subjects = paths_of(s);
+	for (const std::vector<Pt> &r : also) {
+		Clipper2Lib::PathD p;
+		for (const Pt &q : r) {
+			p.push_back(Clipper2Lib::PointD(q.x, q.y));
+		}
+		subjects.push_back(std::move(p));
+	}
+	Clipper2Lib::ClipperD c(4);
+	c.AddSubject(subjects);
+	Clipper2Lib::PolyTreeD tree;
+	c.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::Positive, tree);
+	rc::vis::Outline o;
+	std::function<void(const Clipper2Lib::PolyPathD &, int)> walk = [&](const Clipper2Lib::PolyPathD &node, int outer) {
+		for (const auto &child : node) {
+			std::vector<Pt> ring;
+			for (const Clipper2Lib::PointD &q : child->Polygon()) {
+				ring.push_back(Pt{q.x, q.y});
+			}
+			const bool hole = child->IsHole();
+			if (ring.size() >= 3) {
+				o.rings.push_back(std::move(ring));
+				o.parent.push_back(hole ? outer : -1);
+			}
+			walk(*child, hole ? outer : int(o.rings.size()) - 1);
+		}
+	};
+	walk(tree, -1);
+	const rc::vis::Fill f = rc::vis::fill_of(o);
+	const int base = int(pts.size());
+	for (const Pt &q : f.points) {
+		pts.push_back(rc::V2::of(q.x, q.y));
+	}
+	for (uint32_t i : f.indices) {
+		indices.push_back(base + int(i));
 	}
 }
 
@@ -974,19 +878,19 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 					apex = r->player; // the region's rays leave the player: its shadows can follow it
 				}
 			}
-			sm::Shape next = s.region() ? sm::shape_of(*s.region(), std::move(carriers)) : sm::Shape{};
+			sm::Shape next = s.region() ? sm::shape_of(s.region_outline(), std::move(carriers)) : sm::Shape{};
 			if (apex) {
 				sm::mark_shadows(next, *apex);
 			}
 			if (config_.region_seconds > 0.0 && region_version_ >= 0 && (was_late_ || config_.smooth_on_time)) {
 				// it was late: morph in from what was shown
-				morph_ = Morph{sm::plan(shown_, next, here), now_, config_.region_seconds};
+				morph_ = Morph{sm::plan(shown_, next, here), now_, config_.region_seconds, sm::common(shown_, next)};
 			} else if (morph_) {
 				// on time during a morph: retargeted from what is shown over the time the
 				// morph has left, never extended (on-time regions keep no morph alive)
 				const double left = morph_->start + morph_->seconds - now_;
 				if (left > 0.0) {
-					morph_ = Morph{sm::plan(shown_, next, here), now_, left};
+					morph_ = Morph{sm::plan(shown_, next, here), now_, left, sm::common(shown_, next)};
 				} else {
 					morph_.reset();
 				}
@@ -1027,7 +931,11 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 		}
 		std::vector<rc::V2> pts;
 		std::vector<int> idx;
-		sm::fill_of(shape, pts, idx);
+		if (morph_) {
+			sm::fill_with(shape, morph_->stable, pts, idx); // (what both shapes cover stays lit: no slit there)
+		} else {
+			sm::fill_of(shape, pts, idx);
+		}
 		shown_ = std::move(shape);
 		auto calls = std::make_shared<std::vector<render::Call>>();
 		if (!idx.empty()) { // (as the session: no mesh call without triangles)

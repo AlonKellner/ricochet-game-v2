@@ -189,6 +189,13 @@ struct LadderStats {
 	long long verify = 0;     // verified by a climb
 	long long tier_solves[6] = {}; // BigFloat walks computed per tier (index into TIERS)
 	long long big_usec = 0;   // time in those walks
+	long long why[32] = {};   // Stage 123: the declined decisions by what set the margin (Solver::Why)
+	long long why_zero = 0;   // ... of which the margin was exactly 0
+	long long why_kind[8] = {}; // ... by the declined event's kind (EventKind)
+	long long why_unbounded = 0; // ... whose margin is unbounded (no competitor: the estimate blew up)
+	long long why_empty = 0;     // ... a walk with no events
+	long long why_beyond = 0;    // ... the first unreliable index past the events given
+	long long unconverged = 0;   // climbs that reached the last tier undecided (the 64-limb walk used as it is)
 };
 
 // The scenes of one solve at every tier, built on demand, plus the solve caches.
@@ -255,9 +262,17 @@ public:
 	explicit Ladder(LadderContext &ctx, Clock clock = steady_usec) : ctx_(ctx), clock_(std::move(clock)) {}
 
 	// player / cursor: float64 (never float32-rounded here). tol: px.
+	// Stage 123: stops >= 0, what the caller reads of the walks (a region's cast):
+	// the physical walk through its stops-th stop after the start (a hit that is
+	// applied or changes the flags), the planned one through the events at the
+	// cursor's point; a decision past them needs no precision (horizon()).
 	LadderResult solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, int max_planned,
-			int max_physical, double tol, bool verify = false, const Flags &flags = Flags(), std::optional<bool> force = std::nullopt) {
+			int max_physical, double tol, bool verify = false, const Flags &flags = Flags(), std::optional<bool> force = std::nullopt,
+			int stops = -1, const std::optional<std::pair<double, double>> &known = std::nullopt) {
 		force_ = force;
+		stops_ = stops;
+		known_ = known;
+		flags0_ = flags;
 		const long long t0 = clock_();
 		LadderResult r;
 		// ---- physical
@@ -285,6 +300,7 @@ public:
 		}
 		Solver<Dual> fast(ctx_.dual_scene(), &ctx_.dual_cache());
 		fast.force_reversed = force_;
+		fast.aim_known = known_;
 		const CN<Dual> P{Dual{px, 0.0}, Dual{py, 0.0}};
 		const CN<Dual> Cc{Dual{cx, 0.0}, Dual{cy, 0.0}};
 		std::optional<Walk<Dual>> wq = fast.run(P, Cc, plan, Mode::Planned, max_planned, flags);
@@ -307,10 +323,11 @@ public:
 			auto planned_fn = [&](int limbs) -> std::vector<Event<BigFloat>> {
 				Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
 				big.force_reversed = force_;
+				big.aim_known = known_;
 				const BigFloat l = BigFloat::from_int(1, limbs);
-				return big.planned(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, max_planned, flags);
+				return big.planned(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, cap_ >= 0 ? std::min(max_planned, cap_) : max_planned, flags);
 			};
-			r.planned = decide(sq, std::move(wq->events), est_q, tol, verify, planned_fn);
+			r.planned = decide(sq, std::move(wq->events), est_q, tol, verify, planned_fn, false);
 		}
 		r.usec_planned = clock_() - t1;
 		r.usec = clock_() - t0;
@@ -396,6 +413,10 @@ public:
 private:
 	LadderContext &ctx_;
 	Clock clock_;
+	int stops_ = -1; // Stage 123: what the caller reads (solve)
+	int cap_ = -1;   // ... the climb's walks cut a little past it (crossings; -1: none)
+	Flags flags0_;   // the walks' flags at the start (the horizon's flag changes)
+	std::optional<std::pair<double, double>> known_; // Stage 123: Solver::aim_known (solve)
 	std::optional<bool> force_; // Stage 111: the orientation the caller forces on every tier
 
 	using Compute = std::function<std::vector<Event<BigFloat>>(int)>;
@@ -405,6 +426,7 @@ private:
 			int max_physical, double tol, bool verify, const Flags &flags) {
 		Solver<Dual> fast(ctx_.dual_scene(), &ctx_.dual_cache());
 		fast.force_reversed = force_;
+		fast.aim_known = known_;
 		const CN<Dual> P{Dual{px, 0.0}, Dual{py, 0.0}};
 		const CN<Dual> Cc{Dual{cx, 0.0}, Dual{cy, 0.0}};
 		std::optional<Walk<Dual>> wp = fast.run(P, Cc, plan, Mode::Physical, max_physical, flags);
@@ -415,10 +437,11 @@ private:
 		auto physical_fn = [&](int limbs) -> std::vector<Event<BigFloat>> {
 			Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
 			big.force_reversed = force_;
+			big.aim_known = known_;
 			const BigFloat l = BigFloat::from_int(1, limbs);
-			return big.physical(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, max_physical, flags);
+			return big.physical(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, cap_ >= 0 ? std::min(max_physical, cap_) : max_physical, flags);
 		};
-		r.physical = decide(sp, std::move(ev), est_p, tol, verify, physical_fn);
+		r.physical = decide(sp, std::move(ev), est_p, tol, verify, physical_fn, true);
 		r.physical_sens = sp;
 	}
 
@@ -460,29 +483,74 @@ private:
 		return c.limbs == 0 ? same_structure_ev(a, c.f64_events, n) : same_structure_ev(a, c.big_events, n);
 	}
 
-	static double worst(const std::vector<double> &a) {
+	static double worst(const std::vector<double> &a, size_t n = SIZE_MAX) {
 		double w = 0.0;
-		for (double x : a) {
-			w = gd_maxf(w, x);
+		for (size_t i = 0; i < a.size() && i < n; i++) {
+			w = gd_maxf(w, a[i]);
 		}
 		return w;
 	}
 
+	// Stage 123: the events of a walk its caller reads (solve's stops; all of them
+	// otherwise): a decision past them needs no precision
+	template <Num N>
+	size_t horizon(const std::vector<Event<N>> &ev, bool physical) const {
+		if (stops_ < 0) {
+			return ev.size();
+		}
+		if (physical) {
+			int n = 0;
+			const Flags *prev = &flags0_;
+			for (size_t i = 0; i < ev.size(); i++) {
+				if (ev[i].kind != EventKind::Hit) {
+					continue;
+				}
+				if ((ev[i].applied || !(ev[i].flags == *prev)) && ++n > stops_) {
+					return i + 1;
+				}
+				prev = &ev[i].flags;
+			}
+			return ev.size();
+		}
+		// the cursor, the events at its point, and the next two
+		for (size_t i = 0; i < ev.size(); i++) {
+			if (ev[i].kind != EventKind::Cursor) {
+				continue;
+			}
+			size_t j = i + 1;
+			while (j < ev.size() && ev[j].point && ev[i].point && ev[j].point->fx() == ev[i].point->fx() && ev[j].point->fy() == ev[i].point->fy()) {
+				j++;
+			}
+			return std::min(ev.size(), j + 2);
+		}
+		return ev.size();
+	}
+
 	Climb decide(const estimate::Sensitivity &sens, F64Events events, const std::vector<double> &est, double tol, bool verify,
-			const Compute &compute) {
-		const bool reliable = sens.unreliable_from < 0 && !events.empty();
+			const Compute &compute, bool physical) {
+		const size_t need = horizon(events, physical);
+		const bool reliable = (sens.unreliable_from < 0 || size_t(sens.unreliable_from) >= need) && !events.empty();
 		LadderStats &st = ctx_.stats();
 		st.walks++;
 		if (verify) {
 			st.verify++;
 		} else if (!reliable) {
 			st.unreliable++;
-		} else if (worst(est) > tol) {
+			st.why_empty += events.empty() ? 1 : 0;
+			st.why_beyond += !events.empty() && (sens.unreliable_from < 0 || size_t(sens.unreliable_from) >= events.size()) ? 1 : 0;
+			if (sens.unreliable_from >= 0 && size_t(sens.unreliable_from) < events.size()) {
+				const auto &ev = events[size_t(sens.unreliable_from)];
+				st.why[ev.why & 31]++;
+				st.why_zero += ev.margin == 0.0 ? 1 : 0;
+				st.why_kind[size_t(ev.kind) & 7]++;
+				st.why_unbounded += std::isinf(ev.margin) ? 1 : 0;
+			}
+		} else if (worst(est, need) > tol) {
 			st.over_tol++;
 		} else {
 			st.f64++;
 		}
-		if (provisional && !verify && !(reliable && worst(est) <= tol)) {
+		if (provisional && !verify && !(reliable && worst(est, need) <= tol)) {
 			needed_climb = true;
 			Climb c;
 			c.f64_events = std::move(events);
@@ -492,7 +560,7 @@ private:
 			c.tried = {0};
 			return c;
 		}
-		if (reliable && worst(est) <= tol && !verify) {
+		if (reliable && worst(est, need) <= tol && !verify) {
 			Climb c;
 			c.f64_events = std::move(events);
 			c.err = est;
@@ -503,13 +571,18 @@ private:
 		}
 		int start_limbs = 4;
 		if (reliable || sens.unreliable_from > 0) {
-			start_limbs = std::max(4, required_for_prefix(sens, reliable ? int(sens.gain.size()) : sens.unreliable_from, tol));
+			start_limbs = std::max(4, required_for_prefix(sens, reliable ? int(need) : sens.unreliable_from, tol));
 		}
 		if (verify) {
-			const bool start_f64 = reliable && worst(est) <= tol;
+			const bool start_f64 = reliable && worst(est, need) <= tol;
 			return climb(start_f64 ? 0 : start_limbs, start_f64 ? &events : nullptr, tol, compute);
 		}
-		return replay_climb(start_limbs, tol, compute);
+		// (the climb walks only a little past what is read)
+		cap_ = need < events.size() ? int(need) + 2 : -1;
+		Climb out = replay_climb(start_limbs, tol, compute, physical);
+		cap_ = -1;
+		ctx_.stats().unconverged += out.converged ? 0 : 1;
+		return out;
 	}
 
 	static int required_for_prefix(const estimate::Sensitivity &sens, int n, double tol) {
@@ -546,12 +619,17 @@ private:
 	// Compute at `limbs`, re-estimate along that trajectory with replay, accept
 	// when the estimate meets tol and every decision is reliable at that tier;
 	// otherwise jump to the tier the replay asks for.
-	Climb replay_climb(int limbs, double tol, const Compute &compute) {
+	Climb replay_climb(int limbs, double tol, const Compute &compute, bool physical) {
 		Climb c;
 		int ti = tier_index(limbs);
 		while (ti >= 0 && ti < int(TIERS.size())) {
 			const int L = TIERS[size_t(ti)];
 			std::vector<Event<BigFloat>> ev = timed(L, compute);
+			const size_t read = horizon(ev, physical);
+			if (cap_ >= 0 && read >= ev.size()) {
+				cap_ = -1; // the cut walk ends before what is read: the whole walk, this tier again
+				continue;
+			}
 			c.tried.push_back(L);
 			c.big_events = ev;
 			c.limbs = L;
@@ -559,12 +637,12 @@ private:
 			const estimate::Sensitivity rs = estimate::replay(ev, ctx_.dual_scene());
 			c.err = estimate::estimate(rs, eps);
 			const int bad = estimate::unreliable_index(rs, eps);
-			if (bad < 0 && worst(c.err) <= tol && !ev.empty()) {
+			if ((bad < 0 || size_t(bad) >= read) && worst(c.err, read) <= tol && !ev.empty()) {
 				c.converged = true;
 				return c;
 			}
 			// next tier: what the (reliable prefix of the) replay asks for, at least +1
-			const int need = required_for_prefix(rs, bad < 0 ? int(rs.gain.size()) : std::max(bad, 1), tol);
+			const int need = required_for_prefix(rs, bad < 0 || size_t(bad) >= read ? int(std::min(read, rs.gain.size())) : std::max(bad, 1), tol);
 			ti = std::max(ti + 1, tier_index(need));
 		}
 		return c;

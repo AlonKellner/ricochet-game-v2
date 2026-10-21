@@ -22,6 +22,7 @@
 //   is smoothed: the session's region is drawn as it is.
 #pragma once
 
+#include "rc/region_union.hpp"
 #include "rc/visibility.hpp"
 #include "rcg/render.hpp"
 
@@ -74,23 +75,20 @@ struct Vertex {
 	bool apex = false; // the apex itself
 };
 using Ring = std::vector<Vertex>;
-// A region's pieces: closed simple polygons (its cells), their carriers, and the
-// apex the shadows lie on rays from (has_apex: the player).
+// A region's outline: closed simple polygons (the union of its cells), their
+// carriers, and the apex the shadows lie on rays from (has_apex: the player).
 struct Shape {
-	std::vector<Ring> rings;  // what is drawn: the outline when there is one, else the pieces
-	std::vector<Ring> pieces; // a region's cells (a diff with a shape that has no outline uses them)
-	bool outline = false;     // rings is an outline (its cells do not overlap)
+	std::vector<Ring> rings; // outer counterclockwise, holes clockwise
 	std::vector<Carrier> carriers;
 	bool has_apex = false;
 	Pt apex;
 };
 
-// A region's shape: the outline of its cells' union (outer rings counterclockwise,
-// holes clockwise: no edge between two cells to part mid-morph) when its cells do
-// not overlap, else the cells' rings themselves (a pencil's two sheets overlap
-// as the fill draws them); straight runs merged and arcs reduced to chords
-// within `tol`, every vertex tagged by the carriers.
-Shape shape_of(const rc::vis::Result &r, std::vector<Carrier> carriers, double tol = 0.5);
+// A region's shape: its outline -- the union of its cells (Session::region_outline,
+// rc::vis::union_outline): outer rings counterclockwise, holes clockwise --
+// straight runs merged and arcs reduced to chords within `tol`, every vertex
+// tagged by the carriers.
+Shape shape_of(const rc::vis::Outline &o, std::vector<Carrier> carriers, double tol = 0.5);
 // The carriers of a region (its cells' carrier edges; a straight surface's segment from the world, if given).
 std::vector<Carrier> carriers_of(const rc::vis::Result &r, const World *world = nullptr);
 // The shadows of a shape whose rays leave `apex` (the player): an edge on a ray
@@ -109,7 +107,6 @@ struct Track {
 };
 struct Plan {
 	std::vector<std::vector<Track>> rings;
-	bool outline = false; // the rings are outlines (both shapes had one)
 	std::vector<int> parent;
 };
 // The diff of two shapes: rings paired by place, then each pair aligned; a
@@ -120,6 +117,11 @@ Plan plan(const Shape &a, const Shape &b, const Pt &anchor);
 Shape at(const Plan &p, double e);
 // A shape's fill: triangles (points, three indices a triangle).
 void fill_of(const Shape &s, std::vector<rc::V2> &pts, std::vector<int> &indices);
+// What two shapes both cover (Clipper2): the part of a morph that stays lit.
+std::vector<std::vector<Pt>> common(const Shape &a, const Shape &b);
+// A shape's fill united with `also` (a morph frame with the part it keeps lit:
+// a slit the morph opens there is covered; Clipper2, then earcut).
+void fill_with(const Shape &s, const std::vector<std::vector<Pt>> &also, std::vector<rc::V2> &pts, std::vector<int> &indices);
 // The holes' outer rings: a clockwise ring is a hole of the smallest counterclockwise
 // ring around it (-1: an outer ring; -2: a hole of nothing).
 std::vector<int> parents_of(const Shape &s);
@@ -143,6 +145,7 @@ private:
 		shape_morph::Plan plan;
 		double start = 0.0;
 		double seconds = 0.0; // its duration (a retarget on time: the rest of the one it continues)
+		std::vector<std::vector<rc::vis::Pt>> stable; // what the old and new shapes both cover: lit throughout
 	};
 	PresentConfig config_;
 	double now_ = 0.0;

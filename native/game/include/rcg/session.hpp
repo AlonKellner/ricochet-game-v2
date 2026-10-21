@@ -14,6 +14,7 @@
 
 #include "rc/sweep.hpp"
 #include "rc/tracer.hpp"
+#include "rc/region_union.hpp"
 #include "rc/visibility.hpp"
 #include "rcg/jobs.hpp"
 #include "rcg/kinematics.hpp"
@@ -139,6 +140,7 @@ public:
 	int visibility_version() const { return visibility_version_; }
 	bool has_region() const { return region_.has_value(); }
 	const std::optional<rc::vis::Result> &region() const { return region_; } // the region shown (Stage 122: the presenter's)
+	const rc::vis::Outline &region_outline() const { return outline_; } // ... its outline: the union of its cells (Stage 123)
 	const std::string &hud() const { return hud_; }
 	const Level &level() const { return level_; }
 	// the camera's target: the arrow in flight, else the player
@@ -310,6 +312,7 @@ private:
 	bool vis_computed_ = false;
 	int visibility_version_ = 0;
 	std::optional<rc::vis::Result> region_;
+	rc::vis::Outline outline_; // Stage 123: the region drawn as the union of its cells
 	rc::vis::Fill fill_;
 	std::vector<std::vector<V2>> whiskers_;
 	nlohmann::json spawn_placed_ = nlohmann::json::array();
@@ -333,6 +336,7 @@ private:
 	};
 	struct VisJobOut {
 		std::optional<rc::vis::Result> region;
+		rc::vis::Outline outline; // Stage 123: the union of its cells (drawn, and morphed)
 		rc::vis::Fill fill;
 		std::vector<std::vector<V2>> whiskers;
 	};

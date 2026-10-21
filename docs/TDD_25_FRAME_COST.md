@@ -163,4 +163,4 @@ cap is consumed in sequence. They wait until the frames they touch matter, after
 | # | Finding | Status |
 |---|---|---|
 | F6 | The region is computed in the frame (TDD_24) | Measured here; Stage N+1 moves it off the frame |
-| F7 | hit_effects: every cursor frame's preview declines float64 on an unreliable decision (a tie), and its region climbs about 460 times per plan change (1.1–1.3 s) | For Stage N+3 (ties by provenance); hidden by N+1 meanwhile |
+| F7 | hit_effects: every cursor frame's preview declines float64 on an unreliable decision (a tie), and its region climbs about 460 times per plan change (1.1–1.3 s) | Resolved by Stage 123 (ties by provenance, TDD_28): its previews never climb; a plan click 1270 → 14 ms |
