@@ -244,6 +244,7 @@ void Session::apply_region(long long ticket, VisJobOut &&out) {
 		region_times_.add(double(out.region->build_usec) / 1e6); // (how long a region takes now: the budget's guess)
 	}
 	region_ = std::move(out.region);
+	outline_ = std::move(out.outline);
 	fill_ = std::move(out.fill);
 	whiskers_ = std::move(out.whiskers);
 	visibility_version_++;
@@ -1094,6 +1095,7 @@ void Session::update_visibility() {
 	vis_applied_ = vis_ticket_; // (no older region computing in the background may show after this one)
 	visibility_version_++;
 	region_.reset();
+	outline_ = rc::vis::Outline{};
 	fill_ = rc::vis::Fill{};
 	whiskers_.clear();
 	if (!visibility_on()) {
@@ -1102,6 +1104,7 @@ void Session::update_visibility() {
 	use_defs(vis_tracer_, vis_defs_);
 	VisJobOut out = run_visibility(vis_tracer_, player_, items(), flags_, vb, nullptr);
 	region_ = std::move(out.region);
+	outline_ = std::move(out.outline);
 	fill_ = std::move(out.fill);
 	whiskers_ = std::move(out.whiskers);
 }
@@ -1113,7 +1116,10 @@ Session::VisJobOut Session::run_visibility(rc::Tracer &t, const V2 &player, cons
 	if (out.region->cancelled || !out.region->supported) {
 		return out;
 	}
-	out.fill = rc::vis::fill_triangles(*out.region);
+	// Stage 123: drawn as the union of its cells (no seam between two cells to
+	// crack or overlap; overlapping sheets merged)
+	out.outline = rc::vis::union_outline(*out.region);
+	out.fill = rc::vis::fill_of(out.outline);
 	for (const rc::vis::Edge &e : out.region->whiskers) {
 		std::vector<rc::vis::Pt> pts;
 		rc::vis::tessellate(e, pts);

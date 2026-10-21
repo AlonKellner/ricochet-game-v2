@@ -12,6 +12,7 @@
 
 #include <cmath>
 #include <filesystem>
+#include <functional>
 #include <optional>
 
 namespace {
@@ -63,7 +64,7 @@ double mesh_area(const rcg::render::FrameNode &n) {
 
 // the session's region as the presenter outlines it
 sm::Shape outline(const rcg::Session &s) {
-	return s.region() ? sm::shape_of(*s.region(), sm::carriers_of(*s.region(), &s.world())) : sm::Shape{};
+	return s.region() ? sm::shape_of(s.region_outline(), sm::carriers_of(*s.region(), &s.world())) : sm::Shape{};
 }
 
 // plans the side of the nth surface with a label, 6 px off its middle
@@ -403,24 +404,118 @@ TEST_CASE("present: one late region does not keep on-time regions morphing") {
 	CHECK_FALSE(p.animating());
 }
 
-TEST_CASE("present: cells that do not overlap morph as one outline (no edge between cells to part)") {
-	rcg::Session s(level("main.json"));
-	s.settle();
-	const sm::Shape a = outline(s);
-	CHECK(a.outline);
-	CHECK(a.rings.size() == 1);
-	CHECK(a.pieces.size() > 1);
-	s.teleport(s.player() + rc::V2{-12, 6});
-	s.settle();
-	const sm::Plan p = sm::plan(a, outline(s), sm::Pt{0, 0});
-	CHECK(p.outline);
-	CHECK(sm::at(p, 0.5).rings.size() == 1);
-	// a planned inversion's cells overlap: its shape is its pieces
-	rcg::Session v(level("playground/inversion_grid.json"));
-	plan_side(v, "FullInversion", 3, 0);
-	v.teleport(v.player() + rc::V2{0, 7});
-	v.settle();
-	const sm::Shape inv = outline(v);
-	CHECK_FALSE(inv.outline);
-	CHECK(inv.rings.size() == inv.pieces.size());
+namespace {
+
+// pixel-centre coverage of a triangle mesh, as a GPU fills it (the top-left rule)
+struct Coverage {
+	int x0 = 0, y0 = 0, w = 0, h = 0;
+	std::vector<uint8_t> n;
+	Coverage(const std::vector<rc::V2> &pts, const std::vector<int> &idx) {
+		if (pts.empty()) {
+			return;
+		}
+		double ax = INFINITY, ay = INFINITY, bx = -INFINITY, by = -INFINITY;
+		for (const rc::V2 &q : pts) {
+			ax = std::min(ax, double(q.x));
+			ay = std::min(ay, double(q.y));
+			bx = std::max(bx, double(q.x));
+			by = std::max(by, double(q.y));
+		}
+		x0 = int(std::floor(ax)) - 1;
+		y0 = int(std::floor(ay)) - 1;
+		w = int(std::ceil(bx)) + 2 - x0;
+		h = int(std::ceil(by)) + 2 - y0;
+		n.assign(size_t(w * h), 0);
+		for (size_t t = 0; t + 2 < idx.size(); t += 3) {
+			const rc::V2 &a = pts[size_t(idx[t])], &b = pts[size_t(idx[t + 1])], &c = pts[size_t(idx[t + 2])];
+			const double area = (double(b.x) - a.x) * (double(c.y) - a.y) - (double(b.y) - a.y) * (double(c.x) - a.x);
+			if (area == 0.0) {
+				continue;
+			}
+			const double sg = area > 0 ? 1.0 : -1.0;
+			auto inside = [&](const rc::V2 &p, const rc::V2 &q, double X, double Y) {
+				const double e = sg * ((double(q.x) - p.x) * (Y - p.y) - (double(q.y) - p.y) * (X - p.x));
+				if (e != 0.0) {
+					return e > 0.0;
+				}
+				const double dx = sg * (double(q.x) - p.x), dy = sg * (double(q.y) - p.y);
+				return (dy == 0.0 && dx < 0.0) || dy > 0.0;
+			};
+			const int xa = int(std::floor(std::min({a.x, b.x, c.x}))), xb = int(std::ceil(std::max({a.x, b.x, c.x})));
+			const int ya = int(std::floor(std::min({a.y, b.y, c.y}))), yb = int(std::ceil(std::max({a.y, b.y, c.y})));
+			for (int y = ya; y <= yb; y++) {
+				for (int x = xa; x <= xb; x++) {
+					const double X = x + 0.5, Y = y + 0.5;
+					if (inside(a, b, X, Y) && inside(b, c, X, Y) && inside(c, a, X, Y)) {
+						n[size_t((y - y0) * w + (x - x0))]++;
+					}
+				}
+			}
+		}
+	}
+	int at(int x, int y) const { return x < x0 || y < y0 || x >= x0 + w || y >= y0 + h ? 0 : n[size_t((y - y0) * w + (x - x0))]; }
+	// pixels covered twice; uncovered pixels with covered neighbours both sides (a crack)
+	// that `inside` says belong to the region
+	std::pair<int, int> faults(const std::function<bool(double, double)> &inside_region) const {
+		int twice = 0, cracks = 0;
+		for (int y = y0 + 1; y < y0 + h - 1; y++) {
+			for (int x = x0 + 1; x < x0 + w - 1; x++) {
+				const int v = at(x, y);
+				twice += v >= 2 ? 1 : 0;
+				if (v == 0 && ((at(x - 1, y) && at(x + 1, y)) || (at(x, y - 1) && at(x, y + 1))) && inside_region(x + 0.5, y + 0.5)) {
+					cracks++;
+				}
+			}
+		}
+		return {twice, cracks};
+	}
+};
+
+} // namespace
+
+TEST_CASE("present: the region is drawn as the union of its cells: no pixel twice, no crack, still or morphing") {
+	// (the user saw hairline overlaps and cracks: the fill drawn cell by cell, the
+	// morph cell by cell; now one outline, holes and all)
+	struct Case {
+		const char *name;
+		const char *label;
+	};
+	for (const Case &c : {Case{"main.json", nullptr}, Case{"test_levels/crossings.json", nullptr}, Case{"playground/tangent_infinity.json", nullptr},
+			 Case{"playground/pre_inverted.json", nullptr}, Case{"playground/inversion_grid.json", "FullInversion"}}) {
+		CAPTURE(std::string(c.name));
+		rcg::Session s(level(c.name));
+		s.settle();
+		if (c.label) {
+			plan_side(s, c.label, 3, 0);
+		}
+		rcg::PresentConfig late;
+		late.smooth_on_time = true;
+		rcg::Presenter p(late);
+		p.frame(s.draw_frame(), s);
+		for (int k = 0; k < 4; k++) {
+			s.teleport(s.player() + rc::V2{9, 4});
+			s.settle();
+			// a pixel that is a crack must lie in the region, clear of its boundary
+			// by more than the arcs' chords (0.25 px)
+			auto in_region = [&](double x, double y) {
+				const rc::vis::Pt q{x, y};
+				return s.region() && rc::vis::contains(*s.region(), q) == rc::vis::Membership::Inside && rc::vis::margin(*s.region(), q) > 0.3;
+			};
+			const rcg::render::Call *m = mesh(*vis_node(s.draw_frame()));
+			if (m) {
+				const auto [twice, cracks] = Coverage(m->pts, m->indices).faults(in_region);
+				CHECK(twice == 0);
+				CHECK(cracks == 0);
+			}
+			for (int f = 0; f < 3; f++) { // the morph's frames
+				p.advance(0.03);
+				const auto n = vis_node(p.frame(s.draw_frame(), s));
+				if (const rcg::render::Call *mm = mesh(*n)) {
+					CHECK(Coverage(mm->pts, mm->indices).faults([](double, double) { return false; }).first == 0);
+				}
+			}
+			p.advance(0.2);
+			p.frame(s.draw_frame(), s);
+		}
+	}
 }
