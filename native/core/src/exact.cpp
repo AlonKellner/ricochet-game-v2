@@ -672,6 +672,18 @@ bool gc_tangent_circle(const GCircle &g, const Point3 &C, const BigFloat &rw2) {
 	return sub(mul(u, u), mul(mul(of(4.0), delta), mul(q2, mul(rw2, s2)))).is_zero();
 }
 
+namespace {
+// A (x^2 + y^2) + (B x + C y) w + D w^2 = 0 at the homogeneous point (x, y, w)
+bool gc_passes_h(const GCircle &g, const Point3 &X) {
+	const BigFloat &w = X[2];
+	const BigFloat s = add(mul(X[0], X[0]), mul(X[1], X[1]));
+	return add(add(mul(g.A, s), mul(add(mul(g.B, X[0]), mul(g.C, X[1])), w)), mul(g.D, mul(w, w))).is_zero();
+}
+int point_limbs(const Point3 &X) {
+	return std::max({X[0].precision_limbs(), X[1].precision_limbs(), X[2].precision_limbs()});
+}
+} // namespace
+
 bool gc_passes(const GCircle &g, double x, double y) {
 	const BigFloat ex = of(x);
 	const BigFloat ey = of(y);
@@ -726,6 +738,41 @@ std::shared_ptr<const BeamRec> BeamRec::inverted(const Point3 &C, const BigFloat
 	r->c_ = C;
 	r->rw2_ = rw2;
 	return r;
+}
+
+bool BeamRec::passes(double x, double y) const {
+	if (done_) {
+		return exact_ && gc_passes(*exact_, x, y);
+	}
+	return passes_h(Point3{of(x), of(y), of(1.0)});
+}
+
+// (each map is undone on the point: a reflection and an inversion are their own
+// inverses, a translation by d is undone by -d)
+bool BeamRec::passes_h(const Point3 &X) const {
+	if (done_) {
+		return exact_ && gc_passes_h(*exact_, X);
+	}
+	if (point_limbs(X) > EXACT_LIMBS) {
+		return false; // (the exact-data budget, as exact()'s)
+	}
+	switch (kind_) {
+		case Kind::Line: {
+			const std::optional<Line3> L = line_->exact();
+			return L && on_line_h(*L, X);
+		}
+		case Kind::Circle: return false; // (born done)
+		case Kind::Reflect: return parent_->passes_h(reflect_point_h(X, m_[0], m_[1], m_[2], m_[3]));
+		case Kind::Translate: return parent_->passes_h(Point3{sub(X[0], mul(of(m_[0]), X[2])), sub(X[1], mul(of(m_[1]), X[2])), X[2]});
+		case Kind::Invert: {
+			if (const std::optional<Point3> Y = invert_point_h(X, c_, rw2_)) {
+				return parent_->passes_h(*Y);
+			}
+			const std::optional<GCircle> g = exact(); // (the centre itself: its preimage is infinity)
+			return g && gc_passes_h(*g, X);
+		}
+	}
+	return false;
 }
 
 std::optional<GCircle> BeamRec::exact() const {

@@ -174,9 +174,15 @@ public:
 	// nullopt: the base line has no exact coefficients, or the circle grew past
 	// the budget (EXACT_LIMBS)
 	std::optional<GCircle> exact() const;
+	// Stage 124: exactly whether exact() passes (x, y) (as gc_passes on it says),
+	// by pulling the point back through the maps to the base line or circle: a
+	// point's image stays small where the circle's coefficients grow with every
+	// inversion. False where exact() would make no claim.
+	bool passes(double x, double y) const;
 	static constexpr int EXACT_LIMBS = 320;
 
 private:
+	bool passes_h(const Point3 &X) const;
 	enum class Kind { Line, Circle, Reflect, Translate, Invert };
 	Kind kind_ = Kind::Line;
 	std::shared_ptr<const Line> line_;

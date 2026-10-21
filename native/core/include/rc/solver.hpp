@@ -433,6 +433,13 @@ struct Walk {
 	std::map<const Beam<N> *, int> beam_views;
 	std::optional<PointGroup<N>> point; // B5: the point being crossed (physical walk)
 	std::vector<uint8_t> gap_why; // Stage 123: the step's margins' classes (Solver::gaps, the instrument; reused)
+	// Stage 124: a step's working vectors, kept across the walk's steps (no
+	// allocation per step: the region's parallel casts contended in malloc)
+	std::vector<Candidate<N>> step_cands;
+	std::vector<double> step_gaps;
+	std::vector<std::pair<int, InlineVec<N, 4>>> step_shared;
+	std::vector<std::pair<double, double>> gap_pts;
+	std::vector<int> gap_dbl;
 };
 
 // Caches owned by the caller (one per solve / tracer): the anchored chain of
@@ -2102,8 +2109,6 @@ private:
 		}
 		w.rec_hits_of = w.rec;
 		w.rec_hits.clear();
-		std::optional<exact::GCircle> g;
-		bool tried = false;
 		for (const auto &kv : w.chain->exact_hits) {
 			const CN<N> &c = kv.second;
 			const CN<N> q = beam.at(Backend<N>::param_of(beam, c));
@@ -2111,11 +2116,7 @@ private:
 			if (!(q.sub(c).abs2().to_float() <= (1e-6 * scale) * (1e-6 * scale))) {
 				continue;
 			}
-			if (!tried) {
-				g = w.rec->exact();
-				tried = true;
-			}
-			if (g && exact::gc_passes(*g, c.fx(), c.fy())) {
+			if (w.rec->passes(c.fx(), c.fy())) {
 				w.rec_hits.push_back(c);
 			}
 		}
@@ -2134,9 +2135,7 @@ private:
 		if (!(q.sub(c).abs2().to_float() <= (1e-6 * scale) * (1e-6 * scale))) {
 			return false;
 		}
-		if (const std::optional<exact::GCircle> g = w.rec->exact()) {
-			w.rec_cursor_on = exact::gc_passes(*g, c.fx(), c.fy());
-		}
+		w.rec_cursor_on = w.rec->passes(c.fx(), c.fy()); // (Stage 124: the cursor pulled back, not the circle pushed forward)
 		return w.rec_cursor_on;
 	}
 
@@ -2176,9 +2175,11 @@ private:
 	// Candidates in walk order: [t, surf (nullptr = cursor), rehit, exact point].
 	// keep_cursor (K4): a restart after a derivative-only seed keeps the cursor
 	// candidate the loop listed (the oracle lists it once per loop).
-	std::vector<Candidate<N>> candidates(Walk<N> &w, const Beam<N> &beam, int depart, bool fresh, const N &t0, bool keep_cursor = false) const {
-		std::vector<Candidate<N>> cands;
-		std::vector<std::pair<int, std::vector<N>>> shared; // K6: carrier rep -> its roots this loop
+	// (into cands: the walk's step buffer, refilled)
+	void candidates(Walk<N> &w, const Beam<N> &beam, int depart, bool fresh, const N &t0, bool keep_cursor, std::vector<Candidate<N>> &cands) const {
+		cands.clear();
+		std::vector<std::pair<int, InlineVec<N, 4>>> &shared = w.step_shared; // K6: carrier rep -> its roots this loop
+		shared.clear();
 		const Surf<N> *dep_surf = depart >= 0 ? w.scene->find(depart) : nullptr;
 		const int dep_rep = dep_surf != nullptr ? dep_surf->carrier_rep : -1;
 		for (const auto &sp : w.scene->surfaces) {
@@ -2204,11 +2205,11 @@ private:
 			}
 			const bool departing = dep_rep >= 0 && dep_rep == s.carrier_rep;
 			const Surf<N> &src = departing ? *w.scene->find(depart) : s;
-			std::vector<N> rs;
+			InlineVec<N, 4> rs;
 			if (fresh) {
 				rs = geom::hits(beam, src.seg, departing);
 				if (departing) {
-					std::vector<N> f;
+					InlineVec<N, 4> f;
 					for (const N &t : rs) {
 						if (!t.is_zero()) {
 							f.push_back(t);
@@ -2372,7 +2373,6 @@ private:
 			}
 			cands.push_back(Candidate<N>{t0, w.scene->find(depart), true, dep_pt, -1});
 		}
-		return cands;
 	}
 
 	// On an exact line, adjacent crossings of two line carriers that meet the
@@ -2513,8 +2513,9 @@ private:
 		WHY_ZERO = 0 << 3, WHY_ROUNDING = 1 << 3, WHY_SMALL = 2 << 3, WHY_WIDE = 3 << 3 // how close
 	};
 
-	static std::vector<double> gaps(Walk<N> &w, const Beam<N> &beam, const std::vector<Candidate<N>> &cands, std::vector<uint8_t> *why = nullptr) {
-		std::vector<std::pair<double, double>> pts;
+	static void gaps(Walk<N> &w, const Beam<N> &beam, const std::vector<Candidate<N>> &cands, std::vector<double> &out, std::vector<uint8_t> *why = nullptr) {
+		std::vector<std::pair<double, double>> &pts = w.gap_pts;
+		pts.clear();
 		for (const Candidate<N> &cand : cands) {
 			if (cand.inf && !cand.pt) {
 				pts.emplace_back(INF_D, INF_D);
@@ -2551,7 +2552,8 @@ private:
 		};
 		// double roots: consecutive candidates on one surface, a rounding apart,
 		// where the beam touches its carrier exactly
-		std::vector<int> dbl(cands.size(), -1);
+		std::vector<int> &dbl = w.gap_dbl;
+		dbl.assign(cands.size(), -1);
 		for (size_t i = 0; i < cands.size(); i++) {
 			const Surf<N> *s = cands[i].surf;
 			if (s == nullptr || cands[i].rehit) {
@@ -2605,7 +2607,7 @@ private:
 		if (why) {
 			why->assign(cands.size(), WHY_NONE);
 		}
-		std::vector<double> out;
+		out.clear();
 		for (size_t i = 0; i < cands.size(); i++) {
 			double g = INF_D;
 			uint8_t term = WHY_NONE;
@@ -2669,7 +2671,7 @@ private:
 			}
 			out.push_back(g);
 		}
-		return out;
+		return;
 	}
 
 	// Blocked sides at an exact endpoint, incl. other segments sharing it.
@@ -2868,10 +2870,12 @@ private:
 				w.exact_trace.push_back(w.Q ? w.pole.has_value() : w.line != nullptr);
 				w.known_trace.push_back(w.known);
 			}
-			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0, keep_cursor);
+			std::vector<Candidate<N>> &cands = w.step_cands; // (Stage 124: the walk's buffers, refilled each step)
+			candidates(w, *beam, depart, fresh, t0, keep_cursor, cands);
 			keep_cursor = false;
 			std::vector<uint8_t> &gw = w.gap_why; // (reused across the walk's steps)
-			std::vector<double> gp = gaps(w, *beam, cands, &gw);
+			std::vector<double> &gp = w.step_gaps;
+			gaps(w, *beam, cands, gp, &gw);
 			std::optional<Next> next;
 			bool restart = false;
 			size_t ci = skip;

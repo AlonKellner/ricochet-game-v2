@@ -92,7 +92,7 @@ std::array<N, 3> line_coeffs(const Beam<N> &beam, const Seg<N> &seg) {
 // Real roots t of beam ∩ seg's carrier. depart_on: beam.p lies exactly on it
 // (provenance), so the root t = 0 is the departure and is not returned.
 template <Num N>
-std::vector<N> hits(const Beam<N> &beam, const Seg<N> &seg, bool depart_on) {
+InlineVec<N, 4> hits(const Beam<N> &beam, const Seg<N> &seg, bool depart_on) {
 	if (seg.kind == SegKind::Circle) {
 		return beam.hits(*seg.circ, depart_on);
 	}
@@ -101,7 +101,7 @@ std::vector<N> hits(const Beam<N> &beam, const Seg<N> &seg, bool depart_on) {
 	const N &c1 = co[1];
 	const N &c2 = co[2];
 	// degree drop (c2 = 0): a curved beam meets the line at its antipode, t = inf
-	std::vector<N> at_inf;
+	InlineVec<N, 4> at_inf;
 	if (!beam.kappa.is_zero()) {
 		at_inf.push_back(beam.kappa.inf_like());
 	}
@@ -115,8 +115,10 @@ std::vector<N> hits(const Beam<N> &beam, const Seg<N> &seg, bool depart_on) {
 		if (c1.is_zero()) {
 			return at_inf;
 		}
-		std::vector<N> out{c0.neg().div(c1)};
-		out.insert(out.end(), at_inf.begin(), at_inf.end());
+		InlineVec<N, 4> out{c0.neg().div(c1)};
+		for (const N &t : at_inf) {
+			out.push_back(t);
+		}
 		return out;
 	}
 	const N disc = c1.mul(c1).sub(c2.mul(c0).mul_pow2(2));

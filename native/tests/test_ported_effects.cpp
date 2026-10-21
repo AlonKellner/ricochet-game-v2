@@ -156,10 +156,10 @@ Seg<N> line_seg(const N &like, double ax, double ay, double bx, double by, int i
 	return geom::seg_from_def(d, like);
 }
 
-template <Num N>
-std::vector<double> sorted_floats(const std::vector<N> &ts) {
+template <class V>
+std::vector<double> sorted_floats(const V &ts) {
 	std::vector<double> out;
-	for (const N &t : ts) {
+	for (const auto &t : ts) {
 		out.push_back(t.to_float());
 	}
 	std::sort(out.begin(), out.end());
