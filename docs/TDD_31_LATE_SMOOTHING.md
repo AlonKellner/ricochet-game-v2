@@ -10,7 +10,7 @@ Also, proceed to the path preview morph at the same time".
 |---|---|---|
 | 126.1 | A region is smoothed by its computation time, not its latency; C API 1.4 `late_ms` | Done |
 | 126.2 | The path preview morphs in when its exact climb was slower than 30 Hz (a diff of steps by the surfaces they hit) | Done |
-| 126.3 | Docs, `make gates`, sign-off | In progress |
+| 126.3 | Docs, `make gates`, sign-off | Done (user, 2026-10-21) |
 
 ## 126.1 What the crossings morph taught
 
