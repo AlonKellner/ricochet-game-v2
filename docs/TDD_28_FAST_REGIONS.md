@@ -32,7 +32,7 @@ The path morph that TDD_27 planned for this stage moves to a later one: the user
 | 123.8 | A region's cast tells the ladder what it reads: no climb for a decision past it (re-blessed, approved) | Done |
 | 123.9 | A region cast's climb walks only a little past what it reads | Done |
 | 123.10 | An endpoint member's casts know the endpoint; one carrier's shared root is one decision (re-blessed, approved) | Done |
-| 123.11 | Docs, `make gates`, sign-off | In progress |
+| 123.11 | Docs, `make gates`, sign-off | Done (user, 2026-10-21) |
 
 ## Where a region's time went
 
