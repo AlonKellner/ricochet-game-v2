@@ -333,6 +333,7 @@ public:
 			s.why_unbounded += x.why_unbounded;
 			s.why_empty += x.why_empty;
 			s.why_beyond += x.why_beyond;
+			s.unconverged += x.unconverged;
 		}
 		return s;
 	}

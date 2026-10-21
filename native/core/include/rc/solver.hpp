@@ -2452,6 +2452,29 @@ private:
 				pts.emplace_back(x, y);
 			}
 		}
+		// Stage 123: at a BigFloat tier a gap within float64's reach of 0 is measured
+		// at the tier's precision (the points above are float64 views of the beam):
+		// two hits a few 1e-13 px apart are told apart at 4 limbs, not left a
+		// rounding apart at every tier (a climb to 64 limbs that never converges).
+		// The float64 walks are untouched.
+		std::vector<std::optional<CN<N>>> at_tier(cands.size());
+		auto point_at_tier = [&](size_t i) -> const CN<N> & {
+			if (!at_tier[i]) {
+				at_tier[i] = cands[i].pt ? *cands[i].pt : beam.at(cands[i].t);
+			}
+			return *at_tier[i];
+		};
+		auto finer = [&](double d, size_t i, const CN<N> *other_pt, size_t k) -> double {
+			if constexpr (std::is_same_v<N, BigFloat>) {
+				const double scale = gd_maxf(1.0, gd_maxf(std::fabs(pts[i].first), std::fabs(pts[i].second)));
+				if (std::isfinite(d) && d <= 1e-6 * scale && !(cands[i].inf && !cands[i].pt)) {
+					const CN<N> &a = point_at_tier(i);
+					const CN<N> &b = other_pt ? *other_pt : point_at_tier(k);
+					return std::sqrt(a.sub(b).abs2().to_float());
+				}
+			}
+			return d;
+		};
 		// double roots: consecutive candidates on one surface, a rounding apart,
 		// where the beam touches its carrier exactly
 		std::vector<int> dbl(cands.size(), -1);
@@ -2514,7 +2537,8 @@ private:
 					l--;
 				}
 				if (l >= 0) {
-					const double d = d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second);
+					const double d = cands[size_t(l)].inf && !cands[size_t(l)].pt ? d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second)
+						: finer(d64(pts[i].first, pts[i].second, pts[size_t(l)].first, pts[size_t(l)].second), i, nullptr, size_t(l));
 					if (d < g) {
 						g = d;
 						term = cands[size_t(l)].surf == s ? WHY_SAME_SURFACE : WHY_NEIGHBOUR;
@@ -2526,7 +2550,8 @@ private:
 					r++;
 				}
 				if (r < cands.size()) {
-					const double d = d64(pts[i].first, pts[i].second, pts[r].first, pts[r].second);
+					const double d = cands[r].inf && !cands[r].pt ? d64(pts[i].first, pts[i].second, pts[r].first, pts[r].second)
+						: finer(d64(pts[i].first, pts[i].second, pts[r].first, pts[r].second), i, nullptr, r);
 					if (d < g) {
 						g = d;
 						term = cands[r].surf == s ? WHY_SAME_SURFACE : WHY_NEIGHBOUR;
@@ -2534,8 +2559,8 @@ private:
 					}
 				}
 				if (!s->seg.full) {
-					const double ds = d64(pts[i].first, pts[i].second, s->sx, s->sy);
-					const double de = d64(pts[i].first, pts[i].second, s->ex, s->ey);
+					const double ds = finer(d64(pts[i].first, pts[i].second, s->sx, s->sy), i, &s->seg.s, 0);
+					const double de = finer(d64(pts[i].first, pts[i].second, s->ex, s->ey), i, &s->seg.e, 0);
 					// an exact endpoint hit is decided by provenance, not by a margin
 					if (ds > 0.0 && ds < g) {
 						g = ds;

@@ -195,6 +195,7 @@ struct LadderStats {
 	long long why_unbounded = 0; // ... whose margin is unbounded (no competitor: the estimate blew up)
 	long long why_empty = 0;     // ... a walk with no events
 	long long why_beyond = 0;    // ... the first unreliable index past the events given
+	long long unconverged = 0;   // climbs that reached the last tier undecided (the 64-limb walk used as it is)
 };
 
 // The scenes of one solve at every tier, built on demand, plus the solve caches.
@@ -524,7 +525,9 @@ private:
 			const bool start_f64 = reliable && worst(est) <= tol;
 			return climb(start_f64 ? 0 : start_limbs, start_f64 ? &events : nullptr, tol, compute);
 		}
-		return replay_climb(start_limbs, tol, compute);
+		Climb out = replay_climb(start_limbs, tol, compute);
+		ctx_.stats().unconverged += out.converged ? 0 : 1;
+		return out;
 	}
 
 	static int required_for_prefix(const estimate::Sensitivity &sens, int n, double tol) {
