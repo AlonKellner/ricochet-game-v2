@@ -1901,8 +1901,35 @@ def _exact_data_hit(surf: Surface, etype, cfg, X, H):
         if ok and not any(D == q for q in found):
             found.append(D)
     if not found:
-        return None
+        return _exact_float_hit(surf, etype, cfg, X)
     return min(found, key=lambda D: abs(H - D))
+
+
+def _exact_float_hit(surf: Surface, etype, cfg, X):
+    """Stage 125 (K11): with no data point the hit point, H computed exactly from
+    the exact target X -- a line normal's foot on its line, a directional's
+    crossing of its line carrier (rationals) -- when both its coordinates are
+    binary floats exactly: exact data like a data point. None for a circle
+    carrier (a root) or a point between floats."""
+    seg = surf.seg
+    if seg.kind != "line" or etype == "circle_normal_projection":
+        return None
+    S, E = FC(seg.S), FC(seg.E)
+    d = _sub(E, S)
+    if etype == "line_normal_projection":
+        t = ((X[0] - S[0]) * d[0] + (X[1] - S[1]) * d[1]) / (d[0] * d[0] + d[1] * d[1])
+        H = (S[0] + t * d[0], S[1] + t * d[1])
+    else:
+        n = FC(P(cfg["normal"]))
+        den = _cross(n, d)
+        if den == 0:
+            return None
+        s_ = _cross(_sub(S, X), d) / den
+        H = (X[0] + s_ * n[0], X[1] + s_ * n[1])
+    hx, hy = float(H[0]), float(H[1])
+    if Fraction(hx) != H[0] or Fraction(hy) != H[1]:
+        return None
+    return mp.mpc(mp.mpf(hx), mp.mpf(hy))
 
 
 def _backward(surfaces, plan, cursor, flags=None, hints=None, start=0):

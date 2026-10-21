@@ -74,7 +74,8 @@ def test_k11_a_line_normal_hit_point_at_the_via_is_exact():
     sc = _scene("playground__projective_lines")
     hits = T.projective_hits(sc, [(5, "LEFT")], (900.0, 540.0))
     assert hits[0][2] == mp.mpc(750, 540) and hits[0][1] is not None
-    assert T.projective_hits(sc, [(5, "LEFT")], (900.0, 541.0))[0][2] is None
+    # (Stage 125: off the via, the foot (750, 541) is exact data too -- floats exactly)
+    assert T.projective_hits(sc, [(5, "LEFT")], (900.0, 541.0))[0][2] == mp.mpc(750, 541)
 
 
 def test_k11_a_directional_arc_hit_point_at_its_tangency_endpoint():

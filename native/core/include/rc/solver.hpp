@@ -1064,7 +1064,55 @@ public:
 				best = std::make_pair(CN<N>{H.re.like(dx), H.re.like(dy)}, exact::Point3{exact::of(dx), exact::of(dy), exact::of(1.0)});
 			}
 		}
-		return best;
+		return best ? best : exact_float_hit(surf, etype, left, X, H);
+	}
+
+	// Stage 125 (K11): with no data point the hit point, the hit point computed
+	// exactly from the exact target X -- a line normal's foot on its line, a
+	// directional's crossing of its line carrier -- when both its coordinates are
+	// floats exactly: exact data like a data point. nullopt for a circle carrier
+	// (a root) or a point between floats. (Oracle: trace2._exact_float_hit.)
+	std::optional<std::pair<CN<N>, exact::Point3>> exact_float_hit(const Surf<N> &surf, EffectType etype, bool left, const exact::Point3 &X,
+			const CN<N> &H) const {
+		using exact::add;
+		using exact::mul;
+		using exact::of;
+		using exact::sub;
+		if (!surf.line || etype == EffectType::CircleNormalProjection) {
+			return std::nullopt;
+		}
+		const BigFloat sx = of(surf.sx), sy = of(surf.sy);
+		const BigFloat dx = sub(of(surf.ex), sx), dy = sub(of(surf.ey), sy);
+		BigFloat hx, hy, hw; // the hit point, homogeneous
+		if (etype == EffectType::LineNormalProjection) {
+			// S + t d, t = ((X - S w) . d) / (w |d|^2)
+			const BigFloat dd = add(mul(dx, dx), mul(dy, dy));
+			const BigFloat num = add(mul(sub(X[0], mul(sx, X[2])), dx), mul(sub(X[1], mul(sy, X[2])), dy));
+			hw = mul(X[2], dd);
+			hx = add(mul(sx, hw), mul(num, dx));
+			hy = add(mul(sy, hw), mul(num, dy));
+		} else {
+			// X + s n on the line: s w = cross(S w - X, d) / cross(n, d)
+			const Projective &pr = surf.proj(left);
+			const BigFloat nx = of(pr.nx), ny = of(pr.ny);
+			const BigFloat den = sub(mul(nx, dy), mul(ny, dx));
+			if (den.is_zero()) {
+				return std::nullopt;
+			}
+			const BigFloat num = sub(mul(sub(mul(sx, X[2]), X[0]), dy), mul(sub(mul(sy, X[2]), X[1]), dx));
+			hw = mul(X[2], den);
+			hx = add(mul(X[0], den), mul(num, nx));
+			hy = add(mul(X[1], den), mul(num, ny));
+		}
+		if (hw.is_zero()) {
+			return std::nullopt;
+		}
+		const double fx = hx.div(hw).to_float(); // (the truncated quotient: exact when the point is floats)
+		const double fy = hy.div(hw).to_float();
+		if (!std::isfinite(fx) || !std::isfinite(fy) || !sub(mul(of(fx), hw), hx).is_zero() || !sub(mul(of(fy), hw), hy).is_zero()) {
+			return std::nullopt; // (between floats: the quotient's rounding is not the point)
+		}
+		return std::make_pair(CN<N>{H.re.like(fx), H.re.like(fy)}, exact::Point3{of(fx), of(fy), of(1.0)});
 	}
 
 	// The backward pass (GAME_SPEC 13.3): the sub-chains' targets, and alongside
