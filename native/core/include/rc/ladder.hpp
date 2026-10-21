@@ -322,7 +322,7 @@ public:
 				Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
 				big.force_reversed = force_;
 				const BigFloat l = BigFloat::from_int(1, limbs);
-				return big.planned(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, max_planned, flags);
+				return big.planned(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, cap_ >= 0 ? std::min(max_planned, cap_) : max_planned, flags);
 			};
 			r.planned = decide(sq, std::move(wq->events), est_q, tol, verify, planned_fn, false);
 		}
@@ -411,6 +411,7 @@ private:
 	LadderContext &ctx_;
 	Clock clock_;
 	int stops_ = -1; // Stage 123: what the caller reads (solve)
+	int cap_ = -1;   // ... the climb's walks cut a little past it (crossings; -1: none)
 	Flags flags0_;   // the walks' flags at the start (the horizon's flag changes)
 	std::optional<bool> force_; // Stage 111: the orientation the caller forces on every tier
 
@@ -432,7 +433,7 @@ private:
 			Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
 			big.force_reversed = force_;
 			const BigFloat l = BigFloat::from_int(1, limbs);
-			return big.physical(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, max_physical, flags);
+			return big.physical(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, cap_ >= 0 ? std::min(max_physical, cap_) : max_physical, flags);
 		};
 		r.physical = decide(sp, std::move(ev), est_p, tol, verify, physical_fn, true);
 		r.physical_sens = sp;
@@ -570,7 +571,10 @@ private:
 			const bool start_f64 = reliable && worst(est, need) <= tol;
 			return climb(start_f64 ? 0 : start_limbs, start_f64 ? &events : nullptr, tol, compute);
 		}
+		// (the climb walks only a little past what is read)
+		cap_ = need < events.size() ? int(need) + 2 : -1;
 		Climb out = replay_climb(start_limbs, tol, compute, physical);
+		cap_ = -1;
 		ctx_.stats().unconverged += out.converged ? 0 : 1;
 		return out;
 	}
@@ -615,6 +619,11 @@ private:
 		while (ti >= 0 && ti < int(TIERS.size())) {
 			const int L = TIERS[size_t(ti)];
 			std::vector<Event<BigFloat>> ev = timed(L, compute);
+			const size_t read = horizon(ev, physical);
+			if (cap_ >= 0 && read >= ev.size()) {
+				cap_ = -1; // the cut walk ends before what is read: the whole walk, this tier again
+				continue;
+			}
 			c.tried.push_back(L);
 			c.big_events = ev;
 			c.limbs = L;
@@ -622,7 +631,6 @@ private:
 			const estimate::Sensitivity rs = estimate::replay(ev, ctx_.dual_scene());
 			c.err = estimate::estimate(rs, eps);
 			const int bad = estimate::unreliable_index(rs, eps);
-			const size_t read = horizon(ev, physical);
 			if ((bad < 0 || size_t(bad) >= read) && worst(c.err, read) <= tol && !ev.empty()) {
 				c.converged = true;
 				return c;
