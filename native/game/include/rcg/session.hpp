@@ -149,6 +149,10 @@ public:
 	// Stage 121 (async): the background work's state; drain() waits for it and
 	// applies its results (then the session is what a synchronous one is)
 	bool region_pending() const;
+	// Stage 124: the latest region request, and the one the shown region answers
+	// (the presenter times a region from its request to its arrival)
+	long long region_requested() const { return vis_ticket_; }
+	long long region_shown() const { return vis_applied_; }
 	bool preview_exact() const { return !provisional_.has_value(); }
 	void set_budget(double seconds) { budget_ = seconds; } // (SessionConfig::budget; tests)
 	long long prefetches() const { return prefetch_ticket_; } // the prefetches started (tests, benches)

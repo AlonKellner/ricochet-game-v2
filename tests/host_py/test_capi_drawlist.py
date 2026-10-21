@@ -116,7 +116,8 @@ def test_draw_changes_sends_only_what_changed():
 
 def test_an_animated_game_smooths_only_a_late_region():
     """C API 1.3 (animate, budget_ms): a region on time is drawn as the game's;
-    a late one (an asynchronous game with no budget) morphs in, then is the game's."""
+    a late one (an asynchronous game with no budget, slower than 30 Hz: Stage 124)
+    morphs in, then is the game's."""
     import time
     text = (rc_host.ROOT / "data" / "levels" / "main.json").read_text()
 
@@ -145,6 +146,8 @@ def test_an_animated_game_smooths_only_a_late_region():
         g.event(rc_host.EVENT_PLAN_ADD)
         g.advance(0.0)
     assert region(on_time) == region(plain)
+    region(late)  # (a host draws every frame: the presenter sees the request)
+    late.advance(0.05)  # a 50 ms frame: the region arrives at least 1/30 s after its request
     ready(late)  # its arrival frame drawn: the morph begins
     late.advance(0.016)
     assert region(late) != region(plain)

@@ -16,7 +16,8 @@ the drawing stays exact; a changed golden is brought with its evidence for appro
 | 124.2 | A region cast's walks end two events past what the cast reads (bit-exact) | Done |
 | 124.3 | A member's exact point is known to its cast after its own plan entries; an exact crossing is exact data (re-blessed, approved) | Done |
 | 124.4 | Projective members know their exact points too; a cast's paths are converted lean (results unchanged) | Done |
-| 124.5 | A frame collects the work it started even when it finished before the budget's check (F17); docs, `make gates`, sign-off | In progress |
+| 124.5 | A frame collects the work it started even when it finished before the budget's check (F17); docs, `make gates`, sign-off | Done (user, 2026-10-21) |
+| 124.6 | Smoothing only for work slower than 30 Hz (the user, at the sign-off) | Done |
 
 ## Where the time was
 
@@ -91,6 +92,21 @@ A cast reads its paths' steps, their frames, the events' steps and frames, and t
 not read hit records, targets or the steps' display fields. `Tracer::cast_paths` now builds only what is read;
 it no longer computes a beam tangent per hit, which was costly on BigFloat walks. In both modes, a hit's flags
 key is rebuilt only when the flags change. projective_lines 10 → 7 ms.
+
+## 124.6 Smoothing only below 30 Hz
+
+At the sign-off the user asked: "Let's make the morph active only if the calculation is slower than 30 Hz".
+Before, a region that missed its frame's budget (4 ms) was late: followed while it computed, morphed in when
+it arrived. Now the presenter times each region from its request to its arrival on its own clock
+(`PresentConfig::late_seconds`, 1/30 s; `Session::region_requested` / `region_shown`, the tickets):
+
+- A region that arrives within 1/30 s of its request is drawn as it is, even if it missed a frame.
+- One that arrives later morphs in.
+- While a newer region computes, the shown one's shadows follow the player only once the shown region is
+  1/30 s old.
+
+Measuring per request matters. Regions of 11 ms are pending on every frame while the player walks at 120 Hz,
+so "pending since" would call them all late.
 
 ## Results
 

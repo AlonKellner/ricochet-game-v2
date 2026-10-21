@@ -868,7 +868,17 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 		}
 		const render::Call *mesh = mesh_of(n);
 		const int version = s.visibility_version();
-		const bool late = s.region_pending() || config_.smooth_on_time;
+		// Stage 124: a region is late when its request is late_seconds old -- the one
+		// arriving (morphed in), or the one shown while a newer computes (followed);
+		// a region faster than that is drawn as it is
+		requested_at_.try_emplace(s.region_requested(), now_);
+		auto age = [&](long long ticket) {
+			const auto it = requested_at_.find(ticket);
+			return it == requested_at_.end() ? 0.0 : now_ - it->second;
+		};
+		const double shown_age = age(s.region_shown());
+		requested_at_.erase(requested_at_.begin(), requested_at_.lower_bound(s.region_shown()));
+		const bool late = (s.region_pending() && shown_age >= config_.late_seconds) || config_.smooth_on_time;
 		if (version != region_version_) {
 			std::vector<sm::Carrier> carriers;
 			std::optional<sm::Pt> apex;
@@ -882,7 +892,7 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 			if (apex) {
 				sm::mark_shadows(next, *apex);
 			}
-			if (config_.region_seconds > 0.0 && region_version_ >= 0 && (was_late_ || config_.smooth_on_time)) {
+			if (config_.region_seconds > 0.0 && region_version_ >= 0 && (shown_age >= config_.late_seconds || config_.smooth_on_time)) {
 				// it was late: morph in from what was shown
 				morph_ = Morph{sm::plan(shown_, next, here), now_, config_.region_seconds, sm::common(shown_, next)};
 			} else if (morph_) {
@@ -901,7 +911,6 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 				shown_ = target_;
 			}
 		}
-		was_late_ = late;
 		const bool moved = config_.follow && late && target_.has_apex && std::hypot(here.x - target_.apex.x, here.y - target_.apex.y) > 1e-6;
 		sm::Shape shape;
 		if (morph_) {

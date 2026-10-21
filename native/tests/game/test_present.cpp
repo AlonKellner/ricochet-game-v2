@@ -354,7 +354,7 @@ TEST_CASE("present: regions on time are drawn as they are: no morph, no followin
 }
 
 TEST_CASE("present: a region that misses its frame follows, then morphs in") {
-	// no budget: every region arrives a frame or more late
+	// no budget: every region arrives a frame or more late; slower than 30 Hz, it is smoothed
 	rcg::SessionConfig cfg;
 	cfg.async = true;
 	rcg::Session s(level("main.json"), cfg);
@@ -367,13 +367,37 @@ TEST_CASE("present: a region that misses its frame follows, then morphs in") {
 	s.advance(rcg::kinematics::STEP * 1.5, in);
 	p.advance(rcg::kinematics::STEP * 1.5);
 	REQUIRE(s.region_pending());
-	CHECK(vis_node(p.frame(s.draw_frame(), s))->version != vis_node(s.draw_frame())->version); // followed
+	CHECK(vis_node(p.frame(s.draw_frame(), s))->version == vis_node(s.draw_frame())->version); // 25 ms old: not late yet
+	p.advance(0.02);
+	REQUIRE(s.region_pending());
+	CHECK(vis_node(p.frame(s.draw_frame(), s))->version != vis_node(s.draw_frame())->version); // 45 ms old: followed
 	s.drain(); // the late region arrives
 	p.advance(0.016);
 	CHECK(vis_node(p.frame(s.draw_frame(), s))->version != vis_node(s.draw_frame())->version); // morphing in
 	CHECK(p.animating());
 	p.advance(0.2);
 	CHECK(vis_node(p.frame(s.draw_frame(), s))->version == vis_node(s.draw_frame())->version);
+}
+
+TEST_CASE("present: a region faster than 30 Hz is drawn as it is, though it missed its frame") {
+	// (the user, Stage 124: smoothing only when the computation is slower than 30 Hz)
+	rcg::SessionConfig cfg;
+	cfg.async = true;
+	rcg::Session s(level("main.json"), cfg);
+	rcg::Presenter p;
+	s.settle();
+	s.drain();
+	p.frame(s.draw_frame(), s);
+	rcg::kinematics::Input in;
+	in.axis_x = 1.0f;
+	s.advance(rcg::kinematics::STEP * 1.5, in);
+	p.advance(rcg::kinematics::STEP * 1.5);
+	REQUIRE(s.region_pending());
+	p.frame(s.draw_frame(), s); // its request seen
+	s.drain();                 // it arrives 16 ms after its request (a frame or two late)
+	p.advance(0.016);
+	CHECK(vis_node(p.frame(s.draw_frame(), s))->version == vis_node(s.draw_frame())->version);
+	CHECK_FALSE(p.animating());
 }
 
 TEST_CASE("present: one late region does not keep on-time regions morphing") {
@@ -384,10 +408,10 @@ TEST_CASE("present: one late region does not keep on-time regions morphing") {
 	rcg::Session s(level("main.json"), cfg);
 	rcg::Presenter p;
 	s.settle();
-	p.frame(s.draw_frame(), s); // the first region pending: late
+	p.frame(s.draw_frame(), s); // the first region pending
 	s.drain();
-	p.advance(0.016);
-	p.frame(s.draw_frame(), s); // it arrives: a morph
+	p.advance(0.05);
+	p.frame(s.draw_frame(), s); // it arrives 50 ms after its request: late, a morph
 	CHECK(p.animating());
 	s.set_budget(5.0); // from now on every region is on time
 	rcg::kinematics::Input in;
