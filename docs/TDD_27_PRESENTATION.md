@@ -1,4 +1,4 @@
-# TDD 27: The presenter — the player between ticks, the region morphing by surface (Stage 122)
+# TDD 27: The presenter — the player between ticks, the region morphing as a diff of shapes (Stage 122)
 
 The third stage of the smooth-frames program (plan approved by the user, 2026-10-20). Stage 121 took the
 solver off the frame, but what it computes still lands on screen at once: a region arrives a few frames
@@ -24,7 +24,7 @@ overlays, the spawn preview and the flight's dimming.
 |---|---|---|
 | 122.1 | `rcg::Presenter` (`rcg/present.hpp`): the session's frame in, the frame on screen out; its clock | Done |
 | 122.2 | The player drawn between its last two physics ticks (`Session::tick_from`, `tick_alpha`) | Done |
-| 122.3 | The region morph (`rcg::region_field`); C API 1.3 (`rc_game_config.animate`); the Godot host animates | Done |
+| 122.3 | The region morph: first per ray (rejected interactively), then a diff of shapes (`rcg::shape_morph`) with the shadows following the player; C API 1.3 (`rc_game_config.animate`); the Godot host animates | Done |
 | 122.4 | Docs, `make gates`, sign-off | In progress |
 
 ## 122.1 The presenter
@@ -49,48 +49,78 @@ the player is drawn where it is.
 `rc_frame.camera_x/y` follows the drawn player when animating, so the camera moves as smoothly as the
 player. Godot's own camera smoothing still applies on top of it.
 
-## 122.3 The region morph
+## 122.3 The region morph: a diff of shapes
 
-**The field.** `region_field::field_of(result)` samples a region along rays from its apex `P_K`: the player,
-or its image behind the planned surfaces. A region of a pencil of rays is a set of wedge cells. Each cell is
-bounded by two member rays and by carrier pieces: a far one, and a near one when the region lies behind a
-planned surface (Stage 113's cells; checked on every shipped level). Along each ray, a cell gives one or more
-visible spans.
+**The first design, and why it went.** The first version sampled each region along 720 rays from its apex
+and interpolated each ray's visible spans, sliding ends along their surfaces. When nothing matched (the apex
+jumped, a pencil of circles), it collapsed the old region into the player and grew the new one. The user's
+interactive test (2026-10-21) rejected both:
 
-- **The rays.** 720 rays half a degree apart, plus each cell's two edges from just inside (1e-6 rad), so
-  every corner of the region is a sample.
-- **The ends.** Each span's two ends say what they lie on: a surface (its id, and the circle when the
-  carrier is one), the domain's edge, or the apex.
-- **The fill.** A quad joins the same span at neighbouring rays. The field's fill equals the region's fill
-  within 0.5% of its area on every level tested, a region behind a mirror included.
+- "When moving the visibility edges are crisp, but they are no longer lines, they are strange curves." On a
+  ray whose end changes surface, the per-ray interpolation bends straight edges.
+- "When an inversion is planned in inversion_grid, the flickering is unbearable." A planned inversion's
+  region is a pencil of circles, so every region update collapsed and regrew it.
 
-**The morph** (`region_field::morph(a, b, e)`) runs over the union of both fields' rays. Along each ray, the
-spans before and after pair up in order. A sequence alignment pairs as many as it can, preferring pairs whose
-ends lie on the same surfaces. For each pair:
+The user's direction: "calculating a git like diff ... between the shapes of two frames ... keeping the
+points that match paired during the animation. Then, diff points should be paired with arbitrary points on
+the counter part shape, preferably the closest points. Also, the morph should prefer to keep shapes as
+simple polygons or multi-lines with straight lines."
 
-- **An end on the same surface before and after slides along that surface.** A straight surface's ends move
-  along the line. A circle's ends move round the circle (the test checks that every such end, halfway, is on
-  its circle).
-- **An end on another surface** (a shadow's edge passing a corner) moves along the ray, from the old
-  surface to the new one.
-- **A span with no partner** grows out of its near end, or shrinks into it. Nothing appears in empty space.
+**The shape** (`shape_morph::shape_of`). A region is its cells' rings, exactly as the fill makes them:
+conforming (a corner of one cell on another's edge is a vertex of both), clipped to the domain and split into
+simple rings, each counterclockwise. Cells are not merged: a pencil's two sheets can overlap (a planned
+inversion's cells cover 3.4M px² of a 2.4M px² domain), and the fill draws each cell. Straight runs are
+merged and arcs reduced to chords within 0.5 px. Every vertex is tagged with the surfaces it lies on: a wall
+corner has two, a point on a wall one, the apex none.
 
-**When nothing can match**, the old region collapses into the player and the new one grows out of it, as a
-disk that sweeps between each mesh's nearest and farthest points from the player (by default 40% of the time
-collapsing, 60% growing). The presenter does this in three cases:
+**The diff** (`shape_morph::plan`):
 
-- the apex jumped more than 64 px (a plan change that moves `P_K`);
-- either region is not a pencil of rays (a pencil of circles after an inversion, of parallels);
-- a morph from a collapse/grow in progress.
+- **Pieces pair by place.** A cheap signature (centroid distance for the size, the areas' ratio) picks each
+  piece's three likeliest partners both ways. Then the mean distance of each one's vertices to the other's
+  outline ranks them, and pairs are taken greedily.
+- **Each pair is aligned like a diff.** This is a cyclic Needleman–Wunsch alignment:
+  - a pair of vertices costs their distance, half when they lie on the same surfaces, plus a penalty when
+    their surfaces differ;
+  - an unpaired vertex costs its distance to the other ring, plus a gap cost;
+  - the cyclic start (the anchor) is the cheapest of several tried: every rotation of a small ring, the two
+    closest same-surface pairs and the closest point for a large one. One fixed anchor reversed thin wedge
+    cells that moved more than their width.
+- **Unpaired vertices go to the other shape's closest points,** as the user specified. A deleted vertex moves
+  to the closest point of the new ring's stretch between its paired neighbours' partners, and an inserted
+  one comes from the old ring's stretch. Within each gap the projections are kept in order along both
+  chains, so both ends trace their rings in order (no zigzag on a curve, no notch at the end).
+- **A piece with no partner grows out of the other shape's closest edge** (or shrinks into it), as a
+  degenerate polygon on that edge. With nothing there (the region switched on or off), it grows out of the
+  drawn player.
 
-**The timeline.** A morph runs 100 ms with an ease-out (cubic). When a newer region arrives (the player keeps
-walking, Stage 121's regions a few frames behind), the morph starts again from the field on screen, so the
-shape never jumps. When the morph ends, the node is the session's exact region (the same calls and version).
-The whiskers (1D visible sets) show as the target's.
+**The frames.** Every vertex moves in a straight line (ease-out, 100 ms), so every frame is polygons of
+straight edges, triangulated by earcut. When a newer region arrives mid-morph, the diff starts again from the
+shape on screen. At the end, the node is the session's exact region.
 
-**The cost.** A new region's field costs 0.16–0.29 ms and a morph frame 0.26–0.6 ms (fill included), on
-main, crossings, hit_effects and inversion_grid. That is on the frame thread, once per new region and once per
-animated frame.
+**Following the player before the next region** (the user's idea: "the rays which reach the player update to
+the new position even before the new visibility region ... is fully calculated"). When a region's apex is
+the player (no plan, or entries that do not transform), its shape follows the drawn player at once:
+
+- its apex vertices sit on the drawn player;
+- a shadow's far end recasts: on a ray from the apex through a surface's end (the occluding corner) to a
+  straight surface, the far end moves to where the ray from the drawn player through that corner meets the
+  surface, while it stays on the surface's segment.
+
+The morph's target follows the same way, so the shape reacts to every frame of motion, and the next region
+corrects the rest. Behind a planned mirror the apex is the player's image, so those regions only morph.
+
+**Measured** (one new region's shape and diff, a morph frame; per level):
+
+| Level | Pieces | Vertices | Shape | Diff | Frame |
+|---|---|---|---|---|---|
+| main | 22 | 66 | 0.06 ms | 0.14 ms | 0.01 ms |
+| crossings | 50 | 155 | 0.10 ms | 0.21 ms | 0.01 ms |
+| tangent_infinity | 46 | 1204 | 0.25 ms | 1.88 ms | 0.10 ms |
+| inversion_grid, inversion planned | 66 | 2773 | 0.68 ms | 4.24 ms | 0.34 ms |
+
+Walking four steps on each of these levels, every diff frame (e = 0.25, 0.5, 0.75) has no self-crossing on
+crossings, main and hit_effects. On the planned inversion it has a few more than the regions' own sub-pixel
+slivers. Each frame's area stays between the two regions'; the inversion dips about 2% mid-morph.
 
 ## The C API (1.3)
 
@@ -105,12 +135,12 @@ property, on by default); its session-replay test turns it off.
 
 | Test | What it shows |
 |---|---|
-| `present: a region sampled along rays from its apex is the region` | the field's fill equals the region's (4 levels, and behind a planned mirror), its spans start on the mirror |
-| `present: a morph starts on the old region, ends on the new, and its ends slide along the surfaces they share` | e = 0 and e = 1 are the two regions; halfway, every end on one circle before and after is on that circle (hit_effects) |
-| `present: a span with no partner grows out of its near end` | an empty region to a full one: growing, monotone, exact at the end; and back |
-| `present: a mesh clipped to a disk` | the collapse/grow's clip |
-| `present: without animation the presenter's frame is the session's` | no durations: every node's key, version and position are the session's |
-| `present: a region's change morphs for its duration, then shows the region` | a walk morphs then lands on the exact node; a plan change collapses then grows; switched off, no frame has an empty mesh (Godot refuses one: caught by its suite) |
+| `present: a region's outline is its fill` | the pieces' area is the fill's (4 levels and a planned inversion); every ring is simple; most vertices lie on surfaces |
+| `present: the diff of two regions starts and ends on them, pairs their corners, and stays simple polygons` | walking on crossings, main, hit_effects and inversion_grid with an inversion planned: e = 0 and 1 are the two regions; between, the area stays between theirs and no ring crosses itself (beyond the regions' own slivers); 90% of shared corners pair with themselves |
+| `present: a ring with no partner grows out of the anchor` | an empty region to a full one grows monotonically and ends exact |
+| `present: without animation the presenter's frame is the session's` | no durations, no following: every node's key, version and position are the session's |
+| `present: a region's change morphs for its duration, then shows the region` | a walk morphs and lands on the exact node; a planned mirror never drops below half the area; switched off, no frame has an empty mesh (Godot refuses one) |
+| `present: before the next region, its shadows follow the drawn player` | half a tick behind: the shown mesh is the region with its shadows recast from the drawn player (main.json's mirrors occlude) |
 | `present: the player is drawn between its last two physics ticks` | half a tick: halfway |
 | `test_an_animated_game_morphs_its_region_then_draws_the_game` (Python host) | through the C API: the region morphs after a plan click, then equals the unanimated game's |
 
@@ -119,4 +149,5 @@ property, on by default); its session-replay test turns it off.
 | # | Finding | Status |
 |---|---|---|
 | F8 | A region and the preview arrive later than their input and replace what was shown at once | The region: resolved here (the morph). The path: Stage 123 |
-| F9 | A pencil of circles (after an inversion) or of parallels is not sampled along rays: its changes collapse and grow instead of morphing | Open: sampling along the pencil's own curves would morph them too |
+| F9 | The first morph (per ray) bent straight edges and collapsed a planned inversion's region on every update | Resolved: the diff of shapes (any pencil, straight edges) |
+| F10 | A planned inversion's diff costs about 4 ms per new region on the frame thread (2773 vertices) | Open: the diff could run beside the region's job |

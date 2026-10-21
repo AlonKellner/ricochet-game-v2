@@ -6,17 +6,18 @@
 //
 // - The player is drawn between its last two physics ticks (the accumulator's
 //   remainder), so motion is smooth at any display rate.
-// - The visibility region morphs from the shape shown to a new one, with crisp
-//   edges and no blending. Each region is sampled along directions from its
-//   apex (P_K: the player, or its image behind the planned surfaces); a
-//   sample's visible spans end on surfaces, and an end found on the same
-//   surface before and after slides along that surface (a circle's ends along
-//   the circle), an end on another surface along the sample's ray; a span
-//   with no partner grows out of (or shrinks into) its near end. A region
-//   whose apex jumped, or one the sampling does not cover (a pencil of
-//   circles, of parallels), collapses into the player, then the new one grows
-//   out of it. A morph retargets from the shape on screen when a newer region
-//   arrives (walking), and ends on the exact region.
+// - The visibility region morphs as a diff of two shapes (the user's design,
+//   2026-10-21): each region is its outline -- polygons of straight edges, every
+//   vertex tagged with the surfaces it lies on -- and the old and new outlines
+//   are aligned like a diff (a cyclic sequence alignment, dynamic programming):
+//   a vertex paired with its counterpart moves to it in a straight line, one
+//   with none moves to (or from) the closest point of the other outline between
+//   its paired neighbours. Every frame is polygons with straight edges. A newer
+//   region retargets the morph from the shape on screen; a morph ends on the
+//   exact region.
+// - While no newer region has arrived, the region follows the drawn player at
+//   once where it can (its apex is the player): a shadow edge pivots about its
+//   occluding corner, its far end recast from the player onto its wall.
 #pragma once
 
 #include "rc/visibility.hpp"
@@ -29,63 +30,89 @@
 namespace rcg {
 
 class Session;
+class World;
 
 struct PresentConfig {
-	double region_seconds = 0.1;  // the region's morph (0: none)
-	double collapse_share = 0.4;  // a morph with nothing matched: the old region collapses in this share, the new grows in the rest
-	double match_distance = 64.0; // an apex that moved further: nothing matched
-	bool interpolate = true;      // the player between physics ticks
+	double region_seconds = 0.1; // the region's morph (0: none)
+	bool interpolate = true;     // the player between physics ticks
+	bool follow = true;          // the region's shadows follow the drawn player before its next region
 };
 
-namespace region_field {
+namespace shape_morph {
 
 using Pt = rc::vis::Pt;
 
-// An end of a visible span along a sample ray: on a surface's carrier (its
-// geometry: a line, or a circle to slide along), on the domain's edge, or the apex.
-struct End {
-	enum Kind : uint8_t { Apex, Carrier, Bounds } kind = Apex;
-	Pt p;
+// A surface's carrier (the tags' source; a straight one also its segment, for
+// recasting a shadow's end onto it).
+struct Carrier {
 	int surface = -1;
-	bool circle = false;
-	Pt center;
-	double radius = 0.0;
+	bool line = true;
+	Pt p, d; // a line
+	Pt c;    // a circle
+	double r = 0.0;
+	bool has_segment = false;
+	Pt s, e; // the surface's segment (a straight one)
+	double dist(const Pt &q) const;
 };
 
-// A visible span along one sample ray, and its identity (the same span at
-// neighbouring samples is one strip of the fill).
-struct Span {
-	End near, far;
-	int64_t id = 0;
+// A vertex of an outline: its point, the surfaces it lies on (a tag: 0 none),
+// and how it follows the player (Stage 122: a shadow's far end recast through
+// its pivot onto its carrier; the apex itself).
+struct Vertex {
+	Pt p;
+	int64_t tag = 0;
+	int carrier = -1;  // the one straight carrier it lies on (an index), or -1
+	bool shadow = false;
+	Pt pivot;          // a shadow's occluding corner (on the ray from the apex)
+	bool apex = false; // the apex itself
 };
-
-struct Sample {
-	double phi = 0.0; // the ray's angle at the apex, [0, 2 pi)
-	std::vector<Span> spans; // by distance from the apex
-};
-
-// A region as samples along rays from its apex. ok false: not sampled (a
-// pencil the sampling does not cover); an empty, ok field is no region.
-struct Field {
-	bool ok = false;
-	bool empty = true;
+using Ring = std::vector<Vertex>;
+// A region's pieces: closed simple polygons (its cells), their carriers, and the
+// apex the shadows lie on rays from (has_apex: the player).
+struct Shape {
+	std::vector<Ring> rings;
+	std::vector<Carrier> carriers;
+	bool has_apex = false;
 	Pt apex;
-	std::vector<Sample> samples; // by phi
 };
 
-// The field of a region (720 rays, and every cell's edges from inside).
-Field field_of(const rc::vis::Result &r);
-// The spans of a field along the ray at phi (between samples: interpolated).
-std::vector<Span> spans_at(const Field &f, double phi);
-// The field e of the way from a to b (e in [0, 1]; 0: a, 1: b).
-Field morph(const Field &a, const Field &b, double e);
-// The fill of a field: a triangle mesh (points, three indices a triangle).
-void fill_of(const Field &f, std::vector<rc::V2> &pts, std::vector<int> &indices);
-// A triangle mesh clipped to the disk (c, r) (a polygon of `sides`).
-void clip_disk(const std::vector<rc::V2> &pts, const std::vector<int> &indices, const Pt &c, double r, std::vector<rc::V2> &out_pts,
-	std::vector<int> &out_indices, int sides = 96);
+// A region as pieces: its cells' rings as its fill makes them (each a simple
+// polygon, counterclockwise; cells of a pencil's two sheets may overlap, as the
+// fill draws them), straight runs merged and arcs reduced to chords within
+// `tol`, every vertex tagged by the carriers.
+Shape shape_of(const rc::vis::Result &r, std::vector<Carrier> carriers, double tol = 0.5);
+// The carriers of a region (its cells' carrier edges; a straight surface's segment from the world, if given).
+std::vector<Carrier> carriers_of(const rc::vis::Result &r, const World *world = nullptr);
+// The shadows of a shape whose rays leave `apex` (the player): an edge on a ray
+// from it is a shadow's edge, its far end recast through its near end (the
+// occluding corner) onto its straight carrier as the apex moves.
+void mark_shadows(Shape &s, const Pt &apex);
+// A vertex for the apex moved to `apex` (a shadow's end recast while it stays on its surface).
+Vertex recast(const Vertex &v, const std::vector<Carrier> &carriers, const Pt &apex);
+// The shape with its shadows recast from the apex moved to `apex` (no apex: as it is).
+Shape follow(const Shape &s, const Pt &apex);
 
-} // namespace region_field
+// A morph: per ring, every vertex's way (from -> to) in order, and which ring
+// each is the hole of (-1: an outer ring).
+struct Track {
+	Vertex from, to;
+};
+struct Plan {
+	std::vector<std::vector<Track>> rings;
+	std::vector<int> parent;
+};
+// The diff of two shapes: rings paired by place, then each pair aligned; a
+// ring with no partner moves from (to) the closest points of the other shape,
+// or the anchor when it is empty.
+Plan plan(const Shape &a, const Shape &b, const Pt &anchor);
+// The shape at e of the way (0: a, 1: b).
+Shape at(const Plan &p, double e);
+// A shape's fill: triangles (points, three indices a triangle).
+void fill_of(const Shape &s, std::vector<rc::V2> &pts, std::vector<int> &indices);
+// The holes' outer rings, by containment (-1: an outer ring).
+std::vector<int> parents_of(const Shape &s);
+
+} // namespace shape_morph
 
 class Presenter {
 public:
@@ -101,21 +128,15 @@ public:
 
 private:
 	struct Morph {
-		region_field::Field from, to;          // a field morph
-		bool disk = false;                // nothing matched: collapse into the player, then grow
-		std::vector<rc::V2> from_pts, to_pts; // a disk morph's fills
-		std::vector<int> from_idx, to_idx;
+		shape_morph::Plan plan;
 		double start = 0.0;
 	};
 	PresentConfig config_;
 	double now_ = 0.0;
-	int region_version_ = -1;      // the session's region the morph runs to
-	region_field::Field shown_;         // the field of the region shown when no morph runs
-	std::vector<rc::V2> shown_pts_; // ... and its fill
-	std::vector<int> shown_idx_;
+	int region_version_ = -1;  // the session's region shown (or morphed to)
+	shape_morph::Shape target_; // its outline
+	shape_morph::Shape shown_;  // the outline on screen (the last frame's)
 	std::optional<Morph> morph_;
-	region_field::Field current_;       // the morph's field this frame
-	bool current_ok_ = false;
 	uint64_t frame_serial_ = 0;
 };
 

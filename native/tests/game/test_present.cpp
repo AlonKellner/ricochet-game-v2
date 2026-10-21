@@ -1,8 +1,9 @@
-// Stage 122: the presentation layer (rcg/present.hpp): a region sampled along
-// rays from its apex is the region; a morph starts and ends on the two
-// regions, its ends slide along the surfaces they share; a region that does
-// not match collapses into the player and the new one grows; the presenter
-// with no animation is the session's frame.
+// Stage 122: the presentation layer (rcg/present.hpp): a region's outline is
+// its fill; the diff of two outlines starts and ends on them, pairs the
+// corners they share, and every frame between is simple polygons of straight
+// edges (a planned inversion's regions too: the flicker the user saw); the
+// shadows follow the drawn player before the next region; the presenter with
+// no animation is the session's frame.
 #include "rcg/level.hpp"
 #include "rcg/present.hpp"
 #include "rcg/session.hpp"
@@ -11,10 +12,11 @@
 
 #include <cmath>
 #include <filesystem>
+#include <optional>
 
 namespace {
 
-namespace rf = rcg::region_field;
+namespace sm = rcg::shape_morph;
 
 const std::filesystem::path ROOT = RC_REPO_ROOT;
 
@@ -29,128 +31,198 @@ double area(const std::vector<rc::V2> &pts, const std::vector<int> &idx) {
 	return a;
 }
 
-double area(const rc::vis::Fill &f) {
+double area(const sm::Shape &s) {
 	std::vector<rc::V2> pts;
 	std::vector<int> idx;
-	for (const rc::vis::Pt &p : f.points) {
-		pts.push_back(rc::V2::of(p.x, p.y));
-	}
-	for (uint32_t i : f.indices) {
-		idx.push_back(int(i));
-	}
+	sm::fill_of(s, pts, idx);
 	return area(pts, idx);
 }
 
-double area(const rf::Field &f) {
-	std::vector<rc::V2> pts;
-	std::vector<int> idx;
-	rf::fill_of(f, pts, idx);
-	return area(pts, idx);
-}
-
-std::vector<rc::V2> plannable(const rcg::Session &s) {
-	std::vector<rc::V2> out;
-	for (const rcg::BuiltSurface &b : s.world().surfaces()) {
-		if (b.label && b.left && b.left->interactive && !b.pre_transform && b.seg.is_line()) {
-			const rc::V2 d = (b.seg.e - b.seg.s).normalized();
-			out.push_back(b.seg.v + rc::V2{-d.y, d.x} * 6.0f);
+std::optional<rcg::render::FrameNode> vis_node(const std::vector<rcg::render::FrameNode> &nodes) {
+	for (const rcg::render::FrameNode &n : nodes) {
+		if (n.key.kind == rcg::render::NodeKind::Visibility) {
+			return n; // (a copy: the list is a temporary)
 		}
+	}
+	return std::nullopt;
+}
+
+const rcg::render::Call *mesh(const rcg::render::FrameNode &n) {
+	for (const rcg::render::Call &c : *n.calls) {
+		if (c.kind == rcg::render::Kind::Triangles) {
+			return &c;
+		}
+	}
+	return nullptr;
+}
+
+double mesh_area(const rcg::render::FrameNode &n) {
+	const rcg::render::Call *m = mesh(n);
+	return m ? area(m->pts, m->indices) : 0.0;
+}
+
+// the session's region as the presenter outlines it
+sm::Shape outline(const rcg::Session &s) {
+	return s.region() ? sm::shape_of(*s.region(), sm::carriers_of(*s.region(), &s.world())) : sm::Shape{};
+}
+
+// plans the side of the nth surface with a label, 6 px off its middle
+void plan_side(rcg::Session &s, const char *label, int nth, int side) {
+	int k = 0;
+	for (const rcg::BuiltSurface &b : s.world().surfaces()) {
+		if (b.label && *b.label == label && k++ == nth) {
+			const rc::V2 d = (b.seg.e - b.seg.s).normalized();
+			s.set_cursor(b.seg.v + (side == 0 ? rc::V2{d.y, -d.x} : rc::V2{-d.y, d.x}) * 6.0f);
+			s.settle();
+			s.click(false);
+			s.settle();
+			return;
+		}
+	}
+	FAIL("no such surface");
+}
+
+bool proper_cross(const sm::Pt &a, const sm::Pt &b, const sm::Pt &c, const sm::Pt &d) {
+	auto orient = [](const sm::Pt &p, const sm::Pt &q, const sm::Pt &r) { return (q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x); };
+	const double o1 = orient(a, b, c), o2 = orient(a, b, d), o3 = orient(c, d, a), o4 = orient(c, d, b);
+	const double eps = 1e-6;
+	return ((o1 > eps && o2 < -eps) || (o1 < -eps && o2 > eps)) && ((o3 > eps && o4 < -eps) || (o3 < -eps && o4 > eps));
+}
+
+// a ring's edges that cross each other properly
+int self_crossings(const sm::Ring &r) {
+	int n = 0;
+	for (size_t i = 0; i < r.size(); i++) {
+		for (size_t j = i + 2; j < r.size(); j++) {
+			if (i == 0 && j == r.size() - 1) {
+				continue;
+			}
+			n += proper_cross(r[i].p, r[(i + 1) % r.size()].p, r[j].p, r[(j + 1) % r.size()].p) ? 1 : 0;
+		}
+	}
+	return n;
+}
+
+// regions a few px apart as the player walks (each settled)
+std::vector<sm::Shape> walk(rcg::Session &s, rc::V2 step, int n) {
+	std::vector<sm::Shape> out{outline(s)};
+	for (int k = 0; k < n; k++) {
+		s.teleport(s.player() + step);
+		s.settle();
+		out.push_back(outline(s));
 	}
 	return out;
 }
 
 } // namespace
 
-TEST_CASE("present: a region sampled along rays from its apex is the region") {
+TEST_CASE("present: a region's outline is its fill") {
 	for (const char *name : {"test_levels/crossings.json", "test_levels/hit_effects.json", "main.json", "playground/portals.json"}) {
 		CAPTURE(name);
 		rcg::Session s(level(name));
 		s.settle();
-		REQUIRE(s.region());
-		const rf::Field f = rf::field_of(*s.region());
-		REQUIRE(f.ok);
-		CHECK_FALSE(f.empty);
-		const double exact = area(rc::vis::fill_triangles(*s.region()));
-		CHECK(area(f) == doctest::Approx(exact).epsilon(0.005));
-	}
-	// behind a planned mirror: the apex is the player's image, the spans start on the mirror
-	rcg::Session s(level("test_levels/crossings.json"));
-	s.set_cursor(plannable(s).at(0));
-	s.settle();
-	s.click(false);
-	s.settle();
-	REQUIRE(s.region());
-	const rf::Field f = rf::field_of(*s.region());
-	REQUIRE(f.ok);
-	CHECK(area(f) == doctest::Approx(area(rc::vis::fill_triangles(*s.region()))).epsilon(0.005));
-	int on_carrier = 0;
-	for (const rf::Sample &sm : f.samples) {
-		for (const rf::Span &sp : sm.spans) {
-			on_carrier += sp.near.kind == rf::End::Carrier ? 1 : 0;
+		const sm::Shape o = outline(s);
+		CHECK_FALSE(o.rings.empty());
+		CHECK(area(o) == doctest::Approx(mesh_area(*vis_node(s.draw_frame()))).epsilon(0.01));
+		size_t tagged = 0, all = 0;
+		for (const sm::Ring &r : o.rings) {
+			for (const sm::Vertex &v : r) {
+				tagged += v.tag != 0 ? 1 : 0;
+				all++;
+			}
+			CHECK(self_crossings(r) == 0);
 		}
+		CHECK(tagged > all / 2); // (most corners lie on surfaces)
 	}
-	CHECK(on_carrier > 0);
+	// a planned inversion: a pencil of circles, outlined all the same
+	rcg::Session s(level("playground/inversion_grid.json"));
+	plan_side(s, "FullInversion", 3, 0);
+	REQUIRE(s.plan().size() == 1);
+	const sm::Shape o = outline(s);
+	CHECK_FALSE(o.rings.empty());
+	CHECK(area(o) == doctest::Approx(mesh_area(*vis_node(s.draw_frame()))).epsilon(0.01));
 }
 
-TEST_CASE("present: a morph starts on the old region, ends on the new, and its ends slide along the surfaces they share") {
-	// hit_effects: circle carriers among the walls
-	rcg::Session s(level("test_levels/hit_effects.json"));
-	s.settle();
-	const rf::Field a = rf::field_of(*s.region());
-	s.teleport(s.player() + rc::V2{24, 10});
-	s.settle();
-	const rf::Field b = rf::field_of(*s.region());
-	REQUIRE(a.ok);
-	REQUIRE(b.ok);
-	CHECK(area(rf::morph(a, b, 0.0)) == doctest::Approx(area(a)).epsilon(0.002));
-	CHECK(area(rf::morph(a, b, 1.0)) == doctest::Approx(area(b)).epsilon(0.002));
-	// halfway, an end found on one circle before and after is on that circle
-	const rf::Field m = rf::morph(a, b, 0.5);
-	int circle_ends = 0, slid = 0;
-	for (const rf::Sample &sm : m.samples) {
-		const std::vector<rf::Span> A = rf::spans_at(a, sm.phi), B = rf::spans_at(b, sm.phi);
-		if (A.size() != 1 || B.size() != 1 || sm.spans.size() != 1) {
-			continue;
+TEST_CASE("present: the diff of two regions starts and ends on them, pairs their corners, and stays simple polygons") {
+	struct Case {
+		const char *name;
+		const char *label;
+		rc::V2 step;
+	};
+	for (const Case &c : {Case{"test_levels/crossings.json", nullptr, rc::V2{9, 4}}, Case{"main.json", nullptr, rc::V2{-12, 6}},
+			 Case{"test_levels/hit_effects.json", nullptr, rc::V2{8, -5}}, Case{"playground/inversion_grid.json", "FullInversion", rc::V2{0, 7}}}) {
+		CAPTURE(std::string(c.name));
+		rcg::Session s(level(c.name));
+		s.settle();
+		if (c.label) {
+			plan_side(s, c.label, 3, 0);
 		}
-		const rf::End &ea = A[0].far, &eb = B[0].far, &em = sm.spans[0].far;
-		if (ea.kind == rf::End::Carrier && eb.kind == rf::End::Carrier && ea.surface == eb.surface && ea.circle) {
-			circle_ends++;
-			const double r = std::hypot(em.p.x - ea.center.x, em.p.y - ea.center.y);
-			slid += std::abs(r - ea.radius) < 0.5 ? 1 : 0;
+		const std::vector<sm::Shape> regions = walk(s, c.step, 4);
+		for (size_t k = 0; k + 1 < regions.size(); k++) {
+			CAPTURE(k);
+			const sm::Shape &a = regions[k], &b = regions[k + 1];
+			const sm::Plan p = sm::plan(a, b, sm::Pt{double(s.player().x), double(s.player().y)});
+			const double aa = area(a), ab = area(b);
+			CHECK(area(sm::at(p, 0.0)) == doctest::Approx(aa).epsilon(0.002));
+			CHECK(area(sm::at(p, 1.0)) == doctest::Approx(ab).epsilon(0.002));
+			for (double e : {0.25, 0.5, 0.75}) {
+				CAPTURE(e);
+				const sm::Shape m = sm::at(p, e);
+				// no collapse, no flicker: the area stays between the two (a little slack for the shapes' change)
+				CHECK(area(m) >= 0.8 * std::min(aa, ab));
+				CHECK(area(m) <= 1.2 * std::max(aa, ab));
+				// simple polygons: no crossing the regions do not have themselves (a planned
+				// inversion's sub-pixel slivers: a few more while they move)
+				int crossings = 0, own = 0;
+				for (const sm::Ring &r : m.rings) {
+					crossings += self_crossings(r);
+				}
+				for (const sm::Shape *x : {&a, &b}) {
+					for (const sm::Ring &r : x->rings) {
+						own += self_crossings(r);
+					}
+				}
+				CHECK(crossings <= own + (c.label ? 16 : 0));
+			}
+			// a corner of two surfaces in both regions is paired with itself
+			int corners = 0, paired = 0;
+			for (const auto &ring : p.rings) {
+				for (const sm::Track &t : ring) {
+					if (t.from.tag == 0 || t.from.carrier >= 0) {
+						continue; // (a corner: two surfaces or more)
+					}
+					bool in_a = false, in_b = false;
+					for (const sm::Ring &r : a.rings) {
+						for (const sm::Vertex &v : r) {
+							in_a = in_a || (v.tag == t.from.tag && v.p.x == t.from.p.x && v.p.y == t.from.p.y);
+						}
+					}
+					for (const sm::Ring &r : b.rings) {
+						for (const sm::Vertex &v : r) {
+							in_b = in_b || v.tag == t.from.tag;
+						}
+					}
+					if (in_a && in_b) {
+						corners++;
+						paired += t.to.tag == t.from.tag ? 1 : 0;
+					}
+				}
+			}
+			CHECK(paired >= corners * 9 / 10);
 		}
 	}
-	CHECK(circle_ends > 0);
-	CHECK(slid == circle_ends);
 }
 
-TEST_CASE("present: a span with no partner grows out of its near end") {
+TEST_CASE("present: a ring with no partner grows out of the anchor") {
 	rcg::Session s(level("test_levels/crossings.json"));
 	s.settle();
-	const rf::Field b = rf::field_of(*s.region());
-	const rf::Field none{true, true, {}, {}};
-	CHECK(area(rf::morph(none, b, 0.0)) == doctest::Approx(0.0));
-	const double half = area(rf::morph(none, b, 0.5)), full = area(rf::morph(none, b, 1.0));
+	const sm::Shape b = outline(s);
+	const sm::Plan p = sm::plan(sm::Shape{}, b, sm::Pt{double(s.player().x), double(s.player().y)});
+	CHECK(area(sm::at(p, 0.0)) == doctest::Approx(0.0));
+	const double half = area(sm::at(p, 0.5)), full = area(sm::at(p, 1.0));
 	CHECK(half > 0.0);
 	CHECK(half < full);
 	CHECK(full == doctest::Approx(area(b)).epsilon(0.002));
-	CHECK(area(rf::morph(b, none, 1.0)) == doctest::Approx(0.0));
-}
-
-TEST_CASE("present: a mesh clipped to a disk") {
-	const std::vector<rc::V2> pts{rc::V2{0, 0}, rc::V2{100, 0}, rc::V2{0, 100}};
-	const std::vector<int> idx{0, 1, 2};
-	std::vector<rc::V2> op;
-	std::vector<int> oi;
-	rf::clip_disk(pts, idx, rf::Pt{0, 0}, 1000.0, op, oi);
-	CHECK(area(op, oi) == doctest::Approx(5000.0));
-	op.clear();
-	oi.clear();
-	rf::clip_disk(pts, idx, rf::Pt{0, 0}, 50.0, op, oi);
-	CHECK(area(op, oi) == doctest::Approx(3.14159265 * 2500.0 / 4.0).epsilon(0.01)); // a quarter disk
-	op.clear();
-	oi.clear();
-	rf::clip_disk(pts, idx, rf::Pt{0, 0}, 0.0, op, oi);
-	CHECK(oi.empty());
 }
 
 TEST_CASE("present: without animation the presenter's frame is the session's") {
@@ -158,6 +230,7 @@ TEST_CASE("present: without animation the presenter's frame is the session's") {
 	rcg::PresentConfig cfg;
 	cfg.region_seconds = 0.0;
 	cfg.interpolate = false;
+	cfg.follow = false;
 	rcg::Presenter p(cfg);
 	for (int k = 0; k < 6; k++) {
 		s.teleport(s.player() + rc::V2{8, 0});
@@ -175,56 +248,36 @@ TEST_CASE("present: without animation the presenter's frame is the session's") {
 }
 
 TEST_CASE("present: a region's change morphs for its duration, then shows the region") {
-	rcg::Session s(level("test_levels/crossings.json"));
+	rcg::Session s(level("main.json"));
 	rcg::Presenter p;
 	s.settle();
 	p.frame(s.draw_frame(), s);
-	auto vis = [](const std::vector<rcg::render::FrameNode> &nodes) {
-		for (const rcg::render::FrameNode &n : nodes) {
-			if (n.key.kind == rcg::render::NodeKind::Visibility) {
-				return n;
-			}
-		}
-		FAIL("no region node");
-		return rcg::render::FrameNode{};
-	};
-	// the player moves: matched, a field morph
 	s.teleport(s.player() + rc::V2{20, 0});
 	s.settle();
 	p.advance(0.02);
-	CHECK(vis(p.frame(s.draw_frame(), s)).version != vis(s.draw_frame()).version);
+	CHECK(vis_node(p.frame(s.draw_frame(), s))->version != vis_node(s.draw_frame())->version);
 	CHECK(p.animating());
 	p.advance(0.1);
-	CHECK(vis(p.frame(s.draw_frame(), s)).version == vis(s.draw_frame()).version);
+	CHECK(vis_node(p.frame(s.draw_frame(), s))->version == vis_node(s.draw_frame())->version);
 	CHECK_FALSE(p.animating());
-	// a planned mirror: the apex jumps, the old region collapses into the player, then the new grows
-	s.set_cursor(plannable(s).at(0));
-	s.settle();
-	s.click(false);
-	s.settle();
-	std::vector<double> areas;
+	// a planned mirror: no collapse, the area moves from one region's to the other's
+	const double before = mesh_area(*vis_node(s.draw_frame()));
+	plan_side(s, "Mirror", 0, 0);
+	REQUIRE(s.plan().size() == 1);
+	const double after = mesh_area(*vis_node(s.draw_frame()));
 	for (int k = 0; k < 7; k++) {
-		const rcg::render::FrameNode n = vis(p.frame(s.draw_frame(), s));
-		double a = 0.0;
-		for (const rcg::render::Call &c : *n.calls) {
-			if (c.kind == rcg::render::Kind::Triangles) {
-				a += area(c.pts, c.indices);
-			}
-		}
-		areas.push_back(a);
+		CAPTURE(k);
+		const double a = mesh_area(*vis_node(p.frame(s.draw_frame(), s)));
+		CHECK(a >= 0.5 * std::min(before, after));
 		p.advance(0.016);
 	}
-	CHECK(areas[1] < areas[0]); // collapsing
-	CHECK(areas[2] < areas[1]);
-	CHECK(areas[4] > areas[3]); // growing
-	CHECK(areas[6] > areas[4]);
 	p.advance(0.1);
-	CHECK(vis(p.frame(s.draw_frame(), s)).version == vis(s.draw_frame()).version);
-	// a region switched off collapses; no frame has a mesh call without triangles (a host refuses one)
+	CHECK(vis_node(p.frame(s.draw_frame(), s))->version == vis_node(s.draw_frame())->version);
+	// switched off: shrinks away; no frame has a mesh call without triangles (a host refuses one)
 	s.key(rcg::Action::ToggleVisibility);
 	s.settle();
 	for (int k = 0; k < 8; k++) {
-		for (const rcg::render::Call &c : *vis(p.frame(s.draw_frame(), s)).calls) {
+		for (const rcg::render::Call &c : *vis_node(p.frame(s.draw_frame(), s))->calls) {
 			if (c.kind == rcg::render::Kind::Triangles) {
 				CHECK_FALSE(c.indices.empty());
 				CHECK_FALSE(c.pts.empty());
@@ -232,6 +285,33 @@ TEST_CASE("present: a region's change morphs for its duration, then shows the re
 		}
 		p.advance(0.016);
 	}
+}
+
+TEST_CASE("present: before the next region, its shadows follow the drawn player") {
+	// main.json: the player in a room of mirrors (occluders), no plan: the region's rays leave the player
+	rcg::Session s(level("main.json"));
+	rcg::Presenter p;
+	rcg::kinematics::Input in;
+	in.axis_x = 1.0f;
+	s.advance(rcg::kinematics::STEP * 1.5, in); // one tick, half of the next: the drawn player half a tick behind
+	p.frame(s.draw_frame(), s);
+	const rc::V2 drawn = p.player(s);
+	REQUIRE(std::abs(double(drawn.x) - double(s.player().x)) > 1e-3);
+	const rcg::render::FrameNode n = *vis_node(p.frame(s.draw_frame(), s));
+	CHECK(n.version != vis_node(s.draw_frame())->version); // followed, not the exact region
+	sm::Shape exact = outline(s);
+	sm::mark_shadows(exact, sm::Pt{double(s.player().x), double(s.player().y)});
+	int shadows = 0;
+	for (const sm::Ring &r : exact.rings) {
+		for (const sm::Vertex &v : r) {
+			shadows += v.shadow ? 1 : 0;
+		}
+	}
+	CHECK(shadows > 0);
+	// the shown shape: the region's, its shadows recast from the drawn player
+	const sm::Shape followed = sm::follow(exact, sm::Pt{double(drawn.x), double(drawn.y)});
+	CHECK(mesh_area(n) == doctest::Approx(area(followed)).epsilon(0.001));
+	CHECK(mesh_area(n) != doctest::Approx(area(exact)).epsilon(1e-6));
 }
 
 TEST_CASE("present: the player is drawn between its last two physics ticks") {

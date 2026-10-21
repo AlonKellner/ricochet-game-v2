@@ -1,466 +1,775 @@
 // Stage 122: the presentation layer (rcg/present.hpp, docs/TDD_27_PRESENTATION.md).
 #include "rcg/present.hpp"
 
+#include "rc/earcut.hpp"
 #include "rcg/session.hpp"
 
 #include <algorithm>
 #include <cmath>
+#include <cstring>
+#include <map>
+#include <tuple>
 
 namespace rcg {
 
-namespace region_field {
+namespace shape_morph {
 
 namespace {
 
-using rc::vis::Edge;
-using rc::vis::EdgeKind;
+constexpr double TAG_TOL = 0.02; // a point on a carrier (float positions)
 
-constexpr double TAU = 6.283185307179586;
-constexpr int GRID = 720;        // the rays every region is sampled along (half a degree apart)
-constexpr double INSET = 1e-6;   // a cell's edges are sampled this far inside it
-
-double wrap(double a) {
-	a = std::fmod(a, TAU);
-	return a < 0.0 ? a + TAU : a;
-}
-double angle_of(const Pt &d) { return wrap(std::atan2(d.y, d.x)); }
+Pt sub(const Pt &a, const Pt &b) { return Pt{a.x - b.x, a.y - b.y}; }
 Pt lerp(const Pt &a, const Pt &b, double e) { return Pt{a.x + (b.x - a.x) * e, a.y + (b.y - a.y) * e}; }
-double dist(const Pt &a, const Pt &b) { return std::hypot(a.x - b.x, a.y - b.y); }
+double dist2(const Pt &a, const Pt &b) { return (a.x - b.x) * (a.x - b.x) + (a.y - b.y) * (a.y - b.y); }
+double dist(const Pt &a, const Pt &b) { return std::sqrt(dist2(a, b)); } // (presentation: no hypot's care)
 
-struct Seg {
-	Pt a, b;
-	const Edge *edge;
-};
+// the closest point of segment ab to q, and its parameter
+Pt closest_on(const Pt &a, const Pt &b, const Pt &q, double *w = nullptr) {
+	const Pt d = sub(b, a);
+	const double l2 = dot(d, d);
+	const double t = l2 > 0.0 ? std::clamp(dot(sub(q, a), d) / l2, 0.0, 1.0) : 0.0;
+	if (w) {
+		*w = t;
+	}
+	return lerp(a, b, t);
+}
 
-struct CellGeom {
-	std::vector<Seg> segs; // every loop, closed
-	double lo = 0.0, span = 0.0; // the rays through it: [lo, lo + span] (wrapped)
-	int index = 0;
-	bool has(double phi) const { return wrap(phi - lo) <= span; }
-};
+double area(const std::vector<Pt> &ring) {
+	double a = 0.0;
+	for (size_t i = 0; i < ring.size(); i++) {
+		a += cross(ring[i], ring[(i + 1) % ring.size()]);
+	}
+	return a / 2.0;
+}
 
-bool inside(const CellGeom &c, const Pt &q) { // even-odd
-	bool in = false;
-	for (const Seg &s : c.segs) {
-		if ((s.a.y > q.y) != (s.b.y > q.y)) {
-			const double x = s.a.x + (q.y - s.a.y) / (s.b.y - s.a.y) * (s.b.x - s.a.x);
-			if (x > q.x) {
-				in = !in;
+std::vector<Pt> points(const Ring &r) {
+	std::vector<Pt> out;
+	out.reserve(r.size());
+	for (const Vertex &v : r) {
+		out.push_back(v.p);
+	}
+	return out;
+}
+
+Pt centroid(const std::vector<Pt> &ring) {
+	Pt c{0, 0};
+	for (const Pt &p : ring) {
+		c.x += p.x / double(ring.size());
+		c.y += p.y / double(ring.size());
+	}
+	return c;
+}
+
+// the tag of a point: the surfaces it lies on
+void tag(Vertex &v, const std::vector<Carrier> &carriers) {
+	std::vector<int> ids;
+	int line = -1, lines = 0;
+	for (size_t k = 0; k < carriers.size(); k++) {
+		if (carriers[k].dist(v.p) < TAG_TOL) {
+			ids.push_back(carriers[k].surface);
+			if (carriers[k].line) {
+				line = int(k);
+				lines++;
 			}
 		}
 	}
-	return in;
+	std::sort(ids.begin(), ids.end());
+	uint64_t h = 0;
+	for (int id : ids) {
+		h = h * 1000003ull + uint64_t(id + 2);
+	}
+	v.tag = int64_t(h);
+	v.carrier = ids.size() == 1 && lines == 1 ? line : -1;
 }
 
-End end_on(const Edge *e, const Pt &p) {
-	End out;
+// the closest point of a ring's chain from vertex i0 forward to i1 (cyclic) to q, and its arc parameter
+Pt closest_on_chain(const std::vector<Pt> &ring, size_t i0, size_t i1, const Pt &q, double *param = nullptr) {
+	const size_t n = ring.size();
+	Pt best = ring[i0 % n];
+	double bd = INFINITY, bp = 0.0, run = 0.0;
+	for (size_t k = i0; k <= i0 + n; k++) {
+		const Pt &a = ring[k % n];
+		if (k % n == i1 % n && k > i0) {
+			if (dist(a, q) < bd) {
+				best = a;
+				bp = run;
+			}
+			break;
+		}
+		const Pt &b = ring[(k + 1) % n];
+		double w = 0.0;
+		const Pt c = closest_on(a, b, q, &w);
+		const double d = dist(c, q);
+		if (d < bd) {
+			bd = d;
+			best = c;
+			bp = run + w * dist(a, b);
+		}
+		run += dist(a, b);
+	}
+	if (param) {
+		*param = bp;
+	}
+	return best;
+}
+
+// the point of a ring's chain from i0 forward to i1 at arc parameter `at`
+Pt point_on_chain(const std::vector<Pt> &ring, size_t i0, size_t i1, double at) {
+	const size_t n = ring.size();
+	double run = 0.0;
+	for (size_t k = i0; k < i0 + n; k++) {
+		if (k % n == i1 % n && k > i0) {
+			break;
+		}
+		const Pt &a = ring[k % n], &b = ring[(k + 1) % n];
+		const double l = dist(a, b);
+		if (run + l >= at) {
+			return lerp(a, b, l > 0.0 ? (at - run) / l : 0.0);
+		}
+		run += l;
+	}
+	return ring[i1 % n];
+}
+
+// the closest edge of a shape to q (where a piece grows out of, or shrinks into)
+bool closest_edge(const Shape &s, const Pt &q, Pt &a, Pt &b) {
+	double bd = INFINITY;
+	for (const Ring &r : s.rings) {
+		for (size_t i = 0; i < r.size(); i++) {
+			const Pt &u = r[i].p, &v = r[(i + 1) % r.size()].p;
+			const double d = dist(closest_on(u, v, q), q);
+			if (d < bd) {
+				bd = d;
+				a = u;
+				b = v;
+			}
+		}
+	}
+	return std::isfinite(bd);
+}
+
+double dist_to_ring(const std::vector<Pt> &ring, const Pt &q) {
+	double bd = INFINITY;
+	for (size_t i = 0; i < ring.size(); i++) {
+		bd = std::min(bd, dist2(closest_on(ring[i], ring[(i + 1) % ring.size()], q), q));
+	}
+	return std::sqrt(bd);
+}
+
+Vertex moved_to(const Vertex &v, const Pt &p) {
+	Vertex out = v;
 	out.p = p;
-	if (e->kind == EdgeKind::Carrier) {
-		out.kind = End::Carrier;
-		out.surface = e->surface;
-		out.circle = !e->gline;
-		out.center = e->gc;
-		out.radius = e->gr;
-	} else {
-		out.kind = End::Bounds;
-	}
+	out.shadow = false;
+	out.apex = false;
 	return out;
 }
 
-// the ray apex + s u, s in [enter, exit], inside the rectangle
-bool ray_in(const rc::vis::Rect &r, const Pt &apex, const Pt &u, double &enter, double &exit) {
-	enter = 0.0;
-	exit = INFINITY;
-	const double o[2] = {apex.x, apex.y}, d[2] = {u.x, u.y}, lo[2] = {r.x0, r.y0}, hi[2] = {r.x1, r.y1};
-	for (int k = 0; k < 2; k++) {
-		if (std::abs(d[k]) < 1e-15) {
-			if (o[k] < lo[k] || o[k] > hi[k]) {
-				return false;
-			}
-			continue;
-		}
-		double t0 = (lo[k] - o[k]) / d[k], t1 = (hi[k] - o[k]) / d[k];
-		if (t0 > t1) {
-			std::swap(t0, t1);
-		}
-		enter = std::max(enter, t0);
-		exit = std::min(exit, t1);
-	}
-	return exit > enter;
-}
-
-// the spans of one cell along the ray at phi
-void cast(const CellGeom &c, const Pt &apex, double phi, const rc::vis::Rect &domain, std::vector<Span> &out) {
-	const Pt u{std::cos(phi), std::sin(phi)};
-	struct Hit {
-		double s;
-		const Edge *edge;
-	};
-	std::vector<Hit> hits;
-	for (const Seg &sg : c.segs) {
-		if (sg.edge->kind == EdgeKind::Member) {
-			continue; // (a ray inside the cell meets its members only at the apex)
-		}
-		const Pt d{sg.b.x - sg.a.x, sg.b.y - sg.a.y};
-		const double den = rc::vis::cross(u, d);
-		if (std::abs(den) < 1e-15) {
-			continue;
-		}
-		const Pt ao{sg.a.x - apex.x, sg.a.y - apex.y};
-		const double s = rc::vis::cross(ao, d) / den, w = rc::vis::cross(ao, u) / den;
-		if (s > 1e-9 && w >= 0.0 && w <= 1.0) {
-			hits.push_back(Hit{s, sg.edge});
-		}
-	}
-	std::sort(hits.begin(), hits.end(), [](const Hit &a, const Hit &b) { return a.s < b.s; });
-	// a vertex between two segments is one crossing
-	std::vector<Hit> uniq;
-	for (const Hit &h : hits) {
-		if (uniq.empty() || h.s - uniq.back().s > 1e-7 * std::max(1.0, h.s)) {
-			uniq.push_back(h);
-		}
-	}
-	double enter = 0.0, exit = 0.0;
-	if (!ray_in(domain, apex, u, enter, exit)) {
-		return;
-	}
-	const double first = uniq.empty() ? std::min(exit, 1e6) : uniq.front().s;
-	bool in = inside(c, Pt{apex.x + u.x * first * 0.5, apex.y + u.y * first * 0.5});
-	double from = 0.0;
-	const Edge *from_edge = nullptr;
-	int ordinal = 0;
-	auto emit = [&](double s0, const Edge *e0, double s1, const Edge *e1) {
-		const double a = std::max(s0, enter), b = std::min(s1, exit);
-		if (b <= a) {
-			return;
-		}
-		Span sp;
-		const Pt pa{apex.x + u.x * a, apex.y + u.y * a}, pb{apex.x + u.x * b, apex.y + u.y * b};
-		if (a > s0 || (e0 == nullptr && s0 > 0.0)) {
-			sp.near.kind = End::Bounds;
-			sp.near.p = pa;
-		} else if (e0 == nullptr) {
-			sp.near.kind = End::Apex;
-			sp.near.p = pa;
-		} else {
-			sp.near = end_on(e0, pa);
-		}
-		if (b < s1 || e1 == nullptr) {
-			sp.far.kind = End::Bounds;
-			sp.far.p = pb;
-		} else {
-			sp.far = end_on(e1, pb);
-		}
-		sp.id = int64_t(c.index) * 64 + ordinal++;
-		out.push_back(sp);
-	};
-	for (const Hit &h : uniq) {
-		if (in) {
-			emit(from, from_edge, h.s, h.edge);
-		}
-		in = !in;
-		from = h.s;
-		from_edge = h.edge;
-	}
-	if (in) {
-		emit(from, from_edge, INFINITY, nullptr);
-	}
-}
-
-void sort_spans(std::vector<Span> &v, const Pt &apex) {
-	std::stable_sort(v.begin(), v.end(), [&](const Span &a, const Span &b) { return dist(a.near.p, apex) < dist(b.near.p, apex); });
-}
-
-bool same_place(const End &a, const End &b) {
-	return a.kind == b.kind && (a.kind != End::Carrier || a.surface == b.surface);
-}
-
-// an end the way from a to b: along the surface they share (a circle's ends
-// round the circle), else straight
-End move(const End &a, const End &b, double e) {
-	End out = e < 0.5 ? a : b;
-	if (a.kind == End::Carrier && b.kind == End::Carrier && a.surface == b.surface && a.circle && b.circle) {
-		const Pt c = lerp(a.center, b.center, e);
-		const double r0 = dist(a.p, a.center), r1 = dist(b.p, b.center);
-		const double t0 = std::atan2(a.p.y - a.center.y, a.p.x - a.center.x);
-		double dt = std::atan2(b.p.y - b.center.y, b.p.x - b.center.x) - t0;
-		dt = std::remainder(dt, TAU);
-		const double t = t0 + dt * e, r = r0 + (r1 - r0) * e;
-		out.p = Pt{c.x + r * std::cos(t), c.y + r * std::sin(t)};
-		return out;
-	}
-	out.p = lerp(a.p, b.p, e);
-	return out;
-}
-
-int64_t pair_id(int64_t a, int64_t b) {
-	uint64_t h = uint64_t(a + 1) * 0x9E3779B97F4A7C15ull;
-	h ^= uint64_t(b + 1) + 0x7F4A7C159E3779B9ull + (h << 6) + (h >> 2);
-	return int64_t(h >> 1);
-}
-
-// the pairs of spans along one ray, in order, most surfaces in common (a span
-// left unpaired grows or shrinks)
-std::vector<std::pair<int, int>> align(const std::vector<Span> &A, const std::vector<Span> &B) {
+// a cyclic diff of two rings (both with the interior on the left): anchored at
+// the closest pair of equal tags, then a sequence alignment (Needleman-Wunsch):
+// a pair costs its distance (half when they lie on the same surfaces), an
+// unpaired vertex its distance to the other ring and a gap; an unpaired vertex
+// then moves to (from) the closest point of the other ring between its paired
+// neighbours' partners.
+// the alignment from one pair of anchors, and its cost
+std::vector<Track> align_from(const Ring &A, const Ring &B, size_t a0, size_t b0, double *total) {
 	const size_t n = A.size(), m = B.size();
-	std::vector<std::vector<int>> best(n + 1, std::vector<int>(m + 1, 0));
-	auto score = [&](size_t i, size_t j) {
-		return 1 + (same_place(A[i].near, B[j].near) ? 2 : 0) + (same_place(A[i].far, B[j].far) ? 2 : 0);
+	const std::vector<Pt> pa = points(A), pb = points(B);
+	auto ai = [&](size_t i) { return (a0 + i) % n; };
+	auto bj = [&](size_t j) { return (b0 + j) % m; };
+	constexpr double GAP = 8.0, OTHER = 24.0;
+	std::vector<double> del(n), ins(m);
+	for (size_t i = 0; i < n; i++) {
+		del[i] = dist_to_ring(pb, pa[ai(i)]) + GAP;
+	}
+	for (size_t j = 0; j < m; j++) {
+		ins[j] = dist_to_ring(pa, pb[bj(j)]) + GAP;
+	}
+	auto pair_cost = [&](size_t i, size_t j) {
+		const Vertex &x = A[ai(i)], &y = B[bj(j)];
+		const double d = dist(x.p, y.p);
+		return x.tag != y.tag ? d + OTHER : x.tag != 0 ? 0.5 * d : d; // (on the same surfaces: cheaper)
 	};
-	for (size_t i = n; i-- > 0;) {
-		for (size_t j = m; j-- > 0;) {
-			best[i][j] = std::max({best[i + 1][j], best[i][j + 1], best[i + 1][j + 1] + score(i, j)});
+	// the alignment of A[1..n) with B[1..m) (the anchors paired)
+	const size_t N = n - 1, M = m - 1, W = M + 1;
+	std::vector<double> cost((N + 1) * W, 0.0);
+	std::vector<uint8_t> step((N + 1) * W, 0); // 1 pair, 2 delete, 3 insert
+	for (size_t i = 1; i <= N; i++) {
+		cost[i * W] = cost[(i - 1) * W] + del[i];
+		step[i * W] = 2;
+	}
+	for (size_t j = 1; j <= M; j++) {
+		cost[j] = cost[j - 1] + ins[j];
+		step[j] = 3;
+	}
+	for (size_t i = 1; i <= N; i++) {
+		for (size_t j = 1; j <= M; j++) {
+			const double p = cost[(i - 1) * W + j - 1] + pair_cost(i, j), d = cost[(i - 1) * W + j] + del[i], s = cost[i * W + j - 1] + ins[j];
+			if (p <= d && p <= s) {
+				cost[i * W + j] = p;
+				step[i * W + j] = 1;
+			} else if (d <= s) {
+				cost[i * W + j] = d;
+				step[i * W + j] = 2;
+			} else {
+				cost[i * W + j] = s;
+				step[i * W + j] = 3;
+			}
 		}
 	}
-	std::vector<std::pair<int, int>> out;
-	size_t i = 0, j = 0;
-	while (i < n || j < m) {
-		if (i < n && j < m && best[i][j] == best[i + 1][j + 1] + score(i, j)) {
-			out.push_back({int(i++), int(j++)});
-		} else if (i < n && (j == m || best[i][j] == best[i + 1][j])) {
-			out.push_back({int(i++), -1});
+	if (total) {
+		*total = cost[N * W + M] + dist(pa[a0], pb[b0]);
+	}
+	struct Op {
+		long i = -1, j = -1; // offsets from the anchors (-1: none)
+	};
+	std::vector<Op> ops;
+	for (size_t i = N, j = M; i > 0 || j > 0;) {
+		const uint8_t s = step[i * W + j];
+		if (s == 1) {
+			ops.push_back(Op{long(i--), long(j--)});
+		} else if (s == 2) {
+			ops.push_back(Op{long(i--), -1});
 		} else {
-			out.push_back({-1, int(j++)});
+			ops.push_back(Op{-1, long(j--)});
 		}
+	}
+	ops.push_back(Op{0, 0});
+	std::reverse(ops.begin(), ops.end());
+	std::vector<Track> out;
+	out.reserve(ops.size());
+	size_t k = 0;
+	while (k < ops.size()) {
+		if (ops[k].i >= 0 && ops[k].j >= 0) {
+			out.push_back(Track{A[ai(size_t(ops[k].i))], B[bj(size_t(ops[k].j))]});
+			k++;
+			continue;
+		}
+		// a gap run between two pairs (the last one: the anchors again)
+		size_t e = k;
+		while (e < ops.size() && !(ops[e].i >= 0 && ops[e].j >= 0)) {
+			e++;
+		}
+		const Op prev = ops[k - 1];
+		const Op next = e < ops.size() ? ops[e] : Op{long(n), long(m)};
+		// deleted vertices keep A's order, inserted ones B's; each moves to (from) the
+		// other chain between the paired neighbours' partners, in order along it
+		struct Gap {
+			Track t;
+			double own = 0.0, other = 0.0; // its arc parameter on its own chain, its projection's on the other
+		};
+		std::vector<Gap> dels, inss;
+		const size_t A0 = ai(size_t(prev.i)), A1 = ai(size_t(next.i)), B0 = bj(size_t(prev.j)), B1 = bj(size_t(next.j));
+		for (size_t g = k; g < e; g++) {
+			Gap gp;
+			if (ops[g].i >= 0) { // deleted: along A, to B's chain
+				const Vertex &v = A[ai(size_t(ops[g].i))];
+				closest_on_chain(pa, A0, A1, v.p, &gp.own);
+				closest_on_chain(pb, B0, B1, v.p, &gp.other);
+				gp.t = Track{v, v};
+				dels.push_back(gp);
+			} else { // inserted: along B, from A's chain
+				const Vertex &v = B[bj(size_t(ops[g].j))];
+				closest_on_chain(pb, B0, B1, v.p, &gp.own);
+				closest_on_chain(pa, A0, A1, v.p, &gp.other);
+				gp.t = Track{v, v};
+				inss.push_back(gp);
+			}
+		}
+		// merged along A (a deleted vertex by its own place, an inserted one by its
+		// projection's), then every projection kept in order on its chain and between
+		// the fixed vertices around it there, so both ends trace their rings in order
+		struct Item {
+			bool del;
+			double a, b; // the arc parameters on A's and B's chains (one fixed, one projected)
+			Track t;
+		};
+		std::vector<Item> items;
+		for (size_t x = 0, y = 0; x < dels.size() || y < inss.size();) {
+			if (y == inss.size() || (x < dels.size() && dels[x].own <= inss[y].other)) {
+				items.push_back(Item{true, dels[x].own, dels[x].other, dels[x].t});
+				x++;
+			} else {
+				items.push_back(Item{false, inss[y].other, inss[y].own, inss[y].t});
+				y++;
+			}
+		}
+		auto keep_in_order = [&](bool on_a) {
+			// the fixed values on this chain: A's for deleted vertices, B's for inserted ones
+			const size_t c = items.size();
+			std::vector<double> lo(c, 0.0), hi(c, INFINITY);
+			double floor = 0.0;
+			for (size_t q = 0; q < c; q++) {
+				const bool fixed = items[q].del == on_a;
+				double &v = on_a ? items[q].a : items[q].b;
+				if (fixed) {
+					floor = std::max(floor, v);
+				}
+				lo[q] = floor;
+			}
+			double ceil = INFINITY;
+			for (size_t q = c; q-- > 0;) {
+				const bool fixed = items[q].del == on_a;
+				const double v = on_a ? items[q].a : items[q].b;
+				if (fixed) {
+					ceil = std::min(ceil, v);
+				}
+				hi[q] = ceil;
+			}
+			double run = 0.0;
+			for (size_t q = 0; q < c; q++) {
+				double &v = on_a ? items[q].a : items[q].b;
+				if (items[q].del != on_a) { // projected: between its fixed neighbours, after the previous
+					v = std::max({v, lo[q], run});
+					v = std::min(v, std::max(hi[q], lo[q]));
+				}
+				run = std::max(run, v);
+			}
+		};
+		keep_in_order(true);
+		keep_in_order(false);
+		for (Item &it : items) {
+			if (it.del) {
+				it.t.to = moved_to(it.t.from, point_on_chain(pb, B0, B1, it.b));
+			} else {
+				it.t.from = moved_to(it.t.to, point_on_chain(pa, A0, A1, it.a));
+			}
+			out.push_back(it.t);
+		}
+		k = e;
 	}
 	return out;
+}
+
+// a cyclic diff of two rings (both counterclockwise): the alignment of the
+// cheapest anchors tried -- every rotation of a small ring, the two closest
+// pairs on one surface and the closest point for a large one
+std::vector<Track> align(const Ring &A, const Ring &B) {
+	const size_t n = A.size(), m = B.size();
+	std::vector<std::pair<size_t, size_t>> anchors;
+	if (n * m <= 400) {
+		for (size_t j = 0; j < m; j++) {
+			anchors.push_back({0, j});
+		}
+	} else {
+		std::vector<std::tuple<double, size_t, size_t>> pairs;
+		for (size_t i = 0; i < n; i++) {
+			for (size_t j = 0; j < m; j++) {
+				if (A[i].tag != 0 && A[i].tag == B[j].tag) {
+					pairs.push_back({dist(A[i].p, B[j].p), i, j});
+				}
+			}
+		}
+		std::sort(pairs.begin(), pairs.end());
+		for (size_t k = 0; k < pairs.size() && k < 2; k++) {
+			anchors.push_back({std::get<1>(pairs[k]), std::get<2>(pairs[k])});
+		}
+		size_t near = 0;
+		for (size_t j = 1; j < m; j++) {
+			near = dist(A[0].p, B[j].p) < dist(A[0].p, B[near].p) ? j : near;
+		}
+		anchors.push_back({0, near});
+	}
+	std::vector<Track> best;
+	double best_cost = INFINITY;
+	for (const auto &[a0, b0] : anchors) {
+		double c = 0.0;
+		std::vector<Track> t = align_from(A, B, a0, b0, &c);
+		if (c < best_cost) {
+			best_cost = c;
+			best = std::move(t);
+		}
+	}
+	return best;
 }
 
 } // namespace
 
-Field field_of(const rc::vis::Result &r) {
-	Field f;
-	if (!r.supported || r.cells.empty()) {
-		f.ok = true;
-		return f;
-	}
-	if (r.pk_none) {
-		return f;
-	}
-	f.apex = r.pk;
-	std::vector<CellGeom> cells;
-	for (size_t ci = 0; ci < r.cells.size(); ci++) {
-		const rc::vis::Cell &cell = r.cells[ci];
-		CellGeom g;
-		g.index = int(ci);
+double Carrier::dist(const Pt &q) const { return line ? std::abs(cross(d, sub(q, p))) : std::abs(std::hypot(q.x - c.x, q.y - c.y) - r); }
+
+std::vector<Carrier> carriers_of(const rc::vis::Result &r, const World *world) {
+	std::map<int, Carrier> by_id;
+	for (const rc::vis::Cell &cell : r.cells) {
 		for (const auto &loop : cell.loops) {
-			std::vector<std::pair<Pt, const Edge *>> ring;
-			for (const Edge &e : loop) {
-				if (e.kind == EdgeKind::Member && e.arc) {
-					return Field{}; // a pencil of circles: not sampled along rays
-				}
-				std::vector<Pt> pts;
-				rc::vis::tessellate(e, pts);
-				for (const Pt &p : pts) {
-					ring.push_back({p, &e});
-				}
-			}
-			for (size_t k = 0; k < ring.size(); k++) {
-				g.segs.push_back(Seg{ring[k].first, ring[(k + 1) % ring.size()].first, ring[k].second});
-			}
-		}
-		// the rays through it: round the ray to its inside point, every corner's offset
-		const Pt in{cell.inside.x - f.apex.x, cell.inside.y - f.apex.y};
-		if (std::hypot(in.x, in.y) < 1e-9) {
-			return Field{};
-		}
-		const double mid = angle_of(in);
-		double lo = 0.0, hi = 0.0;
-		for (const Seg &s : g.segs) {
-			const Pt d{s.a.x - f.apex.x, s.a.y - f.apex.y};
-			if (std::hypot(d.x, d.y) < 1e-6) {
-				continue;
-			}
-			const double off = std::remainder(angle_of(d) - mid, TAU);
-			lo = std::min(lo, off);
-			hi = std::max(hi, off);
-		}
-		if (hi - lo >= TAU - 1e-6) {
-			return Field{}; // round the apex: not a wedge
-		}
-		g.lo = wrap(mid + lo);
-		g.span = hi - lo;
-		cells.push_back(std::move(g));
-	}
-	std::vector<double> phis;
-	for (int k = 0; k < GRID; k++) {
-		phis.push_back(TAU * k / GRID);
-	}
-	for (const CellGeom &g : cells) {
-		if (g.span > 2 * INSET) {
-			phis.push_back(wrap(g.lo + INSET));
-			phis.push_back(wrap(g.lo + g.span - INSET));
-		}
-	}
-	std::sort(phis.begin(), phis.end());
-	phis.erase(std::unique(phis.begin(), phis.end()), phis.end());
-	for (double phi : phis) {
-		Sample s;
-		s.phi = phi;
-		for (const CellGeom &g : cells) {
-			if (g.has(phi)) {
-				cast(g, f.apex, phi, r.domain, s.spans);
-			}
-		}
-		sort_spans(s.spans, f.apex);
-		f.empty = f.empty && s.spans.empty();
-		f.samples.push_back(std::move(s));
-	}
-	f.ok = true;
-	return f;
-}
-
-std::vector<Span> spans_at(const Field &f, double phi) {
-	const size_t n = f.samples.size();
-	if (n == 0) {
-		return {};
-	}
-	phi = wrap(phi);
-	auto it = std::upper_bound(f.samples.begin(), f.samples.end(), phi, [](double v, const Sample &s) { return v < s.phi; });
-	const size_t k1 = size_t(it - f.samples.begin()) % n;
-	const size_t k = (k1 + n - 1) % n;
-	const Sample &a = f.samples[k], &b = f.samples[k1];
-	if (std::abs(a.phi - phi) < 1e-12) {
-		return a.spans;
-	}
-	const double gap = wrap(b.phi - a.phi), w = gap > 0.0 ? wrap(phi - a.phi) / gap : 0.0;
-	std::vector<Span> out;
-	for (const Span &sa : a.spans) {
-		for (const Span &sb : b.spans) {
-			if (sb.id == sa.id) {
-				Span sp = sa;
-				sp.near.p = lerp(sa.near.p, sb.near.p, w);
-				sp.far.p = lerp(sa.far.p, sb.far.p, w);
-				out.push_back(sp);
-				break;
-			}
-		}
-	}
-	return out;
-}
-
-Field morph(const Field &a, const Field &b, double e) {
-	Field out;
-	out.ok = true;
-	out.apex = a.empty ? b.apex : b.empty ? a.apex : lerp(a.apex, b.apex, e);
-	std::vector<double> phis;
-	for (const Sample &s : a.samples) {
-		phis.push_back(s.phi);
-	}
-	for (const Sample &s : b.samples) {
-		phis.push_back(s.phi);
-	}
-	std::sort(phis.begin(), phis.end());
-	phis.erase(std::unique(phis.begin(), phis.end()), phis.end());
-	for (double phi : phis) {
-		const std::vector<Span> A = spans_at(a, phi), B = spans_at(b, phi);
-		Sample s;
-		s.phi = phi;
-		for (const auto &[pi, pj] : align(A, B)) {
-			const size_t i = size_t(std::max(pi, 0)), j = size_t(std::max(pj, 0));
-			Span sp;
-			if (pi >= 0 && pj >= 0) {
-				sp.near = move(A[i].near, B[j].near, e);
-				sp.far = move(A[i].far, B[j].far, e);
-				sp.id = pair_id(A[i].id, B[j].id);
-			} else if (pj >= 0) { // born: out of its near end
-				sp.near = B[j].near;
-				sp.far = B[j].far;
-				sp.far.p = lerp(B[j].near.p, B[j].far.p, e);
-				sp.id = pair_id(-2, B[j].id);
-			} else { // dying: into its near end
-				sp.near = A[i].near;
-				sp.far = A[i].far;
-				sp.far.p = lerp(A[i].far.p, A[i].near.p, e);
-				sp.id = pair_id(A[i].id, -2);
-			}
-			s.spans.push_back(sp);
-		}
-		out.empty = out.empty && s.spans.empty();
-		out.samples.push_back(std::move(s));
-	}
-	return out;
-}
-
-void fill_of(const Field &f, std::vector<rc::V2> &pts, std::vector<int> &indices) {
-	const size_t n = f.samples.size();
-	if (n < 2) {
-		return;
-	}
-	for (size_t k = 0; k < n; k++) {
-		const Sample &a = f.samples[k], &b = f.samples[(k + 1) % n];
-		if (wrap(b.phi - a.phi) > 0.05) {
-			continue; // (never between samples this far apart)
-		}
-		for (const Span &sa : a.spans) {
-			for (const Span &sb : b.spans) {
-				if (sb.id != sa.id) {
+			for (const rc::vis::Edge &e : loop) {
+				if (e.kind != rc::vis::EdgeKind::Carrier || by_id.count(e.surface)) {
 					continue;
 				}
-				const int base = int(pts.size());
-				pts.push_back(rc::V2::of(sa.near.p.x, sa.near.p.y));
-				pts.push_back(rc::V2::of(sa.far.p.x, sa.far.p.y));
-				pts.push_back(rc::V2::of(sb.far.p.x, sb.far.p.y));
-				pts.push_back(rc::V2::of(sb.near.p.x, sb.near.p.y));
-				indices.insert(indices.end(), {base, base + 1, base + 2, base, base + 2, base + 3});
-				break;
+				Carrier c;
+				c.surface = e.surface;
+				c.line = e.gline;
+				c.p = e.gp;
+				const double l = std::hypot(e.gd.x, e.gd.y);
+				c.d = l > 0.0 ? Pt{e.gd.x / l, e.gd.y / l} : Pt{1, 0};
+				c.c = e.gc;
+				c.r = e.gr;
+				by_id[e.surface] = c;
 			}
 		}
 	}
+	std::vector<Carrier> out;
+	for (auto &[id, c] : by_id) {
+		if (const BuiltSurface *b = world ? world->by_id(id) : nullptr; b && c.line && b->seg.is_line()) {
+			c.has_segment = true;
+			c.s = Pt{double(b->seg.s.x), double(b->seg.s.y)};
+			c.e = Pt{double(b->seg.e.x), double(b->seg.e.y)};
+		}
+		out.push_back(c);
+	}
+	return out;
 }
 
-void clip_disk(const std::vector<rc::V2> &pts, const std::vector<int> &indices, const Pt &c, double r, std::vector<rc::V2> &out_pts,
-	std::vector<int> &out_indices, int sides) {
-	if (r <= 0.0) {
-		return;
-	}
-	std::vector<Pt> disk;
-	for (int k = 0; k < sides; k++) {
-		const double a = TAU * k / sides;
-		disk.push_back(Pt{c.x + r * std::cos(a), c.y + r * std::sin(a)});
-	}
-	std::vector<Pt> poly, next;
-	for (size_t t = 0; t + 2 < indices.size(); t += 3) {
-		poly.clear();
-		bool all_in = true;
-		for (int k = 0; k < 3; k++) {
-			const rc::V2 &v = pts[size_t(indices[t + size_t(k)])];
-			poly.push_back(Pt{double(v.x), double(v.y)});
-			all_in = all_in && std::hypot(double(v.x) - c.x, double(v.y) - c.y) <= r * std::cos(TAU / sides / 2);
+// a ring's vertices kept where it turns: straight runs merged, arcs to chords within tol
+std::vector<Pt> simplified(const std::vector<Pt> &ring, double tol) {
+	const size_t n = ring.size();
+	size_t s0 = 0;
+	double sharpest = -1.0;
+	for (size_t i = 0; i < n; i++) {
+		const Pt u = sub(ring[i], ring[(i + n - 1) % n]), w = sub(ring[(i + 1) % n], ring[i]);
+		const double turn = std::abs(std::atan2(rc::vis::cross(u, w), rc::vis::dot(u, w)));
+		if (turn > sharpest) {
+			sharpest = turn;
+			s0 = i;
 		}
-		if (!all_in) {
-			for (int k = 0; k < sides && !poly.empty(); k++) {
-				const Pt &p0 = disk[size_t(k)], &p1 = disk[size_t((k + 1) % sides)];
-				const Pt d{p1.x - p0.x, p1.y - p0.y};
-				auto side = [&](const Pt &q) { return rc::vis::cross(d, Pt{q.x - p0.x, q.y - p0.y}); };
-				next.clear();
-				for (size_t i = 0; i < poly.size(); i++) {
-					const Pt &q0 = poly[i], &q1 = poly[(i + 1) % poly.size()];
-					const double s0 = side(q0), s1 = side(q1);
-					if (s0 >= 0.0) {
-						next.push_back(q0);
+	}
+	std::vector<Pt> kept{ring[s0]};
+	size_t anchor = 0; // the last kept (an offset from s0)
+	for (size_t off = 1; off < n; off++) {
+		const Pt &next = ring[(s0 + off + 1) % n];
+		bool fits = true;
+		for (size_t k = anchor + 1; k <= off && fits; k++) {
+			const Pt &q = ring[(s0 + k) % n];
+			fits = dist(closest_on(ring[(s0 + anchor) % n], next, q), q) <= tol;
+		}
+		if (!fits) {
+			kept.push_back(ring[(s0 + off) % n]);
+			anchor = off;
+		}
+	}
+	return kept;
+}
+
+Shape shape_of(const rc::vis::Result &r, std::vector<Carrier> carriers, double tol) {
+	using namespace rc::vis::fill_detail;
+	Shape out;
+	out.carriers = std::move(carriers);
+	if (!r.supported) {
+		return out;
+	}
+	// the cells' rings as the fill makes them (conforming: a corner of one cell on
+	// another's edge is a vertex of both), each counterclockwise
+	std::map<GeomKey, std::vector<Pt>> corners;
+	for (const rc::vis::Cell &c : r.cells) {
+		for (const auto &l : c.loops) {
+			for (const rc::vis::Edge &e : l) {
+				const GeomKey k = key_of(e);
+				if (k.kind != 0) {
+					corners[k].push_back(e.a);
+					corners[k].push_back(e.b);
+				}
+			}
+		}
+	}
+	for (const rc::vis::Cell &c : r.cells) {
+		for (const auto &l : c.loops) {
+			std::vector<Pt> poly;
+			for (const rc::vis::Edge &e : l) {
+				conforming(e, corners, poly);
+			}
+			std::vector<Pt> ring;
+			for (const Pt &q : rc::vis::clip_polygon(poly, r.domain)) {
+				if (ring.empty() || !(ring.back() == q)) {
+					ring.push_back(q);
+				}
+			}
+			while (ring.size() > 1 && ring.back() == ring.front()) {
+				ring.pop_back();
+			}
+			const double a0 = ring.size() >= 3 ? area(ring) : 0.0;
+			if (std::abs(a0) <= 1e-9) {
+				continue;
+			}
+			std::vector<std::vector<Pt>> simple;
+			rc::vis::simple_rings(std::move(ring), a0 > 0.0 ? 1.0 : -1.0, simple);
+			for (std::vector<Pt> &sr : simple) {
+				if (area(sr) < 0.0) {
+					std::reverse(sr.begin(), sr.end());
+				}
+				const std::vector<Pt> kept = sr.size() > 3 ? simplified(sr, tol) : sr;
+				if (kept.size() < 3 || std::abs(area(kept)) < 0.01) {
+					continue;
+				}
+				Ring rr;
+				for (const Pt &q : kept) {
+					Vertex v;
+					v.p = q;
+					tag(v, out.carriers);
+					rr.push_back(v);
+				}
+				out.rings.push_back(std::move(rr));
+			}
+		}
+	}
+	return out;
+}
+
+void mark_shadows(Shape &s, const Pt &apex) {
+	s.has_apex = true;
+	s.apex = apex;
+	// the corners that can occlude: the surfaces' ends
+	std::vector<std::pair<Pt, int>> corners;
+	for (size_t k = 0; k < s.carriers.size(); k++) {
+		if (s.carriers[k].has_segment) {
+			corners.push_back({s.carriers[k].s, int(k)});
+			corners.push_back({s.carriers[k].e, int(k)});
+		}
+	}
+	for (Ring &r : s.rings) {
+		const size_t n = r.size();
+		for (size_t i = 0; i < n; i++) {
+			r[i].apex = r[i].apex || dist(r[i].p, apex) < 1e-3;
+		}
+		for (size_t i = 0; i < n; i++) {
+			for (const size_t j : {(i + 1) % n, (i + n - 1) % n}) {
+				// an edge on a ray from the apex; its far end on a straight surface
+				const Vertex &u = r[j];
+				Vertex &v = r[i];
+				const Pt du = sub(u.p, apex), dv = sub(v.p, apex);
+				const double lu = std::hypot(du.x, du.y), lv = std::hypot(dv.x, dv.y);
+				if (lv <= lu || lv < 1e-3 || v.carrier < 0 || !s.carriers[size_t(v.carrier)].has_segment) {
+					continue;
+				}
+				if (lu >= 1e-3 && (rc::vis::dot(du, dv) <= 0.0 || std::abs(rc::vis::cross(du, dv)) > 1e-5 * lu * lv)) {
+					continue;
+				}
+				// the occluding corner: another surface's end on the ray, the farthest before v
+				double best = 0.0;
+				for (const auto &[c, k] : corners) {
+					if (k == v.carrier) {
+						continue;
 					}
-					if ((s0 >= 0.0) != (s1 >= 0.0)) {
-						next.push_back(lerp(q0, q1, s0 / (s0 - s1)));
+					double w = 0.0;
+					if (dist(closest_on(apex, v.p, c, &w), c) < 1e-3 && w > 1e-3 && w < 1.0 - 1e-6 && w > best) {
+						best = w;
+						v.shadow = true;
+						v.pivot = c;
 					}
 				}
-				poly.swap(next);
 			}
-		}
-		if (poly.size() < 3) {
-			continue;
-		}
-		const int base = int(out_pts.size());
-		for (const Pt &q : poly) {
-			out_pts.push_back(rc::V2::of(q.x, q.y));
-		}
-		for (int i = 1; i + 1 < int(poly.size()); i++) {
-			out_indices.insert(out_indices.end(), {base, base + i, base + i + 1});
 		}
 	}
 }
 
-} // namespace region_field
+Vertex recast(const Vertex &v, const std::vector<Carrier> &carriers, const Pt &apex) {
+	Vertex out = v;
+	if (v.apex) {
+		out.p = apex;
+		return out;
+	}
+	if (!v.shadow || v.carrier < 0 || size_t(v.carrier) >= carriers.size()) {
+		return out;
+	}
+	const Carrier &c = carriers[size_t(v.carrier)];
+	const Pt dir = sub(v.pivot, apex), d = sub(c.e, c.s);
+	const double den = cross(dir, d);
+	if (std::abs(den) < 1e-12) {
+		return out;
+	}
+	const Pt so = sub(c.s, apex);
+	const double t = cross(so, d) / den, w = cross(so, dir) / den;
+	if (t > 1.0 && w >= 0.0 && w <= 1.0) { // beyond the corner, on the surface
+		out.p = Pt{apex.x + dir.x * t, apex.y + dir.y * t};
+	}
+	return out;
+}
+
+Shape follow(const Shape &s, const Pt &apex) {
+	Shape out = s;
+	if (!s.has_apex) {
+		return out;
+	}
+	for (Ring &r : out.rings) {
+		for (Vertex &v : r) {
+			v = recast(v, s.carriers, apex);
+		}
+	}
+	return out;
+}
+
+std::vector<int> parents_of(const Shape &s) {
+	std::vector<std::vector<Pt>> rings;
+	for (const Ring &r : s.rings) {
+		rings.push_back(points(r));
+	}
+	std::vector<int> parent(rings.size(), -1);
+	for (size_t k = 0; k < rings.size(); k++) {
+		if (rings[k].empty()) {
+			continue;
+		}
+		int depth = 0, inner = -1;
+		double inner_area = INFINITY;
+		for (size_t o = 0; o < rings.size(); o++) {
+			if (o != k && rings[o].size() >= 3 && in_ring(rings[o], rings[k][0])) {
+				depth++;
+				const double a = std::abs(area(rings[o]));
+				if (a < inner_area) {
+					inner_area = a;
+					inner = int(o);
+				}
+			}
+		}
+		parent[k] = depth % 2 == 1 ? inner : -1;
+	}
+	return parent;
+}
+
+// a piece with no partner: its vertices on the other shape's edge closest to it
+// (a degenerate polygon there) at one end of the way
+std::vector<Track> grow(const Ring &piece, const Shape &other, const Pt &anchor, bool born) {
+	const std::vector<Pt> pts = points(piece);
+	Pt ea = anchor, eb = anchor;
+	closest_edge(other, centroid(pts), ea, eb);
+	std::vector<Track> out;
+	for (const Vertex &v : piece) {
+		const Vertex there = moved_to(v, closest_on(ea, eb, v.p));
+		out.push_back(born ? Track{there, v} : Track{v, there});
+	}
+	return out;
+}
+
+Plan plan(const Shape &a, const Shape &b, const Pt &anchor) {
+	Plan out;
+	// the pieces paired by place (how far each one's vertices lie from the other's
+	// outline, for their size), greedily
+	struct Cand {
+		double cost;
+		size_t i, j;
+	};
+	std::vector<Cand> cands;
+	std::vector<std::vector<Pt>> PA, PB;
+	std::vector<Pt> CA, CB;
+	std::vector<double> SA, SB;
+	for (const Ring &r : a.rings) {
+		PA.push_back(points(r));
+		CA.push_back(centroid(PA.back()));
+		SA.push_back(std::sqrt(std::max(std::abs(area(PA.back())), 1.0)));
+	}
+	for (const Ring &r : b.rings) {
+		PB.push_back(points(r));
+		CB.push_back(centroid(PB.back()));
+		SB.push_back(std::sqrt(std::max(std::abs(area(PB.back())), 1.0)));
+	}
+	// a cheap signature first (centroids for the size, the areas' ratio): each
+	// piece's three likeliest partners, both ways; then how far their outlines lie
+	std::vector<std::pair<size_t, size_t>> likely;
+	auto rough = [&](size_t i, size_t j) {
+		const double size = std::max(SA[i], SB[j]);
+		return dist(CA[i], CB[j]) / size + std::abs(std::log(SA[i] / SB[j]));
+	};
+	for (int way = 0; way < 2; way++) {
+		const size_t outer = way == 0 ? PA.size() : PB.size(), inner = way == 0 ? PB.size() : PA.size();
+		for (size_t x = 0; x < outer; x++) {
+			std::vector<std::pair<double, size_t>> by;
+			for (size_t y = 0; y < inner; y++) {
+				by.push_back({way == 0 ? rough(x, y) : rough(y, x), y});
+			}
+			const size_t keep = std::min<size_t>(3, by.size());
+			std::partial_sort(by.begin(), by.begin() + long(keep), by.end());
+			for (size_t q = 0; q < keep; q++) {
+				likely.push_back(way == 0 ? std::pair{x, by[q].second} : std::pair{by[q].second, x});
+			}
+		}
+	}
+	std::sort(likely.begin(), likely.end());
+	likely.erase(std::unique(likely.begin(), likely.end()), likely.end());
+	for (const auto &[i, j] : likely) {
+		{
+			const double size = std::max(SA[i], SB[j]);
+			if (dist(CA[i], CB[j]) > 2.0 * size) {
+				continue;
+			}
+			// (at most 24 vertices of each, evenly spread)
+			double d = 0.0;
+			const size_t sa = std::max<size_t>(1, PA[i].size() / 24), sb = std::max<size_t>(1, PB[j].size() / 24);
+			for (size_t q = 0; q < PA[i].size(); q += sa) {
+				d += dist_to_ring(PB[j], PA[i][q]) / double((PA[i].size() + sa - 1) / sa);
+			}
+			for (size_t q = 0; q < PB[j].size(); q += sb) {
+				d += dist_to_ring(PA[i], PB[j][q]) / double((PB[j].size() + sb - 1) / sb);
+			}
+			const double c = d / 2.0 / size;
+			if (c < 0.5) {
+				cands.push_back(Cand{c, i, j});
+			}
+		}
+	}
+	std::sort(cands.begin(), cands.end(), [](const Cand &x, const Cand &y) { return x.cost < y.cost; });
+	std::vector<int> pair_of_a(a.rings.size(), -1), pair_of_b(b.rings.size(), -1);
+	for (const Cand &c : cands) {
+		if (pair_of_a[c.i] < 0 && pair_of_b[c.j] < 0) {
+			pair_of_a[c.i] = int(c.j);
+			pair_of_b[c.j] = int(c.i);
+		}
+	}
+	for (size_t j = 0; j < b.rings.size(); j++) {
+		if (pair_of_b[j] >= 0) {
+			out.rings.push_back(align(a.rings[size_t(pair_of_b[j])], b.rings[j]));
+		} else { // born: out of the old shape's closest edge (or the anchor)
+			out.rings.push_back(grow(b.rings[j], a, anchor, true));
+		}
+	}
+	for (size_t i = 0; i < a.rings.size(); i++) {
+		if (pair_of_a[i] < 0) { // dying: into the new shape's closest edge (or the anchor)
+			out.rings.push_back(grow(a.rings[i], b, anchor, false));
+		}
+	}
+	return out;
+}
+
+Shape at(const Plan &p, double e) {
+	Shape out;
+	for (const std::vector<Track> &ring : p.rings) {
+		Ring r;
+		r.reserve(ring.size());
+		for (const Track &t : ring) {
+			Vertex v = e < 0.5 ? t.from : t.to;
+			v.p = lerp(t.from.p, t.to.p, e);
+			r.push_back(v);
+		}
+		out.rings.push_back(std::move(r));
+	}
+	return out;
+}
+
+void fill_of(const Shape &s, std::vector<rc::V2> &pts, std::vector<int> &indices) {
+	const std::vector<int> parent(s.rings.size(), -1); // (pieces: every ring its own polygon; cells may overlap)
+	rc::earcut::Triangulator tri;
+	for (size_t k = 0; k < s.rings.size(); k++) {
+		if (parent[k] >= 0 || s.rings[k].size() < 3) {
+			continue;
+		}
+		std::vector<const Ring *> order{&s.rings[k]};
+		for (size_t h = 0; h < s.rings.size(); h++) {
+			if (parent[h] == int(k) && s.rings[h].size() >= 3) {
+				order.push_back(&s.rings[h]);
+			}
+		}
+		std::vector<std::vector<rc::earcut::XY>> rings;
+		const int base = int(pts.size());
+		for (const Ring *r : order) {
+			std::vector<rc::earcut::XY> xy;
+			for (const Vertex &v : *r) {
+				xy.push_back(rc::earcut::XY{v.p.x, v.p.y});
+				pts.push_back(rc::V2::of(v.p.x, v.p.y));
+			}
+			rings.push_back(std::move(xy));
+		}
+		for (uint32_t i : tri.run(rings)) {
+			indices.push_back(base + int(i));
+		}
+	}
+}
+
+} // namespace shape_morph
 
 namespace {
 
@@ -499,104 +808,87 @@ rc::V2 Presenter::player(const Session &s) const {
 }
 
 std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> nodes, const Session &s) {
-	using region_field::Field;
+	namespace sm = shape_morph;
+	const rc::V2 drawn = player(s);
+	const sm::Pt here{double(drawn.x), double(drawn.y)};
 	for (render::FrameNode &n : nodes) {
 		if (n.key.kind == render::NodeKind::Player) {
-			n.position = player(s);
+			n.position = drawn;
 		}
 		if (n.key.kind != render::NodeKind::Visibility) {
 			continue;
 		}
 		const render::Call *mesh = mesh_of(n);
-		static const std::vector<rc::V2> none_pts;
-		static const std::vector<int> none_idx;
-		const std::vector<rc::V2> &target_pts = mesh ? mesh->pts : none_pts;
-		const std::vector<int> &target_idx = mesh ? mesh->indices : none_idx;
 		const int version = s.visibility_version();
 		if (version != region_version_) {
-			Field next = s.region() ? region_field::field_of(*s.region()) : Field{true, true, {}, {}};
-			if (config_.region_seconds > 0.0 && region_version_ >= 0) {
-				Morph m;
-				const Field &from = morph_ ? current_ : shown_;
-				const bool from_ok = morph_ ? current_ok_ : shown_.ok;
-				const bool match = from_ok && next.ok &&
-								   (from.empty || next.empty || std::hypot(from.apex.x - next.apex.x, from.apex.y - next.apex.y) <= config_.match_distance);
-				if (match) {
-					m.from = from;
-					m.to = next;
-				} else {
-					m.disk = true;
-					m.from_pts = shown_pts_;
-					m.from_idx = shown_idx_;
+			std::vector<sm::Carrier> carriers;
+			std::optional<sm::Pt> apex;
+			if (const auto &r = s.region(); r && r->supported) {
+				carriers = sm::carriers_of(*r, &s.world());
+				if (!r->pk_none && std::hypot(r->pk.x - r->player.x, r->pk.y - r->player.y) < 1e-6) {
+					apex = r->player; // the region's rays leave the player: its shadows can follow it
 				}
-				m.start = now_;
-				morph_ = std::move(m);
-			} else {
-				shown_pts_ = target_pts;
-				shown_idx_ = target_idx;
+			}
+			sm::Shape next = s.region() ? sm::shape_of(*s.region(), std::move(carriers)) : sm::Shape{};
+			if (apex) {
+				sm::mark_shadows(next, *apex);
+			}
+			if (config_.region_seconds > 0.0 && region_version_ >= 0) {
+				morph_ = Morph{sm::plan(shown_, next, here), now_};
 			}
 			region_version_ = version;
-			shown_ = std::move(next);
+			target_ = std::move(next);
+			if (!morph_) {
+				shown_ = target_;
+			}
 		}
+		const bool moved = config_.follow && target_.has_apex && std::hypot(here.x - target_.apex.x, here.y - target_.apex.y) > 1e-6;
+		sm::Shape shape;
 		if (morph_) {
 			const double x = (now_ - morph_->start) / config_.region_seconds;
 			if (x >= 1.0) {
-				morph_.reset(); // the exact region
-				shown_pts_ = target_pts;
-				shown_idx_ = target_idx;
+				morph_.reset();
 			} else {
-				std::vector<rc::V2> pts;
-				std::vector<int> idx;
-				if (!morph_->disk) {
-					current_ = region_field::morph(morph_->from, morph_->to, ease_out(x));
-					current_ok_ = true;
-					region_field::fill_of(current_, pts, idx);
-				} else {
-					current_ = Field{};
-					current_ok_ = false;
-					const rc::V2 c = player(s);
-					const region_field::Pt pc{double(c.x), double(c.y)};
-					// a mesh's reach from the player: its nearest and farthest points (the disk sweeps between)
-					auto reach = [&](const std::vector<rc::V2> &v, double &lo, double &hi) {
-						lo = INFINITY;
-						hi = 0.0;
-						for (const rc::V2 &q : v) {
-							const double d = std::hypot(double(q.x) - pc.x, double(q.y) - pc.y);
-							lo = std::min(lo, d);
-							hi = std::max(hi, d);
+				const double e = ease_out(x);
+				shape = sm::at(morph_->plan, e);
+				if (moved) { // the target's shadows follow the player: each way ends where its end is recast
+					for (size_t k = 0; k < shape.rings.size(); k++) {
+						const std::vector<sm::Track> &tracks = morph_->plan.rings[k];
+						for (size_t i = 0; i < tracks.size(); i++) {
+							const sm::Pt to = sm::recast(tracks[i].to, target_.carriers, here).p, &from = tracks[i].from.p;
+							shape.rings[k][i].p = sm::Pt{from.x + (to.x - from.x) * e, from.y + (to.y - from.y) * e};
 						}
-						lo = std::isfinite(lo) ? lo : 0.0;
-					};
-					const double share = std::clamp(config_.collapse_share, 0.0, 1.0);
-					double lo = 0.0, hi = 0.0;
-					if (x < share) {
-						reach(morph_->from_pts, lo, hi);
-						region_field::clip_disk(morph_->from_pts, morph_->from_idx, pc, hi - (hi - lo) * ease_out(x / share), pts, idx);
-					} else {
-						reach(target_pts, lo, hi);
-						region_field::clip_disk(target_pts, target_idx, pc, lo + (hi - lo) * ease_out((x - share) / std::max(1e-9, 1.0 - share)), pts, idx);
 					}
 				}
-				shown_pts_ = pts;
-				shown_idx_ = idx;
-				auto calls = std::make_shared<std::vector<render::Call>>();
-				if (!idx.empty()) { // (as the session: no mesh call without triangles)
-					render::Call k;
-					k.kind = render::Kind::Triangles;
-					k.pts = std::move(pts);
-					k.indices = std::move(idx);
-					k.colors = mesh ? mesh->colors : std::vector<render::Color>{render::Color{1.0f, 1.0f, 1.0f, 0.1f}};
-					calls->push_back(std::move(k));
-				}
-				for (const render::Call &c : *n.calls) {
-					if (c.kind != render::Kind::Triangles) {
-						calls->push_back(c); // the whiskers
-					}
-				}
-				n.calls = std::move(calls);
-				n.version = 0x5052455345000000ull + ++frame_serial_;
 			}
 		}
+		if (!morph_) {
+			if (!moved) {
+				shown_ = target_; // the exact region: the node as the session made it
+				continue;
+			}
+			shape = sm::follow(target_, here);
+		}
+		std::vector<rc::V2> pts;
+		std::vector<int> idx;
+		sm::fill_of(shape, pts, idx);
+		shown_ = std::move(shape);
+		auto calls = std::make_shared<std::vector<render::Call>>();
+		if (!idx.empty()) { // (as the session: no mesh call without triangles)
+			render::Call k;
+			k.kind = render::Kind::Triangles;
+			k.pts = std::move(pts);
+			k.indices = std::move(idx);
+			k.colors = mesh ? mesh->colors : std::vector<render::Color>{render::Color{1.0f, 1.0f, 1.0f, 0.1f}};
+			calls->push_back(std::move(k));
+		}
+		for (const render::Call &c : *n.calls) {
+			if (c.kind != render::Kind::Triangles) {
+				calls->push_back(c); // the whiskers
+			}
+		}
+		n.calls = std::move(calls);
+		n.version = 0x5052455345000000ull + ++frame_serial_;
 	}
 	return nodes;
 }
