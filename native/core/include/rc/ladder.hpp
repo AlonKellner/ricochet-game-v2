@@ -268,9 +268,10 @@ public:
 	// cursor's point; a decision past them needs no precision (horizon()).
 	LadderResult solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, int max_planned,
 			int max_physical, double tol, bool verify = false, const Flags &flags = Flags(), std::optional<bool> force = std::nullopt,
-			int stops = -1) {
+			int stops = -1, const std::optional<std::pair<double, double>> &known = std::nullopt) {
 		force_ = force;
 		stops_ = stops;
+		known_ = known;
 		flags0_ = flags;
 		const long long t0 = clock_();
 		LadderResult r;
@@ -299,6 +300,7 @@ public:
 		}
 		Solver<Dual> fast(ctx_.dual_scene(), &ctx_.dual_cache());
 		fast.force_reversed = force_;
+		fast.aim_known = known_;
 		const CN<Dual> P{Dual{px, 0.0}, Dual{py, 0.0}};
 		const CN<Dual> Cc{Dual{cx, 0.0}, Dual{cy, 0.0}};
 		std::optional<Walk<Dual>> wq = fast.run(P, Cc, plan, Mode::Planned, max_planned, flags);
@@ -321,6 +323,7 @@ public:
 			auto planned_fn = [&](int limbs) -> std::vector<Event<BigFloat>> {
 				Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
 				big.force_reversed = force_;
+				big.aim_known = known_;
 				const BigFloat l = BigFloat::from_int(1, limbs);
 				return big.planned(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, cap_ >= 0 ? std::min(max_planned, cap_) : max_planned, flags);
 			};
@@ -413,6 +416,7 @@ private:
 	int stops_ = -1; // Stage 123: what the caller reads (solve)
 	int cap_ = -1;   // ... the climb's walks cut a little past it (crossings; -1: none)
 	Flags flags0_;   // the walks' flags at the start (the horizon's flag changes)
+	std::optional<std::pair<double, double>> known_; // Stage 123: Solver::aim_known (solve)
 	std::optional<bool> force_; // Stage 111: the orientation the caller forces on every tier
 
 	using Compute = std::function<std::vector<Event<BigFloat>>(int)>;
@@ -422,6 +426,7 @@ private:
 			int max_physical, double tol, bool verify, const Flags &flags) {
 		Solver<Dual> fast(ctx_.dual_scene(), &ctx_.dual_cache());
 		fast.force_reversed = force_;
+		fast.aim_known = known_;
 		const CN<Dual> P{Dual{px, 0.0}, Dual{py, 0.0}};
 		const CN<Dual> Cc{Dual{cx, 0.0}, Dual{cy, 0.0}};
 		std::optional<Walk<Dual>> wp = fast.run(P, Cc, plan, Mode::Physical, max_physical, flags);
@@ -432,6 +437,7 @@ private:
 		auto physical_fn = [&](int limbs) -> std::vector<Event<BigFloat>> {
 			Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
 			big.force_reversed = force_;
+			big.aim_known = known_;
 			const BigFloat l = BigFloat::from_int(1, limbs);
 			return big.physical(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, cap_ >= 0 ? std::min(max_physical, cap_) : max_physical, flags);
 		};

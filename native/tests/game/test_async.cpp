@@ -126,8 +126,9 @@ TEST_CASE("async: a player moving faster than its regions drains to the synchron
 }
 
 TEST_CASE("async: a preview that must climb shows provisionally, then the exact one") {
-	// hit_effects: the cursor circling the player declines float64 on a tie almost every frame (TDD_25, F7)
-	const rcg::Level lv = level("test_levels/hit_effects.json");
+	// inversion_grid: the cursor circling the player declines float64 at a few points (hit_effects did on
+	// almost every frame, TDD_25 F7, until Stage 123 made its ties -- one carrier's shared roots -- exact)
+	const rcg::Level lv = level("playground/inversion_grid.json");
 	rcg::SessionConfig cfg;
 	cfg.async = true;
 	rcg::Session a(lv, cfg);

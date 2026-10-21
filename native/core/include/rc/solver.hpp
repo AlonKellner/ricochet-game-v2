@@ -834,6 +834,11 @@ public:
 
 	// Stage 111: the region casts a member in a forced orientation (nullopt: the plan's realization).
 	std::optional<bool> force_reversed;
+	// Stage 123: a region's cast along a member through exact data (a segment's
+	// endpoint, found in the player's frame): the first beam passes it by
+	// construction, so it is a known point there (add_aim_known), and a hit at it
+	// is decided by identity, never by the ladder
+	std::optional<std::pair<double, double>> aim_known;
 
 	// Stage 111: the realization the order against Q_0 (or today's rule) picks
 	// without the walk: what a cursor both planned walks reach gets; the region
@@ -1700,6 +1705,7 @@ private:
 				}
 			}
 		}
+		add_aim_known(w, *b0);
 		walk_from(w, b0, -1, std::nullopt);
 		return w;
 	}
@@ -1845,8 +1851,28 @@ private:
 			}
 			add_line_endpoints(w, *b0);
 		}
+		add_aim_known(w, *b0);
 		walk_from(w, b0, -1, std::nullopt);
 		return w;
+	}
+
+	// Stage 123: the caller's known point of the first beam (aim_known), when the
+	// beam passes it to rounding (the beam is the member's own, rounded)
+	void add_aim_known(Walk<N> &w, const Beam<N> &b) const {
+		if (!aim_known) {
+			return;
+		}
+		const CN<N> k{w.known[0].p.re.like(aim_known->first), w.known[0].p.re.like(aim_known->second)};
+		if (known_index(w.known, k) >= 0) {
+			return;
+		}
+		const N t = Backend<N>::param_of(b, k);
+		double x, y;
+		Backend<N>::f64_point(b, t, x, y);
+		const double scale = gd_maxf(1.0, gd_maxf(std::fabs(aim_known->first), std::fabs(aim_known->second)));
+		if (d64(x, y, aim_known->first, aim_known->second) <= 1e-6 * scale) {
+			w.known.push_back(Known<N>{k, t, -1, std::nullopt});
+		}
 	}
 
 	// Segment data points (endpoints, via) exactly on the current exact line are known points.
@@ -2546,6 +2572,14 @@ private:
 			}
 		}
 		auto same_root = [&](size_t i, long k) { return dbl[i] >= 0 && dbl[size_t(k)] == dbl[i]; };
+		// Stage 123: surfaces on one carrier cross it at one shared root (K6): the
+		// same parameter, ordered by id -- one decision, not two neighbours
+		auto shared_root = [&](size_t i, long k) {
+			const Candidate<N> &a = cands[i];
+			const Candidate<N> &b = cands[size_t(k)];
+			return a.surf != nullptr && b.surf != nullptr && a.surf != b.surf && !a.rehit && !b.rehit && !a.inf && !b.inf
+				&& a.surf->carrier_rep == b.surf->carrier_rep && a.t.cmp(b.t) == 0;
+		};
 		// (the instrument) an endpoint of `s` at (x, y) that another surface shares
 		auto shared_end = [&](const Surf<N> *s, double x, double y, const Surf<N> *with) {
 			const double tol = 1e-6 * gd_maxf(1.0, gd_maxf(std::fabs(x), std::fabs(y)));
@@ -2581,7 +2615,7 @@ private:
 				const bool exact_i = cands[i].pt.has_value();
 				const int tie_i = cands[i].tie;
 				long l = long(i) - 1;
-				while (l >= 0 && (cands[size_t(l)].surf == nullptr || (exact_i && cands[size_t(l)].pt) || (tie_i >= 0 && cands[size_t(l)].tie == tie_i) || same_root(i, l))) {
+				while (l >= 0 && (cands[size_t(l)].surf == nullptr || (exact_i && cands[size_t(l)].pt) || (tie_i >= 0 && cands[size_t(l)].tie == tie_i) || same_root(i, l) || shared_root(i, l))) {
 					l--;
 				}
 				if (l >= 0) {
@@ -2594,7 +2628,7 @@ private:
 					}
 				}
 				size_t r = i + 1;
-				while (r < cands.size() && (cands[r].surf == nullptr || (exact_i && cands[r].pt) || (tie_i >= 0 && cands[r].tie == tie_i) || same_root(i, long(r)))) {
+				while (r < cands.size() && (cands[r].surf == nullptr || (exact_i && cands[r].pt) || (tie_i >= 0 && cands[r].tie == tie_i) || same_root(i, long(r)) || shared_root(i, long(r)))) {
 					r++;
 				}
 				if (r < cands.size()) {
