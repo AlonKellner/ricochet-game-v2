@@ -150,8 +150,8 @@ those regions are smoothed when late.
 | # | Finding | Status |
 |---|---|---|
 | F12 (TDD_28) | A region with a plan was over the budget on 14 levels (4–35 ms) | Reduced (now 4.8–17.6 ms on 11 levels); open |
-| F14 | What remains is the number of casts: about 1400 per region on crossings, because every crossing of two carriers bounds a member, and each member costs a crit cast, two side casts and a mid cast in each of a split plan's two halves. Per cast, the work is now spread thin: candidates, emitting events, path conversion | Open: fewer casts is a change to the region's construction (which members can matter), for a later stage |
-| F15 | A projective's own planned hit point H is exact data only when it is a data point of its segment (K11). For an exact cursor and an axis-aligned projection, H is exact in double precision too, and a tie there still climbs (projective_lines: 1212 climbs per 120 regions) | Open: K11 is the solver's provenance for previews too (oracle, fixtures), a spec change |
+| F14 | What remains is the number of casts: about 1400 per region on crossings, because every crossing of two carriers bounds a member, and each member costs a crit cast, two side casts and a mid cast in each of a split plan's two halves. Per cast, the work is now spread thin: candidates, emitting events, path conversion | Measured by Stage 125 (TDD_30): side casts are needed where they are made; open |
+| F15 | A projective's own planned hit point H is exact data only when it is a data point of its segment (K11). For an exact cursor and an axis-aligned projection, H is exact in double precision too, and a tie there still climbs (projective_lines: 1212 climbs per 120 regions) | Resolved by Stage 125 (TDD_30) for line carriers |
 | F16 | More cast threads (10 or 12 instead of 8) gain 0–10% | Kept at 8 |
 | F17 | A region (or preview) that finished between its submission and the budget's busy check was not collected that frame: it showed a frame late (the merge gate's load exposed it once the regions got fast) | Resolved (124.5): work started this frame and typically within the budget is always waited for and collected |
 
