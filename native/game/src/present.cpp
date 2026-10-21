@@ -2,11 +2,14 @@
 #include "rcg/present.hpp"
 
 #include "rc/earcut.hpp"
+
+#include <clipper2/clipper.engine.h>
 #include "rcg/session.hpp"
 
 #include <algorithm>
 #include <cmath>
 #include <cstring>
+#include <functional>
 #include <map>
 #include <tuple>
 
@@ -734,6 +737,86 @@ void fill_of(const Shape &s, std::vector<rc::V2> &pts, std::vector<int> &indices
 	}
 }
 
+namespace {
+
+Clipper2Lib::PathsD paths_of(const Shape &s) {
+	Clipper2Lib::PathsD out;
+	for (const Ring &r : s.rings) {
+		Clipper2Lib::PathD p;
+		p.reserve(r.size());
+		for (const Vertex &v : r) {
+			p.push_back(Clipper2Lib::PointD(v.p.x, v.p.y));
+		}
+		out.push_back(std::move(p));
+	}
+	return out;
+}
+
+} // namespace
+
+std::vector<std::vector<Pt>> common(const Shape &a, const Shape &b) {
+	if (a.rings.empty() || b.rings.empty()) {
+		return {};
+	}
+	Clipper2Lib::ClipperD c(4);
+	c.AddSubject(paths_of(a));
+	c.AddClip(paths_of(b));
+	Clipper2Lib::PathsD both;
+	c.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::Positive, both);
+	std::vector<std::vector<Pt>> out;
+	for (const Clipper2Lib::PathD &p : both) {
+		std::vector<Pt> ring;
+		for (const Clipper2Lib::PointD &q : p) {
+			ring.push_back(Pt{q.x, q.y});
+		}
+		out.push_back(std::move(ring));
+	}
+	return out;
+}
+
+void fill_with(const Shape &s, const std::vector<std::vector<Pt>> &also, std::vector<rc::V2> &pts, std::vector<int> &indices) {
+	if (also.empty()) {
+		fill_of(s, pts, indices);
+		return;
+	}
+	Clipper2Lib::PathsD subjects = paths_of(s);
+	for (const std::vector<Pt> &r : also) {
+		Clipper2Lib::PathD p;
+		for (const Pt &q : r) {
+			p.push_back(Clipper2Lib::PointD(q.x, q.y));
+		}
+		subjects.push_back(std::move(p));
+	}
+	Clipper2Lib::ClipperD c(4);
+	c.AddSubject(subjects);
+	Clipper2Lib::PolyTreeD tree;
+	c.Execute(Clipper2Lib::ClipType::Union, Clipper2Lib::FillRule::Positive, tree);
+	rc::vis::Outline o;
+	std::function<void(const Clipper2Lib::PolyPathD &, int)> walk = [&](const Clipper2Lib::PolyPathD &node, int outer) {
+		for (const auto &child : node) {
+			std::vector<Pt> ring;
+			for (const Clipper2Lib::PointD &q : child->Polygon()) {
+				ring.push_back(Pt{q.x, q.y});
+			}
+			const bool hole = child->IsHole();
+			if (ring.size() >= 3) {
+				o.rings.push_back(std::move(ring));
+				o.parent.push_back(hole ? outer : -1);
+			}
+			walk(*child, hole ? outer : int(o.rings.size()) - 1);
+		}
+	};
+	walk(tree, -1);
+	const rc::vis::Fill f = rc::vis::fill_of(o);
+	const int base = int(pts.size());
+	for (const Pt &q : f.points) {
+		pts.push_back(rc::V2::of(q.x, q.y));
+	}
+	for (uint32_t i : f.indices) {
+		indices.push_back(base + int(i));
+	}
+}
+
 } // namespace shape_morph
 
 namespace {
@@ -801,13 +884,13 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 			}
 			if (config_.region_seconds > 0.0 && region_version_ >= 0 && (was_late_ || config_.smooth_on_time)) {
 				// it was late: morph in from what was shown
-				morph_ = Morph{sm::plan(shown_, next, here), now_, config_.region_seconds};
+				morph_ = Morph{sm::plan(shown_, next, here), now_, config_.region_seconds, sm::common(shown_, next)};
 			} else if (morph_) {
 				// on time during a morph: retargeted from what is shown over the time the
 				// morph has left, never extended (on-time regions keep no morph alive)
 				const double left = morph_->start + morph_->seconds - now_;
 				if (left > 0.0) {
-					morph_ = Morph{sm::plan(shown_, next, here), now_, left};
+					morph_ = Morph{sm::plan(shown_, next, here), now_, left, sm::common(shown_, next)};
 				} else {
 					morph_.reset();
 				}
@@ -848,7 +931,11 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 		}
 		std::vector<rc::V2> pts;
 		std::vector<int> idx;
-		sm::fill_of(shape, pts, idx);
+		if (morph_) {
+			sm::fill_with(shape, morph_->stable, pts, idx); // (what both shapes cover stays lit: no slit there)
+		} else {
+			sm::fill_of(shape, pts, idx);
+		}
 		shown_ = std::move(shape);
 		auto calls = std::make_shared<std::vector<render::Call>>();
 		if (!idx.empty()) { // (as the session: no mesh call without triangles)

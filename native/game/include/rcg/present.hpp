@@ -117,6 +117,11 @@ Plan plan(const Shape &a, const Shape &b, const Pt &anchor);
 Shape at(const Plan &p, double e);
 // A shape's fill: triangles (points, three indices a triangle).
 void fill_of(const Shape &s, std::vector<rc::V2> &pts, std::vector<int> &indices);
+// What two shapes both cover (Clipper2): the part of a morph that stays lit.
+std::vector<std::vector<Pt>> common(const Shape &a, const Shape &b);
+// A shape's fill united with `also` (a morph frame with the part it keeps lit:
+// a slit the morph opens there is covered; Clipper2, then earcut).
+void fill_with(const Shape &s, const std::vector<std::vector<Pt>> &also, std::vector<rc::V2> &pts, std::vector<int> &indices);
 // The holes' outer rings: a clockwise ring is a hole of the smallest counterclockwise
 // ring around it (-1: an outer ring; -2: a hole of nothing).
 std::vector<int> parents_of(const Shape &s);
@@ -140,6 +145,7 @@ private:
 		shape_morph::Plan plan;
 		double start = 0.0;
 		double seconds = 0.0; // its duration (a retarget on time: the rest of the one it continues)
+		std::vector<std::vector<rc::vis::Pt>> stable; // what the old and new shapes both cover: lit throughout
 	};
 	PresentConfig config_;
 	double now_ = 0.0;
