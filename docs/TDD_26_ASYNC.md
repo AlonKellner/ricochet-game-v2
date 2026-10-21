@@ -26,7 +26,7 @@ The decisions this stage follows (user, 2026-10-20):
 | 121.3 | The preview's two tiers (`rc::Ladder::provisional`, `Tracer::trace_pair_provisional`, `preview_exact`); a fire reuses the exact preview; C API 1.2; the Godot host | Done |
 | 121.4 | Speculative prefetch: the hovered side's region, computed while idle, shown at its click | Done |
 | 121.5 | A click on a side whose prefetch still runs adopts it; `SessionConfig::prefetch`; the bench's click-to-region time | Done |
-| 121.6 | Docs, `make gates` (1602 s, green, ASan included), sign-off | Sign-off pending |
+| 121.6 | Docs, `make gates` (1602 s, green, ASan included), sign-off | Done (user, 2026-10-21) |
 
 ## 121.1 The job
 
