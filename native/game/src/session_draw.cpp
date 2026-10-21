@@ -642,6 +642,20 @@ struct PathPainter {
 
 } // namespace
 
+// Stage 126: the merged path's steps as the preview draws them (the presenter
+// paints a morph's steps with it)
+void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<Call> &out) const {
+	PathPainter pp{bounds().grow(50.0f), out};
+	for (const rc::TraceStep &ms : steps) {
+		if (ms.start == ms.end) {
+			continue;
+		}
+		const Color col = step_color(ms.type);
+		pp.step(ms, ms.ghost ? ghost_color(col) : col, !is_solid(ms.type));
+	}
+	pp.endpoint_circles(steps, true, WHITE);
+}
+
 std::vector<render::Node> Session::draw() const {
 	std::vector<render::Node> nodes;
 	for (const render::FrameNode &f : draw_frame()) {
@@ -713,14 +727,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		if (pv.has_paths || !pv.merged.empty()) {
 			if (display_mode_ == 0) {
 				if (!pv.merged.empty()) {
-					for (const rc::TraceStep &ms : pv.merged) {
-						if (ms.start == ms.end) {
-							continue;
-						}
-						const Color col = step_color(ms.type);
-						pp.step(ms, ms.ghost ? ghost_color(col) : col, !is_solid(ms.type));
-					}
-					pp.endpoint_circles(pv.merged, true, WHITE);
+					paint_steps(pv.merged, out);
 					for (const auto &[pt, col] : truncation_markers(pv)) {
 						pp.stop_marker(pt, col);
 					}

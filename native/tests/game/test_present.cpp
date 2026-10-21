@@ -549,3 +549,98 @@ TEST_CASE("present: the region is drawn as the union of its cells: no pixel twic
 		}
 	}
 }
+
+// ---- Stage 126: the path preview's morph
+
+namespace {
+
+std::optional<rcg::render::FrameNode> path_node(const std::vector<rcg::render::FrameNode> &nodes) {
+	for (const rcg::render::FrameNode &n : nodes) {
+		if (n.key.kind == rcg::render::NodeKind::Path) {
+			return n;
+		}
+	}
+	return std::nullopt;
+}
+
+rc::TraceStep step(rc::V2 a, rc::V2 b, int sid, rc::StepType type = rc::StepType::Aligned) {
+	rc::TraceStep s = rc::TraceStep::make(a, b, 0, std::nullopt, std::nullopt, rc::V2{}, false);
+	s.surface_id = sid;
+	s.type = type;
+	return s;
+}
+
+bool same_points(const std::vector<rc::TraceStep> &a, const std::vector<rc::TraceStep> &b) {
+	if (a.size() != b.size()) {
+		return false;
+	}
+	for (size_t i = 0; i < a.size(); i++) {
+		if (!(a[i].start == b[i].start) || !(a[i].end == b[i].end)) {
+			return false;
+		}
+	}
+	return true;
+}
+
+} // namespace
+
+TEST_CASE("present: the path's diff starts and ends on the two paths, stays joined, and grows a new step out of its point") {
+	namespace pm = rcg::path_morph;
+	// old: player -> mirror 3 -> wall 1;  new: player -> mirror 3 (moved) -> mirror 4 -> wall 1
+	const std::vector<rc::TraceStep> from{step({0, 0}, {100, 0}, 3), step({100, 0}, {100, 100}, 1, rc::StepType::DivergedPhysical)};
+	const std::vector<rc::TraceStep> to{step({0, 0}, {110, 0}, 3), step({110, 0}, {200, 50}, 4), step({200, 50}, {150, 120}, 1)};
+	const std::vector<pm::Pair> plan = pm::plan(from, to);
+	REQUIRE(plan.size() == 3); // 3 and 1 paired; 4 grows
+	CHECK(plan[0].from.surface_id == 3);
+	CHECK(plan[1].from.start == plan[1].from.end);              // 4's partner: a point...
+	CHECK(plan[1].from.start == rc::V2{100, 0});                 // ... where the old path had reached
+	CHECK(same_points(pm::at(plan, 1.0), to));
+	std::vector<rc::TraceStep> start = pm::at(plan, 0.0);
+	start.erase(start.begin() + 1); // (the grown step, still a point)
+	CHECK(same_points(start, from));
+	for (double e : {0.25, 0.5, 0.75}) {
+		const std::vector<rc::TraceStep> mid = pm::at(plan, e);
+		for (size_t k = 0; k + 1 < mid.size(); k++) {
+			CHECK((mid[k].end - mid[k + 1].start).length() < 1e-4f); // joined
+		}
+	}
+	// a step's colour switches at the midpoint, never blends
+	CHECK(pm::at(plan, 0.49).back().type == rc::StepType::DivergedPhysical);
+	CHECK(pm::at(plan, 0.51).back().type == rc::StepType::Aligned);
+}
+
+TEST_CASE("present: a preview whose exact climb is slower than 30 Hz morphs in; a faster one is drawn as it arrives") {
+	// inversion_grid: the cursor circling the player declines float64 at a few points (test_async)
+	const rcg::Level lv = level("playground/inversion_grid.json");
+	for (const double late : {0.0, 1.0 / 30.0}) {
+		rcg::SessionConfig cfg;
+		cfg.async = true;
+		rcg::Session s(lv, cfg);
+		rcg::PresentConfig pc;
+		pc.late_seconds = late; // (0: every late preview counts as slow)
+		rcg::Presenter p(pc);
+		const rc::V2 home = s.player();
+		s.settle();
+		s.drain();
+		p.frame(s.draw_frame(), s);
+		// a cursor whose exact path differs from its provisional one (33 steps each)
+		s.set_cursor(home + rc::V2::of(420.0 * std::cos(11 * 0.31), 420.0 * std::sin(11 * 0.31)));
+		s.settle();
+		REQUIRE_FALSE(s.preview_exact());
+		p.advance(0.016);
+		p.frame(s.draw_frame(), s); // the provisional path shown
+		s.drain();                 // the exact one arrives
+		p.advance(0.016);
+		const auto shown = path_node(p.frame(s.draw_frame(), s));
+		if (late == 0.0) {
+			CHECK(p.animating_path());
+			CHECK(shown->version != path_node(s.draw_frame())->version); // morphing in
+		} else {
+			CHECK_FALSE(p.animating_path()); // its climb took milliseconds: drawn as it arrives
+			CHECK(shown->version == path_node(s.draw_frame())->version);
+		}
+		p.advance(0.2);
+		CHECK(path_node(p.frame(s.draw_frame(), s))->version == path_node(s.draw_frame())->version); // then the session's
+		CHECK_FALSE(p.animating_path());
+	}
+}
