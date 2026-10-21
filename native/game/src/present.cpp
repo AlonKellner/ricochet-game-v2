@@ -820,6 +820,7 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 		}
 		const render::Call *mesh = mesh_of(n);
 		const int version = s.visibility_version();
+		const bool late = s.region_pending() || config_.smooth_on_time;
 		if (version != region_version_) {
 			std::vector<sm::Carrier> carriers;
 			std::optional<sm::Pt> apex;
@@ -833,8 +834,10 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 			if (apex) {
 				sm::mark_shadows(next, *apex);
 			}
-			if (config_.region_seconds > 0.0 && region_version_ >= 0) {
-				morph_ = Morph{sm::plan(shown_, next, here), now_};
+			if (config_.region_seconds > 0.0 && region_version_ >= 0 && (was_late_ || morph_ || config_.smooth_on_time)) {
+				morph_ = Morph{sm::plan(shown_, next, here), now_}; // it was late: morph in from what was shown
+			} else {
+				morph_.reset(); // on time: as it is
 			}
 			region_version_ = version;
 			target_ = std::move(next);
@@ -842,7 +845,8 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 				shown_ = target_;
 			}
 		}
-		const bool moved = config_.follow && target_.has_apex && std::hypot(here.x - target_.apex.x, here.y - target_.apex.y) > 1e-6;
+		was_late_ = late;
+		const bool moved = config_.follow && late && target_.has_apex && std::hypot(here.x - target_.apex.x, here.y - target_.apex.y) > 1e-6;
 		sm::Shape shape;
 		if (morph_) {
 			const double x = (now_ - morph_->start) / config_.region_seconds;

@@ -157,7 +157,7 @@ rc_status rc_game_create(const rc_level *level, const rc_game_config *config, rc
 			return fail(RC_E_ARGUMENT, "rc_game_create: null argument or unsized config");
 		}
 		*out = nullptr;
-		rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0, 0};
+		rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0, 0, 0.0f};
 		if (config != nullptr) {
 			std::memcpy(&cfg, config, std::min<size_t>(config->size, sizeof(rc_game_config)));
 		}
@@ -169,6 +169,7 @@ rc_status rc_game_create(const rc_level *level, const rc_game_config *config, rc
 			sc.visibility = cfg.visibility != 0;
 		}
 		sc.async = cfg.async != 0;
+		sc.budget = cfg.budget_ms > 0.0f && std::isfinite(cfg.budget_ms) ? double(cfg.budget_ms) / 1000.0 : 0.0;
 		auto game = std::make_unique<rc_game>();
 		game->level = level->level;
 		game->session = std::make_unique<rcg::Session>(*game->level, sc);

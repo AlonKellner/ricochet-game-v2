@@ -227,7 +227,7 @@ std::vector<Row> run_level(const std::string &path, const Options &o) {
 		const std::string text = read(path);
 		rc_level *lv = nullptr;
 		rc_game *g = nullptr;
-		const rc_game_config gc{sizeof(rc_game_config), -1, -1, o.async ? 1 : 0, o.async ? 1 : 0}; // (a live host's: animated too)
+		const rc_game_config gc{sizeof(rc_game_config), -1, -1, o.async ? 1 : 0, o.async ? 1 : 0, 0.0f}; // (a live host's: animated too)
 		if (rc_level_parse(text.data(), text.size(), &lv) == RC_OK && rc_game_create(lv, &gc, &g) == RC_OK) {
 			rc_game_teleport(g, home.x, home.y);
 			rc_game_advance(g, 0.0, 0, 0);

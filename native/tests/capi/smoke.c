@@ -82,6 +82,7 @@ int main(void) {
 	config.visibility = 1;
 	config.async = 0;
 	config.animate = 0;
+	config.budget_ms = 0.0f;
 	CHECK(rc_game_create(level, &config, &game) == RC_OK);
 	rc_level_release(level); /* the game keeps its own reference */
 	CHECK(rc_game_event(game, 99) == RC_E_ARGUMENT);

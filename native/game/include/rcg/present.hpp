@@ -6,7 +6,7 @@
 //
 // - The player is drawn between its last two physics ticks (the accumulator's
 //   remainder), so motion is smooth at any display rate.
-// - The visibility region morphs as a diff of two shapes (the user's design,
+// - A late visibility region morphs in as a diff of two shapes (the user's design,
 //   2026-10-21): each region is its outline -- polygons of straight edges, every
 //   vertex tagged with the surfaces it lies on -- and the old and new outlines
 //   are aligned like a diff (a cyclic sequence alignment, dynamic programming):
@@ -15,9 +15,11 @@
 //   its paired neighbours. Every frame is polygons with straight edges. A newer
 //   region retargets the morph from the shape on screen; a morph ends on the
 //   exact region.
-// - While no newer region has arrived, the region follows the drawn player at
-//   once where it can (its apex is the player): a shadow edge pivots about its
-//   occluding corner, its far end recast from the player onto its wall.
+// - While a region is late, the shown one follows the drawn player where it can
+//   (its apex is the player): a shadow edge pivots about its occluding corner,
+//   its far end recast from the player onto its wall.
+// - On time (nothing late: the region came within the frame's budget), nothing
+//   is smoothed: the session's region is drawn as it is.
 #pragma once
 
 #include "rc/visibility.hpp"
@@ -32,10 +34,15 @@ namespace rcg {
 class Session;
 class World;
 
+// The smoothing covers for lateness only (the user, 2026-10-21): a region that
+// arrives on time (the frame's budget, SessionConfig::budget) is drawn as it is;
+// only while a region is late (Session::region_pending) does the shown one
+// follow the player, and the late one, when it arrives, morphs in.
 struct PresentConfig {
-	double region_seconds = 0.1; // the region's morph (0: none)
+	double region_seconds = 0.1; // a late region's morph (0: none)
 	bool interpolate = true;     // the player between physics ticks
-	bool follow = true;          // the region's shadows follow the drawn player before its next region
+	bool follow = true;          // while a region is late, the shown one's shadows follow the drawn player
+	bool smooth_on_time = false; // (tests) smooth as if every region were late
 };
 
 namespace shape_morph {
@@ -137,6 +144,7 @@ private:
 	shape_morph::Shape target_; // its outline
 	shape_morph::Shape shown_;  // the outline on screen (the last frame's)
 	std::optional<Morph> morph_;
+	bool was_late_ = false;    // the last frame waited for a region
 	uint64_t frame_serial_ = 0;
 };
 

@@ -77,6 +77,10 @@ public:
 	// ticks, the region morphing; off, the game's state as it is
 	void set_animate(bool on) { animate_ = on; }
 	bool get_animate() const { return animate_; }
+	// Stage 122: the milliseconds a frame waits for the region and the preview's
+	// climb: on time, they show that frame, unsmoothed; late, they morph in
+	void set_solve_budget_ms(double ms) { solve_budget_ms_ = ms; }
+	double get_solve_budget_ms() const { return solve_budget_ms_; }
 	bool get_physics() const { return physics_; }
 	// the game's session record (docs/research/session_digest.md), the HUD
 	godot::String record() const;
@@ -98,6 +102,7 @@ private:
 	bool physics_ = true;
 	bool asynchronous_ = true;
 	bool animate_ = true;
+	double solve_budget_ms_ = 5.0;
 	bool aimed_ = false;
 	godot::Vector2 aim_;
 	rc_game *game_ = nullptr;

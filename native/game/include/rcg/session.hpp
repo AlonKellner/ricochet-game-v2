@@ -77,6 +77,9 @@ struct SessionConfig {
 	bool async = false;
 	// Stage 121 (async): the hovered side's region computed while idle, for its click
 	bool prefetch = true;
+	// Stage 122 (async): how long a frame waits for the work it started (seconds;
+	// 0: never): what finishes in time shows this frame, exact and on time
+	double budget = 0.0;
 };
 
 struct Flight {
@@ -336,7 +339,14 @@ private:
 		std::vector<rc::PlanItem> items;
 		rc::Flags flags;
 	};
+	struct PreviewJobOut {
+		std::optional<rc::TracePair> pair;
+		double seconds = 0.0; // how long the climb took (the budget's guess)
+	};
 	bool async_ = false;
+	double budget_ = 0.0;
+	double region_seconds_ = 0.0;  // the last region's build time
+	double climb_seconds_ = 0.0;   // the last exact climb's
 	std::optional<Preview> provisional_; // shown while the exact climb runs
 	int provisional_version_ = 0;
 	long long vis_ticket_ = 0, preview_ticket_ = 0;
@@ -355,6 +365,7 @@ private:
 	PrefetchKey prefetch_key_;
 	std::optional<std::pair<long long, long long>> adopted_; // a running prefetch taken as a region: (its ticket, the region's)
 	void update_prefetch();
+	void settle_once(); // the derived state from what is known now (settle: then the budget's wait)
 	void apply_region(long long ticket, VisJobOut &&out);
 	static rc::PlanItem item_of(const PlanEntry &e);
 	static bool same_inputs(const VisJobIn &a, const VisJobIn &b);
@@ -395,7 +406,7 @@ private:
 	void clear_hover();
 	// (last: destroyed first, before the state their results go to)
 	std::unique_ptr<LatestJob<VisJobIn, VisJobOut>> vis_job_;
-	std::unique_ptr<LatestJob<PreviewJobIn, std::optional<rc::TracePair>>> preview_job_;
+	std::unique_ptr<LatestJob<PreviewJobIn, PreviewJobOut>> preview_job_;
 	std::unique_ptr<LatestJob<VisJobIn, VisJobOut>> prefetch_job_;
 };
 

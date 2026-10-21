@@ -115,8 +115,10 @@ The flags are informational: a host may show a busy hint, or ignore them. Nothin
 which still calls `rc_game_advance` every frame (that is when finished work is collected).
 
 **Animation (C API 1.3).** With `rc_game_config.animate = 1` the draw list is what should be on screen
-now: the player drawn between physics ticks, the visibility region morphing (about 100 ms) from the shape
-shown to a new one. `frame.camera_x/y` then follows the drawn player. Nothing else changes for the host, but
+now: the player drawn between physics ticks and, when a region is late, the shown region following the
+player, then the late one morphing in (about 100 ms). With `rc_game_config.budget_ms` (async), a frame waits
+up to that long for the work it started. What finishes in time is drawn that frame as it is, with no
+smoothing. The Godot host uses 5 ms; pick what your frame can spare. `frame.camera_x/y` then follows the drawn player. Nothing else changes for the host, but
 it must draw every frame: the presenter animates from what the last list showed, and its clock is the `dt`
 of `rc_game_advance`. The game's state and record are the same either way.
 

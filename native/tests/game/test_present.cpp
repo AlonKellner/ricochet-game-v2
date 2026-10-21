@@ -247,9 +247,11 @@ TEST_CASE("present: without animation the presenter's frame is the session's") {
 	}
 }
 
-TEST_CASE("present: a region's change morphs for its duration, then shows the region") {
+TEST_CASE("present: a late region's change morphs for its duration, then shows the region") {
 	rcg::Session s(level("main.json"));
-	rcg::Presenter p;
+	rcg::PresentConfig late;
+	late.smooth_on_time = true; // (as if every region were late)
+	rcg::Presenter p(late);
 	s.settle();
 	p.frame(s.draw_frame(), s);
 	s.teleport(s.player() + rc::V2{20, 0});
@@ -287,10 +289,12 @@ TEST_CASE("present: a region's change morphs for its duration, then shows the re
 	}
 }
 
-TEST_CASE("present: before the next region, its shadows follow the drawn player") {
+TEST_CASE("present: while its next region is late, the region's shadows follow the drawn player") {
 	// main.json: the player in a room of mirrors (occluders), no plan: the region's rays leave the player
 	rcg::Session s(level("main.json"));
-	rcg::Presenter p;
+	rcg::PresentConfig late;
+	late.smooth_on_time = true; // (as if every region were late)
+	rcg::Presenter p(late);
 	rcg::kinematics::Input in;
 	in.axis_x = 1.0f;
 	s.advance(rcg::kinematics::STEP * 1.5, in); // one tick, half of the next: the drawn player half a tick behind
@@ -324,4 +328,48 @@ TEST_CASE("present: the player is drawn between its last two physics ticks") {
 	CHECK(s.tick_alpha() == doctest::Approx(0.5));
 	CHECK(double(drawn.x) == doctest::Approx((double(s.tick_from().x) + double(s.player().x)) / 2.0));
 	CHECK(drawn.x < s.player().x);
+}
+
+TEST_CASE("present: regions on time are drawn as they are: no morph, no following") {
+	// an asynchronous session whose frames wait for their work (a generous budget): every region on time
+	rcg::SessionConfig cfg;
+	cfg.async = true;
+	cfg.budget = 5.0;
+	rcg::Session s(level("test_levels/crossings.json"), cfg);
+	rcg::Presenter p;
+	s.settle();
+	p.frame(s.draw_frame(), s);
+	rcg::kinematics::Input in;
+	in.axis_x = 1.0f;
+	for (int k = 0; k < 12; k++) {
+		s.advance(1.0 / 90.0, in); // (between ticks: the drawn player is not the game's)
+		p.advance(1.0 / 90.0);
+		CHECK_FALSE(s.region_pending());
+		const std::vector<rcg::render::FrameNode> got = p.frame(s.draw_frame(), s);
+		CHECK(vis_node(got)->version == vis_node(s.draw_frame())->version);
+		CHECK_FALSE(p.animating());
+	}
+}
+
+TEST_CASE("present: a region that misses its frame follows, then morphs in") {
+	// no budget: every region arrives a frame or more late
+	rcg::SessionConfig cfg;
+	cfg.async = true;
+	rcg::Session s(level("main.json"), cfg);
+	rcg::Presenter p;
+	s.settle();
+	s.drain();
+	p.frame(s.draw_frame(), s);
+	rcg::kinematics::Input in;
+	in.axis_x = 1.0f;
+	s.advance(rcg::kinematics::STEP * 1.5, in);
+	p.advance(rcg::kinematics::STEP * 1.5);
+	REQUIRE(s.region_pending());
+	CHECK(vis_node(p.frame(s.draw_frame(), s))->version != vis_node(s.draw_frame())->version); // followed
+	s.drain(); // the late region arrives
+	p.advance(0.016);
+	CHECK(vis_node(p.frame(s.draw_frame(), s))->version != vis_node(s.draw_frame())->version); // morphing in
+	CHECK(p.animating());
+	p.advance(0.2);
+	CHECK(vis_node(p.frame(s.draw_frame(), s))->version == vis_node(s.draw_frame())->version);
 }

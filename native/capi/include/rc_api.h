@@ -85,6 +85,11 @@ typedef struct rc_game_config {
 	 * drawn. The game's state and its record are unchanged. 0 (the default, and
 	 * an older host's config): the game's state as it is (replays). */
 	int32_t animate;
+	/* 1.3 (async): the milliseconds a frame waits for the work it started (the
+	 * region, the preview's exact climb): what finishes in time shows that frame,
+	 * exact, and nothing is smoothed; what is late shows later (animated: morphed
+	 * in). 0 (the default): never wait. */
+	float budget_ms;
 } rc_game_config;
 
 /* A game on a level (config may be null: the defaults). The game keeps its

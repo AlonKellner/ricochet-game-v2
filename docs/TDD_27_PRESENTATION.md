@@ -25,7 +25,8 @@ overlays, the spawn preview and the flight's dimming.
 | 122.1 | `rcg::Presenter` (`rcg/present.hpp`): the session's frame in, the frame on screen out; its clock | Done |
 | 122.2 | The player drawn between its last two physics ticks (`Session::tick_from`, `tick_alpha`) | Done |
 | 122.3 | The region morph: first per ray (rejected interactively), then a diff of shapes (`rcg::shape_morph`) with the shadows following the player; C API 1.3 (`rc_game_config.animate`); the Godot host animates | Done |
-| 122.4 | Docs, `make gates`, sign-off | In progress |
+| 122.4 | Smoothing only for late work: the frame's budget (`SessionConfig::budget`, C API `budget_ms`); the presenter morphs and follows only a late region | Done |
+| 122.5 | Docs, `make gates`, sign-off | In progress |
 
 ## 122.1 The presenter
 
@@ -122,11 +123,56 @@ Walking four steps on each of these levels, every diff frame (e = 0.25, 0.5, 0.7
 crossings, main and hit_effects. On the planned inversion it has a few more than the regions' own sub-pixel
 slivers. Each frame's area stays between the two regions'; the inversion dips about 2% mid-morph.
 
+## 122.4 Smoothing only for late work
+
+The user's direction after the diff (2026-10-21): "I highly prefer to avoid using this mechanism in normal
+circumstance. Ideally, the preview and visibility calculations will be optimized to be fast enough for the
+required frame rate, and this smoothing algorithm will not even trigger. Please make this mechanism trigger
+only if the calculations don't match the required frame rate."
+
+**The frame's budget** (`SessionConfig::budget`, C API `rc_game_config.budget_ms`; the Godot host's
+`solve_budget_ms`, 5 ms by default). An asynchronous frame that starts work (a region, a preview's exact
+climb) waits for it up to the budget, then settles again. What finishes in time shows that frame, exact, as a
+synchronous frame would show it. What does not finish arrives in a later frame. A budget of 0 (the default)
+never waits.
+
+A frame waits only for the work it started itself; work already late is not waited for again. It also skips
+the wait when the last region (or exact climb) took longer than the budget. Waiting for work that cannot
+finish in time would only slow the frame.
+
+**On time, nothing is smoothed.** The presenter calls a region late when the session still waits for one at
+frame time (`region_pending`), or when the last frame did. The rules:
+
+- **No region late:** the session's region is drawn as it is, with no morph and no following.
+- **A region late:** the shown one follows the drawn player (its shadows recast), and when the late region
+  arrives it morphs in from what was shown.
+- **A morph running:** a newer region retargets it, never cutting it short.
+
+A synchronous game (the replays) never has a region late, so it never morphs.
+
+**Measured** (an asynchronous session with a 5 ms budget, walking left and right for 240 frames at 60 Hz;
+a frame is late when the region or the exact preview is still pending after it):
+
+| Level | Late frames | Frame mean | Frame max |
+|---|---|---|---|
+| main | 0 / 240 | 0.94 ms | 1.31 ms |
+| inversion_grid | 165 / 240 | 1.50 ms | 6.60 ms |
+| tangent_infinity | 239 / 240 | 0.38 ms | 6.37 ms |
+| hit_effects | 240 / 240 | 0.57 ms | 6.45 ms |
+| crossings | 240 / 240 | 0.05 ms | 0.16 ms |
+
+On main every region is on time: nothing is smoothed. On crossings, hit_effects and tangent_infinity a
+walking region takes longer than a frame (crossings about 15–17 ms, hit_effects over a second: F7), so the
+smoothing covers them on every frame. Making those regions fit the frame is the next stage's work (the plan's
+N+3: the solver's ties, the region's refinement), after which the smoothing will rarely trigger there either. The player drawn between
+physics ticks is separate (motion at display rates that are not 60 Hz) and stays.
+
 ## The C API (1.3)
 
 | Field | Meaning |
 |---|---|
-| `rc_game_config.animate` | 1: the draw list is animated (`rcg::Presenter`); 0 (the default, and an older host's config): the game's state as it is |
+| `rc_game_config.animate` | 1: the draw list is animated (`rcg::Presenter`): the player between ticks, a late region morphed in; 0 (the default, and an older host's config): the game's state as it is |
+| `rc_game_config.budget_ms` | (async) the milliseconds a frame waits for the work it started; on time it shows that frame, unsmoothed. 0 (the default): never wait |
 
 With `animate`, `rc_frame.camera_x/y` follows the drawn player. The Godot host animates (its `animate`
 property, on by default); its session-replay test turns it off.
@@ -142,7 +188,10 @@ property, on by default); its session-replay test turns it off.
 | `present: a region's change morphs for its duration, then shows the region` | a walk morphs and lands on the exact node; a planned mirror never drops below half the area; switched off, no frame has an empty mesh (Godot refuses one) |
 | `present: before the next region, its shadows follow the drawn player` | half a tick behind: the shown mesh is the region with its shadows recast from the drawn player (main.json's mirrors occlude) |
 | `present: the player is drawn between its last two physics ticks` | half a tick: halfway |
-| `test_an_animated_game_morphs_its_region_then_draws_the_game` (Python host) | through the C API: the region morphs after a plan click, then equals the unanimated game's |
+| `present: regions on time are drawn as they are: no morph, no following` | an asynchronous session with a budget, walking between ticks: every region node is the session's, nothing animates |
+| `present: a region that misses its frame follows, then morphs in` | no budget: while pending the region follows; on arrival it morphs; then it is the session's |
+| `async: a frame with a budget shows the work that finishes in it, as a synchronous frame` | with a budget, nothing pending and the record equals the synchronous session's without a drain |
+| `test_an_animated_game_smooths_only_a_late_region` (Python host) | through the C API: a synchronous animated game draws the game's region; an asynchronous one with no budget morphs its late region in, then draws the game's |
 
 ## Findings
 
@@ -150,4 +199,5 @@ property, on by default); its session-replay test turns it off.
 |---|---|---|
 | F8 | A region and the preview arrive later than their input and replace what was shown at once | The region: resolved here (the morph). The path: Stage 123 |
 | F9 | The first morph (per ray) bent straight edges and collapsed a planned inversion's region on every update | Resolved: the diff of shapes (any pencil, straight edges) |
-| F10 | A planned inversion's diff costs about 4 ms per new region on the frame thread (2773 vertices) | Open: the diff could run beside the region's job |
+| F10 | A planned inversion's diff costs about 4 ms per new region on the frame thread (2773 vertices) | Open (only when late, since 122.4): the diff could run beside the region's job |
+| F11 | Mid-morph, two cells' shared edges can part or overlap by a hairline (each pair is aligned on its own) | Open, minor since 122.4 (only when late): align shared vertices once for both cells |

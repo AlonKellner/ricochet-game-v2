@@ -213,3 +213,22 @@ TEST_CASE("async: a click on a side whose prefetch still runs shows that prefetc
 	s.settle();
 	CHECK(record_of(a) == record_of(s));
 }
+
+TEST_CASE("async: a frame with a budget shows the work that finishes in it, as a synchronous frame") {
+	const rcg::Level lv = level("test_levels/crossings.json");
+	rcg::SessionConfig cfg;
+	cfg.async = true;
+	cfg.budget = 5.0; // (generous: every region and climb in time)
+	rcg::Session a(lv, cfg);
+	rcg::Session s(lv);
+	for (int k = 0; k < 6; k++) {
+		for (rcg::Session *x : {&a, &s}) {
+			x->teleport(x->player() + rc::V2{11, -4});
+			x->set_cursor(x->player() + rc::V2::of(300.0 * std::cos(k), 300.0 * std::sin(k)));
+			x->settle();
+		}
+		CHECK_FALSE(a.region_pending());
+		CHECK(a.preview_exact());
+		CHECK(record_of(a) == record_of(s)); // no drain: on time
+	}
+}
