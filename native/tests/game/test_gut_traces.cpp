@@ -2,7 +2,10 @@
 // the `capture` rows). Each was recorded from its GUT test in the GDScript game
 // (tools/capture_gut_traces.py -> bench/gut_traces): every trace_pair call's
 // inputs and output, and the crossings probe's pairs with the GDScript answers.
-// Replayed here on rc::Tracer / rcg::crossings_of: bit for bit.
+// Replayed here on rc::Tracer / rcg::crossings_of: bit for bit. Stage 125: an
+// approved behaviour change re-records the traces' outputs natively
+// (RC_GUT_TRACES_WRITE=<dir>: every file into <dir>, each row's "out" the
+// native pair's; the GDScript game that captured them is retired).
 #include "json_defs.hpp"
 
 #include "rcg/digest.hpp"
@@ -68,8 +71,9 @@ void check_crossings(const json &row) {
 	CHECK(rcg::span(sb) == num(gd["span_b"]));
 }
 
-// a trace_pair call: the same inputs give the same pair, bit for bit
-void check_trace(const json &row, const std::string &line) {
+// a trace_pair call: the same inputs give the same pair, bit for bit (the
+// native pair's encoding returned, for RC_GUT_TRACES_WRITE)
+std::string check_trace(const json &row, const std::string &line) {
 	const ojson in = ojson::parse(line); // in order (a resolver's table order matters)
 	const std::vector<rc::SurfaceDef> defs = rc::defs_from_json(in["defs"]);
 	CHECK(rcg::trace_json::defs(defs) == in["defs"]); // the defs read back as written
@@ -79,20 +83,29 @@ void check_trace(const json &row, const std::string &line) {
 	const std::optional<rc::TracePair> pair =
 		t.trace_pair(v2(row["player"]), v2(row["cursor"]), rc::plan_from_json(in["plan"]), rc::flags_from_json(in["flags"]));
 	// (the output is held in the digest encoding: an infinite end point, a signed zero)
-	CHECK(rcg::digest::encode(rcg::trace_json::pair(pair)) == row["out"].get<std::string>());
+	const std::string out = rcg::digest::encode(rcg::trace_json::pair(pair));
+	if (std::getenv("RC_GUT_TRACES_WRITE") == nullptr) {
+		CHECK(out == row["out"].get<std::string>());
+	}
+	return out;
 }
 
 } // namespace
 
 TEST_CASE("gut traces: the GUT suite's solver scenarios replay bit for bit") {
 	REQUIRE(fs::is_directory(TRACES));
-	int files = 0, rows = 0;
+	const char *write = std::getenv("RC_GUT_TRACES_WRITE");
+	int files = 0, rows = 0, rewritten = 0;
 	for (const fs::directory_entry &e : fs::directory_iterator(TRACES)) {
 		if (e.path().extension() != ".jsonl") {
 			continue;
 		}
 		files++;
 		std::ifstream in(e.path());
+		std::ofstream out_file;
+		if (write != nullptr) {
+			out_file.open(fs::path(write) / e.path().filename());
+		}
 		std::string line;
 		while (std::getline(in, line)) {
 			if (line.empty()) {
@@ -102,12 +115,28 @@ TEST_CASE("gut traces: the GUT suite's solver scenarios replay bit for bit") {
 			INFO(row["key"].get<std::string>());
 			if (row.value("kind", std::string("trace")) == "crossings") {
 				check_crossings(row);
+				if (write != nullptr) {
+					out_file << line << "\n";
+				}
 			} else {
-				check_trace(row, line);
+				const std::string out = check_trace(row, line);
+				if (write != nullptr) {
+					if (out == row["out"].get<std::string>()) {
+						out_file << line << "\n";
+					} else {
+						ojson o = ojson::parse(line);
+						o["out"] = out;
+						out_file << o.dump() << "\n";
+						rewritten++;
+					}
+				}
 			}
 			rows++;
 		}
 	}
 	CHECK(files == 26);
 	CHECK(rows == 3600);
+	if (write != nullptr) {
+		MESSAGE("rewrote " << rewritten << " rows into " << std::string(write));
+	}
 }
