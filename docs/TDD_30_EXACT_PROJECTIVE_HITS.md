@@ -15,7 +15,7 @@ time".
 |---|---|---|
 | 125.0 | F14: side casts spared where a member's walk passes no point of interest -- tried, measured, reverted | Done (no change) |
 | 125.1 | F15: K11 extended -- a projective's hit point computed exactly is exact data when its coordinates are floats exactly (spec, oracle, native; re-blessed, approved) | Done |
-| 125.2 | Docs, `make gates`, sign-off | In progress |
+| 125.2 | Docs, `make gates`, sign-off | Done (user, 2026-10-21) |
 
 ## 125.0 The number of casts (F14): a negative result
 
