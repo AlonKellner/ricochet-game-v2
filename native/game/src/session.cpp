@@ -1174,11 +1174,14 @@ void Session::settle() {
 	if (!async_ || budget_ <= 0.0) {
 		return;
 	}
-	// only the work this frame started (work already late is not waited for again)
-	const bool preview_busy = preview_ticket_ != preview0 && preview_job_ && preview_job_->busy() && climb_times_.typical() <= budget_;
+	// only the work this frame started (work already late is not waited for again).
+	// Stage 124: whether it is still busy does not matter -- work that finished
+	// before this check still has to be collected (a region done that fast waited
+	// a frame uncollected)
+	const bool preview_busy = preview_ticket_ != preview0 && preview_job_ && climb_times_.typical() <= budget_;
 	// (regions that typically take longer than the budget: no use waiting for this one;
 	// one slow region among fast ones is not typical)
-	const bool region_busy = vis_ticket_ != vis0 && vis_job_ && vis_job_->busy() && region_times_.typical() <= budget_;
+	const bool region_busy = vis_ticket_ != vis0 && vis_job_ && region_times_.typical() <= budget_;
 	if (!preview_busy && !region_busy) {
 		return;
 	}

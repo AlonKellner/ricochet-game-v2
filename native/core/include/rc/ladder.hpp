@@ -265,12 +265,15 @@ public:
 	// Stage 123: stops >= 0, what the caller reads of the walks (a region's cast):
 	// the physical walk through its stops-th stop after the start (a hit that is
 	// applied or changes the flags), the planned one through the events at the
-	// cursor's point; a decision past them needs no precision (horizon()).
+	// cursor's point (Stage 124: without a cursor, through the plan's last entry);
+	// a decision past them needs no precision (horizon()), and the walks end a
+	// little past them (Stage 124, Solver::read_horizon).
 	LadderResult solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, int max_planned,
 			int max_physical, double tol, bool verify = false, const Flags &flags = Flags(), std::optional<bool> force = std::nullopt,
-			int stops = -1, const std::optional<std::pair<double, double>> &known = std::nullopt) {
+			int stops = -1, const std::optional<AimKnown> &known = std::nullopt) {
 		force_ = force;
 		stops_ = stops;
+		plan_ = &plan;
 		known_ = known;
 		flags0_ = flags;
 		const long long t0 = clock_();
@@ -303,6 +306,7 @@ public:
 		fast.aim_known = known_;
 		const CN<Dual> P{Dual{px, 0.0}, Dual{py, 0.0}};
 		const CN<Dual> Cc{Dual{cx, 0.0}, Dual{cy, 0.0}};
+		fast.read_horizon = stops_ >= 0 ? &read_planned_ : nullptr;
 		std::optional<Walk<Dual>> wq = fast.run(P, Cc, plan, Mode::Planned, max_planned, flags);
 		if (!wq || wq->events.empty()) {
 			r.physical = Climb{};
@@ -324,8 +328,9 @@ public:
 				Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
 				big.force_reversed = force_;
 				big.aim_known = known_;
+				big.read_horizon = stops_ >= 0 ? &read_planned_big_ : nullptr;
 				const BigFloat l = BigFloat::from_int(1, limbs);
-				return big.planned(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, cap_ >= 0 ? std::min(max_planned, cap_) : max_planned, flags);
+				return big.planned(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, max_planned, flags);
 			};
 			r.planned = decide(sq, std::move(wq->events), est_q, tol, verify, planned_fn, false);
 		}
@@ -414,9 +419,14 @@ private:
 	LadderContext &ctx_;
 	Clock clock_;
 	int stops_ = -1; // Stage 123: what the caller reads (solve)
-	int cap_ = -1;   // ... the climb's walks cut a little past it (crossings; -1: none)
+	const std::vector<PlanItem> *plan_ = nullptr; // (solve's: the planned walk's last entry, horizon)
+	// Stage 124: horizon() for the walks of a solve that reads part of them (Solver::read_horizon)
+	const std::function<size_t(const std::vector<Event<Dual>> &)> read_physical_ = [this](const std::vector<Event<Dual>> &ev) { return horizon(ev, true); };
+	const std::function<size_t(const std::vector<Event<Dual>> &)> read_planned_ = [this](const std::vector<Event<Dual>> &ev) { return horizon(ev, false); };
+	const std::function<size_t(const std::vector<Event<BigFloat>> &)> read_physical_big_ = [this](const std::vector<Event<BigFloat>> &ev) { return horizon(ev, true); };
+	const std::function<size_t(const std::vector<Event<BigFloat>> &)> read_planned_big_ = [this](const std::vector<Event<BigFloat>> &ev) { return horizon(ev, false); };
 	Flags flags0_;   // the walks' flags at the start (the horizon's flag changes)
-	std::optional<std::pair<double, double>> known_; // Stage 123: Solver::aim_known (solve)
+	std::optional<AimKnown> known_; // Stage 123: Solver::aim_known (solve)
 	std::optional<bool> force_; // Stage 111: the orientation the caller forces on every tier
 
 	using Compute = std::function<std::vector<Event<BigFloat>>(int)>;
@@ -429,6 +439,7 @@ private:
 		fast.aim_known = known_;
 		const CN<Dual> P{Dual{px, 0.0}, Dual{py, 0.0}};
 		const CN<Dual> Cc{Dual{cx, 0.0}, Dual{cy, 0.0}};
+		fast.read_horizon = stops_ >= 0 ? &read_physical_ : nullptr;
 		std::optional<Walk<Dual>> wp = fast.run(P, Cc, plan, Mode::Physical, max_physical, flags);
 		F64Events ev = wp ? std::move(wp->events) : F64Events{};
 		std::vector<double> gains = wp ? std::move(wp->gains) : std::vector<double>{};
@@ -438,8 +449,9 @@ private:
 			Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
 			big.force_reversed = force_;
 			big.aim_known = known_;
+			big.read_horizon = stops_ >= 0 ? &read_physical_big_ : nullptr;
 			const BigFloat l = BigFloat::from_int(1, limbs);
-			return big.physical(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, cap_ >= 0 ? std::min(max_physical, cap_) : max_physical, flags);
+			return big.physical(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(cx), l.like(cy)}, plan, max_physical, flags);
 		};
 		r.physical = decide(sp, std::move(ev), est_p, tol, verify, physical_fn, true);
 		r.physical_sens = sp;
@@ -523,6 +535,19 @@ private:
 			}
 			return std::min(ev.size(), j + 2);
 		}
+		// Stage 124: no cursor -- the event that consumes the plan's last entry (as
+		// the cast finds it, vis::Builder::cast_core), and the next two
+		if (plan_ != nullptr && !plan_->empty()) {
+			size_t j = 0;
+			for (size_t i = 0; i < ev.size(); i++) {
+				const PlanItem &item = (*plan_)[j];
+				const bool consumed = item.is_infinity() ? (ev[i].kind == EventKind::Infinity && ev[i].applied)
+														 : (ev[i].kind == EventKind::Hit && ev[i].surface_id == item.surface_id && ev[i].left == item.left);
+				if (consumed && ++j == plan_->size()) {
+					return std::min(ev.size(), i + 3);
+				}
+			}
+		}
 		return ev.size();
 	}
 
@@ -577,10 +602,7 @@ private:
 			const bool start_f64 = reliable && worst(est, need) <= tol;
 			return climb(start_f64 ? 0 : start_limbs, start_f64 ? &events : nullptr, tol, compute);
 		}
-		// (the climb walks only a little past what is read)
-		cap_ = need < events.size() ? int(need) + 2 : -1;
 		Climb out = replay_climb(start_limbs, tol, compute, physical);
-		cap_ = -1;
 		ctx_.stats().unconverged += out.converged ? 0 : 1;
 		return out;
 	}
@@ -626,10 +648,6 @@ private:
 			const int L = TIERS[size_t(ti)];
 			std::vector<Event<BigFloat>> ev = timed(L, compute);
 			const size_t read = horizon(ev, physical);
-			if (cap_ >= 0 && read >= ev.size()) {
-				cap_ = -1; // the cut walk ends before what is read: the whole walk, this tier again
-				continue;
-			}
 			c.tried.push_back(L);
 			c.big_events = ev;
 			c.limbs = L;

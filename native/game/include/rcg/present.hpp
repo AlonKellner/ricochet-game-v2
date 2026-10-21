@@ -27,6 +27,7 @@
 #include "rcg/render.hpp"
 
 #include <cstdint>
+#include <map>
 #include <optional>
 #include <vector>
 
@@ -41,6 +42,10 @@ class World;
 // follow the player, and the late one, when it arrives, morphs in.
 struct PresentConfig {
 	double region_seconds = 0.1; // a late region's morph (0: none)
+	// Stage 124 (the user): a region is late -- smoothed: followed while it computes,
+	// morphed in when it arrives -- only once it has computed this long (slower
+	// than 30 Hz); one that arrives sooner is drawn as it is
+	double late_seconds = 1.0 / 30.0;
 	bool interpolate = true;     // the player between physics ticks
 	bool follow = true;          // while a region is late, the shown one's shadows follow the drawn player
 	bool smooth_on_time = false; // (tests) smooth as if every region were late
@@ -153,7 +158,8 @@ private:
 	shape_morph::Shape target_; // its outline
 	shape_morph::Shape shown_;  // the outline on screen (the last frame's)
 	std::optional<Morph> morph_;
-	bool was_late_ = false;    // the last frame waited for a region
+	// Stage 124: when each region request was first seen (the clock), from the shown one on
+	std::map<long long, double> requested_at_;
 	uint64_t frame_serial_ = 0;
 };
 

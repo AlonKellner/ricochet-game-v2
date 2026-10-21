@@ -7,6 +7,7 @@
 #pragma once
 
 #include "rc/cn.hpp"
+#include "rc/inline_vec.hpp"
 
 #include <cmath>
 
@@ -93,12 +94,12 @@ struct Beam {
 
 	// Real roots of beam ∩ circle. depart_on: p lies exactly on the circle
 	// (provenance) and the t = 0 root is dropped.
-	std::vector<N> hits(const Circle<N> &circ, bool depart_on) const {
+	InlineVec<N, 4> hits(const Circle<N> &circ, bool depart_on) const {
 		const CN<N> q = circ.c.sub(p);
 		const N tq = CN<N>::dot(q, tau);
 		const N &k = kappa;
 		const N one = k.one_like();
-		std::vector<N> roots;
+		InlineVec<N, 4> roots;
 		if (depart_on) {
 			const N a2_d = one.sub(k.mul(CN<N>::cross(tau, q)));
 			if (!a2_d.is_zero()) {

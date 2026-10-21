@@ -199,7 +199,7 @@ public:
 	// cache; nullopt where trace_pair returns none. Stage 123: stops, what the
 	// cast reads (Ladder::solve's horizon); known, Solver::aim_known.
 	std::optional<LadderResult> solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags,
-			std::optional<bool> force_reversed = std::nullopt, int stops = -1, const std::optional<std::pair<double, double>> &known = std::nullopt) {
+			std::optional<bool> force_reversed = std::nullopt, int stops = -1, const std::optional<AimKnown> &known = std::nullopt) {
 		if (!ctx_ || !scene_supported(defs_) || (px == cx && py == cy)) {
 			return std::nullopt;
 		}
@@ -273,8 +273,8 @@ public:
 		const V2 player = V2::of(px, py);
 		const Ray aim{player, player, V2::of(cx, cy)};
 		std::map<std::string, int> frames;
-		TracePath physical = to_path(res.physical, frames, aim, flags);
-		TracePath planned = to_path(res.planned, frames, aim, flags);
+		TracePath physical = to_path(res.physical, frames, aim, flags, true);
+		TracePath planned = to_path(res.planned, frames, aim, flags, true);
 		return {std::move(planned), std::move(physical)};
 	}
 
@@ -363,16 +363,18 @@ public:
 	// ---------------------------------------------------------------- conversion
 
 	// Steps are in visual space; frame_id identifies the (epoch, transform stack, flags).
-	TracePath to_path(const Climb &climb, std::map<std::string, int> &frames, const Ray &aim, const Flags &flags) const {
+	// lean (Stage 124, a region's cast): the steps, their frames and the events'
+	// steps and frames only (no hit records, targets or display fields)
+	TracePath to_path(const Climb &climb, std::map<std::string, int> &frames, const Ray &aim, const Flags &flags, bool lean = false) const {
 		if (climb.limbs == 0) {
-			return to_path_events(climb.f64_events, climb.err, climb.limbs, frames, aim, flags);
+			return to_path_events(climb.f64_events, climb.err, climb.limbs, frames, aim, flags, lean);
 		}
-		return to_path_events(climb.big_events, climb.err, climb.limbs, frames, aim, flags);
+		return to_path_events(climb.big_events, climb.err, climb.limbs, frames, aim, flags, lean);
 	}
 
 	template <Num N>
 	TracePath to_path_events(const std::vector<Event<N>> &events, const std::vector<double> &errs, int limbs,
-			std::map<std::string, int> &frames, const Ray &aim, const Flags &flags) const {
+			std::map<std::string, int> &frames, const Ray &aim, const Flags &flags, bool lean = false) const {
 		TracePath path;
 		std::vector<int> stack;
 		const int bits = tier_bits(limbs);
@@ -384,6 +386,7 @@ public:
 		std::string epoch_key; // the projective firings so far (K14: an epoch is its firing, not a count)
 		bool ghost = flags.is_true(GHOST);
 		Flags before = flags; // the flags before the next hit (Stage 107)
+		const Flags *keyed = &flags; // (Stage 124: cur_flags is the key of these flags)
 		const Scene<Dual> &scene = ctx_->dual_scene();
 		for (size_t i = 0; i < events.size(); i++) {
 			const Event<N> &e = events[i];
@@ -411,10 +414,12 @@ public:
 				if (!std::isinf(s.start.x) && !std::isinf(s.end.x)) {
 					s.is_arc_step = !e.beam->kappa.is_zero();
 				}
-				s.ray = aim;
-				s.ghost = ghost;
-				s.est_error = i < errs.size() ? errs[i] : -1.0;
-				s.precision_bits = bits;
+				if (!lean) {
+					s.ray = aim;
+					s.ghost = ghost;
+					s.est_error = i < errs.size() ? errs[i] : -1.0;
+					s.precision_bits = bits;
+				}
 				path.steps.push_back(std::move(s));
 				appended = true;
 			}
@@ -432,7 +437,7 @@ public:
 				}
 				gap = gap || e.teleport;
 			}
-			if (e.kind == EventKind::Hit && appended) {
+			if (e.kind == EventKind::Hit && appended && !lean) {
 				TraceStep &last = path.steps.back();
 				const Side side = e.left ? Side::Left : Side::Right;
 				last.hit = TraceHit{e.t_to->to_float(), last.end, surf != nullptr ? surf->id : -1, side, e.on_segment};
@@ -444,7 +449,7 @@ public:
 					path.targets_hit.push_back(surf->id);
 				}
 			}
-			if (e.kind == EventKind::Hit) {
+			if (e.kind == EventKind::Hit && !lean) {
 				HitRecord h;
 				h.surface_id = e.surface_id;
 				h.side = e.left ? Side::Left : Side::Right;
@@ -468,7 +473,7 @@ public:
 				path.hits.push_back(std::move(h));
 				before = e.flags;
 			}
-			if (e.kind == EventKind::Infinity && appended) {
+			if (e.kind == EventKind::Infinity && appended && !lean) {
 				// the outgoing half of the wrap carries the infinity id: plan
 				// highlighting and PLAN_EFFECTS_APPLIED find the entry there
 				TraceStep &last = path.steps.back();
@@ -476,7 +481,10 @@ public:
 				last.hit_on_segment = true;
 			}
 			if (e.kind == EventKind::Hit) {
-				cur_flags = e.flags.canonical_key();
+				if (!(e.flags == *keyed)) {
+					cur_flags = e.flags.canonical_key(); // (a pure function of the flags: rebuilt when they change)
+					keyed = &e.flags;
+				}
 				ghost = e.flags.is_true(GHOST);
 			}
 			if (e.kind == EventKind::Cursor) {

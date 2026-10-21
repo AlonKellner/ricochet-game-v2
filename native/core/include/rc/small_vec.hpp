@@ -5,6 +5,7 @@
 #pragma once
 
 #include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdlib>
 #include <cstring>
@@ -13,6 +14,71 @@
 #include <type_traits>
 
 namespace rc {
+
+namespace small_vec_detail {
+
+// Stage 124: freed heap blocks kept per thread by power-of-two size (64 B to
+// 128 KiB), so a value past its inline limbs reuses one instead of going to
+// malloc: the region's parallel casts made malloc's small zones contended (a
+// third of their time at 8 threads). Bounded per size; a block freed on another
+// thread joins that thread's cache; after the thread's cache is gone, plain free.
+struct BlockCache {
+	static constexpr size_t CLASSES = 12;
+	static constexpr size_t KEEP = 256;
+	std::array<void *[KEEP], CLASSES> blocks{};
+	std::array<size_t, CLASSES> counts{};
+	~BlockCache();
+};
+inline thread_local bool cache_gone = false;
+inline BlockCache::~BlockCache() {
+	cache_gone = true;
+	for (size_t k = 0; k < CLASSES; k++) {
+		for (size_t i = 0; i < counts[k]; i++) {
+			std::free(blocks[k][i]);
+		}
+	}
+}
+inline BlockCache &cache() {
+	thread_local BlockCache c;
+	return c;
+}
+// the class holding `bytes` (64 << k >= bytes), or CLASSES past the largest
+inline size_t class_of(size_t bytes) {
+	size_t k = 0;
+	while (k < BlockCache::CLASSES && (size_t(64) << k) < bytes) {
+		k++;
+	}
+	return k;
+}
+// a block of at least `bytes`; its usable size in `got`
+inline void *alloc(size_t bytes, size_t &got) {
+	const size_t k = class_of(bytes);
+	if (k >= BlockCache::CLASSES) {
+		got = bytes;
+		return std::malloc(bytes);
+	}
+	got = size_t(64) << k;
+	if (!cache_gone) {
+		BlockCache &c = cache();
+		if (c.counts[k] > 0) {
+			return c.blocks[k][--c.counts[k]];
+		}
+	}
+	return std::malloc(got);
+}
+inline void release(void *p, size_t bytes) {
+	const size_t k = class_of(bytes);
+	if (k < BlockCache::CLASSES && (size_t(64) << k) == bytes && !cache_gone) {
+		BlockCache &c = cache();
+		if (c.counts[k] < BlockCache::KEEP) {
+			c.blocks[k][c.counts[k]++] = p;
+			return;
+		}
+	}
+	std::free(p);
+}
+
+} // namespace small_vec_detail
 
 template <class T, size_t N>
 class SmallVec {
@@ -66,8 +132,8 @@ public:
 		if (c <= cap_) {
 			return;
 		}
-		size_t nc = std::max(c, cap_ * 2);
-		T *np = static_cast<T *>(std::malloc(nc * sizeof(T)));
+		size_t got = 0;
+		T *np = static_cast<T *>(small_vec_detail::alloc(std::max(c, cap_ * 2) * sizeof(T), got));
 		if (np == nullptr) {
 			throw std::bad_alloc();
 		}
@@ -75,10 +141,10 @@ public:
 			std::memcpy(np, p_, n_ * sizeof(T));
 		}
 		if (p_ != buf_) {
-			std::free(p_);
+			small_vec_detail::release(p_, cap_ * sizeof(T));
 		}
 		p_ = np;
-		cap_ = nc;
+		cap_ = got / sizeof(T);
 	}
 	void assign(size_t n, const T &v) {
 		reserve(n);
@@ -122,7 +188,7 @@ private:
 
 	void release() {
 		if (p_ != buf_) {
-			std::free(p_);
+			small_vec_detail::release(p_, cap_ * sizeof(T));
 		}
 		p_ = buf_;
 		cap_ = N;
