@@ -279,7 +279,8 @@ TEST_CASE("present: a late region's change morphs for its duration, then shows t
 	s.key(rcg::Action::ToggleVisibility);
 	s.settle();
 	for (int k = 0; k < 8; k++) {
-		for (const rcg::render::Call &c : *vis_node(p.frame(s.draw_frame(), s))->calls) {
+		const rcg::render::FrameNode shown = *vis_node(p.frame(s.draw_frame(), s)); // (held: a range-for's temporary dies first)
+		for (const rcg::render::Call &c : *shown.calls) {
 			if (c.kind == rcg::render::Kind::Triangles) {
 				CHECK_FALSE(c.indices.empty());
 				CHECK_FALSE(c.pts.empty());
