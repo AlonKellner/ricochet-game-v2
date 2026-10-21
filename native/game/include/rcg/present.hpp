@@ -137,6 +137,7 @@ private:
 	struct Morph {
 		shape_morph::Plan plan;
 		double start = 0.0;
+		double seconds = 0.0; // its duration (a retarget on time: the rest of the one it continues)
 	};
 	PresentConfig config_;
 	double now_ = 0.0;

@@ -373,3 +373,31 @@ TEST_CASE("present: a region that misses its frame follows, then morphs in") {
 	p.advance(0.2);
 	CHECK(vis_node(p.frame(s.draw_frame(), s))->version == vis_node(s.draw_frame())->version);
 }
+
+TEST_CASE("present: one late region does not keep on-time regions morphing") {
+	// (the user saw main morphing while walking: the first region, late, began a morph that
+	// every on-time region after it restarted)
+	rcg::SessionConfig cfg;
+	cfg.async = true;
+	rcg::Session s(level("main.json"), cfg);
+	rcg::Presenter p;
+	s.settle();
+	p.frame(s.draw_frame(), s); // the first region pending: late
+	s.drain();
+	p.advance(0.016);
+	p.frame(s.draw_frame(), s); // it arrives: a morph
+	CHECK(p.animating());
+	s.set_budget(5.0); // from now on every region is on time
+	rcg::kinematics::Input in;
+	in.axis_x = 1.0f;
+	int morphing = 0;
+	for (int k = 0; k < 30; k++) {
+		s.advance(1.0 / 60.0, in);
+		p.advance(1.0 / 60.0);
+		REQUIRE_FALSE(s.region_pending());
+		p.frame(s.draw_frame(), s);
+		morphing += p.animating() ? 1 : 0;
+	}
+	CHECK(morphing <= 6); // (the first morph's 100 ms, at most)
+	CHECK_FALSE(p.animating());
+}

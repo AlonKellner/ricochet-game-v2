@@ -145,6 +145,7 @@ public:
 	// applies its results (then the session is what a synchronous one is)
 	bool region_pending() const;
 	bool preview_exact() const { return !provisional_.has_value(); }
+	void set_budget(double seconds) { budget_ = seconds; } // (SessionConfig::budget; tests)
 	void drain();
 
 	// the derived state as the game's nodes reach it after their frames

@@ -834,10 +834,18 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 			if (apex) {
 				sm::mark_shadows(next, *apex);
 			}
-			if (config_.region_seconds > 0.0 && region_version_ >= 0 && (was_late_ || morph_ || config_.smooth_on_time)) {
-				morph_ = Morph{sm::plan(shown_, next, here), now_}; // it was late: morph in from what was shown
-			} else {
-				morph_.reset(); // on time: as it is
+			if (config_.region_seconds > 0.0 && region_version_ >= 0 && (was_late_ || config_.smooth_on_time)) {
+				// it was late: morph in from what was shown
+				morph_ = Morph{sm::plan(shown_, next, here), now_, config_.region_seconds};
+			} else if (morph_) {
+				// on time during a morph: retargeted from what is shown over the time the
+				// morph has left, never extended (on-time regions keep no morph alive)
+				const double left = morph_->start + morph_->seconds - now_;
+				if (left > 0.0) {
+					morph_ = Morph{sm::plan(shown_, next, here), now_, left};
+				} else {
+					morph_.reset();
+				}
 			}
 			region_version_ = version;
 			target_ = std::move(next);
@@ -849,7 +857,7 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 		const bool moved = config_.follow && late && target_.has_apex && std::hypot(here.x - target_.apex.x, here.y - target_.apex.y) > 1e-6;
 		sm::Shape shape;
 		if (morph_) {
-			const double x = (now_ - morph_->start) / config_.region_seconds;
+			const double x = (now_ - morph_->start) / morph_->seconds;
 			if (x >= 1.0) {
 				morph_.reset();
 			} else {
