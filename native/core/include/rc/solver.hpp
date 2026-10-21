@@ -15,6 +15,7 @@
 #include "rc/beam_effects.hpp"
 
 #include <algorithm>
+#include <functional>
 #include <limits>
 #include <map>
 #include <memory>
@@ -440,6 +441,7 @@ struct Walk {
 	std::vector<std::pair<int, InlineVec<N, 4>>> step_shared;
 	std::vector<std::pair<double, double>> gap_pts;
 	std::vector<int> gap_dbl;
+	const std::function<size_t(const std::vector<Event<N>> &)> *read_horizon = nullptr; // Stage 124: Solver::read_horizon
 };
 
 // Caches owned by the caller (one per solve / tracer): the anchored chain of
@@ -846,6 +848,9 @@ public:
 	// construction, so it is a known point there (add_aim_known), and a hit at it
 	// is decided by identity, never by the ladder
 	std::optional<std::pair<double, double>> aim_known;
+	// Stage 124: the caller reads only the first events of a walk (a region's cast,
+	// Ladder::horizon): the walk ends two events past them
+	const std::function<size_t(const std::vector<Event<N>> &)> *read_horizon = nullptr;
 
 	// Stage 111: the realization the order against Q_0 (or today's rule) picks
 	// without the walk: what a cursor both planned walks reach gets; the region
@@ -1674,6 +1679,7 @@ private:
 		w.record_poles = record_poles_;
 		w.pole_memo = cache_ ? &cache_->poles : nullptr;
 		w.incidence_memo = cache_ ? &cache_->incidence : nullptr;
+		w.read_horizon = read_horizon;
 		return w;
 	}
 
@@ -2865,6 +2871,12 @@ private:
 		bool fired_state = false; // a state change in the current loop
 		bool keep_cursor = false; // K4: the seed restart keeps the listed cursor
 		while (!w.done) {
+			// Stage 124: past what the caller reads (and two events more): done (the
+			// events so far are the whole walk's: it is decided step by step)
+			if (w.read_horizon != nullptr && (*w.read_horizon)(w.events) + 2 <= w.events.size()) {
+				w.done = true;
+				return;
+			}
 			if (w.record_poles) {
 				w.pole_trace.emplace_back(beam, w.pole);
 				w.exact_trace.push_back(w.Q ? w.pole.has_value() : w.line != nullptr);
