@@ -2951,6 +2951,12 @@ private:
 			size_t ci = skip;
 			skip = 0;
 			while (ci < cands.size()) {
+				// Stage 127: past what the caller reads within a step too (a straight beam
+				// crosses many carriers in one step; the events so far are complete)
+				if (w.read_horizon != nullptr && (*w.read_horizon)(w.events) + 2 <= w.events.size()) {
+					w.done = true;
+					return;
+				}
 				const Candidate<N> cand = cands[ci];
 				const N t = cand.t;
 				const Surf<N> *surf = cand.surf;
