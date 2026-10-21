@@ -1436,6 +1436,22 @@ private:
 		return true;
 	}
 
+	// Stage 123: the exact data a member's casts pass by construction (Solver::
+	// aim_known; Stage 124: in any frame -- but not on the carrier the beam departs
+	// there, whose departure point is its own -- and a crossing exactly on both
+	// carriers, in any pencil)
+	std::optional<AimKnown> aim_known_of(const CN<F64> &z, size_t j, bool exact_data) const {
+		if (!exact_data) {
+			return std::nullopt;
+		}
+		const Surf<F64> *dep = j > 0 && !plan_[j - 1].is_infinity() ? scene_.find(plan_[j - 1].surface_id) : nullptr;
+		if (dep != nullptr && on_carrier_exact(*dep, z)) {
+			return std::nullopt;
+		}
+		const Pt e = pt_of(z);
+		return AimKnown{int(j), e.x, e.y};
+	}
+
 	void add_poi(std::vector<Member> &out, const CN<F64> &z, size_t j, const std::string &why, int tangent_sid = -1, bool exact = false,
 			const std::optional<Pt> &other = std::nullopt, bool exact_point = false) {
 		const std::optional<CN<F64>> c = forward(std::optional<CN<F64>>(z), j, K);
@@ -1470,6 +1486,7 @@ private:
 				m.sigma = sigma_of_cursor(cp, *key);
 			}
 			m.sub = sub_of(*key, m.sigma);
+			m.aim_known = aim_known_of(z, j, exact || exact_point);
 			m.why = why + (j < K ? " (frame " + std::to_string(j) + ")" : "");
 			m.tangent_sid = j == K || (tangent_sid >= 0 && carrier_fixed(tangent_sid, j)) ? tangent_sid : -1;
 			m.exact = exact && same_frame_as_final(j);
@@ -1484,13 +1501,7 @@ private:
 		m.dir = *d;
 		m.cursor = cp;
 		m.poi = true;
-		// (Stage 124: in any frame -- but not on the carrier the beam departs there,
-		// whose departure point is its own -- and a crossing exactly on both carriers)
-		const Surf<F64> *dep = j > 0 && !plan_[j - 1].is_infinity() ? scene_.find(plan_[j - 1].surface_id) : nullptr;
-		if ((exact || exact_point) && !(dep != nullptr && on_carrier_exact(*dep, z))) {
-			const Pt e = pt_of(z);
-			m.aim_known = AimKnown{int(j), e.x, e.y};
-		}
+		m.aim_known = aim_known_of(z, j, exact || exact_point);
 		m.why = why + (j < K ? " (frame " + std::to_string(j) + ")" : "");
 		m.tangent_sid = j == K || (tangent_sid >= 0 && carrier_fixed(tangent_sid, j)) ? tangent_sid : -1;
 		m.exact = exact && same_frame_as_final(j);
@@ -1827,11 +1838,17 @@ private:
 		out.push_back(std::move(m));
 	}
 	// the members through a point of an earlier epoch, pushed through the projectives
-	void add_pushed(std::vector<Member> &out, const CN<F64> &z, size_t j, const std::string &why) const {
+	// (Stage 124: exact data -- the walk passes it before the projectives: aim_known)
+	void add_pushed(std::vector<Member> &out, const CN<F64> &z, size_t j, const std::string &why, bool exact_data = false) const {
 		std::vector<double> keys;
 		keys_from_point(j, z, keys);
+		const std::optional<AimKnown> ak = aim_known_of(z, j, exact_data);
 		for (double k : keys) {
+			const size_t before = out.size();
 			add_key(out, k, why + " (frame " + std::to_string(j) + ", pushed through)");
+			for (size_t q = before; q < out.size(); q++) {
+				out[q].aim_known = ak;
+			}
 		}
 	}
 
@@ -1888,8 +1905,8 @@ private:
 			for (size_t a = 0; a < surfs.size(); a++) {
 				const Surf<F64> &s = *surfs[a];
 				if (!s.full) {
-					add_pushed(pois, CN<F64>{F64{s.sx}, F64{s.sy}}, j, "endpoint of " + std::to_string(s.id));
-					add_pushed(pois, CN<F64>{F64{s.ex}, F64{s.ey}}, j, "endpoint of " + std::to_string(s.id));
+					add_pushed(pois, CN<F64>{F64{s.sx}, F64{s.sy}}, j, "endpoint of " + std::to_string(s.id), true);
+					add_pushed(pois, CN<F64>{F64{s.ex}, F64{s.ey}}, j, "endpoint of " + std::to_string(s.id), true);
 				}
 				if (first_epoch && !(s.line && !B)) {
 					for (const Pt &t : tangent_points(A, B, s)) {
@@ -1901,7 +1918,8 @@ private:
 						continue;
 					}
 					for (const Pt &x : carrier_points(s, *surfs[b])) {
-						add_pushed(pois, cn_of(x), j, "crossing of " + std::to_string(s.id) + " and " + std::to_string(surfs[b]->id));
+						add_pushed(pois, cn_of(x), j, "crossing of " + std::to_string(s.id) + " and " + std::to_string(surfs[b]->id),
+							on_carrier_exact(s, cn_of(x)) && on_carrier_exact(*surfs[b], cn_of(x)));
 					}
 				}
 			}
@@ -1911,8 +1929,8 @@ private:
 				}
 				if (plan_[e].span) {
 					const auto &sp = *plan_[e].span;
-					add_pushed(pois, CN<F64>{F64{sp[0]}, F64{sp[1]}}, j, "piece end");
-					add_pushed(pois, CN<F64>{F64{sp[2]}, F64{sp[3]}}, j, "piece end");
+					add_pushed(pois, CN<F64>{F64{sp[0]}, F64{sp[1]}}, j, "piece end", true);
+					add_pushed(pois, CN<F64>{F64{sp[2]}, F64{sp[3]}}, j, "piece end", true);
 				}
 			}
 		}
