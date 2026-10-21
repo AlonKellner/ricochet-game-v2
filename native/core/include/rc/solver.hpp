@@ -397,6 +397,7 @@ struct Walk {
 	int view_count = 0;
 	std::map<const Beam<N> *, int> beam_views;
 	std::optional<PointGroup<N>> point; // B5: the point being crossed (physical walk)
+	std::vector<uint8_t> gap_why; // Stage 123: the step's margins' classes (Solver::gaps, the instrument; reused)
 };
 
 // Caches owned by the caller (one per solve / tracer): the anchored chain of
@@ -2457,7 +2458,7 @@ private:
 		// two hits a few 1e-13 px apart are told apart at 4 limbs, not left a
 		// rounding apart at every tier (a climb to 64 limbs that never converges).
 		// The float64 walks are untouched.
-		std::vector<std::optional<CN<N>>> at_tier(cands.size());
+		std::vector<std::optional<CN<N>>> at_tier(std::is_same_v<N, BigFloat> ? cands.size() : 0); // (BigFloat tiers only)
 		auto point_at_tier = [&](size_t i) -> const CN<N> & {
 			if (!at_tier[i]) {
 				at_tier[i] = cands[i].pt ? *cands[i].pt : beam.at(cands[i].t);
@@ -2788,7 +2789,7 @@ private:
 			}
 			std::vector<Candidate<N>> cands = candidates(w, *beam, depart, fresh, t0, keep_cursor);
 			keep_cursor = false;
-			std::vector<uint8_t> gw;
+			std::vector<uint8_t> &gw = w.gap_why; // (reused across the walk's steps)
 			std::vector<double> gp = gaps(w, *beam, cands, &gw);
 			std::optional<Next> next;
 			bool restart = false;

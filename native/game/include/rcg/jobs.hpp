@@ -41,11 +41,12 @@ public:
 	LatestJob &operator=(const LatestJob &) = delete;
 
 	// compute fn(in) in the background; `ticket` comes back with the result
-	void submit(In in, long long ticket) {
+	// (cancel: this time the running computation is stale too, whatever the policy)
+	void submit(In in, long long ticket, bool cancel = false) {
 		{
 			std::lock_guard<std::mutex> lock(m_);
 			pending_ = std::make_pair(std::move(in), ticket);
-			if (cancel_running_) {
+			if (cancel_running_ || cancel) {
 				cancel_ = running_; // the running computation is stale now
 				result_.reset();    // so is a finished, untaken one
 			}

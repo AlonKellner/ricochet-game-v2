@@ -1086,7 +1086,9 @@ void Session::update_visibility() {
 			prefetch_job_->cancel(); // (an adopted one runs on, like a region job)
 		}
 		prefetch_in_.reset();
-		vis_job_->submit(std::move(in), vis_ticket_);
+		// (regions that fit the budget: the frame waits for this one, so a running older
+		// one is stale -- cancelled; slower ones: kept, a walking player still sees regions)
+		vis_job_->submit(std::move(in), vis_ticket_, budget_ > 0.0 && region_times_.n > 0 && region_times_.typical() <= budget_);
 		return;
 	}
 	vis_applied_ = vis_ticket_; // (no older region computing in the background may show after this one)
