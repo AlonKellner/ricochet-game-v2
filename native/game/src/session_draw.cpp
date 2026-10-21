@@ -707,28 +707,29 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 	}
 	const Color dim{1, 1, 1, flying_ ? 0.25f : 1.0f};
 	if (level_.features.preview) {
-		cached(path_draw_, {trace_version_, display_mode_, 0}, NodeKind::Path, 20, V2{}, dim, [&](std::vector<Call> &out) {
+		const Preview &pv = shown(); // (the provisional preview while its exact climb runs)
+		cached(path_draw_, {trace_version_, display_mode_, provisional_version_}, NodeKind::Path, 20, V2{}, dim, [&](std::vector<Call> &out) {
 		PathPainter pp{b.grow(50.0f), out};
-		if (preview_.has_paths || !preview_.merged.empty()) {
+		if (pv.has_paths || !pv.merged.empty()) {
 			if (display_mode_ == 0) {
-				if (!preview_.merged.empty()) {
-					for (const rc::TraceStep &ms : preview_.merged) {
+				if (!pv.merged.empty()) {
+					for (const rc::TraceStep &ms : pv.merged) {
 						if (ms.start == ms.end) {
 							continue;
 						}
 						const Color col = step_color(ms.type);
 						pp.step(ms, ms.ghost ? ghost_color(col) : col, !is_solid(ms.type));
 					}
-					pp.endpoint_circles(preview_.merged, true, WHITE);
-					for (const auto &[pt, col] : truncation_markers()) {
+					pp.endpoint_circles(pv.merged, true, WHITE);
+					for (const auto &[pt, col] : truncation_markers(pv)) {
 						pp.stop_marker(pt, col);
 					}
 				}
-			} else if (preview_.has_paths) {
+			} else if (pv.has_paths) {
 				if (display_mode_ == 1) {
-					pp.raw(preview_.physical, CYAN, "P");
+					pp.raw(pv.physical, CYAN, "P");
 				} else {
-					pp.raw(preview_.planned, MAGENTA, "L");
+					pp.raw(pv.planned, MAGENTA, "L");
 				}
 			}
 		}

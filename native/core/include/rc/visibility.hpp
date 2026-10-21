@@ -463,6 +463,7 @@ struct Rect {
 
 struct Result {
 	bool supported = false;
+	bool cancelled = false; // Stage 121: the computation was cancelled (a newer one superseded it): no region
 	std::string reason; // why unsupported
 	Pt player;
 	Pt pk;              // P_K
@@ -641,6 +642,14 @@ public:
 	bool splits() const { return solver_.first_entry(plan_, flags_) >= 0; }
 	// Workflow W2.0: the memo the two halves share (compute)
 	void share(SolveMemo *memo) { memo_ = memo; }
+	// Stage 121: a computation another one superseded stops at its next cast (Cancelled)
+	void set_cancel(const std::atomic<bool> *cancel) { cancel_ = cancel; }
+	struct Cancelled {};
+	void check_cancel() const {
+		if (cancel_ != nullptr && cancel_->load(std::memory_order_relaxed)) {
+			throw Cancelled{};
+		}
+	}
 
 	// One cast of the cursor c (after prepare(); for tests and debugging).
 	std::optional<Cast> probe(const Pt &c) {
@@ -707,6 +716,7 @@ public:
 private:
 	Tracer &tracer_;
 	SolveMemo *memo_ = nullptr;
+	const std::atomic<bool> *cancel_ = nullptr;
 	std::vector<PlanItem> plan_;
 	Flags flags_;
 	Scene<F64> scene_;
@@ -2079,6 +2089,7 @@ private:
 	// ---- casts
 
 	Cast cast(const Pt &c, const Param &q, const Beam<F64> &member, CastKind kind = CastKind::Other) {
+		check_cancel();
 		res_.casts++;
 		res_.casts_by_kind[size_t(kind)]++;
 		return cast_on(tracer_, c, q, member);
@@ -2102,6 +2113,7 @@ private:
 		const size_t nt = std::min(jobs.size(), size_t(vis_threads()));
 		if (nt <= 1) {
 			for (size_t i = 0; i < jobs.size(); i++) {
+				check_cancel();
 				out[i] = cast_on(tracer_, jobs[i].c, jobs[i].q, jobs[i].member);
 			}
 			return out;
@@ -2111,9 +2123,14 @@ private:
 			tracers.push_back(&tracer_.helper(k - 1));
 		}
 		// (Stage 120: on the persistent pool, not threads made per batch; worker k casts with tracers[k])
+		check_cancel();
 		ThreadPool::shared().parallel_for(jobs.size(), nt - 1, [&](size_t worker, size_t i) {
+			if (cancel_ != nullptr && cancel_->load(std::memory_order_relaxed)) {
+				return; // (cancelled: the caller throws below, never a pool thread)
+			}
 			out[i] = cast_on(*tracers[worker], jobs[i].c, jobs[i].q, jobs[i].member);
 		});
+		check_cancel();
 		return out;
 	}
 
@@ -4733,10 +4750,15 @@ inline std::vector<std::pair<int, int>> parts_of(const Result &r) {
 }
 
 // The visibility region of the plan for the player (bounds: the level's).
-inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanItem> &plan, const Flags &flags, const Rect &bounds) {
+// cancel (Stage 121; may be null): a computation polled at every cast; once set, it
+// stops and returns a Result with `cancelled` (no region)
+inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanItem> &plan, const Flags &flags, const Rect &bounds,
+		const std::atomic<bool> *cancel = nullptr) {
 	const auto t0 = std::chrono::steady_clock::now();
 	Builder b(tracer, player, plan, flags, bounds);
+	b.set_cancel(cancel);
 	Result r;
+	try {
 	if (!b.splits()) {
 		r = b.build();
 	} else {
@@ -4746,6 +4768,8 @@ inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanIt
 		Builder br(tracer, player, plan, flags, bounds, Half::Reversed);
 		bd.share(&memo);
 		br.share(&memo);
+		bd.set_cancel(cancel);
+		br.set_cancel(cancel);
 		Result ra = bd.build();
 		Result rb = br.build();
 		if (std::getenv("RC_VIS_MEMO_STATS") != nullptr) {
@@ -4753,6 +4777,12 @@ inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanIt
 				memo.tie_ms, memo.realization_n, memo.realization_ms, memo.hits);
 		}
 		r = join_halves(std::move(ra), std::move(rb));
+	}
+	} catch (const Builder::Cancelled &) {
+		Result c;
+		c.cancelled = true;
+		c.reason = "cancelled";
+		return c;
 	}
 	for (Loop &l : r.loops) {
 		l.area = loop_area(l.edges);

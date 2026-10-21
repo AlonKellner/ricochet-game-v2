@@ -16,7 +16,7 @@ V2 at(const json &a) { return V2::of(a[0].get<double>(), a[1].get<double>()); }
 
 } // namespace
 
-std::vector<std::string> replay_session(const json &script, const std::string &levels_dir, DrawRecord draw) {
+std::vector<std::string> replay_session(const json &script, const std::string &levels_dir, DrawRecord draw, bool async) {
 	const std::filesystem::path levels = levels_dir;
 	SessionConfig cfg;
 	if (script.contains("switches")) {
@@ -28,9 +28,13 @@ std::vector<std::string> replay_session(const json &script, const std::string &l
 			cfg.visibility = sw["visibility"].get<bool>();
 		}
 	}
+	cfg.async = async;
 	Session s(load_level((levels / (script["level"].get<std::string>() + ".json")).string()), cfg);
 	std::vector<std::string> lines;
 	auto record = [&](json extra) {
+		if (async) {
+			s.drain();
+		}
 		if (draw != DrawRecord::None) {
 			const json d = render::list_json(s.draw());
 			extra["draw"] = draw == DrawRecord::Full ? d : json(digest::sha(d));

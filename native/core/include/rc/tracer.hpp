@@ -120,6 +120,20 @@ public:
 	// Planned + physical traces, or nullopt if the scene is not supported or the
 	// input is degenerate (player = cursor, a pole / image at infinity).
 	std::optional<TracePair> trace_pair(V2 player, V2 cursor, const std::vector<PlanItem> &plan, Flags flags) {
+		return trace_pair_opt(player, cursor, plan, std::move(flags), nullptr);
+	}
+
+	// Stage 121: the float64 tier only -- *exact tells whether the result is the
+	// exact one (the ladder accepted float64) or provisional (it would climb).
+	std::optional<TracePair> trace_pair_provisional(V2 player, V2 cursor, const std::vector<PlanItem> &plan, Flags flags, bool *exact) {
+		return trace_pair_opt(player, cursor, plan, std::move(flags), exact);
+	}
+
+private:
+	std::optional<TracePair> trace_pair_opt(V2 player, V2 cursor, const std::vector<PlanItem> &plan, Flags flags, bool *exact) {
+		if (exact != nullptr) {
+			*exact = true;
+		}
 		if (!ctx_ || !scene_supported(defs_)) {
 			return std::nullopt;
 		}
@@ -129,14 +143,18 @@ public:
 		// ghost is per shot: every trace starts solid
 		flags.erase(GHOST);
 		CacheKey key;
-		if (pair_cache_) {
+		if (pair_cache_ && exact == nullptr) {
 			key = CacheKey{player, cursor, plan_key(plan), flags.canonical_key()};
 			if (cache_valid_ && key == cache_key_) {
 				return cache_pair_;
 			}
 		}
 		Ladder ladder(*ctx_, clock_);
+		ladder.provisional = exact != nullptr;
 		LadderResult res = ladder.solve(player.x, player.y, cursor.x, cursor.y, plan, MAX_HITS, MAX_HITS, TRACE_TOL, false, flags);
+		if (exact != nullptr) {
+			*exact = !ladder.needed_climb;
+		}
 		if (res.planned.empty() || res.physical.empty() || !finite(res.planned) || !finite(res.physical)) {
 			return std::nullopt;
 		}
@@ -166,7 +184,7 @@ public:
 		pair.shared = shared;
 		pair.cursor_point_agrees = shared || cursor_point_agrees(pair.planned, pair.physical);
 		pair.result = std::move(res);
-		if (pair_cache_) {
+		if (pair_cache_ && exact == nullptr) {
 			cache_key_ = key;
 			cache_pair_ = pair;
 			cache_valid_ = true;
@@ -174,6 +192,7 @@ public:
 		return pair;
 	}
 
+public:
 	// Stage 110: one cast of the visibility region -- the ladder's planned and
 	// physical events for a float64 player and cursor, as trace_pair solves them
 	// (ghost erased, the same tolerance), without the display conversion or the

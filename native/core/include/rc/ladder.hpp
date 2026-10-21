@@ -241,6 +241,11 @@ private:
 
 class Ladder {
 public:
+	// Stage 121: a provisional solve stops at float64 -- a walk the ladder would
+	// climb returns its float64 events instead (not converged) and sets
+	// needed_climb; a walk accepted at float64 is the exact solve's, bit for bit.
+	bool provisional = false;
+	bool needed_climb = false;
 	// A clock for the usec fields (injectable: tests pass a constant one).
 	using Clock = std::function<long long()>;
 	static long long steady_usec() {
@@ -476,6 +481,16 @@ private:
 			st.over_tol++;
 		} else {
 			st.f64++;
+		}
+		if (provisional && !verify && !(reliable && worst(est) <= tol)) {
+			needed_climb = true;
+			Climb c;
+			c.f64_events = std::move(events);
+			c.err = est;
+			c.limbs = 0;
+			c.converged = false;
+			c.tried = {0};
+			return c;
 		}
 		if (reliable && worst(est) <= tol && !verify) {
 			Climb c;

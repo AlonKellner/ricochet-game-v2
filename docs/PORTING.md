@@ -97,6 +97,27 @@ The cursor is in world coordinates. If your camera moves, unproject the mouse fi
 Call `rc_game_advance(game, 0, 0, 0)` after events whose effect you want drawn before the next frame. The
 Godot host does this after every click and key.
 
+### Background work (C API 1.2)
+
+Create a live game with `rc_game_config.async = 1`. The frame then never waits for the solver: the
+visibility region and the preview's exact precision climbs are computed on the game's own threads.
+
+- **The region.** Until a newer region is ready, the frame draws the last one, and `frame.region_pending`
+  is 1. While the player keeps moving, a running region finishes and shows, a little behind the player,
+  while the newest one computes.
+- **The preview.** When float64 is not enough to decide the path exactly, the frame draws the float64 path
+  and `frame.preview_exact` is 0 until the exact path replaces it. The rules never read a provisional path:
+  the overlays, the spawn preview, the record and a fire use the exact one, and a fire waits for it.
+- **The click.** While the cursor rests on a plannable side and nothing else computes, the game computes the
+  region that side's click would make, so the click shows it at once.
+
+The flags are informational: a host may show a busy hint, or ignore them. Nothing else changes for the host,
+which still calls `rc_game_advance` every frame (that is when finished work is collected).
+
+`async = 0`, the default and an older host's config, computes everything inside the frame, in order. Use
+it to replay sessions: the session golden is recorded that way. An asynchronous game reaches the same record
+once its work is done, but not on a given frame.
+
 ### Coordinates
 
 - 1 unit = 1 pixel at zoom 1.
@@ -183,7 +204,11 @@ engine's log. The default writes to stderr.
 
 - Use one game from one thread at a time.
 - A parsed level is immutable and may be shared between games on any threads.
-- The library keeps no global state besides the log sink and the per-thread last error.
+- The library keeps no global state besides the log sink, the per-thread last error and a pool of compute
+  threads (the hardware threads but one) that the visibility region's casts share.
+- An asynchronous game (`async = 1`) owns up to three worker threads of its own. It calls back into
+  nothing: its results are taken on your thread in `rc_game_advance`. `rc_game_destroy` waits for its
+  running work, cancelling what it can.
 
 ## Verifying a port
 

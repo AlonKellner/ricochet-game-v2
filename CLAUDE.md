@@ -32,12 +32,15 @@ make check                      # every entry, ~18 s after the build
 make check AREA=vis             # solver | vis | goldens | sweeps | game | all
 make check TC="visibility digest" SKIP=0   # one doctest filter (--no-skip with SKIP=0)
 
+# Between commits: only the ctest entries a change can affect (the result cache, tools/gate_cache.py)
+make quick
+
 # Before every commit (core, oracle, ctest, the extension, the dumps/manifests current, the Python host,
-# the Godot host's suite, goldens unchanged; timed summary)
+# the Godot host's suite, goldens unchanged; through the result cache, redundant hosts sampled; timed summary)
 make gate
 SKIP_GODOT=1 make gate          # every engine-free gate (what a port runs)
 
-# Before a merge to main or a phase close: the same plus ASan+UBSan
+# Before a merge to main or a phase close: everything, uncached and unsampled, plus ASan+UBSan
 make gates
 
 # The pieces
@@ -87,3 +90,4 @@ record or fixture is a behaviour change: bring the evidence (the judge's report)
 - `docs/TDD_01_FOUNDATION.md` through `docs/TDD_08_EDITOR_AND_POLISH.md` — Stage-by-stage implementation guide (TDD_06 is history)
 - `docs/TDD_09_PRECISION_INTEGRATION.md` through `docs/TDD_19_FORK_RULE.md` — The beam solver, the native core, hit effects, crossings, spec import, visibility
 - `docs/TDD_20_ENGINE_AGNOSTIC_DATA.md` through `docs/TDD_24_ENGINE_SWITCH.md` — The engine-agnostic port
+- `docs/TDD_25_FRAME_COST.md` onward — Smoother frames: the measurement harness, asynchrony (`rcg/jobs.hpp`), presentation

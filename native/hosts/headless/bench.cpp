@@ -29,6 +29,7 @@
 #include <functional>
 #include <sstream>
 #include <string>
+#include <thread>
 #include <vector>
 
 namespace bench {
@@ -46,11 +47,15 @@ struct Options {
 	int click_frames = 10;
 	double budget_ms = 8.0;
 	bool strict = false; // a mean over the budget fails too
+	bool async = false;  // Stage 121: the live host's session (the region and climbs in the background)
+	bool prefetch = true; // (async) the hovered side's region computed while idle
+	double dwell_ms = -1; // (async) how long the cursor rests on a side before its click (< 0: until idle)
 };
 
 struct Row {
 	std::string name;
 	std::vector<double> ms;
+	std::vector<double> shown; // (async plan_click) ms from the click until its region shows
 	long long previews = 0, regions = 0, climbs = 0, region_climbs = 0;
 	long long unreliable = 0, over_tol = 0; // why the preview's walks climbed
 	std::string check; // empty: ok
@@ -84,7 +89,10 @@ std::string read(const fs::path &p) {
 
 std::vector<Row> run_level(const std::string &path, const Options &o) {
 	const rcg::Level level = rcg::load_level(path);
-	rcg::Session s(level);
+	rcg::SessionConfig cfg;
+	cfg.async = o.async;
+	cfg.prefetch = o.prefetch;
+	rcg::Session s(level, cfg);
 	const rc::V2 home = s.player();
 	const rc::V2 aim = home + rc::V2{300.0f, -100.0f};
 	// the plannable sides: 6 px off the middle of a surface, on its left
@@ -164,11 +172,28 @@ std::vector<Row> run_level(const std::string &path, const Options &o) {
 			s.key(rcg::Action::ClearPlan);
 			s.set_cursor(plannable[size_t(k) % plannable.size()]);
 			s.settle();
+			if (o.async) { // the cursor rests on the side (idle frames)
+				if (o.dwell_ms < 0) {
+					s.drain();
+				} else {
+					for (const auto d0 = clk::now(); std::chrono::duration<double, std::milli>(clk::now() - d0).count() < o.dwell_ms;) {
+						std::this_thread::sleep_for(std::chrono::milliseconds(1));
+						s.settle();
+					}
+				}
+			}
 			const auto t0 = clk::now();
 			s.click(false);
 			s.settle();
 			const std::vector<rcg::render::Node> list = s.draw();
 			r.ms.push_back(std::chrono::duration<double, std::milli>(clk::now() - t0).count());
+			if (o.async) { // then frames until the click's region shows
+				while (s.region_pending()) {
+					std::this_thread::sleep_for(std::chrono::microseconds(250));
+					s.settle();
+				}
+				r.shown.push_back(std::chrono::duration<double, std::milli>(clk::now() - t0).count());
+			}
 		}
 		r.previews = s.preview_version() - p0;
 		r.regions = s.visibility_version() - v0;
@@ -202,7 +227,8 @@ std::vector<Row> run_level(const std::string &path, const Options &o) {
 		const std::string text = read(path);
 		rc_level *lv = nullptr;
 		rc_game *g = nullptr;
-		if (rc_level_parse(text.data(), text.size(), &lv) == RC_OK && rc_game_create(lv, nullptr, &g) == RC_OK) {
+		const rc_game_config gc{sizeof(rc_game_config), -1, -1, o.async ? 1 : 0};
+		if (rc_level_parse(text.data(), text.size(), &lv) == RC_OK && rc_game_create(lv, &gc, &g) == RC_OK) {
 			rc_game_teleport(g, home.x, home.y);
 			rc_game_advance(g, 0.0, 0, 0);
 			for (int k = 0; k < n; k++) {
@@ -236,9 +262,14 @@ std::vector<Row> run_level(const std::string &path, const Options &o) {
 }
 
 json row_json(const Row &r) {
-	return {{"frames", r.ms.size()}, {"mean", mean(r.ms)}, {"p50", pct(r.ms, 0.5)}, {"p95", pct(r.ms, 0.95)}, {"p99", pct(r.ms, 0.99)},
+	json j = {{"frames", r.ms.size()}, {"mean", mean(r.ms)}, {"p50", pct(r.ms, 0.5)}, {"p95", pct(r.ms, 0.95)}, {"p99", pct(r.ms, 0.99)},
 		{"max", pct(r.ms, 1.0)}, {"previews", r.previews}, {"regions", r.regions}, {"climbs", r.climbs}, {"region_climbs", r.region_climbs},
 		{"unreliable", r.unreliable}, {"over_tol", r.over_tol}, {"check", r.check.empty() ? "ok" : r.check}};
+	if (!r.shown.empty()) {
+		j["shown_mean"] = mean(r.shown);
+		j["shown_max"] = pct(r.shown, 1.0);
+	}
+	return j;
 }
 
 void print_rows(const std::string &level, const std::vector<Row> &rows, double budget) {
@@ -249,6 +280,10 @@ void print_rows(const std::string &level, const std::vector<Row> &rows, double b
 			pct(r.ms, 0.99), pct(r.ms, 1.0), r.previews, r.regions, r.climbs, r.region_climbs, r.unreliable, r.over_tol,
 			mean(r.ms) > budget ? "(over budget) " : "",
 			r.check.empty() ? "" : ("FAIL: " + r.check).c_str());
+		if (!r.shown.empty()) {
+			std::printf("%-13s %8.3f %8.3f %8s %8.3f   (ms from the click until its region shows)\n", "  shown", mean(r.shown), pct(r.shown, 0.95), "",
+				pct(r.shown, 1.0));
+		}
 	}
 }
 
@@ -264,14 +299,20 @@ int run(std::vector<std::string> args) {
 			o.frames = std::stoi(args[i + 1]);
 		} else if (args[i] == "--click-frames" && value) {
 			o.click_frames = std::stoi(args[i + 1]);
+		} else if (args[i] == "--dwell" && value) {
+			o.dwell_ms = std::stod(args[i + 1]);
 		} else if (args[i] == "--budget" && value) {
 			o.budget_ms = std::stod(args[i + 1]);
 		} else if (args[i] == "--json" && value) {
 			json_out = args[i + 1];
 		} else if (args[i] == "--md" && value) {
 			md_out = args[i + 1];
-		} else if (args[i] == "--all" || args[i] == "--strict") {
-			(args[i] == "--all" ? all : o.strict) = true;
+		} else if (args[i] == "--all" || args[i] == "--strict" || args[i] == "--async") {
+			(args[i] == "--all" ? all : args[i] == "--strict" ? o.strict : o.async) = true;
+			args.erase(args.begin() + long(i));
+			continue;
+		} else if (args[i] == "--no-prefetch") {
+			o.prefetch = false;
 			args.erase(args.begin() + long(i));
 			continue;
 		} else {
@@ -282,7 +323,7 @@ int run(std::vector<std::string> args) {
 	}
 	if (args.size() != 1) {
 		std::fprintf(stderr, "usage: rc_tool bench (<level json> | --all <levels dir>) [--frames N] [--click-frames N] [--budget ms] "
-							 "[--strict] [--json out] [--md out]\n");
+							 "[--strict] [--async [--no-prefetch] [--dwell ms]] [--json out] [--md out]\n");
 		return 2;
 	}
 	std::vector<std::string> levels;

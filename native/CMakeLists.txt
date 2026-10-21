@@ -32,6 +32,15 @@ if(NOT DEFINED CMAKE_CXX_COMPILER_LAUNCHER)
     endif()
 endif()
 
+# A link is a function of its objects: macOS writes each object's mtime into the
+# binary's debug map; zeroed, relinking the same objects (a ccache hit after a
+# revert or a branch switch) gives the same bytes. The commit gate's result
+# cache keys on the binaries (tools/gate_cache.py).
+if(APPLE AND NOT DEFINED CMAKE_CXX_LINKER_LAUNCHER)
+    set(CMAKE_CXX_LINKER_LAUNCHER "${CMAKE_COMMAND};-E;env;ZERO_AR_DATE=1" CACHE STRING "linker launcher (deterministic links)")
+    set(CMAKE_C_LINKER_LAUNCHER "${CMAKE_COMMAND};-E;env;ZERO_AR_DATE=1" CACHE STRING "linker launcher (deterministic links)")
+endif()
+
 set(CMAKE_CXX_STANDARD 20)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
 set(CMAKE_CXX_EXTENSIONS OFF)
@@ -240,12 +249,16 @@ if(RC_BUILD_TESTS)
     target_compile_definitions(rcg_tests PRIVATE "RC_REPO_ROOT=\"${RC_REPO_ROOT}\"")
     rc_apply_flags(rcg_tests NO_CONVERSION)
     add_test(NAME rcg_tests COMMAND rcg_tests "--test-case-exclude=sessions:*")
-    # Stage 116.5: the native session against the session replay golden, in parts
-    set(RCG_SESSIONS_PARTS 6 CACHE STRING "ctest entries the session replay runs in")
-    math(EXPR RCG_SESSIONS_LAST "${RCG_SESSIONS_PARTS} - 1")
+    # Stage 116.5: the native session against the session replay golden, in parts;
+    # Stage 121: the asynchronous session, drained, in parts of its own (two
+    # hit_effects sessions are most of the cost: 12 parts keep them apart)
+    set(RCG_SESSION_SHARDS 12 CACHE STRING "ctest entries each session replay (sync, async) runs in")
+    math(EXPR RCG_SESSIONS_LAST "${RCG_SESSION_SHARDS} - 1")
     foreach(part RANGE ${RCG_SESSIONS_LAST})
-        add_test(NAME rcg_sessions_${part} COMMAND rcg_tests "--test-case=sessions:*")
-        set_tests_properties(rcg_sessions_${part} PROPERTIES ENVIRONMENT "RCG_SESSIONS_PART=${part}/${RCG_SESSIONS_PARTS}")
+        add_test(NAME rcg_sessions_${part} COMMAND rcg_tests "--test-case=sessions: every session*")
+        set_tests_properties(rcg_sessions_${part} PROPERTIES ENVIRONMENT "RCG_SESSIONS_PART=${part}/${RCG_SESSION_SHARDS}")
+        add_test(NAME rcg_sessions_async_${part} COMMAND rcg_tests "--test-case=sessions: the asynchronous*")
+        set_tests_properties(rcg_sessions_async_${part} PROPERTIES ENVIRONMENT "RCG_SESSIONS_PART=${part}/${RCG_SESSION_SHARDS}")
     endforeach()
     # Stage 118: the C API -- a C11 host compiles against rc_api.h and plays a
     # level; every session replayed through the C API equals the golden
@@ -256,11 +269,11 @@ if(RC_BUILD_TESTS)
     target_link_libraries(capi_c_smoke PRIVATE rc_capi_shared)
     target_compile_definitions(capi_c_smoke PRIVATE "RC_REPO_ROOT=\"${RC_REPO_ROOT}\"")
     add_test(NAME capi_c_smoke COMMAND capi_c_smoke)
-    set(CAPI_SESSIONS_PARTS 6 CACHE STRING "ctest entries the C API session replay runs in")
-    math(EXPR CAPI_SESSIONS_LAST "${CAPI_SESSIONS_PARTS} - 1")
+    set(CAPI_SESSION_SHARDS 12 CACHE STRING "ctest entries the C API session replay runs in")
+    math(EXPR CAPI_SESSIONS_LAST "${CAPI_SESSION_SHARDS} - 1")
     foreach(part RANGE ${CAPI_SESSIONS_LAST})
         add_test(NAME capi_sessions_${part} COMMAND rc_tool replay ${RC_REPO_ROOT}/data/sessions ${RC_REPO_ROOT}/data/levels
-                 --check ${RC_REPO_ROOT}/bench/sessions --shard ${part}/${CAPI_SESSIONS_PARTS})
+                 --check ${RC_REPO_ROOT}/bench/sessions --shard ${part}/${CAPI_SESSION_SHARDS})
     endforeach()
 
     # the level data is in its canonical spelling (rc_tool fmt)

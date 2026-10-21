@@ -1,12 +1,15 @@
 """Every session script played through the C API from Python equals the golden
-(bench/sessions): a host in another language reproduces the game bit for bit."""
+(bench/sessions): a host in another language reproduces the game bit for bit.
+RC_PYHOST_SESSION_STRIDE=n plays every n-th session (the commit gate: the C++
+host on the C API, ctest capi_sessions_*, plays them all; a merge plays all here too)."""
 import json
+import os
 
 import pytest
 
 import rc_host
 
-SESSIONS = sorted((rc_host.ROOT / "data" / "sessions").glob("*.json"))
+SESSIONS = sorted((rc_host.ROOT / "data" / "sessions").glob("*.json"))[:: int(os.environ.get("RC_PYHOST_SESSION_STRIDE", "1"))]
 
 
 @pytest.mark.parametrize("path", SESSIONS, ids=[p.stem for p in SESSIONS])

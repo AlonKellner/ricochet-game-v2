@@ -155,7 +155,7 @@ rc_status rc_game_create(const rc_level *level, const rc_game_config *config, rc
 			return fail(RC_E_ARGUMENT, "rc_game_create: null argument or unsized config");
 		}
 		*out = nullptr;
-		rc_game_config cfg{sizeof(rc_game_config), -1, -1};
+		rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0};
 		if (config != nullptr) {
 			std::memcpy(&cfg, config, std::min<size_t>(config->size, sizeof(rc_game_config)));
 		}
@@ -166,6 +166,7 @@ rc_status rc_game_create(const rc_level *level, const rc_game_config *config, rc
 		if (cfg.visibility >= 0) {
 			sc.visibility = cfg.visibility != 0;
 		}
+		sc.async = cfg.async != 0;
 		auto game = std::make_unique<rc_game>();
 		game->level = level->level;
 		game->session = std::make_unique<rcg::Session>(*game->level, sc);
@@ -269,6 +270,8 @@ rc_status rc_game_frame(const rc_game *game, rc_frame *out) {
 		f.display_mode = l.features.preview ? s.display_mode() : -1;
 		f.gravity_x = s.gravity().x;
 		f.gravity_y = s.gravity().y;
+		f.region_pending = s.region_pending() ? 1 : 0;
+		f.preview_exact = s.preview_exact() ? 1 : 0;
 		fill(out, f);
 		return RC_OK;
 	});

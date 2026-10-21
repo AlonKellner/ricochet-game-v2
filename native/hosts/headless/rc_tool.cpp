@@ -11,7 +11,8 @@
 //                                             engine's host): one record per step, as the golden
 //                                             (bench/sessions) holds them; --check: compare with the golden
 //                                             instead of writing; --full: the records hold the draw list
-//                                             itself, not its sha
+//                                             itself, not its sha; RC_SESSIONS_SAMPLE=n plays every n-th
+//                                             session (the commit gate, docs/WORKFLOW.md)
 //   rc_tool bench (<level json> | --all <levels dir>) [--frames N] [--click-frames N] [--budget ms]
 //                 [--strict] [--json out] [--md out]
 //                                             the game's per-frame cost (bench.cpp): phases still, cursor,
@@ -31,6 +32,7 @@
 
 #include <algorithm>
 #include <cstdio>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <iostream>
@@ -198,13 +200,14 @@ int replay(std::vector<std::string> args) {
 	}
 	const fs::path in = args[0], levels = args[1];
 	const fs::path out = check.empty() ? fs::path(args[2]) : fs::path();
-	int n = 0, differ = 0, index = -1;
+	int n = 0, differ = 0, index = -1, sampled = -1;
+	const int sample = std::getenv("RC_SESSIONS_SAMPLE") ? std::max(1, std::atoi(std::getenv("RC_SESSIONS_SAMPLE"))) : 1;
 	for (const fs::path &p : json_files({in.string()})) {
 		const std::string name = p.stem().string();
 		if (!only.empty() && name.find(only) == std::string::npos) {
 			continue;
 		}
-		if (++index % shards != shard) {
+		if (++sampled % sample != 0 || ++index % shards != shard) {
 			continue;
 		}
 		const json script = json::parse(read(p));

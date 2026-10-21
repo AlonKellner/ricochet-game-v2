@@ -24,7 +24,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: test run test-verbose frame-bench perf perf-diff oracle-test pyhost \
+.PHONY: quick gate-clear-cache test run test-verbose frame-bench perf perf-diff oracle-test pyhost \
 	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
 	sessions sessions-check godot-data
 
@@ -55,6 +55,14 @@ check_re_game := ^rcg|^capi
 check: core
 	@if [ -n "$(TC)" ]; then $(BUILD_CORE)/rc_tests -tc="$(TC)" $(if $(filter 0,$(SKIP)),--no-skip,); \
 	else $(CTEST) --test-dir $(BUILD_CORE) -j $(CTEST_JOBS) --output-on-failure -R '$(check_re_$(AREA))'; fi
+
+# Between commits: core, then every ctest entry a change can affect (the commit
+# gate's ctest: the result cache, tools/gate_cache.py; the sweeps at one player
+# in 4, the asynchronous and C API session replays every 4th session)
+quick: core
+	RC_SWEEPS_STRIDE=4 RC_SESSIONS_SAMPLE=4 python3 -I tools/gate_cache.py ctest $(BUILD_CORE) --jobs $(CTEST_JOBS) $(if $(AREA),--regex '$(check_re_$(AREA))',)
+gate-clear-cache:
+	python3 -I tools/gate_cache.py clear
 
 # The extension (RelWithDebInfo) loaded by Godot. The headless --import makes a
 # headless Godot discover it (.godot/extension_list.cfg); it runs when that file
@@ -93,12 +101,15 @@ native-debug:
 # level loops exercise the same regions.
 ASAN_SWEEP_STRIDE ?= 1
 ASAN_SWEEPS_STRIDE ?= 24
+# the asynchronous and C API session replays: every n-th session (the release
+# ctest of `make gates` plays them all; the synchronous replay plays all here)
+ASAN_SESSIONS_SAMPLE ?= 4
 native-asan:
 	$(CMAKE) -S native -B $(BUILD_ASAN) $(call gen,$(BUILD_ASAN)) -DCMAKE_BUILD_TYPE=Debug \
 		-DCMAKE_CXX_FLAGS_DEBUG="-g -O1" -DCMAKE_C_FLAGS_DEBUG="-g -O1" \
 		-DRC_SANITIZE=address,undefined -DRC_BUILD_EXTENSION=OFF -DRC_BUILD_TESTS=ON
 	$(CMAKE) --build $(BUILD_ASAN) -j $(JOBS)
-	RC_SWEEP_STRIDE=$(ASAN_SWEEP_STRIDE) RC_SWEEPS_STRIDE=$(ASAN_SWEEPS_STRIDE) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) \
+	RC_SWEEP_STRIDE=$(ASAN_SWEEP_STRIDE) RC_SWEEPS_STRIDE=$(ASAN_SWEEPS_STRIDE) RC_SESSIONS_SAMPLE=$(ASAN_SESSIONS_SAMPLE) $(CTEST) --test-dir $(BUILD_ASAN) -j $(CTEST_JOBS) \
 		--output-on-failure -E rc_tests_regions
 
 # the release ctest (build-core; `make core` first)

@@ -15,15 +15,52 @@ machine (6 performance, 6 efficiency cores) unless a row says otherwise.
 | The Godot host (`native/hosts/godot`, `engines/godot`; Stage 119) | the adapter | GUT (`engines/godot/tests`): the host's smoke test (layers, input, camera, errors, leaks) and the session golden played through Godot's InputEvents | Godot headless |
 | Game | the scenes (one `RicochetGame` each) | interactive sign-off per behavioural phase | Godot |
 
-## The three gates
+## The gates
 
 | Target | When | What | Time |
 |---|---|---|---|
-| `make check` | after every edit | `make core` (the `rc_tests` binary alone) then the ctest entries of an area: `AREA=all` (default) / `solver` / `vis` / `goldens` / `sweeps` / `game` (`rcg_*`, `capi_*`), or one doctest filter `TC="..."` (`SKIP=0` adds `--no-skip`) | 18–24 s for a core header change + the entries (all: 18 s) |
-| `make gate` | before every commit | `gates.sh LEVEL=commit`: core, oracle, ctest (release; the native sweeps at one player in 4), the extension build, the level dumps current (Stage 115), the manifests current, the Python host on the C API (`pyhost`, Stage 118, ~33 s), the Godot host's suite (~60 s), the goldens and the session golden unchanged; `SKIP_GODOT=1`: every engine-free gate (no extension, no Godot suite) | see below |
-| `make gates` | before a merge to main, at each phase close, and whenever a golden, a fixture or a dump changes | `LEVEL=merge`: the same with every sweep player, then ctest under ASan+UBSan | see below |
+| `make check` | after every edit | `make core` then the ctest entries of an area: `AREA=all` (default) / `solver` / `vis` / `goldens` / `sweeps` / `game` (`rcg_*`, `capi_*`), or one doctest filter `TC="..."` (`SKIP=0` adds `--no-skip`); no cache | an area's entries |
+| `make quick` | between commits | `make core`, then the commit gate's ctest through the result cache: only the entries a change can affect (`AREA=` narrows it) | 0.5 s unchanged; about 56 s after a game-layer change, 131 s after a core change (plus the rebuild) |
+| `make gate` | before every commit | `gates.sh LEVEL=commit`: core, oracle, the level dumps and the manifests current, then side by side: ctest (release; the native sweeps at one player in 4; the asynchronous and C API session replays every 4th session), the Python host on the C API (every 4th session), the extension build and the Godot host's suite; the goldens and the session golden unchanged. Through the result cache. `SKIP_GODOT=1`: every engine-free gate | see below |
+| `make gates` | before a merge to main, at each phase close, and whenever a golden, a fixture or a dump changes | `LEVEL=merge`: the same with every sweep player, every session in every host, and **no cache**; then ctest under ASan+UBSan | see below |
 
 Every gate runs even after a failure; the summary names the failed ones and the log directory.
+
+### The result cache (`tools/gate_cache.py`)
+
+A native test is a deterministic function of its binary, its command line, its environment and the repo data
+it reads. The commit gate (and `make quick`) skips a ctest entry when all of these hash the same as on a run
+where it passed:
+
+- the test binary, and the shared libraries of the build tree it links (`otool -L`);
+- its arguments and its ctest `ENVIRONMENT`, and every `RC_*`/`RCG_*` variable of the run (the strides);
+- `data/`, `bench/`, `tests/data/` and `docs/research/`: the index's blob ids, plus the content of every
+  edited or untracked file.
+
+`rc_tests` links only the core, so during game-layer work its sweeps, regions and goldens (about 85% of
+ctest's CPU) are not run again. A failed entry is never recorded. The last 8 passing keys of each entry are
+kept, so a revert or a switch back to a branch costs nothing. Links are deterministic for this:
+macOS records each object's mtime in a binary, and the build zeroes it (`ZERO_AR_DATE=1`, the linker
+launcher in `native/CMakeLists.txt`). Entries whose command is not a binary of the tree (the lints, the
+CMake scripts) always run.
+
+The Python host and the Godot suite are cached as whole steps on their inputs. The Godot suite's inputs at
+a commit are the host's: `engines/godot`, `native/hosts/godot`, `rc_api.h`, the data and the Godot binary.
+A game-only change is therefore checked through the C++ and Python hosts on the C API at a commit, and
+through all four hosts at a merge.
+
+The cache lives in `native/build-core/gate_cache.json`. `GATE_CACHE=0 make gate` ignores it, and
+`make gate-clear-cache` drops it. `make gates` never reads it: a merge runs everything.
+
+**What the commit level samples.** These are the redundant hosts of the same game, sampled for speed;
+`make gates` plays them all:
+
+- the asynchronous replay (`rcg_sessions_async_*`) and the C API replay (`capi_sessions_*`) play every 4th
+  session (`RC_SESSIONS_SAMPLE=4`);
+- the Python host plays every 4th session too (`RC_PYHOST_SESSION_STRIDE=4`).
+
+The synchronous native replay (`rcg_sessions_*`), the primary check of the session golden, plays all of
+them.
 
 ## The three build trees
 
@@ -75,6 +112,23 @@ The gates, measured on 2026-10-18 (the main branch; `gates.sh` prints the same t
 | `make gates` (merge), main before Stage 111 | 0–5 | 2 | 72–75 | 8 | 10 | 30 | 65 | 187 s |
 | `make gate` (commit), with Stage 111 | 0–5 | 2 | 68 | 28 | 11 | 48 | – | 157 s |
 | `make gates` (merge), with Stage 111 | 0–5 | 2 | 135 | 8 | 10 | 48 | 179 (with its rebuild) | 382 s |
+
+| `make gate` (commit), Stage 121 before the cache | 0 | 3 | 176 | 30 | 1 | 63 + pyhost 34 | – | 308 s |
+| `make gates` (merge), Stage 121 before the cache | 0 | 3 | 274 | 30 | 1 | 63 + pyhost 34 | 1197 | 1602 s |
+
+With the result cache and the side-by-side gates (2026-10-21, wall time):
+
+| Change since the last pass | `make gate` |
+|---|---|
+| nothing (docs, a re-run, a comment: the binaries are the same bytes) | 12 s |
+| game-layer code (`native/game`) | 86 s: the rebuild 17 s, then ctest 64 s (47 of 95 entries) beside the Python host and the extension's rebuild; the Godot suite cached |
+| a core header (`visibility.hpp`) | 229 s: the rebuild 45 s, then ctest 155 s (every entry) beside the extension and the Godot suite |
+| a revert of either | 12 s (every entry cached) |
+
+`make gates` (merge, uncached): 1042 s, from 1602 s. ctest runs 301 s beside the Python host (every session)
+and the Godot suite, then ASan takes 737 s (from 1197 s: the session replays in 12 shards, sync and async
+apart, with the asynchronous and C API replays sampled). ASan's longest entries are now the visibility sweeps'
+and levels' fourth parts (420 s, 330 s).
 
 Before the rework the one gate took 202–343 s per commit (GUT 76–96 s, since Stage 111 over 3 min).
 Stage 111's two-half regions cost about twice Stage 110's per visibility sweep (TDD_16, 111.6).
