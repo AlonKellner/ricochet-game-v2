@@ -247,6 +247,21 @@
      }
     },
     {
+     "kind": "origin",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "100.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {
+      "ghost": true
+     }
+    },
+    {
      "kind": "hit",
      "surface_id": 1,
      "side": "RIGHT",

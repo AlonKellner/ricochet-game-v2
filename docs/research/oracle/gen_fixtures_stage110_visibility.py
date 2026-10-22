@@ -17,6 +17,7 @@ Usage:
 Writes bench/fixtures/stage110_visibility.json.
 """
 import json
+import multiprocessing
 from fractions import Fraction
 import os
 import sys
@@ -140,6 +141,27 @@ def cursors(surfs, player, plan=(), extra=()):
 
 CANDIDATES = [(760.0, 400.0), (1200.0, 400.0), (950.0, 700.0), (650.0, 650.0), (1250.0, 700.0)]
 
+# Stage 131: a case's cursors are labelled in parallel -- each label is an
+# independent oracle trace; forked workers inherit the case (and the oracle's
+# precision), and the labels come back in order, so the file is the same as a
+# sequential run's. RC_REGEN_JOBS=1: sequential.
+JOBS = int(os.environ.get("RC_REGEN_JOBS", "0")) or (os.cpu_count() or 1)
+_JOB = None
+
+
+def _label(c):
+    sc, player, plan, hints = _JOB
+    return V.visible(sc, player, c, plan, None, hints)
+
+
+def labels(sc, player, plan, hints, cs):
+    global _JOB
+    _JOB = (sc, player, plan, hints)
+    if JOBS <= 1 or len(cs) < 2 * JOBS:
+        return [_label(c) for c in cs]
+    with multiprocessing.get_context("fork").Pool(JOBS) as pool:
+        return pool.map(_label, cs, chunksize=max(1, len(cs) // (JOBS * 4)))
+
 
 def planned_case(name, scene, plan, players=None, hints=None):
     """The case at the first candidate player from which the plan shows some cursors."""
@@ -175,8 +197,8 @@ def case(name, scene, player, plan, hints=None, extra=()):
     surfs = dump(scene)
     sc = T.scene_from_json(surfs)
     labelled = []
-    for c in cursors(surfs, player, plan, projective_cursors(sc, plan) + list(extra)):
-        v = V.visible(sc, player, c, plan, None, hints)
+    cs = cursors(surfs, player, plan, projective_cursors(sc, plan) + list(extra))
+    for c, v in zip(cs, labels(sc, player, plan, hints, cs)):
         if v is not None:
             labelled.append([c[0], c[1], bool(v)])
     entries = []

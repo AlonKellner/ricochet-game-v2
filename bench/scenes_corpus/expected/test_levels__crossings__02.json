@@ -122,6 +122,17 @@
    "y": "650.0000000000000000000000000000000000000"
   },
   {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1341.552101207901385552515237868587140154",
+   "y": "646.3755677632710897723789790366604167392"
+  },
+  {
    "kind": "hit",
    "surface_id": 19,
    "side": "RIGHT",
@@ -353,6 +364,193 @@
    "y": "-1736.560597524827017092725044449145908745"
   },
   {
+   "kind": "hit",
+   "surface_id": 2,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1700.000000000000000000000000000000000000",
+   "y": "-1667.785933095472986421082603381999239228"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 18,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1400.000000000000000000000000000000000000",
+   "y": "-1512.539231556797073646388068823232231200"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 13,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "750.0000000000000000000000000000000000000",
+   "y": "-669.5823868672478540136647294890169917142"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 15,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "666.4193218346951791054370451286601760790",
+   "y": "-217.1613563306096417891259097426796478420"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 5,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "671.9773774731115820196559079584890286771",
+   "y": "0.0"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 1,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "684.3580841946217655297238915149661177767",
+   "y": "100.0000000000000000000000000000000000000"
+  },
+  {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "710.0000000000000000000000000000000000000",
+   "y": "230.0000000000000000000000000000000000000"
+  },
+  {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "712.1691934858760404863940405081760492990",
+   "y": "238.9329783757162376945604222831340378332"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 14,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "714.9307581773027617250790631727813622083",
+   "y": "250.0000000000000000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 10,
+   "side": "LEFT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "737.3752206482565310198631525115485488763",
+   "y": "330.0000000000000000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 13,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "750.0000000000000000000000000000000000000",
+   "y": "369.1905341923849484608389178543882054590"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 11,
+   "side": "LEFT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "847.9249994392933387691939807618096162033",
+   "y": "600.0000000000000000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 15,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "973.2031125222082605035323800728791065055",
+   "y": "396.4062250444165210070647601457582130111"
+  },
+  {
+   "kind": "cursor",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1023.740783691406250000000000000000000000",
+   "y": "330.0103149414062500000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 10,
+   "side": "RIGHT",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1023.749060414701418589350275500838646743",
+   "y": "330.0000000000000000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 14,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1092.306984515992444503541735900679829743",
+   "y": "250.0000000000000000000000000000000000000"
+  },
+  {
+   "kind": "hit",
+   "surface_id": 16,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": false,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1097.288913411166616590486453387554602855",
+   "y": "255.4221731776667668190270932248907942895"
+  },
+  {
    "kind": "max",
    "surface_id": -1,
    "side": "",
@@ -360,8 +558,8 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "1700.000000000000000000000000000000000000",
-   "y": "-1667.785933095472986421082603381999239228"
+   "x": "1050.840877136890211451744942407499754371",
+   "y": "250.0000000000000000000000000000000000000"
   }
  ],
  "physical": [

@@ -79,3 +79,62 @@ TEST_CASE("region reports: crossings [17 L, western piece] -- a hit on the easte
 	s.settle();
 	CHECK(s.debug_summary().find("cursor: preview visible, region inside") != std::string::npos);
 }
+
+// The user's report (F12, 2026-10-22, Stage 131): on open_room_playable, the
+// mirror 5 planned; the path runs off the level through infinity and returns
+// to the cursor -- an unplanned infinity, so the paths diverge there (GAME_SPEC
+// 12.5) and the cursor beyond is not visible. Planned, the wrap is aligned.
+TEST_CASE("region reports: open_room_playable [5 L] -- an unplanned infinity before the cursor diverges") {
+	rcg::Session s(rcg::load_level((ROOT / "data" / "levels" / "open_room_playable.json").string()));
+	s.teleport(rc::V2::of(0x1.41aad8p+10, 0x1.9df5c2p+9));
+	rc::PlanItem it;
+	it.surface_id = 5;
+	it.left = true;
+	it.hint = rc::effects::F32Point{0x1.2ed0cp+10f, 0x1.3b1562p+9f};
+	s.set_plan({it});
+	REQUIRE(s.plan().size() == 1);
+	s.set_cursor(rc::V2::of(0x1.d97e42p+9, 0x1.f66e34p+9));
+	s.settle();
+	CHECK(s.debug_summary().find("cursor: preview not visible, region outside") != std::string::npos);
+	// the merged steps: aligned to the level's edge, diverged past the wrap
+	const std::vector<rc::TraceStep> &m = s.preview_steps();
+	REQUIRE(m.size() >= 6);
+	for (size_t i = 0; i < 5; i++) {
+		CHECK(m[i].type == rc::StepType::Aligned);
+	}
+	CHECK(m[5].type != rc::StepType::Aligned);
+	// control: infinity planned after the mirror, the wrap is the plan's
+	rc::PlanItem inf;
+	inf.surface_id = rc::INFINITY_ID;
+	inf.left = true;
+	s.set_plan({it, inf});
+	s.settle();
+	CHECK(s.debug_summary().find("cursor: preview visible, region inside") != std::string::npos);
+}
+
+// The user's report (F12, 2026-10-22, Stage 131): [5 L, inf] -- the wrap planned,
+// the beam comes back through the ray's origin, the player's image in the mirror
+// x = 1200, before the cursor: unplanned, a divergence there (GAME_SPEC 12.6)
+TEST_CASE("region reports: open_room_playable [5 L, inf] -- the player's image passed before the cursor diverges") {
+	rcg::Session s(rcg::load_level((ROOT / "data" / "levels" / "open_room_playable.json").string()));
+	s.teleport(rc::V2::of(0x1.7df8aep+10, 0x1.cef2e4p+9));
+	rc::PlanItem it;
+	it.surface_id = 5;
+	it.left = true;
+	it.hint = rc::effects::F32Point{0x1.2d906ap+10f, 0x1.36933ep+9f};
+	rc::PlanItem inf;
+	inf.surface_id = rc::INFINITY_ID;
+	inf.left = true;
+	inf.hint = rc::effects::F32Point{0x1.dc7f1p+10f, 0x1.90bdfep+4f};
+	s.set_plan({it, inf});
+	REQUIRE(s.plan().size() == 2);
+	s.set_cursor(rc::V2::of(0x1.d7fddcp+9, 0x1.b24de8p+9));
+	s.settle();
+	CHECK(s.debug_summary().find("cursor: preview not visible, region outside") != std::string::npos);
+	const std::vector<rc::TraceStep> &m = s.preview_steps();
+	REQUIRE(m.size() >= 12);
+	for (size_t i = 0; i < 11; i++) {
+		CHECK(m[i].type == rc::StepType::Aligned);
+	}
+	CHECK(m[11].type != rc::StepType::Aligned);
+}

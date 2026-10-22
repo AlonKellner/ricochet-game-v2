@@ -59,13 +59,17 @@ def main():
         ks = [e["kind"] for e in p["expected"]]
         assert ks[0] == "hit" and p["expected"][ks.index("infinity")]["applied"], kinds(p)
     # the cursor on the player's side with the wrap planned: passed with the
-    # entry pending, unreached
-    p = pair(fx, "mw_direct_side_infinity_pending", mw, player, (1000.0, 600.0), [(5, "LEFT"), INF], expect_reach=False)
+    # entry pending; Stage 131 (no loop detection): the planned walk meets it on
+    # a later loop, the physical one ends at the wall before it
+    p = pair(fx, "mw_direct_side_infinity_pending", mw, player, (1000.0, 600.0), [(5, "LEFT"), INF], expect_reach=True)
     assert [e["kind"] for e in p["expected"]][0] == "hit" and p["expected"][0]["applied"], kinds(p)
+    assert not reaches(fx[-1]), kinds(fx[-1])
     pair(fx, "mw_direct_side_unplanned", mw, player, (1000.0, 600.0), [(5, "LEFT")])
     # [inf, 5 L] from the reflective side: the aim is at the mirror; the planned
     # walk passes it (the wrap is next), the physical reflects: a divergence
-    p = pair(fx, "mw_infinity_before_mirror", mw, player, (480.5005, 524.9722), [INF, (5, "LEFT")], expect_reach=False)
+    # (Stage 131: the planned walk reaches the cursor on a later loop; the physical one never)
+    p = pair(fx, "mw_infinity_before_mirror", mw, player, (480.5005, 524.9722), [INF, (5, "LEFT")], expect_reach=True)
+    assert not reaches(fx[-1]), kinds(fx[-1])
     assert p["expected"][0]["surface_id"] == 5 and not p["expected"][0]["applied"], kinds(p)
     assert fx[-1]["expected"][0]["surface_id"] == 5 and fx[-1]["expected"][0]["applied"], kinds(fx[-1])
     # the mirror seen from its pass side: the only realization goes away,

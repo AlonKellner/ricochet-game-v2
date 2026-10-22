@@ -3,6 +3,7 @@ semantically (Workflow W3).
 
   make regen          # run every generator, compare, restore the files as they were
   make regen-apply    # the same, keeping the regenerated files whose content changed
+  (the generators run concurrently; RC_REGEN_JOBS=1 runs them one at a time)
   docs/research/.venv/bin/python docs/research/regen.py [--keep] [--only NAME...] [--all]
 
 Every gen_fixtures_*.py and gen_scene_corpus.py writes in place (bench/fixtures,
@@ -16,6 +17,7 @@ and stress corpus generators (gen_corpus.py, regen_bench_v2.py), normally left
 alone. Exit 0: nothing changed; 2: changes (see the report).
 """
 import argparse
+import concurrent.futures
 import decimal
 import filecmp
 import glob
@@ -33,6 +35,10 @@ ROOT = os.path.dirname(os.path.dirname(HERE))
 PY = sys.executable
 DIRS = ["bench/fixtures", "bench/scenes_corpus"]
 LEGACY = ["gen_corpus.py", "regen_bench_v2.py"]
+# the slowest first: they run concurrently (each writes its own files), and the
+# visibility generator labels its cursors on every core (RC_REGEN_JOBS)
+SLOW = ["gen_fixtures_stage110_visibility.py", "gen_scene_corpus.py"]
+JOBS = int(os.environ.get("RC_REGEN_JOBS", "0")) or (os.cpu_count() or 1)
 
 
 def generators(only, include_legacy):
@@ -104,19 +110,27 @@ def main():
     snap = tempfile.mkdtemp(prefix="ricochet_regen.")
     for d in DIRS:
         shutil.copytree(os.path.join(ROOT, d), os.path.join(snap, d))
-    timings = []
-    failed = []
-    for g in generators(args.only, args.all):
+    gens = generators(args.only, args.all)
+    gens.sort(key=lambda g: (g not in SLOW, SLOW.index(g) if g in SLOW else 0))
+
+    def run(g):
         t0 = time.time()
         r = subprocess.run([PY, "-I", os.path.join(ORACLE, g)], cwd=ROOT, capture_output=True, text=True)
-        timings.append((g, time.time() - t0, r.returncode))
-        if r.returncode != 0:
-            failed.append((g, r.stderr[-2000:]))
+        return g, time.time() - t0, r.returncode, r.stderr[-2000:]
+
+    t_all = time.time()
+    with concurrent.futures.ThreadPoolExecutor(max_workers=JOBS) as ex:
+        results = list(ex.map(run, gens))
+    results.sort(key=lambda r: r[0])
+    timings = [(g, t, rc) for g, t, rc, _ in results]
+    failed = [(g, err) for g, _, rc, err in results if rc != 0]
     lines = ["# Regeneration report", ""]
     lines.append("| generator | seconds | status |")
     lines.append("|---|---|---|")
     for g, t, rc in timings:
         lines.append("| %s | %.1f | %s |" % (g, t, "ok" if rc == 0 else "FAILED"))
+    lines.append("")
+    lines.append("wall: %.1f s (%d jobs)" % (time.time() - t_all, JOBS))
     lines.append("")
     any_change = False
     keep = []

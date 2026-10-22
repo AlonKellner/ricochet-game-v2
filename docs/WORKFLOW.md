@@ -194,7 +194,10 @@ a different spelling of the same value is no change), prints the report (identic
 changed cases per file / scenarios added and removed), and restores the files; `make regen-apply` keeps
 only the files whose content changed, so a blanket regeneration is safe to commit. `ONLY=stage111`
 narrows to one generator. On 2026-10-18 the 19 fixture files regenerate byte for byte and the corpus
-takes 13 s. A changed expectation is a behaviour change: the oracle changed, and the native tests
+takes 13 s. Since Stage 131 the generators run concurrently (each writes its own files; the slowest start
+first), and `gen_fixtures_stage110_visibility.py` labels each case's cursors on every core (a fork pool,
+order kept): the whole regeneration takes about 3 minutes instead of 22, byte for byte the same.
+`RC_REGEN_JOBS=1` runs it serially. A changed expectation is a behaviour change: the oracle changed, and the native tests
 (`test_corpus_oracle.cpp`, the fixture tests) say whether the kernel follows; bring it with the judge's
 report.
 

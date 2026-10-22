@@ -230,6 +230,17 @@
    "y": "578.2698891935968413592823293376201078221"
   },
   {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1196.826761846093054425293735960845527849",
+   "y": "596.9099690472778719708192946961788523745"
+  },
+  {
    "kind": "hit",
    "surface_id": 5,
    "side": "LEFT",

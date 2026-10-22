@@ -56,6 +56,17 @@
    "y": "611.3636363636363636363636363636363636364"
   },
   {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "531.9294367962167163813640450492651495088",
+   "y": "617.4235309405103555884788926635239722849"
+  },
+  {
    "kind": "hit",
    "surface_id": 8,
    "side": "LEFT",
@@ -199,6 +210,17 @@
    "y": "520.0978540088865939065232454848762265332"
   },
   {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "941.3077065737022287742497290895813082375",
+   "y": "520.8057180986097564235115770891522066064"
+  },
+  {
    "kind": "hit",
    "surface_id": 7,
    "side": "RIGHT",
@@ -232,12 +254,12 @@
    "y": "273.4924240875863068258321370813041135294"
   },
   {
-   "kind": "hit",
-   "surface_id": 1,
-   "side": "RIGHT",
-   "applied": true,
-   "terminal": true,
-   "on_segment": true,
+   "kind": "max",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
    "rehit": false,
    "x": "416.9368443263076152389248569053291689614",
    "y": "140.0000000000000000000000000000000000000"
@@ -300,6 +322,17 @@
    "y": "540.0000000000000000000000000000000000000"
   },
   {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "799.1400279086617541360739476390232629230",
+   "y": "596.0170577046578472897145437418099891216"
+  },
+  {
    "kind": "hit",
    "surface_id": 7,
    "side": "RIGHT",
@@ -353,6 +386,17 @@
    "rehit": false,
    "x": "796.7571989528795811518324607329842931937",
    "y": "563.3318335514834205933682373472949389180"
+  },
+  {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "762.8072367698346825849298126517437472339",
+   "y": "584.8699690810518308179508730516768885050"
   },
   {
    "kind": "hit",

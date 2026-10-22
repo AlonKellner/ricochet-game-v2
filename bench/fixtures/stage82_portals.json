@@ -346,314 +346,130 @@
      "y": "-12.50000000000000000000000000000000000000"
     },
     {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "RIGHT",
-     "applied": true,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": true,
-     "x": "400.0000000000000000000000000000000000000",
-     "y": "6.250000000000000000000000000000000000000"
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "400.0000000000000000000000000000000000000",
-     "y": "25.00000000000000000000000000000000000000"
-    },
-    {
-     "kind": "infinity",
-     "surface_id": -3,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 1,
-     "side": "RIGHT",
-     "applied": true,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": true,
-     "x": "100.0000000000000000000000000000000000000",
-     "y": "6.250000000000000000000000000000000000000"
-    },
-    {
-     "kind": "infinity",
-     "surface_id": -3,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 1,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "100.0000000000000000000000000000000000000",
-     "y": "-12.50000000000000000000000000000000000000"
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "RIGHT",
-     "applied": true,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": true,
-     "x": "400.0000000000000000000000000000000000000",
-     "y": "6.250000000000000000000000000000000000000"
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "400.0000000000000000000000000000000000000",
-     "y": "25.00000000000000000000000000000000000000"
-    },
-    {
-     "kind": "infinity",
-     "surface_id": -3,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 1,
-     "side": "RIGHT",
-     "applied": true,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": true,
-     "x": "100.0000000000000000000000000000000000000",
-     "y": "6.250000000000000000000000000000000000000"
-    },
-    {
-     "kind": "infinity",
-     "surface_id": -3,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 1,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "100.0000000000000000000000000000000000000",
-     "y": "-12.50000000000000000000000000000000000000"
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "RIGHT",
-     "applied": true,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": true,
-     "x": "400.0000000000000000000000000000000000000",
-     "y": "6.250000000000000000000000000000000000000"
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "400.0000000000000000000000000000000000000",
-     "y": "25.00000000000000000000000000000000000000"
-    },
-    {
-     "kind": "infinity",
-     "surface_id": -3,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 1,
-     "side": "RIGHT",
-     "applied": true,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": true,
-     "x": "100.0000000000000000000000000000000000000",
-     "y": "6.250000000000000000000000000000000000000"
-    },
-    {
-     "kind": "infinity",
-     "surface_id": -3,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 1,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "100.0000000000000000000000000000000000000",
-     "y": "-12.50000000000000000000000000000000000000"
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "RIGHT",
-     "applied": true,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": true,
-     "x": "400.0000000000000000000000000000000000000",
-     "y": "6.250000000000000000000000000000000000000"
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "400.0000000000000000000000000000000000000",
-     "y": "25.00000000000000000000000000000000000000"
-    },
-    {
-     "kind": "infinity",
-     "surface_id": -3,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 1,
-     "side": "RIGHT",
-     "applied": true,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": true,
-     "x": "100.0000000000000000000000000000000000000",
-     "y": "6.250000000000000000000000000000000000000"
-    },
-    {
-     "kind": "infinity",
-     "surface_id": -3,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 1,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "100.0000000000000000000000000000000000000",
-     "y": "-12.50000000000000000000000000000000000000"
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "RIGHT",
-     "applied": true,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": true,
-     "x": "400.0000000000000000000000000000000000000",
-     "y": "6.250000000000000000000000000000000000000"
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "400.0000000000000000000000000000000000000",
-     "y": "25.00000000000000000000000000000000000000"
-    },
-    {
-     "kind": "infinity",
-     "surface_id": -3,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 1,
-     "side": "RIGHT",
-     "applied": true,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": true,
-     "x": "100.0000000000000000000000000000000000000",
-     "y": "6.250000000000000000000000000000000000000"
-    },
-    {
-     "kind": "infinity",
-     "surface_id": -3,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false
-    },
-    {
-     "kind": "max",
+     "kind": "origin",
      "surface_id": -1,
      "side": "",
      "applied": false,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "0.0"
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": true,
+     "x": "400.0000000000000000000000000000000000000",
+     "y": "6.250000000000000000000000000000000000000"
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "400.0000000000000000000000000000000000000",
+     "y": "25.00000000000000000000000000000000000000"
+    },
+    {
+     "kind": "infinity",
+     "surface_id": -3,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false
+    },
+    {
+     "kind": "origin",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "0.0",
+     "y": "0.0"
+    },
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": true,
+     "x": "100.0000000000000000000000000000000000000",
+     "y": "6.250000000000000000000000000000000000000"
+    },
+    {
+     "kind": "infinity",
+     "surface_id": -3,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false
+    },
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
      "x": "100.0000000000000000000000000000000000000",
      "y": "-12.50000000000000000000000000000000000000"
+    },
+    {
+     "kind": "origin",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "0.0"
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": true,
+     "x": "400.0000000000000000000000000000000000000",
+     "y": "6.250000000000000000000000000000000000000"
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "400.0000000000000000000000000000000000000",
+     "y": "25.00000000000000000000000000000000000000"
+    },
+    {
+     "kind": "max",
+     "surface_id": -3,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false
     }
    ],
    "targets": []
@@ -1307,415 +1123,415 @@
    "surfaces": [
     {
      "circle": null,
+     "end": [
+      1360.0,
+      240.0
+     ],
+     "full": false,
      "id": 1,
+     "is_target": false,
+     "left": {
+      "interactive": false,
+      "type": "terminal"
+     },
+     "line": true,
+     "player_solid": true,
+     "right": {
+      "interactive": false,
+      "type": "terminal"
+     },
      "start": [
       560.0,
-      240.0
-     ],
-     "end": [
-      1360.0,
       240.0
      ],
      "via": [
       960.0,
       240.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": false,
-      "type": "terminal"
-     },
-     "right": {
-      "interactive": false,
-      "type": "terminal"
-     },
-     "is_target": false,
-     "player_solid": true
+     ]
     },
     {
      "circle": null,
+     "end": [
+      1360.0,
+      840.0
+     ],
+     "full": false,
      "id": 2,
-     "start": [
-      1360.0,
-      240.0
-     ],
-     "end": [
-      1360.0,
-      840.0
-     ],
-     "via": [
-      1360.0,
-      540.0
-     ],
-     "full": false,
-     "line": true,
+     "is_target": false,
      "left": {
       "interactive": false,
       "type": "terminal"
      },
+     "line": true,
+     "player_solid": true,
      "right": {
       "interactive": false,
       "type": "terminal"
      },
-     "is_target": false,
-     "player_solid": true
+     "start": [
+      1360.0,
+      240.0
+     ],
+     "via": [
+      1360.0,
+      540.0
+     ]
     },
     {
      "circle": null,
+     "end": [
+      560.0,
+      840.0
+     ],
+     "full": false,
      "id": 3,
+     "is_target": false,
+     "left": {
+      "interactive": false,
+      "type": "terminal"
+     },
+     "line": true,
+     "player_solid": true,
+     "right": {
+      "interactive": false,
+      "type": "terminal"
+     },
      "start": [
       1360.0,
       840.0
      ],
-     "end": [
-      560.0,
-      840.0
-     ],
      "via": [
       960.0,
       840.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": false,
-      "type": "terminal"
-     },
-     "right": {
-      "interactive": false,
-      "type": "terminal"
-     },
-     "is_target": false,
-     "player_solid": true
+     ]
     },
     {
      "circle": null,
-     "id": 4,
-     "start": [
-      560.0,
-      840.0
-     ],
      "end": [
       560.0,
       240.0
      ],
-     "via": [
-      560.0,
-      540.0
-     ],
      "full": false,
-     "line": true,
+     "id": 4,
+     "is_target": false,
      "left": {
       "interactive": false,
       "type": "terminal"
      },
+     "line": true,
+     "player_solid": true,
      "right": {
       "interactive": false,
       "type": "terminal"
      },
-     "is_target": false,
-     "player_solid": true
+     "start": [
+      560.0,
+      840.0
+     ],
+     "via": [
+      560.0,
+      540.0
+     ]
     },
     {
      "circle": null,
-     "id": 5,
-     "start": [
-      960.0,
-      280.0
-     ],
      "end": [
       960.0,
       380.0
      ],
+     "full": false,
+     "id": 5,
+     "is_target": false,
+     "left": {
+      "interactive": true,
+      "type": "reflection"
+     },
+     "line": true,
+     "player_solid": false,
+     "right": {
+      "interactive": true,
+      "type": "reflection"
+     },
+     "start": [
+      960.0,
+      280.0
+     ],
      "via": [
       960.0,
       330.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": true,
-      "type": "reflection"
-     },
-     "right": {
-      "interactive": true,
-      "type": "reflection"
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
+     "end": [
+      830.0,
+      740.0
+     ],
+     "full": false,
      "id": 6,
+     "is_target": false,
+     "left": {
+      "d": [
+       300.0,
+       0.0
+      ],
+      "interactive": true,
+      "pair": 7,
+      "theta": 0.0,
+      "type": "portal"
+     },
+     "line": true,
+     "player_solid": false,
+     "right": {
+      "d": [
+       300.0,
+       0.0
+      ],
+      "interactive": true,
+      "pair": 7,
+      "theta": 0.0,
+      "type": "portal"
+     },
      "start": [
       830.0,
       340.0
      ],
-     "end": [
-      830.0,
-      740.0
-     ],
      "via": [
       830.0,
       540.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       300.0,
-       0.0
-      ],
-      "pair": 7
-     },
-     "right": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       300.0,
-       0.0
-      ],
-      "pair": 7
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
+     "end": [
+      1130.0,
+      740.0
+     ],
+     "full": false,
      "id": 7,
+     "is_target": false,
+     "left": {
+      "d": [
+       -300.0,
+       -0.0
+      ],
+      "interactive": true,
+      "pair": 6,
+      "theta": -0.0,
+      "type": "portal"
+     },
+     "line": true,
+     "player_solid": false,
+     "right": {
+      "d": [
+       -300.0,
+       -0.0
+      ],
+      "interactive": true,
+      "pair": 6,
+      "theta": -0.0,
+      "type": "portal"
+     },
      "start": [
       1130.0,
       340.0
      ],
-     "end": [
-      1130.0,
-      740.0
-     ],
      "via": [
       1130.0,
       540.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       -300.0,
-       0.0
-      ],
-      "pair": 6
-     },
-     "right": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       -300.0,
-       0.0
-      ],
-      "pair": 6
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
-     "id": 8,
-     "start": [
-      700.0,
-      350.0
-     ],
      "end": [
       700.0,
       530.0
+     ],
+     "full": false,
+     "id": 8,
+     "is_target": false,
+     "left": {
+      "d": [
+       550.0,
+       0.0
+      ],
+      "interactive": true,
+      "pair": 9,
+      "theta": 0.0,
+      "type": "portal"
+     },
+     "line": false,
+     "player_solid": false,
+     "right": {
+      "d": [
+       550.0,
+       0.0
+      ],
+      "interactive": true,
+      "pair": 9,
+      "theta": 0.0,
+      "type": "portal"
+     },
+     "start": [
+      700.0,
+      350.0
      ],
      "via": [
       640.0,
       440.0
-     ],
-     "full": false,
-     "line": false,
-     "left": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       550.0,
-       0.0
-      ],
-      "pair": 9
-     },
-     "right": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       550.0,
-       0.0
-      ],
-      "pair": 9
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
-     "id": 9,
-     "start": [
-      1250.0,
-      350.0
-     ],
      "end": [
       1250.0,
       530.0
      ],
+     "full": false,
+     "id": 9,
+     "is_target": false,
+     "left": {
+      "d": [
+       -550.0,
+       -0.0
+      ],
+      "interactive": true,
+      "pair": 8,
+      "theta": -0.0,
+      "type": "portal"
+     },
+     "line": false,
+     "player_solid": false,
+     "right": {
+      "d": [
+       -550.0,
+       -0.0
+      ],
+      "interactive": true,
+      "pair": 8,
+      "theta": -0.0,
+      "type": "portal"
+     },
+     "start": [
+      1250.0,
+      350.0
+     ],
      "via": [
       1190.0,
       440.0
-     ],
-     "full": false,
-     "line": false,
-     "left": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       -550.0,
-       0.0
-      ],
-      "pair": 8
-     },
-     "right": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       -550.0,
-       0.0
-      ],
-      "pair": 8
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
+     "end": [
+      1920.0,
+      0.0
+     ],
+     "full": false,
      "id": 10,
+     "is_target": false,
+     "left": {
+      "interactive": false,
+      "type": "pass"
+     },
+     "line": true,
+     "player_solid": false,
+     "right": {
+      "interactive": false,
+      "type": "pass"
+     },
      "start": [
       0.0,
-      0.0
-     ],
-     "end": [
-      1920.0,
       0.0
      ],
      "via": [
       960.0,
       0.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": false,
-      "type": "pass"
-     },
-     "right": {
-      "interactive": false,
-      "type": "pass"
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
+     "end": [
+      1920.0,
+      1080.0
+     ],
+     "full": false,
      "id": 11,
-     "start": [
-      1920.0,
-      0.0
-     ],
-     "end": [
-      1920.0,
-      1080.0
-     ],
-     "via": [
-      1920.0,
-      540.0
-     ],
-     "full": false,
-     "line": true,
+     "is_target": false,
      "left": {
       "interactive": false,
       "type": "pass"
      },
+     "line": true,
+     "player_solid": false,
      "right": {
       "interactive": false,
       "type": "pass"
      },
-     "is_target": false,
-     "player_solid": false
+     "start": [
+      1920.0,
+      0.0
+     ],
+     "via": [
+      1920.0,
+      540.0
+     ]
     },
     {
      "circle": null,
-     "id": 12,
-     "start": [
-      1920.0,
-      1080.0
-     ],
      "end": [
       0.0,
+      1080.0
+     ],
+     "full": false,
+     "id": 12,
+     "is_target": false,
+     "left": {
+      "interactive": false,
+      "type": "pass"
+     },
+     "line": true,
+     "player_solid": false,
+     "right": {
+      "interactive": false,
+      "type": "pass"
+     },
+     "start": [
+      1920.0,
       1080.0
      ],
      "via": [
       960.0,
       1080.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": false,
-      "type": "pass"
-     },
-     "right": {
-      "interactive": false,
-      "type": "pass"
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
-     "id": 13,
-     "start": [
-      0.0,
-      1080.0
-     ],
      "end": [
       0.0,
       0.0
      ],
-     "via": [
-      0.0,
-      540.0
-     ],
      "full": false,
-     "line": true,
+     "id": 13,
+     "is_target": false,
      "left": {
       "interactive": false,
       "type": "pass"
      },
+     "line": true,
+     "player_solid": false,
      "right": {
       "interactive": false,
       "type": "pass"
      },
-     "is_target": false,
-     "player_solid": false
+     "start": [
+      0.0,
+      1080.0
+     ],
+     "via": [
+      0.0,
+      540.0
+     ]
     }
    ],
    "player": [
@@ -1787,415 +1603,415 @@
    "surfaces": [
     {
      "circle": null,
+     "end": [
+      1360.0,
+      240.0
+     ],
+     "full": false,
      "id": 1,
+     "is_target": false,
+     "left": {
+      "interactive": false,
+      "type": "terminal"
+     },
+     "line": true,
+     "player_solid": true,
+     "right": {
+      "interactive": false,
+      "type": "terminal"
+     },
      "start": [
       560.0,
-      240.0
-     ],
-     "end": [
-      1360.0,
       240.0
      ],
      "via": [
       960.0,
       240.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": false,
-      "type": "terminal"
-     },
-     "right": {
-      "interactive": false,
-      "type": "terminal"
-     },
-     "is_target": false,
-     "player_solid": true
+     ]
     },
     {
      "circle": null,
+     "end": [
+      1360.0,
+      840.0
+     ],
+     "full": false,
      "id": 2,
-     "start": [
-      1360.0,
-      240.0
-     ],
-     "end": [
-      1360.0,
-      840.0
-     ],
-     "via": [
-      1360.0,
-      540.0
-     ],
-     "full": false,
-     "line": true,
+     "is_target": false,
      "left": {
       "interactive": false,
       "type": "terminal"
      },
+     "line": true,
+     "player_solid": true,
      "right": {
       "interactive": false,
       "type": "terminal"
      },
-     "is_target": false,
-     "player_solid": true
+     "start": [
+      1360.0,
+      240.0
+     ],
+     "via": [
+      1360.0,
+      540.0
+     ]
     },
     {
      "circle": null,
+     "end": [
+      560.0,
+      840.0
+     ],
+     "full": false,
      "id": 3,
+     "is_target": false,
+     "left": {
+      "interactive": false,
+      "type": "terminal"
+     },
+     "line": true,
+     "player_solid": true,
+     "right": {
+      "interactive": false,
+      "type": "terminal"
+     },
      "start": [
       1360.0,
       840.0
      ],
-     "end": [
-      560.0,
-      840.0
-     ],
      "via": [
       960.0,
       840.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": false,
-      "type": "terminal"
-     },
-     "right": {
-      "interactive": false,
-      "type": "terminal"
-     },
-     "is_target": false,
-     "player_solid": true
+     ]
     },
     {
      "circle": null,
-     "id": 4,
-     "start": [
-      560.0,
-      840.0
-     ],
      "end": [
       560.0,
       240.0
      ],
-     "via": [
-      560.0,
-      540.0
-     ],
      "full": false,
-     "line": true,
+     "id": 4,
+     "is_target": false,
      "left": {
       "interactive": false,
       "type": "terminal"
      },
+     "line": true,
+     "player_solid": true,
      "right": {
       "interactive": false,
       "type": "terminal"
      },
-     "is_target": false,
-     "player_solid": true
+     "start": [
+      560.0,
+      840.0
+     ],
+     "via": [
+      560.0,
+      540.0
+     ]
     },
     {
      "circle": null,
-     "id": 5,
-     "start": [
-      960.0,
-      280.0
-     ],
      "end": [
       960.0,
       380.0
      ],
+     "full": false,
+     "id": 5,
+     "is_target": false,
+     "left": {
+      "interactive": true,
+      "type": "reflection"
+     },
+     "line": true,
+     "player_solid": false,
+     "right": {
+      "interactive": true,
+      "type": "reflection"
+     },
+     "start": [
+      960.0,
+      280.0
+     ],
      "via": [
       960.0,
       330.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": true,
-      "type": "reflection"
-     },
-     "right": {
-      "interactive": true,
-      "type": "reflection"
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
+     "end": [
+      830.0,
+      740.0
+     ],
+     "full": false,
      "id": 6,
+     "is_target": false,
+     "left": {
+      "d": [
+       300.0,
+       0.0
+      ],
+      "interactive": true,
+      "pair": 7,
+      "theta": 0.0,
+      "type": "portal"
+     },
+     "line": true,
+     "player_solid": false,
+     "right": {
+      "d": [
+       300.0,
+       0.0
+      ],
+      "interactive": true,
+      "pair": 7,
+      "theta": 0.0,
+      "type": "portal"
+     },
      "start": [
       830.0,
       340.0
      ],
-     "end": [
-      830.0,
-      740.0
-     ],
      "via": [
       830.0,
       540.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       300.0,
-       0.0
-      ],
-      "pair": 7
-     },
-     "right": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       300.0,
-       0.0
-      ],
-      "pair": 7
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
+     "end": [
+      1130.0,
+      740.0
+     ],
+     "full": false,
      "id": 7,
+     "is_target": false,
+     "left": {
+      "d": [
+       -300.0,
+       -0.0
+      ],
+      "interactive": true,
+      "pair": 6,
+      "theta": -0.0,
+      "type": "portal"
+     },
+     "line": true,
+     "player_solid": false,
+     "right": {
+      "d": [
+       -300.0,
+       -0.0
+      ],
+      "interactive": true,
+      "pair": 6,
+      "theta": -0.0,
+      "type": "portal"
+     },
      "start": [
       1130.0,
       340.0
      ],
-     "end": [
-      1130.0,
-      740.0
-     ],
      "via": [
       1130.0,
       540.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       -300.0,
-       0.0
-      ],
-      "pair": 6
-     },
-     "right": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       -300.0,
-       0.0
-      ],
-      "pair": 6
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
-     "id": 8,
-     "start": [
-      700.0,
-      350.0
-     ],
      "end": [
       700.0,
       530.0
+     ],
+     "full": false,
+     "id": 8,
+     "is_target": false,
+     "left": {
+      "d": [
+       550.0,
+       0.0
+      ],
+      "interactive": true,
+      "pair": 9,
+      "theta": 0.0,
+      "type": "portal"
+     },
+     "line": false,
+     "player_solid": false,
+     "right": {
+      "d": [
+       550.0,
+       0.0
+      ],
+      "interactive": true,
+      "pair": 9,
+      "theta": 0.0,
+      "type": "portal"
+     },
+     "start": [
+      700.0,
+      350.0
      ],
      "via": [
       640.0,
       440.0
-     ],
-     "full": false,
-     "line": false,
-     "left": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       550.0,
-       0.0
-      ],
-      "pair": 9
-     },
-     "right": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       550.0,
-       0.0
-      ],
-      "pair": 9
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
-     "id": 9,
-     "start": [
-      1250.0,
-      350.0
-     ],
      "end": [
       1250.0,
       530.0
      ],
+     "full": false,
+     "id": 9,
+     "is_target": false,
+     "left": {
+      "d": [
+       -550.0,
+       -0.0
+      ],
+      "interactive": true,
+      "pair": 8,
+      "theta": -0.0,
+      "type": "portal"
+     },
+     "line": false,
+     "player_solid": false,
+     "right": {
+      "d": [
+       -550.0,
+       -0.0
+      ],
+      "interactive": true,
+      "pair": 8,
+      "theta": -0.0,
+      "type": "portal"
+     },
+     "start": [
+      1250.0,
+      350.0
+     ],
      "via": [
       1190.0,
       440.0
-     ],
-     "full": false,
-     "line": false,
-     "left": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       -550.0,
-       0.0
-      ],
-      "pair": 8
-     },
-     "right": {
-      "interactive": true,
-      "type": "portal",
-      "theta": 0.0,
-      "d": [
-       -550.0,
-       0.0
-      ],
-      "pair": 8
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
+     "end": [
+      1920.0,
+      0.0
+     ],
+     "full": false,
      "id": 10,
+     "is_target": false,
+     "left": {
+      "interactive": false,
+      "type": "pass"
+     },
+     "line": true,
+     "player_solid": false,
+     "right": {
+      "interactive": false,
+      "type": "pass"
+     },
      "start": [
       0.0,
-      0.0
-     ],
-     "end": [
-      1920.0,
       0.0
      ],
      "via": [
       960.0,
       0.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": false,
-      "type": "pass"
-     },
-     "right": {
-      "interactive": false,
-      "type": "pass"
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
+     "end": [
+      1920.0,
+      1080.0
+     ],
+     "full": false,
      "id": 11,
-     "start": [
-      1920.0,
-      0.0
-     ],
-     "end": [
-      1920.0,
-      1080.0
-     ],
-     "via": [
-      1920.0,
-      540.0
-     ],
-     "full": false,
-     "line": true,
+     "is_target": false,
      "left": {
       "interactive": false,
       "type": "pass"
      },
+     "line": true,
+     "player_solid": false,
      "right": {
       "interactive": false,
       "type": "pass"
      },
-     "is_target": false,
-     "player_solid": false
+     "start": [
+      1920.0,
+      0.0
+     ],
+     "via": [
+      1920.0,
+      540.0
+     ]
     },
     {
      "circle": null,
-     "id": 12,
-     "start": [
-      1920.0,
-      1080.0
-     ],
      "end": [
       0.0,
+      1080.0
+     ],
+     "full": false,
+     "id": 12,
+     "is_target": false,
+     "left": {
+      "interactive": false,
+      "type": "pass"
+     },
+     "line": true,
+     "player_solid": false,
+     "right": {
+      "interactive": false,
+      "type": "pass"
+     },
+     "start": [
+      1920.0,
       1080.0
      ],
      "via": [
       960.0,
       1080.0
-     ],
-     "full": false,
-     "line": true,
-     "left": {
-      "interactive": false,
-      "type": "pass"
-     },
-     "right": {
-      "interactive": false,
-      "type": "pass"
-     },
-     "is_target": false,
-     "player_solid": false
+     ]
     },
     {
      "circle": null,
-     "id": 13,
-     "start": [
-      0.0,
-      1080.0
-     ],
      "end": [
       0.0,
       0.0
      ],
-     "via": [
-      0.0,
-      540.0
-     ],
      "full": false,
-     "line": true,
+     "id": 13,
+     "is_target": false,
      "left": {
       "interactive": false,
       "type": "pass"
      },
+     "line": true,
+     "player_solid": false,
      "right": {
       "interactive": false,
       "type": "pass"
      },
-     "is_target": false,
-     "player_solid": false
+     "start": [
+      0.0,
+      1080.0
+     ],
+     "via": [
+      0.0,
+      540.0
+     ]
     }
    ],
    "player": [

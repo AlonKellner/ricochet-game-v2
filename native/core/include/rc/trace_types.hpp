@@ -150,6 +150,9 @@ struct TraceStep {
 	bool hit_on_segment = false;
 	bool after_portal = false;
 	bool ghost = false;
+	bool significant = false; // Stage 131: it ends at a significant event (an applied effect, a firing state change, a passage of infinity)
+	bool after_infinity = false; // Stage 131: it starts at a passage of infinity (the incoming half of a wrap)
+	bool teleports = false;      // Stage 131: it ends at a portal's entry (the next drawn step is after_portal)
 	double est_error = -1.0;
 	int precision_bits = 0;
 
@@ -181,6 +184,9 @@ struct TraceStep {
 		est_error = o.est_error;
 		precision_bits = o.precision_bits;
 		ghost = o.ghost;
+		significant = o.significant;
+		after_infinity = o.after_infinity;
+		teleports = o.teleports;
 	}
 };
 
