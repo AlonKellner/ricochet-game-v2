@@ -12,7 +12,7 @@ structural change".
 | 128.0 | The planned walk resumed from the physical one: studied, not bit-exact (no change) | Done |
 | 128.1 | A cast without contention: walks allocate less, the region memo sharded (results unchanged) | Done |
 | 128.2 | A cast's two walks share their exact start in a pre-transform frame (results unchanged) | Done |
-| 128.3 | Docs, `make gates`, sign-off | Pending |
+| 128.3 | Docs, `make gates`, sign-off | Done (user, 2026-10-22) |
 | 128.4 | The F12 debug dump restored natively (C API 1.5 `rc_game_debug_dump`): a summary printed, the full dump saved | Done |
 | 128.5 | A tiny arc on a known circle drawn the long way round: the disc of crossings' mirror circle in the region (the user's F12 report) | Done |
 
