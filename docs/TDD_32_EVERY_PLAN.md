@@ -11,7 +11,7 @@ flight's dimming).
 |---|---|---|
 | 127.0 | Every plannable side of every level measured | Done |
 | 127.1 | No casts in a gap outside the plan's reach; side and mid casts do not read their cursor; walks end within a step (results unchanged) | Done |
-| 127.2 | Docs, `make gates`, sign-off | In progress |
+| 127.2 | Docs, `make gates`, sign-off | Done (user, 2026-10-22) |
 
 ## 127.0 Every plan measured
 
