@@ -25,7 +25,7 @@ Was there no loop detection to stop it where it came back through the player? Th
 | 131.2 | Event marks: ringed dots, small dots, half rings at the bounds and at portals, side by side | Done |
 | 131.3 | An unplanned passage of infinity before the cursor diverges; the region stops there | Done |
 | 131.4 | The ray's origin: the player's image (a circle normal's centre), a candidate; unplanned, a divergence | Done |
-| 131.5 | Regeneration on every core; goldens judged and re-blessed (approved); docs; `make gates`; sign-off | Sign-off pending |
+| 131.5 | Regeneration on every core; goldens judged and re-blessed (approved); docs; `make gates`; sign-off | Done (user, 2026-10-22) |
 
 ## 131.1 The limits
 
@@ -110,3 +110,10 @@ cursor in turn.
 | `region reports` (rcg_tests) | the user's two dumps and the control |
 | `test_present.cpp` | the marks: significant and other, wrap and portal half rings, side by side |
 | `test_infinity.cpp` | the switch on against the switch off: insertions (infinity and origin passages), wraps past an escape, earlier cuts (47 / 86 / 12 / 9) |
+
+## After a line normal or directional projection
+
+The user asked whether the origin there could be infinity, by analogy with the circle normal's centre. It could be
+represented: the origin only marks where a passage is an event, while the beam keeps its departure and direction.
+The game's infinity is one point that every line passes, so this would only move which passage counts, and the
+wrap already counts. The origin stays at the departure: the projection starts a new ray there.
