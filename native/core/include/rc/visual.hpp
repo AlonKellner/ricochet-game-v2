@@ -568,8 +568,15 @@ inline std::array<V2, 3> chevron_vertices(const V2 &tip, const V2 &direction, do
 // drawing's dashes, as segment pairs [a0, b0, a1, b1, ...]). The arc's points
 // are float64 on the float32 center, rounded to float32; the line's dashes run
 // along the direction over the capped length (as the GDScript original).
+// Stage 130: phase (px) moves the pattern forward along the stroke (the path
+// preview's dashes run the way the arrow flies); 0 is the original pattern.
+inline double dash_start(double phase, double period) {
+	const double m = std::fmod(phase, period);
+	return (m < 0.0 ? m + period : m) - period;
+}
+
 inline std::vector<V2> dash_arc(const V2 &center, double radius, double start_angle, double end_angle, int point_count, double dash_on,
-		double dash_off, double max_len) {
+		double dash_off, double max_len, double phase = 0.0) {
 	std::vector<V2> pts;
 	const double span = end_angle - start_angle;
 	const double total_len = std::min(radius * std::abs(span), max_len);
@@ -578,6 +585,28 @@ inline std::vector<V2> dash_arc(const V2 &center, double radius, double start_an
 	}
 	const double cx = center.x;
 	const double cy = center.y;
+	if (phase != 0.0) {
+		auto dash = [&](double d0, double d1) {
+			const double a0 = start_angle + (d0 / total_len) * span;
+			const double a1 = start_angle + (d1 / total_len) * span;
+			const int seg_points = std::max(2, int(point_count * (d1 - d0) / total_len));
+			V2 prev = V2::of(cx + std::cos(a0) * radius, cy + std::sin(a0) * radius);
+			for (int k = 1; k < seg_points; k++) {
+				const double th = a0 + (k / (seg_points - 1.0)) * (a1 - a0);
+				const V2 q = V2::of(cx + std::cos(th) * radius, cy + std::sin(th) * radius);
+				pts.push_back(prev);
+				pts.push_back(q);
+				prev = q;
+			}
+		};
+		for (double s0 = dash_start(phase, dash_on + dash_off); s0 < total_len; s0 += dash_on + dash_off) {
+			const double d0 = std::max(s0, 0.0), d1 = std::min(s0 + dash_on, total_len);
+			if (d1 > d0) {
+				dash(d0, d1);
+			}
+		}
+		return pts;
+	}
 	double drawn = 0.0;
 	bool on = true;
 	while (drawn < total_len) {
@@ -601,7 +630,7 @@ inline std::vector<V2> dash_arc(const V2 &center, double radius, double start_an
 	return pts;
 }
 
-inline std::vector<V2> dash_line(const V2 &from, const V2 &to, double dash_on, double dash_off, double max_len) {
+inline std::vector<V2> dash_line(const V2 &from, const V2 &to, double dash_on, double dash_off, double max_len, double phase = 0.0) {
 	std::vector<V2> pts;
 	const double dx = double(to.x) - double(from.x);
 	const double dy = double(to.y) - double(from.y);
@@ -611,6 +640,16 @@ inline std::vector<V2> dash_line(const V2 &from, const V2 &to, double dash_on, d
 	}
 	const double ux = dx / total_len;
 	const double uy = dy / total_len;
+	if (phase != 0.0) {
+		for (double s0 = dash_start(phase, dash_on + dash_off); s0 < total_len; s0 += dash_on + dash_off) {
+			const double d0 = std::max(s0, 0.0), d1 = std::min(s0 + dash_on, total_len);
+			if (d1 > d0) {
+				pts.push_back(V2::of(from.x + ux * d0, from.y + uy * d0));
+				pts.push_back(V2::of(from.x + ux * d1, from.y + uy * d1));
+			}
+		}
+		return pts;
+	}
 	double drawn = 0.0;
 	bool on = true;
 	while (drawn < total_len) {

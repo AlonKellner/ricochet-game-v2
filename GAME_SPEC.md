@@ -257,6 +257,11 @@ The preview draws the step tree (§14). Each step has one of five types, each wi
 | **DIVERGED_PLANNED** | Red | Solid | Where the plan says the arrow should go, but the physical arrow diverged. |
 | **DIVERGED_POST_PLANNED** | Red | Dashed | Post-cursor continuation of the planned path, after divergence. |
 
+**The look** (Stage 130, the user, 2026-10-22):
+- A **solid** step is a slightly dark stroke (green `#00B300`, red `#B30000`) with a slightly bright dashed stroke over it (`#80FF80`, `#FF8080`).
+- **Dashes run** along the way the arrow flies (start to end of each step), about 30 px per second. They are presentation only: a replay draws them still.
+- **Steps drawn on one another are set side by side.** Two steps of the preview on one carrier (the same line, or the same circle, to half a pixel) that run together for more than 2 px are drawn on one another: the same step either way round, or steps with different ends (the planned path cut at the cursor while the physical one runs on to its next hit). Such steps form groups, transitively, and each group is drawn in two lanes 3.5 px apart (a 1.5 px margin between 2 px strokes): the planned path's steps on the left of the group's first step's way, the physical path's on the right. A line moves along its normal, and an arc moves to a larger or smaller radius on its circle. A whole step moves, so each path stays joined along the carrier. A path that runs on itself (a step and its way back) is spread the same way. Sections of different carriers that cross or lie close are drawn as they are, for now.
+
 **Visual invariants:**
 - A **solid path** always leads from the player to the cursor — this is the plan's intended route.
 - A **dashed path** always shows post-cursor continuation (what happens after the planned endpoint).
@@ -2028,11 +2033,13 @@ Target surfaces display their effect color on each side plus a **gold outline** 
 
 | Step type | Color | Style |
 |-----------|-------|-------|
-| ALIGNED | Green | Solid |
+| ALIGNED | Green | Solid (dark, with bright dashes over it; §4.3) |
 | ALIGNED_POST_PLANNED | Green | Dashed |
 | DIVERGED_PHYSICAL | Yellow | Dashed |
-| DIVERGED_PLANNED | Red | Solid |
+| DIVERGED_PLANNED | Red | Solid (dark, with bright dashes over it; §4.3) |
 | DIVERGED_POST_PLANNED | Red | Dashed |
+
+Dashes run along the arrow's way; coinciding steps are drawn side by side (§4.3).
 
 **Other:**
 
@@ -2666,4 +2673,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.41.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.42.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -52,6 +52,7 @@ struct PresentConfig {
 	bool interpolate = true;     // the player between physics ticks
 	bool follow = true;          // while a region is late, the shown one's shadows follow the drawn player
 	bool smooth_on_time = false; // (tests) smooth as if every region were late
+	double dash_speed = 30.0;    // Stage 130: px per second the path preview's dashes run along the arrow's way (0: still)
 };
 
 namespace shape_morph {

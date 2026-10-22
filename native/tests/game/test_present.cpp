@@ -232,6 +232,7 @@ TEST_CASE("present: without animation the presenter's frame is the session's") {
 	cfg.region_seconds = 0.0;
 	cfg.interpolate = false;
 	cfg.follow = false;
+	cfg.dash_speed = 0.0; // (Stage 130: the dashes still)
 	rcg::Presenter p(cfg);
 	for (int k = 0; k < 6; k++) {
 		s.teleport(s.player() + rc::V2{8, 0});
@@ -618,6 +619,7 @@ TEST_CASE("present: a preview whose exact climb is slower than 30 Hz morphs in; 
 		rcg::Session s(lv, cfg);
 		rcg::PresentConfig pc;
 		pc.late_seconds = late; // (0: every late preview counts as slow)
+		pc.dash_speed = 0.0;     // (Stage 130: the dashes still -- a repaint here is a morph)
 		rcg::Presenter p(pc);
 		const rc::V2 home = s.player();
 		s.settle();
@@ -643,4 +645,101 @@ TEST_CASE("present: a preview whose exact climb is slower than 30 Hz morphs in; 
 		CHECK(path_node(p.frame(s.draw_frame(), s))->version == path_node(s.draw_frame())->version); // then the session's
 		CHECK_FALSE(p.animating_path());
 	}
+}
+
+// Stage 130: the preview's look -- a solid step is a dark stroke under bright
+// dashes; the dashes run the way the arrow flies; steps drawn on one another
+// are set side by side
+namespace {
+std::vector<rc::TraceStep> two_steps(rc::StepType a, rc::StepType b, bool reversed) {
+	rc::TraceStep s1;
+	s1.start = rc::V2{100, 100};
+	s1.end = rc::V2{300, 100};
+	s1.via = rc::V2{200, 100};
+	s1.type = a;
+	rc::TraceStep s2 = s1;
+	s2.type = b;
+	if (reversed) {
+		std::swap(s2.start, s2.end);
+	}
+	return {s1, s2};
+}
+} // namespace
+
+TEST_CASE("present: a solid step is a dark stroke under bright dashes, and the dashes run along the arrow's way") {
+	rcg::Session s(level("test_levels/crossings.json"));
+	rc::TraceStep st;
+	st.start = rc::V2{100, 100};
+	st.end = rc::V2{300, 100};
+	st.via = rc::V2{200, 100};
+	st.type = rc::StepType::Aligned;
+	std::vector<rcg::render::Call> c0, c1;
+	s.paint_steps({st}, c0, 0.0);
+	s.paint_steps({st}, c1, 4.0);
+	REQUIRE(c0.size() >= 2);
+	CHECK(c0[0].kind == rcg::render::Kind::Line);      // the solid stroke
+	CHECK(c0[1].kind == rcg::render::Kind::Multiline); // the dashes over it
+	CHECK(c0[0].colors[0][1] < c0[1].colors[0][1]);    // darker under, brighter over
+	CHECK(c0[1].colors[0][0] > c0[0].colors[0][0]);
+	// the dashes (10 px on, 5 off) start at the step's start; 4 px of phase moves them 4 px along
+	REQUIRE(c1.size() >= 2);
+	CHECK(c0[1].pts[0].x == 100.0f);
+	CHECK(c0[1].pts[1].x == 110.0f);
+	CHECK(c1[1].pts[0].x == 104.0f);
+	CHECK(c1[1].pts[1].x == 114.0f);
+}
+
+TEST_CASE("present: steps drawn on one another are set side by side, the planned on the left") {
+	rcg::Session s(level("test_levels/crossings.json"));
+	for (const bool reversed : {false, true}) {
+		std::vector<rcg::render::Call> out;
+		s.paint_steps(two_steps(rc::StepType::DivergedPlanned, rc::StepType::DivergedPhysical, reversed), out, 0.0);
+		// the planned step's solid stroke, then its dashes, then the physical's dashes
+		REQUIRE(out.size() >= 3);
+		const float planned_y = out[0].pts[0].y;
+		const float physical_y = out[2].pts[0].y;
+		CHECK(planned_y == doctest::Approx(100.0 - 1.75)); // (y down: the left of a way to +x is -y)
+		CHECK(physical_y == doctest::Approx(100.0 + 1.75));
+	}
+	// steps apart are drawn where they are
+	std::vector<rc::TraceStep> apart = two_steps(rc::StepType::DivergedPlanned, rc::StepType::DivergedPhysical, false);
+	apart[1].start.y += 20;
+	apart[1].end.y += 20;
+	apart[1].via.y += 20;
+	std::vector<rcg::render::Call> out;
+	s.paint_steps(apart, out, 0.0);
+	CHECK(out[0].pts[0].y == 100.0f);
+}
+
+// Stage 130 (the user's F12 dump of 2026-10-22 15:43): after the divergence the
+// planned step ends at the cursor and the physical one runs on to the next hit
+// -- the same circle, different ends: set side by side all the same
+TEST_CASE("present: steps on one carrier with different ends are set side by side") {
+	rcg::Session s(level("test_levels/crossings.json"));
+	s.teleport(rc::V2::of(0x1.617668p+10, 0x1.ea1932p+8));
+	rc::PlanItem it;
+	it.surface_id = 17;
+	it.left = true;
+	it.hint = rc::effects::F32Point{1352.40869140625f, 393.7291564941406f};
+	it.span = std::array<double, 6>{1400.0, 390.0, 1400.0, 210.0, 1310.0, 300.0};
+	s.set_plan({it});
+	s.set_cursor(rc::V2::of(0x1.792492p+10, 0x1.79b31p+8));
+	s.settle();
+	const std::vector<rc::TraceStep> &m = s.preview_steps();
+	REQUIRE(m.size() >= 3);
+	REQUIRE(m[1].type == rc::StepType::DivergedPlanned);
+	REQUIRE(m[2].type == rc::StepType::DivergedPhysical);
+	REQUIRE(m[1].end != m[2].end); // (the cursor; the next hit)
+	const rc::arc::ArcParams p = rc::arc::arc_params(m[1].start, m[1].via, m[1].end);
+	std::vector<rcg::render::Call> out;
+	s.paint_steps(m, out, 0.0);
+	// the aligned step (a stroke, its dashes), the planned arc (a stroke, its dashes), the physical dashes
+	REQUIRE(out.size() >= 5);
+	REQUIRE(out[2].kind == rcg::render::Kind::Arc);
+	const double planned_r = out[2].radius;
+	const rc::V2 q = out[4].pts[0];
+	const double physical_r = std::hypot(double(q.x) - double(p.center.x), double(q.y) - double(p.center.y));
+	CHECK(std::abs(planned_r - p.radius) == doctest::Approx(1.75).epsilon(0.01));
+	CHECK(std::abs(physical_r - p.radius) == doctest::Approx(1.75).epsilon(0.01));
+	CHECK((planned_r - p.radius) * (physical_r - p.radius) < 0.0); // on either side
 }
