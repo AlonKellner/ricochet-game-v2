@@ -69,7 +69,9 @@ def main():
         # the vertical exit meets no vertical wall before the wrap: after the
         # reflection at 3 the next hit is the top wall 12
         i3 = ks.index(("hit", 3, True))
-        assert ks[i3 + 1][:2] == ("hit", 12), (tag, ks[i3:i3 + 3])
+        # (Stage 131: the passage of the ray's origin between is no wall's crossing)
+        nxt = next(k for k in ks[i3 + 1:] if k[0] != "origin")
+        assert nxt[:2] == ("hit", 12), (tag, ks[i3:i3 + 3])
         # stable across the oracle's precisions (a tie-rich scene would not be)
         for dps in (60, 120):
             with mp.workdps(dps):

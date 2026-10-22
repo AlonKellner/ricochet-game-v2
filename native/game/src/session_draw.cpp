@@ -103,6 +103,13 @@ Call polygon(const std::array<V2, 3> &pts, const Color &c) {
 	k.colors = {c, c, c};
 	return k;
 }
+Call polygon_n(const std::vector<V2> &pts, const Color &c) {
+	Call k;
+	k.kind = Kind::Polygon;
+	k.pts = pts;
+	k.colors.assign(pts.size(), c);
+	return k;
+}
 Call circle(const V2 &center, double radius, const Color &c) {
 	Call k;
 	k.kind = Kind::Circle;
@@ -618,6 +625,152 @@ struct PathPainter {
 		}
 	}
 
+	// Stage 131: the merged path's event marks -- a significant event (an applied
+	// effect, a firing state change, a passage of infinity: the ten a shot may
+	// make) a ringed dot in its step's colour, any other crossing a small dim dot.
+	// A mark sits at its step's end as the step is drawn (side by side with the
+	// marks of steps drawn on one another: a loop's repeats). A passage of an
+	// infinity point off the level (the real infinity of a straight beam, or a
+	// circle beam's Q outside the bounds) is marked twice: where the outgoing step
+	// leaves the level's bounds and where the incoming one enters them -- each
+	// half outside, together the one mark.
+	void ring(const V2 &at, const rc::TraceStep &st) {
+		Color col = step_color(st.type);
+		if (st.ghost) {
+			col = ghost_color(col);
+		}
+		out.push_back(circle(at, 5.5, st.ghost ? ghost_color(WHITE) : WHITE));
+		out.push_back(circle(at, 4.0, col));
+	}
+
+	// half a ring: the half facing `face` (a passage of infinity off the level, a
+	// portal: one half where the beam goes out, the other where it comes back in)
+	void half_ring(const V2 &at, const V2 &face, const rc::TraceStep &st) {
+		Color col = step_color(st.type);
+		if (st.ghost) {
+			col = ghost_color(col);
+		}
+		const double a0 = std::atan2(double(face.y), double(face.x));
+		auto half = [&](double r) {
+			std::vector<V2> pts{at};
+			for (int k = 0; k <= 12; k++) {
+				const double a = a0 - PI / 2.0 + PI * k / 12.0;
+				pts.push_back(at + V2::of(r * std::cos(a), r * std::sin(a)));
+			}
+			return pts;
+		};
+		out.push_back(polygon_n(half(5.5), st.ghost ? ghost_color(WHITE) : WHITE));
+		out.push_back(polygon_n(half(4.0), col));
+	}
+
+	// the step's way at its start or its end (a unit vector)
+	static V2 way_at(const rc::TraceStep &st, bool at_end) {
+		if (st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end)) {
+			const rc::arc::ArcParams p = rc::arc::arc_params(st.start, st.via, st.end);
+			const double th = at_end ? p.end_angle : p.start_angle;
+			const double sgn = p.end_angle >= p.start_angle ? 1.0 : -1.0;
+			return V2::of(-std::sin(th) * sgn, std::cos(th) * sgn);
+		}
+		const V2 d = st.end - st.start;
+		return d / d.length();
+	}
+
+	// where the step as drawn (shifted) crosses the level's bounds: leaving them
+	// (inside to outside), or entering them (the last outside-to-inside)
+	static std::optional<V2> bounds_crossing(const rc::TraceStep &st, const Shift &sh, const rc::Rect2f &level, bool leaving) {
+		if (st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end)) {
+			const rc::arc::ArcParams p = rc::arc::arc_params(st.start, st.via, st.end);
+			const double r = p.radius + sh.dr;
+			auto at = [&](double u) {
+				const double th = p.start_angle + (p.end_angle - p.start_angle) * u;
+				return V2::of(double(p.center.x) + r * std::cos(th), double(p.center.y) + r * std::sin(th));
+			};
+			constexpr int N = 256;
+			auto inside = [&](double u) { return level.has_point(at(u)); };
+			auto bisect = [&](double a, double b) { // inside(a) != inside(b)
+				const bool ia = inside(a);
+				for (int k = 0; k < 40; k++) {
+					const double m = (a + b) / 2.0;
+					(inside(m) == ia ? a : b) = m;
+				}
+				return at(ia ? a : b); // (the inside side)
+			};
+			if (leaving) {
+				for (int k = 0; k < N; k++) {
+					if (inside(double(k) / N) && !inside(double(k + 1) / N)) {
+						return bisect(double(k) / N, double(k + 1) / N);
+					}
+				}
+			} else {
+				for (int k = N; k > 0; k--) {
+					if (inside(double(k) / N) && !inside(double(k - 1) / N)) {
+						return bisect(double(k - 1) / N, double(k) / N);
+					}
+				}
+			}
+			return std::nullopt;
+		}
+		V2 from = st.start + sh.by, to = st.end + sh.by;
+		if (level.has_point(leaving ? from : to) == false || !clip_line(from, to, level)) {
+			return std::nullopt;
+		}
+		return leaving ? to : from;
+	}
+
+	void event_marks(const std::vector<rc::TraceStep> &steps, const std::vector<Shift> &shifts, const rc::Rect2f &level) {
+		for (size_t i = 0; i < steps.size(); i++) {
+			const rc::TraceStep &st = steps[i];
+			if (st.start == st.end) {
+				continue;
+			}
+			V2 at = st.end;
+			if (st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end)) {
+				const rc::arc::ArcParams p = rc::arc::arc_params(st.start, st.via, st.end);
+				const V2 c = V2::of(double(p.center.x), double(p.center.y));
+				at = c + (st.end - c) * float((p.radius + shifts[i].dr) / p.radius);
+			} else {
+				at = st.end + shifts[i].by;
+			}
+			// the incoming half of a passage of infinity off the level: where it
+			// enters, facing in; of a portal: at its exit, facing the way out
+			if (st.after_infinity && !level.has_point(st.start)) {
+				if (const std::optional<V2> in = bounds_crossing(st, shifts[i], level, false)) {
+					half_ring(*in, way_at(st, false), st);
+				}
+			}
+			if (st.after_portal && bounds.has_point(st.start)) {
+				half_ring(st.start + shifts[i].by, way_at(st, false), st);
+			}
+			if (st.significant && st.surface_id == rc::INFINITY_ID && !level.has_point(st.end)) {
+				// the outgoing half: where it leaves, facing back in
+				if (const std::optional<V2> outp = bounds_crossing(st, shifts[i], level, true)) {
+					half_ring(*outp, -way_at(st, true), st);
+				}
+				continue;
+			}
+			if (st.teleports) {
+				// a portal's entry: the half facing back the way the beam came
+				if (bounds.has_point(at)) {
+					half_ring(at, -way_at(st, true), st);
+				}
+				continue;
+			}
+			if (!bounds.has_point(at)) {
+				continue;
+			}
+			if (st.significant) {
+				ring(at, st);
+			} else {
+				Color col = step_color(st.type);
+				if (st.ghost) {
+					col = ghost_color(col);
+				}
+				col[3] = 0.5f;
+				out.push_back(circle(at, 2.0, col));
+			}
+		}
+	}
+
 	void stop_marker(const V2 &at, const Color &col) {
 		if (!bounds.has_point(at)) {
 			return;
@@ -833,7 +986,7 @@ void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<C
 			pp.step(ms, tint(step_color(ms.type)), true, dash_phase, shifts[i]);
 		}
 	}
-	pp.endpoint_circles(steps, true, WHITE);
+	pp.event_marks(steps, shifts, bounds());
 }
 
 // The path node's calls (Stage 130: the presenter repaints it as its dashes run)

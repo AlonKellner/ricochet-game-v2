@@ -610,8 +610,9 @@ TEST_CASE("present: the path's diff starts and ends on the two paths, stays join
 	CHECK(pm::at(plan, 0.51).back().type == rc::StepType::Aligned);
 }
 
-TEST_CASE("present: a preview whose exact climb is slower than 30 Hz morphs in; a faster one is drawn as it arrives") {
-	// inversion_grid: the cursor circling the player declines float64 at a few points (test_async)
+TEST_CASE("present: a preview whose exact climb changes nothing is drawn as it is; a changed path morphs in when it is late") {
+	// inversion_grid: a cursor whose preview declines float64 (Stage 131: the event
+	// limits leave one of the circle's, and its exact path is its provisional one)
 	const rcg::Level lv = level("playground/inversion_grid.json");
 	for (const double late : {0.0, 1.0 / 30.0}) {
 		rcg::SessionConfig cfg;
@@ -625,26 +626,36 @@ TEST_CASE("present: a preview whose exact climb is slower than 30 Hz morphs in; 
 		s.settle();
 		s.drain();
 		p.frame(s.draw_frame(), s);
-		// a cursor whose exact path differs from its provisional one (33 steps each)
-		s.set_cursor(home + rc::V2::of(420.0 * std::cos(11 * 0.31), 420.0 * std::sin(11 * 0.31)));
+		s.set_cursor(home + rc::V2::of(420.0, 0.0));
 		s.settle();
 		REQUIRE_FALSE(s.preview_exact());
 		p.advance(0.016);
 		p.frame(s.draw_frame(), s); // the provisional path shown
-		s.drain();                 // the exact one arrives
+		s.drain();                 // the exact one arrives: the same drawing
 		p.advance(0.016);
 		const auto shown = path_node(p.frame(s.draw_frame(), s));
-		if (late == 0.0) {
-			CHECK(p.animating_path());
-			CHECK(shown->version != path_node(s.draw_frame())->version); // morphing in
-		} else {
-			CHECK_FALSE(p.animating_path()); // its climb took milliseconds: drawn as it arrives
-			CHECK(shown->version == path_node(s.draw_frame())->version);
-		}
-		p.advance(0.2);
-		CHECK(path_node(p.frame(s.draw_frame(), s))->version == path_node(s.draw_frame())->version); // then the session's
-		CHECK_FALSE(p.animating_path());
+		CHECK_FALSE(p.animating_path()); // nothing to morph, slow or not
+		CHECK(shown->version == path_node(s.draw_frame())->version);
 	}
+	// a path that changes, late (smooth_on_time: every path counts as late): it morphs in, then is the session's
+	rcg::Session s(lv);
+	rcg::PresentConfig pc;
+	pc.smooth_on_time = true;
+	pc.dash_speed = 0.0;
+	rcg::Presenter p(pc);
+	const rc::V2 home = s.player();
+	s.set_cursor(home + rc::V2::of(300.0, -40.0));
+	s.settle();
+	p.frame(s.draw_frame(), s);
+	s.set_cursor(home + rc::V2::of(-300.0, 60.0));
+	s.settle();
+	p.advance(0.016);
+	const auto shown = path_node(p.frame(s.draw_frame(), s));
+	CHECK(p.animating_path());
+	CHECK(shown->version != path_node(s.draw_frame())->version); // morphing in
+	p.advance(0.2);
+	CHECK(path_node(p.frame(s.draw_frame(), s))->version == path_node(s.draw_frame())->version); // then the session's
+	CHECK_FALSE(p.animating_path());
 }
 
 // Stage 130: the preview's look -- a solid step is a dark stroke under bright
@@ -742,4 +753,102 @@ TEST_CASE("present: steps on one carrier with different ends are set side by sid
 	CHECK(std::abs(planned_r - p.radius) == doctest::Approx(1.75).epsilon(0.01));
 	CHECK(std::abs(physical_r - p.radius) == doctest::Approx(1.75).epsilon(0.01));
 	CHECK((planned_r - p.radius) * (physical_r - p.radius) < 0.0); // on either side
+}
+
+// Stage 131 (the user): a significant event is marked apart -- a ringed dot (a
+// white disc under one in the step's colour); any other crossing a small dot
+TEST_CASE("present: significant events are ringed dots, other crossings small dots") {
+	rcg::Session s(level("test_levels/crossings.json"));
+	rc::TraceStep a;
+	a.start = rc::V2{100, 100};
+	a.end = rc::V2{300, 100};
+	a.via = rc::V2{200, 100};
+	a.type = rc::StepType::AlignedPostPlanned;
+	a.significant = true;
+	rc::TraceStep b = a;
+	b.start = a.end;
+	b.end = rc::V2{300, 300};
+	b.via = rc::V2{300, 200};
+	b.significant = false;
+	std::vector<rcg::render::Call> out;
+	s.paint_steps({a, b}, out, 0.0);
+	std::vector<const rcg::render::Call *> discs;
+	for (const auto &c : out) {
+		if (c.kind == rcg::render::Kind::Circle) {
+			discs.push_back(&c);
+		}
+	}
+	REQUIRE(discs.size() == 3);
+	CHECK(discs[0]->pts[0] == rc::V2{300, 100});
+	CHECK(discs[0]->radius == 5.5); // the ring
+	CHECK(discs[1]->radius == 4.0); // the dot in it
+	CHECK(discs[2]->pts[0] == rc::V2{300, 300});
+	CHECK(discs[2]->radius == 2.0); // a crossing
+}
+
+// Stage 131 (the user): a passage of infinity off the level and a portal are one
+// significant event drawn as two half rings -- out and back in, each facing the level
+TEST_CASE("present: a wrap and a portal are marked by two half rings") {
+	rcg::Session s(level("test_levels/crossings.json")); // (bounds 0..1920 x 0..1080)
+	auto polys = [](const std::vector<rcg::render::Call> &out) {
+		std::vector<const rcg::render::Call *> v;
+		for (const auto &c : out) {
+			if (c.kind == rcg::render::Kind::Polygon) {
+				v.push_back(&c);
+			}
+		}
+		return v;
+	};
+	// the wrap: out through the right edge, back in through the left
+	rc::TraceStep out_step;
+	out_step.start = rc::V2{1000, 100};
+	out_step.end = rc::V2{3000, 100};
+	out_step.via = rc::V2{2000, 100};
+	out_step.type = rc::StepType::AlignedPostPlanned;
+	out_step.significant = true;
+	out_step.surface_id = rc::INFINITY_ID;
+	rc::TraceStep in_step = out_step;
+	in_step.start = rc::V2{-1000, 200};
+	in_step.end = rc::V2{500, 200};
+	in_step.via = rc::V2{-250, 200};
+	in_step.significant = false;
+	in_step.surface_id = -1;
+	in_step.after_infinity = true;
+	std::vector<rcg::render::Call> out;
+	s.paint_steps({out_step, in_step}, out, 0.0);
+	const auto wrap = polys(out);
+	REQUIRE(wrap.size() == 4); // (two half rings: a white half and a coloured one each)
+	CHECK(wrap[0]->pts[0] == rc::V2{1920, 100}); // leaving the bounds
+	for (const auto &q : wrap[0]->pts) {
+		CHECK(q.x <= 1920.0f + 1e-3f); // facing back into the level
+	}
+	CHECK(wrap[2]->pts[0] == rc::V2{0, 200}); // entering them
+	for (const auto &q : wrap[2]->pts) {
+		CHECK(q.x >= -1e-3f);
+	}
+	// a portal: half at its entry facing back, half at its exit facing on
+	rc::TraceStep to_portal = out_step;
+	to_portal.end = rc::V2{1200, 100};
+	to_portal.via = rc::V2{1100, 100};
+	to_portal.surface_id = 12;
+	to_portal.teleports = true;
+	rc::TraceStep from_portal = to_portal;
+	from_portal.start = rc::V2{1550, 100};
+	from_portal.end = rc::V2{1700, 100};
+	from_portal.via = rc::V2{1625, 100};
+	from_portal.teleports = false;
+	from_portal.significant = false;
+	from_portal.after_portal = true;
+	out.clear();
+	s.paint_steps({to_portal, from_portal}, out, 0.0);
+	const auto portal = polys(out);
+	REQUIRE(portal.size() == 4);
+	CHECK(portal[0]->pts[0] == rc::V2{1200, 100});
+	for (const auto &q : portal[0]->pts) {
+		CHECK(q.x <= 1200.0f + 1e-3f); // the half the beam came from
+	}
+	CHECK(portal[2]->pts[0] == rc::V2{1550, 100});
+	for (const auto &q : portal[2]->pts) {
+		CHECK(q.x >= 1550.0f - 1e-3f); // the half it leaves by
+	}
 }

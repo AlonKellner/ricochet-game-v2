@@ -993,6 +993,24 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 		if (b[size_t(i)].margin <= move) {
 			break;
 		}
+		// Stage 131: a hit exactly at a segment's endpoint is decided by exact data
+		// (the game's walk knows the point; the reference, aimed at a rounded image,
+		// does not) -- the comparison ends there, as at a margin within the error.
+		// The longer walks (no loop detection) reach such hits past the first loop.
+		const auto at_endpoint = [&](const EvInfo &e) {
+			if (!e.has_point) {
+				return false;
+			}
+			for (const auto &sf : sc.surfaces) {
+				if ((e.fx == sf->sx && e.fy == sf->sy) || (e.fx == sf->ex && e.fy == sf->ey)) {
+					return true;
+				}
+			}
+			return false;
+		};
+		if (at_endpoint(a[size_t(i)]) || at_endpoint(b[size_t(i)])) {
+			break;
+		}
 		if (a[size_t(i)].surface_id != b[size_t(i)].surface_id || a[size_t(i)].left != b[size_t(i)].left) {
 			out.push_back(v("DIRECTION-ONLY: hit %d s=%d vs s=%d without plan", I(i), I(a[size_t(i)].surface_id), I(b[size_t(i)].surface_id)));
 			return out;

@@ -49,6 +49,10 @@ inline TraceStep piece_of(const TraceStep &step, const V2 &p_start, const V2 &p_
 	piece.est_error = step.est_error;
 	piece.precision_bits = step.precision_bits;
 	piece.after_portal = first ? step.after_portal : false;
+	// (Stage 131: the piece that ends where the step does -- for a step to infinity, the one toward it)
+	piece.significant = step.significant && (p_end == step.end || !std::isfinite(step.end.x));
+	piece.after_infinity = first ? step.after_infinity : false;
+	piece.teleports = step.teleports && p_end == step.end;
 	if (keep_hit && step.hit) {
 		piece.surface_id = step.surface_id;
 		piece.hit_side = step.hit_side;

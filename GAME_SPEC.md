@@ -260,6 +260,7 @@ The preview draws the step tree (§14). Each step has one of five types, each wi
 **The look** (Stage 130, the user, 2026-10-22):
 - A **solid** step is a slightly dark stroke (green `#00B300`, red `#B30000`) with a slightly bright dashed stroke over it (`#80FF80`, `#FF8080`).
 - **Dashes run** along the way the arrow flies (start to end of each step), about 30 px per second. They are presentation only: a replay draws them still.
+- **Event marks** (Stage 131, the user): where a step ends at a **significant event** -- an applied effect, a firing state change, a passage of the frame's infinity, a passage of the ray's origin (§12.6: a shot makes at most ten) -- a ringed dot in the step's colour (white ring, radius 5.5; the dot 4); where it ends at any other crossing (a pass-through, an off-segment crossing) a small dot at half opacity (radius 2). A passage of an infinity point off the level -- the real infinity of a straight beam, or a circle beam's `Q` outside the level's bounds -- is marked twice: where the outgoing step (the one that reaches it) leaves the level's bounds, and where the incoming step enters them again; each is half a ring, facing into the level, and the two halves make the one mark. A **portal** is marked the same way: half a ring at its entry, facing back the way the beam came, and half at its exit, facing the way it leaves -- one significant event (the user). Other crossings of the bounds are not marks. Marks sit at their steps' ends as the steps are drawn, so the marks of steps drawn on one another (a loop's repeats) are side by side too (the user).
 - **Steps drawn on one another are set side by side.** Two steps of the preview on one carrier (the same line, or the same circle, to half a pixel) that run together for more than 2 px are drawn on one another: the same step either way round, or steps with different ends (the planned path cut at the cursor while the physical one runs on to its next hit). Such steps form groups, transitively, and each group is drawn in two lanes 3.5 px apart (a 1.5 px margin between 2 px strokes): the planned path's steps on the left of the group's first step's way, the physical path's on the right. A line moves along its normal, and an arc moves to a larger or smaller radius on its circle. A whole step moves, so each path stays joined along the carrier. A path that runs on itself (a step and its way back) is spread the same way. Sections of different carriers that cross or lie close are drawn as they are, for now.
 
 **Visual invariants:**
@@ -793,7 +794,7 @@ All produce an outgoing **straight beam** in visual space, determined solely by 
 
 ### 10.5 Terminal effect: block
 
-Stops the beam. No outgoing beam, no stack change. A trace cut by the **32-event limit** (§12.6) ends similarly. It ends with a "max" event at the next crossing, drawn up to that crossing with no effect.
+Stops the beam. No outgoing beam, no stack change. A trace cut by the **event limits** (§12.6) ends similarly. It ends with a "max" event at the crossing that would exceed a limit, drawn up to that crossing with no effect.
 
 ### 10.6 Hit effects (state changes, targets, spawn, reset)
 
@@ -881,7 +882,7 @@ State changes are applied sequentially along the trace. If multiple hits write t
 
 - **Togglers:** a ghost toggler is a side whose state changes include a write to `ghost`. Its effect is a pass, it is plannable, and the level export is `ghost_toggler_lines`.
 - **While ghosted, everything else passes.** Every other side resolves to a pass, together with its state change: mirrors, inversions, portals, projectives, terminals and room walls. A ghost arrow therefore crosses everything, can leave through a wall, and wraps through infinity, since a straight beam is a projective line.
-- **Materializing:** the arrow materializes at the next toggler hit, or at the same toggler one loop later. A loop around the beam that changed the state is walked again; a loop that changed nothing ends the trace as usual. MAX_HITS bounds both.
+- **Materializing:** the arrow materializes at the next toggler hit, or at the same toggler one loop later. Every loop is walked (there is no loop detection, Stage 131); the event limits bound them (§12.6).
 - **Drawing:** ghost steps (`TraceStep.ghost`) are drawn paler and translucent, and ghost togglers have their own colour.
 - **Planning inside a ghost stretch:** the plan's state is simulated forward from a solid start (§13.7). While it is ghosted, after an odd number of planned ghost togglers, only a ghost toggler can be added: every other side is refused at the click and gets no hover highlight. A click within reach of both a refused side and a toggler takes the toggler. A programmatic plan that still names such a side treats it as a pass (`BeamTracer.plan_refuses`).
 
@@ -1075,11 +1076,13 @@ walk(beam, depart, t0):
         snap candidates to known points (exact incidence, §11.1)
         sort projectively from t0 (§11.3)
         for c in cands:
-            count += 1
-            if count > MAX_HITS: emit "max" at c (drawn up to it, no effect); stop
             if c is the cursor:
-                emit "cursor"; mode = PHYSICAL      # post-cursor continuation
+                emit "cursor"; mode = PHYSICAL      # post-cursor continuation (never counted, §12.6)
                 continue
+            if events + 1 > 64: emit "max" at c (drawn up to it, no effect); stop
+            # (c's decision below; a significant one -- an applied effect, a state change, the passage of
+            #  infinity -- past the 10th: emit "max" at c instead, no effect; stop)
+            events += 1
             classify c → point, on_segment, side, fully_blocked
             if mode == PHYSICAL:
                 do = side's effect if fully_blocked else none
@@ -1094,8 +1097,9 @@ walk(beam, depart, t0):
             if do is terminal: stop
             if do is transformative: push/pop the provenance stack (§10.7); beam = mapped or restored beam; restart loop
             if do is projective:     clear stack, epoch += 1; beam = exit line (§10.4); restart loop
-        # no effect fired on any candidate
-        emit "escape" (straight beam) or "origin" (circle beam, back at its start); stop
+        # no effect fired on the whole loop (Stage 131: no loop detection)
+        if a straight beam and infinity is off: emit "escape"; stop   # it leaves through infinity
+        restart loop on the same beam                                  # the next loop: the limits bound it
 ```
 
 **Anchored planned path.** In PLANNED mode, and in PHYSICAL mode until its first divergence from the planned decisions, firing plan entry `j` does not map the current beam. Instead the walker swaps in the **anchored beam** `B_{j+1}` of the plan (§13.1). Each anchored beam is built independently from exact data, so errors do not accumulate along the plan. After the divergence (or after the cursor) the trace is a forward continuation from the current beam. That part is the numerically sensitive one: it is seeded for `ErrorEstimate` and solved on the `PrecisionLadder`.
@@ -1132,20 +1136,21 @@ The frame id of subsequent steps follows the stack (§10.7).
 
 ### 12.5 Beyond-infinity in the visual frame
 
-- **The frame's infinity** `Q = F(∞)` (§6.3, §13.1) is passed exactly once per loop of a beam; the passage is the `infinity` event (Stages 88, 101): it counts toward the hit limit; a trace cut by the limit there ends with a `max` event at `Q` (surface id `INFINITY_ID`; no point when `Q` is the real infinity). The event is **applied** when the next plan entry is ∞ (the entry is consumed, in both modes); otherwise it **passes**. An unplanned passage is **not a divergence**; an ∞ entry that is not reached when another entry fires is one, like any unmet entry (§14.2).
-- **Straight beam, `Q = ∞`:** passing `t = ∞` means the arrow travels to the viewport edge, leaves, and returns from the opposite edge (two escape steps, §12.3; the outgoing one carries `surface_id = INFINITY_ID`). If no effect fires on the whole loop, the trace still ends with an `escape` event.
-- **A finite `Q`** (every circle beam, after an inversion or in a pre-transform level; a straight beam through an inversion center): the arrow simply passes the point `Q`; the step ending there carries `surface_id = INFINITY_ID` and the next step continues from it. `t = ∞` of a circle beam (the antipode of `p`) is an ordinary point. If no effect fires on the whole circle, the trace ends back at the beam's start with an `origin` event. A straight beam with a finite `Q` passes the real `t = ∞` silently (its pre-image there is a finite point).
+- **The frame's infinity** `Q = F(∞)` (§6.3, §13.1) is passed exactly once per loop of a beam; the passage is the `infinity` event (Stages 88, 101): it counts toward the hit limit; a trace cut by the limit there ends with a `max` event at `Q` (surface id `INFINITY_ID`; no point when `Q` is the real infinity). The event is **applied** when the next plan entry is ∞ (the entry is consumed, in both modes); otherwise it **passes**. **An unplanned passage before the cursor is a divergence** (Stage 131, the user, 2026-10-22): the physical walk leaves the plan there (§14.2), so a cursor reached only through infinity unplanned is not visible, and the path is drawn diverged from the passage on. The aim prefers not going through infinity; when only the way through infinity reaches the cursor, the aim takes it all the same, shown as a divergence. After the cursor a passage is the continuation, not a divergence. An ∞ entry that is not reached when another entry fires is a divergence too, like any unmet entry.
+- **Straight beam, `Q = ∞`:** passing `t = ∞` means the arrow travels to the viewport edge, leaves, and returns from the opposite edge (two escape steps, §12.3; the outgoing one carries `surface_id = INFINITY_ID`). If no effect fires on the whole loop, the arrow loops again: there is no loop detection (Stage 131); the event limits end the trace (§12.6). With the infinity switch off the beam does not wrap: it leaves through infinity, an `escape` event.
+- **A finite `Q`** (every circle beam, after an inversion or in a pre-transform level; a straight beam through an inversion center): the arrow simply passes the point `Q`; the step ending there carries `surface_id = INFINITY_ID` and the next step continues from it. `t = ∞` of a circle beam (the antipode of `p`) is an ordinary point. If no effect fires on the whole circle, the arrow goes round again (Stage 131): every circle beam passes `Q` once per cycle, a significant hit, so the event limits end it (§12.6) -- with the infinity switch off too, where the passage is counted though no event is emitted. A straight beam with a finite `Q` passes the real `t = ∞` silently (its pre-image there is a finite point).
 - **Ties:** at one parameter the cursor comes first, then the hits by id, then the passage of infinity.
 - **A touch at `Q`** (Stage 105): a beam tangent to a surface's carrier at `Q` touches it without crossing (no event; §11.4). A pre-transform level with a mirror through `Q_0` makes such grazes reachable on purpose (`scenes/playground/tangent_infinity.tscn`).
 
-### 12.6 Effect limit
+### 12.6 Event limits
 
-Maximum **32 events** per trace (`BeamSolver.MAX_HITS = 32`). **Every event counts:**
-- every carrier crossing (pass-throughs and off-segment crossings included);
-- the cursor;
-- the final `origin`/`escape` event.
+There is **no loop detection** (Stage 131, the user, 2026-10-22). A trace ends at a block (§10.5), at an escape (a straight beam with the infinity switch off), or at a limit:
+- at most **10 significant events**: an applied effect (reflection, inversion, portal, projective, block, a pop), a hit whose state change fires, the passage of the frame's infinity (`infinity` events, applied or not; with the switch off a circle beam's passage of `Q` counts, unseen), and the passage of the **ray's origin** (`origin` events, below);
+- at most **64 events** in all: the significant ones, and every other carrier crossing (stateless pass-throughs and off-segment crossings).
 
-A trace cut by the limit ends with a `max` event at the next crossing, drawn up to it with no effect. This prevents infinite loops from any source, including overlapping pass-through surfaces.
+These are the only two limits (the user, 2026-10-22).
+
+**The ray's origin** (Stage 131, the user). The ray's origin in a frame is the point the ray radiates from there: the player, carried by every map applied since (a reflection, an inversion, a portal) -- the player's image in that frame, which lies on the beam's carrier (a map takes the line through the player to a line or circle through its image); after a projective effect, which starts a new ray, its departure point -- except a circle normal projection's, whose rays all run along the circle's radii: their origin is the circle's centre (the user), so passing the centre (or its image under the maps after) is a significant event that needs planning, on whichever side of the circle the ray was projected. When the walk passes it -- on the first beam only after a loop that fires no effect (or only changes the state), when the beam comes back to the player; after a reflection, wherever its carrier passes the player's image (a straight beam behind its departure, once it wraps through infinity) -- that passage is an `origin` event at that point, a significant event. A departure point that is not the ray's origin is no event when a loop comes back to it: the beam goes round again. An origin at infinity (the player at an inversion's centre) is the passage of infinity itself. Before the cursor, an unplanned passage of the ray's origin is a **divergence**, like an unplanned passage of infinity (§12.5): the physical walk leaves the plan there, so a cursor reached only on a later lap is not visible. A straight beam with the infinity switch off does not come back (it escapes). *(Planning the ray's origin, like ∞: Stage 132.)* The cursor is not counted: it is not a crossing, and the two walks get the same budget. A trace cut by a limit ends with a `max` event at the crossing that would exceed it, drawn up to it with no effect (a crossing at the infinity point: at `Q`, no point when `Q` is the real infinity). The planned walk decides the plan's realization with wider limits (8 × each, §13.1).
 
 When the limit is reached, the preview shows a truncation marker (small stop icon) at the final hit point *(implemented, Stage 110: `TracePath.truncated`, `PathRenderer.truncation_markers`)*. The cursor of a cut path is not reached, so it is not a valid aim and lies outside the visibility region (§15). During arrow flight, the arrow stops with a distinct visual cue (flash/fade) *(not yet implemented)*.
 
@@ -1174,7 +1179,7 @@ B_j = circle through  P_j = F_j(player),  X_j = F_j(F_K⁻¹(cursor)),  Q_j = F_
 - **Points at infinity** are allowed. If the construction degenerates (player or cursor exactly at an inversion center), see §11.4.
 - **Two realizations** (Stages 88, 101, 111): path order is preserved by every effect, so the orientation of the whole first epoch is fixed by `B_0`'s: toward `X_0` (`P → X → Q`, the direct realization), or away from it, reaching `X_0` through `Q_0` (`P → Q → X`: the same circle the other way round). **Which one is the plan's is fixed by the plan's first entry, not by where the cursor's image falls** (Stage 111; the image lies ahead of or behind the player by an accident of the geometry). Let `e` be the first planned entry of the first epoch that names a present surface (∞ entries and absent surfaces skipped; a pass side, a terminal, a toggler, a portal or a projective counts as much as a mirror: the planned walk fires only on an id and side match):
   - **R1.** When only one orientation of `B_0` crosses `e`'s carrier from `e`'s side, that one. A straight `B_0` meets a line carrier once per loop, from opposite sides in the two orientations, so this always decides a line-first plan: on the planned side, aim at the carrier; on the other side, aim away and come back through infinity. ∞ entries play no part.
-  - **R2.** When both orientations fire `e` (a circle carrier, or a circle `B_0` in a pre-transform frame; the crossing at `e`'s own carrier through `Q_0` is the one the pole record pins there, §31.4), the one whose planned walk consumes the whole plan and reaches the cursor — decided with a wide event budget (8 × `MAX_HITS`), the plan's order being a question of geometry, not of the budget. When both or neither do and the two fire `e` on different sides of the passage of `Q_0`, the one that fires `e` before `Q_0`, or after it when an ∞ entry precedes `e` in the plan: "∞ = the beam passes the frame's infinity here", positionally.
+  - **R2.** When both orientations fire `e` (a circle carrier, or a circle `B_0` in a pre-transform frame; the crossing at `e`'s own carrier through `Q_0` is the one the pole record pins there, §31.4), the one whose planned walk consumes the whole plan and reaches the cursor — decided with wide event limits (8 × each, §12.6), the plan's order being a question of geometry, not of the budget. When both or neither do and the two fire `e` on different sides of the passage of `Q_0`, the one that fires `e` before `Q_0`, or after it when an ∞ entry precedes `e` in the plan: "∞ = the beam passes the frame's infinity here", positionally.
   - **R3.** Otherwise (no such entry; no orientation fires `e`, the aim parallel to its line carrier or missing its circle; both fire it alike): toward `X_0`, reversed by an ∞ entry in the first epoch (`via_infinity`, the rule of Stages 88 and 101).
   In a later epoch the projective's exit already fixes the orientation (§13.3), so an ∞ entry there is only matched by the walker. The ∞ entry must sit where the beam of its frame passes that frame's infinity `Q_j = F_j(∞)` (§12.5): the real infinity on a straight beam, the inversion's center image on a circle beam. Whether an ∞ entry at a given plan position is met depends on the geometry (the passage of `Q_j` may come after the cursor); an unmet entry shows as invalid (§13.5): a cursor passed with the entry pending is not reached. With a pre-transform (§9.5) `Q_0` is finite and `B_0` is already a circle through it. The decisions are the walker's own predicates (the carrier's roots on `B_0`, the side at a crossing, the projective order with the pole; for a straight `B_0` and a line carrier the one sign `dot(X_0 − P, grad)`, from the homogeneous aim image with rigorous bounds and exactly when they straddle zero), never an epsilon. *Oracle:* `trace2.realization`, `first_entry`, `via_infinity`, `beam_through`; fixtures `bench/fixtures/stage88_infinity.json`, `stage101_infinity_point.json`, `stage111_orientation.json`.
 
@@ -1498,7 +1503,7 @@ The members through a point of an earlier epoch are found by **pushing it throug
 
 On its member, the visible cursors form intervals of the walk:
 - from the departure point of the last plan entry (the player, for an empty plan; `Q_K` after an infinity entry);
-- to the first event at which the physical walk changes the frame (the **stop**: an applied effect, or a state change that changes the flags), or to the last event the hit budget leaves for a cursor (the 32nd non-cursor event, §12.6), or round the whole loop;
+- to the first event at which the physical walk changes the frame (the **stop**: an applied effect, or a state change that changes the flags), or to the last event the event limits leave (§12.6; the cursor counts toward neither), or round the whole loop (the next loop repeats it);
 - inside the owned arc.
 
 Ties are the solver's: the cursor comes before a crossing at its own parameter, so a stop is visible.
@@ -1883,7 +1888,7 @@ Since Stage 119 every layer but the host is native and engine-free (lints: `*_no
 
 The historical layer table (GDScript Math / Visual / Game) described the game before the port; its GDScript was deleted in Stage 119 (docs/TDD_24_ENGINE_SWITCH.md).
 
-**GDScript performance note:** GDScript is significantly slower than C++ for tight numerical loops. For the intersection kernel (32 events × N surfaces per frame), avoid object allocation in hot loops. This is why `FastSolver` exists: a raw-float64 `PackedFloat64Array` backend, roughly 50× faster than the precision-generic code and bit-identical to it at float64. If profiling shows the intersection kernel is the bottleneck, consider moving it to a GDExtension (C++) module. The math layer's zero-dependency design makes this migration straightforward.
+**GDScript performance note:** GDScript is significantly slower than C++ for tight numerical loops. For the intersection kernel (up to 64 events × N surfaces per frame), avoid object allocation in hot loops. This is why `FastSolver` exists: a raw-float64 `PackedFloat64Array` backend, roughly 50× faster than the precision-generic code and bit-identical to it at float64. If profiling shows the intersection kernel is the bottleneck, consider moving it to a GDExtension (C++) module. The math layer's zero-dependency design makes this migration straightforward.
 
 **Level data (Stage 115):** a level scene points at its data (`LevelSettings.level_path`); `LevelData` turns the natively read data into `SurfaceSpec` / `SideSpec` / `SpawnTemplate` resources in build order, and the surfaces in the scene tree are `Node2D` instances drawing them. The engine-free game layer (`native/game`, `rcg::`) reads, validates and builds the same data; the headless host `rc_tool` runs the data pipelines without Godot. Stage 116: the game's model and session are native too (`rcg::Session`: the plan, clicks, overlays, preview, visibility, spawn preview, fire / flight / landing, undo, reset; `rcg/world.hpp`, `rcg/landing.hpp`, `rcg/geom.hpp`), checked against the GDScript game by the session replay golden; the GDScript game still runs the shipped build until the engine boundary (a C API) replaces it.
 
@@ -1980,7 +1985,7 @@ The arrow is animated step-by-step along the computed physical `TracePath` (from
 
 ### 21.3 Ray escape during flight
 
-When the ray escapes (no hit on the full great circle), the arrow animates flying to the viewport edge and disappears. The shot still counts — checkpoint is saved, game time unfreezes, state changes from prior hits take effect. Win condition is evaluated normally.
+When the ray escapes (a straight beam with the infinity switch off, nothing hit on its way), the arrow animates flying to the viewport edge and disappears. With the switch on there is no escape: the arrow loops until a hit limit (§12.6). The shot still counts — checkpoint is saved, game time unfreezes, state changes from prior hits take effect. Win condition is evaluated normally.
 
 ### 21.4 After the shot
 
@@ -2068,7 +2073,8 @@ Default `draw_arc()` point_count: **64 per full circle**, scaled by arc span (e.
 
 | Constraint | Value | Rationale |
 |------------|-------|-----------|
-| Max events per trace | **32** (`BeamSolver.MAX_HITS`) | Every event counts (crossings incl. pass-through and off-segment, cursor, final origin/escape). Prevents infinite loops. |
+| Max significant events per trace | **10** (`MAX_SIGNIFICANT`) | Applied effects, firing state changes, passages of infinity (§12.6). No loop detection: the limits end every loop (Stage 131). |
+| Max events per trace | **64** (`MAX_HITS`) | Every carrier crossing, pass-through and off-segment included; not the cursor (§12.6). |
 | Inversion circle = carrier | Always | No separate inversion-circle parameter. |
 | Min segment length | > 0 | Zero-length segments never hit. Validated at load. |
 | Effect invertibility | Always | Every transformative effect is invertible by definition (§10.8); no matrices are composed since Stage 84, so the former "frame determinant ≠ 0" check no longer applies. Portal rotation `a = unit(cos θ, sin θ)`. |
@@ -2569,7 +2575,7 @@ There is no frame composition. Numerical stability of long effect chains (invers
   3. Otherwise BigFloat tiers (from at least 112 bits, up to 1792) are climbed until two consecutive tiers agree within tolerance with identical event structure. A tier measures a gap within float64's reach of zero at its own precision.
   4. A caller that reads only part of the walks asks for precision only there (Stage 123): a visibility cast reads its physical walk through the first stop after the plan's entries (a hit applied or changing the flags) and its planned walk through the events at its cursor (Stage 124: with no cursor, through the event consuming the plan's last entry); a decision past them is not climbed for, and its walks end two events past them (Stage 124). The preview and the fire read whole walks.
 - **Provenance stack:** cancelling re-hits restore earlier beams exactly instead of recomputing through the chain.
-- **32-event limit** bounds chain length.
+- **Event limits** (10 significant, 64 in all; §12.6) bound chain length.
 - **Projectives** clear the stack and start from an exact line when the hit and axis are exact.
 
 *(Manual overrides, §17.4, are not implemented.)*
@@ -2673,4 +2679,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.42.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.43.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

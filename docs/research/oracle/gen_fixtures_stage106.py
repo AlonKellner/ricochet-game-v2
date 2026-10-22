@@ -105,7 +105,8 @@ def main():
     with Spy() as s:
         f = fixture("periodic_orbit_direction", [c] + BOX, (760.0, 540.0), direction=(1.0, 0.0))
     assert s.fired(1, (760.0, 540.0)) and f["expected"][-1]["kind"] == "max", kinds(f)
-    assert all(h == (1, True) for h in hits(f)) and len(hits(f)) >= 20, kinds(f)
+    # (Stage 131: the inversions and the passages are significant: ten, then a max)
+    assert all(h == (1, True) for h in hits(f)) and len(hits(f)) >= 5, kinds(f)
     fx.append(f)
     with Spy() as s:
         f = fixture("periodic_orbit_aimed_physical", [c] + BOX, (760.0, 540.0), mode="physical", cursor=(1160.0, 540.0))

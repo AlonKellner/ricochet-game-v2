@@ -189,13 +189,15 @@ from beam import Beam, Circle, circle_hits, cross, dot, invert_beam, invert_poin
 from geometry import (LEFT, RIGHT, P, Seg, endpoint_blocked_sides, line_hits, on_segment,
                       side_at, winding)
 
-MAX_HITS = 32
+MAX_HITS = 64          # Stage 131: events in all (every carrier crossing; not the cursor)
+MAX_SIGNIFICANT = 10   # Stage 131: significant events (applied effects, firing state changes, passages of infinity)
 PHYSICAL = 0
 PLANNED = 1
 TRANSFORMATIVE = ("reflection", "inversion", "portal")
 PROJECTIVE = ("line_normal_projection", "circle_normal_projection",
               "line_directional_projection", "circle_directional_projection")
 INFINITY_ID = -3        # plan entry / event id of the point at infinity (Stage 88)
+ORIGIN_ID = -4          # event id of the ray's origin (Stage 131: the player's image in the frame)
 # Stage 88: emit the "infinity" event at the wrap of a straight beam. Off until
 # Stage 88b regenerates the fixtures (the shipped solver does not emit it yet);
 # gen_fixtures_stage88 turns it on.
@@ -557,6 +559,7 @@ class StackEntry:
     pole: object = None         # the exact pole record before the push (Stage 105)
     gc: object = None           # the exact generalized circle before the push (Perf P2b)
     through_c: object = None
+    o: object = None            # the ray's origin before the push (Stage 131; restored by the pop)
 
 
 @dataclass
@@ -573,6 +576,7 @@ class Walk:
     plan_index: int = 0
     plan_matched: bool = True
     left_plan: bool = False   # Stage 129: a surface fired out of plan while entries remained (GAME_SPEC 14.2; sticky)
+    wrapped_off: bool = False # Stage 131: an unplanned passage of infinity or of the ray's origin before the cursor
     plan_spans: list = None   # Stage 108: per entry, a piece's span (Seg) or None (the whole surface)
     carrier_groups: dict = None   # K6: surface id -> the lowest id on exactly the same carrier
     cursor_done: bool = False
@@ -587,6 +591,7 @@ class Walk:
     through_c: object = None                           # K15: the exact homogeneous centre (nx, ny, w) the current beam passes by provenance (a circle normal's exit), or None
     on_plan: bool = True                               # on the planned beams: every projective fired at its H
     Q: object = None                                   # the current frame's image of infinity (None = inf)
+    O: object = None                                   # Stage 131: the ray's origin in the frame (the player's image; None = inf)
     # Stage 105: the exact pole record (Qx, Qy, Dx, Dy), Fractions: the frame's
     # infinity point and the beam's direction there (any nonzero real scale),
     # or None (Q at infinity, or the frame's data not exact)
@@ -600,7 +605,9 @@ class Walk:
     # B5 (Stage 110): the point being crossed (a run of tied candidates), with
     # the planned walk's shadow over it -- see _Point
     point: object = None
-    max_hits: int = MAX_HITS   # the event budget (Stage 111: the realization decides with a wider one)
+    max_hits: int = MAX_HITS   # the hit budget (Stage 111: the realization decides with a wider one)
+    max_sig: int = MAX_SIGNIFICANT  # Stage 131: the significant hits' budget
+    sig: int = 0               # Stage 131: significant events so far
 
 
 @dataclass
@@ -857,6 +864,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
     if fresh:
         t0 = mp.mpf(0)
     while not walk.done:
+        count0 = walk.count             # (a lap that counts nothing ends at its departure, below)
         if POLE_HOOK is not None:
             POLE_HOOK(walk, beam)       # tests: the record beside each beam
         cands = []
@@ -924,6 +932,17 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 D = hj[2] if len(hj) > 2 else None
                 if D is not None and not any(k[0] == D for k in walk.known) and gc_at(walk.gc, FC(D)) == 0:
                     walk.known.append((D, beam.param_of(D), None))
+        # Stage 131: the ray's origin, where the beam passes it -- not at its
+        # departure (a loop's return there is the loop's end, below). A known
+        # point of the beam: a carrier exactly through it is crossed there, at
+        # its parameter (the crossing first, then the passage)
+        if walk.O is not None and walk.O != (beam.p if fresh else beam.at(t0)):
+            ko = next((k for k in walk.known if k[0] == walk.O), None)
+            to = ko[1] if ko is not None else beam.param_of(walk.O)
+            if to != t0:
+                cands.append((sort_key(to, t0), 3, ORIGIN_ID, to, False))
+                if ko is None:
+                    walk.known.append((walk.O, to, None))
         snapped = {}
         for kp, kt, skip in walk.known:
             for s in walk.surfaces:
@@ -996,13 +1015,39 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     if _point_sync(walk):
                         _late_cursor(walk, beam, cands, ci, key, t0)
                 continue        # absent under the current flags (Stage 107): no crossing at all
+            if sid == -1:
+                if walk.mode == PHYSICAL and walk.wrapped_off:
+                    continue   # (Stage 131: the walk left the plan by an unplanned wrap: no cursor after it)
+                # the cursor is not a hit point (Stage 131): counted toward neither limit
+                _append(walk, Event("cursor", point=beam.at(t), t=t, beam=beam))
+                walk.cursor_done = True
+                walk.mode = walk.post_mode
+                walk.on_plan = False
+                continue
             walk.count += 1
+            if sid == ORIGIN_ID:
+                if walk.count > walk.max_hits or walk.sig + 1 > walk.max_sig:
+                    _append(walk, Event("max", point=walk.O, t=t, beam=beam))
+                    walk.done = True
+                    return
+                walk.sig += 1
+                ev = Event("origin", point=walk.O, t=t, beam=beam, flags=walk.flags)
+                _append(walk, ev)
+                if walk.mode == PHYSICAL and not walk.cursor_done:
+                    # unplanned before the cursor: a divergence, like infinity's
+                    walk.left_plan = True
+                    walk.wrapped_off = True
+                    walk.plan_matched = False
+                    walk.on_plan = False
+                    ev.off_plan = True
+                continue
             if sid == INFINITY_ID:
                 q_pt = snapped.get((INFINITY_ID, t))   # None: the real infinity
-                if walk.count > walk.max_hits:
+                if walk.count > walk.max_hits or walk.sig + 1 > walk.max_sig:
                     _append(walk, Event("max", INFINITY_ID, point=q_pt, t=t, beam=beam))
                     walk.done = True
                     return
+                walk.sig += 1               # (the passage of infinity is significant)
                 consumed = walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index][0] == INFINITY_ID
                 if consumed:
                     walk.plan_index += 1
@@ -1011,6 +1056,14 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 if walk.mode == PHYSICAL:
                     _point_step(walk, None, INFINITY_ID, None, None)
                     consumed = _point_sync(walk) or consumed
+                    if not consumed and not walk.cursor_done:
+                        # Stage 131 (the user): an unplanned passage of infinity before
+                        # the cursor is a divergence -- the walk leaves the plan there
+                        walk.left_plan = True
+                        walk.wrapped_off = True
+                        walk.plan_matched = False
+                        walk.on_plan = False
+                        walk.events[-1].off_plan = True
                 if consumed:
                     _late_cursor(walk, beam, cands, ci, key, t0)
                 continue
@@ -1020,12 +1073,6 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 _append(walk, Event("max", point=mp_, t=t, beam=beam))
                 walk.done = True
                 return
-            if sid == -1:
-                _append(walk, Event("cursor", point=beam.at(t), t=t, beam=beam))
-                walk.cursor_done = True
-                walk.mode = walk.post_mode
-                walk.on_plan = False
-                continue
             surf = by_id[sid]
             if rehit:
                 # the departure point: the beam's own p when fresh, else the known
@@ -1068,6 +1115,13 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 do = eff if (eff in TRANSFORMATIVE or eff in PROJECTIVE) else None
                 fires_state = bool(changes)
                 fired = not ghosted
+            if do is not None or fires_state:
+                # Stage 131: a significant hit point past the limit -- cut here (drawn up to it, no effect)
+                if walk.sig + 1 > walk.max_sig:
+                    _append(walk, Event("max", point=pt, t=t, beam=beam))
+                    walk.done = True
+                    return
+                walk.sig += 1
             walk.flags_before = walk.flags
             if fires_state:
                 walk.flags = apply_states(walk.flags, changes)
@@ -1122,21 +1176,48 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             _late_cursor(walk, beam, cands, ci, key, t0)
         if walk.mode == PHYSICAL:
             _point_close(walk)
-        if not applied and fired_state:
-            # no effect, but the loop changed the state: the next loop on the
-            # same beam differs (e.g. a ghost toggler re-hit) -- walk it again
-            continue
         if not applied:
-            # nothing fired on the full loop: a line escapes through infinity;
-            # a circle closes at its departure point (beam.at(t0)) and repeats
+            # nothing fired on the full loop (or the loop only changed the state:
+            # the next one differs, e.g. a ghost toggler re-hit). Stage 131: no loop
+            # detection -- the arrow goes round again and the limits end it. A line
+            # with the infinity switch off leaves through infinity (it does not wrap).
+            if beam.kappa == 0 and not EMIT_INFINITY:
+                if fired_state:
+                    continue   # (walked again on the same beam, as before)
+                _append(walk, Event("escape"))
+                walk.done = True
+                return
+            if not EMIT_INFINITY:
+                # the passage of the frame's infinity, unseen (a circle with the
+                # switch off): significant all the same
+                walk.sig += 1
+                if walk.sig > walk.max_sig:
+                    _append(walk, Event("max", INFINITY_ID, point=walk.Q, beam=beam,
+                                        t=beam.param_of(walk.Q) if walk.Q is not None else None))
+                    walk.done = True
+                    return
+            # back at the departure: when it is the ray's origin (the player, a
+            # projected ray's start), its passage -- a significant event (the user);
+            # unplanned before the cursor, a divergence: the walk leaves the plan.
+            # Another departure is no event: the beam goes round again
+            o = beam.p if fresh else beam.at(t0)
+            if (walk.O is None or walk.O != o) and walk.count > count0:
+                continue
             walk.count += 1
-            if walk.count <= walk.max_hits:
-                if beam.kappa == 0:
-                    _append(walk, Event("escape"))
-                else:
-                    _append(walk, Event("origin", point=beam.p if fresh else beam.at(t0)))
-            walk.done = True
-            return
+            if walk.count > walk.max_hits or walk.sig + 1 > walk.max_sig:
+                _append(walk, Event("max", point=o, t=t0, beam=beam))
+                walk.done = True
+                return
+            walk.sig += 1
+            ev = Event("origin", point=o, t=t0, beam=beam, flags=walk.flags)
+            _append(walk, ev)
+            if walk.mode == PHYSICAL and not walk.cursor_done:
+                walk.left_plan = True
+                walk.wrapped_off = True
+                walk.plan_matched = False
+                walk.on_plan = False
+                ev.off_plan = True
+            continue
 
 
 def _late_cursor(walk: Walk, beam, cands, ci, key, t0):
@@ -1182,6 +1263,9 @@ def _project(walk: Walk, beam, t, surf: Surface, side, pt, pt_exact):
     nb = Beam(pt, exit / abs(exit), mp.mpf(0))
     walk.stack = []
     walk.Q = None
+    # (a new ray: its origin is its departure -- a circle normal's, the circle's
+    # centre, which every ray of the projection passes: Stage 131, the user)
+    walk.O = seg.c if etype == "circle_normal_projection" else pt
     walk.pole = None
     walk.known = [(pt, mp.mpf(0), surf.id)] if pt_exact else []
     walk.line = None
@@ -1348,6 +1432,7 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
         walk.line = top.line
         walk.gc = top.gc
         walk.Q = top.q
+        walk.O = top.o
         walk.pole = top.pole
         walk.through_c = top.through_c
         return top.beam, top.sid, t_res, False
@@ -1355,9 +1440,10 @@ def _apply(walk: Walk, beam, t, surf: Surface, etype, depart, fresh, t0, rehit, 
     portal = surf.portal()
     pop_id = portal[2] if portal is not None else surf.id
     walk.stack.append(StackEntry(beam, surf.id, t, other, walk.known, walk.line, pop_id, map_kind(surf, etype), walk.Q,
-                                 walk.pole, walk.gc, walk.through_c))
+                                 walk.pole, walk.gc, walk.through_c, walk.O))
     walk.pole = _pole_apply(walk.pole, walk.Q, walk.line, surf)
     walk.Q = map_point(walk.Q, surf)
+    walk.O = map_point(walk.O, surf)
     nb = apply_effect(beam, t, surf, etype, pt)
     old_known = walk.known
     if portal is not None:
@@ -1773,19 +1859,22 @@ def trace_physical_direction(surfaces, player, direction, plan=(), cursor=None, 
 
 
 def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="direction", flags=None,
-                         extra_known=(), proj_hits=None, beam=None, exact_aim=None, spans=None, max_hits=MAX_HITS):
+                         extra_known=(), proj_hits=None, beam=None, exact_aim=None, spans=None, max_hits=MAX_HITS,
+                         max_sig=MAX_SIGNIFICANT):
     """line: the initial beam's exact implicit line; "direction": `direction`
     is exact data; None: not exact. beam: the initial beam itself (a scene
     with a pre-transform: the circle through Q0); else the straight beam
     along `direction`, or the circle through Q0 tangent to it."""
     walk = Walk(hittable(surfaces), list(plan), cursor, mode, PHYSICAL)
     walk.max_hits = max_hits
+    walk.max_sig = max_sig
     walk.plan_spans = spans
     walk.flags = dict(flags or {})
     walk.flags_before = walk.flags
     walk.proj_hits = proj_hits or {}
     walk.Q = pre_q(surfaces)
     p0 = P(player)
+    walk.O = p0
     # the exact pole record of a pre-transform frame (Stage 105): Q0 exact, the
     # direction there from the initial beam (an aimed shot needs the exact aim
     # image `exact_aim`; a direction shot its exact direction)
@@ -2195,7 +2284,7 @@ def _planned_oriented(surfaces, player, cursor, plan, flags, hints, away):
     # wide one, so that a realization cut by MAX_HITS still counts as reaching
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
                                 extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
-                                beam=beam, exact_aim=xe, max_hits=8 * MAX_HITS)
+                                beam=beam, exact_aim=xe, max_hits=8 * MAX_HITS, max_sig=8 * MAX_SIGNIFICANT)
 
 
 def _aim(surfaces, player, cursor, plan, flags=None, hints=None):

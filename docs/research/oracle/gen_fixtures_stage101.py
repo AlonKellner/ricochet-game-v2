@@ -48,13 +48,17 @@ def main():
     Q0 = pre(9, (500.0, 0.0), 200.0)          # Q0 = (500, 0), on screen
     # --- the pre-transform frame, direction traces ---
     f = fixture("pre_straight_through_q", [Q0], (0.0, 0.0), direction=(1.0, 0.0))
-    assert [e["kind"] for e in f["expected"]] == ["infinity", "escape"] and near(inf_points(f)[0], 500, 0), kinds(f)
+    # (Stage 131: no loop detection -- each loop passes Q0 and the ray's origin,
+    # both significant: ten, then a max)
+    loops = ["infinity", "origin"] * (T.MAX_SIGNIFICANT // 2) + ["max"]
+    assert [e["kind"] for e in f["expected"]] == loops and near(inf_points(f)[0], 500, 0), kinds(f)
     fx.append(f)
     f = fixture("pre_circle_passes_q", [Q0], (0.0, 0.0), direction=(1.0, 0.5))
-    assert [e["kind"] for e in f["expected"]] == ["infinity", "origin"] and near(inf_points(f)[0], 500, 0), kinds(f)
+    assert [e["kind"] for e in f["expected"]] == loops and near(inf_points(f)[0], 500, 0), kinds(f)
     fx.append(f)
     f = fixture("pre_player_at_q_straight", [Q0], (500.0, 0.0), direction=(1.0, 0.0))
-    assert [e["kind"] for e in f["expected"]] == ["escape"], kinds(f)
+    # (its passages of Q0 unseen: it starts at Q0, the ray's origin -- each loop is one passage of the origin)
+    assert [e["kind"] for e in f["expected"]] == ["origin"] * T.MAX_SIGNIFICANT + ["max"], kinds(f)
     fx.append(f)
     # two pre-transform circles: Q0 is the second inversion's image of the first center
     two = [pre(9, (500.0, 0.0), 200.0), pre(10, (800.0, 100.0), 150.0)]
@@ -64,18 +68,21 @@ def main():
     fx.append(f)
     # the player at Q: the straight line to the cursor (infinity first cannot pass Q, the start)
     p = pair(fx, "pre_player_at_q_direct", [Q0], (500.0, 0.0), (300.0, 100.0), [])
-    assert [e["kind"] for e in p["expected"]] == ["cursor", "escape"], kinds(p)
+    assert [e["kind"] for e in p["expected"]] == ["cursor"] + ["origin"] * T.MAX_SIGNIFICANT + ["max"], kinds(p)   # (Stage 131: from Q0, the origin, its passages of Q0 unseen)
     f = fixture("pre_player_at_q_infinity_first_planned", [Q0], (500.0, 0.0), plan=[INF], mode="planned", cursor=(300.0, 100.0))
     assert not reaches(f), kinds(f)
     fx.append(f)
     # the aim point at Q: the line through both, the cursor first at the tie
     p = pair(fx, "pre_cursor_at_q", [Q0], (0.0, 0.0), (500.0, 0.0), [])
-    assert [e["kind"] for e in p["expected"]] == ["cursor", "infinity", "escape"], kinds(p)
+    ks = [e["kind"] for e in p["expected"]]   # (Stage 131: the loops after, to a max)
+    assert ks[:2] == ["cursor", "infinity"] and ks[-1] == "max", kinds(p)
     # --- the two realizations in the pre-transform frame ---
     p = pair(fx, "pre_direct", [Q0], (0.0, 0.0), (300.0, 100.0), [])
-    assert [e["kind"] for e in p["expected"]] == ["cursor", "infinity", "origin"] and infinities(p) == [False], kinds(p)
+    ks = [e["kind"] for e in p["expected"]]
+    assert ks[:2] == ["cursor", "infinity"] and ks[-1] == "max" and infinities(p)[0] is False, kinds(p)
     p = pair(fx, "pre_infinity_first", [Q0], (0.0, 0.0), (300.0, 100.0), [INF])
-    assert [e["kind"] for e in p["expected"]] == ["infinity", "cursor", "origin"] and infinities(p) == [True], kinds(p)
+    ks = [e["kind"] for e in p["expected"]]
+    assert ks[:2] == ["infinity", "cursor"] and ks[-1] == "max" and infinities(p)[0] is True, kinds(p)
     # --- a mirror in the pre-transform frame: Q moves with the reflection ---
     m = line(1, (400.0, -300.0), (400.0, 300.0), REFL, REFL)
     f = fixture("pre_mirror_moves_q", [Q0, m], (0.0, 0.0), direction=(1.0, 0.3))
@@ -96,7 +103,8 @@ def main():
     assert ks[0] == "hit" and f["expected"][0]["applied"] and "infinity" not in ks and ks[-1] == "max", kinds(f)
     fx.append(f)
     # --- the MAX_HITS cut at a finite Q carries its point ---
-    lines = [line(i + 1, (10.0 * (i + 1), -500.0), (10.0 * (i + 1), 500.0), PASS, PASS) for i in range(T.MAX_HITS)]
+    # (Stage 131: MAX_HITS lines all before Q at x = 500, so that the next event is the passage of Q)
+    lines = [line(i + 1, (7.0 * (i + 1), -500.0), (7.0 * (i + 1), 500.0), PASS, PASS) for i in range(T.MAX_HITS)]
     f = fixture("pre_max_at_q_has_point", [Q0] + lines, (0.0, 0.0), direction=(1.0, 0.0))
     last = f["expected"][-1]
     assert last["kind"] == "max" and last["surface_id"] == T.INFINITY_ID and near((last["x"], last["y"]), 500, 0), last

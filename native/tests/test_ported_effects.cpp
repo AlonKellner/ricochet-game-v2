@@ -736,17 +736,17 @@ TEST_CASE("ported: the stage 81-87 fixtures match the oracle") {
 		CHECK(rule("terminal_ends_trace")["expected"].back()["terminal"].get<bool>());
 	}
 	{
-		INFO("test_max_hits_32_counts_all_events: 32 hits, then the MAX_HITS stop");
+		INFO("test_max_hits_32_counts_all_events (Stage 131): ten reflections (significant), then the stop");
 		const auto ev = walk64(rule("max_hits_parallel_mirrors"));
-		CHECK(std::count_if(ev.begin(), ev.end(), [](const Event<F64> &e) { return e.kind == EventKind::Hit; }) == 32);
+		CHECK(std::count_if(ev.begin(), ev.end(), [](const Event<F64> &e) { return e.kind == EventKind::Hit; }) == MAX_SIGNIFICANT);
 		REQUIRE(!ev.empty());
 		CHECK(ev.back().kind == EventKind::Max);
 	}
 	{
-		INFO("test_departure_rehit_is_ordinary_hit: the second event (infinity aside) is the departure re-hit");
+		INFO("test_departure_rehit_is_ordinary_hit: the second event (infinity and the ray's origin aside) is the departure re-hit");
 		std::vector<Event<F64>> ev;
 		for (const Event<F64> &e : walk64(rule("departure_rehit_straight"))) {
-			if (e.kind != EventKind::Infinity) {
+			if (e.kind != EventKind::Infinity && e.kind != EventKind::Origin) {
 				ev.push_back(e);
 			}
 		}
@@ -1066,8 +1066,9 @@ TEST_CASE("ported: test_stage111_orientation: test_region_covers_both_sides_of_t
 		tr.set_defs(defs);
 		const vis::Result region = vis::compute(tr, player, {mirror}, Flags(), bounds);
 		CHECK(region.supported);
-		CHECK_MESSAGE(vis::contains(region, at(480.5005, 524.9722)) == vis::Membership::Inside, "in front of the image");
-		CHECK_MESSAGE(vis::contains(region, at(166.1731, 535.9927)) == vis::Membership::Inside, "behind the image");
+		// Stage 131: both sides of the image are reached through infinity, unplanned: a divergence
+		CHECK_MESSAGE(vis::contains(region, at(480.5005, 524.9722)) == vis::Membership::Outside, "in front of the image (an unplanned infinity)");
+		CHECK_MESSAGE(vis::contains(region, at(166.1731, 535.9927)) == vis::Membership::Outside, "behind the image (an unplanned infinity)");
 		CHECK_MESSAGE(vis::contains(region, at(1000, 600)) == vis::Membership::Inside, "the player's side");
 		CHECK_MESSAGE(vis::contains(region, at(293.33, 900)) == vis::Membership::Outside, "the aim parallel to the mirror never fires it");
 	}
@@ -1077,6 +1078,8 @@ TEST_CASE("ported: test_stage111_orientation: test_region_covers_both_sides_of_t
 		tr.set_defs(defs);
 		const vis::Result with_inf = vis::compute(tr, player, {mirror, inf}, Flags(), bounds);
 		CHECK_MESSAGE(vis::contains(with_inf, at(1000, 600)) == vis::Membership::Outside, "with the entry: the player's side is passed with the wrap pending");
-		CHECK_MESSAGE(vis::contains(with_inf, at(166.1731, 535.9927)) == vis::Membership::Inside, "with the entry: behind the image");
+		CHECK_MESSAGE(vis::contains(with_inf, at(166.1731, 535.9927)) == vis::Membership::Inside, "with the entry: before the image");
+		// Stage 131: back from the wrap, the beam passes the ray's origin -- the player's image (293.3, 540) -- unplanned
+		CHECK_MESSAGE(vis::contains(with_inf, at(480.5005, 524.9722)) == vis::Membership::Outside, "with the entry: past the image");
 	}
 }

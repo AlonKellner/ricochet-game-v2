@@ -78,6 +78,17 @@
    "y": "750.0000000000000000000000000000000000000"
   },
   {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "458.2367779061034258144872303611428563078",
+   "y": "745.4644766293836934629823650159603387288"
+  },
+  {
    "kind": "cursor",
    "surface_id": -1,
    "side": "",

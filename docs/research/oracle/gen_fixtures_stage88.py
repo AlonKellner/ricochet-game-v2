@@ -75,14 +75,18 @@ def main():
     ahead = line(1, (50, -500), (50, 500), PASS, PASS)
     behind = line(2, (-50, -500), (-50, 500), PASS, PASS)
     f = fixture("wrap_between_ahead_and_wrapped_crossings", [ahead, behind], (0.0, 0.0), direction=(1.0, 0.0))
-    assert [e["kind"] for e in f["expected"]] == ["hit", "infinity", "hit", "escape"], kinds(f)
+    # (Stage 131: no loop detection -- each loop passes infinity and the ray's
+    # origin, both significant, until the 11th)
+    ks = [e["kind"] for e in f["expected"]]
+    assert ks[:4] == ["hit", "infinity", "hit", "origin"] and ks.count("infinity") + ks.count("origin") == T.MAX_SIGNIFICANT and ks[-1] == "max", kinds(f)
     fx.append(f)
-    # a mirror in an open scene: reflect, wrap, re-hit (pop), wrap, ... cut by MAX_HITS
+    # a mirror in an open scene: reflect, wrap, re-hit (pop), wrap, ... cut by the
+    # tenth significant event (Stage 131)
     m = line(1, (100, -500), (100, 500), REFL, REFL)
     f = fixture("mirror_wrap_loop_counts_to_max", [m], (0.0, 0.0), direction=(1.0, 1.0))
-    assert f["expected"][-1]["kind"] == "max" and len(f["expected"]) == T.MAX_HITS + 1, kinds(f)
+    assert f["expected"][-1]["kind"] == "max" and len(f["expected"]) == T.MAX_SIGNIFICANT + 1, kinds(f)
     fx.append(f)
-    # the cut on the wrap itself: 32 pass lines ahead
+    # the cut on the wrap itself: MAX_HITS pass lines ahead
     lines = [line(i + 1, (10 * (i + 1), -500), (10 * (i + 1), 500), PASS, PASS) for i in range(T.MAX_HITS)]
     f = fixture("max_at_infinity_has_no_point", lines, (0.0, 0.0), direction=(1.0, 0.0))
     last = f["expected"][-1]
@@ -109,7 +113,8 @@ def main():
     # wrap; [inf, M] reaches the other way round
     m = line(1, (200, -300), (200, 300), REFL, REFL)
     p = pair(fx, "mirror_direct_reaches_through_unapplied_wrap", [m], (0.0, 0.0), (300.0, 50.0), [(1, "RIGHT")])
-    assert [e["kind"] for e in p["expected"]][:3] == ["hit", "infinity", "cursor"] and infinities(p)[0] is False, kinds(p)
+    # (Stage 131: back from the wrap, the ray's origin -- the player's image (400, 0) -- first)
+    assert [e["kind"] for e in p["expected"]][:4] == ["hit", "infinity", "origin", "cursor"] and infinities(p)[0] is False, kinds(p)
     p = pair_search(fx, "infinity_then_mirror", [m], (0.0, 0.0), (300.0, 50.0), [INF, 1])
     assert [e["kind"] for e in p["expected"]][:3] == ["infinity", "hit", "cursor"] and infinities(p)[0] is True, kinds(p)
     # mirror first, the reflected beam wraps onto the cursor
@@ -124,9 +129,11 @@ def main():
                     plan=[INF, (1, side)], mode="planned", cursor=(600.0, 50.0))
         got[side] = f
         fx.append(f)
-    far = [s for s, f in got.items() if reaches(f)]
+    # (Stage 131: no loop detection -- the near face reaches the cursor too, on the
+    # next loop: the far face's plan is the one that reaches it on the first)
+    # (the far face's reflected beam passes the player's image, the ray's origin, first)
+    far = [s for s, f in got.items() if [e["kind"] for e in f["expected"]][:4] == ["infinity", "hit", "origin", "cursor"]]
     assert len(far) == 1, {s: kinds(f) for s, f in got.items()}
-    assert [e["kind"] for e in got[far[0]]["expected"]][:3] == ["infinity", "hit", "cursor"], kinds(got[far[0]])
     near = got["LEFT" if far[0] == "RIGHT" else "RIGHT"]
     assert [e["kind"] for e in near["expected"]][:2] == ["hit", "infinity"] and not near["expected"][0]["applied"], kinds(near)
     # two mirrors with the wrap between them
@@ -147,7 +154,7 @@ def main():
                    for e in f["expected"] if e["kind"] == "infinity"), kinds(f)
         met.append(reaches(f))
         fx.append(f)
-    assert True in met and False in met, met
+    assert all(met), met   # (Stage 131: no loop detection -- the other side meets it on a later loop)
     # a projective whose exit points away from the cursor: reached through the
     # wrap; the infinity entry in that epoch is optional
     proj = {"type": "line_normal_projection", "interactive": True, "back": False}

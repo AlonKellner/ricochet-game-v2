@@ -208,6 +208,17 @@
    "y": "840.0000000000000000000000000000000000000"
   },
   {
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "671.0943603515625000000000000000000000000",
+   "y": "808.8207397460937500000000000000000000000"
+  },
+  {
    "kind": "hit",
    "surface_id": 5,
    "side": "LEFT",
@@ -241,13 +252,15 @@
    "y": "371.4189815689142201669226772683400496657"
   },
   {
-   "kind": "escape",
-   "surface_id": -1,
-   "side": "",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false
+   "kind": "hit",
+   "surface_id": 1,
+   "side": "RIGHT",
+   "applied": true,
+   "terminal": true,
+   "on_segment": true,
+   "rehit": false,
+   "x": "1294.803721984593247919950008415201482534",
+   "y": "240.0000000000000000000000000000000000000"
   }
  ],
  "physical": [

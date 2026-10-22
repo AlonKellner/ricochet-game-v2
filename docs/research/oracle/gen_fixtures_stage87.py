@@ -98,7 +98,14 @@ def main():
     for k, cur in enumerate([(383.3994, 487.9036), (146.1522, 559.0353)]):
         for mode in ("planned", "physical"):
             f = fixture("user_capture_%d_%s" % (k, mode), pl, (842.1705, 878.0266), plan=uplan, mode=mode, cursor=cur)
-            assert reaches(f), kinds(f)
+            if k == 1 and mode == "physical":
+                # Stage 131 (the user): past the portal 13 the ray's origin -- the circle
+                # normal 9's centre, carried by the portal -- comes before this cursor:
+                # unplanned, a divergence
+                ks = [e["kind"] for e in f["expected"]]
+                assert not reaches(f) and "origin" in ks, kinds(f)
+            else:
+                assert reaches(f), kinds(f)
             fx.append(f)
     # the same fork, clicked on the other half: the other candidate
     f = fixture("fork_other_click_planned", pl, (842.1705, 878.0266), mode="planned", cursor=(146.1522, 559.0353),

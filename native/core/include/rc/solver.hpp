@@ -29,7 +29,12 @@
 
 namespace rc {
 
-constexpr int MAX_HITS = 32;
+// Stage 131 (GAME_SPEC 12.6): no loop detection -- two limits end every trace:
+// events in all (every carrier crossing and passage of infinity; not the
+// cursor), and significant events (applied effects, firing state changes,
+// passages of infinity)
+constexpr int MAX_HITS = 64;
+constexpr int MAX_SIGNIFICANT = 10;
 // Plan entry / event id of the point at infinity (Stage 88): the player
 // clicked the level bounds' edge; the beam wraps through infinity there.
 constexpr int INFINITY_ID = -3;
@@ -103,6 +108,7 @@ struct Event {
 	bool anchored = false;  // cursor: reached on the anchored path
 	int beam_view = -1;     // identity of the beam as the events see it (Backend::views_per_run)
 	bool off_plan = false;  // Stage 129: the walk has left the plan by this event (GAME_SPEC 14.2: a part of its frame)
+	int lap = 0;            // Stage 131: the loops its beam had gone round with nothing fired (no loop detection: they repeat)
 };
 
 // Stage 123: the exact incidence of a point on a surface's carrier (Solver::
@@ -322,6 +328,7 @@ struct StackEntry {
 	int pole_serial = 0;
 	std::shared_ptr<const exact::BeamRec> rec; // the exact beam before the push (Perf P2b)
 	const Surf<N> *through_c = nullptr;        // K15: the provenance before the push (restored by the pop)
+	std::optional<CN<N>> o;                    // Stage 131: the ray's origin before the push (restored by the pop)
 };
 
 template <Num N>
@@ -333,6 +340,7 @@ struct Candidate {
 	int tie = -1;                  // concurrent-tie group index
 	bool inf = false;              // the wrap through t = infinity of a straight beam (Stage 88)
 	bool at_q = false;             // pinned at the frame's infinity point (Stage 105)
+	bool origin = false;           // Stage 131: the passage of the ray's origin (surf nullptr, pt the origin)
 };
 
 // Anchored beams B_0..B_K of a plan (flat: beams[j] is the beam after j
@@ -462,9 +470,13 @@ struct Walk {
 	int plan_index = 0;
 	bool plan_matched = true;
 	bool left_plan = false; // Stage 129: a surface fired out of plan while entries remained (GAME_SPEC 14.2; sticky)
+	bool wrapped_off = false; // Stage 131: an unplanned passage of infinity or of the ray's origin before the cursor
 	bool cursor_done = false;
 	int count = 0;
 	int max_events = MAX_HITS;
+	int max_sig = MAX_SIGNIFICANT; // Stage 131
+	int sig = 0;                    // ... the significant events so far
+	int lap = 0;                    // ... the loops the current beam has gone round with nothing fired
 	// Workflow W2.0: a decision walk (realize, R2) needs the cursor event alone:
 	// it stops there (the events up to it are the same walk's)
 	bool stop_at_cursor = false;
@@ -503,6 +515,7 @@ struct Walk {
 	// the pre-transform's at the start, mapped forward by every applied effect,
 	// restored by a pop, infinity again after a projective
 	std::optional<CN<N>> Q;
+	std::optional<CN<N>> O; // Stage 131: the ray's origin in the frame (the player's image; nullopt = infinity)
 	// Stage 105: the exact pole record (Q exactly, and the beam's direction at
 	// Q), or nullopt (Q at infinity, or the frame's data not exact); its serial
 	// keys the tangency cache
@@ -613,6 +626,7 @@ public:
 		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
 			set_pole(w, exact::pole_start_direction(player.fx(), player.fy(), dir.fx(), dir.fy(), *q0));
 		}
+		w.O = b0->p; // (Stage 131: the first ray's origin, the player)
 		walk_from(w, b0, -1, std::nullopt);
 		return w;
 	}
@@ -1896,6 +1910,7 @@ private:
 		w.mode = mode;
 		w.post_mode = Mode::Physical;
 		w.max_events = max_events;
+		w.max_sig = max_events == MAX_HITS ? MAX_SIGNIFICANT : (max_events / MAX_HITS) * MAX_SIGNIFICANT; // (the realization's wide budget: 8 x each)
 		w.Q = effects::scene_pre_q(scene_);
 		w.record_poles = record_poles_;
 		w.pole_memo = cache_ ? &cache_->poles : nullptr;
@@ -1942,6 +1957,7 @@ private:
 			}
 		}
 		add_aim_known(w, *b0);
+		w.O = b0->p; // (Stage 131: the first ray's origin, the player)
 		walk_from(w, b0, -1, std::nullopt);
 		return w;
 	}
@@ -2088,6 +2104,7 @@ private:
 			add_line_endpoints(w, *b0);
 		}
 		add_aim_known(w, *b0);
+		w.O = b0->p; // (Stage 131: the first ray's origin, the player)
 		walk_from(w, b0, -1, std::nullopt);
 		return w;
 	}
@@ -2520,6 +2537,22 @@ private:
 				}
 			}
 		}
+		// Stage 131: the ray's origin, where the beam passes it -- not at its
+		// departure (a loop's return there is the loop's end, walk_from). A known
+		// point of the beam: a carrier exactly through it is crossed there, at its
+		// parameter (the crossing first, then the passage)
+		if (w.O && !geom::eq(*w.O, fresh ? beam.p : beam.at(t0))) {
+			const int ki = known_index(w.known, *w.O);
+			const N to = ki >= 0 ? w.known[size_t(ki)].t : Backend<N>::param_of(beam, *w.O);
+			if (to.cmp(t0) != 0) {
+				Candidate<N> oc{to, nullptr, false, w.O, -1};
+				oc.origin = true;
+				cands.push_back(oc);
+				if (ki < 0) {
+					w.known.push_back(Known<N>{*w.O, to, -1, std::nullopt});
+				}
+			}
+		}
 		for (Known<N> &kp : w.known) {
 			snap(w, beam, cands, kp);
 		}
@@ -2572,8 +2605,8 @@ private:
 		}
 		std::sort(cands.begin(), cands.end(), [&](const Candidate<N> &a, const Candidate<N> &b) {
 			// the cursor at the departure point comes first (the wrap candidate is not the cursor)
-			const bool a_cursor = a.surf == nullptr && !a.inf;
-			const bool b_cursor = b.surf == nullptr && !b.inf;
+			const bool a_cursor = a.surf == nullptr && !a.inf && !a.origin;
+			const bool b_cursor = b.surf == nullptr && !b.inf && !b.origin;
 			if (cursor_now && a_cursor != b_cursor) {
 				return a_cursor;
 			}
@@ -2583,6 +2616,9 @@ private:
 			}
 			if (a.inf != b.inf) {
 				return b.inf; // at a tie the passage of infinity comes after the cursor and the hits
+			}
+			if (a.origin != b.origin) {
+				return b.origin; // (and the ray's origin after them, before infinity)
 			}
 			const int ia = a.surf == nullptr ? -1 : a.surf->id;
 			const int ib = b.surf == nullptr ? -1 : b.surf->id;
@@ -3026,6 +3062,7 @@ private:
 		e.kind = kind;
 		e.beam = beam;
 		e.off_plan = w.left_plan;
+		e.lap = w.lap;
 		if (Backend<N>::views_per_run()) {
 			if (w.hp_view < 0 || w.hp_src != beam) {
 				w.hp_src = beam;
@@ -3105,6 +3142,7 @@ private:
 		bool fired_state = false; // a state change in the current loop
 		bool keep_cursor = false; // K4: the seed restart keeps the listed cursor
 		while (!w.done) {
+			const int count0 = w.count; // (Stage 131: a lap that counts nothing ends at its departure)
 			// Stage 124: past what the caller reads (and two events more): done (the
 			// events so far are the whole walk's: it is decided step by step)
 			if (w.read_horizon != nullptr && (*w.read_horizon)(w.events) + 2 <= w.events.size()) {
@@ -3143,7 +3181,7 @@ private:
 					if (w.point && (wrap || w.point->wrap || cand.t.cmp(w.point->t) != 0 || cand.rehit != w.point->rehit)) {
 						point_close(w);
 					}
-					if (!w.point && (surf != nullptr || cand.inf) && w.plan_matched && w.on_plan && !w.cursor_done) {
+					if (!w.point && (surf != nullptr || cand.inf || cand.origin) && w.plan_matched && w.on_plan && !w.cursor_done) {
 						w.point = PointGroup<N>{t, rehit, wrap, w.flags, w.plan_index, false, false};
 					}
 				}
@@ -3159,8 +3197,11 @@ private:
 					ci++; // absent under the current flags (Stage 107): no crossing at all
 					continue;
 				}
-				w.count++;
-				if (w.count > w.max_events) {
+				const bool is_cursor = surf == nullptr && !cand.inf && !cand.origin; // (Stage 131: the cursor counts toward neither limit)
+				if (!is_cursor) {
+					w.count++;
+				}
+				if (!is_cursor && (w.count > w.max_events || ((cand.inf || cand.origin) && w.sig + 1 > w.max_sig))) {
 					// cut at the next crossing: drawn up to it, no effect (at the
 					// wrap: a max at infinity, no point)
 					Event<N> &me = emit(w, EventKind::Max, beam, t_prev, (cand.inf && !cand.pt) ? std::nullopt : std::optional<N>(t), INF_D);
@@ -3177,7 +3218,27 @@ private:
 					w.done = true;
 					return;
 				}
+				if (cand.origin) {
+					// Stage 131: the passage of the ray's origin -- significant; unplanned
+					// before the cursor, a divergence, like infinity's
+					w.sig++;
+					Event<N> &oe = emit(w, EventKind::Origin, beam, t_prev, t, gp[ci]);
+					oe.why = gw[ci];
+					oe.point = cand.pt;
+					oe.flags = w.flags;
+					t_prev = t;
+					if (w.mode == Mode::Physical && !w.cursor_done) {
+						w.left_plan = true;
+						w.wrapped_off = true;
+						w.plan_matched = false;
+						w.on_plan = false;
+						oe.off_plan = true;
+					}
+					ci++;
+					continue;
+				}
 				if (cand.inf) {
+					w.sig++; // (Stage 131: the passage of infinity is significant)
 					// the wrap through infinity (Stage 88): consumes the infinity
 					// entry when it is next in the plan, in both modes
 					bool consumed = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].is_infinity();
@@ -3196,11 +3257,24 @@ private:
 					if (w.mode == Mode::Physical) {
 						point_step(w, nullptr, true, false, beam->p);
 						consumed = point_sync(w) || consumed;
+						if (!consumed && !w.cursor_done) {
+							// Stage 131 (the user): an unplanned passage of infinity before
+							// the cursor is a divergence -- the walk leaves the plan there
+							w.left_plan = true;
+							w.wrapped_off = true;
+							w.plan_matched = false;
+							w.on_plan = false;
+							w.events.back().off_plan = true;
+						}
 					}
 					if (consumed) {
 						late_cursor(w, *beam, cands, gp, gw, ci, t, t0);
 					}
 					ci++;
+					continue;
+				}
+				if (surf == nullptr && w.mode == Mode::Physical && w.wrapped_off) {
+					ci++; // (Stage 131: the walk left the plan by an unplanned wrap: no cursor after it)
 					continue;
 				}
 				if (surf == nullptr) {
@@ -3289,6 +3363,16 @@ private:
 					fires_state = plan_state;
 					fired = plan_match && !ghosted;
 				}
+				if (do_ != EffectType::Pass || fires_state) {
+					// Stage 131: a significant event past the limit -- cut here (drawn up to it, no effect)
+					if (w.sig + 1 > w.max_sig) {
+						Event<N> &me = emit(w, EventKind::Max, beam, t_prev, t, INF_D);
+						me.point = pt;
+						w.done = true;
+						return;
+					}
+					w.sig++;
+				}
 				if (fires_state) {
 					w.flags = w.flags.applied(changes);
 					fired_state = true;
@@ -3331,7 +3415,7 @@ private:
 							skip = ci + 1;
 							// K4: the recomputed loop keeps a cursor this loop still lists
 							for (size_t k = ci + 1; k < cands.size(); k++) {
-								keep_cursor = keep_cursor || (cands[k].surf == nullptr && !cands[k].inf);
+								keep_cursor = keep_cursor || (cands[k].surf == nullptr && !cands[k].inf && !cands[k].origin);
 							}
 							restart = true;
 							break;
@@ -3374,25 +3458,79 @@ private:
 			if (w.mode == Mode::Physical) {
 				point_close(w);
 			}
-			if (!next && fired_state) {
-				// no effect, but the loop changed the state: walk the same beam again
+			if (!next) {
+				// nothing fired on the full loop (or the loop only changed the state:
+				// the next one differs, e.g. a ghost toggler re-hit). Stage 131: no loop
+				// detection -- the arrow goes round again and the limits end it. A line
+				// with the infinity switch off leaves through infinity (it does not wrap).
+				if (beam->kappa.is_zero() && !w.scene->emit_infinity) {
+					if (fired_state) {
+						fired_state = false;
+						continue; // (walked again on the same beam, as before)
+					}
+					emit(w, EventKind::Escape, beam, t_prev, std::nullopt, INF_D);
+					w.done = true;
+					return;
+				}
+				if (!w.scene->emit_infinity) {
+					// the passage of the frame's infinity, unseen (a circle with the
+					// switch off): significant all the same
+					w.sig++;
+					if (w.sig > w.max_sig) {
+						const std::optional<N> tq = w.Q ? std::optional<N>(Backend<N>::param_of(*beam, *w.Q)) : std::nullopt;
+						Event<N> &me = emit(w, EventKind::Max, beam, t_prev, tq, INF_D);
+						me.surface_id = INFINITY_ID;
+						if (w.Q) {
+							me.point = w.Q;
+						}
+						w.done = true;
+						return;
+					}
+				}
+				// back at the departure: when it is the ray's origin (the player, a
+				// projected ray's start), its passage -- a significant event (the user);
+				// unplanned before the cursor, a divergence: the walk leaves the plan.
+				// Another departure is no event: the beam goes round again (a lap that
+				// counted nothing ends there all the same)
+				if ((!w.O || !geom::eq(*w.O, fresh ? beam->p : beam->at(t0))) && w.count > count0) {
+					// (the next event runs on from the last one, across the departure)
+					if (!fired_state) {
+						w.lap++;
+					}
+					fired_state = false;
+					continue;
+				}
+				w.count++;
+				if (w.count > w.max_events || w.sig + 1 > w.max_sig) {
+					Event<N> &me = emit(w, EventKind::Max, beam, t_prev, t0, INF_D);
+					if (fresh) {
+						me.point = beam->p;
+					}
+					w.done = true;
+					return;
+				}
+				w.sig++;
+				Event<N> &oe = emit(w, EventKind::Origin, beam, t_prev, t0, INF_D);
+				if (fresh) {
+					oe.point = beam->p;
+				}
+				oe.flags = w.flags;
+				if (w.mode == Mode::Physical && !w.cursor_done) {
+					w.left_plan = true;
+					w.wrapped_off = true;
+					w.plan_matched = false;
+					w.on_plan = false;
+					oe.off_plan = true;
+				}
+				t_prev = t0; // (the next arc runs on from the origin)
+				if (!fired_state) {
+					w.lap++;
+				}
 				fired_state = false;
 				continue;
 			}
-			if (!next) {
-				w.count++;
-				if (w.count <= w.max_events) {
-					const bool straight = beam->kappa.is_zero();
-					const std::optional<N> t_end = straight ? std::nullopt : std::optional<N>(t0);
-					Event<N> &oe = emit(w, straight ? EventKind::Escape : EventKind::Origin, beam, t_prev, t_end, INF_D);
-					if (t_end && fresh) {
-						oe.point = beam->p;
-					}
-				}
-				w.done = true;
-				return;
-			}
 			fired_state = false;
+			w.lap = 0;
 			beam = next->beam;
 			if (aim_known && aim_known->j > 0) {
 				add_aim_known(w, *beam); // (Stage 124: the beam after the member's own entries)
@@ -3411,7 +3549,7 @@ private:
 	static void late_cursor(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands, std::vector<double> &gp, std::vector<uint8_t> &gw,
 			size_t ci, const N &t, const N &t0) {
 		if (!w.cursor_done && w.cursor && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan && !(w.point && w.point->pending)
-				&& std::none_of(cands.begin(), cands.end(), [](const Candidate<N> &c) { return c.surf == nullptr && !c.inf; })) {
+				&& std::none_of(cands.begin(), cands.end(), [](const Candidate<N> &c) { return c.surf == nullptr && !c.inf && !c.origin; })) {
 			const N tc = Backend<N>::param_of(beam, *w.cursor);
 			if (!before(tc, t, t0)) {
 				size_t j = ci + 1;
@@ -3474,6 +3612,7 @@ private:
 			w.line = top.line;
 			w.rec = top.rec;
 			w.Q = top.q;
+			w.O = top.o;
 			w.pole = top.pole;
 			w.pole_serial = top.pole_serial;
 			w.through_c = top.through_c;
@@ -3482,9 +3621,10 @@ private:
 		const N other = other_root(*beam, surf, depart, t0, t, pt);
 		const int pop_id = surf.portal ? surf.pair : surf.id;
 		w.stack.push_back(StackEntry<N>{beam, surf.id, t, other, w.known, w.line, pop_id, map_kind(surf, etype), w.Q, w.pole, w.pole_serial, w.rec,
-			w.through_c});
+			w.through_c, w.O});
 		set_pole(w, pole_after(w, surf));
 		w.Q = effects::map_point(w.Q, surf, false);
+		w.O = effects::map_point(w.O, surf, false);
 		const std::vector<Known<N>> old_known = w.known;
 		// the surface the new beam departs from, and the departure point
 		const Surf<N> &dsurf = surf.portal ? *w.scene->find(surf.pair) : surf;
@@ -3680,10 +3820,15 @@ private:
 			if (w.line) {
 				add_line_endpoints(w, *ab);
 			}
+			// (a new ray: its origin is its departure -- a circle normal's, the circle's centre)
+			w.O = surf.effect(left) == EffectType::CircleNormalProjection ? surf.seg.circ->c : ab->at(*best);
 			return Next{ab, surf.id, *best, false};
 		}
 		const CN<N> hp = Backend<N>::exact_point(*beam, t, pt);
 		BeamPtr<N> nb = std::make_shared<const Beam<N>>(effects::project(*beam, t, surf, left, &hp));
+		// (a new ray: its origin is its departure -- a circle normal's, the circle's
+		// centre, which every ray of the projection passes: Stage 131, the user)
+		w.O = surf.effect(left) == EffectType::CircleNormalProjection ? surf.seg.circ->c : nb->p;
 		w.anchored = false;
 		w.known.clear();
 		if (pt_exact) {

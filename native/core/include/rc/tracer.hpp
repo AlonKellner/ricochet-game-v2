@@ -383,6 +383,7 @@ public:
 		const int bits = tier_bits(limbs);
 		std::optional<V2> prev_pt;
 		bool gap = false; // the previous event teleported (portal)
+		bool after_inf = false; // Stage 131: the previous drawn event passed infinity
 		const std::string init_flags = flags.canonical_key();
 		std::string cur_flags = init_flags;
 		path.frame_keys.push_back(frame_key({}, "", init_flags));
@@ -407,6 +408,8 @@ public:
 			}
 			Steps steps = steps_for(e, fid, gap ? std::nullopt : prev_pt);
 			bool gap_pending = gap;
+			bool inf_pending = after_inf; // (Stage 131: the step after a passage of infinity)
+			after_inf = false;
 			gap = false;
 			if (e.point) {
 				prev_pt = V2::of(e.point->fx(), e.point->fy());
@@ -424,6 +427,10 @@ public:
 					s.after_portal = true;
 					gap_pending = false;
 				}
+				if (inf_pending) {
+					s.after_infinity = true;
+					inf_pending = false;
+				}
 				// a finite step on a curved beam is an arc step (curvature is exact)
 				if (!std::isinf(s.start.x) && !std::isinf(s.end.x)) {
 					s.is_arc_step = !e.beam->kappa.is_zero();
@@ -440,6 +447,7 @@ public:
 			// K5: a teleport's mark waits for the next drawn step (an event at the
 			// departure point, e.g. a carrier crossing there, draws nothing)
 			gap = gap_pending;
+			after_inf = inf_pending || (e.kind == EventKind::Infinity && appended);
 			if (e.kind == EventKind::Hit && e.applied && !e.terminal) {
 				if (e.projective) {
 					stack.clear();
@@ -456,6 +464,8 @@ public:
 				TraceStep &last = path.steps.back();
 				const Side side = e.left ? Side::Left : Side::Right;
 				last.hit = TraceHit{e.t_to->to_float(), last.end, surf != nullptr ? surf->id : -1, side, e.on_segment};
+				last.significant = e.applied || e.state; // (Stage 131: an applied effect or a firing state change)
+				last.teleports = e.applied && e.teleport;
 				last.surface_id = e.surface_id;
 				last.hit_side = int(side);
 				last.hit_on_segment = e.on_segment;
@@ -488,12 +498,16 @@ public:
 				path.hits.push_back(std::move(h));
 				before = e.flags;
 			}
+			if (e.kind == EventKind::Origin && appended && !lean) {
+				path.steps.back().significant = true; // (Stage 131: the passage of the ray's origin)
+			}
 			if (e.kind == EventKind::Infinity && appended && !lean) {
 				// the outgoing half of the wrap carries the infinity id: plan
 				// highlighting and PLAN_EFFECTS_APPLIED find the entry there
 				TraceStep &last = path.steps.back();
 				last.surface_id = INFINITY_ID;
 				last.hit_on_segment = true;
+				last.significant = true; // (Stage 131: a passage of infinity)
 			}
 			if (e.kind == EventKind::Hit) {
 				if (!(e.flags == *keyed)) {

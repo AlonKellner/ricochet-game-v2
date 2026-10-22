@@ -81,7 +81,9 @@ def main():
         for mode in modes:
             f = fixture("k9_pre_inverted_%d_%s" % (int(player[0]), mode), d["surfaces"], player, plan=plan, mode=mode, cursor=(1900.0, 880.0))
             if mode == "physical":
-                assert hits_near(f, 0.0, 880.0) == [4, 8], (f["name"], hits_near(f, 0.0, 880.0))
+                # (Stage 131: no loop detection -- the loop repeats, the pair each time)
+                h = hits_near(f, 0.0, 880.0)
+                assert h[:2] == [4, 8] and h == [4, 8] * (len(h) // 2), (f["name"], h)
             fx.append(f)
 
     # K7: the same shot from (1350, 443.33334): the planned walk consumes surface 4
