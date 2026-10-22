@@ -1072,18 +1072,30 @@ void Presenter::frame_path(render::FrameNode &n, const Session &s) {
 			path_shown_ = path_target_;
 		}
 	}
+	const double phase = now_ * config_.dash_speed; // (Stage 130: the dashes run)
+	auto running = [&]() {
+		if (phase == 0.0) {
+			return; // the path as the session drew it
+		}
+		auto calls = std::make_shared<std::vector<render::Call>>();
+		s.paint_path(*calls, phase);
+		n.calls = std::move(calls);
+		n.version = 0x5041544800000000ull + ++frame_serial_;
+	};
 	if (!path_morph_) {
-		return; // the path as the session drew it
+		running();
+		return;
 	}
 	const double x = (now_ - path_morph_->start) / path_morph_->seconds;
 	if (x >= 1.0) {
 		path_morph_.reset();
 		path_shown_ = path_target_;
+		running();
 		return;
 	}
 	path_shown_ = path_morph::at(path_morph_->pairs, ease_out(x));
 	auto calls = std::make_shared<std::vector<render::Call>>();
-	s.paint_steps(path_shown_, *calls);
+	s.paint_steps(path_shown_, *calls, phase);
 	n.calls = std::move(calls);
 	n.version = 0x5041544800000000ull + ++frame_serial_;
 }

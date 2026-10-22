@@ -79,6 +79,10 @@ gives a few lines of text, which the host prints. The JSON holds the solver's in
 in hex floats too), the scene's defs, the plan, the preview's walks and the region's summary; the summary also says
 whether the preview and the region agree on the cursor. It is meant for bug reports, and its contents may change.
 
+**The path preview's dashes run** (Stage 130): with `animate` on, the presenter repaints the path node every frame
+(a new version each frame) as its dashes move along the arrow's way. A host that keeps unchanged nodes still
+repaints that one.
+
 **The violation viewer** (C API 1.6, a tool). `rc_game_set_plan(game, json, len)` sets a plan as it is, from a JSON
 array of `{surface_id, side, click?, span?}` (a piece by its span, as the sweeps write it). The Godot host's viewer
 mode (`RicochetGame.violations_path`, `scenes/violation_viewer.tscn`) uses it with `rc_game_teleport` and a fixed

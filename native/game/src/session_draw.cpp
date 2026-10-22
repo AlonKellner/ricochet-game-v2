@@ -15,6 +15,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <map>
 
 namespace rcg {
 namespace {
@@ -47,6 +48,12 @@ const Color CYAN = render::hex(0x00FFFFFF);
 const Color MAGENTA = render::hex(0xFF00FFFF);
 const Color GREEN = render::hex(0x00FF00FF);
 const Color YELLOW = render::hex(0xFFFF00FF);
+// Stage 130 (the user, 2026-10-22): a solid preview step is a slightly dark
+// stroke with a slightly bright dashed stroke over it
+const Color GREEN_DARK = render::hex(0x00B300FF);
+const Color GREEN_BRIGHT = render::hex(0x80FF80FF);
+const Color RED_DARK = render::hex(0xB30000FF);
+const Color RED_BRIGHT = render::hex(0xFF8080FF);
 
 Color rgba(double r, double g, double b, double a = 1.0) { return {float(r), float(g), float(b), float(a)}; }
 
@@ -520,6 +527,19 @@ Color step_color(rc::StepType t) {
 
 bool is_solid(rc::StepType t) { return t == rc::StepType::Aligned || t == rc::StepType::DivergedPlanned; }
 
+// Stage 130: the dashes over a solid step, and the solid stroke under them
+Color solid_under(rc::StepType t) { return t == rc::StepType::Aligned ? GREEN_DARK : RED_DARK; }
+Color dashes_over(rc::StepType t) { return t == rc::StepType::Aligned ? GREEN_BRIGHT : RED_BRIGHT; }
+
+// Stage 130: steps drawn on one another are set side by side -- a step moved
+// sideways (a line along its group's left normal; an arc to a larger or a
+// smaller radius on its circle)
+struct Shift {
+	V2 by;          // a line's
+	double dr = 0.0; // an arc's
+};
+constexpr double SIDE_BY_SIDE = 3.5; // px between the centres of two strokes (2 px wide: a 1.5 px margin)
+
 // PathRenderer._clip_line_to_rect
 bool clip_line(V2 &from, V2 &to, const rc::Rect2f &rect) {
 	const double dx = double(to.x) - double(from.x);
@@ -555,27 +575,28 @@ struct PathPainter {
 	const rc::Rect2f bounds; // the draw bounds: the level's, grown by 50
 	std::vector<Call> &out;
 
-	void step(const rc::TraceStep &st, const Color &col, bool dashed_step) {
+	void step(const rc::TraceStep &st, const Color &col, bool dashed_step, double phase = 0.0, const Shift &sh = {}) {
 		const bool arcs = st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end);
 		if (arcs) {
 			const rc::arc::ArcParams p = rc::arc::arc_params(st.start, st.via, st.end);
 			const V2 center = V2::of(double(p.center.x), double(p.center.y));
+			const double r = p.radius + sh.dr;
 			if (dashed_step) {
-				const std::vector<V2> pts = rc::arc::dash_arc(center, p.radius, p.start_angle, p.end_angle, p.point_count, 10.0, 5.0, 4000.0);
+				const std::vector<V2> pts = rc::arc::dash_arc(center, r, p.start_angle, p.end_angle, p.point_count, 10.0, 5.0, 4000.0, phase);
 				if (!pts.empty()) {
 					out.push_back(stroke(Kind::Multiline, pts, col, 2.0));
 				}
 			} else {
-				out.push_back(arc(center, p.radius, p.start_angle, p.end_angle, p.point_count, col, 2.0));
+				out.push_back(arc(center, r, p.start_angle, p.end_angle, p.point_count, col, 2.0));
 			}
 			return;
 		}
-		V2 from = st.start, to = st.end;
+		V2 from = st.start + sh.by, to = st.end + sh.by;
 		if (!clip_line(from, to, bounds)) {
 			return;
 		}
 		if (dashed_step) {
-			const std::vector<V2> pts = rc::arc::dash_line(from, to, 10.0, 5.0, 4000.0);
+			const std::vector<V2> pts = rc::arc::dash_line(from, to, 10.0, 5.0, 4000.0, phase);
 			if (!pts.empty()) {
 				out.push_back(stroke(Kind::Multiline, pts, col, 2.0));
 			}
@@ -642,18 +663,199 @@ struct PathPainter {
 
 } // namespace
 
+namespace {
+
+// Stage 130: two steps drawn on one another -- the same carrier (a line, or a
+// circle: the same centre and radius, to half a pixel), and some stretch more
+// than 2 px long where both run: the same step (either way round), or steps
+// with different ends (the planned path cut at the cursor, the physical one
+// running on to the next hit)
+struct StepGeom {
+	bool ok = false;
+	bool arcs = false;
+	V2 a, b;                  // a line's ends
+	rc::arc::ArcParams p;     // an arc's
+	double len = 0.0;
+};
+
+StepGeom geom_of(const rc::TraceStep &s) {
+	StepGeom g;
+	const bool finite = std::isfinite(s.start.x) && std::isfinite(s.start.y) && std::isfinite(s.end.x) && std::isfinite(s.end.y);
+	if (!finite || s.start == s.end) {
+		return g;
+	}
+	g.ok = true;
+	g.arcs = s.is_arc_step && rc::arc::is_arc(s.start, s.via, s.end);
+	g.a = s.start;
+	g.b = s.end;
+	if (g.arcs) {
+		g.p = rc::arc::arc_params(s.start, s.via, s.end);
+		g.len = g.p.radius * std::abs(g.p.end_angle - g.p.start_angle);
+	} else {
+		g.len = double((s.end - s.start).length());
+	}
+	return g;
+}
+
+// the point at fraction f along the step
+V2 along(const StepGeom &g, double f) {
+	if (g.arcs) {
+		const double th = g.p.start_angle + (g.p.end_angle - g.p.start_angle) * f;
+		return V2::of(double(g.p.center.x) + g.p.radius * std::cos(th), double(g.p.center.y) + g.p.radius * std::sin(th));
+	}
+	return V2::of(double(g.a.x) + (double(g.b.x) - double(g.a.x)) * f, double(g.a.y) + (double(g.b.y) - double(g.a.y)) * f);
+}
+
+// q on the step, more than `inset` px from its ends (q on its carrier, to half a pixel)
+bool runs_through(const StepGeom &g, const V2 &q, double inset) {
+	if (g.arcs) {
+		const double dx = double(q.x) - double(g.p.center.x), dy = double(q.y) - double(g.p.center.y);
+		if (std::abs(std::sqrt(dx * dx + dy * dy) - g.p.radius) > 0.5) {
+			return false;
+		}
+		const double sweep = g.p.end_angle - g.p.start_angle;
+		double d = std::atan2(dy, dx) - g.p.start_angle;
+		const double tau = 2.0 * PI;
+		d = sweep >= 0.0 ? std::fmod(std::fmod(d, tau) + tau, tau) : -std::fmod(std::fmod(-d, tau) + tau, tau);
+		const double at = d * g.p.radius * (sweep >= 0.0 ? 1.0 : -1.0); // (px along the way)
+		return at > inset && at < g.len - inset;
+	}
+	const double ux = (double(g.b.x) - double(g.a.x)) / g.len, uy = (double(g.b.y) - double(g.a.y)) / g.len;
+	const double rx = double(q.x) - double(g.a.x), ry = double(q.y) - double(g.a.y);
+	if (std::abs(rx * uy - ry * ux) > 0.5) {
+		return false;
+	}
+	const double at = rx * ux + ry * uy;
+	return at > inset && at < g.len - inset;
+}
+
+bool on_one_another(const StepGeom &a, const StepGeom &b) {
+	if (!a.ok || !b.ok || a.arcs != b.arcs) {
+		return false;
+	}
+	if (a.arcs && ((a.p.center - b.p.center).length() > 0.5f || std::abs(a.p.radius - b.p.radius) > 0.5)) {
+		return false;
+	}
+	// some stretch of one inside the other (sampled), or the same ends: the whole step
+	auto near = [](const V2 &p, const V2 &q) { return (p - q).length() <= 0.5f; };
+	if ((near(a.a, b.a) && near(a.b, b.b)) || (near(a.a, b.b) && near(a.b, b.a))) {
+		return a.arcs ? near(along(a, 0.5), along(b, 0.5)) : true;
+	}
+	for (int k = 1; k < 16; k++) {
+		if (runs_through(a, along(b, k / 16.0), 2.0) || runs_through(b, along(a, k / 16.0), 2.0)) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// a step's lane: the planned path's steps on the left of a group's way, the
+// physical path's on the right
+bool physical_lane(rc::StepType t) { return t == rc::StepType::DivergedPhysical; }
+
+std::vector<Shift> side_by_side(const std::vector<rc::TraceStep> &steps) {
+	const size_t n = steps.size();
+	std::vector<Shift> out(n);
+	std::vector<StepGeom> g(n);
+	for (size_t i = 0; i < n; i++) {
+		g[i] = geom_of(steps[i]);
+	}
+	// the groups: steps drawn on one another, transitively
+	std::vector<size_t> root(n);
+	for (size_t i = 0; i < n; i++) {
+		root[i] = i;
+	}
+	std::function<size_t(size_t)> find = [&](size_t i) { return root[i] == i ? i : root[i] = find(root[i]); };
+	for (size_t i = 0; i < n; i++) {
+		for (size_t j = i + 1; j < n; j++) {
+			if (find(i) != find(j) && on_one_another(g[i], g[j])) {
+				root[find(j)] = find(i);
+			}
+		}
+	}
+	std::map<size_t, std::vector<size_t>> groups;
+	for (size_t i = 0; i < n; i++) {
+		groups[find(i)].push_back(i);
+	}
+	for (const auto &[r, members] : groups) {
+		if (members.size() < 2) {
+			continue;
+		}
+		const StepGeom &ref = g[members[0]];
+		const V2 d = ref.b - ref.a;
+		const V2 left = V2{d.y, -d.x} / d.length(); // (y down: the left of the way)
+		double sign = 1.0; // an arc: moving left grows the radius
+		if (ref.arcs) {
+			const double a0 = ref.p.start_angle;
+			const double dir = ref.p.end_angle > ref.p.start_angle ? 1.0 : -1.0; // (the angle grows along the way)
+			const V2 way = V2::of(-std::sin(a0) * dir, std::cos(a0) * dir);
+			const V2 l = V2{way.y, -way.x};
+			sign = l.dot(V2::of(std::cos(a0), std::sin(a0))) > 0.0f ? 1.0 : -1.0;
+		}
+		bool planned = false, physical = false;
+		for (size_t m : members) {
+			(physical_lane(steps[m].type) ? physical : planned) = true;
+		}
+		for (size_t k = 0; k < members.size(); k++) {
+			double off;
+			if (planned && physical) {
+				off = (physical_lane(steps[members[k]].type) ? -0.5 : 0.5) * SIDE_BY_SIDE; // two lanes
+			} else {
+				off = ((double(members.size()) - 1.0) / 2.0 - double(k)) * SIDE_BY_SIDE; // one path on itself: spread
+			}
+			out[members[k]].by = left * float(off);
+			out[members[k]].dr = off * sign;
+		}
+	}
+	return out;
+}
+
+} // namespace
+
 // Stage 126: the merged path's steps as the preview draws them (the presenter
-// paints a morph's steps with it)
-void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<Call> &out) const {
+// paints a morph's steps with it). Stage 130: a solid step is a slightly dark
+// stroke under slightly bright dashes; dashes run the way the arrow flies
+// (dash_phase, px: the presenter's clock; 0 in a replay); steps drawn on one
+// another are set side by side.
+void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<Call> &out, double dash_phase) const {
 	PathPainter pp{bounds().grow(50.0f), out};
-	for (const rc::TraceStep &ms : steps) {
+	const std::vector<Shift> shifts = side_by_side(steps);
+	for (size_t i = 0; i < steps.size(); i++) {
+		const rc::TraceStep &ms = steps[i];
 		if (ms.start == ms.end) {
 			continue;
 		}
-		const Color col = step_color(ms.type);
-		pp.step(ms, ms.ghost ? ghost_color(col) : col, !is_solid(ms.type));
+		auto tint = [&](const Color &c) { return ms.ghost ? ghost_color(c) : c; };
+		if (is_solid(ms.type)) {
+			pp.step(ms, tint(solid_under(ms.type)), false, 0.0, shifts[i]);
+			pp.step(ms, tint(dashes_over(ms.type)), true, dash_phase, shifts[i]);
+		} else {
+			pp.step(ms, tint(step_color(ms.type)), true, dash_phase, shifts[i]);
+		}
 	}
 	pp.endpoint_circles(steps, true, WHITE);
+}
+
+// The path node's calls (Stage 130: the presenter repaints it as its dashes run)
+void Session::paint_path(std::vector<Call> &out, double dash_phase) const {
+	const Preview &pv = shown(); // (the provisional preview while its exact climb runs)
+	PathPainter pp{bounds().grow(50.0f), out};
+	if (pv.has_paths || !pv.merged.empty()) {
+		if (display_mode_ == 0) {
+			if (!pv.merged.empty()) {
+				paint_steps(pv.merged, out, dash_phase);
+				for (const auto &[pt, col] : truncation_markers(pv)) {
+					pp.stop_marker(pt, col);
+				}
+			}
+		} else if (pv.has_paths) {
+			if (display_mode_ == 1) {
+				pp.raw(pv.physical, CYAN, "P");
+			} else {
+				pp.raw(pv.planned, MAGENTA, "L");
+			}
+		}
+	}
 }
 
 std::vector<render::Node> Session::draw() const {
@@ -722,25 +924,9 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 	const Color dim{1, 1, 1, flying_ ? 0.25f : 1.0f};
 	if (level_.features.preview) {
 		const Preview &pv = shown(); // (the provisional preview while its exact climb runs)
-		cached(path_draw_, {trace_version_, display_mode_, provisional_version_}, NodeKind::Path, 20, V2{}, dim, [&](std::vector<Call> &out) {
-		PathPainter pp{b.grow(50.0f), out};
-		if (pv.has_paths || !pv.merged.empty()) {
-			if (display_mode_ == 0) {
-				if (!pv.merged.empty()) {
-					paint_steps(pv.merged, out);
-					for (const auto &[pt, col] : truncation_markers(pv)) {
-						pp.stop_marker(pt, col);
-					}
-				}
-			} else if (pv.has_paths) {
-				if (display_mode_ == 1) {
-					pp.raw(pv.physical, CYAN, "P");
-				} else {
-					pp.raw(pv.planned, MAGENTA, "L");
-				}
-			}
-		}
-		});
+		(void)pv;
+		cached(path_draw_, {trace_version_, display_mode_, provisional_version_}, NodeKind::Path, 20, V2{}, dim,
+			[&](std::vector<Call> &out) { paint_path(out, 0.0); });
 	}
 	if (level_.features.arrow && flying_) { // (the arrow's node is hidden between flights)
 		std::vector<Call> a;
