@@ -566,6 +566,17 @@ struct SolveCache {
 		}
 	};
 	std::unordered_map<ImageKey, std::optional<exact::Point3>, ImageHash> images;
+	// Stage 128: an aimed shot's exact start in a pre-transform frame (its pole
+	// and its circle through P, X0, Q0), pure functions of the three points: a
+	// cast's two walks start alike. The last few, by the points' exact bits.
+	struct Start {
+		uint64_t px = 0, py = 0;
+		exact::Point3 X0, Q0;
+		bool has_pole = false, has_gc = false;
+		std::optional<exact::ExactPole> pole;
+		exact::GCircle gc;
+	};
+	std::vector<Start> starts;
 	PoleMemo poles; // Stage 120
 	IncidenceMemo incidence; // Stage 123
 };
@@ -858,7 +869,7 @@ public:
 		if (q0) {
 			if (const std::optional<exact::Point3> q0e = pre_q_exact()) {
 				if (const std::optional<exact::Point3> X0 = exact_image_cached(cursor, plan, flags)) {
-					pole = exact::pole_start_aimed(player.fx(), player.fy(), *X0, *q0e);
+					pole = start_pole(player.fx(), player.fy(), *X0, *q0e);
 					if (pole && exact::pole_limbs(*pole) > EXACT_IMAGE_LIMBS) {
 						pole.reset();
 					}
@@ -1426,6 +1437,60 @@ private:
 		return X;
 	}
 
+	// (the same exact value, held alike: sign, exponent and limbs)
+	static bool same_bits(const BigFloat &a, const BigFloat &b) {
+		return a.sign == b.sign && a.exp == b.exp && a.limbs.size() == b.limbs.size() && std::equal(a.limbs.begin(), a.limbs.end(), b.limbs.begin());
+	}
+	static bool same_bits(const exact::Point3 &a, const exact::Point3 &b) {
+		return same_bits(a[0], b[0]) && same_bits(a[1], b[1]) && same_bits(a[2], b[2]);
+	}
+	// An aimed shot's exact start in a pre-transform frame (SolveCache::Start)
+	typename SolveCache<N>::Start *start_entry(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
+		if (cache_ == nullptr) {
+			return nullptr;
+		}
+		const uint64_t bx = std::bit_cast<uint64_t>(px);
+		const uint64_t by = std::bit_cast<uint64_t>(py);
+		for (auto &e : cache_->starts) {
+			if (e.px == bx && e.py == by && same_bits(e.X0, X0) && same_bits(e.Q0, Q0)) {
+				return &e;
+			}
+		}
+		if (cache_->starts.size() >= 8) {
+			cache_->starts.erase(cache_->starts.begin());
+		}
+		typename SolveCache<N>::Start e;
+		e.px = bx;
+		e.py = by;
+		e.X0 = X0;
+		e.Q0 = Q0;
+		cache_->starts.push_back(std::move(e));
+		return &cache_->starts.back();
+	}
+	std::optional<exact::ExactPole> start_pole(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
+		typename SolveCache<N>::Start *e = start_entry(px, py, X0, Q0);
+		if (e == nullptr) {
+			return exact::pole_start_aimed(px, py, X0, Q0);
+		}
+		if (!e->has_pole) {
+			e->pole = exact::pole_start_aimed(px, py, X0, Q0);
+			e->has_pole = true;
+		}
+		return e->pole;
+	}
+	exact::GCircle start_gc(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
+		auto through = [&] { return exact::gc_through(exact::Point3{exact::of(px), exact::of(py), exact::of(1.0)}, X0, Q0); };
+		typename SolveCache<N>::Start *e = start_entry(px, py, X0, Q0);
+		if (e == nullptr) {
+			return through();
+		}
+		if (!e->has_gc) {
+			e->gc = through();
+			e->has_gc = true;
+		}
+		return e->gc;
+	}
+
 	// The exact implicit line of B_0, when it is exact data: lazy float64
 	// coefficients with rigorous bounds; the exact homogeneous image only when a
 	// predicate needs it.
@@ -1867,10 +1932,10 @@ private:
 		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
 			// an aimed shot in a pre-transform frame: the circle through P, X0, Q0
 			if (const std::optional<exact::Point3> X0 = exact_image_cached(cursor, plan, flags)) {
-				set_pole(w, exact::pole_start_aimed(player.fx(), player.fy(), *X0, *q0));
+				set_pole(w, start_pole(player.fx(), player.fy(), *X0, *q0));
 				if (!w.rec) {
 					// K9: and its exact circle
-					w.rec = exact::BeamRec::from_gc(exact::gc_through(exact::Point3{exact::of(player.fx()), exact::of(player.fy()), exact::of(1.0)}, *X0, *q0));
+					w.rec = exact::BeamRec::from_gc(start_gc(player.fx(), player.fy(), *X0, *q0));
 				}
 			}
 		}
@@ -1982,7 +2047,7 @@ private:
 		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
 		const CN<N> delta = w.Q ? player.sub(*w.Q) : player.sub(player);
 		Beam<N> b = Beam<N>::through(player, aim, w.Q ? &delta : nullptr);
-		std::optional<exact::GCircle> start_gc;
+		std::optional<exact::GCircle> start_circle;
 		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
 			// the exact pole record (Stage 105): the circle through the player, the aim
 			// point and Q0; a shot straight at the cursor passes exact data
@@ -1993,8 +2058,8 @@ private:
 				X0 = exact_image_cached(cursor, plan, flags);
 			}
 			if (X0) {
-				set_pole(w, exact::pole_start_aimed(player.fx(), player.fy(), *X0, *q0));
-				start_gc = exact::gc_through(exact::Point3{exact::of(player.fx()), exact::of(player.fy()), exact::of(1.0)}, *X0, *q0);
+				set_pole(w, start_pole(player.fx(), player.fy(), *X0, *q0));
+				start_circle = start_gc(player.fx(), player.fy(), *X0, *q0);
 			}
 		}
 		if (force_reversed ? *force_reversed : realize(player, cursor, plan, flags, b, nullptr).reversed) {
@@ -2011,8 +2076,8 @@ private:
 		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
 		w.line = line;
 		w.rec = exact::BeamRec::from_line(w.line);
-		if (!w.rec && start_gc) {
-			w.rec = exact::BeamRec::from_gc(*start_gc); // K9: a pre-transform start's exact circle
+		if (!w.rec && start_circle) {
+			w.rec = exact::BeamRec::from_gc(*start_circle); // K9: a pre-transform start's exact circle
 		}
 		if (w.line) {
 			if (X && !X->sub(player).is_zero() && !plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
