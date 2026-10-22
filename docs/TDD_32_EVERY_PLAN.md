@@ -89,7 +89,7 @@ Every worst side is now under 25 ms, below the 33 ms at which a late region is s
 | # | Finding | Status |
 |---|---|---|
 | F19 (TDD_31) | crossings with its inversion planned about 27 ms | Reduced (22) |
-| F20 | The remaining cost per region: planned walks about 45% (a plan entry consumed after a dozen pass-throughs), physical walks about 30%, climbs about 10%, path conversion about 10%. The walks that do not meet the plan (11% of side and mid walks) are read whole: only the whole walk shows that | Open: a planned walk resumed from the physical one where they diverge, or a region updated from the last one as the player moves, would be the next order of change |
+| F20 | The remaining cost per region: planned walks about 45% (a plan entry consumed after a dozen pass-throughs), physical walks about 30%, climbs about 10%, path conversion about 10%. The walks that do not meet the plan (11% of side and mid walks) are read whole: only the whole walk shows that | Reduced by Stage 128 (TDD_33): contention and allocations; the resumed walk is not bit-exact; a region updated from the last one stays open |
 
 ## Tests
 
