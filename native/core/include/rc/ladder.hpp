@@ -270,11 +270,12 @@ public:
 	// little past them (Stage 124, Solver::read_horizon).
 	LadderResult solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, int max_planned,
 			int max_physical, double tol, bool verify = false, const Flags &flags = Flags(), std::optional<bool> force = std::nullopt,
-			int stops = -1, const std::optional<AimKnown> &known = std::nullopt) {
+			int stops = -1, const std::optional<AimKnown> &known = std::nullopt, bool reads_cursor = true) {
 		force_ = force;
 		stops_ = stops;
 		plan_ = &plan;
 		known_ = known;
+		reads_cursor_ = reads_cursor;
 		flags0_ = flags;
 		const long long t0 = clock_();
 		LadderResult r;
@@ -427,6 +428,7 @@ private:
 	const std::function<size_t(const std::vector<Event<BigFloat>> &)> read_planned_big_ = [this](const std::vector<Event<BigFloat>> &ev) { return horizon(ev, false); };
 	Flags flags0_;   // the walks' flags at the start (the horizon's flag changes)
 	std::optional<AimKnown> known_; // Stage 123: Solver::aim_known (solve)
+	bool reads_cursor_ = true;      // Stage 127: the caller reads the planned walk's cursor (solve)
 	std::optional<bool> force_; // Stage 111: the orientation the caller forces on every tier
 
 	using Compute = std::function<std::vector<Event<BigFloat>>(int)>;
@@ -524,8 +526,14 @@ private:
 			}
 			return ev.size();
 		}
+		// Stage 127: a caller that does not read the cursor (a region's side and mid
+		// casts) reads the planned walk through the plan's last entry only -- with no
+		// plan, its first step
+		if (!reads_cursor_ && plan_ != nullptr && plan_->empty()) {
+			return std::min(ev.size(), size_t(2));
+		}
 		// the cursor, the events at its point, and the next two
-		for (size_t i = 0; i < ev.size(); i++) {
+		for (size_t i = 0; reads_cursor_ && i < ev.size(); i++) {
 			if (ev[i].kind != EventKind::Cursor) {
 				continue;
 			}
