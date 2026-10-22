@@ -306,6 +306,12 @@ def main():
     out.append(planned_case("room_with_inversion_planned", "test_levels__room_with_inversion", [inv[0]]))
     out.append(case("pre_inverted_no_plan", "playground__pre_inverted", (500.0, 300.0), []))
     out.append(case("empty_room_infinity", "test_levels__empty_room", (500.0, 300.0), [(T.INFINITY_ID, "LEFT")]))
+    # Stage 132: the ray's origin planned -- after the wrap (the player), and past a
+    # mirror's image of the player
+    out.append(case("empty_room_infinity_origin", "test_levels__empty_room", (500.0, 300.0), [(T.INFINITY_ID, "LEFT"), (T.ORIGIN_ID, "LEFT")]))
+    out.append(case("mirror_and_wall_infinity_origin", "test_levels__mirror_and_wall", (V._f32(1306.67), 540.0),
+                    [(5, "LEFT"), (T.INFINITY_ID, "LEFT"), (T.ORIGIN_ID, "LEFT")],
+                    extra=[(480.5005, 524.9722), (400.0, 540.0), (500.0, 600.0), (166.1731, 535.9927)]))
     out.append(case("room_with_passthroughs_no_plan", "test_levels__room_with_passthroughs", room, []))
     # B5: a co-carrier write of the planned value (hit_effects: 15 fires, 16 is planned)
     out.append(case("hit_effects_state_plan", "test_levels__hit_effects", (960.0, 540.0), [(16, "RIGHT")]))

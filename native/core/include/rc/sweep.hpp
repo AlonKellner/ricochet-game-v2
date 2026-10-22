@@ -185,7 +185,7 @@ inline inv::Violations check_combo(Tracer &tracer, const Scene<F64> &scene, cons
 inline std::vector<V2> carrier_extension_cursors(const std::vector<SurfaceDef> &defs, const std::vector<PlanItem> &plan, const Rect2f &bounds) {
 	std::vector<int> ids;
 	for (const PlanItem &item : plan) {
-		if (item.is_infinity()) {
+		if (item.is_infinity() || item.is_origin()) {
 			continue;
 		}
 		ids.push_back(item.surface_id);

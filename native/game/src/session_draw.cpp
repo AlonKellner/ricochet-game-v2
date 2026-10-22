@@ -1154,6 +1154,19 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 			edge_chevrons(out, pt, o, color);
 			out.push_back(text(pt - vs(o, HOVER_WIDTH + 14.0) + V2{-5, 5}, idx, 1, 14, WHITE));
 		}
+		// Stage 132: the ray's origin -- the planned entries' marks, and its marker where plannable
+		for (const auto &m : origin_marks_) {
+			const Color color = m.valid ? PLAN_VALID_COLOR : PLAN_INVALID_COLOR;
+			point_overlay(out, m.point, color);
+			point_marker(out, m.point, render::with_alpha(color, 0.9), false);
+			out.push_back(text(m.point + V2::of(POINT_RADIUS + OUTER_CHEVRON_DIST, -POINT_RADIUS - 4.0), std::to_string(m.index), 0, 14, WHITE));
+		}
+		if (origin_point_) {
+			if (origin_hovered_) {
+				point_overlay(out, *origin_point_, HOVER_COLOR);
+			}
+			point_marker(out, *origin_point_, POINT_COLOR, origin_hovered_);
+		}
 		if (edge_point_) {
 			if (edge_hovered_) {
 				point_overlay(out, *edge_point_, HOVER_COLOR);

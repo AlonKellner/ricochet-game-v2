@@ -592,7 +592,7 @@ inline Violations check_VIS_CELL_CONSTANT(const VisInput &in) {
 // The last entry departs where the region of the plan without it reaches its surface.
 inline Violations check_VIS_ITERATION_CHAIN(const VisInput &in) {
 	Violations out;
-	if (in.tracer == nullptr || in.plan.empty() || in.plan.back().is_infinity()) {
+	if (in.tracer == nullptr || in.plan.empty() || in.plan.back().is_infinity() || in.plan.back().is_origin()) {
 		return out;
 	}
 	const vis::Result &r = *in.region;
@@ -812,11 +812,11 @@ inline bool consumes_at_piece_end(Tracer &tracer, const vis::Pt &player, const v
 	}
 	size_t j = 0;
 	for (const EvInfo &e : ev_infos(lr->planned)) {
-		if (j < plan.size() && plan[j].is_infinity() && e.kind == EventKind::Infinity && e.applied) {
+		if (j < plan.size() && ((plan[j].is_infinity() && e.kind == EventKind::Infinity) || (plan[j].is_origin() && e.kind == EventKind::Origin)) && e.applied) {
 			j++;
 			continue;
 		}
-		if (j >= plan.size() || e.kind != EventKind::Hit || plan[j].is_infinity() || e.surface_id != plan[j].surface_id || e.left != plan[j].left) {
+		if (j >= plan.size() || e.kind != EventKind::Hit || plan[j].is_infinity() || plan[j].is_origin() || e.surface_id != plan[j].surface_id || e.left != plan[j].left) {
 			continue;
 		}
 		if (const auto &sp = plan[j].span; sp && e.has_point) {
@@ -852,7 +852,7 @@ inline Violations check_VIS_REGULAR(const vis::Result &r, const Scene<F64> *scen
 			continue;
 		}
 		const Surf<F64> *s = scene->find(w.surface);
-		const bool last = !plan.empty() && !plan.back().is_infinity() && plan.back().surface_id == w.surface;
+		const bool last = !plan.empty() && !plan.back().is_infinity() && !plan.back().is_origin() && plan.back().surface_id == w.surface;
 		const bool terminal = last && s != nullptr && s->effect(plan.back().left, flags) == EffectType::Terminal;
 		if (!terminal || !geom::on_segment(s->seg, vis::cn_of(w.via))) {
 			out.push_back(v("VIS-REGULAR: whisker %d on surface %d at %s has no area and is not on the planned terminal's segment", I(int64_t(wi)),

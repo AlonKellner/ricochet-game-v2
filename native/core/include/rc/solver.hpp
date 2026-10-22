@@ -38,6 +38,9 @@ constexpr int MAX_SIGNIFICANT = 10;
 // Plan entry / event id of the point at infinity (Stage 88): the player
 // clicked the level bounds' edge; the beam wraps through infinity there.
 constexpr int INFINITY_ID = -3;
+// Plan entry / event id of the ray's origin (Stage 132, GAME_SPEC 4.2, 12.6):
+// the beam passes the player's image in the frame (a circle normal's centre).
+constexpr int ORIGIN_ID = -4;
 // Anchored-prefix gains are scaled to their own calibration constant
 // (C_prefix = ErrorEstimate.C * PREFIX_GAIN_SCALE).
 constexpr double PREFIX_GAIN_SCALE = 64.0 / 4096.0;
@@ -77,7 +80,21 @@ struct PlanItem {
 	std::optional<std::array<double, 6>> span;
 	// the infinity entry (no side): the beam wraps through infinity here
 	bool is_infinity() const { return surface_id == INFINITY_ID; }
+	// the origin entry (no side, Stage 132): the beam passes the ray's origin here
+	bool is_origin() const { return surface_id == ORIGIN_ID; }
 };
+
+// Stage 132 (GAME_SPEC 4.2): the entries leave the walk behind the ray's origin --
+// an odd number of infinity and origin entries (each passage turns the half of the
+// ray's line the walk is on); with the infinity switch off an infinity entry is
+// never consumed and turns nothing.
+inline bool behind_origin(const std::vector<PlanItem> &plan, size_t n, bool emit_infinity) {
+	int k = 0;
+	for (size_t i = 0; i < n && i < plan.size(); i++) {
+		k += (plan[i].is_origin() || (emit_infinity && plan[i].is_infinity())) ? 1 : 0;
+	}
+	return k % 2 == 1;
+}
 
 template <Num N>
 using BeamPtr = std::shared_ptr<const Beam<N>>;
@@ -675,20 +692,15 @@ public:
 	// Stage 88: the plan's first epoch (its entries before the first projective)
 	// holds an infinity entry: the aim is the second realization, away from the
 	// aim image, reaching it through infinity (GAME_SPEC 13.1).
+	// Stage 132: the first epoch's entries leave the walk behind the ray's origin
+	// (an odd number of infinity and origin entries).
 	bool via_infinity(const std::vector<PlanItem> &plan, const Flags &flags) const {
-		if (!scene_.emit_infinity) {
-			return false; // the entry can never be consumed: the direct aim, as before Stage 88
-		}
 		const std::vector<EffectType> effs = plan_effects(plan, flags);
-		for (size_t j = 0; j < plan.size(); j++) {
-			if (is_projective(effs[j])) {
-				return false;
-			}
-			if (plan[j].is_infinity()) {
-				return true;
-			}
+		size_t n = 0;
+		while (n < plan.size() && !is_projective(effs[n])) {
+			n++;
 		}
-		return false;
+		return behind_origin(plan, n, scene_.emit_infinity);
 	}
 
 	// Stage 111: the index of the first planned entry of the first epoch that
@@ -697,7 +709,7 @@ public:
 	// an id and side match), or -1.
 	int first_entry(const std::vector<PlanItem> &plan, const Flags &flags) const {
 		for (size_t j = 0; j < plan.size(); j++) {
-			if (plan[j].is_infinity()) {
+			if (plan[j].is_infinity() || plan[j].is_origin()) {
 				continue;
 			}
 			const Surf<N> *surf = scene_.find(plan[j].surface_id);
@@ -949,12 +961,10 @@ public:
 			}
 		}
 		if (*qd != *qr) {
-			// an infinity entry before e asks for the passage of Q_0 first (with the
-			// switch off the entry can never be consumed: the direct order)
-			bool before_e = false;
-			for (int i = 0; i < j && scene_.emit_infinity; i++) {
-				before_e = before_e || plan[size_t(i)].is_infinity();
-			}
+			// entries before e that leave the walk behind the ray's origin ask for the
+			// passage of Q_0 first (Stage 132: the parity of infinity and origin entries;
+			// with the switch off an infinity entry can never be consumed)
+			const bool before_e = behind_origin(plan, size_t(j), scene_.emit_infinity);
 			return Realization{*qr == before_e, RealizationKind::Entry};
 		}
 		return fallback;
@@ -1041,6 +1051,75 @@ public:
 			q = effects::map_point(q, *s, false);
 		}
 		return q;
+	}
+
+	// Stage 132 (GAME_SPEC 4.2): the ray's origin after the plan, and whether the
+	// plan leaves the walk behind it (the origin entry is plannable there). The
+	// origin: the player -- or the last projection's new ray's, a circle normal's
+	// centre or a line projection's departure (its back-propagated hit, from the
+	// cursor's anchor chain; unknown without a cursor) -- carried by the frame maps
+	// after it. Behind: a circle normal projecting toward its centre, then turned
+	// by each infinity and origin entry after the last projection.
+	struct OriginState {
+		std::optional<CN<N>> point; // nullopt: unknown (or at infinity)
+		bool behind = false;
+	};
+	OriginState plan_origin(const CN<N> &player, const std::optional<CN<N>> &cursor, const std::vector<PlanItem> &plan, const Flags &flags) {
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		OriginState o{player, false};
+		size_t start = 0;
+		for (size_t j = 0; j < plan.size(); j++) {
+			if (!is_projective(effs[j])) {
+				continue;
+			}
+			start = j + 1;
+			const Surf<N> *surf = scene_.find(plan[j].surface_id);
+			if (surf == nullptr) {
+				o = OriginState{std::nullopt, false};
+				continue;
+			}
+			if (effs[j] == EffectType::CircleNormalProjection) {
+				const CN<N> &c = surf->seg.circ->c;
+				// the ray heads for the centre when the beam comes from outside (through)
+				// or from inside (back): the inside is where a ray leaving outward comes from
+				const bool inside_left = geom::side_left(surf->seg, surf->seg.s, surf->seg.s.sub(c));
+				const bool from_outside = plan[j].left != inside_left;
+				o = OriginState{c, from_outside != surf->proj(plan[j].left).back};
+			} else {
+				o = OriginState{std::nullopt, false};
+				if (cursor) {
+					const std::vector<PlanItem> prefix(plan.begin(), plan.begin() + std::ptrdiff_t(j + 1));
+					const std::shared_ptr<const AnchorChain<N>> ch = build_chain(player, *cursor, prefix, flags);
+					if (ch) {
+						if (auto it = ch->hits.find(int(j)); it != ch->hits.end()) {
+							o.point = it->second;
+						}
+					}
+				}
+			}
+		}
+		// the half: the orientation's own parity (behind_origin, as the realization
+		// reads it) over the entries since the last projection, from its start
+		const std::vector<PlanItem> since(plan.begin() + std::ptrdiff_t(start), plan.end());
+		o.behind = o.behind != behind_origin(since, since.size(), scene_.emit_infinity);
+		std::vector<const Surf<N> *> st;
+		for (size_t j = start; j < plan.size(); j++) {
+			const Surf<N> *surf = scene_.find(plan[j].surface_id);
+			if (surf == nullptr || !is_transformative(effs[j])) {
+				continue;
+			}
+			if (!st.empty() && pop_id_of(st.back()->id) == surf->id) {
+				st.pop_back();
+			} else {
+				st.push_back(surf);
+			}
+		}
+		for (const Surf<N> *s : st) {
+			if (o.point) {
+				o.point = effects::map_point(o.point, *s, false);
+			}
+		}
+		return o;
 	}
 
 	Flags plan_flags(const std::vector<PlanItem> &plan, const Flags &flags) const {
@@ -3023,19 +3102,19 @@ private:
 	// The planned walk's decision at this candidate, on the shadow: the next
 	// entry is consumed (its state changes applied under the shadow's flags); a
 	// transformative or projective entry ends the shadow.
-	static void point_step(Walk<N> &w, const Surf<N> *surf, bool inf, bool left, const CN<N> &pt) {
+	static void point_step(Walk<N> &w, const Surf<N> *surf, bool inf, bool left, const CN<N> &pt, bool origin = false) {
 		if (!w.point || w.point->broke || w.point->index >= int(w.plan.size())) {
 			return;
 		}
 		PointGroup<N> &p = *w.point;
 		const PlanItem &item = w.plan[size_t(p.index)];
-		if (inf) {
-			if (item.is_infinity()) {
+		if (inf || origin) {
+			if ((inf && item.is_infinity()) || (origin && item.is_origin())) {
 				p.index++;
 			}
 			return;
 		}
-		if (item.is_infinity() || item.surface_id != surf->id || item.left != left || !in_span(item, pt)) {
+		if (item.is_infinity() || item.is_origin() || item.surface_id != surf->id || item.left != left || !in_span(item, pt)) {
 			return;
 		}
 		const EffectType eff = surf->effect(left, p.flags);
@@ -3227,12 +3306,8 @@ private:
 					oe.point = cand.pt;
 					oe.flags = w.flags;
 					t_prev = t;
-					if (w.mode == Mode::Physical && !w.cursor_done) {
-						w.left_plan = true;
-						w.wrapped_off = true;
-						w.plan_matched = false;
-						w.on_plan = false;
-						oe.off_plan = true;
+					if (origin_passage(w, *beam)) {
+						late_cursor(w, *beam, cands, gp, gw, ci, t, t0);
 					}
 					ci++;
 					continue;
@@ -3515,13 +3590,7 @@ private:
 					oe.point = beam->p;
 				}
 				oe.flags = w.flags;
-				if (w.mode == Mode::Physical && !w.cursor_done) {
-					w.left_plan = true;
-					w.wrapped_off = true;
-					w.plan_matched = false;
-					w.on_plan = false;
-					oe.off_plan = true;
-				}
+				origin_passage(w, *beam);
 				t_prev = t0; // (the next arc runs on from the origin)
 				if (!fired_state) {
 					w.lap++;
@@ -3540,6 +3609,29 @@ private:
 			fresh = next->fresh;
 			t_prev = t0;
 		}
+	}
+
+	// Stage 132: the passage of the ray's origin (the walk's last event) consumes an
+	// origin entry next in the plan, in both walks (applied, like infinity's);
+	// unplanned before the cursor it is a divergence (Stage 131). True: consumed.
+	static bool origin_passage(Walk<N> &w, const Beam<N> &beam) {
+		bool consumed = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].is_origin();
+		if (consumed) {
+			w.plan_index++;
+		}
+		w.events.back().applied = consumed;
+		if (w.mode == Mode::Physical) {
+			point_step(w, nullptr, false, false, beam.p, true);
+			consumed = point_sync(w) || consumed;
+			if (!consumed && !w.cursor_done) {
+				w.left_plan = true;
+				w.wrapped_off = true;
+				w.plan_matched = false;
+				w.on_plan = false;
+				w.events.back().off_plan = true;
+			}
+		}
+		return consumed;
 	}
 
 	// The plan completed at the event at t (index ci) without a frame change

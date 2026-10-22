@@ -14,6 +14,7 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 ROOT = os.path.abspath(os.path.join(HERE, "..", "..", ".."))
 FIXTURES = os.path.join(ROOT, "bench", "fixtures")
 INFINITY_ID = -3
+ORIGIN_ID = -4   # Stage 132: the ray's origin entry
 
 # data files that are not trace fixtures (no oracle generator writes them)
 NOT_TRACES = {
@@ -60,8 +61,8 @@ def test_trace_fixture_schema(name):
         assert fx["direction"] is not None or fx["cursor"] is not None, label + ": a direction or a cursor"
         for p in fx["plan"]:
             assert {"surface_id", "side"} <= set(p), label
-            if p["surface_id"] == INFINITY_ID:
-                assert p["side"] == "", label + ": the infinity entry has no side"
+            if p["surface_id"] in (INFINITY_ID, ORIGIN_ID):
+                assert p["side"] == "", label + ": the infinity and origin entries have no side"
             else:
                 assert p["side"] in ("LEFT", "RIGHT"), label
         for i, e in enumerate(fx["expected"]):

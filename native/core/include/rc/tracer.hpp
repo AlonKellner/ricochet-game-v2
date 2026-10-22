@@ -295,6 +295,28 @@ public:
 		return V2::of(q->fx(), q->fy());
 	}
 
+	// Stage 132: the ray's origin after the plan (GAME_SPEC 4.2) and whether the plan
+	// leaves the walk behind it (the origin entry plannable); the cursor gives a line
+	// projection's departure.
+	struct OriginPoint {
+		std::optional<V2> point;
+		bool behind = false;
+	};
+	OriginPoint origin_point(V2 player, std::optional<V2> cursor, const std::vector<PlanItem> &plan, const Flags &flags) {
+		if (!ctx_) {
+			return {};
+		}
+		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		auto cn = [](V2 p) { return CN<Dual>{Dual{double(p.x), 0.0}, Dual{double(p.y), 0.0}}; };
+		const auto o = solver.plan_origin(cn(player), cursor ? std::optional<CN<Dual>>(cn(*cursor)) : std::nullopt, plan, flags);
+		OriginPoint out;
+		out.behind = o.behind;
+		if (o.point) {
+			out.point = V2::of(o.point->fx(), o.point->fy());
+		}
+		return out;
+	}
+
 	void clear_cache() {
 		cache_valid_ = false;
 		if (!defs_.empty()) {
@@ -499,7 +521,13 @@ public:
 				before = e.flags;
 			}
 			if (e.kind == EventKind::Origin && appended && !lean) {
-				path.steps.back().significant = true; // (Stage 131: the passage of the ray's origin)
+				TraceStep &last = path.steps.back();
+				last.significant = true; // (Stage 131: the passage of the ray's origin)
+				if (e.applied) {
+					// Stage 132: a consumed origin entry carries its id, like infinity's
+					last.surface_id = ORIGIN_ID;
+					last.hit_on_segment = true;
+				}
 			}
 			if (e.kind == EventKind::Infinity && appended && !lean) {
 				// the outgoing half of the wrap carries the infinity id: plan
