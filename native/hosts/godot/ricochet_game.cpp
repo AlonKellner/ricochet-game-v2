@@ -382,24 +382,28 @@ String RicochetGame::record() const {
 	return String::utf8(out, int64_t(n));
 }
 
-// F12 (the GDScript game's DEBUG STATE): the game's state, printed and saved to
-// user://debug_dumps (one file per press)
+// F12 (the GDScript game's DEBUG STATE): the game's state -- its summary printed,
+// the full dump saved to user://debug_dumps (one file per press)
 void RicochetGame::debug_dump() {
 	const char *text = nullptr;
 	size_t n = 0;
-	if (rc_game_debug_dump(game_, &text, &n) != RC_OK) {
+	if (rc_game_debug_dump(game_, 0, &text, &n) != RC_OK) {
 		UtilityFunctions::push_error(String::utf8(rc_last_error()));
 		return;
 	}
 	const String dump = String::utf8(text, int64_t(n));
+	if (rc_game_debug_dump(game_, RC_DEBUG_SUMMARY, &text, &n) != RC_OK) {
+		UtilityFunctions::push_error(String::utf8(rc_last_error()));
+		return;
+	}
+	const String summary = String::utf8(text, int64_t(n));
 	DirAccess::make_dir_recursive_absolute("user://debug_dumps");
 	const String path = "user://debug_dumps/" + Time::get_singleton()->get_datetime_string_from_system().replace(":", "-") + ".json";
 	const Ref<FileAccess> f = FileAccess::open(path, FileAccess::WRITE);
 	if (f.is_valid()) {
 		f->store_string(dump);
 	}
-	UtilityFunctions::print("=== DEBUG STATE (F12) ===\n", dump, "\n=== END DEBUG STATE === saved to ",
-		ProjectSettings::get_singleton()->globalize_path(path));
+	UtilityFunctions::print("=== DEBUG STATE (F12) ===\n", summary, "the full dump: ", ProjectSettings::get_singleton()->globalize_path(path));
 }
 
 String RicochetGame::hud() const {

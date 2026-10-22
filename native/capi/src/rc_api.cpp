@@ -442,12 +442,12 @@ rc_status rc_game_record(rc_game *game, const char *extra_json, size_t extra_len
 	});
 }
 
-rc_status rc_game_debug_dump(rc_game *game, const char **out, size_t *out_length) {
+rc_status rc_game_debug_dump(rc_game *game, uint32_t flags, const char **out, size_t *out_length) {
 	return guarded([&]() -> rc_status {
 		if (game == nullptr || out == nullptr) {
 			return fail(RC_E_ARGUMENT, "rc_game_debug_dump: null argument");
 		}
-		game->dump = game->session->debug_dump().dump(1, '\t');
+		game->dump = (flags & RC_DEBUG_SUMMARY) != 0 ? game->session->debug_summary() : game->session->debug_dump().dump(1, '\t');
 		*out = game->dump.c_str();
 		if (out_length != nullptr) {
 			*out_length = game->dump.size();

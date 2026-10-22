@@ -73,10 +73,11 @@ Map your engine's input onto events. These are the Godot host's bindings (`proje
 | `RC_EVENT_TOGGLE_GRAVITY` / `TOGGLE_VISIBILITY` | G / V |
 | `RC_EVENT_ANY_KEY` | any other key (speeds up a flight) |
 
-**The debug dump** (C API 1.5, not an event). The Godot host binds it to F12: `rc_game_debug_dump(game, &text,
-&len)` gives the game's state as JSON, which the host prints and saves to `user://debug_dumps/`. It holds the
-solver's inputs exactly (the player and cursor in hex floats too), the scene's defs, the plan, the preview's walks
-and the region's summary. It is meant for bug reports, and its fields may change.
+**The debug dump** (C API 1.5, not an event). The Godot host binds it to F12: `rc_game_debug_dump(game, 0, &text,
+&len)` gives the game's state as JSON, which the host saves to `user://debug_dumps/`; with `RC_DEBUG_SUMMARY` it
+gives a few lines of text, which the host prints. The JSON holds the solver's inputs exactly (the player and cursor
+in hex floats too), the scene's defs, the plan, the preview's walks and the region's summary; the summary also says
+whether the preview and the region agree on the cursor. It is meant for bug reports, and its contents may change.
 
 Movement is not an event. Pass the held movement keys (`RC_KEY_LEFT | RIGHT | UP | DOWN`, default WASD) to
 every `rc_game_advance`, and the keys first pressed this frame as `pressed` (Up is the jump with gravity).

@@ -13,7 +13,8 @@ structural change".
 | 128.1 | A cast without contention: walks allocate less, the region memo sharded (results unchanged) | Done |
 | 128.2 | A cast's two walks share their exact start in a pre-transform frame (results unchanged) | Done |
 | 128.3 | Docs, `make gates`, sign-off | Pending |
-| 128.4 | The F12 debug dump restored natively (C API 1.5 `rc_game_debug_dump`) | Done |
+| 128.4 | The F12 debug dump restored natively (C API 1.5 `rc_game_debug_dump`): a summary printed, the full dump saved | Done |
+| 128.5 | A tiny arc on a known circle drawn the long way round: the disc of crossings' mirror circle in the region (the user's F12 report) | Done |
 
 ## 128.0 Resuming the planned walk: why not
 
@@ -75,8 +76,30 @@ tracked tests, not tools. It is now engine-free:
   dump is replayed bit for bit), the switches, the flags, the plan and the solver's plan items, the scene's defs,
   the preview's ladder result (each walk's limbs, convergence and events), its traced pair and merged steps, and the
   region's summary.
-- C API 1.5 `rc_game_debug_dump`.
-- The Godot host prints it on F12 and saves it to `user://debug_dumps/`.
+- `Session::debug_summary()`: a few lines -- the inputs (hex floats too), the plan, the preview's walks, the merged
+  steps as runs of one type, the cursor as the preview and the region classify it (flagged `DISAGREE` where they
+  differ: VISIBILITY_EQUALS_NON_DIVERGENCE), the region.
+- C API 1.5 `rc_game_debug_dump(game, flags, ...)`: the JSON, or with `RC_DEBUG_SUMMARY` the summary.
+- The Godot host prints the summary on F12 and saves the full dump to `user://debug_dumps/` (the full dump in
+  Godot's output overflowed it, the user, 2026-10-22).
+
+## 128.5 A tiny arc drawn the long way round
+
+**The report** (the user, 2026-10-22, with an F12 dump): on crossings with the mirror circle 17 planned from
+outside (its western half), the region invaded the circle, where every point is divergent.
+
+**Replayed exactly** from the dump: 1512 of 1513 points sampled in the disc were in the region and none was shown
+by the preview. The same on main (Stage 127): the defect predates this stage. One cell of the reversed half (a
+sliver between members 69, an endpoint of 16, and 70, a tangency to 16) closes on carrier 17 with an arc 1.5e-6 px
+long. Its three points lie within rounding of a line: `cross(via - a, b - via)`, which `arc_geom` turned into the
+arc's direction, was noise, and the wrong sign made the arc sweep -2π: the whole circle. `on_arc_side` had the same
+weakness (the via's side of the chord).
+
+**The fix** (`vis::ccw_about`): an arc on a known circle turns the way its via lies between its ends in angle about
+the centre (1.7e-8 rad apart here, well above rounding); its side of the chord is the centre's, opposite for a minor
+arc. Where the cross product is reliable the two agree. The region's edges are unchanged (the 2010-region set bit
+for bit, the digests, the sweeps, the sessions); what changes is how such an arc is read -- its fill, its
+membership. No arc of the 2010-region set was read the other way: the sweeps' players never met it.
 
 ## Results
 
@@ -123,4 +146,7 @@ measurements vary ±2 ms between runs.
 | the region digests, the sweeps (unsampled), the sessions | unchanged |
 | the 2010-region comparison against Stage 127 (scratch) | every region bit for bit |
 | `debug dump: the inputs exactly, the scene, the preview's walks and the region` | the dump's exact inputs and its parts |
-| `capi_c_smoke` | `rc_game_debug_dump` (1.5), its error path |
+| `capi_c_smoke` | `rc_game_debug_dump` (1.5), the summary, the error path |
+| `debug dump: the summary names the inputs and the cursor as the preview and the region classify it` | the summary |
+| `visibility: a tiny arc on a known circle turns the short way` | the dump's arc: its sweep, its side (the old rule swept -2π) |
+| `region reports: crossings [17 L] -- the mirror circle's disc is not in the region` | the report replayed: no point of the disc in the region |

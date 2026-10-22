@@ -37,3 +37,17 @@ TEST_CASE("debug dump: the inputs exactly, the scene, the preview's walks and th
 	CHECK(d["region"]["supported"] == true);
 	CHECK(d["region"]["cells"].get<int>() > 0);
 }
+
+TEST_CASE("debug dump: the summary names the inputs and the cursor as the preview and the region classify it") {
+	rcg::Session s(rcg::load_level((ROOT / "data" / "levels" / "test_levels" / "crossings.json").string()));
+	const rc::V2 cursor = s.player() + rc::V2::of(300.1, -120.7);
+	s.set_cursor(cursor);
+	s.settle();
+	const std::string t = s.debug_summary();
+	CHECK(t.find("level test_levels/crossings") != std::string::npos);
+	CHECK(t.find(hex(double(cursor.x))) != std::string::npos);
+	CHECK(t.find("cursor: preview ") != std::string::npos);
+	CHECK(t.find("DISAGREE") == std::string::npos);
+	CHECK(t.find("region: supported") != std::string::npos);
+	CHECK(t.size() < 2000);
+}

@@ -6,6 +6,8 @@
 
 #include "rcg/trace_json.hpp"
 
+#include "rc/visibility_checks.hpp"
+
 #include <cstdio>
 
 namespace rcg {
@@ -123,6 +125,67 @@ nlohmann::json Session::debug_dump() const {
 	}
 	j["region"] = rg;
 	return j;
+}
+
+std::string Session::debug_summary() const {
+	std::string out;
+	char buf[512];
+	auto line = [&](const char *fmt, auto... args) {
+		std::snprintf(buf, sizeof buf, fmt, args...);
+		out += buf;
+		out += '\n';
+	};
+	line("level %s%s", level_.name.c_str(), flying_ ? " (flying)" : "");
+	line("player (%.9g, %.9g) [%s, %s]", double(player_.x), double(player_.y), hex(double(player_.x)).c_str(), hex(double(player_.y)).c_str());
+	line("cursor (%.9g, %.9g) [%s, %s]", double(cursor_.x), double(cursor_.y), hex(double(cursor_.x)).c_str(), hex(double(cursor_.y)).c_str());
+	std::string plan;
+	for (const PlanEntry &e : plan_) {
+		plan += (plan.empty() ? "" : ", ") + std::to_string(e.surface_id) + (e.side == Side::Left ? "L" : "R");
+		if (e.piece >= 0) {
+			plan += " (piece " + std::to_string(e.piece) + ")";
+		}
+	}
+	line("plan [%s]  flags %s  infinity %s  visibility %s", plan.c_str(), trace_json::flags(flags_).dump().c_str(), infinity_on() ? "on" : "off",
+		visibility_on() ? "on" : "off");
+	const Preview &p = shown();
+	if (p.last_result) {
+		const rc::LadderResult &r = *p.last_result;
+		line("preview %s: planned %zu events (%d limbs%s), physical %zu events (%d limbs%s)", preview_exact() ? "exact" : "provisional", r.planned.size(),
+			r.planned.limbs, r.planned.converged ? "" : ", unconverged", r.physical.size(), r.physical.limbs, r.physical.converged ? "" : ", unconverged");
+	}
+	// the merged steps as runs of one type
+	std::string runs;
+	for (size_t i = 0; i < p.merged.size();) {
+		size_t j = i;
+		while (j < p.merged.size() && p.merged[j].type == p.merged[i].type) {
+			j++;
+		}
+		runs += (runs.empty() ? "" : ", ") + std::to_string(j - i) + " " + step_type(p.merged[i].type);
+		i = j;
+	}
+	line("merged %zu steps: %s", p.merged.size(), runs.c_str());
+	// the cursor as the preview shows it and as the region holds it (GAME_SPEC 15.1: they agree)
+	const bool shown_visible = p.pair && rc::inv::preview_visible(p.planned, p.merged, p.pair->cursor_point_agrees);
+	std::string held = "no region";
+	if (region_ && region_->supported) {
+		switch (rc::vis::contains(*region_, rc::vis::Pt{double(cursor_.x), double(cursor_.y)})) {
+			case rc::vis::Membership::Inside: held = "inside"; break;
+			case rc::vis::Membership::Outside: held = "outside"; break;
+			case rc::vis::Membership::Unclassified: held = "unclassified"; break;
+		}
+	}
+	const bool disagree = (held == "inside" && !shown_visible) || (held == "outside" && shown_visible);
+	line("cursor: preview %s, region %s%s", shown_visible ? "visible" : "not visible", held.c_str(),
+		disagree ? "  <-- DISAGREE (VISIBILITY_EQUALS_NON_DIVERGENCE)" : "");
+	if (region_) {
+		const rc::vis::Result &r = *region_;
+		line("region%s: %s%s, %zu cells, %zu loops, %d casts, %.1f ms%s", region_pending() ? " (a newer one pending)" : "", r.supported ? "supported" : "unsupported: ",
+			r.supported ? "" : r.reason.c_str(), r.cells.size(), r.loops.size(), r.casts, double(r.build_usec) / 1000.0, r.split ? ", split" : "");
+		for (const std::string &n : r.notes) {
+			line("  note: %s", n.c_str());
+		}
+	}
+	return out;
 }
 
 } // namespace rcg

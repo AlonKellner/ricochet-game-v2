@@ -238,8 +238,11 @@ RC_API rc_status rc_game_record(rc_game *game, const char *extra_json, size_t ex
 
 /* 1.5: the debug dump (a host's F12): the game's state as JSON -- the solver's
  * inputs exactly (hex floats), the scene, the plan, the preview's walks, the
- * region. A tool for bug reports; its fields may change. Borrowed (terminated). */
-RC_API rc_status rc_game_debug_dump(rc_game *game, const char **out, size_t *out_length);
+ * region -- or with RC_DEBUG_SUMMARY a few lines of text (the inputs, the
+ * preview, the cursor as the preview and the region classify it, the region).
+ * A tool for bug reports; its contents may change. Borrowed (terminated). */
+enum { RC_DEBUG_SUMMARY = 1 };
+RC_API rc_status rc_game_debug_dump(rc_game *game, uint32_t flags, const char **out, size_t *out_length);
 
 /* The record encoding's sha256 of a JSON value (lowercase hex, terminated). */
 RC_API rc_status rc_digest_sha(const char *json, size_t length, char out[65]);

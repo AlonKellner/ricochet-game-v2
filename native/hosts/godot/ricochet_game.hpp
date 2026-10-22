@@ -93,7 +93,7 @@ protected:
 
 private:
 	void event(int32_t e);
-	void debug_dump(); // F12: the game's state, printed and saved (rc_game_debug_dump)
+	void debug_dump(); // F12: the game's state, its summary printed, the full dump saved (rc_game_debug_dump)
 	void sync();
 	godot::Vector2 cursor() const;
 
