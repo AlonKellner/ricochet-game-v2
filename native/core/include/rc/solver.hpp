@@ -13,6 +13,7 @@
 #pragma once
 
 #include "rc/beam_effects.hpp"
+#include "rc/small_vec.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -201,10 +202,17 @@ struct Backend {
 	// object when nothing changes.
 	static BeamPtr<N> seed(const BeamPtr<N> &b) {
 		if constexpr (std::is_same_v<N, Dual>) {
-			const double tx = b->tau.re.v;
-			const double ty = b->tau.im.v;
-			return std::make_shared<const Beam<N>>(Beam<N>{{Dual{b->p.re.v, 0.0}, Dual{b->p.im.v, 0.0}},
-				{Dual{tx, -ty}, Dual{ty, tx}}, Dual{b->kappa.v, 0.0}});
+			return std::make_shared<const Beam<N>>(seeded(*b));
+		} else {
+			return b;
+		}
+	}
+	// (Dual: the seeded beam's value -- Stage 128: prefix_gain without a heap beam)
+	static Beam<N> seeded(const Beam<N> &b) {
+		if constexpr (std::is_same_v<N, Dual>) {
+			const double tx = b.tau.re.v;
+			const double ty = b.tau.im.v;
+			return Beam<N>{{Dual{b.p.re.v, 0.0}, Dual{b.p.im.v, 0.0}}, {Dual{tx, -ty}, Dual{ty, tx}}, Dual{b.kappa.v, 0.0}};
 		} else {
 			return b;
 		}
@@ -241,8 +249,8 @@ struct Backend {
 	// anchored prefix: sensitivity to the anchored beam's own angle
 	static double prefix_gain(const Beam<N> &b, const N &t) {
 		if constexpr (std::is_same_v<N, Dual>) {
-			const BeamPtr<N> s = seed(std::make_shared<const Beam<N>>(b));
-			const CN<Dual> h = s->at(Dual{t.v, 0.0});
+			const Beam<N> s = seeded(b); // (the same arithmetic as seed(): a value, no allocation)
+			const CN<Dual> h = s.at(Dual{t.v, 0.0});
 			return std::sqrt(h.re.d * h.re.d + h.im.d * h.im.d);
 		} else {
 			(void)b;
@@ -365,6 +373,84 @@ struct PointGroup {
 	bool pending = false;
 };
 
+// Stage 124/128: a walk step's working vectors (its candidates, their margins
+// and the margins' classes, the shared roots, the gaps' points), kept across
+// steps and -- Stage 128 -- leased per thread for the duration of a walk: the
+// region's thousands of short walks each grew their own, a fifth of all their
+// allocations
+// Stage 128: a few entries keyed by a small key, inline (no allocation up to C;
+// a SmallVec past it), searched in order -- a walk's per-surface memos, which
+// as std::maps took a heap node per entry in every one of the region's walks.
+// The subset of std::map's interface they use.
+template <class K, class V, size_t C = 16>
+class SmallMap {
+public:
+	struct Item {
+		K first;
+		V second;
+	};
+	Item *find(const K &k) {
+		for (Item &i : items_) {
+			if (i.first == k) {
+				return &i;
+			}
+		}
+		return end();
+	}
+	Item *end() { return items_.end(); }
+	V &operator[](const K &k) {
+		if (Item *i = find(k); i != end()) {
+			return i->second;
+		}
+		items_.push_back(Item{k, V{}});
+		return items_.back().second;
+	}
+	void clear() { items_.clear(); }
+
+private:
+	SmallVec<Item, C> items_;
+};
+// (a point and a surface: Walk::incidence's key)
+struct PointSurf {
+	double x = 0.0, y = 0.0;
+	int surf = 0;
+	bool operator==(const PointSurf &) const = default;
+};
+
+template <Num N>
+struct StepScratch {
+	std::vector<Candidate<N>> cands;
+	std::vector<double> gaps;
+	std::vector<uint8_t> why; // (Stage 123: the margins' classes, the instrument)
+	std::vector<std::pair<int, InlineVec<N, 4>>> shared;
+	std::vector<std::pair<double, double>> pts;
+	std::vector<int> dbl;
+};
+template <Num N>
+class ScratchLease {
+public:
+	ScratchLease() {
+		std::vector<std::unique_ptr<StepScratch<N>>> &p = pool();
+		if (p.empty()) {
+			s_ = std::make_unique<StepScratch<N>>();
+		} else {
+			s_ = std::move(p.back());
+			p.pop_back();
+		}
+	}
+	~ScratchLease() { pool().push_back(std::move(s_)); } // (a walk nested in this one, on this thread, leased another)
+	ScratchLease(const ScratchLease &) = delete;
+	ScratchLease &operator=(const ScratchLease &) = delete;
+	StepScratch<N> &get() { return *s_; }
+
+private:
+	static std::vector<std::unique_ptr<StepScratch<N>>> &pool() {
+		thread_local std::vector<std::unique_ptr<StepScratch<N>>> p;
+		return p;
+	}
+	std::unique_ptr<StepScratch<N>> s_;
+};
+
 template <Num N>
 struct Walk {
 	const Scene<N> *scene = nullptr;
@@ -391,18 +477,18 @@ struct Walk {
 	std::vector<Known<N>> known;
 	std::shared_ptr<const exact::Line> line;
 	const Surf<N> *through_c = nullptr; // K15 (Stage 114): the circle normal whose centre the current beam passes by provenance (its exit)
-	std::map<std::tuple<double, double, int>, bool> incidence;
+	SmallMap<PointSurf, bool, 32> incidence;
 	std::shared_ptr<const exact::Line> tangent_line;
-	std::map<int, bool> tangent;
+	SmallMap<int, bool> tangent;
 	// Stage 112: the line carriers the current exact line is parallel to (cached per line)
 	std::shared_ptr<const exact::Line> parallel_line;
-	std::map<int, bool> parallel;
+	SmallMap<int, bool> parallel;
 	// Perf P2b: the current beam's exact generalized circle, lazily (from_line
 	// of `line` whenever there is one; mapped by every effect; nullptr: no
 	// exact claim), and its tangencies to carriers (cached per record)
 	std::shared_ptr<const exact::BeamRec> rec;
 	std::shared_ptr<const exact::BeamRec> rec_tangent_of;
-	std::map<int, bool> rec_tangent;
+	SmallMap<int, bool> rec_tangent;
 	// K7: whether the record's circle passes the cursor (cached per record)
 	std::shared_ptr<const exact::BeamRec> rec_cursor_of;
 	bool rec_cursor_on = false;
@@ -425,8 +511,8 @@ struct Walk {
 	int pole_serial = 0;
 	int pole_serials = 0;
 	int pole_tangent_serial = -1;
-	std::map<int, bool> pole_tangent;   // surf id -> tangent at Q
-	std::map<int, bool> pole_on;        // surf id -> its carrier passes Q
+	SmallMap<int, bool> pole_tangent;   // surf id -> tangent at Q
+	SmallMap<int, bool> pole_on;        // surf id -> its carrier passes Q
 	PoleMemo *pole_memo = nullptr;      // Stage 120: across walks (the solver's cache's), or none
 	IncidenceMemo *incidence_memo = nullptr; // Stage 123: likewise
 	// tests only: the record beside each beam loop (record_poles)
@@ -439,16 +525,9 @@ struct Walk {
 	BeamPtr<N> hp_src;
 	int hp_view = -1;
 	int view_count = 0;
-	std::map<const Beam<N> *, int> beam_views;
+	std::vector<std::pair<const Beam<N> *, int>> beam_views; // (Stage 128: a few per walk, searched in order)
 	std::optional<PointGroup<N>> point; // B5: the point being crossed (physical walk)
-	std::vector<uint8_t> gap_why; // Stage 123: the step's margins' classes (Solver::gaps, the instrument; reused)
-	// Stage 124: a step's working vectors, kept across the walk's steps (no
-	// allocation per step: the region's parallel casts contended in malloc)
-	std::vector<Candidate<N>> step_cands;
-	std::vector<double> step_gaps;
-	std::vector<std::pair<int, InlineVec<N, 4>>> step_shared;
-	std::vector<std::pair<double, double>> gap_pts;
-	std::vector<int> gap_dbl;
+	StepScratch<N> *scratch = nullptr; // Stage 128: the step's working vectors while it walks (walk_from's lease)
 	const std::function<size_t(const std::vector<Event<N>> &)> *read_horizon = nullptr; // Stage 124: Solver::read_horizon
 };
 
@@ -469,7 +548,35 @@ struct SolveCache {
 	std::optional<ChainKey> chain_key;
 	std::shared_ptr<const AnchorChain<N>> chain;
 	bool chain_null = false;
-	std::map<std::string, std::optional<exact::Point3>> images;
+	// Stage 128: the aim image's key as exact bits (the %.17g text it was told
+	// every number apart the same way, at a printf per cast)
+	struct ImageKey {
+		SmallVec<uint64_t, 48> words;
+		bool operator==(const ImageKey &o) const {
+			return words.size() == o.words.size() && std::equal(words.begin(), words.end(), o.words.begin());
+		}
+	};
+	struct ImageHash {
+		size_t operator()(const ImageKey &k) const {
+			uint64_t h = 14695981039346656037ULL;
+			for (uint64_t w : k.words) {
+				h = (h ^ w) * 1099511628211ULL;
+			}
+			return size_t(h);
+		}
+	};
+	std::unordered_map<ImageKey, std::optional<exact::Point3>, ImageHash> images;
+	// Stage 128: an aimed shot's exact start in a pre-transform frame (its pole
+	// and its circle through P, X0, Q0), pure functions of the three points: a
+	// cast's two walks start alike. The last few, by the points' exact bits.
+	struct Start {
+		uint64_t px = 0, py = 0;
+		exact::Point3 X0, Q0;
+		bool has_pole = false, has_gc = false;
+		std::optional<exact::ExactPole> pole;
+		exact::GCircle gc;
+	};
+	std::vector<Start> starts;
 	PoleMemo poles; // Stage 120
 	IncidenceMemo incidence; // Stage 123
 };
@@ -762,7 +869,7 @@ public:
 		if (q0) {
 			if (const std::optional<exact::Point3> q0e = pre_q_exact()) {
 				if (const std::optional<exact::Point3> X0 = exact_image_cached(cursor, plan, flags)) {
-					pole = exact::pole_start_aimed(player.fx(), player.fy(), *X0, *q0e);
+					pole = start_pole(player.fx(), player.fy(), *X0, *q0e);
 					if (pole && exact::pole_limbs(*pole) > EXACT_IMAGE_LIMBS) {
 						pole.reset();
 					}
@@ -1302,19 +1409,20 @@ private:
 		if (cache_ == nullptr) {
 			return exact_image_h(cursor, plan, EXACT_IMAGE_LIMBS, flags);
 		}
-		char cbuf[64];
-		std::snprintf(cbuf, sizeof cbuf, "%a,%a", cursor.fx(), cursor.fy());
-		std::string key = cbuf;
+		typename SolveCache<N>::ImageKey key;
+		auto put = [&key](double v) { key.words.push_back(std::bit_cast<uint64_t>(v)); };
+		put(cursor.fx());
+		put(cursor.fy());
 		const std::vector<EffectType> effs = plan_effects(plan, flags);
 		for (size_t ji = 0; ji < plan.size(); ji++) {
 			const PlanItem &item = plan[ji];
 			const Surf<N> *s = scene_.find(item.surface_id);
-			key += "|" + std::to_string(item.surface_id) + (item.left ? "L" : "R");
+			key.words.push_back(uint64_t(uint32_t(item.surface_id)) | uint64_t(item.left) << 32 | uint64_t(s != nullptr) << 33);
 			if (s != nullptr) {
-				char buf[400];
-				std::snprintf(buf, sizeof buf, ":%d:%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g,%.17g", int(effs[ji]),
-					s->sx, s->sy, s->ex, s->ey, s->has_v ? s->vx : 0.0, s->has_v ? s->vy : 0.0, s->cx, s->cy, s->r, s->dx, s->dy, s->theta);
-				key += buf;
+				key.words.push_back(uint64_t(int64_t(effs[ji])));
+				for (double v : {s->sx, s->sy, s->ex, s->ey, s->has_v ? s->vx : 0.0, s->has_v ? s->vy : 0.0, s->cx, s->cy, s->r, s->dx, s->dy, s->theta}) {
+					put(v);
+				}
 			}
 		}
 		auto it = cache_->images.find(key);
@@ -1325,8 +1433,62 @@ private:
 			cache_->images.clear();
 		}
 		std::optional<exact::Point3> X = exact_image_h(cursor, plan, EXACT_IMAGE_LIMBS, flags);
-		cache_->images[key] = X;
+		cache_->images[std::move(key)] = X;
 		return X;
+	}
+
+	// (the same exact value, held alike: sign, exponent and limbs)
+	static bool same_bits(const BigFloat &a, const BigFloat &b) {
+		return a.sign == b.sign && a.exp == b.exp && a.limbs.size() == b.limbs.size() && std::equal(a.limbs.begin(), a.limbs.end(), b.limbs.begin());
+	}
+	static bool same_bits(const exact::Point3 &a, const exact::Point3 &b) {
+		return same_bits(a[0], b[0]) && same_bits(a[1], b[1]) && same_bits(a[2], b[2]);
+	}
+	// An aimed shot's exact start in a pre-transform frame (SolveCache::Start)
+	typename SolveCache<N>::Start *start_entry(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
+		if (cache_ == nullptr) {
+			return nullptr;
+		}
+		const uint64_t bx = std::bit_cast<uint64_t>(px);
+		const uint64_t by = std::bit_cast<uint64_t>(py);
+		for (auto &e : cache_->starts) {
+			if (e.px == bx && e.py == by && same_bits(e.X0, X0) && same_bits(e.Q0, Q0)) {
+				return &e;
+			}
+		}
+		if (cache_->starts.size() >= 8) {
+			cache_->starts.erase(cache_->starts.begin());
+		}
+		typename SolveCache<N>::Start e;
+		e.px = bx;
+		e.py = by;
+		e.X0 = X0;
+		e.Q0 = Q0;
+		cache_->starts.push_back(std::move(e));
+		return &cache_->starts.back();
+	}
+	std::optional<exact::ExactPole> start_pole(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
+		typename SolveCache<N>::Start *e = start_entry(px, py, X0, Q0);
+		if (e == nullptr) {
+			return exact::pole_start_aimed(px, py, X0, Q0);
+		}
+		if (!e->has_pole) {
+			e->pole = exact::pole_start_aimed(px, py, X0, Q0);
+			e->has_pole = true;
+		}
+		return e->pole;
+	}
+	exact::GCircle start_gc(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
+		auto through = [&] { return exact::gc_through(exact::Point3{exact::of(px), exact::of(py), exact::of(1.0)}, X0, Q0); };
+		typename SolveCache<N>::Start *e = start_entry(px, py, X0, Q0);
+		if (e == nullptr) {
+			return through();
+		}
+		if (!e->has_gc) {
+			e->gc = through();
+			e->has_gc = true;
+		}
+		return e->gc;
 	}
 
 	// The exact implicit line of B_0, when it is exact data: lazy float64
@@ -1737,6 +1899,8 @@ private:
 		w.pole_memo = cache_ ? &cache_->poles : nullptr;
 		w.incidence_memo = cache_ ? &cache_->incidence : nullptr;
 		w.read_horizon = read_horizon;
+		w.events.reserve(32); // (Stage 128: one allocation, not a growth per few events)
+		w.gains.reserve(32);
 		return w;
 	}
 
@@ -1768,10 +1932,10 @@ private:
 		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
 			// an aimed shot in a pre-transform frame: the circle through P, X0, Q0
 			if (const std::optional<exact::Point3> X0 = exact_image_cached(cursor, plan, flags)) {
-				set_pole(w, exact::pole_start_aimed(player.fx(), player.fy(), *X0, *q0));
+				set_pole(w, start_pole(player.fx(), player.fy(), *X0, *q0));
 				if (!w.rec) {
 					// K9: and its exact circle
-					w.rec = exact::BeamRec::from_gc(exact::gc_through(exact::Point3{exact::of(player.fx()), exact::of(player.fy()), exact::of(1.0)}, *X0, *q0));
+					w.rec = exact::BeamRec::from_gc(start_gc(player.fx(), player.fy(), *X0, *q0));
 				}
 			}
 		}
@@ -1883,7 +2047,7 @@ private:
 		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
 		const CN<N> delta = w.Q ? player.sub(*w.Q) : player.sub(player);
 		Beam<N> b = Beam<N>::through(player, aim, w.Q ? &delta : nullptr);
-		std::optional<exact::GCircle> start_gc;
+		std::optional<exact::GCircle> start_circle;
 		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
 			// the exact pole record (Stage 105): the circle through the player, the aim
 			// point and Q0; a shot straight at the cursor passes exact data
@@ -1894,8 +2058,8 @@ private:
 				X0 = exact_image_cached(cursor, plan, flags);
 			}
 			if (X0) {
-				set_pole(w, exact::pole_start_aimed(player.fx(), player.fy(), *X0, *q0));
-				start_gc = exact::gc_through(exact::Point3{exact::of(player.fx()), exact::of(player.fy()), exact::of(1.0)}, *X0, *q0);
+				set_pole(w, start_pole(player.fx(), player.fy(), *X0, *q0));
+				start_circle = start_gc(player.fx(), player.fy(), *X0, *q0);
 			}
 		}
 		if (force_reversed ? *force_reversed : realize(player, cursor, plan, flags, b, nullptr).reversed) {
@@ -1912,8 +2076,8 @@ private:
 		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
 		w.line = line;
 		w.rec = exact::BeamRec::from_line(w.line);
-		if (!w.rec && start_gc) {
-			w.rec = exact::BeamRec::from_gc(*start_gc); // K9: a pre-transform start's exact circle
+		if (!w.rec && start_circle) {
+			w.rec = exact::BeamRec::from_gc(*start_circle); // K9: a pre-transform start's exact circle
 		}
 		if (w.line) {
 			if (X && !X->sub(player).is_zero() && !plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
@@ -1986,7 +2150,7 @@ private:
 				return *hit;
 			}
 		}
-		const std::tuple<double, double, int> key{kx, ky, surf.id};
+		const PointSurf key{kx, ky, surf.id};
 		auto it = w.incidence.find(key);
 		if (it != w.incidence.end()) {
 			return it->second;
@@ -2242,7 +2406,7 @@ private:
 	// (into cands: the walk's step buffer, refilled)
 	void candidates(Walk<N> &w, const Beam<N> &beam, int depart, bool fresh, const N &t0, bool keep_cursor, std::vector<Candidate<N>> &cands) const {
 		cands.clear();
-		std::vector<std::pair<int, InlineVec<N, 4>>> &shared = w.step_shared; // K6: carrier rep -> its roots this loop
+		std::vector<std::pair<int, InlineVec<N, 4>>> &shared = w.scratch->shared; // K6: carrier rep -> its roots this loop
 		shared.clear();
 		const Surf<N> *dep_surf = depart >= 0 ? w.scene->find(depart) : nullptr;
 		const int dep_rep = dep_surf != nullptr ? dep_surf->carrier_rep : -1;
@@ -2578,7 +2742,7 @@ private:
 	};
 
 	static void gaps(Walk<N> &w, const Beam<N> &beam, const std::vector<Candidate<N>> &cands, std::vector<double> &out, std::vector<uint8_t> *why = nullptr) {
-		std::vector<std::pair<double, double>> &pts = w.gap_pts;
+		std::vector<std::pair<double, double>> &pts = w.scratch->pts;
 		pts.clear();
 		for (const Candidate<N> &cand : cands) {
 			if (cand.inf && !cand.pt) {
@@ -2616,7 +2780,7 @@ private:
 		};
 		// double roots: consecutive candidates on one surface, a rounding apart,
 		// where the beam touches its carrier exactly
-		std::vector<int> &dbl = w.gap_dbl;
+		std::vector<int> &dbl = w.scratch->dbl;
 		dbl.assign(cands.size(), -1);
 		for (size_t i = 0; i < cands.size(); i++) {
 			const Surf<N> *s = cands[i].surf;
@@ -2864,9 +3028,10 @@ private:
 			}
 			e.beam_view = w.hp_view;
 		} else {
-			auto it = w.beam_views.find(beam.get());
+			auto it = std::find_if(w.beam_views.begin(), w.beam_views.end(), [&](const auto &v) { return v.first == beam.get(); });
 			if (it == w.beam_views.end()) {
-				it = w.beam_views.emplace(beam.get(), int(w.beam_views.size())).first;
+				w.beam_views.emplace_back(beam.get(), int(w.beam_views.size()));
+				it = w.beam_views.end() - 1;
 			}
 			e.beam_view = it->second;
 		}
@@ -2922,6 +3087,12 @@ private:
 	// Forward walk. depart: id of the surface the beam departs from (-1: none).
 	// t_start nullopt: fresh (the beam's own point p is the departure, t = 0).
 	void walk_from(Walk<N> &w, BeamPtr<N> beam, int depart, std::optional<N> t_start) {
+		ScratchLease<N> lease; // (Stage 128: the step buffers, this thread's, while this walk runs)
+		struct Unlease {
+			Walk<N> &w;
+			~Unlease() { w.scratch = nullptr; }
+		} unlease{w};
+		w.scratch = &lease.get();
 		bool fresh = !t_start.has_value();
 		N t0 = fresh ? beam->kappa.like(0.0) : *t_start;
 		size_t skip = 0; // candidates already processed (in-place reseed)
@@ -2940,11 +3111,11 @@ private:
 				w.exact_trace.push_back(w.Q ? w.pole.has_value() : w.line != nullptr);
 				w.known_trace.push_back(w.known);
 			}
-			std::vector<Candidate<N>> &cands = w.step_cands; // (Stage 124: the walk's buffers, refilled each step)
+			std::vector<Candidate<N>> &cands = w.scratch->cands; // (Stage 124: the walk's buffers, refilled each step)
 			candidates(w, *beam, depart, fresh, t0, keep_cursor, cands);
 			keep_cursor = false;
-			std::vector<uint8_t> &gw = w.gap_why; // (reused across the walk's steps)
-			std::vector<double> &gp = w.step_gaps;
+			std::vector<uint8_t> &gw = w.scratch->why; // (reused across the walk's steps)
+			std::vector<double> &gp = w.scratch->gaps;
 			gaps(w, *beam, cands, gp, &gw);
 			std::optional<Next> next;
 			bool restart = false;

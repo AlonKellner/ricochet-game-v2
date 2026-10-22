@@ -1797,3 +1797,28 @@ TEST_CASE("visibility: the drawn fill has no seams (F8)") {
 		CHECK(inv::check_VIS_DRAWN_MATCHES(r).empty());
 	}
 }
+
+// Stage 128 (the F12 dump of 2026-10-22, crossings [17 L]): a carrier edge on a
+// known circle, 1.5e-6 px long -- its three points within rounding of a line --
+// turns the way its via lies, not the long way round (a cell swallowed the disc)
+TEST_CASE("visibility: a tiny arc on a known circle turns the short way") {
+	vis::Edge e;
+	e.kind = vis::EdgeKind::Carrier;
+	e.surface = 17;
+	e.arc = true;
+	e.gline = false;
+	e.gc = vis::Pt{1400, 300};
+	e.gr = 90;
+	e.a = vis::Pt{1311.565891319935, 283.28448559085223};
+	e.via = vis::Pt{1311.5658919801017, 283.28448209821363};
+	e.b = vis::Pt{1311.5658926402684, 283.28447860557498};
+	const vis::ArcGeom g = vis::arc_geom(e);
+	CHECK(std::abs(vis::arc_sweep(e, g)) < 1e-6);
+	// the far side of the circle is not on the arc: its distance is to the ends
+	CHECK(!vis::on_arc_side(e, vis::Pt{1490, 300}));
+	CHECK(vis::edge_dist(e, vis::Pt{1490, 300}) > 170.0);
+	// both ways round, the same short arc
+	std::swap(e.a, e.b);
+	CHECK(std::abs(vis::arc_sweep(e, vis::arc_geom(e))) < 1e-6);
+	CHECK(!vis::on_arc_side(e, vis::Pt{1490, 300}));
+}

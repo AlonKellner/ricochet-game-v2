@@ -38,6 +38,7 @@ struct rc_game {
 	std::map<uint64_t, std::string> key_text; // id -> its key's JSON
 	std::string hud;
 	std::string record;
+	std::string dump; // 1.5
 };
 
 static_assert(RC_DRAW_LINE == int(rcg::render::Kind::Line) && RC_DRAW_ARC == int(rcg::render::Kind::Arc) &&
@@ -436,6 +437,20 @@ rc_status rc_game_record(rc_game *game, const char *extra_json, size_t extra_len
 		*out = game->record.c_str();
 		if (out_length != nullptr) {
 			*out_length = game->record.size();
+		}
+		return RC_OK;
+	});
+}
+
+rc_status rc_game_debug_dump(rc_game *game, uint32_t flags, const char **out, size_t *out_length) {
+	return guarded([&]() -> rc_status {
+		if (game == nullptr || out == nullptr) {
+			return fail(RC_E_ARGUMENT, "rc_game_debug_dump: null argument");
+		}
+		game->dump = (flags & RC_DEBUG_SUMMARY) != 0 ? game->session->debug_summary() : game->session->debug_dump().dump(1, '\t');
+		*out = game->dump.c_str();
+		if (out_length != nullptr) {
+			*out_length = game->dump.size();
 		}
 		return RC_OK;
 	});

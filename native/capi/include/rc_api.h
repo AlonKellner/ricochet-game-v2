@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 4
+#define RC_API_VERSION_MINOR 5
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -235,6 +235,14 @@ RC_API rc_status rc_game_hud(rc_game *game, const char **text, size_t *length);
 enum { RC_RECORD_DRAW_LIST = 1 };
 RC_API rc_status rc_game_record(rc_game *game, const char *extra_json, size_t extra_length, uint32_t flags, const char **out,
 		size_t *out_length);
+
+/* 1.5: the debug dump (a host's F12): the game's state as JSON -- the solver's
+ * inputs exactly (hex floats), the scene, the plan, the preview's walks, the
+ * region -- or with RC_DEBUG_SUMMARY a few lines of text (the inputs, the
+ * preview, the cursor as the preview and the region classify it, the region).
+ * A tool for bug reports; its contents may change. Borrowed (terminated). */
+enum { RC_DEBUG_SUMMARY = 1 };
+RC_API rc_status rc_game_debug_dump(rc_game *game, uint32_t flags, const char **out, size_t *out_length);
 
 /* The record encoding's sha256 of a JSON value (lowercase hex, terminated). */
 RC_API rc_status rc_digest_sha(const char *json, size_t length, char out[65]);
