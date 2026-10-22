@@ -8,6 +8,7 @@
 #include "rc/ladder.hpp"
 
 #include <algorithm>
+#include <array>
 #include <memory>
 #include <string>
 #include <unordered_map>
@@ -43,16 +44,16 @@ inline bool cursor_point_agrees(const TracePath &pl, const TracePath &ph) {
 		return false;
 	}
 	// the frame after the last event with event_steps == k (the frame step k is walked in)
-	auto frame_at = [](const TracePath &p, int k) -> std::string {
-		std::string f = p.start_frame;
+	auto frame_at = [](const TracePath &p, int k) -> const std::string & {
+		int f = 0; // (the start frame)
 		for (size_t i = 0; i < p.event_steps.size() && p.event_steps[i] <= k; i++) {
 			f = p.event_frames[i];
 		}
-		return f;
+		return p.frame_keys[size_t(f)];
 	};
-	const std::string leave_pl = frame_at(pl, n);
+	const std::string &leave_pl = frame_at(pl, n);
 	const bool same_end = ph.steps[size_t(n - 1)].end == pl.steps[size_t(n - 1)].end;
-	const std::string leave_ph = same_end ? frame_at(ph, n) : frame_at(ph, n - 1);
+	const std::string &leave_ph = same_end ? frame_at(ph, n) : frame_at(ph, n - 1);
 	return leave_pl == leave_ph;
 }
 
@@ -384,7 +385,14 @@ public:
 		bool gap = false; // the previous event teleported (portal)
 		const std::string init_flags = flags.canonical_key();
 		std::string cur_flags = init_flags;
-		path.start_frame = frame_key({}, "", init_flags);
+		path.frame_keys.push_back(frame_key({}, "", init_flags));
+		// (Stage 128: the frame -- its key, its id -- changes only at an applied
+		// hit or a flags change; rebuilt then, not per event)
+		bool fid_stale = false, key_stale = false;
+		int fid = IDENTITY_FRAME;
+		path.steps.reserve(events.size() + 1);
+		path.event_steps.reserve(events.size());
+		path.event_frames.reserve(events.size());
 		std::string epoch_key; // the projective firings so far (K14: an epoch is its firing, not a count)
 		bool ghost = flags.is_true(GHOST);
 		Flags before = flags; // the flags before the next hit (Stage 107)
@@ -392,8 +400,11 @@ public:
 		const Scene<Dual> &scene = ctx_->dual_scene();
 		for (size_t i = 0; i < events.size(); i++) {
 			const Event<N> &e = events[i];
-			const int fid = frame_id(stack, frames, epoch_key, cur_flags, init_flags);
-			std::vector<TraceStep> steps = steps_for(e, fid, gap ? std::nullopt : prev_pt);
+			if (fid_stale) {
+				fid = frame_id(stack, frames, epoch_key, cur_flags, init_flags);
+				fid_stale = false;
+			}
+			Steps steps = steps_for(e, fid, gap ? std::nullopt : prev_pt);
 			bool gap_pending = gap;
 			gap = false;
 			if (e.point) {
@@ -438,6 +449,7 @@ public:
 					stack.push_back(e.surface_id);
 				}
 				gap = gap || e.teleport;
+				fid_stale = key_stale = true;
 			}
 			if (e.kind == EventKind::Hit && appended && !lean) {
 				TraceStep &last = path.steps.back();
@@ -486,6 +498,7 @@ public:
 				if (!(e.flags == *keyed)) {
 					cur_flags = e.flags.canonical_key(); // (a pure function of the flags: rebuilt when they change)
 					keyed = &e.flags;
+					fid_stale = key_stale = true;
 				}
 				ghost = e.flags.is_true(GHOST);
 			}
@@ -493,7 +506,11 @@ public:
 				path.cursor_index = int(path.steps.size());
 			}
 			path.event_steps.push_back(int(path.steps.size()));
-			path.event_frames.push_back(frame_key(stack, epoch_key, cur_flags)); // (the frame the event leaves in: its firing counted)
+			if (key_stale) {
+				path.frame_keys.push_back(frame_key(stack, epoch_key, cur_flags));
+				key_stale = false;
+			}
+			path.event_frames.push_back(int(path.frame_keys.size()) - 1); // (the frame the event leaves in: its firing counted)
 			if (e.kind == EventKind::Max) {
 				path.truncated = true;
 				break;
@@ -654,9 +671,20 @@ private:
 		return V2::of(x, y);
 	}
 
+	// (Stage 128: an event's at most two steps, inline)
+	struct Steps {
+		std::array<TraceStep, 2> s;
+		int n = 0;
+		Steps() = default;
+		Steps(const TraceStep &a) : s{a, TraceStep{}}, n(1) {}
+		Steps(const TraceStep &a, const TraceStep &b) : s{a, b}, n(2) {}
+		TraceStep *begin() { return s.data(); }
+		TraceStep *end() { return s.data() + n; }
+	};
+
 	// start -> infinity along the start tangent, infinity -> end along the end
 	// tangent (escape-step convention: `via` holds the direction).
-	static std::vector<TraceStep> through_infinity(const Beam<F64> &bf, double tf, double tt, V2 start, V2 end, int fid) {
+	static Steps through_infinity(const Beam<F64> &bf, double tf, double tt, V2 start, V2 end, int fid) {
 		const CN<F64> tg0 = bf.tangent_at(F64{tf});
 		TraceStep out_step = TraceStep::make(start, V2::inf(), fid, std::nullopt, ray_of(start, V2::of(tg0.re.v, tg0.im.v)), V2::of(tg0.re.v, tg0.im.v), false);
 		const CN<F64> tg1 = bf.tangent_at(F64{tt});
@@ -667,7 +695,7 @@ private:
 	// One event = the arc from its t_from to t_to on its beam. Arcs that wrap
 	// through t = infinity on a straight beam are split at infinity.
 	template <Num N>
-	static std::vector<TraceStep> steps_for(const Event<N> &e, int fid, const std::optional<V2> &prev_pt) {
+	static Steps steps_for(const Event<N> &e, int fid, const std::optional<V2> &prev_pt) {
 		const Beam<N> &b = *e.beam;
 		const Beam<F64> bf{{F64{b.p.fx()}, F64{b.p.fy()}}, {F64{b.tau.fx()}, F64{b.tau.fy()}}, F64{b.kappa.to_float()}};
 		const double tf = e.t_from->to_float();

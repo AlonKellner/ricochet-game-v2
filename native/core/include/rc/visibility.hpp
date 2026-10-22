@@ -41,6 +41,7 @@
 #include <thread>
 #include <limits>
 #include <map>
+#include <memory>
 #include <mutex>
 #include <optional>
 #include <string>
@@ -627,14 +628,55 @@ struct SolveMemo {
 		return Key{std::bit_cast<uint64_t>(c.x), std::bit_cast<uint64_t>(c.y), force ? (*force ? 1 : 0) : 2, known ? std::bit_cast<uint64_t>(known->x) : 0,
 			known ? std::bit_cast<uint64_t>(known->y) : 0, known ? known->j : -1, cursor};
 	}
-	std::mutex mutex;
-	std::unordered_map<Key, std::optional<LadderResult>, Hash> solves;
-	std::unordered_map<Key, std::optional<bool>, Hash> ties;
-	std::unordered_map<Key, std::optional<bool>, Hash> realizations;
-	long hits = 0;
-	// RC_VIS_MEMO_STATS=1: the time each kind of call took (misses), printed by compute
+	// Stage 128: a table in shards, each under its own mutex, holding what is
+	// cheap to copy under it (a solve's result is shared, copied after): the
+	// cast threads waited on one mutex, which also copied whole results
+	template <class V>
+	class Table {
+	public:
+		bool find(const Key &k, V &out) {
+			Shard &sh = of(k);
+			std::lock_guard<std::mutex> lock(sh.mutex);
+			const auto it = sh.map.find(k);
+			if (it == sh.map.end()) {
+				return false;
+			}
+			out = it->second;
+			return true;
+		}
+		void put(const Key &k, V v) {
+			Shard &sh = of(k);
+			std::lock_guard<std::mutex> lock(sh.mutex);
+			sh.map.emplace(k, std::move(v));
+		}
+
+	private:
+		struct Shard {
+			std::mutex mutex;
+			std::unordered_map<Key, V, Hash> map;
+		};
+		static constexpr size_t SHARDS = 16;
+		std::array<Shard, SHARDS> shards_;
+		Shard &of(const Key &k) {
+			const uint64_t h = Hash{}(k);
+			return shards_[size_t(h ^ (h >> 29) ^ (h >> 47)) % SHARDS];
+		}
+	};
+	Table<std::shared_ptr<const std::optional<LadderResult>>> solves;
+	Table<std::optional<bool>> ties;
+	Table<std::optional<bool>> realizations;
+	std::atomic<long> hits{0};
+	// RC_VIS_MEMO_STATS=1 (timed): the time each kind of call took (misses), printed by compute
+	bool timed = false;
+	std::mutex stats_mutex;
 	double solve_ms = 0, tie_ms = 0, realization_ms = 0;
 	long solve_n = 0, tie_n = 0, realization_n = 0;
+	void count(double &ms_sum, long &n, std::chrono::steady_clock::time_point t0) {
+		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
+		std::lock_guard<std::mutex> lock(stats_mutex);
+		ms_sum += ms;
+		n++;
+	}
 };
 
 class Builder {
@@ -2260,29 +2302,26 @@ private:
 	// (Stage 123: a cast reads its physical walk through the stop after the plan's
 	// K entries and its planned walk through its cursor, cast_core: the ladder's
 	// horizon, int(K))
-	std::optional<LadderResult> memo_solve(Tracer &tracer, const Pt &c, std::optional<bool> force, const std::optional<AimKnown> &known = std::nullopt,
+	// (Stage 128: shared, not copied: the memo keeps what the cast reads)
+	using SolvePtr = std::shared_ptr<const std::optional<LadderResult>>;
+	SolvePtr memo_solve(Tracer &tracer, const Pt &c, std::optional<bool> force, const std::optional<AimKnown> &known = std::nullopt,
 			bool cursor = true) const {
 		const Pt P = res_.player;
 		const std::optional<AimKnown> &kp = known;
 		if (memo_ == nullptr) {
-			return tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K), kp, cursor);
+			return std::make_shared<const std::optional<LadderResult>>(tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K), kp, cursor));
 		}
 		const SolveMemo::Key key = SolveMemo::key(c, force, known, cursor);
-		{
-			std::lock_guard<std::mutex> lock(memo_->mutex);
-			const auto it = memo_->solves.find(key);
-			if (it != memo_->solves.end()) {
-				memo_->hits++;
-				return it->second;
-			}
+		if (SolvePtr hit; memo_->solves.find(key, hit)) {
+			memo_->hits++;
+			return hit;
 		}
-		const auto t0 = std::chrono::steady_clock::now();
-		std::optional<LadderResult> lr = tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K), kp, cursor);
-		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-		std::lock_guard<std::mutex> lock(memo_->mutex);
-		memo_->solves.emplace(key, lr);
-		memo_->solve_ms += ms;
-		memo_->solve_n++;
+		const auto t0 = memo_->timed ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
+		SolvePtr lr = std::make_shared<const std::optional<LadderResult>>(tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K), kp, cursor));
+		memo_->solves.put(key, lr);
+		if (memo_->timed) {
+			memo_->count(memo_->solve_ms, memo_->solve_n, t0);
+		}
 		return lr;
 	}
 	std::optional<bool> memo_tie(Tracer &tracer, const Pt &c) const {
@@ -2291,21 +2330,16 @@ private:
 			return tracer.tie_choice(P.x, P.y, c.x, c.y, plan_, flags_);
 		}
 		const SolveMemo::Key key = SolveMemo::key(c, std::nullopt);
-		{
-			std::lock_guard<std::mutex> lock(memo_->mutex);
-			const auto it = memo_->ties.find(key);
-			if (it != memo_->ties.end()) {
-				memo_->hits++;
-				return it->second;
-			}
+		if (std::optional<bool> hit; memo_->ties.find(key, hit)) {
+			memo_->hits++;
+			return hit;
 		}
-		const auto t0 = std::chrono::steady_clock::now();
+		const auto t0 = memo_->timed ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 		const std::optional<bool> q = tracer.tie_choice(P.x, P.y, c.x, c.y, plan_, flags_);
-		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-		std::lock_guard<std::mutex> lock(memo_->mutex);
-		memo_->ties.emplace(key, q);
-		memo_->tie_ms += ms;
-		memo_->tie_n++;
+		memo_->ties.put(key, q);
+		if (memo_->timed) {
+			memo_->count(memo_->tie_ms, memo_->tie_n, t0);
+		}
 		return q;
 	}
 	std::optional<bool> memo_realization(Tracer &tracer, const Pt &c) const {
@@ -2314,21 +2348,16 @@ private:
 			return tracer.realization_reversed(P.x, P.y, c.x, c.y, plan_, flags_);
 		}
 		const SolveMemo::Key key = SolveMemo::key(c, std::nullopt);
-		{
-			std::lock_guard<std::mutex> lock(memo_->mutex);
-			const auto it = memo_->realizations.find(key);
-			if (it != memo_->realizations.end()) {
-				memo_->hits++;
-				return it->second;
-			}
+		if (std::optional<bool> hit; memo_->realizations.find(key, hit)) {
+			memo_->hits++;
+			return hit;
 		}
-		const auto t0 = std::chrono::steady_clock::now();
+		const auto t0 = memo_->timed ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
 		const std::optional<bool> q = tracer.realization_reversed(P.x, P.y, c.x, c.y, plan_, flags_);
-		const double ms = std::chrono::duration<double, std::milli>(std::chrono::steady_clock::now() - t0).count();
-		std::lock_guard<std::mutex> lock(memo_->mutex);
-		memo_->realizations.emplace(key, q);
-		memo_->realization_ms += ms;
-		memo_->realization_n++;
+		memo_->realizations.put(key, q);
+		if (memo_->timed) {
+			memo_->count(memo_->realization_ms, memo_->realization_n, t0);
+		}
 		return q;
 	}
 
@@ -2339,7 +2368,8 @@ private:
 		r.dir = q.dir;
 		r.key = q.key;
 		const Pt P = res_.player;
-		const std::optional<LadderResult> lr = memo_solve(tracer, c, force, known, cursor);
+		const SolvePtr solved = memo_solve(tracer, c, force, known, cursor);
+		const std::optional<LadderResult> &lr = *solved;
 		if (!lr) {
 			return r;
 		}
@@ -4885,6 +4915,7 @@ inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanIt
 	} else {
 		// Stage 111: the plan's first entry fixes the realization per cursor
 		SolveMemo memo;
+		memo.timed = std::getenv("RC_VIS_MEMO_STATS") != nullptr;
 		Builder bd(tracer, player, plan, flags, bounds, Half::Direct);
 		Builder br(tracer, player, plan, flags, bounds, Half::Reversed);
 		bd.share(&memo);
@@ -4893,9 +4924,9 @@ inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanIt
 		br.set_cancel(cancel);
 		Result ra = bd.build();
 		Result rb = br.build();
-		if (std::getenv("RC_VIS_MEMO_STATS") != nullptr) {
+		if (memo.timed) {
 			std::fprintf(stderr, "memo: solves %ld (%.1f ms), ties %ld (%.1f ms), realizations %ld (%.1f ms), hits %ld\n", memo.solve_n, memo.solve_ms, memo.tie_n,
-				memo.tie_ms, memo.realization_n, memo.realization_ms, memo.hits);
+				memo.tie_ms, memo.realization_n, memo.realization_ms, memo.hits.load());
 		}
 		r = join_halves(std::move(ra), std::move(rb));
 	}
