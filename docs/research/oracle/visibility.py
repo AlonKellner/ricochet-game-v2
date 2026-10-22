@@ -43,9 +43,10 @@ def _drawn(e):
 
 
 def _frames_after(events, flags0):
-    """The frame after each event: (epoch, transform stack, flags), as the
-    native cast reads it (Tracer::to_path_events); the epoch is the tuple of
-    the projective firings so far, (surface_id, side) each (K14)."""
+    """The frame after each event: (epoch, transform stack, flags, off the
+    plan), as the native cast reads it (Tracer::to_path_events); the epoch is
+    the tuple of the projective firings so far, (surface_id, side) each (K14);
+    off the plan: the walk has left it (Stage 129, GAME_SPEC 14.2)."""
     out = []
     stack, epoch, flags = [], (), dict(flags0 or {})
     for e in events:
@@ -59,7 +60,7 @@ def _frames_after(events, flags0):
                 else:
                     stack = stack + [e.surface_id]
             flags = dict(e.flags or {})
-        out.append((epoch, tuple(stack), tuple(sorted(flags.items()))))
+        out.append((epoch, tuple(stack), tuple(sorted(flags.items())), e.off_plan))
     return out
 
 
@@ -98,5 +99,5 @@ def visible(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
     if rph[kc][0] == rpl[kc][0]:
         leave_ph = fph[rph[kc][1]]
     else:
-        leave_ph = fph[rph[kc - 1][1]] if kc > 0 else (0, (), tuple(sorted((flags or {}).items())))
+        leave_ph = fph[rph[kc - 1][1]] if kc > 0 else (0, (), tuple(sorted((flags or {}).items())), False)
     return leave_pl == leave_ph

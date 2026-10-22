@@ -2,6 +2,7 @@
 
 #include "rcg/build.hpp"
 #include "rcg/digest.hpp"
+#include "rcg/geom.hpp"
 #include "rcg/model.hpp"
 #include "rcg/rng.hpp"
 #include "rcg/session.hpp"
@@ -161,7 +162,16 @@ Level combo_level(const Level &base, Pair lines, Pair circles) {
 
 // ---------------------------------------------------------------- the plans (SweepPlans)
 
-using Plan = std::vector<std::pair<int, Side>>;
+// a plan entry: a side of a surface, or (Stage 129) one piece of it
+struct Entry {
+	int first = 0;
+	Side second = Side::Left;
+	std::optional<std::array<double, 6>> span;
+	Entry(int id, Side side) : first(id), second(side) {}
+	Entry(const std::pair<int, Side> &e) : first(e.first), second(e.second) {}
+	Entry(int id, Side side, const std::array<double, 6> &sp) : first(id), second(side), span(sp) {}
+};
+using Plan = std::vector<Entry>;
 
 struct Marked {
 	int id;
@@ -283,6 +293,33 @@ std::vector<Plan> infinity_plans(const std::vector<BuiltSurface> &s) {
 	return plans;
 }
 
+// Stage 129: every piece of a split surface's plannable side, planned alone (its
+// span: GAME_SPEC 9.7) -- a beam meeting another piece of the same design surface
+// leaves the plan there (14.2)
+std::vector<Plan> piece_plans(const std::vector<BuiltSurface> &s) {
+	const Pieces pieces = build_pieces(s);
+	const rc::Flags none;
+	std::vector<Plan> plans;
+	for (const BuiltSurface &b : s) {
+		const std::vector<Piece> &ps = pieces.of(b.id);
+		if (ps.size() < 2) {
+			continue;
+		}
+		for (Side sd : {Side::Left, Side::Right}) {
+			const BuiltSide *c = active_side(b, sd, none);
+			if (c == nullptr || !c->interactive || kind_of(c->effect) != EffectKind::Transformative) {
+				continue;
+			}
+			for (const Piece &pc : ps) {
+				if (pc.span) {
+					plans.push_back({Entry(b.id, sd, *pc.span)});
+				}
+			}
+		}
+	}
+	return plans;
+}
+
 std::vector<Plan> plans_of(const std::string &rule, const std::vector<BuiltSurface> &s) {
 	std::vector<Plan> out;
 	size_t at = 0;
@@ -297,6 +334,7 @@ std::vector<Plan> plans_of(const std::string &rule, const std::vector<BuiltSurfa
 		else if (part == "infinity") more = infinity_plans(s);
 		else if (part == "projective") more = projective_plans(s);
 		else if (part == "composition") more = composition_plans(s);
+		else if (part == "pieces") more = piece_plans(s);
 		else throw std::runtime_error("unknown plan rule '" + part + "'");
 		out.insert(out.end(), more.begin(), more.end());
 		at = plus + 1;
@@ -539,8 +577,13 @@ std::vector<std::pair<std::string, json>> manifests(const json &recipes, const s
 			json plans_json = json::array();
 			for (const Plan &p : plans) {
 				json entries = json::array();
-				for (const auto &[id, sd] : p) {
-					entries.push_back({{"surface_id", id}, {"side", sd == Side::Left ? "LEFT" : "RIGHT"}});
+				for (const Entry &e : p) {
+					json je = {{"surface_id", e.first}, {"side", e.second == Side::Left ? "LEFT" : "RIGHT"}};
+					if (e.span) {
+						const auto &sp = *e.span;
+						je["span"] = {{"start", {sp[0], sp[1]}}, {"end", {sp[2], sp[3]}}, {"via", {sp[4], sp[5]}}};
+					}
+					entries.push_back(je);
 				}
 				plans_json.push_back(entries);
 			}
@@ -558,6 +601,15 @@ std::vector<std::pair<std::string, json>> manifests(const json &recipes, const s
 				{"visibility", g.value("visibility", false)},
 				{"carrier_cursors", g.value("carrier_cursors", false)},
 			};
+			// Stage 129: the known findings this group's violations may hold (the sweep
+			// test names them instead of failing), and the shots that made its world
+			// (the violation viewer replays them)
+			if (g.contains("known")) {
+				m["known"] = g["known"];
+			}
+			if (g.contains("shots")) {
+				m["shots"] = g["shots"];
+			}
 			out.push_back({base + "__" + std::to_string(n) + ".json", std::move(m)});
 		}
 	}

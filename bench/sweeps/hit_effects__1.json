@@ -1212,6 +1212,24 @@
  "scene": "res://scenes/test_levels/hit_effects.tscn",
  "schema": "sweep-manifest/1",
  "seq": 1,
+ "shots": [
+  [
+   [300, 220],
+   [400, 220]
+  ],
+  [
+   [300, 390],
+   [400, 390]
+  ],
+  [
+   [300, 560],
+   [400, 560]
+  ],
+  [
+   [800, 400],
+   [900, 400]
+  ]
+ ],
  "skip_equal": false,
  "visibility": false
 }

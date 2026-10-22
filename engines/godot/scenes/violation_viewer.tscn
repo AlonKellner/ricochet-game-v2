@@ -1,0 +1,4 @@
+[gd_scene format=3]
+
+[node name="ViolationViewer" type="RicochetGame"]
+violations_path = "res://violations.json"

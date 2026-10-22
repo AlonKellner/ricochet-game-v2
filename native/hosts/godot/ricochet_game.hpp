@@ -82,6 +82,11 @@ public:
 	void set_solve_budget_ms(double ms) { solve_budget_ms_ = ms; }
 	double get_solve_budget_ms() const { return solve_budget_ms_; }
 	bool get_physics() const { return physics_; }
+	// Stage 129: the violation viewer (the GDScript ViolationViewer's successor):
+	// a sweep's violations file (make violations), one violation shown at a time
+	// -- its level and shots, its player, plan and cursor, fixed; ←/→ step through
+	void set_violations_path(const godot::String &p) { violations_path_ = p; }
+	godot::String get_violations_path() const { return violations_path_; }
 	// the game's session record (docs/research/session_digest.md), the HUD
 	godot::String record() const;
 	godot::String hud() const;
@@ -96,6 +101,9 @@ private:
 	void debug_dump(); // F12: the game's state, its summary printed, the full dump saved (rc_game_debug_dump)
 	void sync();
 	godot::Vector2 cursor() const;
+	bool start(const godot::String &level_path); // the game of a level (its layers, camera)
+	void stop();
+	void show_violation(int index);
 
 	godot::String level_path_;
 	int infinity_ = -1;
@@ -111,6 +119,11 @@ private:
 	godot::Camera2D *camera_ = nullptr;
 	godot::Label *hud_ = nullptr;
 	std::map<std::string, RicochetLayer *> by_key_;
+	// the violation viewer
+	godot::String violations_path_;
+	godot::Array violations_;
+	int violation_ = 0;
+	godot::Label *viewer_label_ = nullptr;
 };
 
 // registers the adapter's classes (the extension's initializer calls it)

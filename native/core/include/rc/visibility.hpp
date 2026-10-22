@@ -275,7 +275,8 @@ struct CastEvent {
 	bool rehit = false; // the departure point, re-hit after the full loop
 	bool terminal = false;
 	std::string flags;
-	std::string frame;  // the frame after the event: epoch, transform stack, flags (Tracer::frame_id)
+	std::string frame;  // the frame after the event: epoch, transform stack, flags, off the plan (Tracer::frame_id)
+	bool off_plan = false; // Stage 129: the walk has left the plan by this event
 	bool has_pt = false;
 	Pt pt;
 };
@@ -295,6 +296,7 @@ std::vector<CastEvent> cast_events(const std::vector<Event<N>> &events, const st
 		c.applied = e.applied;
 		c.rehit = e.rehit;
 		c.terminal = e.terminal;
+		c.off_plan = e.off_plan;
 		c.flags = e.flags.canonical_key();
 		// the frame as Tracer::to_path_events keeps it
 		if (e.kind == EventKind::Hit && e.applied && !e.terminal) {
@@ -315,7 +317,7 @@ std::vector<CastEvent> cast_events(const std::vector<Event<N>> &events, const st
 		for (int sid : stack) {
 			c.frame += std::to_string(sid) + ",";
 		}
-		c.frame += "|" + flags_now;
+		c.frame += "|" + flags_now + (e.off_plan ? "|off" : "");
 		std::optional<CN<N>> p = e.point;
 		if (!p && e.beam && e.kind != EventKind::Escape && e.kind != EventKind::Origin) {
 			p = e.t_to ? std::optional<CN<N>>(e.beam->at(*e.t_to)) : e.beam->at_infinity();
@@ -336,7 +338,7 @@ inline std::vector<CastEvent> cast_events(const Climb &c, const std::string &ini
 // Decisions equal at an event: both walks leave it in the same frame.
 inline bool same_decision(const CastEvent &a, const CastEvent &b) {
 	return a.kind == b.kind && a.sid == b.sid && (a.kind != EventKind::Hit || a.left == b.left) && a.applied == b.applied
-		&& (a.kind != EventKind::Hit || a.flags == b.flags);
+		&& (a.kind != EventKind::Hit || a.flags == b.flags) && a.off_plan == b.off_plan;
 }
 
 

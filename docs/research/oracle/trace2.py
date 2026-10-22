@@ -114,6 +114,11 @@ Hit effects and presence (Stage 107, GAME_SPEC 9.6 / 10.6):
   a span {start, end, via} on the surface's carrier. PHYSICAL: a firing hit
   matches the entry only inside the span (else the paths diverge); PLANNED:
   the entry is consumed as before, its event on-segment only inside the span.
+- Stage 129 (GAME_SPEC 14.2): every event records whether its walk has left
+  the plan (`off_plan`: a surface fired out of plan while entries remained;
+  a spent plan is not left), a part of the frame -- a physical hit on another
+  piece of the planned design surface diverges though it applies the same
+  effect to the same beam.
 - Surfaces on exactly the same carrier (K6, Stage 109) are crossed at the same
   points: their roots are computed once per loop and shared, so simultaneous
   crossings tie exactly and the id breaks the tie (GAME_SPEC 9.3).
@@ -535,6 +540,7 @@ class Event:
     fired: bool = False         # Stage 107: the side fired (its hit effects fire), ghost aside
     popped: bool = False        # the applied effect popped the transform stack (Stage 110: frames)
     projective: bool = False    # the applied effect was projective (a new epoch, the stack cleared)
+    off_plan: bool = False      # Stage 129: the walk has left the plan by this event (its frame says so)
 
 
 @dataclass
@@ -566,6 +572,7 @@ class Walk:
     gc: object = None                           # Perf P2b: its exact generalized circle (A, B, C, D), or None
     plan_index: int = 0
     plan_matched: bool = True
+    left_plan: bool = False   # Stage 129: a surface fired out of plan while entries remained (GAME_SPEC 14.2; sticky)
     plan_spans: list = None   # Stage 108: per entry, a piece's span (Seg) or None (the whole surface)
     carrier_groups: dict = None   # K6: surface id -> the lowest id on exactly the same carrier
     cursor_done: bool = False
@@ -993,13 +1000,13 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             if sid == INFINITY_ID:
                 q_pt = snapped.get((INFINITY_ID, t))   # None: the real infinity
                 if walk.count > walk.max_hits:
-                    walk.events.append(Event("max", INFINITY_ID, point=q_pt, t=t, beam=beam))
+                    _append(walk, Event("max", INFINITY_ID, point=q_pt, t=t, beam=beam))
                     walk.done = True
                     return
                 consumed = walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index][0] == INFINITY_ID
                 if consumed:
                     walk.plan_index += 1
-                walk.events.append(Event("infinity", INFINITY_ID, applied=consumed, point=q_pt, t=t, beam=beam,
+                _append(walk, Event("infinity", INFINITY_ID, applied=consumed, point=q_pt, t=t, beam=beam,
                                          flags=walk.flags))
                 if walk.mode == PHYSICAL:
                     _point_step(walk, None, INFINITY_ID, None, None)
@@ -1010,11 +1017,11 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             if walk.count > walk.max_hits:
                 # the trace is cut at the next crossing (drawn up to it, no effect)
                 mp_ = beam.p if (rehit and fresh) else snapped.get((sid, t), beam.at(t))
-                walk.events.append(Event("max", point=mp_, t=t, beam=beam))
+                _append(walk, Event("max", point=mp_, t=t, beam=beam))
                 walk.done = True
                 return
             if sid == -1:
-                walk.events.append(Event("cursor", point=beam.at(t), t=t, beam=beam))
+                _append(walk, Event("cursor", point=beam.at(t), t=t, beam=beam))
                 walk.cursor_done = True
                 walk.mode = walk.post_mode
                 walk.on_plan = False
@@ -1067,7 +1074,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 fired_state = True
             ev = Event("hit", sid, side, do is not None, do == "terminal", on_seg, pt, t, beam, rehit,
                        fires_state, walk.flags, fired)
-            walk.events.append(ev)
+            _append(walk, ev)
             if walk.mode == PHYSICAL and walk.point is not None:
                 if do in TRANSFORMATIVE or do in PROJECTIVE:
                     _point_close(walk)
@@ -1125,9 +1132,9 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             walk.count += 1
             if walk.count <= walk.max_hits:
                 if beam.kappa == 0:
-                    walk.events.append(Event("escape"))
+                    _append(walk, Event("escape"))
                 else:
-                    walk.events.append(Event("origin", point=beam.p if fresh else beam.at(t0)))
+                    _append(walk, Event("origin", point=beam.p if fresh else beam.at(t0)))
             walk.done = True
             return
 
@@ -1201,6 +1208,12 @@ def _project(walk: Walk, beam, t, surf: Surface, side, pt, pt_exact):
     return nb
 
 
+def _append(walk: Walk, ev):
+    """Stage 129: an event, with whether its walk has left the plan."""
+    ev.off_plan = walk.left_plan
+    walk.events.append(ev)
+
+
 def in_planned_span(walk: Walk, i, pt):
     """Stage 108: plan entry i names a piece -- pt must lie in its span."""
     span = walk.plan_spans[i] if walk.plan_spans is not None and i < len(walk.plan_spans) else None
@@ -1232,6 +1245,7 @@ def _plan_bookkeeping(walk: Walk, sid, pt, defer=None):
     if defer is not None:
         defer.pending = True
         return
+    walk.left_plan = walk.left_plan or walk.plan_index < len(walk.plan)
     walk.plan_matched = False
     walk.on_plan = False      # a surface fired out of plan: off the planned beams
 
@@ -1244,6 +1258,7 @@ def _point_close(walk: Walk):
     p = walk.point
     walk.point = None
     if p is not None and p.pending:
+        walk.left_plan = walk.left_plan or walk.plan_index < len(walk.plan)
         walk.plan_matched = False
         walk.on_plan = False
 

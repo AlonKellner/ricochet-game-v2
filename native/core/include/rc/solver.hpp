@@ -102,6 +102,7 @@ struct Event {
 	Flags flags;            // the trace's flags after this event (hits)
 	bool anchored = false;  // cursor: reached on the anchored path
 	int beam_view = -1;     // identity of the beam as the events see it (Backend::views_per_run)
+	bool off_plan = false;  // Stage 129: the walk has left the plan by this event (GAME_SPEC 14.2: a part of its frame)
 };
 
 // Stage 123: the exact incidence of a point on a surface's carrier (Solver::
@@ -460,6 +461,7 @@ struct Walk {
 	Mode post_mode = Mode::Physical;
 	int plan_index = 0;
 	bool plan_matched = true;
+	bool left_plan = false; // Stage 129: a surface fired out of plan while entries remained (GAME_SPEC 14.2; sticky)
 	bool cursor_done = false;
 	int count = 0;
 	int max_events = MAX_HITS;
@@ -2968,12 +2970,14 @@ private:
 			w.point->pending = true;
 			return;
 		}
+		w.left_plan = w.left_plan || w.plan_index < int(w.plan.size());
 		w.plan_matched = false;
 		w.on_plan = false; // a surface fired out of plan: off the planned beams
 	}
 
 	static void point_close(Walk<N> &w) {
 		if (w.point && w.point->pending) {
+			w.left_plan = w.left_plan || w.plan_index < int(w.plan.size());
 			w.plan_matched = false;
 			w.on_plan = false;
 		}
@@ -3021,6 +3025,7 @@ private:
 		Event<N> e;
 		e.kind = kind;
 		e.beam = beam;
+		e.off_plan = w.left_plan;
 		if (Backend<N>::views_per_run()) {
 			if (w.hp_view < 0 || w.hp_src != beam) {
 				w.hp_src = beam;

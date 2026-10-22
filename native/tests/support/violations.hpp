@@ -25,8 +25,9 @@ inline std::string render(const rc::inv::Violation &vi) {
 		const rc::inv::Arg &a = ai < vi.args.size() ? vi.args[ai++] : rc::inv::Arg(std::string("?"));
 		char buf[256];
 		if (const auto *x = std::get_if<int64_t>(&a)) std::snprintf(buf, sizeof buf, "%lld", (long long)*x);
-		else if (const auto *d = std::get_if<double>(&a)) std::snprintf(buf, sizeof buf, spec.c_str(), *d);
+		else if (const auto *d = std::get_if<double>(&a)) std::snprintf(buf, sizeof buf, spec.back() == 's' ? "%.17g" : spec.c_str(), *d); // (a float as %s: GDScript's str())
 		else if (const auto *str = std::get_if<std::string>(&a)) std::snprintf(buf, sizeof buf, "%s", str->c_str());
+		else if (const auto *bo = std::get_if<bool>(&a)) std::snprintf(buf, sizeof buf, "%s", *bo ? "true" : "false");
 		else std::snprintf(buf, sizeof buf, "?");
 		out += buf;
 		i = j;

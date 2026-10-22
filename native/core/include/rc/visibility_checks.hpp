@@ -794,7 +794,45 @@ inline Violations check_VIS_DETERMINISTIC(const VisInput &in) {
 // terminal (the arrow ends exactly at the cursor). A whisker anywhere else -- a departure point off
 // the planned segment, the thin lines of the B4 report -- is a violation, as is
 // a loop that doubles back on itself (a spike of no area).
-inline Violations check_VIS_REGULAR(const vis::Result &r, const Scene<F64> *scene, const Flags &flags, const std::vector<PlanItem> &plan) {
+// Stage 129 (GAME_SPEC 15.1): the planned walk to cursor c consumes an entry that
+// names a piece exactly at an end of its span -- a crossing that cuts the planned
+// design surface: the walks beside it meet the other piece (or the cutting
+// surface) and leave the plan, so the cursors along that walk are a whisker
+inline bool consumes_at_piece_end(Tracer &tracer, const vis::Pt &player, const vis::Pt &c, const std::vector<PlanItem> &plan, const Flags &flags) {
+	bool spans = false;
+	for (const PlanItem &it : plan) {
+		spans = spans || it.span.has_value();
+	}
+	if (!spans) {
+		return false;
+	}
+	const std::optional<LadderResult> lr = tracer.solve(player.x, player.y, c.x, c.y, plan, flags);
+	if (!lr) {
+		return false;
+	}
+	size_t j = 0;
+	for (const EvInfo &e : ev_infos(lr->planned)) {
+		if (j < plan.size() && plan[j].is_infinity() && e.kind == EventKind::Infinity && e.applied) {
+			j++;
+			continue;
+		}
+		if (j >= plan.size() || e.kind != EventKind::Hit || plan[j].is_infinity() || e.surface_id != plan[j].surface_id || e.left != plan[j].left) {
+			continue;
+		}
+		if (const auto &sp = plan[j].span; sp && e.has_point) {
+			const double tol = 1e-6 * std::max({1.0, std::abs(e.fx), std::abs(e.fy)});
+			for (int k : {0, 2}) {
+				if (std::abs(e.fx - (*sp)[size_t(k)]) <= tol && std::abs(e.fy - (*sp)[size_t(k) + 1]) <= tol) {
+					return true;
+				}
+			}
+		}
+		j++;
+	}
+	return false;
+}
+
+inline Violations check_VIS_REGULAR(const vis::Result &r, const Scene<F64> *scene, const Flags &flags, const std::vector<PlanItem> &plan, Tracer *tracer = nullptr) {
 	using namespace visdetail;
 	Violations out;
 	for (size_t wi = 0; wi < r.whiskers.size(); wi++) {
@@ -804,7 +842,7 @@ inline Violations check_VIS_REGULAR(const vis::Result &r, const Scene<F64> *scen
 			// line where its neighbours are circles: its own realization's reach)
 			const bool tangent_pole = w.member >= 0 && w.member < int(r.members.size())
 				&& (r.members[size_t(w.member)].tangent_pole || r.members[size_t(w.member)].straight);
-			if (!tangent_pole) {
+			if (!tangent_pole && !(tracer != nullptr && consumes_at_piece_end(*tracer, r.player, w.via, plan, flags))) {
 				out.push_back(v("VIS-REGULAR: whisker %d lies along member %d, which is not tangent at a frame's infinity point", I(int64_t(wi)),
 					I(int64_t(w.member))));
 			}
@@ -871,7 +909,7 @@ inline Violations check_visibility(const VisInput &in) {
 		add(check_VIS_VERTEX_PROVENANCE(r, scene));
 		add(check_VIS_SHADOW_ANCHORED(r, scene));
 		add(check_VIS_NO_BLOCKER_INSIDE(r, scene, flags, in.plan));
-		add(check_VIS_REGULAR(r, &scene, flags, in.plan));
+		add(check_VIS_REGULAR(r, &scene, flags, in.plan, in.tracer));
 	} else {
 		add(check_VIS_REGULAR(r, nullptr, in.flags, in.plan));
 	}

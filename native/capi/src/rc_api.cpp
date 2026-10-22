@@ -456,6 +456,36 @@ rc_status rc_game_debug_dump(rc_game *game, uint32_t flags, const char **out, si
 	});
 }
 
+rc_status rc_game_set_plan(rc_game *game, const char *json, size_t length) {
+	return guarded([&]() -> rc_status {
+		if (game == nullptr || json == nullptr) {
+			return fail(RC_E_ARGUMENT, "rc_game_set_plan: null argument");
+		}
+		const nlohmann::json j = nlohmann::json::parse(std::string_view(json, length));
+		if (!j.is_array()) {
+			return fail(RC_E_ARGUMENT, "rc_game_set_plan: not a JSON array");
+		}
+		std::vector<rc::PlanItem> items;
+		for (const nlohmann::json &e : j) {
+			rc::PlanItem it;
+			it.surface_id = e.at("surface_id").get<int>();
+			const nlohmann::json &side = e.at("side");
+			it.left = side.is_string() ? side.get<std::string>() == "LEFT" : side.get<int>() == 0;
+			if (e.contains("click") && !e["click"].is_null()) {
+				it.hint = rc::effects::F32Point{e["click"][0].get<float>(), e["click"][1].get<float>()};
+			}
+			if (e.contains("span") && !e["span"].is_null()) {
+				const nlohmann::json &sp = e["span"];
+				it.span = std::array<double, 6>{sp["start"][0].get<double>(), sp["start"][1].get<double>(), sp["end"][0].get<double>(),
+					sp["end"][1].get<double>(), sp["via"][0].get<double>(), sp["via"][1].get<double>()};
+			}
+			items.push_back(it);
+		}
+		game->session->set_plan(items);
+		return RC_OK;
+	});
+}
+
 rc_status rc_digest_sha(const char *json, size_t length, char out[65]) {
 	return guarded([&]() -> rc_status {
 		if (json == nullptr || out == nullptr) {

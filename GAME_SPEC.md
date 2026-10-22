@@ -689,7 +689,7 @@ So the solver traces whole design surfaces, and pieces live where they matter.
 
 **Pieces are the plannable units.**
 - Clicks and hovers address one piece.
-- A plan entry may name a piece. It then matches only a hit inside that piece's span, in the planned and the physical path alike. A planned hit outside it is off its segment, and a physical hit outside it is not the planned one, so the paths diverge.
+- A plan entry may name a piece. It then matches only a hit inside that piece's span, in the planned and the physical path alike. A planned hit outside it is off its segment, and a physical hit outside it is not the planned one, so the paths diverge. They diverge there even when the hit is on another piece of the same design surface, which applies the same effect on the same beam: the physical walk has left the plan (§14.2). Both paths are then drawn diverged from that hit on (red and yellow), although they coincide (Stage 129, the user, 2026-10-22).
 - An entry without a piece (a programmatic plan) matches the whole design surface, as before.
 
 **Everything else is the design surface's:** hit effects (one target, `target:<id>`), presence, the resolver, consumption of a spawn host. **Splitting ignores presence**, so the pieces never change within a shot.
@@ -1325,7 +1325,9 @@ Both modes use the same solver, the same scene defs and the same scene state. `P
 
 ### 14.2 Divergence: exact definition
 
-Divergence is defined by comparing the PLANNED and PHYSICAL traces step by step. Before divergence both modes produce the **same hitpoints** (§14.1), so steps at the same index have the same `start` and `end`. The field compared is the **frame id**: the id of `(epoch, provenance stack)`, §10.7.
+Divergence is defined by comparing the PLANNED and PHYSICAL traces step by step. Before divergence both modes produce the **same hitpoints** (§14.1), so steps at the same index have the same `start` and `end`. The field compared is the **frame id**: the id of `(epoch, provenance stack, flags, on the plan)`, §10.7.
+
+**On the plan** (Stage 129). A walk leaves the plan at the first hit that fires out of plan while plan entries remain: an effect applied (or a state change) at a surface that is not the next plan entry, or at the next entry's surface outside its planned piece (§9.7). From that hit on, its frame says so. The planned walk never leaves the plan, since it applies only its entries until they are spent. So a physical walk that fires out of plan diverges at that hit, even when it applies the same effect to the same beam as the planned walk: another piece of the planned design surface. A spent plan is not left: the hits after it (after the cursor, or the physical walk's after its last entry) change no frame's "on the plan".
 
 **Aligned** — step `i` is aligned if the planned and physical traces have the same **frame ID** at that step. This means both modes applied the same effects up to and including step `i`.
 
@@ -1342,6 +1344,7 @@ The following are common scenarios that trigger divergence, but they are all ins
 - A projective effect's back-propagation was valid in planning, but the physical ray arrives at a different point on the surface.
 - Circle inversion curves the physical ray into missing a later planned surface.
 - The planned path uses the infinite carrier extension of a surface, but the physical ray hits the segment's finite edge first.
+- The physical ray hits the planned design surface outside the planned piece (§9.7): the same effect on the same beam, but out of plan (the frame's "on the plan" part). Both paths are drawn diverged from that hit on, although they coincide.
 
 ### 14.4 Step tree data structure
 
@@ -1467,11 +1470,11 @@ There is no separate post-cursor computation. Both traces run the full path from
 
 The visibility region highlights the **set of cursor positions that will not cause divergence** for the current plan: if the cursor is placed there, the planned and the physical paths agree up to it. *(Principle 14: visibility shares the world.)*
 
-**Definition.** A cursor is in the region iff (V1) the preview's planned path reaches it, (V2) every merged step before it is ALIGNED (§14.2: the same frame ids, epoch, stack and flags; an epoch is its projective firings, §10.7), and (V3) both walks leave the cursor's own point in the same frame. V1 and V2 are what the preview shows: an all-green solid path from the player to the cursor. V3 counts the decisions made exactly at the cursor, which fall between the last step before it and the first after it (B4, Stage 110). When the physical walk has no event at the cursor's point, it passes the point in the frame it had. The region never depends on the cursor, only on the player, the plan (with its clicks and pieces), the game state's flags and the surfaces.
+**Definition.** A cursor is in the region iff (V1) the preview's planned path reaches it, (V2) every merged step before it is ALIGNED (§14.2: the same frame ids, epoch, stack, flags and on the plan; an epoch is its projective firings, §10.7), and (V3) both walks leave the cursor's own point in the same frame. V1 and V2 are what the preview shows: an all-green solid path from the player to the cursor. V3 counts the decisions made exactly at the cursor, which fall between the last step before it and the first after it (B4, Stage 110). When the physical walk has no event at the cursor's point, it passes the point in the frame it had. The region never depends on the cursor, only on the player, the plan (with its clicks and pieces), the game state's flags and the surfaces.
 - A cursor that the trace never reaches (cut by the event limit, §12.6) is **outside**.
 - A cursor on the player (no aim), on the player's image `P_K` or on the frame's infinity `Q_K` is **not classified**: the aim degenerates there (§11.4). After a projective the poles are the pencil's (§15.2): the image of a circle normal's centre (every exit line passes it) and the frame's infinity.
 - A cursor exactly where the last entry is crossed off its segment is **outside**: the planned walk applies the entry there and the physical one passes, so they leave the point in different frames (V3). Before B4 these departure points formed thin lines along the planned carrier.
-- The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4), and on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor). A whisker's end at exact data (a segment endpoint) belongs to the region exactly when the preview reaches a cursor there: at a planned terminal's endpoint the hit does not fire physically, so the walks diverge and the endpoint is outside (K7).
+- The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4); on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor); and (Stage 129) along a member whose walk meets a planned piece exactly at an end where another surface cuts it (§9.7): the walks beside it meet the other piece, or the cutting surface, and leave the plan (§14.2) (the user, 2026-10-22). A whisker's end at exact data (a segment endpoint) belongs to the region exactly when the preview reaches a cursor there: at a planned terminal's endpoint the hit does not fire physically, so the walks diverge and the endpoint is outside (K7).
 
 ### 15.2 Members
 
@@ -2663,4 +2666,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.40.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.41.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

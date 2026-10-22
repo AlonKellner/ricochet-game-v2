@@ -79,6 +79,11 @@ gives a few lines of text, which the host prints. The JSON holds the solver's in
 in hex floats too), the scene's defs, the plan, the preview's walks and the region's summary; the summary also says
 whether the preview and the region agree on the cursor. It is meant for bug reports, and its contents may change.
 
+**The violation viewer** (C API 1.6, a tool). `rc_game_set_plan(game, json, len)` sets a plan as it is, from a JSON
+array of `{surface_id, side, click?, span?}` (a piece by its span, as the sweeps write it). The Godot host's viewer
+mode (`RicochetGame.violations_path`, `scenes/violation_viewer.tscn`) uses it with `rc_game_teleport` and a fixed
+cursor to show each of the sweeps' violations (`make violations`).
+
 Movement is not an event. Pass the held movement keys (`RC_KEY_LEFT | RIGHT | UP | DOWN`, default WASD) to
 every `rc_game_advance`, and the keys first pressed this frame as `pressed` (Up is the jump with gravity).
 A press is kept until the next physics tick runs.
