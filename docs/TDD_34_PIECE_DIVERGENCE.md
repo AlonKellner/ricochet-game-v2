@@ -15,7 +15,7 @@ any divergence, although their steps coincide.
 | 129.2 | Piece plans in the sweeps; known findings in a sweep group | Done |
 | 129.3 | A whisker through a planned piece's end (GAME_SPEC 15.1) | Done |
 | 129.4 | The violation viewer, restored in the Godot host (C API 1.6 `rc_game_set_plan`, `make violations`) | Done |
-| 129.5 | Docs, `make gates`, sign-off | Pending |
+| 129.5 | Docs, `make gates`, sign-off | Done (user, 2026-10-22) |
 
 ## 129.1 Off the plan is part of the frame
 
