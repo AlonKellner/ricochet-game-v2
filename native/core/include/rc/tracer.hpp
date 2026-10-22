@@ -389,6 +389,7 @@ public:
 		// (Stage 128: the frame -- its key, its id -- changes only at an applied
 		// hit or a flags change; rebuilt then, not per event)
 		bool fid_stale = false, key_stale = false;
+		bool off_plan = false; // Stage 129: the walk has left the plan (a part of its frame)
 		int fid = IDENTITY_FRAME;
 		path.steps.reserve(events.size() + 1);
 		path.event_steps.reserve(events.size());
@@ -401,7 +402,7 @@ public:
 		for (size_t i = 0; i < events.size(); i++) {
 			const Event<N> &e = events[i];
 			if (fid_stale) {
-				fid = frame_id(stack, frames, epoch_key, cur_flags, init_flags);
+				fid = frame_id(stack, frames, epoch_key, cur_flags, init_flags, off_plan);
 				fid_stale = false;
 			}
 			Steps steps = steps_for(e, fid, gap ? std::nullopt : prev_pt);
@@ -502,12 +503,16 @@ public:
 				}
 				ghost = e.flags.is_true(GHOST);
 			}
+			if (e.off_plan != off_plan) {
+				off_plan = e.off_plan; // (Stage 129: the walk left the plan at this event)
+				fid_stale = key_stale = true;
+			}
 			if (e.kind == EventKind::Cursor) {
 				path.cursor_index = int(path.steps.size());
 			}
 			path.event_steps.push_back(int(path.steps.size()));
 			if (key_stale) {
-				path.frame_keys.push_back(frame_key(stack, epoch_key, cur_flags));
+				path.frame_keys.push_back(frame_key(stack, epoch_key, cur_flags, off_plan));
 				key_stale = false;
 			}
 			path.event_frames.push_back(int(path.frame_keys.size()) - 1); // (the frame the event leaves in: its firing counted)
@@ -626,8 +631,10 @@ private:
 		return same_prefix_ev(a.big_events, b.big_events, n);
 	}
 
-	// The frame's key: epoch (its firings) | transform stack | flags (frame_id interns it).
-	static std::string frame_key(const std::vector<int> &stack, const std::string &epoch, const std::string &flags_key) {
+	// The frame's key: epoch (its firings) | transform stack | flags, and
+	// "|off" once the walk has left the plan (Stage 129, GAME_SPEC 14.2;
+	// frame_id interns it).
+	static std::string frame_key(const std::vector<int> &stack, const std::string &epoch, const std::string &flags_key, bool off_plan = false) {
 		std::string key = epoch + "|";
 		for (size_t i = 0; i < stack.size(); i++) {
 			if (i) {
@@ -635,24 +642,17 @@ private:
 			}
 			key += std::to_string(stack[i]);
 		}
-		return key + "|" + flags_key;
+		return key + "|" + flags_key + (off_plan ? "|off" : "");
 	}
 
-	// frame id per (epoch, transform stack, flags): a projective starts a new
-	// epoch, and a state change a new frame
+	// frame id per (epoch, transform stack, flags, off the plan): a projective
+	// starts a new epoch, and a state change a new frame
 	static int frame_id(const std::vector<int> &stack, std::map<std::string, int> &frames, const std::string &epoch, const std::string &flags_key,
-			const std::string &init_key) {
-		if (stack.empty() && epoch.empty() && flags_key == init_key) {
+			const std::string &init_key, bool off_plan) {
+		if (stack.empty() && epoch.empty() && flags_key == init_key && !off_plan) {
 			return IDENTITY_FRAME;
 		}
-		std::string key = epoch + "|";
-		for (size_t i = 0; i < stack.size(); i++) {
-			if (i) {
-				key += ",";
-			}
-			key += std::to_string(stack[i]);
-		}
-		key += "|" + flags_key;
+		const std::string key = frame_key(stack, epoch, flags_key, off_plan);
 		auto it = frames.find(key);
 		if (it == frames.end()) {
 			it = frames.emplace(key, int(frames.size()) + 1).first;

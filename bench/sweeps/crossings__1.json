@@ -944,6 +944,12 @@
  "scene": "res://scenes/test_levels/crossings.tscn",
  "schema": "sweep-manifest/1",
  "seq": 1,
+ "shots": [
+  [
+   [300, 800],
+   [400, 800]
+  ]
+ ],
  "skip_equal": false,
  "visibility": false
 }

@@ -1,5 +1,6 @@
 #include "ricochet_game.hpp"
 
+#include <godot_cpp/classes/canvas_layer.hpp>
 #include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
@@ -8,6 +9,7 @@
 #include <godot_cpp/classes/input.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
+#include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/theme_db.hpp>
@@ -124,6 +126,9 @@ void RicochetGame::_bind_methods() {
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "asynchronous"), "set_asynchronous", "get_asynchronous");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "animate"), "set_animate", "get_animate");
 	ADD_PROPERTY(PropertyInfo(Variant::FLOAT, "solve_budget_ms"), "set_solve_budget_ms", "get_solve_budget_ms");
+	ClassDB::bind_method(D_METHOD("set_violations_path", "path"), &RicochetGame::set_violations_path);
+	ClassDB::bind_method(D_METHOD("get_violations_path"), &RicochetGame::get_violations_path);
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "violations_path", PROPERTY_HINT_FILE, "*.json"), "set_violations_path", "get_violations_path");
 }
 
 void RicochetGame::_ready() {
@@ -135,22 +140,53 @@ void RicochetGame::_ready() {
 		return;
 	}
 	rc_set_log(log_to_godot, nullptr);
-	if (!FileAccess::file_exists(level_path_)) {
-		UtilityFunctions::push_error(String("RicochetGame: no level at ") + level_path_);
+	if (!violations_path_.is_empty()) {
+		// the violation viewer: every state fixed, computed in the frame, drawn as it is
+		physics_ = false;
+		asynchronous_ = false;
+		animate_ = false;
+		CanvasLayer *ui = memnew(CanvasLayer);
+		ui->set_layer(100);
+		add_child(ui);
+		viewer_label_ = memnew(Label);
+		viewer_label_->set_position(Vector2(20, 860));
+		viewer_label_->add_theme_color_override("font_color", Color(1, 1, 1, 1));
+		viewer_label_->add_theme_color_override("font_shadow_color", Color(0, 0, 0, 1));
+		viewer_label_->add_theme_font_size_override("font_size", 16);
+		ui->add_child(viewer_label_);
+		if (!FileAccess::file_exists(violations_path_)) {
+			viewer_label_->set_text("No violations at " + violations_path_ + "\n(make violations writes them)");
+			return;
+		}
+		const Variant v = JSON::parse_string(FileAccess::get_file_as_string(violations_path_));
+		if (v.get_type() != Variant::ARRAY || Array(v).is_empty()) {
+			viewer_label_->set_text("No violations in " + violations_path_);
+			return;
+		}
+		violations_ = v;
+		show_violation(0);
 		return;
 	}
-	const CharString text = FileAccess::get_file_as_string(level_path_).utf8();
+	start(level_path_);
+}
+
+bool RicochetGame::start(const String &level_path) {
+	if (!FileAccess::file_exists(level_path)) {
+		UtilityFunctions::push_error(String("RicochetGame: no level at ") + level_path);
+		return false;
+	}
+	const CharString text = FileAccess::get_file_as_string(level_path).utf8();
 	rc_level *level = nullptr;
 	if (rc_level_parse(text.get_data(), size_t(text.length()), &level) != RC_OK) {
-		report(level_path_.utf8().get_data());
-		return;
+		report(level_path.utf8().get_data());
+		return false;
 	}
 	const rc_game_config cfg{sizeof(rc_game_config), infinity_, visibility_, asynchronous_ ? 1 : 0, animate_ ? 1 : 0, float(solve_budget_ms_), 0.0f};
 	const rc_status s = rc_game_create(level, &cfg, &game_);
 	rc_level_release(level);
 	if (s != RC_OK) {
 		report("rc_game_create");
-		return;
+		return false;
 	}
 	layers_ = memnew(Node2D);
 	layers_->set_name("Layers");
@@ -172,6 +208,75 @@ void RicochetGame::_ready() {
 		camera_->make_current();
 	}
 	sync();
+	return true;
+}
+
+void RicochetGame::stop() {
+	rc_game_destroy(game_);
+	game_ = nullptr;
+	if (layers_ != nullptr) {
+		remove_child(layers_);
+		layers_->queue_free(); // (the HUD with it)
+		layers_ = nullptr;
+	}
+	if (camera_ != nullptr) {
+		remove_child(camera_);
+		camera_->queue_free();
+		camera_ = nullptr;
+	}
+	hud_ = nullptr;
+	by_key_.clear();
+}
+
+// One violation: its level, the shots that made its world (each fired and
+// landed), its player, its plan (pieces by span, clicks) and its cursor.
+void RicochetGame::show_violation(int index) {
+	violation_ = std::max(0, std::min(index, int(violations_.size()) - 1));
+	const Dictionary v = violations_[violation_];
+	stop();
+	if (!start("res://data/levels/" + String(v.get("level", "")) + ".json")) {
+		viewer_label_->set_text("Violation " + String::num_int64(violation_ + 1) + ": no level " + String(v.get("level", "")));
+		return;
+	}
+	const Array shots = v.get("shots", Array());
+	for (int i = 0; i < shots.size(); i++) {
+		const Array shot = shots[i];
+		const Array from = shot[0], to = shot[1];
+		rc_game_teleport(game_, float(from[0]), float(from[1]));
+		rc_game_set_cursor(game_, float(to[0]), float(to[1]));
+		rc_game_advance(game_, 0.0, 0, 0);
+		rc_game_event(game_, RC_EVENT_FIRE);
+		for (int k = 0; k < 100000 && is_flying(); k++) {
+			rc_game_advance(game_, 1.0 / 60.0, 0, 0);
+		}
+	}
+	const Array p = v.get("player_pos", Array()), c = v.get("cursor_pos", Array());
+	rc_game_teleport(game_, float(p[0]), float(p[1]));
+	const CharString plan = JSON::stringify(v.get("plan", Array())).utf8();
+	if (rc_game_set_plan(game_, plan.get_data(), size_t(plan.length())) != RC_OK) {
+		report("rc_game_set_plan");
+	}
+	aim(Vector2(float(c[0]), float(c[1])));
+	String plan_text;
+	const Array entries = v.get("plan", Array());
+	for (int i = 0; i < entries.size(); i++) {
+		const Dictionary e = entries[i];
+		plan_text += (i ? ", " : "") + String::num_int64(int64_t(e.get("surface_id", 0))) + (int(e.get("side", 0)) == 0 ? "L" : "R");
+		if (e.has("span")) {
+			const Dictionary sp = e["span"];
+			const Array a = sp["start"], b = sp["end"];
+			plan_text += " (piece " + String::num(double(a[0])) + "," + String::num(double(a[1])) + " - " + String::num(double(b[0])) + "," +
+				String::num(double(b[1])) + ")";
+		}
+	}
+	String known;
+	if (v.has("known")) {
+		known = "\nknown: " + String(v["known"]);
+	}
+	viewer_label_->set_text("Violation " + String::num_int64(violation_ + 1) + "/" + String::num_int64(violations_.size()) + " - " +
+		String(v.get("manifest", "")) + " (" + String(v.get("level", "")) + ")" + (shots.is_empty() ? "" : " after its shots") + "\nplayer (" +
+		String::num(double(p[0])) + ", " + String::num(double(p[1])) + ")  cursor (" + String::num(double(c[0])) + ", " + String::num(double(c[1])) +
+		")\nplan [" + plan_text + "]\n" + String(v.get("violation", "")) + known + "\n[←/→ step] [Tab display mode] [V visibility] [F12 dump]");
 }
 
 void RicochetGame::_process(double delta) {
@@ -198,12 +303,27 @@ void RicochetGame::_process(double delta) {
 }
 
 void RicochetGame::_input(const Ref<InputEvent> &ev) {
-	if (game_ == nullptr) {
-		return;
-	}
 	// a flight: every key but the movement keys speeds it up (the game ignores clicks)
 	const Ref<InputEventKey> key = ev;
 	const Ref<InputEventMouseButton> mouse = ev;
+	if (!violations_path_.is_empty() && !violations_.is_empty()) {
+		// the violation viewer: ←/→ (↑/↓) step, Tab and V as in play, F12 dumps; nothing else
+		if (key.is_valid() && key->is_pressed() && !key->is_echo()) {
+			switch (key->get_physical_keycode()) {
+				case KEY_RIGHT: case KEY_DOWN: show_violation(violation_ + 1); break;
+				case KEY_LEFT: case KEY_UP: show_violation(violation_ - 1); break;
+				case KEY_TAB: if (game_ != nullptr) event(RC_EVENT_CYCLE_DISPLAY); break;
+				case KEY_V: if (game_ != nullptr) event(RC_EVENT_TOGGLE_VISIBILITY); break;
+				case KEY_F12: if (game_ != nullptr) debug_dump(); break;
+				default: break;
+			}
+		}
+		get_viewport()->set_input_as_handled();
+		return;
+	}
+	if (game_ == nullptr) {
+		return;
+	}
 	if (key.is_valid() && key->is_pressed()) {
 		for (const char *a : {"move_up", "move_down", "move_left", "move_right"}) {
 			if (key->is_action(a)) {

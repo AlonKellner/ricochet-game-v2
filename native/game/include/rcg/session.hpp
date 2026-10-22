@@ -99,6 +99,10 @@ public:
 	void set_cursor(const V2 &p) { cursor_ = p; }
 	void teleport(const V2 &p);
 	void click(bool right);
+	// Stage 129 (tools: the violation viewer): the plan set as it is -- entries by
+	// surface and side, each with its click and the span of its piece (matched to
+	// the world's pieces; a span that is none of them is kept as given)
+	void set_plan(const std::vector<rc::PlanItem> &items);
 	void key(Action a);
 	// the fire action, then the whole flight at a fixed frame time (speedup_at:
 	// the `any` key after that many frames; -1: never)

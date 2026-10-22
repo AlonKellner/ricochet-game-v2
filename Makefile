@@ -24,7 +24,7 @@ BUILD_CORE := native/build-core
 BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
-.PHONY: quick gate-clear-cache test run test-verbose frame-bench perf perf-diff oracle-test pyhost \
+.PHONY: violations quick gate-clear-cache test run test-verbose frame-bench perf perf-diff oracle-test pyhost \
 	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
 	sessions sessions-check godot-data
 
@@ -143,6 +143,15 @@ manifests: core
 # record is a behaviour change: docs/research/session_judge.py's report first),
 # `sessions-check` compares a replay with it (also ctest capi_sessions_*).
 SESSIONS_DIR ?= $(CURDIR)/bench/sessions
+# Stage 129: the sweeps' violations (the known findings' too, marked) for the
+# violation viewer (engines/godot/scenes/violation_viewer.tscn): FILTER=<text>
+# narrows the manifests (RC_SWEEPS_FILTER), e.g. make violations FILTER=crossings__4
+VIOLATIONS := engines/godot/violations.json
+violations: core
+	-RC_SWEEPS_FILTER="$(FILTER)" RC_SWEEPS_VIOLATIONS=$(BUILD_CORE)/violations_invariant.json $(BUILD_CORE)/rc_tests -tc="sweeps: the invariant sweeps' manifests hold on every combo" > /dev/null
+	-RC_SWEEPS_FILTER="$(FILTER)" RC_SWEEPS_VIOLATIONS=$(BUILD_CORE)/violations_visibility.json $(BUILD_CORE)/rc_tests -tc="sweeps: the visibility sweeps' manifests hold on every combo" > /dev/null
+	python3 -I -c 'import json, sys; v = [e for f in sys.argv[2:] for e in json.load(open(f))]; json.dump(v, open(sys.argv[1], "w"), indent=1); print(len(v), "violations ->", sys.argv[1], "(open scenes/violation_viewer.tscn)")' $(VIOLATIONS) $(BUILD_CORE)/violations_invariant.json $(BUILD_CORE)/violations_visibility.json
+
 sessions: core
 	rm -rf "$(SESSIONS_DIR)"
 	$(BUILD_CORE)/rc_tool replay data/sessions data/levels "$(SESSIONS_DIR)"

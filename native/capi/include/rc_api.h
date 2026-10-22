@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 5
+#define RC_API_VERSION_MINOR 6
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -243,6 +243,11 @@ RC_API rc_status rc_game_record(rc_game *game, const char *extra_json, size_t ex
  * A tool for bug reports; its contents may change. Borrowed (terminated). */
 enum { RC_DEBUG_SUMMARY = 1 };
 RC_API rc_status rc_game_debug_dump(rc_game *game, uint32_t flags, const char **out, size_t *out_length);
+
+/* 1.6 (tools: the violation viewer): the plan set as it is, from a JSON array of
+ * entries {"surface_id", "side": "LEFT" | "RIGHT" (or 0 | 1), "click": [x, y]?,
+ * "span": {"start", "end", "via"}?} -- a piece by its span, as the sweeps write it. */
+RC_API rc_status rc_game_set_plan(rc_game *game, const char *json, size_t length);
 
 /* The record encoding's sha256 of a JSON value (lowercase hex, terminated). */
 RC_API rc_status rc_digest_sha(const char *json, size_t length, char out[65]);

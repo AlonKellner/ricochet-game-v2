@@ -47,3 +47,35 @@ TEST_CASE("region reports: crossings [17 L] -- the mirror circle's disc is not i
 	const rc::V2 cursor = rc::V2::of(0x1.541ab2p+10, 0x1.298d1p+8);
 	CHECK(rc::vis::contains(r, rc::vis::Pt{double(cursor.x), double(cursor.y)}) == rc::vis::Membership::Outside);
 }
+
+// Stage 129 (the F12 dump of 2026-10-22 11:40): crossings, the mirror circle 17
+// planned on its western piece from below; the aim line meets only the eastern
+// piece, where the physical walk reflects too -- out of plan (GAME_SPEC 9.7,
+// 14.2): the paths diverge there, and the cursor beyond is not visible
+TEST_CASE("region reports: crossings [17 L, western piece] -- a hit on the eastern piece diverges") {
+	rcg::Session s(rcg::load_level((ROOT / "data" / "levels" / "test_levels" / "crossings.json").string()));
+	s.teleport(rc::V2::of(0x1.593f58p+10, 0x1.f0316ap+8));
+	rc::PlanItem it;
+	it.surface_id = 17;
+	it.left = true;
+	it.hint = rc::effects::F32Point{1300.3544921875f, 345.6401062011719f};
+	it.span = std::array<double, 6>{1400.0, 390.0, 1400.0, 210.0, 1310.0, 300.0};
+	s.set_plan({it});
+	REQUIRE(s.plan().size() == 1);
+	CHECK(s.plan()[0].piece >= 0); // (the span is one of the world's pieces)
+	s.set_cursor(rc::V2::of(0x1.932b82p+10, 0x1.62a824p+8));
+	s.settle();
+	const std::string t = s.debug_summary();
+	CHECK(t.find("cursor: preview not visible, region outside") != std::string::npos);
+	// the merged steps: aligned to the hit on 17, diverged from there on
+	const std::vector<rc::TraceStep> &m = s.preview_steps();
+	REQUIRE(m.size() >= 3);
+	CHECK(m[0].type == rc::StepType::Aligned);
+	CHECK(m[1].type == rc::StepType::Aligned);
+	CHECK(m[2].type != rc::StepType::Aligned);
+	// control: the whole surface planned, the same hit is the planned one
+	it.span.reset();
+	s.set_plan({it});
+	s.settle();
+	CHECK(s.debug_summary().find("cursor: preview visible, region inside") != std::string::npos);
+}

@@ -18,8 +18,10 @@
 #include <chrono>
 
 #include <doctest/doctest.h>
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
+#include <map>
 #include <string>
 #include <vector>
 
@@ -39,6 +41,24 @@ struct Manifest {
 	bool emit_infinity = false;
 	bool visibility = false;
 	bool carrier_cursors = false;
+	// Stage 129: known findings -- a violation whose kind is listed (all kinds when
+	// none are) on a plan whose first entry is one of the surfaces
+	struct Known {
+		std::string finding;
+		std::vector<int> surfaces;
+		std::vector<std::string> kinds;
+	};
+	std::vector<Known> known;
+	ojson shots = ojson::array(); // (the shots that made the world: the viewer replays them)
+	const Known *known_of(const std::vector<PlanItem> &plan, const std::string &kind) const {
+		for (const Known &k : known) {
+			const bool on = !plan.empty() && std::find(k.surfaces.begin(), k.surfaces.end(), plan[0].surface_id) != k.surfaces.end();
+			if (on && (k.kinds.empty() || std::find(k.kinds.begin(), k.kinds.end(), kind) != k.kinds.end())) {
+				return &k;
+			}
+		}
+		return nullptr;
+	}
 };
 
 V2 v2_of(const ojson &p) { return V2{float(p[0].get<double>()), float(p[1].get<double>())}; }
@@ -75,6 +95,11 @@ Manifest load_manifest(const std::filesystem::path &path) {
 	m.emit_infinity = j["emit_infinity"].get<bool>();
 	m.visibility = j["visibility"].get<bool>();
 	m.carrier_cursors = j["carrier_cursors"].get<bool>();
+	for (const ojson &k : j.value("known", ojson::array())) {
+		m.known.push_back(Manifest::Known{k["finding"].get<std::string>(), k["surfaces"].get<std::vector<int>>(),
+			k.value("kinds", std::vector<std::string>{})});
+	}
+	m.shots = j.value("shots", ojson::array());
 	return m;
 }
 
@@ -145,6 +170,7 @@ struct Totals {
 	long manifests = 0;
 	long combos = 0;
 	std::vector<std::string> violations;
+	std::map<std::string, long> known; // finding -> violations
 	ojson dump = ojson::array();
 };
 
@@ -167,19 +193,50 @@ void run_manifests(bool visibility, Totals &t) {
 		}
 		for (const sweep::Combo &c : failing) {
 			for (const inv::Violation &v : c.violations) {
-				const std::string line = "[" + m.file + "] plan=" + plan_str(m.plans[size_t(c.plan_index)]) + " player=" + v2_str(c.player) +
-					" cursor=" + v2_str(c.cursor) + ": " + rc_test::render(v);
-				t.violations.push_back(line);
+				const std::vector<PlanItem> &pl = m.plans[size_t(c.plan_index)];
+				const std::string text = rc_test::render(v);
+				const Manifest::Known *k = m.known_of(pl, text.substr(0, text.find(':')));
+				const std::string line = "[" + m.file + "] plan=" + plan_str(pl) + " player=" + v2_str(c.player) + " cursor=" + v2_str(c.cursor) + ": " + text;
+				if (k != nullptr) {
+					t.known[k->finding]++;
+				} else {
+					t.violations.push_back(line);
+				}
+				// (the violation viewer's input: rc_tool's level path, the plan with its
+				// pieces and clicks, the shots that made the world)
 				ojson e;
 				e["scene"] = m.scene;
+				std::string level = m.scene;
+				if (level.rfind("res://scenes/", 0) == 0) {
+					level = level.substr(13);
+				}
+				if (level.size() > 5 && level.substr(level.size() - 5) == ".tscn") {
+					level = level.substr(0, level.size() - 5);
+				}
+				e["level"] = level;
+				e["manifest"] = m.file;
 				e["player_pos"] = {double(c.player.x), double(c.player.y)};
 				e["cursor_pos"] = {double(c.cursor.x), double(c.cursor.y)};
 				ojson plan = ojson::array();
-				for (const PlanItem &it : m.plans[size_t(c.plan_index)]) {
-					plan.push_back({{"surface_id", it.surface_id}, {"side", it.left ? 0 : 1}});
+				for (const PlanItem &it : pl) {
+					ojson pe = {{"surface_id", it.surface_id}, {"side", it.left ? 0 : 1}};
+					if (it.hint) {
+						pe["click"] = {double(it.hint->x), double(it.hint->y)};
+					}
+					if (it.span) {
+						const auto &sp = *it.span;
+						pe["span"] = {{"start", {sp[0], sp[1]}}, {"end", {sp[2], sp[3]}}, {"via", {sp[4], sp[5]}}};
+					}
+					plan.push_back(pe);
 				}
 				e["plan"] = plan;
-				e["violation"] = rc_test::render(v);
+				if (!m.shots.empty()) {
+					e["shots"] = m.shots;
+				}
+				if (k != nullptr) {
+					e["known"] = k->finding;
+				}
+				e["violation"] = text;
 				t.dump.push_back(e);
 			}
 		}
@@ -190,6 +247,9 @@ void run_manifests(bool visibility, Totals &t) {
 	}
 	MESSAGE((visibility ? "visibility" : "invariant") << " sweeps: " << t.manifests << " manifests, " << t.combos << " combos (part " << sel.part.k << "/"
 																		  << sel.part.n << ", stride " << sel.stride << "), " << t.violations.size() << " violations");
+	for (const auto &[finding, n] : t.known) {
+		MESSAGE("known finding " << finding << ": " << n << " violations (data/sweeps.json)");
+	}
 	for (size_t i = 0; i < t.violations.size() && i < 40; i++) {
 		MESSAGE(t.violations[i]);
 	}

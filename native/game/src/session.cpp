@@ -500,6 +500,23 @@ V2 Session::snap_click(const BuiltSurface &s, Side side, const V2 &click) const 
 	return click + n * float(sign * SNAP_PX - double(along));
 }
 
+void Session::set_plan(const std::vector<rc::PlanItem> &items) {
+	plan_.clear();
+	for (const rc::PlanItem &it : items) {
+		PlanEntry e{it.surface_id, it.left ? Side::Left : Side::Right, it.hint ? V2::of(it.hint->x, it.hint->y) : V2::inf(), -1, it.span};
+		if (it.span) {
+			for (const Piece &pc : world_->pieces().of(it.surface_id)) {
+				if (pc.span && *pc.span == *it.span) {
+					e.piece = pc.index;
+				}
+			}
+		}
+		plan_.push_back(e);
+	}
+	plan_changed();
+	refresh_ui();
+}
+
 void Session::click(bool right) {
 	const Hit r = detect_click();
 	if (!r.infinity && !r.has_surface) {

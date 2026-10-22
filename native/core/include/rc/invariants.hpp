@@ -21,6 +21,7 @@
 #include <algorithm>
 #include <cmath>
 #include <limits>
+#include <array>
 #include <optional>
 #include <string>
 #include <utility>
@@ -785,8 +786,13 @@ inline Violations check_ON_SEGMENT_CONSISTENCY(const Input &in) {
 	}
 	for (const std::vector<EvInfo> *evp : {in.planned_events, in.physical_events}) {
 		const std::vector<EvInfo> &events = *evp;
+		const bool planned = evp == in.planned_events;
+		size_t j = 0; // (the planned walk: the next plan entry)
 		for (size_t i = 0; i < events.size(); i++) {
 			const EvInfo &e = events[i];
+			if (planned && e.kind == EventKind::Infinity && j < in.plan.size() && in.plan[j].is_infinity() && e.applied) {
+				j++;
+			}
 			if (e.kind != EventKind::Hit || !e.has_point) {
 				continue;
 			}
@@ -795,10 +801,30 @@ inline Violations check_ON_SEGMENT_CONSISTENCY(const Input &in) {
 				continue;
 			}
 			const CN<F64> p{F64{e.fx}, F64{e.fy}};
-			if (geom::on_segment(s->seg, p) == e.on_segment) {
+			bool expect = geom::on_segment(s->seg, p);
+			std::optional<std::array<double, 6>> piece_span;
+			// Stage 108 (GAME_SPEC 9.7): the hit consuming an entry that names a piece is on
+			// its segment only inside the piece's span
+			if (planned && j < in.plan.size() && !in.plan[j].is_infinity() && in.plan[j].surface_id == e.surface_id && in.plan[j].left == e.left) {
+				if (const auto &sp = in.plan[j].span) {
+					Seg<F64> piece;
+					piece.s = CN<F64>{F64{(*sp)[0]}, F64{(*sp)[1]}};
+					piece.e = CN<F64>{F64{(*sp)[2]}, F64{(*sp)[3]}};
+					piece.v = CN<F64>{F64{(*sp)[4]}, F64{(*sp)[5]}};
+					expect = expect && geom::on_segment(piece, p);
+					piece_span = *sp;
+				}
+				j++;
+			}
+			if (expect == e.on_segment) {
 				continue;
 			}
-			const double near = gd_minf(V2::of(e.fx - s->sx, e.fy - s->sy).length(), V2::of(e.fx - s->ex, e.fy - s->ey).length());
+			double near = gd_minf(V2::of(e.fx - s->sx, e.fy - s->sy).length(), V2::of(e.fx - s->ex, e.fy - s->ey).length());
+			if (piece_span) {
+				// (a piece's ends are crossings, float32: as rounded as a design endpoint)
+				near = gd_minf(near, gd_minf(V2::of(e.fx - (*piece_span)[0], e.fy - (*piece_span)[1]).length(),
+										   V2::of(e.fx - (*piece_span)[2], e.fy - (*piece_span)[3]).length()));
+			}
 			if (near > 1e-9 * gd_maxf(1.0, V2::of(e.fx, e.fy).length())) {
 				out.push_back(v("ON-SEGMENT-CONSISTENCY: event %d s=%d stored=%s recomputed=%s at (%s, %s)", I(int64_t(i)), I(e.surface_id), e.on_segment,
 					!e.on_segment, F(e.fx), F(e.fy)));

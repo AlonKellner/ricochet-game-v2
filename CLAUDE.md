@@ -52,6 +52,7 @@ make pyhost                     # the Python host on the C API
 ./run_tests_parallel.sh         # the Godot host's GUT suite
 make sessions-check             # the session replay golden (make sessions re-records: a behaviour change)
 make frame-bench                # the per-frame cost on a level (rc_tool bench)
+make violations [FILTER=crossings__4]   # the sweeps' violations -> engines/godot/violations.json (open scenes/violation_viewer.tscn)
 ```
 
 - Native tests: doctest `TEST_CASE`s in `native/tests/*.cpp` (`rc_tests`) and `native/tests/game/*.cpp` (`rcg_tests`).
