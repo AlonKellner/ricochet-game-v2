@@ -3,12 +3,15 @@
 #include <godot_cpp/classes/control.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
+#include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/font.hpp>
 #include <godot_cpp/classes/input.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
+#include <godot_cpp/classes/project_settings.hpp>
 #include <godot_cpp/classes/rendering_server.hpp>
 #include <godot_cpp/classes/theme_db.hpp>
+#include <godot_cpp/classes/time.hpp>
 #include <godot_cpp/classes/viewport.hpp>
 #include <godot_cpp/core/class_db.hpp>
 #include <godot_cpp/variant/utility_functions.hpp>
@@ -220,6 +223,7 @@ void RicochetGame::_input(const Ref<InputEvent> &ev) {
 			case KEY_Z: event(RC_EVENT_UNDO); return;
 			case KEY_R: event(RC_EVENT_RESET); return;
 			case KEY_C: event(RC_EVENT_CLEAR_PLAN); return;
+			case KEY_F12: debug_dump(); return;
 			default: break;
 		}
 	}
@@ -376,6 +380,26 @@ String RicochetGame::record() const {
 		return String();
 	}
 	return String::utf8(out, int64_t(n));
+}
+
+// F12 (the GDScript game's DEBUG STATE): the game's state, printed and saved to
+// user://debug_dumps (one file per press)
+void RicochetGame::debug_dump() {
+	const char *text = nullptr;
+	size_t n = 0;
+	if (rc_game_debug_dump(game_, &text, &n) != RC_OK) {
+		UtilityFunctions::push_error(String::utf8(rc_last_error()));
+		return;
+	}
+	const String dump = String::utf8(text, int64_t(n));
+	DirAccess::make_dir_recursive_absolute("user://debug_dumps");
+	const String path = "user://debug_dumps/" + Time::get_singleton()->get_datetime_string_from_system().replace(":", "-") + ".json";
+	const Ref<FileAccess> f = FileAccess::open(path, FileAccess::WRITE);
+	if (f.is_valid()) {
+		f->store_string(dump);
+	}
+	UtilityFunctions::print("=== DEBUG STATE (F12) ===\n", dump, "\n=== END DEBUG STATE === saved to ",
+		ProjectSettings::get_singleton()->globalize_path(path));
 }
 
 String RicochetGame::hud() const {

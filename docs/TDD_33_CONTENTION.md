@@ -13,6 +13,7 @@ structural change".
 | 128.1 | A cast without contention: walks allocate less, the region memo sharded (results unchanged) | Done |
 | 128.2 | A cast's two walks share their exact start in a pre-transform frame (results unchanged) | Done |
 | 128.3 | Docs, `make gates`, sign-off | Pending |
+| 128.4 | The F12 debug dump restored natively (C API 1.5 `rc_game_debug_dump`) | Done |
 
 ## 128.0 Resuming the planned walk: why not
 
@@ -64,6 +65,19 @@ exact pole and circle through the player, the exact aim image and Q0 (Stage 105,
 points. `SolveCache` keeps the last few, keyed by the points' exact bits (sign, exponent and limbs), and the
 realization reads the same entries.
 
+## 128.4 The F12 debug dump
+
+The user reported (2026-10-22) that F12 no longer dumps. The dump was the GDScript game's (`DebugDumper`). It was
+deleted with that game in the engine switch (Stage 119.4), and the native host never got one; the GUT ledger
+tracked tests, not tools. It is now engine-free:
+
+- `Session::debug_dump()` (`session_debug.cpp`) gives JSON: the level, the player and cursor (hex floats too: a
+  dump is replayed bit for bit), the switches, the flags, the plan and the solver's plan items, the scene's defs,
+  the preview's ladder result (each walk's limbs, convergence and events), its traced pair and merged steps, and the
+  region's summary.
+- C API 1.5 `rc_game_debug_dump`.
+- The Godot host prints it on F12 and saves it to `user://debug_dumps/`.
+
 ## Results
 
 **Results unchanged.** Every region of the 2010-region set of Stage 127 (every side and some two-entry plans of
@@ -108,3 +122,5 @@ measurements vary ±2 ms between runs.
 |---|---|
 | the region digests, the sweeps (unsampled), the sessions | unchanged |
 | the 2010-region comparison against Stage 127 (scratch) | every region bit for bit |
+| `debug dump: the inputs exactly, the scene, the preview's walks and the region` | the dump's exact inputs and its parts |
+| `capi_c_smoke` | `rc_game_debug_dump` (1.5), its error path |

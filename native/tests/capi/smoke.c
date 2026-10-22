@@ -152,6 +152,10 @@ int main(void) {
 	CHECK(rc_game_record(game, "{\"i\": 0, \"op\": \"start\"}", 23, 0, &text, &text_length) == RC_OK);
 	CHECK(text_length > 0 && text[0] == '{' && strstr(text, "\"draw\":\"") != NULL);
 	CHECK(rc_game_record(game, "[1]", 3, 0, &text, &text_length) == RC_E_ARGUMENT);
+	/* 1.5: the debug dump */
+	CHECK(rc_game_debug_dump(game, &text, &text_length) == RC_OK);
+	CHECK(text_length > 0 && text[0] == '{' && strlen(text) == text_length && strstr(text, "\"cursor\"") != NULL);
+	CHECK(rc_game_debug_dump(NULL, &text, &text_length) == RC_E_ARGUMENT);
 	CHECK(rc_digest_sha("[1.0,2]", 7, sha) == RC_OK);
 	CHECK(strlen(sha) == 64);
 	CHECK(rc_tessellate_arc(0.0f, 0.0f, 10.0, 0.0, 3.14159265358979, 16, arc, 16, &written) == RC_OK);

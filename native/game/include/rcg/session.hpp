@@ -168,6 +168,9 @@ public:
 	void settle();
 	// the digest record (after settle()); extra: the step's own fields
 	nlohmann::json record(const nlohmann::json &extra) const;
+	// Stage 128: the debug dump (the F12 DEBUG STATE): the solver's inputs exactly,
+	// the scene, the plan, the preview's walks, the region (session_debug.cpp)
+	nlohmann::json debug_dump() const;
 	// Stage 118: what the level's nodes draw (after settle()): the draw list
 	// (rcg/render.hpp), one node per thing drawn, in the GDScript nodes' calls
 	std::vector<render::Node> draw() const;
