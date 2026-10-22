@@ -552,6 +552,23 @@ struct ArcGeom {
 	bool ccw = true; // a -> via -> b turns counterclockwise (x right, y up as numbers)
 };
 
+// Stage 128 (the F12 dump of 2026-10-22): an arc on a known circle so short
+// that its three points lie within rounding of a line (crossings: 1.5e-6 px of
+// a 90 px circle) has no reliable turn -- cross(via - a, b - via) is noise
+// there, and a wrong sign draws it the long way round, the whole disc. About
+// the circle's centre its points are well apart: it turns the way via lies
+// between a and b. (Where the cross product is reliable the two agree.)
+inline bool ccw_about(const Pt &c, const Pt &a, const Pt &via, const Pt &b) {
+	const double ta = std::atan2(a.y - c.y, a.x - c.x);
+	auto delta = [&](const Pt &p) {
+		double d = std::atan2(p.y - c.y, p.x - c.x) - ta;
+		while (d < 0.0) d += 2.0 * PI;
+		while (d >= 2.0 * PI) d -= 2.0 * PI;
+		return d;
+	};
+	return delta(via) < delta(b);
+}
+
 inline ArcGeom arc_geom(const Edge &e) {
 	ArcGeom g;
 	if (!e.arc) {
@@ -561,7 +578,7 @@ inline ArcGeom arc_geom(const Edge &e) {
 		g.line = false;
 		g.c = e.gc;
 		g.r = e.gr;
-		g.ccw = cross(e.via - e.a, e.b - e.via) > 0.0;
+		g.ccw = (e.a != e.b && e.via != e.a && e.via != e.b) ? ccw_about(e.gc, e.a, e.via, e.b) : cross(e.via - e.a, e.b - e.via) > 0.0;
 		return g;
 	}
 	const Pt ab = e.via - e.a;
@@ -586,7 +603,23 @@ inline bool on_arc_side(const Edge &e, const Pt &X) {
 	if (ch.x == 0.0 && ch.y == 0.0) {
 		return true; // a full circle
 	}
-	const double sv = cross(ch, e.via - e.a);
+	double sv = cross(ch, e.via - e.a);
+	if (e.arc && !e.gline && e.gr > 0.0 && e.via != e.a && e.via != e.b) {
+		// Stage 128: a short arc's via lies within rounding of its chord (its side
+		// is noise); the centre's side is not -- a minor arc bulges away from it
+		const double sc = cross(ch, e.gc - e.a);
+		if (std::abs(sv) < std::abs(sc)) {
+			const bool ccw = ccw_about(e.gc, e.a, e.via, e.b);
+			const double ta = std::atan2(e.a.y - e.gc.y, e.a.x - e.gc.x);
+			double sw = std::atan2(e.b.y - e.gc.y, e.b.x - e.gc.x) - ta;
+			if (ccw) {
+				while (sw <= 0.0) sw += 2.0 * PI;
+			} else {
+				while (sw >= 0.0) sw -= 2.0 * PI;
+			}
+			sv = std::abs(sw) < PI ? -sc : sc;
+		}
+	}
 	const double sx = cross(ch, X - e.a);
 	return sx == 0.0 || (sx > 0.0) == (sv > 0.0);
 }
