@@ -13,6 +13,8 @@ with it on; only the native core's default (and the goldens recorded with it) st
 | 136.2 | The `escape` event retired with it | Done |
 | 136.3 | The goldens re-traced with infinity on | Done (approved: the judge's report) |
 | 136.4 | The sweep goldens' `landing` flag | Nothing to do (below) |
+| 136.5 | The interactive test: a wrap's way back through crossings off the level (the arrow, the half rings) | Done (approved: 137 records) |
+| 136.6 | The preview's dashes run on by the walk's length (the user) | Done (approved: 1,228 records) |
 
 ## 136.1 The switch removed
 
@@ -59,3 +61,34 @@ tier: the new goldens are the oracle's walks.
 Stage 134 noted that the sweep goldens' frozen input definitions lacked the `landing` flag. On inspection no sweep
 golden group uses the hit_effects level, and everything that does (the manifests, the corpus scenarios, the scene
 dumps the region digests read) already carries it. Nothing to refresh.
+
+## 136.5 A wrap's way back through crossings off the level
+
+The user's F12 dumps (open_room_playable, no plan): a steep shot through the ceiling wraps through infinity and comes
+back up through the floor, five laps. In one the off-segment crossings fall before the wrap (far above the level), in
+the other after it (far below): there the way back reaches the level only on its last step, through the bottom edge.
+
+- **The arrow** (`rc::arc::advance`): out of the level it skipped ahead to a step that starts inside, else to a step's
+  end -- a step entering from outside sent it to its end (it appeared at the floor's crossing). It now resumes where the
+  step enters the bounds (`segment_entry`, Liang-Barsky; an arc by `arc_reentry`).
+- **The half rings** (`event_marks`): a passage of infinity off the level is marked out and back in when the step
+  reaching it ends off the level. A wrap's way out is clipped onto the edge, which `has_point` counts in on the top and
+  left: those wraps got a full ring cut by the edge and no half ring back in. The test is now the level's interior.
+
+Tests: `visual: the arrow re-enters the bounds where a step from outside enters them`; `present: a wrap whose way back
+crosses far off the level -- half rings and the arrow's re-entry` (both dumps: two half rings a lap, the arrow flying
+from the bottom edge to the floor; the second dump fails without the fixes).
+
+Sessions (the draw lists and flights recorded in full on both sides): 127 records gain the half rings of wraps out
+through the top or left edge; 10 flights change -- 6 open_room_playable shots that vanished at the right edge now come
+back in at the left one and fly the return, 4 pre_inverted shots re-enter where their arcs cross the edge instead of
+at a step's end.
+
+## 136.6 The dashes run on
+
+The user: "the dashed phase is not aligned between them ... I expect the dashes to be determined by the total section
+length from the player position, through the chain of steps and hitpoints up to that point". Each drawn step's dash
+pattern starts at its distance from the player along its walk (`rcg::dash_offsets`): the common part's steps in turn,
+each branch past the divergence on from the common part's length; an arc measured at its lane's radius, a line from
+where it begins (not where the drawing clips it). Test: `present: the dashes run on across the steps, by the walk's
+length from the player`. Sessions: 1,365 records' draw lists, only the dash strokes besides 136.5's changes.

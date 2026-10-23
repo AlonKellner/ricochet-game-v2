@@ -93,6 +93,9 @@ struct Flight {
 // Stage 135: each drawn step's lane offset (px to the left of its group's way;
 // 0 for a step drawn alone) -- the preview's side-by-side lanes
 std::vector<double> lane_offsets(const std::vector<rc::TraceStep> &steps);
+// Stage 136: each drawn step's distance from the player along its walk (px) --
+// where the preview's dash pattern stands at the step's start
+std::vector<double> dash_offsets(const std::vector<rc::TraceStep> &steps);
 
 class Session {
 public:
