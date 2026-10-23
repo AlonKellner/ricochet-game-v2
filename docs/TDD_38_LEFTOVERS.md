@@ -13,7 +13,8 @@ F27 (TDD_36). Along the way, a request from the user's testing of Stage 132.
 | 133.4 | F24: DIRECTION-ONLY at a beam exactly through two mirrors' crossing (a checker false positive) | Done (F24 closed) |
 | 133.5 | F21: a circle normal's hit point that is floats exactly is exact data (no unconverged climbs) | Done (4 GUT rows re-recorded, approved) |
 | 133.6 | F26: the long looping paths' side-by-side lanes (pre_inverted's preview cost) | Done (F26 closed) |
-| 133.7 | F22, F27 | Open |
+| 133.7 | F27: region casts skip precision on the order of pass-through crossings in the planned walk | Done (F27 closed) |
+| 133.8 | F22; the user's idea: crossings that cannot be significant are not candidates | Proposed |
 
 ## 133.1 Open boundary chains (F23)
 
@@ -133,3 +134,22 @@ is unchanged.
 
 **The result:** painting averages 0.22 ms instead of 0.58, and 1.2 ms at worst instead of 5.1. The bench's cursor
 orbit on pre_inverted is 0.26 ms on average instead of 0.69, and 1.4 ms at worst instead of 5.2.
+
+## 133.7 The order of pass-through crossings in a cast's planned walk (F27 closed)
+
+F27 (TDD_36): on crossings, the bench's plan [9R piece, 11R piece] from (300, 500) is unreachable, so its region
+is empty, yet it cost 26 ms at 8 threads and 72 ms on one. Stage 131's longer walks doubled the cost of each of its
+30 climbs (to 30 ms of BigFloat on one thread). 52 of every 60 declined decisions were in planned walks, at the
+order of two crossings that fire nothing.
+
+A region cast reads three things of its planned walk: the entries' consumption, the steps before them, and those
+steps' frames. None depends on the order of crossings that fire nothing. A region cast's planned walk
+(`Ladder::cast_unreliable`, a solve with stops) now takes its first decision needing precision past those crossings
+whose neighbours fire nothing either: the next entry or the cursor beside it still counts. The preview and the
+firing keep every decision.
+
+Two-idle-laps reading rule (`horizon`): a planned walk that goes round twice on one beam without consuming an entry
+repeats itself, so the region reads nothing further.
+
+**Result:** climbs 30 → 11, unconverged 1 → 0, BigFloat 30 → 5 ms; the region 72 → 47 ms on one thread, 26 → 15 ms
+at 8. Every region digest, sweep and session is unchanged.
