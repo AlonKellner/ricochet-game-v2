@@ -45,6 +45,7 @@ struct Sensitivity {
 
 inline std::vector<double> estimate(const Sensitivity &sens, double ctx_eps) {
 	std::vector<double> out;
+	out.reserve(sens.gain.size());
 	const double floor_err = ctx_eps * SCALE * 4.0;
 	for (double g : sens.gain) {
 		out.push_back(gd_maxf(C * ctx_eps * g, floor_err));
@@ -53,9 +54,10 @@ inline std::vector<double> estimate(const Sensitivity &sens, double ctx_eps) {
 }
 
 inline int unreliable_index(const Sensitivity &sens, double ctx_eps) {
-	const std::vector<double> est = estimate(sens, ctx_eps);
+	// (estimate()'s values, one at a time: F22, no vector per call)
+	const double floor_err = ctx_eps * SCALE * 4.0;
 	for (size_t i = 0; i < sens.margin.size(); i++) {
-		if (sens.margin[i] <= MARGIN_SAFETY * est[i]) {
+		if (sens.margin[i] <= MARGIN_SAFETY * gd_maxf(C * ctx_eps * sens.gain[i], floor_err)) {
 			return int(i);
 		}
 	}
@@ -66,6 +68,8 @@ inline int unreliable_index(const Sensitivity &sens, double ctx_eps) {
 template <Num N>
 Sensitivity collect(const std::vector<Event<N>> &ev, const std::vector<double> &gains) {
 	Sensitivity s;
+	s.gain.reserve(ev.size());
+	s.margin.reserve(ev.size());
 	double envelope = 0.0;
 	for (size_t i = 0; i < ev.size(); i++) {
 		envelope = gd_maxf(envelope, gains[i]);

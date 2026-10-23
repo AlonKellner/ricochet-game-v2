@@ -2171,10 +2171,16 @@ private:
 		}
 		const size_t nt = std::min(jobs.size(), size_t(vis_threads()));
 		if (nt <= 1) {
+			long long mx = 0;
 			for (size_t i = 0; i < jobs.size(); i++) {
 				check_cancel();
+				const auto t0 = std::chrono::steady_clock::now();
 				out[i] = cast_on(tracer_, jobs[i].c, jobs[i].q, jobs[i].member, jobs[i].known, reads_cursor(jobs[i].kind));
+				const long long u = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+				res_.batch_sum_usec += u;
+				mx = std::max(mx, u);
 			}
+			res_.batch_max_usec += mx;
 			return out;
 		}
 		std::vector<Tracer *> tracers{&tracer_};
@@ -2211,7 +2217,8 @@ private:
 	// aim, the tie-choice, whether the solver's own choice is this half (chosen),
 	// valid / alive / met, the consuming event, the near and far ends.
 	void trace_cast(const Cast &r, std::optional<bool> q) const {
-		if (std::getenv("RC_VIS_TRACE") == nullptr) {
+		static const bool on = std::getenv("RC_VIS_TRACE") != nullptr; // (F22: getenv takes a lock, once per cast)
+		if (!on) {
 			return;
 		}
 		std::fprintf(stderr, "cast half %d cursor (%.9g, %.9g) dir (%.9f, %.9f) tie %s chosen %d valid %d alive %d met %d whisker %d ek %d depart %d near %s end %s%s\n",
@@ -2232,7 +2239,8 @@ private:
 		// (a plan without an entry -- the prefix of a split plan, built in a cell's
 		// orientation by a check -- has no tie-choice: the forced orientation alone)
 		const std::optional<bool> tq = solver_.first_entry(plan_, flags_) >= 0 ? memo_tie(tracer, c) : std::nullopt;
-		if (std::getenv("RC_VIS_TIE") != nullptr) {
+		static const bool tie_trace = std::getenv("RC_VIS_TIE") != nullptr; // (F22: once, not per cast)
+		if (tie_trace) {
 			std::fprintf(stderr, "tie half %d cursor (%.6g, %.6g) dir (%.9f, %.9f) angle %.9f -> %s\n", int(half_), c.x, c.y, dir.x, dir.y,
 				std::atan2(dir.y, dir.x), tq ? (*tq ? "reversed" : "direct") : "none");
 		}
@@ -4819,6 +4827,12 @@ inline Result join_halves(Result a, Result b) {
 		}
 	}
 	r.refinements += b.refinements;
+	// (F22, Stage 135: the timings of both halves -- they build one after the other)
+	for (size_t k = 0; k < r.phase_usec.size(); k++) {
+		r.phase_usec[k] += b.phase_usec[k];
+	}
+	r.batch_sum_usec += b.batch_sum_usec;
+	r.batch_max_usec += b.batch_max_usec;
 	for (size_t k = 0; k < r.casts_by_kind.size(); k++) {
 		r.casts_by_kind[k] += b.casts_by_kind[k];
 	}

@@ -147,16 +147,61 @@ struct IncidenceMemo {
 			return size_t((h ^ uint64_t(uint32_t(k.surf))) * 0x100000001B3ull);
 		}
 	};
-	std::unordered_map<Key, bool, Hash> map;
+	// F22 (Stage 135): open addressing in one array -- a node per insertion made the
+	// region's threads contend in the allocator; the table allocates only as it grows
+	struct Slot {
+		Key k{};
+		bool v = false;
+		bool used = false;
+	};
+	std::vector<Slot> slots;
+	size_t count = 0;
+	static size_t slot_of(const Key &k, size_t mask) {
+		uint64_t h = Hash{}(k);
+		h ^= h >> 29; // (the multiplies leave the low bits to the keys' low bits)
+		return size_t(h) & mask;
+	}
 	bool *find(const Key &k) {
-		auto it = map.find(k);
-		return it == map.end() ? nullptr : &it->second;
+		if (slots.empty()) {
+			return nullptr;
+		}
+		const size_t mask = slots.size() - 1;
+		for (size_t i = slot_of(k, mask); slots[i].used; i = (i + 1) & mask) {
+			if (slots[i].k == k) {
+				return &slots[i].v;
+			}
+		}
+		return nullptr;
 	}
 	void put(const Key &k, bool v) {
-		if (map.size() > (1u << 18)) { // bounded: a long session's cursors
-			map.clear();
+		if (count > (1u << 18)) { // bounded: a long session's cursors
+			std::fill(slots.begin(), slots.end(), Slot{});
+			count = 0;
 		}
-		map.emplace(k, v);
+		if ((count + 1) * 2 > slots.size()) {
+			std::vector<Slot> old = std::move(slots);
+			slots.assign(old.empty() ? 1024 : old.size() * 2, Slot{});
+			count = 0;
+			for (const Slot &o : old) {
+				if (o.used) {
+					insert(o.k, o.v);
+				}
+			}
+		}
+		insert(k, v);
+	}
+
+private:
+	void insert(const Key &k, bool v) {
+		const size_t mask = slots.size() - 1;
+		size_t i = slot_of(k, mask);
+		for (; slots[i].used; i = (i + 1) & mask) {
+			if (slots[i].k == k) {
+				return; // (emplace: the first value stays)
+			}
+		}
+		slots[i] = Slot{k, v, true};
+		count++;
 	}
 };
 
@@ -676,6 +721,7 @@ public:
 	std::vector<EffectType> plan_effects(const std::vector<PlanItem> &plan, const Flags &flags) const {
 		Flags f = flags;
 		std::vector<EffectType> out;
+		out.reserve(plan.size());
 		for (const PlanItem &item : plan) {
 			const Surf<N> *surf = scene_.find(item.surface_id);
 			if (surf == nullptr || !surf->present(f)) {
@@ -1739,6 +1785,7 @@ private:
 			const Flags &flags) const {
 		const std::vector<EffectType> effs = plan_effects(plan, flags);
 		std::vector<size_t> proj;
+		proj.reserve(plan.size());
 		for (size_t j = 0; j < plan.size(); j++) {
 			if (is_projective(effs[j])) {
 				proj.push_back(j);
@@ -1867,72 +1914,84 @@ private:
 	std::shared_ptr<const AnchorChain<N>> build_simple(const CN<N> &player, const CN<N> &cursor, const std::vector<PlanItem> &plan,
 			const std::vector<EffectType> &effs, const std::optional<CN<N>> &base_q, const Surf<N> *through_c = nullptr) const {
 		const size_t K = plan.size();
-		std::vector<std::vector<int>> stacks = {{}};
-		std::vector<int> st;
-		std::vector<bool> changes; // plan entry j changes the frame
+		// (F22, Stage 135: the frames as a trie -- each its parent and one surface,
+		// identified by its stack -- in one array: no strings, map nodes or a
+		// vector per stack per call; the same frames, met in the same order)
+		struct Frame {
+			int parent = -1;
+			int sid = 0;
+			int depth = 0;
+			bool on_line = false;
+			std::optional<effects::Poles<N>> poles;
+			std::optional<std::optional<CN<N>>> seen;
+			BeamPtr<N> beam;
+		};
+		std::vector<Frame> fr;
+		fr.reserve(K + 1);
+		fr.emplace_back();
+		struct Step {
+			int frame = 0;
+			bool changes = false; // plan entry j changes the frame
+		};
+		std::vector<Step> at(K + 1); // at[j]: the frame before entry j (at[K]: after the plan)
+		int cur = 0;
 		for (size_t ji = 0; ji < K; ji++) {
 			const Surf<N> *surf = scene_.find(plan[ji].surface_id);
 			const bool t = surf != nullptr && is_transformative(effs[ji]);
-			changes.push_back(t);
+			at[ji].changes = t;
 			if (t) {
-				if (!st.empty() && pop_id_of(st.back()) == plan[ji].surface_id) {
-					st.pop_back();
+				if (fr[size_t(cur)].depth > 0 && pop_id_of(fr[size_t(cur)].sid) == plan[ji].surface_id) {
+					cur = fr[size_t(cur)].parent;
 				} else {
-					st.push_back(plan[ji].surface_id);
+					int child = -1;
+					for (size_t f = 0; f < fr.size() && child < 0; f++) {
+						if (fr[f].parent == cur && fr[f].sid == plan[ji].surface_id) {
+							child = int(f);
+						}
+					}
+					if (child < 0) {
+						Frame nf;
+						nf.parent = cur;
+						nf.sid = plan[ji].surface_id;
+						nf.depth = fr[size_t(cur)].depth + 1;
+						fr.push_back(std::move(nf));
+						child = int(fr.size()) - 1;
+					}
+					cur = child;
 				}
 			}
-			stacks.push_back(st);
+			at[ji + 1].frame = cur;
 		}
 		// K15: the frames whose beam is the exit line itself (an inversion centred
 		// on the passed centre, then line-keeping effects): Q is on the line, the
 		// beam is straight
-		std::map<std::string, bool> on_line;
-		on_line[""] = false;
-		for (const std::vector<int> &s : stacks) {
-			for (size_t n = 1; n <= s.size(); n++) {
-				const std::string key = stack_key(std::vector<int>(s.begin(), s.begin() + long(n)));
-				if (on_line.count(key)) {
-					continue;
-				}
-				const std::string parent = stack_key(std::vector<int>(s.begin(), s.begin() + long(n - 1)));
-				const Surf<N> *ps = scene_.find(s[n - 1]);
-				bool v = false;
-				if (ps != nullptr && through_c != nullptr && n == 1 && !ps->line && !ps->portal && same_exact_center(*through_c, *ps)) {
-					v = true;
-				} else if (ps != nullptr && on_line.at(parent) && (ps->line || ps->portal)) {
-					v = true;
-				}
-				on_line[key] = v;
+		for (size_t f = 1; f < fr.size(); f++) {
+			const Surf<N> *ps = scene_.find(fr[f].sid);
+			if (ps != nullptr && through_c != nullptr && fr[f].depth == 1 && !ps->line && !ps->portal && same_exact_center(*through_c, *ps)) {
+				fr[f].on_line = true;
+			} else if (ps != nullptr && fr[size_t(fr[f].parent)].on_line && (ps->line || ps->portal)) {
+				fr[f].on_line = true;
 			}
 		}
-		// pole chain: key -> [P, Q or null, delta or null]
-		std::map<std::string, effects::Poles<N>> memo;
+		// pole chain: per frame [P, Q or null, delta or null]
 		// the epoch's base poles: the player and the frame's image of infinity (Stage 101)
-		memo[""] = effects::Poles<N>{player, base_q, base_q ? std::optional<CN<N>>(player.sub(*base_q)) : std::nullopt};
-		for (const std::vector<int> &s : stacks) {
-			for (size_t n = 1; n <= s.size(); n++) {
-				const std::string key = stack_key(std::vector<int>(s.begin(), s.begin() + long(n)));
-				if (memo.count(key)) {
-					continue;
-				}
-				const effects::Poles<N> &parent = memo.at(stack_key(std::vector<int>(s.begin(), s.begin() + long(n - 1))));
-				if (!parent.P) {
-					return nullptr;
-				}
-				memo[key] = effects::map_pole(parent, *scene_.find(s[n - 1]));
+		fr[0].poles = effects::Poles<N>{player, base_q, base_q ? std::optional<CN<N>>(player.sub(*base_q)) : std::nullopt};
+		for (size_t f = 1; f < fr.size(); f++) {
+			const effects::Poles<N> &parent = *fr[size_t(fr[f].parent)].poles;
+			if (!parent.P) {
+				return nullptr;
 			}
+			fr[f].poles = effects::map_pole(parent, *scene_.find(fr[f].sid));
 		}
 		// image chain X_j, memoized by frame (exact provenance across pops)
 		std::vector<std::optional<CN<N>>> X(K + 1);
-		std::map<std::string, std::optional<CN<N>>> seen;
 		for (size_t jj = K + 1; jj-- > 0;) {
-			const std::string key = stack_key(stacks[jj]);
-			auto it = seen.find(key);
-			if (it != seen.end()) {
-				X[jj] = it->second;
+			Frame &f = fr[size_t(at[jj].frame)];
+			if (f.seen) {
+				X[jj] = *f.seen;
 			} else if (jj == K) {
 				X[jj] = cursor;
-			} else if (!changes[jj]) {
+			} else if (!at[jj].changes) {
 				X[jj] = X[jj + 1];
 			} else {
 				if (!X[jj + 1]) {
@@ -1940,20 +1999,19 @@ private:
 				}
 				X[jj] = effects::map_point(X[jj + 1], *scene_.find(plan[jj].surface_id), true);
 			}
-			seen[key] = X[jj];
+			f.seen = X[jj];
 		}
 		auto chain = std::make_shared<AnchorChain<N>>();
-		std::map<std::string, BeamPtr<N>> beam_of;
+		chain->beams.reserve(K + 1);
 		for (size_t j = 0; j <= K; j++) {
-			const std::string key = stack_key(stacks[j]);
-			auto it = beam_of.find(key);
-			if (it == beam_of.end()) {
-				const effects::Poles<N> &pc = memo.at(key);
+			Frame &f = fr[size_t(at[j].frame)];
+			if (!f.beam) {
+				const effects::Poles<N> &pc = *f.poles;
 				if (!pc.P || !X[j] || X[j]->sub(*pc.P).is_zero()) {
 					return nullptr;
 				}
-				Beam<N> b = Beam<N>::through(*pc.P, *X[j], pc.delta && !on_line.at(key) ? &*pc.delta : nullptr);
-				if (on_line.at(key) && pc.Q) {
+				Beam<N> bm = Beam<N>::through(*pc.P, *X[j], pc.delta && !f.on_line ? &*pc.delta : nullptr);
+				if (f.on_line && pc.Q) {
 					// K15: the straight beam's orientation keeps the circle's order P -> X -> Q:
 					// when Q lies between P and X on the line, X is reached the other way
 					// round, through the real infinity
@@ -1961,12 +2019,12 @@ private:
 					const N tx = d.abs2();
 					const N tq = CN<N>::dot(pc.Q->sub(*pc.P), d);
 					if (!tq.is_negative() && !tq.is_zero() && tq.cmp(tx) < 0) {
-						b = Beam<N>{*pc.P, b.tau.neg(), b.kappa};
+						bm = Beam<N>{*pc.P, bm.tau.neg(), bm.kappa};
 					}
 				}
-				it = beam_of.emplace(key, std::make_shared<const Beam<N>>(b)).first;
+				f.beam = std::make_shared<const Beam<N>>(bm);
 			}
-			chain->beams.push_back(it->second);
+			chain->beams.push_back(f.beam);
 		}
 		return chain;
 	}

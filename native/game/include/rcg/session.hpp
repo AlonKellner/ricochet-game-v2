@@ -91,6 +91,10 @@ struct Flight {
 	std::vector<std::pair<V2, V2>> stream; // the arrow's position and direction before every advance
 };
 
+// Stage 135: each drawn step's lane offset (px to the left of its group's way;
+// 0 for a step drawn alone) -- the preview's side-by-side lanes
+std::vector<double> lane_offsets(const std::vector<rc::TraceStep> &steps);
+
 class Session {
 public:
 	Session(const Level &level, const SessionConfig &config = {});
