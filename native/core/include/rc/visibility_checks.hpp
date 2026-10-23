@@ -25,18 +25,17 @@ using detail::I;
 using detail::S;
 using detail::v;
 
-// What the preview shows: the planned display path reaches the cursor and the
-// merged steps before it are ALIGNED (GAME_SPEC 15.1).
+// What the preview shows: the planned display path reaches the cursor, the
+// walks agree by their significant events up to it (V2) and leave it in one
+// frame (V3), and the merge drew no planned step diverged before it (GAME_SPEC
+// 15.1; Stage 134: the merge is by segments, so its steps are not the planned
+// path's by index).
 inline bool preview_visible(const TracePath &planned, const std::vector<TraceStep> &typed, bool cursor_point_agrees = true) {
 	if (planned.cursor_index < 0 || !cursor_point_agrees) {
-		return false; // (V1; V3: both walks leave the cursor's own point in one frame, B4)
+		return false; // (V1; V2, V3: the significant events, the cursor's own point)
 	}
-	const int ci = planned.cursor_index;
-	if (int(typed.size()) < ci) {
-		return false;
-	}
-	for (int i = 0; i < ci; i++) {
-		if (typed[size_t(i)].type != StepType::Aligned) {
+	for (const TraceStep &st : typed) {
+		if (st.type == StepType::DivergedPlanned) {
 			return false;
 		}
 	}

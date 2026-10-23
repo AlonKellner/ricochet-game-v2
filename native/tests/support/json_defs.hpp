@@ -33,6 +33,7 @@ inline std::optional<SideDef> side_from_json(const ojson &j) {
 	} else if (j.contains("state") && !j["state"].is_null()) {
 		s.states.push_back(change(j["state"]));
 	}
+	s.landing = j.value("landing", false);
 	return s;
 }
 inline std::vector<SurfaceDef> defs_from_json(const ojson &arr) {

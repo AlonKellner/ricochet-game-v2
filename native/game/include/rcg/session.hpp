@@ -163,7 +163,8 @@ public:
 	// climb took (0: computed in its frame), and the path's painter for steps
 	const std::vector<rc::TraceStep> &preview_steps() const { return shown().merged; }
 	double preview_seconds() const { return provisional_ ? 0.0 : preview_climb_seconds_; }
-	void paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<render::Call> &out, double dash_phase = 0.0) const;
+	void paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<render::Call> &out, double dash_phase = 0.0,
+		const std::vector<rc::sweep::EventDot> *dots = nullptr) const;
 	// Stage 130: the path node's calls, its dashes moved dash_phase px along the way
 	// the arrow flies (the presenter's clock; 0: the session's own node)
 	void paint_path(std::vector<render::Call> &out, double dash_phase) const;
@@ -229,6 +230,7 @@ private:
 		bool has_paths = false;
 		rc::TracePath physical, planned; // display paths
 		std::vector<rc::TraceStep> merged;
+		std::vector<rc::sweep::EventDot> dots; // Stage 134: the non-significant events of both walks
 		std::optional<rc::LadderResult> last_result;
 		std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> hits;
 	};

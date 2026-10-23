@@ -1,28 +1,6 @@
 {
  "planned": [
   {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "869.2436019063237719624781656737970878620",
-   "y": "498.0086174904640473398363479944074322002"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "871.7354233583608033107632886135305476538",
-   "y": "587.0038776088973355967105839683779072909"
-  },
-  {
    "kind": "cursor",
    "surface_id": -1,
    "side": "",

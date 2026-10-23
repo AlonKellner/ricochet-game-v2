@@ -994,6 +994,7 @@ void Session::update_preview() {
 		preview_.pair.reset();
 		preview_.has_paths = false;
 		preview_.merged.clear();
+		preview_.dots.clear();
 		return; // (the last result and physical hits stay: PathRenderer keeps them)
 	}
 	use_defs(renderer_tracer_, renderer_defs_);
@@ -1024,6 +1025,7 @@ void Session::make_preview(Preview &p, std::optional<rc::TracePair> pair) const 
 		p.last_result.reset();
 		p.has_paths = false;
 		p.merged.clear();
+		p.dots.clear();
 		return;
 	}
 	p.last_result = std::move(p.pair->result); // (nothing else reads the pair's)
@@ -1035,7 +1037,10 @@ void Session::make_preview(Preview &p, std::optional<rc::TracePair> pair) const 
 	if (ci < 0) {
 		ci = int(p.planned.steps.size());
 	}
-	p.merged = rc::sweep::merge(p.planned.steps, p.physical.steps, ci);
+	rc::sweep::Merged merged = rc::sweep::merge_segments(p.planned.steps, p.physical.steps, ci,
+		p.physical.cursor_index >= 0 ? p.physical.cursor_index : int(p.physical.steps.size()));
+	p.merged = std::move(merged.steps);
+	p.dots = std::move(merged.dots);
 	p.hits = rc::physical_hits(p.physical.steps);
 }
 

@@ -69,16 +69,7 @@ inline int vis_threads() {
 constexpr double INF = std::numeric_limits<double>::infinity();
 constexpr double PI = 3.14159265358979323846;
 
-struct Pt {
-	double x = 0.0;
-	double y = 0.0;
-	bool operator==(const Pt &) const = default;
-	bool operator<(const Pt &o) const { return x < o.x || (x == o.x && y < o.y); }
-	Pt operator+(const Pt &o) const { return {x + o.x, y + o.y}; }
-	Pt operator-(const Pt &o) const { return {x - o.x, y - o.y}; }
-	Pt operator*(double s) const { return {x * s, y * s}; }
-	bool finite() const { return std::isfinite(x) && std::isfinite(y); }
-};
+// (Pt: rc/tracer.hpp)
 
 inline double cross(const Pt &a, const Pt &b) { return a.x * b.y - a.y * b.x; }
 inline double dot(const Pt &a, const Pt &b) { return a.x * b.x + a.y * b.y; }
@@ -215,7 +206,6 @@ struct Cast {
 	End end_kind = End::Loop;
 	int end_sid = -1;
 	Pt end_pt;
-	bool end_rehit = false;   // the stop is the departure point's re-hit: after the full loop
 	std::vector<Interval> iv; // the member's visible intervals (walk order)
 	Pt cursor;                // the cast's cursor
 	Pt dir;                   // its aim direction at the player
@@ -267,82 +257,7 @@ struct Cast {
 };
 
 // A solver event as a cast reads it (float64).
-struct CastEvent {
-	EventKind kind = EventKind::Hit;
-	int sid = -1;
-	bool left = false;
-	bool applied = false;
-	bool rehit = false; // the departure point, re-hit after the full loop
-	bool terminal = false;
-	std::string flags;
-	std::string frame;  // the frame after the event: epoch, transform stack, flags, off the plan (Tracer::frame_id)
-	bool off_plan = false; // Stage 129: the walk has left the plan by this event
-	int lap = 0;           // Stage 131: the loops its beam had gone round with nothing fired
-	bool has_pt = false;
-	Pt pt;
-};
-
-template <Num N>
-std::vector<CastEvent> cast_events(const std::vector<Event<N>> &events, const std::string &init_flags) {
-	std::vector<CastEvent> out;
-	out.reserve(events.size());
-	std::vector<int> stack;
-	std::string epoch_key; // K14: the projective firings so far
-	std::string flags_now = init_flags;
-	for (const Event<N> &e : events) {
-		CastEvent c;
-		c.kind = e.kind;
-		c.sid = e.surface_id;
-		c.left = e.left;
-		c.applied = e.applied;
-		c.rehit = e.rehit;
-		c.terminal = e.terminal;
-		c.off_plan = e.off_plan;
-		c.lap = e.lap;
-		c.flags = e.flags.canonical_key();
-		// the frame as Tracer::to_path_events keeps it
-		if (e.kind == EventKind::Hit && e.applied && !e.terminal) {
-			if (e.projective) {
-				stack.clear();
-				epoch_key += firing_key(e.surface_id, e.left, epoch_key.empty());
-			} else if (e.popped) {
-				if (!stack.empty()) stack.pop_back();
-			} else {
-				stack.push_back(e.surface_id);
-			}
-		}
-		if (e.kind == EventKind::Hit) {
-			flags_now = c.flags;
-		}
-		// (the projective's own event leaves in the frame its firing opens, as event_frames reads it)
-		c.frame = epoch_key + "|";
-		for (int sid : stack) {
-			c.frame += std::to_string(sid) + ",";
-		}
-		c.frame += "|" + flags_now + (e.off_plan ? "|off" : "");
-		std::optional<CN<N>> p = e.point;
-		if (!p && e.beam && e.kind != EventKind::Escape && e.kind != EventKind::Origin) {
-			p = e.t_to ? std::optional<CN<N>>(e.beam->at(*e.t_to)) : e.beam->at_infinity();
-		}
-		if (p) {
-			c.has_pt = true;
-			c.pt = Pt{p->fx(), p->fy()};
-		}
-		out.push_back(std::move(c));
-	}
-	return out;
-}
-
-inline std::vector<CastEvent> cast_events(const Climb &c, const std::string &init_flags) {
-	return c.limbs == 0 ? cast_events(c.f64_events, init_flags) : cast_events(c.big_events, init_flags);
-}
-
-// Decisions equal at an event: both walks leave it in the same frame.
-inline bool same_decision(const CastEvent &a, const CastEvent &b) {
-	return a.kind == b.kind && a.sid == b.sid && (a.kind != EventKind::Hit || a.left == b.left) && a.applied == b.applied
-		&& (a.kind != EventKind::Hit || a.flags == b.flags) && a.off_plan == b.off_plan;
-}
-
+// (CastEvent, cast_events, the significant events: rc/tracer.hpp)
 
 // A point where a cell's boundary turns: on member `member` at parameter t, or
 // a pole, or where an unbounded member leaves the clip rectangle.
@@ -2299,9 +2214,10 @@ private:
 		if (std::getenv("RC_VIS_TRACE") == nullptr) {
 			return;
 		}
-		std::fprintf(stderr, "cast half %d cursor (%.9g, %.9g) dir (%.9f, %.9f) tie %s chosen %d valid %d alive %d met %d ek %d depart %d near %s end %s%s\n",
+		std::fprintf(stderr, "cast half %d cursor (%.9g, %.9g) dir (%.9f, %.9f) tie %s chosen %d valid %d alive %d met %d whisker %d ek %d depart %d near %s end %s%s\n",
 			int(half_), r.cursor.x, r.cursor.y, r.dir.x, r.dir.y, q ? (*q ? "reversed" : "direct") : "none", int(r.chosen), int(r.valid), int(r.alive),
-			int(r.met), r.ek, int(r.has_depart), end_name(r.near_kind), end_name(r.end_kind), r.has_tie ? (r.tie_after_q ? " tie-cut after Q" : " tie-cut") : "");
+			int(r.met), int(r.whisker), r.ek, int(r.has_depart), end_name(r.near_kind), end_name(r.end_kind), r.has_tie ? (r.tie_after_q ? " tie-cut after Q" : " tie-cut") : "");
+		std::fprintf(stderr, "   end_pt (%.6g, %.6g) near_pt (%.6g, %.6g)\n", r.end_pt.x, r.end_pt.y, r.near_pt.x, r.near_pt.y);
 	}
 
 	Cast cast_on(Tracer &tracer, const Pt &c, const Param &q, const Beam<F64> &member, const std::optional<AimKnown> &known = std::nullopt,
@@ -2408,7 +2324,6 @@ private:
 		r.cursor = c;
 		r.dir = q.dir;
 		r.key = q.key;
-		const Pt P = res_.player;
 		const SolvePtr solved = memo_solve(tracer, c, force, known, cursor);
 		const std::optional<LadderResult> &lr = *solved;
 		if (!lr) {
@@ -2468,34 +2383,49 @@ private:
 				eK = -1;
 			}
 		}
-		// The walks as the merge reads them: the steps trace_pair draws, paired by
-		// index, compared by frame id; es[i] counts the steps after event i.
-		const auto paths = tracer.cast_paths(*lr, P.x, P.y, c.x, c.y, flags_);
-		const std::vector<TraceStep> &spl = paths.first.steps;
-		const std::vector<TraceStep> &sph = paths.second.steps;
-		const std::vector<int> &espl = paths.first.event_steps;
-		const std::vector<int> &esph = paths.second.event_steps;
-		// aligned(n): both walks draw n steps, in one frame each
-		auto aligned = [&](int n) {
-			if (n > int(spl.size()) || n > int(sph.size())) {
-				return false;
-			}
-			for (int k = 0; k < n; k++) {
-				if (spl[size_t(k)].frame_id != sph[size_t(k)].frame_id) {
-					return false;
+		// Stage 134 (GAME_SPEC 14.5): the walks compute different candidates, so they
+		// are compared by their significant events (rc/tracer.hpp), not event by event
+		const std::vector<int> sig_pl = significant_events(pl, init_flags_);
+		const std::vector<int> sig_ph = significant_events(ph, init_flags_);
+		auto alike = [&](size_t n) { return significant_alike(pl, sig_pl, ph, sig_ph, n); };
+		auto sig_before = [](const std::vector<int> &sig, int i) { return significant_before(sig, i); };
+		// the departure: the planned walk's consumption of the last entry (eK), and the
+		// physical event that is it (dK) -- the same significant events before it, then
+		// the same event (a significant one, or the entry's crossing among the others)
+		int dK = -1;
+		bool reached = met;
+		if (met && eK >= 0) {
+			const size_t sK = sig_before(sig_pl, eK);
+			reached = alike(sK);
+			if (reached) {
+				const bool sig_eK = sK < sig_pl.size() && sig_pl[sK] == eK;
+				if (sig_eK) {
+					reached = sK < sig_ph.size() && same_significant(pl[size_t(eK)], ph[size_t(sig_ph[sK])]);
+					dK = reached ? sig_ph[sK] : -1;
+				} else {
+					const int from = sK > 0 ? sig_ph[sK - 1] + 1 : 0;
+					const int to = sK < sig_ph.size() ? sig_ph[sK] + 1 : int(ph.size()); // (through the next significant point's run)
+					for (int i = from; i < to && dK < 0; i++) {
+						if (ph[size_t(i)].kind == pl[size_t(eK)].kind && ph[size_t(i)].sid == pl[size_t(eK)].sid && ph[size_t(i)].left == pl[size_t(eK)].left
+								&& same_drawn(ph[size_t(i)], pl[size_t(eK)])) {
+							dK = i;
+						}
+					}
+					reached = dK >= 0;
 				}
 			}
-			return true;
-		};
-		auto steps_after = [](const std::vector<int> &es, int i) { return i < int(es.size()) ? es[size_t(i)] : (es.empty() ? 0 : es.back()); };
-		const int nK = eK >= 0 ? steps_after(espl, eK) : 0;
+		}
 		r.ek = eK;
 		r.met = met;
 		// both walks reach the last entry's crossing in one frame, and leave it in one
-		bool reached = met && aligned(nK);
-		bool alive = reached && (eK < 0 || aligned(nK + 1));
-		// the cast's own cursor: every step before it aligned
-		r.cursor_ok = paths.first.cursor_index >= 0 && aligned(paths.first.cursor_index) && cursor_point_agrees(paths.first, paths.second);
+		// (a walk that ends there -- a terminal entry -- leaves it in no frame: the departure is a whisker)
+		bool alive = reached
+			&& (eK < 0
+				|| (pl[size_t(eK)].frame == ph[size_t(dK)].frame && !pl[size_t(eK)].terminal && !ph[size_t(dK)].terminal
+					&& size_t(eK) + 1 < pl.size() && size_t(dK) + 1 < ph.size()));
+		// the cast's own cursor: reached by both walks with the same significant
+		// events before it, and left in one frame (V1-V3)
+		r.cursor_ok = walks_agree_at_cursor(pl, ph, init_flags_);
 		// the near end
 		if (K == 0) {
 			r.near_kind = End::PoleP;
@@ -2531,13 +2461,13 @@ private:
 		// memo_solve's horizon -- but a walk with no such stop is read whole)
 		// the far end: the first physical event past the last entry's point (a
 		// step beyond it) that changes the frame or ends the walk, or the budget
+		// Stage 134 (the user): no loop detection -- every loop passes the frame's
+		// infinity and the ray's origin, unplanned past the last entry (a
+		// divergence), so the first stop always comes within the walk's first pass
 		int stop_i = -1;
 		int budget_i = -1;
-		int counted = 0;
 		std::string frame_now = "||" + init_flags_; // (epoch 0: no firing yet, K14)
 		auto same = [](const Pt &x, const Pt &y) { return norm(x - y) <= 1e-9 * std::max({1.0, std::abs(x.x), std::abs(x.y)}); };
-		bool past_origin = false;
-		const Pt cast_start = r.near_kind == End::Near ? r.near_pt : (r.near_kind == End::PoleP ? res_.pk : res_.qk);
 		for (size_t i = 0; i < ph.size(); i++) {
 			const CastEvent &e = ph[i];
 			// Stage 131: the cut by the event limits is the walk's max event (the cursor
@@ -2545,115 +2475,21 @@ private:
 			if (e.kind == EventKind::Max && budget_i < 0) {
 				budget_i = int(i);
 			}
-			if (steps_after(esph, int(i)) <= nK) {
+			if (int(i) <= dK) {
 				frame_now = e.frame; // at or before the departure point
 				continue;
 			}
-			// (Stage 131: and a passage of infinity on the walk's first lap -- past the
-			// last entry it is unplanned, so a cursor beyond it diverges there, whether
-			// or not the cast's own walk, its cursor already met, marks it off the plan;
-			// the passage of the ray's origin ends the lap, read by the loop below)
-			// (and a passage of the ray's origin -- the player's image -- away from the
-			// cast's start: unplanned, a divergence; one at the start closes the loop, read below)
-			const bool origin_stop = e.kind == EventKind::Origin && !past_origin && e.has_pt && !same(e.pt, cast_start);
-			if (((e.kind == EventKind::Hit && (e.applied || e.frame != frame_now)) || (e.kind == EventKind::Infinity && !past_origin) || origin_stop) && stop_i < 0) {
+			// (Stage 131: and a passage of infinity or of the ray's origin -- past the
+			// last entry unplanned, so a cursor beyond it diverges there, whether or
+			// not the cast's own walk, its cursor already met, marks it off the plan)
+			if (((e.kind == EventKind::Hit && (e.applied || e.frame != frame_now)) || e.kind == EventKind::Infinity || e.kind == EventKind::Origin) && stop_i < 0) {
 				stop_i = int(i);
 			}
-			past_origin = past_origin || e.kind == EventKind::Origin;
 			frame_now = e.frame;
 		}
-		(void)counted;
-		// Stage 131: no loop detection -- past its last entry, a walk with no stop
-		// goes round its loop again (the same points) until a limit cuts it: read
-		// as the loop that closed, as before (the cut, on a later lap, cuts nothing new)
-		int rep_i = -1;
-		for (size_t i = 0; i < ph.size(); i++) {
-			if (ph[i].lap > 0 && steps_after(esph, int(i)) > nK) {
-				rep_i = int(i);
-				break;
-			}
-		}
-		// (the stop-less walk, past its first lap: read as the loop that closed -- the
-		// same points again; a cut on a later lap cuts nothing new)
-		const bool closes = stop_i < 0 && rep_i >= 0 && (budget_i < 0 || rep_i <= budget_i);
-		if (closes) {
-			budget_i = -1;
-		}
-		if (budget_i >= 0 && eK >= 0 && steps_after(esph, budget_i) <= nK) {
+		if (budget_i >= 0 && eK >= 0 && budget_i <= dK) {
 			alive = false;
 			reached = false;
-		}
-		// a walk whose loop closes ends where its beam began: the cast's own start
-		// (a full loop), or an earlier point when the last entries kept the beam --
-		// a lap's origin (an infinity entry in a pre-transform level), or, after a
-		// surface entry that changes no frame, the last departure before it (P_K
-		// when there is none)
-		int lap_i = -1;
-		End lap_kind = End::Loop;
-		Pt lap_pt;
-		// (the loop's close: an escape, with the infinity switch off; Stage 131: the
-		// start of the walk's second lap, which closes where the beam began -- an
-		// origin for a circle beam, the way an escape is read for a line)
-		CastEvent closed;
-		if (closes) {
-			closed.kind = res_.qk_inf ? EventKind::Escape : EventKind::Origin;
-			if (closed.kind == EventKind::Origin) {
-				Pt o = res_.player; // (the departure of the beam that loops: the last effect before it)
-				for (int i = 0; i < rep_i; i++) {
-					const CastEvent &e = ph[size_t(i)];
-					if (e.kind == EventKind::Hit && e.applied && !e.terminal && e.has_pt) {
-						o = e.pt;
-						const Surf<F64> *surf = scene_.find(e.sid);
-						if (surf != nullptr && surf->portal) {
-							if (const std::optional<CN<F64>> z = effects::map_point(std::optional<CN<F64>>(cn_of(o)), *surf, false)) {
-								o = pt_of(*z);
-							}
-						}
-					}
-				}
-				closed.has_pt = true;
-				closed.pt = o;
-			}
-		}
-		// (Stage 131, F25: after a planned infinity last, the pieces passed before
-		// the wrap are reached on the next lap; still read as cut at the beam's start)
-		if (stop_i < 0 && budget_i < 0 && !ph.empty()
-				&& (closes || ((ph.back().kind == EventKind::Origin || ph.back().kind == EventKind::Escape) && steps_after(esph, int(ph.size()) - 1) > nK))) {
-			const CastEvent &last = closes ? closed : ph.back();
-			const Pt start = r.near_kind == End::Near ? r.near_pt : (r.near_kind == End::PoleP ? res_.pk : res_.qk);
-			if (last.kind == EventKind::Origin && last.has_pt) {
-				if (!same(last.pt, start) && !(!res_.pk_none && same(last.pt, res_.pk))) {
-					lap_kind = End::Stop;
-					lap_pt = last.pt;
-				}
-			} else if (K > 0 && !plan_.back().is_infinity() && !plan_.back().is_origin() && !changes_[K - 1]) {
-				Pt o = res_.player;
-				for (size_t i = 0; i < ph.size() && steps_after(esph, int(i)) <= nK; i++) {
-					const CastEvent &e = ph[i];
-					if (e.kind == EventKind::Hit && e.applied && !e.terminal && e.has_pt) {
-						o = e.pt;
-						const Surf<F64> *surf = scene_.find(e.sid);
-						if (surf != nullptr && surf->portal) {
-							if (const std::optional<CN<F64>> z = effects::map_point(std::optional<CN<F64>>(cn_of(o)), *surf, false)) {
-								o = pt_of(*z);
-							}
-						}
-					}
-				}
-				if (!same(o, start)) {
-					if (!res_.pk_none && same(o, res_.pk)) {
-						lap_kind = End::PoleP;
-					} else if (!res_.qk_inf && same(o, res_.qk)) {
-						lap_kind = End::PoleQ;
-					} else {
-						lap_kind = End::Stop;
-						lap_pt = o;
-					}
-				}
-			}
-			if (lap_kind == End::Stop) {
-				lap_i = closes ? rep_i : int(ph.size()) - 1; // (the closing event; Stage 131: the second lap's first)
-			}
 		}
 		r.alive = alive;
 		// a whisker point is one a cursor there aims at along this member: on its owned arc
@@ -2698,7 +2534,6 @@ private:
 			r.end_kind = End::Stop;
 			r.end_sid = ph[size_t(stop_i)].sid;
 			r.end_pt = ph[size_t(stop_i)].pt;
-			r.end_rehit = ph[size_t(stop_i)].rehit;
 		} else if (budget_i >= 0) {
 			const CastEvent &b = ph[size_t(budget_i)];
 			if (b.kind == EventKind::Hit) {
@@ -2712,22 +2547,10 @@ private:
 				r.end_sid = carrier_through(b.pt);
 				r.end_pt = b.pt;
 			}
-		} else if (lap_kind == End::PoleP || lap_kind == End::PoleQ) {
-			r.end_kind = lap_kind;
-		} else if (lap_i >= 0) {
-			r.end_kind = End::Stop;
-			r.end_pt = lap_pt;
-			r.end_sid = -1;
-			for (int i = lap_i - 1; i > eK && r.end_sid < 0; i--) {
-				if (ph[size_t(i)].kind == EventKind::Hit && ph[size_t(i)].has_pt && ph[size_t(i)].pt == r.end_pt) {
-					r.end_sid = ph[size_t(i)].sid;
-				}
-			}
-			if (r.end_sid < 0) {
-				r.end_sid = carrier_through(r.end_pt);
-			}
+		} else if (!ph.empty() && ph.back().kind == EventKind::Escape) {
+			r.end_kind = End::PoleQ; // (a line with the infinity switch off leaves through infinity)
 		} else {
-			r.end_kind = End::Loop;
+			r.end_kind = End::Loop; // (nothing past the departure: a terminal entry ends the walk there -- not alive)
 		}
 		if (alive) {
 			intervals(r, member);
@@ -2802,10 +2625,8 @@ private:
 		}
 		// a stop at the departure point comes after the full loop (it is re-hit last)
 		const Pt start_pt = r.near_kind == End::Near ? r.near_pt : (r.near_kind == End::PoleP ? res_.pk : res_.qk);
-		// (after a planned infinity last, the departure re-hit is a stop at the
-		// departure point: the pieces passed before the wrap were not reached)
-		const bool loop = r.end_kind == End::Loop || (r.end_kind == End::Stop && r.end_rehit && r.near_kind != End::PoleQ)
-			|| ((r.end_kind == End::Stop || r.end_kind == End::Budget) && r.end_pt == start_pt && r.near_kind != End::PoleQ);
+		// (a stop at the cast's own start: the walk came round to it)
+		const bool loop = r.end_kind == End::Loop || ((r.end_kind == End::Stop || r.end_kind == End::Budget) && r.end_pt == start_pt && r.near_kind != End::PoleQ);
 		double te = t0;
 		if (r.end_kind == End::PoleQ) {
 			te = tq;

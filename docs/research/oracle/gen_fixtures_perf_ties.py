@@ -35,6 +35,10 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")
 PLAYER = (200.0, 450.0)
 DIRECTION = (1.0, 0.0)
 FALLING = ((550, 450), (650, 350))   # y = 1000 - x, through X
+# Stage 134: lines that pass the beam and write a flag -- candidates (a pure pass
+# line is never computed)
+W2 = dict(PASS, interactive=True, states=[{"key": "a", "op": "toggle", "value": True}])
+W3 = dict(PASS, interactive=True, states=[{"key": "b", "op": "toggle", "value": True}])
 RISING = ((500, 350), (700, 450))    # y = x / 2 + 100, through X
 
 
@@ -61,12 +65,12 @@ def main():
         fx.append(f)
 
     # the lower id first, both ways round
-    case("circle_beam_tie_falling_low", [inv, line(2, *FALLING, PASS, PASS), line(3, *RISING, PASS, PASS)] + walls, [2, 3])
-    case("circle_beam_tie_rising_low", [inv, line(2, *RISING, PASS, PASS), line(3, *FALLING, PASS, PASS)] + walls, [2, 3])
+    case("circle_beam_tie_falling_low", [inv, line(2, *FALLING, W2, W2), line(3, *RISING, W3, W3)] + walls, [2, 3])
+    case("circle_beam_tie_rising_low", [inv, line(2, *RISING, W2, W2), line(3, *FALLING, W3, W3)] + walls, [2, 3])
     # control: the falling line moved by 1/16 px along x (no common point on the
     # beam): one hit at X, the other a little apart, in walk order
     moved = ((550.0625, 450), (650.0625, 350))
-    f = fixture("circle_beam_no_tie_control", [inv, line(2, *moved, PASS, PASS), line(3, *RISING, PASS, PASS)] + walls,
+    f = fixture("circle_beam_no_tie_control", [inv, line(2, *moved, W2, W2), line(3, *RISING, W3, W3)] + walls,
                 PLAYER, direction=DIRECTION)
     assert hits_near(f, 600.0, 400.0) == [3], [(e["kind"], e["surface_id"], e.get("x"), e.get("y")) for e in f["expected"]]
     fx.append(f)
@@ -82,8 +86,9 @@ def main():
             f = fixture("k9_pre_inverted_%d_%s" % (int(player[0]), mode), d["surfaces"], player, plan=plan, mode=mode, cursor=(1900.0, 880.0))
             if mode == "physical":
                 # (Stage 131: no loop detection -- the loop repeats, the pair each time)
+                # (Stage 134: surface 8 passes on both sides -- no candidate: 4's hits alone)
                 h = hits_near(f, 0.0, 880.0)
-                assert h[:2] == [4, 8] and h == [4, 8] * (len(h) // 2), (f["name"], h)
+                assert h and all(x == 4 for x in h), (f["name"], h)
             fx.append(f)
 
     # K7: the same shot from (1350, 443.33334): the planned walk consumes surface 4

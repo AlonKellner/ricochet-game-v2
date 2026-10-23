@@ -18,6 +18,8 @@ import mpmath as mp
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import trace2 as T  # noqa: E402
 from gen_fixtures_stage81 import PASS, REFL, line  # noqa: E402
+
+W3 = dict(PASS, interactive=True, states=[{"key": "w", "op": "toggle", "value": True}])
 from gen_fixtures_stage85 import circle, fixture, kinds  # noqa: E402
 from gen_fixtures_stage88 import INF, pair  # noqa: E402
 
@@ -78,7 +80,8 @@ def main():
     fx.append(f)
     # (ii) a circle surface tangent to the beam at Q0
     with Spy() as s:
-        f = fixture("pre_tangent_circle_direction", [Q0, circle(2, (600.0, 0.0), 100.0, PASS, PASS)], (400.0, 200.0),
+        # (Stage 134: a mirror circle -- a candidate; a pass circle is never computed)
+        f = fixture("pre_tangent_circle_direction", [Q0, circle(2, (600.0, 0.0), 100.0, REFL, REFL)], (400.0, 200.0),
                     direction=(200.0, -150.0))
     assert s.fired(2) and no_hits_on(f, 2), kinds(f)
     fx.append(f)
@@ -116,7 +119,8 @@ def main():
     # are collinear): the concurrent mirror and pass line through Q tie exactly there
     q2 = pre(1, (448.0, 704.0), 96.0)
     f = fixture("straight_beam_concurrent_at_q", [q2, line(2, (448.0, 505.0), (448.0, 903.0), REFL, REFL),
-                line(3, (313.0, 704.0), (583.0, 704.0), PASS, PASS), line(4, (720.0, 136.0), (816.0, 176.0), REFL, REFL)],
+                # (Stage 134: line 3 passes and writes a flag -- a candidate; a pure pass is never computed)
+                line(3, (313.0, 704.0), (583.0, 704.0), W3, W3), line(4, (720.0, 136.0), (816.0, 176.0), REFL, REFL)],
                 (672.0, 592.0), direction=(2.0, -1.0))
     assert sum(1 for e in f["expected"] if e["kind"] == "hit" and e["surface_id"] == 3) >= 3, kinds(f)
     fx.append(f)

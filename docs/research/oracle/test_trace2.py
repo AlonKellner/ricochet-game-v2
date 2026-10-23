@@ -55,11 +55,21 @@ def test_terminal_ends_trace():
     assert w.events[-1].terminal
 
 
+def off(sid, x):
+    """Stage 134: a wall whose carrier (x = const) a ray along y = 0 crosses off
+    its segment -- a candidate whose crossing fires nothing (a pass line is no
+    candidate: never computed)."""
+    return line(sid, (x, 100), (x, 200), TERM, TERM)
+
+
 def test_pass_surface_is_event_but_no_effect():
+    # Stage 134: a pass surface is no candidate -- no event at all; a candidate's
+    # crossing that fires nothing (off its segment) is an event without effect
     p = line(1, (50, -500), (50, 500), PASS, PASS)
+    o = off(3, 70)
     wall = line(2, (100, -500), (100, 500), TERM, TERM)
-    w = T.trace_physical_direction([p, wall], (0, 0), mp.mpc(1, 0))
-    assert hits(w) == [(1, False, False), (2, True, True)]
+    w = T.trace_physical_direction([p, o, wall], (0, 0), mp.mpc(1, 0))
+    assert hits(w) == [(3, False, False), (2, True, True)]
 
 
 def test_one_sided_mirror_inert_side_passes():
@@ -118,7 +128,7 @@ def test_y_junction_fires_lower_id():
 def test_partial_blockage_does_not_leak():
     # graze an endpoint on its open side, then cross a pass surface: no effect
     a = line(1, (100, 0), (100, 100), REFL, REFL)        # starts exactly on the ray
-    p = line(2, (200, -100), (200, 100), PASS, PASS)
+    p = off(2, 200)                                      # (Stage 134: a candidate that passes)
     w = T.trace_physical_direction([a, p], (0, 0), mp.mpc(1, 0))
     assert [(e.surface_id, e.applied) for e in w.events if e.kind == "hit"][:2] == [(1, False), (2, False)]
 
@@ -369,7 +379,7 @@ def kinds(walk):
 
 def test_infinity_on_by_default_and_off_reproduces_the_legacy_trace():
     assert T.EMIT_INFINITY is True          # Stage 88b (B9 approved)
-    p = line(1, (50, -500), (50, 500), PASS, PASS)
+    p = off(1, 50)
     w = T.trace_physical_direction([p], (0, 0), mp.mpc(1, 0))
     # Stage 131: no loop detection -- the arrow loops until the 11th passage of infinity
     # (each loop: the line, the wrap, the ray's origin -- the last two significant)
@@ -382,8 +392,8 @@ def test_infinity_on_by_default_and_off_reproduces_the_legacy_trace():
 def test_infinity_event_between_ahead_and_wrapped_crossings():
     # pass lines ahead (x = 50) and behind (x = -50) of the player: the beam
     # crosses the one ahead, wraps, crosses the one behind, then escapes
-    ahead = line(1, (50, -500), (50, 500), PASS, PASS)
-    behind = line(2, (-50, -500), (-50, 500), PASS, PASS)
+    ahead = off(1, 50)
+    behind = off(2, -50)
     with emit_infinity():
         w = T.trace_physical_direction([ahead, behind], (0, 0), mp.mpc(1, 0))
     # (Stage 131: then the next loop, and so on to the 11th passage of infinity)
@@ -410,7 +420,7 @@ def test_infinity_is_a_significant_event():
 
 def test_max_hits_cut_at_the_wrap_is_a_max_at_infinity():
     # 32 pass lines ahead: the 33rd event is the wrap itself
-    lines = [line(i + 1, (10 * (i + 1), -500), (10 * (i + 1), 500), PASS, PASS) for i in range(T.MAX_HITS)]
+    lines = [off(i + 1, 10 * (i + 1)) for i in range(T.MAX_HITS)]
     with emit_infinity():
         w = T.trace_physical_direction(lines, (0, 0), mp.mpc(1, 0))
     assert kinds(w) == ["hit"] * T.MAX_HITS + ["max"]
@@ -700,7 +710,7 @@ def test_pre_transform_tangent_mirror_is_a_touch():
 
 def test_pre_transform_tangent_circle_is_a_touch():
     # a pass circle centered (600, 0) r 100 is tangent at Q0 to the beam circle centered (250, 0)
-    c = circ(2, (600.0, 0.0), 100.0, PASS2, PASS2)
+    c = circ(2, (600.0, 0.0), 100.0, REFL2, REFL2)   # (Stage 134: a candidate; a pass circle is never computed)
     sc = T.scene_from_json([PRE0, c])
     with spy_tangents() as seen:
         w = T.trace_physical_direction(sc, (400, 200), mp.mpc(200, -150))
@@ -977,8 +987,10 @@ def test_pop_at_the_cursor_on_an_arc_continues_past_it():
     # cursor (the departure re-hit: a pop), then the line goes on to the box
     w = T.planned(sc, (600, 300), (1160, 540), [])
     ids = hit_ids(w)
-    assert ids[:5] == [(1, False), (1, True), (1, False), (1, True), (91, True)], (ids, kinds(w))
-    assert kinds(w).index("cursor") == 1
+    # (Stage 134: before its cursor a planned walk with no plan computes nothing --
+    # the arc's off-segment crossing ahead of it is no event)
+    assert ids[:4] == [(1, True), (1, False), (1, True), (91, True)], (ids, kinds(w))
+    assert kinds(w).index("cursor") == 0
     assert no_reapply_in_place(w)
     ph = T.physical(sc, (600, 300), (1160, 540), [])
     assert no_reapply_in_place(ph)
@@ -1108,9 +1120,10 @@ def test_plan_effects_skip_an_absent_entry_and_its_writes():
 def test_surfaces_on_one_carrier_share_their_crossings():
     # three segments on the line x = 1100 (different spans, so different
     # defining points); a beam crossing it meets them at one parameter
-    a = line(5, (1100, 350), (1100, 450), PASS, PASS)
-    b = line(3, (1100, 620), (1100, 760), PASS, PASS)
-    c = line(9, (1100, -50), (1100, 100), PASS, PASS)
+    # (Stage 134: walls crossed off their segments -- candidates that fire nothing)
+    a = line(5, (1100, 400), (1100, 450), TERM, TERM)
+    b = line(3, (1100, 620), (1100, 760), TERM, TERM)
+    c = line(9, (1100, -50), (1100, 100), TERM, TERM)
     assert T.carrier_groups([a, b, c]) == {5: 5, 3: 5, 9: 5}
     w = T.trace_physical_direction([a, b, c], (310.37, 211.9), mp.mpc(1, 0.2117))
     hs = [e for e in w.events if e.kind == "hit"][:3]
@@ -1154,7 +1167,8 @@ def _rescues(fn):
 
 
 def _side(surfaces, sid):
-    w = T.trace_physical_direction([line(sid, (300, 0), (300, 100), PASS, PASS)], (100, 0), mp.mpc(400, 100))
+    # (a mirror: a pass line is no candidate since Stage 134 -- only its side is read)
+    w = T.trace_physical_direction([line(sid, (300, 0), (300, 100), REFL, REFL)], (100, 0), mp.mpc(400, 100))
     return next(e.side for e in w.events if e.kind == "hit" and e.surface_id == sid)
 
 
@@ -1231,7 +1245,8 @@ def test_circle_beam_concurrent_crossings_tie_by_id():
         [((-1000, -1000), (2000, -1000)), ((2000, -1000), (2000, 2000)), ((2000, 2000), (-1000, 2000)), ((-1000, 2000), (-1000, -1000))])]
     falling, rising = ((550, 450), (650, 350)), ((500, 350), (700, 450))
     for first, second in ((falling, rising), (rising, falling)):
-        s = [_gc_scene_circle(1, (500, 500), 100), line(2, *first, PASS, PASS), line(3, *second, PASS, PASS)] + walls
+        # (Stage 134: lines that change a state -- candidates; a pass line is never computed)
+        s = [_gc_scene_circle(1, (500, 500), 100), line(2, *first, _writes("a", 1), _writes("a", 1)), line(3, *second, _writes("b", 1), _writes("b", 1))] + walls
         w = T.trace_physical_direction(s, (200.0, 450.0), mp.mpc(1, 0))
         at_x = [e.surface_id for e in w.events if e.kind == "hit" and abs(e.point - mp.mpc(600, 400)) < mp.mpf("1e-20")]
         assert at_x == [2, 3], at_x
@@ -1259,11 +1274,16 @@ def _reaches_aligned(sc, player, cursor, plan):
     pl = T.planned(sc, player, cursor, plan)
     ph = T.physical(sc, player, cursor, plan)
     kp, kh = kinds(pl), kinds(ph)
-    assert "cursor" in kp, (plan, cursor, kp)
-    i = kp.index("cursor")
-    assert kh[:i + 1] == kp[:i + 1], (plan, cursor, kp, kh)
-    for a, b in zip(pl.events[:i], ph.events[:i]):
-        assert (a.surface_id, a.applied) == (b.surface_id, b.applied), (plan, cursor, kp, kh)
+    assert "cursor" in kp and "cursor" in kh, (plan, cursor, kp, kh)
+    # (Stage 134: the walks compute different candidates -- the same significant
+    # events up to the cursor)
+    def sig(w):
+        out = []
+        for e in w.events[:[x.kind for x in w.events].index("cursor")]:
+            if e.kind in ("infinity", "origin") or (e.kind == "hit" and (e.applied or e.state)):
+                out.append((e.kind, e.surface_id, e.applied))
+        return out
+    assert sig(pl) == sig(ph), (plan, cursor, kp, kh)
     return pl
 
 
@@ -1438,7 +1458,10 @@ def test_projective_exit_meets_no_parallel_wall_before_the_wrap():
                     for e in w.events:
                         if e.point is not None:
                             assert abs(e.point.real) <= 2000 and abs(e.point.imag) <= 2000, (dps, e.kind, e.surface_id, e.point)
-                    i3 = next(i for i, e in enumerate(w.events) if e.kind == "hit" and e.surface_id == 3 and e.applied)
-                    # (Stage 131: the ray's origin, passed between, is no crossing of a wall)
-                    nxt = next(e for e in w.events[i3 + 1:] if e.kind != "origin")
-                    assert nxt.surface_id == 12, (dps, ks[i3:i3 + 3])
+                    # (Stage 134: before its cursor the planned walk computes no wall -- the
+                    # physical walk does: none of its crossings either at a parallel
+                    # carrier's far artefact)
+                    ph = T.physical(T.scene_from_json(_k10_scene(p2)), (200, -200), (250, 300), plan)
+                    for e in ph.events:
+                        if e.point is not None:
+                            assert abs(e.point.real) <= 2000 and abs(e.point.imag) <= 2000, (dps, e.kind, e.surface_id, e.point)

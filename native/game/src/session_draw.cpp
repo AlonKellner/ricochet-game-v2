@@ -771,20 +771,44 @@ struct PathPainter {
 		return n[best];
 	}
 
-	void event_marks(const std::vector<rc::TraceStep> &steps, const std::vector<Shift> &shifts, const rc::Rect2f &level) {
+	// Stage 134 (the user): with `dots` (the merge's), the non-significant events
+	// of both walks are dots coloured by the walk that computed them -- yellow the
+	// physical, red the planned, green both (for debugging)
+	void event_marks(const std::vector<rc::TraceStep> &steps, const std::vector<Shift> &shifts, const rc::Rect2f &level,
+			const std::vector<rc::sweep::EventDot> *dots = nullptr) {
+		// a point at the end of step i as the step is drawn (side by side)
+		auto shifted = [&](size_t i, const V2 &end) {
+			const rc::TraceStep &st = steps[i];
+			if (st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end)) {
+				const rc::arc::ArcParams p = rc::arc::arc_params(st.start, st.via, st.end);
+				const V2 c = V2::of(double(p.center.x), double(p.center.y));
+				return c + (end - c) * float((p.radius + shifts[i].dr) / p.radius);
+			}
+			return end + shifts[i].by;
+		};
+		if (dots != nullptr) {
+			for (const rc::sweep::EventDot &d : *dots) {
+				if (d.step < 0 || size_t(d.step) >= steps.size()) {
+					continue;
+				}
+				const V2 at = shifted(size_t(d.step), d.at);
+				if (!bounds.has_point(at)) {
+					continue;
+				}
+				Color col = d.from == 3 ? GREEN : (d.from == 2 ? YELLOW : RED);
+				if (steps[size_t(d.step)].ghost) {
+					col = ghost_color(col);
+				}
+				col[3] = 0.8f;
+				out.push_back(circle(at, 2.0, col));
+			}
+		}
 		for (size_t i = 0; i < steps.size(); i++) {
 			const rc::TraceStep &st = steps[i];
 			if (st.start == st.end) {
 				continue;
 			}
-			V2 at = st.end;
-			if (st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end)) {
-				const rc::arc::ArcParams p = rc::arc::arc_params(st.start, st.via, st.end);
-				const V2 c = V2::of(double(p.center.x), double(p.center.y));
-				at = c + (st.end - c) * float((p.radius + shifts[i].dr) / p.radius);
-			} else {
-				at = st.end + shifts[i].by;
-			}
+			const V2 at = shifted(i, st.end);
 			// a portal: at its exit, the half facing the way out -- along the pair's
 			// normal (the user)
 			if (st.after_portal && bounds.has_point(st.start)) {
@@ -848,7 +872,7 @@ struct PathPainter {
 			}
 			if (st.significant) {
 				ring(at, st);
-			} else {
+			} else if (dots == nullptr) {
 				Color col = step_color(st.type);
 				if (st.ghost) {
 					col = ghost_color(col);
@@ -1089,7 +1113,8 @@ std::vector<Shift> side_by_side(const std::vector<rc::TraceStep> &steps) {
 // stroke under slightly bright dashes; dashes run the way the arrow flies
 // (dash_phase, px: the presenter's clock; 0 in a replay); steps drawn on one
 // another are set side by side.
-void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<Call> &out, double dash_phase) const {
+void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<Call> &out, double dash_phase,
+		const std::vector<rc::sweep::EventDot> *dots) const {
 	PathPainter pp{bounds().grow(50.0f), out};
 	pp.portal_shape = [&](int sid, const V2 &at, bool pair) -> std::optional<PathPainter::PortalShape> {
 		const BuiltSurface *s = world_->by_id(sid);
@@ -1133,7 +1158,7 @@ void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<C
 			pp.step(ms, tint(step_color(ms.type)), true, dash_phase, shifts[i]);
 		}
 	}
-	pp.event_marks(steps, shifts, bounds());
+	pp.event_marks(steps, shifts, bounds(), dots);
 }
 
 // The path node's calls (Stage 130: the presenter repaints it as its dashes run)
@@ -1143,7 +1168,7 @@ void Session::paint_path(std::vector<Call> &out, double dash_phase) const {
 	if (pv.has_paths || !pv.merged.empty()) {
 		if (display_mode_ == 0) {
 			if (!pv.merged.empty()) {
-				paint_steps(pv.merged, out, dash_phase);
+				paint_steps(pv.merged, out, dash_phase, &pv.dots);
 				for (const auto &[pt, col] : truncation_markers(pv)) {
 					pp.stop_marker(pt, col);
 				}

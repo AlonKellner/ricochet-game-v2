@@ -8,6 +8,7 @@
 #include "rc/ladder.hpp"
 
 #include <doctest/doctest.h>
+#include <cstdlib>
 #include <filesystem>
 #include <fstream>
 #include <string>
@@ -51,6 +52,22 @@ TEST_CASE("corpus: every scene corpus scenario matches the oracle through the la
 		Ladder lad(lctx, []() { return 0LL; });
 		const LadderResult lr = lad.solve(scn["player"][0].get<double>(), scn["player"][1].get<double>(), scn["cursor"][0].get<double>(),
 			scn["cursor"][1].get<double>(), plan, MAX_HITS, MAX_HITS, CORPUS_TOL, false);
+		if (const char *dbg = std::getenv("RC_CORPUS_DUMP"); dbg != nullptr && name == dbg) {
+			for (const Climb *c : {&lr.planned, &lr.physical}) {
+				auto dump = [](const auto &events) {
+					for (const auto &e : events) {
+						MESSAGE(int(e.kind) << " s" << e.surface_id << (e.left ? "L" : "R") << " a" << e.applied 
+							<< (e.point ? " (" + std::to_string(e.point->fx()) + ", " + std::to_string(e.point->fy()) + ")" : std::string()));
+					}
+				};
+				if (c->limbs == 0) {
+					dump(c->f64_events);
+				} else {
+					dump(c->big_events);
+				}
+				MESSAGE("----");
+			}
+		}
 		const std::string dp = climb_diff(lr.planned, ex["planned"]);
 		const std::string dh = climb_diff(lr.physical, ex["physical"]);
 		CHECK_MESSAGE(dp.empty(), name << " planned: " << dp);

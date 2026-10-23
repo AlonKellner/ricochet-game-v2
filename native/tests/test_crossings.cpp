@@ -57,6 +57,7 @@ TEST_CASE("crossings: the tracer's cache tells plans apart by their pieces") {
 }
 
 namespace {
+// (a pass that writes a flag: Stage 134 computes no pure pass-through)
 SurfaceDef pass_line(int id, double sx, double sy, double ex, double ey) {
 	SurfaceDef d;
 	d.id = id;
@@ -68,7 +69,8 @@ SurfaceDef pass_line(int id, double sx, double sy, double ex, double ey) {
 	d.vx = (sx + ex) / 2;
 	d.vy = (sy + ey) / 2;
 	d.left = SideDef{};
-	d.right = SideDef{};
+	d.left->states = {StateChangeDef{"w", false, true}};
+	d.right = d.left;
 	return d;
 }
 

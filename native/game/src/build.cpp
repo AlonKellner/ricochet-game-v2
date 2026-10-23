@@ -232,6 +232,11 @@ json describe_config(const std::optional<BuiltSide> &cfg, int host_id) {
 	if (!writes.empty()) {
 		d["states"] = writes;
 	}
+	for (const HitSpec &h : cfg->hits) {
+		if (h.deferred) {
+			d["landing"] = true; // (Stage 134: its hit changes the game at the landing)
+		}
+	}
 	return d;
 }
 
@@ -269,6 +274,9 @@ std::optional<rc::SideDef> side_def(const std::optional<BuiltSide> &cfg, int hos
 		const json &v = w["value"];
 		c.value = v.is_boolean() ? rc::FlagValue(v.get<bool>()) : v.is_number() ? rc::FlagValue(v.get<double>()) : rc::FlagValue(v.get<std::string>());
 		d.states.push_back(std::move(c));
+	}
+	for (const HitSpec &h : cfg->hits) {
+		d.landing = d.landing || h.deferred; // (Stage 134: its hit matters at the landing)
 	}
 	return d;
 }

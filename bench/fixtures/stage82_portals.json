@@ -1553,17 +1553,6 @@
    "expected": [
     {
      "kind": "hit",
-     "surface_id": 8,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "801.8772939873893172003957520276401624590",
-     "y": "513.2244086275966264843355006403074197239"
-    },
-    {
-     "kind": "hit",
      "surface_id": 6,
      "side": "RIGHT",
      "applied": true,
