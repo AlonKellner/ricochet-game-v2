@@ -547,6 +547,7 @@ private:
 		// the cast finds it, vis::Builder::cast_core), and the next two
 		if (plan_ != nullptr && !plan_->empty()) {
 			size_t j = 0;
+			int base = 0; // the lap of the walk's last progress (a consumption, a new beam)
 			for (size_t i = 0; i < ev.size(); i++) {
 				const PlanItem &item = (*plan_)[j];
 				const bool consumed = item.is_infinity() ? (ev[i].kind == EventKind::Infinity && ev[i].applied)
@@ -554,6 +555,14 @@ private:
 														 : (ev[i].kind == EventKind::Hit && ev[i].surface_id == item.surface_id && ev[i].left == item.left);
 				if (consumed && ++j == plan_->size()) {
 					return std::min(ev.size(), i + 3);
+				}
+				// F27 (TDD_38): the planned walk fires only its entries, so a beam that goes
+				// round twice without consuming one repeats itself: it never meets the plan
+				// (nor reaches its cursor) -- nothing further is read
+				if (consumed || ev[i].lap < base) {
+					base = ev[i].lap;
+				} else if (ev[i].lap >= base + 2) {
+					return std::min(ev.size(), i + 1);
 				}
 			}
 		}
@@ -563,7 +572,8 @@ private:
 	Climb decide(const estimate::Sensitivity &sens, F64Events events, const std::vector<double> &est, double tol, bool verify,
 			const Compute &compute, bool physical) {
 		const size_t need = horizon(events, physical);
-		const bool reliable = (sens.unreliable_from < 0 || size_t(sens.unreliable_from) >= need) && !events.empty();
+		const int unreliable_from = !physical && stops_ >= 0 ? cast_unreliable(sens, events) : sens.unreliable_from;
+		const bool reliable = (unreliable_from < 0 || size_t(unreliable_from) >= need) && !events.empty();
 		LadderStats &st = ctx_.stats();
 		st.walks++;
 		if (verify) {
@@ -571,9 +581,9 @@ private:
 		} else if (!reliable) {
 			st.unreliable++;
 			st.why_empty += events.empty() ? 1 : 0;
-			st.why_beyond += !events.empty() && (sens.unreliable_from < 0 || size_t(sens.unreliable_from) >= events.size()) ? 1 : 0;
-			if (sens.unreliable_from >= 0 && size_t(sens.unreliable_from) < events.size()) {
-				const auto &ev = events[size_t(sens.unreliable_from)];
+			st.why_beyond += !events.empty() && (unreliable_from < 0 || size_t(unreliable_from) >= events.size()) ? 1 : 0;
+			if (unreliable_from >= 0 && size_t(unreliable_from) < events.size()) {
+				const auto &ev = events[size_t(unreliable_from)];
 				st.why[ev.why & 31]++;
 				st.why_zero += ev.margin == 0.0 ? 1 : 0;
 				st.why_kind[size_t(ev.kind) & 7]++;
@@ -604,8 +614,8 @@ private:
 			return c;
 		}
 		int start_limbs = 4;
-		if (reliable || sens.unreliable_from > 0) {
-			start_limbs = std::max(4, required_for_prefix(sens, reliable ? int(need) : sens.unreliable_from, tol));
+		if (reliable || unreliable_from > 0) {
+			start_limbs = std::max(4, required_for_prefix(sens, reliable ? int(need) : unreliable_from, tol));
 		}
 		if (verify) {
 			const bool start_f64 = reliable && worst(est, need) <= tol;
@@ -614,6 +624,30 @@ private:
 		Climb out = replay_climb(start_limbs, tol, compute, physical);
 		ctx_.stats().unconverged += out.converged ? 0 : 1;
 		return out;
+	}
+
+	// F27 (TDD_38): a region cast's planned walk -- the first decision that needs
+	// precision, passing over the order of crossings that fire nothing between
+	// neighbours that fire nothing either: the planned walk fires only its entries,
+	// and the cast reads of it only the entries' consumption, the steps before them
+	// and their frames, which no such order changes (the preview and the firing
+	// keep every decision)
+	template <typename Events>
+	static int cast_unreliable(const estimate::Sensitivity &sens, const Events &events) {
+		if (sens.unreliable_from < 0) {
+			return -1;
+		}
+		auto pure = [&](size_t k) { return events[k].kind == EventKind::Hit && !events[k].applied && !events[k].state; };
+		const std::vector<double> est = estimate::estimate(sens, tier_eps(0));
+		for (size_t i = size_t(sens.unreliable_from); i < sens.margin.size() && i < events.size(); i++) {
+			if (sens.margin[i] > estimate::MARGIN_SAFETY * est[i]) {
+				continue;
+			}
+			if (!(pure(i) && (i == 0 || pure(i - 1)) && (i + 1 >= events.size() || pure(i + 1)))) {
+				return int(i);
+			}
+		}
+		return -1;
 	}
 
 	static int required_for_prefix(const estimate::Sensitivity &sens, int n, double tol) {

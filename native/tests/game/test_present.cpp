@@ -866,4 +866,33 @@ TEST_CASE("present: a wrap and a portal are marked by two half rings") {
 			CHECK(q.x >= 1350.0f - 1e-3f); // the side it leaves by
 		}
 	}
+	// a circular portal (the user): the ring's part on the beam's side of the
+	// portal's circle, its arc meeting the circle at both ends -- portals 12
+	// (centre (1576.6, 675), r 146.6) and 13 (centre (476.6, 675)), a beam from the
+	// west into 12 at its westmost point, out of 13 at its westmost point, inward
+	{
+		rcg::Session s(level("playground/portals.json"));
+		rc::TraceStep to_portal = step(rc::V2{1200, 675}, rc::V2{1430, 675});
+		to_portal.surface_id = 12;
+		to_portal.significant = true;
+		to_portal.teleports = true;
+		rc::TraceStep from_portal = step(rc::V2{330, 675}, rc::V2{450, 675});
+		from_portal.after_portal = true;
+		std::vector<rcg::render::Call> out;
+		s.paint_steps({to_portal, from_portal}, out, 0.0);
+		const auto portal = polys(out);
+		REQUIRE(portal.size() == 4);
+		const double R = 146.607142857; // (both circles)
+		auto check_side = [&](const rcg::render::Call *c, rc::V2 centre, bool outside) {
+			int on_circle = 0;
+			for (const auto &q : c->pts) {
+				const double d = std::hypot(double(q.x - centre.x), double(q.y - centre.y));
+				CHECK((outside ? d >= R - 1e-2 : d <= R + 1e-2));
+				on_circle += std::abs(d - R) < 1e-2 ? 1 : 0;
+			}
+			CHECK(on_circle >= 3); // (`at` and the arc's two ends, along the circle)
+		};
+		check_side(portal[0], rc::V2{1576.607142857f, 675}, true);  // entry: the side the beam came from
+		check_side(portal[2], rc::V2{476.607142857f, 675}, false); // exit: the side it leaves by
+	}
 }

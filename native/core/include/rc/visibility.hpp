@@ -824,6 +824,7 @@ private:
 	Flags flags_;
 	Scene<F64> scene_;
 	mutable Solver<F64> solver_;
+	std::vector<std::optional<Seg<F64>>> piece_spans_; // Stage 133: the plan's pieces, ends that are crossings read as the crossings
 	Result res_;
 	Half half_ = Half::Single;
 	std::vector<EffectType> effs_;
@@ -1271,6 +1272,7 @@ private:
 			}
 		}
 		res_.near_transforms = K > 0 && changes_[K - 1];
+		piece_spans_ = solver_.plan_piece_spans(plan_);
 		for (const PlanItem &item : plan_) {
 			const Surf<F64> *ps = item.is_infinity() || item.is_origin() ? nullptr : scene_.find(item.surface_id);
 			for (const Surf<F64> *q : {ps, ps != nullptr && ps->portal ? scene_.find(ps->pair) : nullptr}) {
@@ -1967,10 +1969,11 @@ private:
 				if (e > j && changes_[e - 1]) {
 					break;
 				}
-				if (plan_[e].span) {
-					const auto &sp = *plan_[e].span;
-					add_poi(pois, CN<F64>{F64{sp[0]}, F64{sp[1]}}, j, "piece end", -1, true);
-					add_poi(pois, CN<F64>{F64{sp[2]}, F64{sp[3]}}, j, "piece end", -1, true);
+				if (plan_[e].span && piece_spans_[e]) {
+					// (Stage 133: its ends that are crossings, the crossings themselves)
+					const auto &sp = *piece_spans_[e];
+					add_poi(pois, sp.s, j, "piece end", -1, true);
+					add_poi(pois, sp.e, j, "piece end", -1, true);
 				}
 			}
 		}
@@ -2012,10 +2015,10 @@ private:
 				if (e > j && changes_[e - 1]) {
 					break;
 				}
-				if (plan_[e].span) {
-					const auto &sp = *plan_[e].span;
-					add_pushed(pois, CN<F64>{F64{sp[0]}, F64{sp[1]}}, j, "piece end", true);
-					add_pushed(pois, CN<F64>{F64{sp[2]}, F64{sp[3]}}, j, "piece end", true);
+				if (plan_[e].span && piece_spans_[e]) {
+					const auto &sp = *piece_spans_[e];
+					add_pushed(pois, sp.s, j, "piece end", true);
+					add_pushed(pois, sp.e, j, "piece end", true);
 				}
 			}
 		}
@@ -2125,10 +2128,11 @@ private:
 				if (e > j && changes_[e - 1]) {
 					break;
 				}
-				if (plan_[e].span) {
-					const auto &sp = *plan_[e].span;
-					add_poi(pois, CN<F64>{F64{sp[0]}, F64{sp[1]}}, j, "piece end", -1, true);
-					add_poi(pois, CN<F64>{F64{sp[2]}, F64{sp[3]}}, j, "piece end", -1, true);
+				if (plan_[e].span && piece_spans_[e]) {
+					// (Stage 133: its ends that are crossings, the crossings themselves)
+					const auto &sp = *piece_spans_[e];
+					add_poi(pois, sp.s, j, "piece end", -1, true);
+					add_poi(pois, sp.e, j, "piece end", -1, true);
 				}
 			}
 		}
@@ -4332,7 +4336,29 @@ private:
 					}
 				}
 				if (next == SIZE_MAX) {
-					break;
+					// F23: no edge starts exactly here -- one point reached by two
+					// computations (two carriers' edges meeting on a member where they
+					// cross, each end its own carrier's root on the member; a point of an
+					// earlier frame that is no member's point of interest): the edge that
+					// starts within rounding of the coordinates' scale goes on from here
+					// (or the loop closes, at its start)
+					const double tol = 1e-9 * std::max({1.0, std::abs(end.x), std::abs(end.y)});
+					auto near = [&](const Pt &p) { return std::abs(p.x - end.x) <= tol && std::abs(p.y - end.y) <= tol; };
+					if (near(edges[s].a)) {
+						loop.edges.back().b = edges[s].a;
+						closed = true;
+						break;
+					}
+					for (size_t k = 0; k < edges.size(); k++) {
+						if (!used[k] && near(edges[k].a)) {
+							next = k;
+							break;
+						}
+					}
+					if (next == SIZE_MAX) {
+						break;
+					}
+					loop.edges.back().b = edges[next].a;
 				}
 				used[next] = true;
 				loop.edges.push_back(edges[next]);

@@ -2012,18 +2012,29 @@ def _exact_data_hit(surf: Surface, etype, cfg, X, H):
         if ok and not any(D == q for q in found):
             found.append(D)
     if not found:
-        return _exact_float_hit(surf, etype, cfg, X)
+        return _exact_float_hit(surf, etype, cfg, X, H)
     return min(found, key=lambda D: abs(H - D))
 
 
-def _exact_float_hit(surf: Surface, etype, cfg, X):
+def _exact_float_hit(surf: Surface, etype, cfg, X, H=None):
     """Stage 125 (K11): with no data point the hit point, H computed exactly from
     the exact target X -- a line normal's foot on its line, a directional's
     crossing of its line carrier (rationals) -- when both its coordinates are
-    binary floats exactly: exact data like a data point. None for a circle
-    carrier (a root) or a point between floats."""
+    binary floats exactly: exact data like a data point. Stage 133 (F21): a
+    circle normal's H (a root) when the numeric H rounded to floats is it
+    exactly: on the circle and collinear with X and the centre, both exactly.
+    None for a point between floats."""
     seg = surf.seg
-    if seg.kind != "line" or etype == "circle_normal_projection":
+    if etype == "circle_normal_projection":
+        if H is None or seg.kind == "line":
+            return None
+        hx, hy = float(H.real), float(H.imag)
+        nx, ny, w, rr = _center_h(seg)
+        K = (Fraction(hx), Fraction(hy))
+        on_circle = (K[0] - nx / w) ** 2 + (K[1] - ny / w) ** 2 == rr
+        collinear = (nx - w * X[0]) * (K[1] - X[1]) - (ny - w * X[1]) * (K[0] - X[0]) == 0
+        return mp.mpc(mp.mpf(hx), mp.mpf(hy)) if on_circle and collinear else None
+    if seg.kind != "line":
         return None
     S, E = FC(seg.S), FC(seg.E)
     d = _sub(E, S)
@@ -2338,12 +2349,86 @@ def _aim_oriented(surfaces, player, cursor, plan, flags, hints, away):
     return d, None, known, (reversed_beam(b) if away else b), xe
 
 
-def plan_spans_of(spans):
-    """Plan entries' piece spans ({start, end, via} or None) as segments."""
+def _carrier_crossings(a: Surface, b: Surface):
+    """The points where two surfaces' carriers cross (at the working precision)."""
+    sa, sb = a.seg, b.seg
+    if sa.kind == "line" and sb.kind == "line":
+        r, q = sa.E - sa.S, sb.E - sb.S
+        den = (mp.conj(r) * q).imag
+        if den == 0:
+            return []
+        u = (mp.conj(sb.S - sa.S) * q).imag / den
+        return [sa.S + r * u]
+    if sa.kind != "line" and sb.kind == "line":
+        a, b, sa, sb = b, a, sb, sa
+    if sa.kind == "line":
+        c, R2 = sb.c, sb.R2
+        d = sa.E - sa.S
+        w = sa.S - c
+        A2 = abs(d) ** 2
+        B2 = 2 * (mp.conj(w) * d).real
+        C2 = abs(w) ** 2 - R2
+        disc = B2 * B2 - 4 * A2 * C2
+        if disc < 0 or A2 == 0:
+            return []
+        sq = mp.sqrt(disc)
+        return [sa.S + d * ((-B2 - sq) / (2 * A2)), sa.S + d * ((-B2 + sq) / (2 * A2))]
+    c0, c1 = sa.c, sb.c
+    d = abs(c1 - c0)
+    if d == 0:
+        return []
+    x = (d * d + sa.R2 - sb.R2) / (2 * d)
+    h2 = sa.R2 - x * x
+    if h2 < 0:
+        return []
+    h = mp.sqrt(h2)
+    e = (c1 - c0) / d
+    return [c0 + e * x + 1j * e * h, c0 + e * x - 1j * e * h]
+
+
+def _ulp32(x):
+    """The spacing of float32 numbers at x."""
+    m, ex = math.frexp(abs(float(x)))
+    return 2.0 ** (ex - 24) if x != 0 else 2.0 ** -149
+
+
+def _piece_end(surfaces, sid, end):
+    """Stage 133 (GAME_SPEC 9.7, the user): a piece's end stored as the float32
+    rounding of a crossing of its carrier with another surface's carrier is that
+    crossing, by provenance -- the nearest one within an ulp in each coordinate."""
+    by_id = {s.id: s for s in surfaces}
+    me = by_id.get(sid)
+    if me is None:
+        return end
+    best, best_d = end, None
+    for other in surfaces:
+        if other.id == sid:
+            continue
+        for x in _carrier_crossings(me, other):
+            if abs(x.real - end.real) <= _ulp32(end.real) and abs(x.imag - end.imag) <= _ulp32(end.imag):
+                dd = abs(x - end)
+                if best_d is None or dd < best_d:
+                    best, best_d = x, dd
+    return best
+
+
+def plan_spans_of(spans, surfaces=None, plan=None):
+    """Plan entries' piece spans ({start, end, via} or None) as segments; an end
+    that is a crossing read as the crossing (Stage 133)."""
     if spans is None:
         return None
-    # on_segment reads only the span's three points (the carrier is the surface's)
-    return [None if sp is None else Seg(-1, P(sp["start"]), P(sp["end"]), P(sp["via"])) for sp in spans]
+    out = []
+    for i, sp in enumerate(spans):
+        if sp is None:
+            out.append(None)
+            continue
+        S, E = P(sp["start"]), P(sp["end"])
+        if surfaces is not None and plan is not None and i < len(plan):
+            S = _piece_end(surfaces, plan[i][0], S)
+            E = _piece_end(surfaces, plan[i][0], E)
+        # on_segment reads only the span's three points (the carrier is the surface's)
+        out.append(Seg(-1, S, E, P(sp["via"])))
+    return out
 
 
 def planned(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
@@ -2352,11 +2437,11 @@ def planned(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
     d, line, known, beam, xe = _aim(surfaces, player, cursor, plan, flags, hints)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
                                 extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
-                                beam=beam, exact_aim=xe, spans=plan_spans_of(spans))
+                                beam=beam, exact_aim=xe, spans=plan_spans_of(spans, surfaces, plan))
 
 
 def physical(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
     d, line, known, beam, xe = _aim(surfaces, player, cursor, plan, flags, hints)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PHYSICAL, line=line, flags=flags,
                                 extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
-                                beam=beam, exact_aim=xe, spans=plan_spans_of(spans))
+                                beam=beam, exact_aim=xe, spans=plan_spans_of(spans, surfaces, plan))

@@ -819,12 +819,6 @@
    }
   }
  ],
- "known": [
-  {
-   "finding": "F23 (TDD_34): the regions of the overlapping circles' pieces",
-   "surfaces": [19, 20]
-  }
- ],
  "plans": [
   [
    {
