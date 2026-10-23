@@ -821,7 +821,8 @@
  ],
  "known": [
   {
-   "finding": "F23 (TDD_34): the regions of the overlapping circles' pieces",
+   "finding": "F23 (TDD_34, TDD_38): cells beside the members through the overlapping circles' crossing, and a whisker at a piece's float32 end",
+   "kinds": ["VIS-CELL-CONSTANT", "VIS-REGULAR"],
    "surfaces": [19, 20]
   }
  ],

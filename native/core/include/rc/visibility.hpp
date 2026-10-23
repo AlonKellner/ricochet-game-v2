@@ -4332,7 +4332,29 @@ private:
 					}
 				}
 				if (next == SIZE_MAX) {
-					break;
+					// F23: no edge starts exactly here -- one point reached by two
+					// computations (two carriers' edges meeting on a member where they
+					// cross, each end its own carrier's root on the member; a point of an
+					// earlier frame that is no member's point of interest): the edge that
+					// starts within rounding of the coordinates' scale goes on from here
+					// (or the loop closes, at its start)
+					const double tol = 1e-9 * std::max({1.0, std::abs(end.x), std::abs(end.y)});
+					auto near = [&](const Pt &p) { return std::abs(p.x - end.x) <= tol && std::abs(p.y - end.y) <= tol; };
+					if (near(edges[s].a)) {
+						loop.edges.back().b = edges[s].a;
+						closed = true;
+						break;
+					}
+					for (size_t k = 0; k < edges.size(); k++) {
+						if (!used[k] && near(edges[k].a)) {
+							next = k;
+							break;
+						}
+					}
+					if (next == SIZE_MAX) {
+						break;
+					}
+					loop.edges.back().b = edges[next].a;
 				}
 				used[next] = true;
 				loop.edges.push_back(edges[next]);

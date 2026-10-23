@@ -581,9 +581,17 @@ bool clip_line(V2 &from, V2 &to, const rc::Rect2f &rect) {
 struct PathPainter {
 	const rc::Rect2f bounds; // the draw bounds: the level's, grown by 50
 	std::vector<Call> &out;
-	// a portal surface's unit normal at a point (pair: of its pair, where the beam
-	// comes out), for its half rings (the user: normal to the portal, not along the way)
-	std::function<std::optional<V2>(int sid, const V2 &at, bool pair)> portal_normal = {};
+	// a portal surface at a point (pair: its pair, where the beam comes out): its
+	// unit normal there, and its circle when it is an arc (the user: a half ring
+	// normal to a line portal; on a circular one, the part of the ring on the
+	// beam's side of the circle)
+	struct PortalShape {
+		V2 normal;
+		bool arc = false;
+		V2 center;
+		double radius = 0.0;
+	};
+	std::function<std::optional<PortalShape>(int sid, const V2 &at, bool pair)> portal_shape = {};
 
 	void step(const rc::TraceStep &st, const Color &col, bool dashed_step, double phase = 0.0, const Shift &sh = {}) {
 		const bool arcs = st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end);
@@ -648,7 +656,7 @@ struct PathPainter {
 
 	// half a ring: the half facing `face` (a passage of infinity off the level, a
 	// portal: one half where the beam goes out, the other where it comes back in)
-	void half_ring(const V2 &at, const V2 &face, const rc::TraceStep &st) {
+	void half_ring(const V2 &at, const V2 &face, const rc::TraceStep &st, const std::optional<PortalShape> &circle = std::nullopt) {
 		Color col = step_color(st.type);
 		if (st.ghost) {
 			col = ghost_color(col);
@@ -656,6 +664,34 @@ struct PathPainter {
 		const double a0 = std::atan2(double(face.y), double(face.x));
 		auto half = [&](double r) {
 			std::vector<V2> pts{at};
+			if (circle && circle->arc && circle->radius > r) {
+				// on a circular portal: the ring's arc between the two points where it
+				// meets the portal's circle, on the face's side, closed along the circle
+				const V2 c = circle->center;
+				const double R = circle->radius;
+				const double al = std::atan2(double(at.y - c.y), double(at.x - c.x)); // outward at `at`
+				const bool outside = double(face.x) * std::cos(al) + double(face.y) * std::sin(al) >= 0.0;
+				const double w = std::acos(-r / (2.0 * R)); // the ring meets the circle at al +- w
+				const double mid = outside ? al : al + PI;
+				const double span = outside ? w : PI - w;
+				auto on_circle = [&](double th) { return V2::of(double(c.x) + R * std::cos(th), double(c.y) + R * std::sin(th)); };
+				const V2 e0 = at + V2::of(r * std::cos(mid - span), r * std::sin(mid - span));
+				const V2 e1 = at + V2::of(r * std::cos(mid + span), r * std::sin(mid + span));
+				const double b0 = std::atan2(double(e0.y - c.y), double(e0.x - c.x));
+				const double b1 = std::atan2(double(e1.y - c.y), double(e1.x - c.x));
+				auto wrap = [](double d) { return std::remainder(d, 2.0 * PI); };
+				for (int k = 1; k <= 4; k++) { // along the circle, from `at` to the ring's first end
+					pts.push_back(on_circle(al + wrap(b0 - al) * k / 4.0));
+				}
+				for (int k = 1; k < 12; k++) {
+					const double a = mid - span + 2.0 * span * k / 12.0;
+					pts.push_back(at + V2::of(r * std::cos(a), r * std::sin(a)));
+				}
+				for (int k = 0; k < 4; k++) { // and back along the circle to `at`
+					pts.push_back(on_circle(b1 + wrap(al - b1) * k / 4.0));
+				}
+				return pts;
+			}
 			for (int k = 0; k <= 12; k++) {
 				const double a = a0 - PI / 2.0 + PI * k / 12.0;
 				pts.push_back(at + V2::of(r * std::cos(a), r * std::sin(a)));
@@ -754,12 +790,13 @@ struct PathPainter {
 			if (st.after_portal && bounds.has_point(st.start)) {
 				const V2 w = way_at(st, false);
 				V2 face = w;
-				if (i > 0 && steps[i - 1].teleports && portal_normal) {
-					if (const std::optional<V2> n = portal_normal(steps[i - 1].surface_id, st.start, true)) {
-						face = n->dot(w) >= 0.0f ? *n : -*n;
+				std::optional<PortalShape> shape;
+				if (i > 0 && steps[i - 1].teleports && portal_shape) {
+					if ((shape = portal_shape(steps[i - 1].surface_id, st.start, true))) {
+						face = shape->normal.dot(w) >= 0.0f ? shape->normal : -shape->normal;
 					}
 				}
-				half_ring(st.start + shifts[i].by, face, st);
+				half_ring(st.start + shifts[i].by, face, st, shape);
 			}
 			// a passage of infinity off the level (the user: on screen): the step that
 			// reaches it, and the step after it, lie off the level -- the outgoing half
@@ -796,12 +833,13 @@ struct PathPainter {
 				if (bounds.has_point(at)) {
 					const V2 w = way_at(st, true);
 					V2 face = -w;
-					if (portal_normal) {
-						if (const std::optional<V2> n = portal_normal(st.surface_id, st.end, false)) {
-							face = n->dot(w) >= 0.0f ? -*n : *n;
+					std::optional<PortalShape> shape;
+					if (portal_shape) {
+						if ((shape = portal_shape(st.surface_id, st.end, false))) {
+							face = shape->normal.dot(w) >= 0.0f ? -shape->normal : shape->normal;
 						}
 					}
-					half_ring(at, face, st);
+					half_ring(at, face, st, shape);
 				}
 				continue;
 			}
@@ -1022,7 +1060,7 @@ std::vector<Shift> side_by_side(const std::vector<rc::TraceStep> &steps) {
 // another are set side by side.
 void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<Call> &out, double dash_phase) const {
 	PathPainter pp{bounds().grow(50.0f), out};
-	pp.portal_normal = [&](int sid, const V2 &at, bool pair) -> std::optional<V2> {
+	pp.portal_shape = [&](int sid, const V2 &at, bool pair) -> std::optional<PathPainter::PortalShape> {
 		const BuiltSurface *s = world_->by_id(sid);
 		if (s != nullptr && pair && s->portal_pair != 0) {
 			s = world_->by_id(s->portal_pair);
@@ -1030,11 +1068,15 @@ void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<C
 		if (s == nullptr) {
 			return std::nullopt;
 		}
-		// a line's normal, or an arc's radius at the point
+		// a line's normal, or an arc's radius at the point (and its circle)
+		PathPainter::PortalShape out;
 		V2 n;
 		if (rc::arc::is_arc(s->seg.s, s->seg.v, s->seg.e)) {
 			const rc::arc::ArcParams p = rc::arc::arc_params(s->seg.s, s->seg.v, s->seg.e);
-			n = at - V2::of(double(p.center.x), double(p.center.y));
+			out.arc = true;
+			out.center = V2::of(double(p.center.x), double(p.center.y));
+			out.radius = p.radius;
+			n = at - out.center;
 		} else {
 			const V2 d = s->seg.e - s->seg.s;
 			n = V2{-d.y, d.x};
@@ -1043,7 +1085,8 @@ void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<C
 		if (!(len > 0.0f)) {
 			return std::nullopt;
 		}
-		return n / len;
+		out.normal = n / len;
+		return out;
 	};
 	const std::vector<Shift> shifts = side_by_side(steps);
 	for (size_t i = 0; i < steps.size(); i++) {
