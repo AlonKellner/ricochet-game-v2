@@ -138,6 +138,7 @@ inline bool same_drawn(const CastEvent &a, const CastEvent &b) {
 // frame (B5; visibility.py _significant)
 inline std::vector<int> significant_events(const std::vector<CastEvent> &ev, const std::string &flags0) {
 	std::vector<int> out;
+	out.reserve(ev.size());
 	const std::string *prev = &flags0;
 	bool run_sig = false;
 	for (size_t i = 0; i < ev.size(); i++) {

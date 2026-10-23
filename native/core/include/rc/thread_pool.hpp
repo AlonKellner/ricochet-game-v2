@@ -14,6 +14,8 @@
 #include <thread>
 #include <vector>
 
+#include "rc/thread_alloc.hpp"
+
 namespace rc {
 
 class ThreadPool {
@@ -58,7 +60,9 @@ public:
 			gen_++;
 		}
 		cv_.notify_all();
+		const bool was = set_compute_thread(true); // (the caller computes too, for the batch)
 		drain(0);
+		set_compute_thread(was);
 		std::unique_lock<std::mutex> lock(m_);
 		done_.wait(lock, [&] { return pending_ == 0; });
 		job_ = nullptr;
@@ -72,6 +76,7 @@ public:
 
 private:
 	void loop(size_t k) {
+		set_compute_thread(true); // F22: its frees cached (rc/thread_alloc.hpp)
 		size_t seen = 0;
 		for (;;) {
 			std::function<void(size_t)> job;

@@ -9,6 +9,7 @@
 #include "rcg/session.hpp"
 
 #include <doctest/doctest.h>
+#include <set>
 
 #include <cmath>
 #include <filesystem>
@@ -895,4 +896,41 @@ TEST_CASE("present: a wrap and a portal are marked by two half rings") {
 		check_side(portal[0], rc::V2{1576.607142857f, 675}, true);  // entry: the side the beam came from
 		check_side(portal[2], rc::V2{476.607142857f, 675}, false); // exit: the side it leaves by
 	}
+}
+
+// Stage 135 (the user's F12 dump, 2026-10-23 18:24): on open_room_playable a shot
+// runs back and forth on one line (five laps through infinity). Lanes went by
+// steps, so a pass changed lane at the cursor and at every crossing. Now each
+// pass keeps one lane; the lanes are packed and centred on the path
+TEST_CASE("present: side by side by passes -- one lane per pass, packed, centred") {
+	rcg::Session s(level("open_room_playable.json"));
+	s.teleport(rc::V2::of(0x1.7e805ep+10, 0x1.45a09p+9));
+	s.set_cursor(rc::V2::of(0x1.86a82cp+10, 0x1.047b8p+9));
+	s.settle();
+	const std::vector<rc::TraceStep> &m = s.preview_steps();
+	REQUIRE(m.size() > 10);
+	const std::vector<double> off = rcg::lane_offsets(m);
+	REQUIRE(off.size() == m.size());
+	std::string text;
+	for (size_t i = 0; i < m.size(); i++) {
+		char b[160];
+		std::snprintf(b, sizeof b, "\n  %zu (%.1f, %.1f) -> (%.1f, %.1f) off %.2f", i, m[i].start.x, m[i].start.y, m[i].end.x, m[i].end.y, off[i]);
+		text += b;
+	}
+	INFO(text);
+	std::set<double> lanes;
+	for (size_t i = 0; i < m.size(); i++) {
+		lanes.insert(off[i]);
+		// a step that goes on from the one before (no wrap) keeps its lane
+		if (i > 0 && m[i].start == m[i - 1].end) {
+			CHECK(off[i] == off[i - 1]);
+		}
+	}
+	// evenly spaced and centred on the path
+	REQUIRE(lanes.size() >= 2);
+	const std::vector<double> l(lanes.begin(), lanes.end());
+	for (size_t k = 1; k < l.size(); k++) {
+		CHECK(l[k] - l[k - 1] == doctest::Approx(3.5));
+	}
+	CHECK(l.front() + l.back() == doctest::Approx(0.0));
 }

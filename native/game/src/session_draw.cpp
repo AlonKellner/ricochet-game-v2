@@ -544,6 +544,7 @@ Color dashes_over(rc::StepType t) { return t == rc::StepType::Aligned ? GREEN_BR
 struct Shift {
 	V2 by;          // a line's
 	double dr = 0.0; // an arc's
+	double off = 0.0; // the lane's offset, px to the left of its group's way
 };
 constexpr double SIDE_BY_SIDE = 3.5; // px between the centres of two strokes (2 px wide: a 1.5 px margin)
 
@@ -1056,57 +1057,159 @@ std::vector<Shift> side_by_side(const std::vector<rc::TraceStep> &steps) {
 	for (size_t i = 0; i < n; i++) {
 		g[i] = geom_of(steps[i]);
 	}
-	// the groups: steps drawn on one another, transitively
-	std::vector<size_t> root(n);
+	// Stage 135 (the user): lanes by passes, not steps. A pass is a run of one
+	// walk's consecutive steps that go on from one another along one carrier
+	// (through the cursor, the crossings that fire nothing, the ray's origin), the
+	// same way round, no step on another of it. Each pass keeps one lane; a
+	// group's lanes are packed (as many as its passes run together) and centred
+	// on the path, the planned walk's on the left and the physical walk's on the right
+	auto way = [&](size_t i) { // the step's unit way at its start and its end
+		const StepGeom &st = g[i];
+		if (st.arcs) {
+			const double dir = st.p.end_angle > st.p.start_angle ? 1.0 : -1.0;
+			auto at = [&](double th) { return V2::of(-std::sin(th) * dir, std::cos(th) * dir); };
+			return std::pair{at(st.p.start_angle), at(st.p.end_angle)};
+		}
+		const V2 d0 = (st.b - st.a) / float(st.len);
+		return std::pair{d0, d0};
+	};
+	auto one_carrier = [&](size_t i, size_t j) {
+		const StepGeom &a = g[i], &b = g[j];
+		if (a.arcs != b.arcs) {
+			return false;
+		}
+		if (a.arcs) {
+			return (a.p.center - b.p.center).length() <= 0.5f && std::abs(a.p.radius - b.p.radius) <= 0.5;
+		}
+		const double ux = (double(a.b.x) - double(a.a.x)) / a.len, uy = (double(a.b.y) - double(a.a.y)) / a.len;
+		return std::abs((double(b.b.x) - double(a.a.x)) * uy - (double(b.b.y) - double(a.a.y)) * ux) <= 0.5;
+	};
+	std::vector<int> pass_of(n, -1);
+	std::vector<std::vector<size_t>> passes;
 	for (size_t i = 0; i < n; i++) {
+		if (pass_of[i] >= 0 || !g[i].ok) {
+			continue;
+		}
+		passes.emplace_back();
+		const int pi = int(passes.size()) - 1;
+		size_t cur = i;
+		while (true) {
+			pass_of[cur] = pi;
+			passes.back().push_back(cur);
+			// the walk's next step (the same lane class)
+			size_t nx = n;
+			for (size_t j = cur + 1; j < n && nx == n; j++) {
+				if (physical_lane(steps[j].type) == physical_lane(steps[cur].type)) {
+					nx = j;
+				}
+			}
+			if (nx == n || pass_of[nx] >= 0 || !g[nx].ok || (g[nx].a - g[cur].b).length() > 0.5f || !one_carrier(cur, nx)
+					|| way(cur).second.dot(way(nx).first) <= 0.0f) {
+				break; // (not where it ended, on another carrier, or back the way it came)
+			}
+			bool overlaps = false;
+			for (size_t q : passes.back()) {
+				overlaps = overlaps || on_one_another(g[q], g[nx]);
+			}
+			if (overlaps) {
+				break; // (round the loop again: a pass of its own)
+			}
+			cur = nx;
+		}
+	}
+	// the groups: passes drawn on one another, transitively
+	const size_t np = passes.size();
+	std::vector<std::vector<char>> on(np, std::vector<char>(np, 0));
+	for (size_t a = 0; a < np; a++) {
+		for (size_t b = a + 1; b < np; b++) {
+			bool hit = false;
+			for (size_t x : passes[a]) {
+				for (size_t y : passes[b]) {
+					if (!hit && on_one_another(g[x], g[y])) {
+						hit = true;
+					}
+				}
+			}
+			on[a][b] = on[b][a] = hit ? 1 : 0;
+		}
+	}
+	std::vector<size_t> root(np);
+	for (size_t i = 0; i < np; i++) {
 		root[i] = i;
 	}
 	std::function<size_t(size_t)> find = [&](size_t i) { return root[i] == i ? i : root[i] = find(root[i]); };
-	for (size_t i = 0; i < n; i++) {
-		for (size_t j = i + 1; j < n; j++) {
-			if (find(i) != find(j) && on_one_another(g[i], g[j])) {
-				root[find(j)] = find(i);
+	for (size_t a = 0; a < np; a++) {
+		for (size_t b = a + 1; b < np; b++) {
+			if (on[a][b] && find(a) != find(b)) {
+				root[find(b)] = find(a);
 			}
 		}
 	}
 	std::map<size_t, std::vector<size_t>> groups;
-	for (size_t i = 0; i < n; i++) {
-		groups[find(i)].push_back(i);
+	for (size_t a = 0; a < np; a++) {
+		groups[find(a)].push_back(a);
 	}
 	for (const auto &[r, members] : groups) {
 		if (members.size() < 2) {
 			continue;
 		}
-		const StepGeom &ref = g[members[0]];
+		const StepGeom &ref = g[passes[members[0]][0]];
 		const V2 d = ref.b - ref.a;
 		const V2 left = V2{d.y, -d.x} / d.length(); // (y down: the left of the way)
 		double sign = 1.0; // an arc: moving left grows the radius
 		if (ref.arcs) {
 			const double a0 = ref.p.start_angle;
 			const double dir = ref.p.end_angle > ref.p.start_angle ? 1.0 : -1.0; // (the angle grows along the way)
-			const V2 way = V2::of(-std::sin(a0) * dir, std::cos(a0) * dir);
-			const V2 l = V2{way.y, -way.x};
+			const V2 wy = V2::of(-std::sin(a0) * dir, std::cos(a0) * dir);
+			const V2 l = V2{wy.y, -wy.x};
 			sign = l.dot(V2::of(std::cos(a0), std::sin(a0))) > 0.0f ? 1.0 : -1.0;
 		}
-		bool planned = false, physical = false;
-		for (size_t m : members) {
-			(physical_lane(steps[m].type) ? physical : planned) = true;
-		}
-		for (size_t k = 0; k < members.size(); k++) {
-			double off;
-			if (planned && physical) {
-				off = (physical_lane(steps[members[k]].type) ? -0.5 : 0.5) * SIDE_BY_SIDE; // two lanes
-			} else {
-				off = ((double(members.size()) - 1.0) / 2.0 - double(k)) * SIDE_BY_SIDE; // one path on itself: spread
+		// the lanes: in path order, each pass the lowest lane no pass on it holds;
+		// the planned walk's lanes first (on the left), then the physical walk's
+		std::map<size_t, int> lane;
+		int used = 0;
+		for (const bool phys : {false, true}) {
+			const int base = used;
+			for (size_t a : members) {
+				if (physical_lane(steps[passes[a][0]].type) != phys) {
+					continue;
+				}
+				std::vector<char> taken;
+				for (const auto &[b, lb] : lane) {
+					if (lb >= base && on[a][b]) {
+						taken.resize(std::max(taken.size(), size_t(lb - base + 1)), 0);
+						taken[size_t(lb - base)] = 1;
+					}
+				}
+				int l = 0;
+				while (size_t(l) < taken.size() && taken[size_t(l)]) {
+					l++;
+				}
+				lane[a] = base + l;
+				used = std::max(used, base + l + 1);
 			}
-			out[members[k]].by = left * float(off);
-			out[members[k]].dr = off * sign;
+		}
+		for (size_t a : members) {
+			const double off = ((double(used) - 1.0) / 2.0 - double(lane[a])) * SIDE_BY_SIDE;
+			for (size_t i : passes[a]) {
+				out[i].by = left * float(off);
+				out[i].dr = off * sign;
+				out[i].off = off;
+			}
 		}
 	}
 	return out;
 }
 
 } // namespace
+
+std::vector<double> lane_offsets(const std::vector<rc::TraceStep> &steps) {
+	std::vector<double> out;
+	for (const Shift &sh : side_by_side(steps)) {
+		out.push_back(sh.off);
+	}
+	return out;
+}
 
 // Stage 126: the merged path's steps as the preview draws them (the presenter
 // paints a morph's steps with it). Stage 130: a solid step is a slightly dark
