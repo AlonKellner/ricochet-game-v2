@@ -775,23 +775,6 @@
     },
     {
      "kind": "hit",
-     "surface_id": 2,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "450.0000000000000000000000000000000000000",
-     "y": "21.87500000000000000000000000000000000000",
-     "state": false,
-     "flags": {
-      "n": 1,
-      "ghost": true
-     },
-     "fired": false
-    },
-    {
-     "kind": "hit",
      "surface_id": 3,
      "side": "RIGHT",
      "applied": false,
@@ -840,23 +823,6 @@
       "ghost": true
      },
      "fired": true
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "450.0000000000000000000000000000000000000",
-     "y": "65.62500000000000000000000000000000000000",
-     "state": false,
-     "flags": {
-      "n": 1,
-      "ghost": true
-     },
-     "fired": false
     },
     {
      "kind": "hit",
@@ -1153,23 +1119,6 @@
       "b": 1
      },
      "fired": true
-    },
-    {
-     "kind": "hit",
-     "surface_id": 1,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "300.0000000000000000000000000000000000000",
-     "y": "128.5714285714285714285714285714285714286",
-     "state": false,
-     "flags": {
-      "a": true,
-      "b": 1
-     },
-     "fired": false
     },
     {
      "kind": "cursor",
@@ -2937,34 +2886,6 @@
    "flags": {},
    "expected": [
     {
-     "kind": "hit",
-     "surface_id": 12,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "766.6666666666666666666666666666666666667",
-     "y": "1000.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 11,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "1000.000000000000000000000000000000000000",
-     "y": "1350.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
@@ -2972,34 +2893,6 @@
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 13,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "-1000.000000000000000000000000000000000000",
-     "y": "-1650.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 10,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "-566.6666666666666666666666666666666666667",
-     "y": "-1000.000000000000000000000000000000000000",
      "state": false,
      "flags": {},
      "fired": false
@@ -3019,34 +2912,6 @@
      "fired": false
     },
     {
-     "kind": "hit",
-     "surface_id": 12,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "766.6666666666666666666666666666666666667",
-     "y": "1000.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 11,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "1000.000000000000000000000000000000000000",
-     "y": "1350.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
@@ -3054,34 +2919,6 @@
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 13,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "-1000.000000000000000000000000000000000000",
-     "y": "-1650.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 10,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "-566.6666666666666666666666666666666666667",
-     "y": "-1000.000000000000000000000000000000000000",
      "state": false,
      "flags": {},
      "fired": false
@@ -3101,34 +2938,6 @@
      "fired": false
     },
     {
-     "kind": "hit",
-     "surface_id": 12,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "766.6666666666666666666666666666666666667",
-     "y": "1000.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 11,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "1000.000000000000000000000000000000000000",
-     "y": "1350.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
@@ -3136,34 +2945,6 @@
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 13,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "-1000.000000000000000000000000000000000000",
-     "y": "-1650.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 10,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "-566.6666666666666666666666666666666666667",
-     "y": "-1000.000000000000000000000000000000000000",
      "state": false,
      "flags": {},
      "fired": false
@@ -3183,34 +2964,6 @@
      "fired": false
     },
     {
-     "kind": "hit",
-     "surface_id": 12,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "766.6666666666666666666666666666666666667",
-     "y": "1000.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 11,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "1000.000000000000000000000000000000000000",
-     "y": "1350.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
@@ -3218,34 +2971,6 @@
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 13,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "-1000.000000000000000000000000000000000000",
-     "y": "-1650.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 10,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "-566.6666666666666666666666666666666666667",
-     "y": "-1000.000000000000000000000000000000000000",
      "state": false,
      "flags": {},
      "fired": false
@@ -3265,34 +2990,6 @@
      "fired": false
     },
     {
-     "kind": "hit",
-     "surface_id": 12,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "766.6666666666666666666666666666666666667",
-     "y": "1000.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 11,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "1000.000000000000000000000000000000000000",
-     "y": "1350.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
@@ -3300,34 +2997,6 @@
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 13,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "-1000.000000000000000000000000000000000000",
-     "y": "-1650.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 10,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "-566.6666666666666666666666666666666666667",
-     "y": "-1000.000000000000000000000000000000000000",
      "state": false,
      "flags": {},
      "fired": false
@@ -3342,34 +3011,6 @@
      "rehit": false,
      "x": "100.0000000000000000000000000000000000000",
      "y": "0.0",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 12,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": true,
-     "rehit": false,
-     "x": "766.6666666666666666666666666666666666667",
-     "y": "1000.000000000000000000000000000000000000",
-     "state": false,
-     "flags": {},
-     "fired": false
-    },
-    {
-     "kind": "hit",
-     "surface_id": 11,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "1000.000000000000000000000000000000000000",
-     "y": "1350.000000000000000000000000000000000000",
      "state": false,
      "flags": {},
      "fired": false

@@ -62,7 +62,8 @@ def main():
            ghost_line(3, (600, -400), (600, 400)), line(4, (800, -400), (800, 400), REFL, REFL)] + walls
     f = fixture("ghost_ends_at_next_toggler", two, (100.0, 0.0), direction=(1.0, 0.0625))
     ks = kinds(f)
-    assert [k[1] for k in ks[:4]] == [1, 2, 3, 4] and not ks[1][3] and ks[3][3], ks
+    # (Stage 134: while ghosted the mirror 2 is passed -- no candidate, never computed)
+    assert [k[1] for k in ks[:3]] == [1, 3, 4] and ks[2][3], ks
     fx.append(f)
     # planned through the ghost stretch: the plan names both togglers and the
     # mirror after them; planned and physical agree through the cursor

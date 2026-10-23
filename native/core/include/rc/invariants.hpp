@@ -8,6 +8,7 @@
 #pragma once
 
 #include "rc/beam_effects.hpp"
+#include "rc/visual.hpp"
 #include "rc/beam_geom.hpp"
 #include "rc/exact.hpp"
 #include "rc/ladder.hpp"
@@ -410,6 +411,17 @@ inline Violations check_GREEN_FROM_PLAYER(const Input &in) {
 	}
 	const TraceStep &first = (*in.typed)[0];
 	if (!is_aligned_type(first.type)) {
+		// (Stage 134: the merge is by segments -- walks that leave the player apart,
+		// one realization the other way round a circle, share no run to draw green)
+		if (in.planned != nullptr && in.physical != nullptr && !in.planned->steps.empty() && !in.physical->steps.empty()) {
+			const TraceStep &a = in.planned->steps[0];
+			const TraceStep &b = in.physical->steps[0];
+			const std::optional<double> fa = arc::fraction_on(a, b.end);
+			const std::optional<double> fb = arc::fraction_on(b, a.end);
+			if (!(fa && *fa > 0.0) && !(fb && *fb > 0.0)) {
+				return out;
+			}
+		}
 		out.push_back(v("GREEN-FROM-PLAYER: First step type=%d, expected green", I(int(first.type))));
 	}
 	return out;
@@ -458,27 +470,29 @@ inline Violations check_NO_POST_CURSOR_DIVERGENCE(const Input &in) {
 		|| !in.cursor_point_agrees) {
 		return out; // no cursor reached, or not visible at its own point: no claim
 	}
-	const size_t ci = size_t(in.planned->cursor_index);
+	// (Stage 134: the merge is by segments, so its steps are not the planned
+	// path's by index: diverged before the cursor is a planned step diverged)
 	const std::vector<TraceStep> &ty = *in.typed;
-	if (ty.size() < ci) {
-		return out;
-	}
-	for (size_t i = 0; i < ci; i++) {
-		if (ty[i].type != StepType::Aligned) {
+	for (const TraceStep &st : ty) {
+		if (st.type == StepType::DivergedPlanned) {
 			return out; // diverged before the cursor: SINGLE-DIVERGENCE's matter
 		}
 	}
-	// a path cut by the event limit ends where it ends: the longer one's tail is not a divergence
-	size_t end = ty.size();
-	const bool truncated = in.planned->truncated || (in.physical != nullptr && in.physical->truncated);
-	if (truncated && in.physical != nullptr) {
-		end = std::min(end, std::min(in.planned->steps.size(), in.physical->steps.size()));
-	}
-	for (size_t i = ci; i < end; i++) {
-		if (ty[i].type != StepType::AlignedPostPlanned) {
-			out.push_back(v("NO-POST-CURSOR-DIVERGENCE: step %d type=%d diverges after fully-aligned path to cursor", I(int64_t(i)), I(int(ty[i].type))));
-			break;
+	for (size_t i = 0; i < ty.size(); i++) {
+		if (ty[i].type == StepType::Aligned || ty[i].type == StepType::AlignedPostPlanned) {
+			continue;
 		}
+		// a path cut by the event limit ends where it ends: the longer one's tail,
+		// from the cut walk's end, is not a divergence
+		// (the tail from the end of the cut walk's last step -- or from just past it, a cut at a wrap)
+		const auto cut_at = [&](const TracePath *p) {
+			return p != nullptr && p->truncated && !p->steps.empty()
+				&& (arc::near_pt(ty[i].start, p->steps.back().end) || (i > 0 && arc::near_pt(ty[i - 1].end, p->steps.back().end)));
+		};
+		if (!cut_at(in.planned) && !cut_at(in.physical)) {
+			out.push_back(v("NO-POST-CURSOR-DIVERGENCE: step %d type=%d diverges after fully-aligned path to cursor", I(int64_t(i)), I(int(ty[i].type))));
+		}
+		break;
 	}
 	return out;
 }
@@ -494,26 +508,51 @@ inline Violations check_PHYSICAL_PREVIEW_MATCH(const Input &in) {
 			non_red.push_back(&ms);
 		}
 	}
-	if (non_red.size() != in.physical->steps.size()) {
-		out.push_back(v("PHYSICAL-PREVIEW-MATCH: non-red count=%d != physical count=%d", I(int64_t(non_red.size())), I(int64_t(in.physical->steps.size()))));
-		return out;
-	}
-	bool portal_seen = false;
-	for (size_t i = 0; i < non_red.size(); i++) {
-		const TraceStep &ms = *non_red[i];
-		const TraceStep &ps = in.physical->steps[i];
-		if (ps.after_portal || ms.after_portal) {
-			portal_seen = true;
+	// Stage 134: the merge is by segments (an aligned one drawn from the planned
+	// walk's steps, which need not split where the physical walk crosses a
+	// surface that fires nothing; the run both walks share drawn from either),
+	// so the preview's physical route is compared by the physical path's
+	// significant points: each, in order, the end of a non-red step, and the
+	// routes ending alike (a passage of infinity is one point, wherever the step
+	// toward it is clipped; past a teleport the drawn steps are the portal's pieces)
+	auto meets = [](const TraceStep &a, const TraceStep &b) {
+		return (a.to_infinity && b.to_infinity) || double(a.end.distance_to(b.end)) <= 0.01;
+	};
+	// (and one route: each non-red step from the end of the one before)
+	for (size_t i = 1; i < non_red.size(); i++) {
+		const TraceStep &prev = *non_red[i - 1];
+		const TraceStep &curr = *non_red[i];
+		if (!prev.hit || prev.to_infinity || curr.after_portal || is_infinity_gap(prev.end, curr.start)) {
+			continue; // (as PHYSICAL-CONTINUITY: a step that ends at a hit goes on from it)
 		}
-		if (portal_seen) {
+		if (double(prev.end.distance_to(curr.start)) > 1.5) {
+			out.push_back(v("PHYSICAL-PREVIEW-MATCH: the preview's physical route breaks between %s and %s", prev.end, curr.start));
+			return out;
+		}
+	}
+	const std::vector<TraceStep> &ph = in.physical->steps;
+	size_t j = 0;
+	for (size_t i = 0; i < ph.size(); i++) {
+		if (ph[i].after_portal) {
+			return out;
+		}
+		if (!ph[i].significant && i + 1 != ph.size()) {
 			continue;
 		}
-		if (double(ms.start.distance_to(ps.start)) > 0.01) {
-			out.push_back(v("PHYSICAL-PREVIEW-MATCH: step %d start mismatch: preview=%s physical=%s", I(int64_t(i)), ms.start, ps.start));
+		while (j < non_red.size() && !non_red[j]->after_portal && !meets(*non_red[j], ph[i])) {
+			j++;
 		}
-		if (double(ms.end.distance_to(ps.end)) > 0.01) {
-			out.push_back(v("PHYSICAL-PREVIEW-MATCH: step %d end mismatch: preview=%s physical=%s", I(int64_t(i)), ms.end, ps.end));
+		if (j < non_red.size() && non_red[j]->after_portal) {
+			return out;
 		}
+		if (j == non_red.size()) {
+			out.push_back(v("PHYSICAL-PREVIEW-MATCH: the physical path's point %s (step %d) is no end of a non-red step", ph[i].end, I(int64_t(i))));
+			return out;
+		}
+		j++;
+	}
+	if (j != non_red.size() && !ph.empty() && !meets(*non_red.back(), ph.back())) {
+		out.push_back(v("PHYSICAL-PREVIEW-MATCH: the preview's physical route ends at %s, the physical path at %s", non_red.back()->end, ph.back().end));
 	}
 	return out;
 }

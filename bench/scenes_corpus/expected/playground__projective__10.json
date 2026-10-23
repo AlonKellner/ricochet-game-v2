@@ -2,17 +2,6 @@
  "planned": [
   {
    "kind": "hit",
-   "surface_id": 9,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "949.9288461703777909171794966618000197509",
-   "y": "494.0357857228605011284638532146381573538"
-  },
-  {
-   "kind": "hit",
    "surface_id": 10,
    "side": "RIGHT",
    "applied": false,
@@ -21,28 +10,6 @@
    "rehit": false,
    "x": "1223.424574038124925457139688178814106547",
    "y": "852.1693024333137245639495577511896876310"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 3,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1336.318403701338778085312595016811323172",
-   "y": "1000.000000000000000000000000000000000000"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 16,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1397.411982516273375725474901637726663001",
-   "y": "1080.000000000000000000000000000000000000"
   },
   {
    "kind": "hit",
@@ -56,39 +23,6 @@
    "y": "1279.808910125822654611183040390749845939"
   },
   {
-   "kind": "hit",
-   "surface_id": 5,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "1600.000000000000000000000000000000000000",
-   "y": "1345.282239362547319555637760446571252502"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 2,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "1820.000000000000000000000000000000000000",
-   "y": "1633.364888004135845311238528692185441377"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 15,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "1920.000000000000000000000000000000000000",
-   "y": "1764.311546477585175200147968803828254503"
-  },
-  {
    "kind": "infinity",
    "surface_id": -3,
    "side": "",
@@ -96,39 +30,6 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "-162.0068409982678525500122367955911278700",
-   "y": "-962.0068409982678525500122367955911278700"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 17,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "-9.913835302014254778414158421213060729780e-119",
-   "y": "-749.8642962126419586669132813397137575047"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 4,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "100.0000000000000000000000000000000000000",
-   "y": "-618.9176377391926287780038412280709443793"
   },
   {
    "kind": "hit",
@@ -140,28 +41,6 @@
    "rehit": false,
    "x": "400.0000000000000000000000000000000000000",
    "y": "-226.0776623188446391112755208931425050032"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 14,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "922.6486685146563075832837622553695753141",
-   "y": "0.0"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 1,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "983.7422473295909052234460688762849151427",
-   "y": "80.00000000000000000000000000000000000000"
   },
   {
    "kind": "hit",
@@ -184,17 +63,6 @@
    "rehit": false,
    "x": "1201.861267089843750000000000000000000000",
    "y": "365.6195678710937500000000000000000000000"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1318.971485144059676614350588725832328708",
-   "y": "518.9714851440596766143505887258323287075"
   },
   {
    "kind": "hit",

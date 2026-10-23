@@ -4,6 +4,8 @@
 #include "goldens.hpp"
 
 #include <cmath>
+#include <cstdio>
+#include <cstdlib>
 #include <string>
 #include <vector>
 
@@ -42,7 +44,26 @@ std::string diff_against_oracle(const std::vector<Event<N>> &events, const ojson
 		for (const Event<N> &e : events) {
 			got += std::string(event_kind_name(e.kind)) + " ";
 		}
-		return "count " + std::to_string(events.size()) + " vs oracle " + std::to_string(expected.size()) + " (" + got + ")";
+		std::string msg = "count " + std::to_string(events.size()) + " vs oracle " + std::to_string(expected.size()) + " (" + got + ")";
+		if (std::getenv("RC_DIFF_DUMP") != nullptr) {
+			// (the events side by side: surface, side, applied, point)
+			for (size_t i = 0; i < std::max(events.size(), expected.size()); i++) {
+				msg += "\n  " + std::to_string(i) + ": ";
+				if (i < events.size()) {
+					const Event<N> &e = events[i];
+					char b[160];
+					std::snprintf(b, sizeof b, "%-8s s%-3d %s%s %s", event_kind_name(e.kind), e.surface_id, e.kind == EventKind::Hit ? (e.left ? "L" : "R") : " ",
+						e.applied ? "*" : " ", e.point ? ("(" + std::to_string(e.point->fx()) + ", " + std::to_string(e.point->fy()) + ")").c_str() : "");
+					msg += b;
+				}
+				if (i < expected.size()) {
+					const ojson &x = expected[i];
+					msg += "   | oracle " + x["kind"].get<std::string>() + " s" + std::to_string(x["surface_id"].get<int>()) + " " + x["side"].get<std::string>()
+						+ (x["applied"].get<bool>() ? "*" : "") + (x.contains("x") ? " (" + x["x"].get<std::string>().substr(0, 12) + ", " + x["y"].get<std::string>().substr(0, 12) + ")" : "");
+				}
+			}
+		}
+		return msg;
 	}
 	for (size_t i = 0; i < events.size(); i++) {
 		const Event<N> &e = events[i];

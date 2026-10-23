@@ -118,7 +118,9 @@ def test_k14_two_projectives_fired_at_one_point_are_different_frames():
     # (the crossing (700, 250) is a computed point: compare the decisions. Stage 133,
     # F21: it is exact data -- the projective's hit, floats exactly -- so line 6's
     # crossing there ties with 9's by id: passed first, then 9 fires)
-    assert [h[:3] for h in _hits(pl)[:3]] == [("hit", 6, False), ("hit", 9, True), ("cursor", -1, False)], _hits(pl)
+    # (Stage 134: before its cursor the planned walk computes its entry alone -- line 6
+    # is no candidate of it)
+    assert [h[:3] for h in _hits(pl)[:2]] == [("hit", 9, True), ("cursor", -1, False)], _hits(pl)
     # (physically 6 fires there first -- the tie by id -- and leaves horizontally)
     assert _hits(ph)[0][:3] == ("hit", 6, True), _hits(ph)
     assert V.visible(sc, player, cursor, plan) is False

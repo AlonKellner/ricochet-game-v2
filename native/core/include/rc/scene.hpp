@@ -53,6 +53,7 @@ struct SideDef {
 	double theta = 0.0, dx = 0.0, dy = 0.0; // portal
 	int pair = -1;                          // portal: the paired surface id (-1: none)
 	std::vector<StateChangeDef> states;     // Stage 107: the side's state changes, in order
+	bool landing = false;                   // Stage 134: its hit changes the game at the landing (deferred effects)
 	bool operator==(const SideDef &) const = default;
 };
 
@@ -122,12 +123,16 @@ struct Surf {
 	// (flag_key -> [left_type, right_type, left_states, right_states], in table order)
 	std::vector<StateChangeDef> left_states;
 	std::vector<StateChangeDef> right_states;
+	bool left_landing = false; // Stage 134: the side's hit changes the game at the landing
+	bool right_landing = false;
 	std::string state_key;
 	struct TableEntry {
 		EffectType left_type;
 		EffectType right_type;
 		std::vector<StateChangeDef> left_states;
 		std::vector<StateChangeDef> right_states;
+		bool left_landing = false;
+		bool right_landing = false;
 	};
 	// Stage 107: presence conditions (all required; empty: always present)
 	std::vector<PresenceCond> presence;
@@ -176,6 +181,14 @@ struct Surf {
 			return left ? e->left_type : e->right_type;
 		}
 		return left ? left_type : right_type;
+	}
+
+	// Stage 134: whether the side's hit changes the game at the landing (its deferred effects)
+	bool landing(bool left, const Flags &flags) const {
+		if (const TableEntry *e = entry(flags)) {
+			return left ? e->left_landing : e->right_landing;
+		}
+		return left ? left_landing : right_landing;
 	}
 
 	const std::vector<StateChangeDef> &base_states(bool left, const Flags &flags) const {
@@ -317,6 +330,8 @@ Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like)
 		s->right_type = d.right ? d.right->type : EffectType::Pass;
 		s->left_states = d.left ? d.left->states : std::vector<StateChangeDef>();
 		s->right_states = d.right ? d.right->states : std::vector<StateChangeDef>();
+		s->left_landing = d.left && d.left->landing;
+		s->right_landing = d.right && d.right->landing;
 		s->presence = d.presence;
 		RC_ASSERT(d.presence.empty() || !d.pre_transform, "a pre-transform surface is always present");
 		if (d.resolver) {
@@ -328,7 +343,7 @@ Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like)
 					"categorical sides: pass / terminal / reflection / inversion");
 				s->table.emplace_back(row.first, typename Surf<N>::TableEntry{l ? l->type : EffectType::Pass,
 					r ? r->type : EffectType::Pass, l ? l->states : std::vector<StateChangeDef>(),
-					r ? r->states : std::vector<StateChangeDef>()});
+					r ? r->states : std::vector<StateChangeDef>(), l && l->landing, r && r->landing});
 			}
 		}
 		for (int side = 0; side < 2; side++) {

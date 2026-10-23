@@ -18,29 +18,41 @@ mp.mp.dps = 50
 def test_a_firing_state_change_is_significant_a_plain_pass_is_not():
     plain = line(1, (50, -500), (50, 500), PASS, PASS)
     w = T.trace_physical_direction([plain], (0, 0), mp.mpc(1, 0))
-    # (a loop: the line, the wrap, the ray's origin -- the last two significant)
-    assert kinds(w) == ["hit", "infinity", "origin"] * (T.MAX_SIGNIFICANT // 2) + ["hit", "max"]
+    # (a loop: the wrap, the ray's origin -- both significant; Stage 134: a plain pass
+    # line is no candidate, never computed)
+    assert kinds(w) == ["infinity", "origin"] * (T.MAX_SIGNIFICANT // 2) + ["max"]
     writes = dict(PASS, states=[{"key": "x", "op": "set", "value": 1}])
     toggler = line(1, (50, -500), (50, 500), writes, writes)
     w = T.trace_physical_direction([toggler], (0, 0), mp.mpc(1, 0))
     assert kinds(w) == ["hit", "infinity", "origin"] * 3 + ["hit", "max"]   # (the toggler's hits significant too)
 
 
+def _off(sid, x):
+    """Stage 134: a wall crossed off its segment by a ray along y = 0 -- a candidate
+    whose crossing fires nothing."""
+    return line(sid, (x, 100), (x, 200), dict(PASS, type="terminal"), dict(PASS, type="terminal"))
+
+
 def test_sixty_four_events_in_all():
-    lines = [line(i + 1, (10 * (i + 1), -500), (10 * (i + 1), 500), PASS, PASS) for i in range(T.MAX_HITS + 6)]
+    lines = [_off(i + 1, 10 * (i + 1)) for i in range(T.MAX_HITS + 6)]
     with emit_infinity():
         w = T.trace_physical_direction(lines, (0, 0), mp.mpc(1, 0))
     assert kinds(w) == ["hit"] * T.MAX_HITS + ["max"]
 
 
 def test_the_cursor_counts_toward_neither():
-    # pass lines ahead and the cursor among them: both walks cross the same lines
-    lines = [line(i + 1, (10 * (i + 1), -500), (10 * (i + 1), 500), PASS, PASS) for i in range(T.MAX_HITS + 6)]
+    # walls crossed off their segments, the cursor among them (Stage 134: the planned
+    # walk computes them past its cursor only, and wraps to the rest)
+    lines = [_off(i + 1, 10 * (i + 1)) for i in range(T.MAX_HITS + 6)]
     with emit_infinity():
         pl = T.planned(lines, (0, 0), (205, 0), [])
         ph = T.physical(lines, (0, 0), (205, 0), [])
     assert "cursor" in kinds(pl)
-    assert kinds(pl).count("hit") == kinds(ph).count("hit") == T.MAX_HITS   # (the cursor is not one of the 64)
+    # (the cursor is not one of the 64: every other event is -- the planned walk's
+    # passages of infinity and of the origin too)
+    def counted(w):
+        return sum(1 for k in kinds(w) if k not in ("cursor", "max"))
+    assert counted(pl) == counted(ph) == T.MAX_HITS
 
 
 def test_a_circle_beam_with_the_switch_off_counts_its_passages_unseen():

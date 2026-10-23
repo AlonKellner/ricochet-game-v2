@@ -2,17 +2,6 @@
  "planned": [
   {
    "kind": "hit",
-   "surface_id": 7,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "1110.000000000000000000000000000000000000",
-   "y": "803.2757277161600687436021203606604349253"
-  },
-  {
-   "kind": "hit",
    "surface_id": 6,
    "side": "LEFT",
    "applied": false,

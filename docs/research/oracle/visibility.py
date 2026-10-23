@@ -77,8 +77,45 @@ def _runs(events):
     return runs
 
 
+def _significant(events, frames, flags0):
+    """The significant points (GAME_SPEC 12.6): the runs of events at one drawn
+    point (_runs) holding a significant event -- an applied effect, a firing
+    state change, a passage of infinity or of the ray's origin -- each as (index
+    of the run's last event, drawn point, the frame the run leaves in). By point,
+    not event by event: surfaces crossed at one point in another order, or one
+    write for two, leave it in one frame (B5, GAME_SPEC 14.1)."""
+    out = []
+    prev = dict(flags0 or {})
+    run_sig = False
+    for i, e in enumerate(events):
+        sig = e.kind in ("infinity", "origin")
+        if e.kind == "hit":
+            now = dict(e.flags or {})
+            sig = e.applied or now != prev
+            prev = now
+        run_sig = run_sig or sig
+        d = _drawn(e)
+        if i + 1 == len(events) or d is None or _drawn(events[i + 1]) != d:
+            if run_sig:
+                out.append((i, d, frames[i]))
+            run_sig = False
+    return out
+
+
+def _leave(events, frames, i):
+    """The frame after the run of events at event i's drawn point."""
+    d, j = _drawn(events[i]), i
+    while j + 1 < len(events) and d is not None and _drawn(events[j + 1]) == d:
+        j += 1
+    return frames[j]
+
+
 def visible(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
-    """True / False, or None when there is no aim (the cursor at the player)."""
+    """True / False, or None when there is no aim (the cursor at the player).
+    Stage 134 (GAME_SPEC 14.5): the walks compute different candidates, so they
+    are compared by their significant events, not event by event: (V2) both
+    reach the cursor with the same significant events before it (drawn points
+    and the frames they leave in), (V3) and leave its point in one frame."""
     if P(player) == P(cursor):
         return None
     pl = T.planned(surfaces, player, cursor, plan, flags, hints, spans)
@@ -86,18 +123,19 @@ def visible(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
     ci = next((i for i, e in enumerate(pl.events) if e.kind == "cursor"), None)
     if ci is None:
         return False                                    # V1
+    cj = next((i for i, e in enumerate(ph.events) if e.kind == "cursor"), None)
+    if cj is None:
+        # (a physical walk that ends at the cursor's point -- a terminal there --
+        # reaches it: the arrow stops at the cursor)
+        last = len(ph.events) - 1
+        if last >= 0 and ph.events[last].kind == "hit" and ph.events[last].terminal \
+                and _drawn(ph.events[last]) == _drawn(pl.events[ci]):
+            cj = last
+        else:
+            return False                                # the physical walk does not reach it on the plan
     fpl, fph = _frames_after(pl.events, flags), _frames_after(ph.events, flags)
-    rpl, rph = _runs(pl.events), _runs(ph.events)
-    kc = next(k for k, (_, last) in enumerate(rpl) if last >= ci)
-    if len(rph) <= kc:
-        return False                                    # the physical walk ends before the cursor's step
-    for k in range(kc):                                 # V2
-        if fpl[rpl[k][1]] != fph[rph[k][1]]:
-            return False
-    # V3: the frame each walk leaves the cursor's point in
-    leave_pl = fpl[rpl[kc][1]]
-    if rph[kc][0] == rpl[kc][0]:
-        leave_ph = fph[rph[kc][1]]
-    else:
-        leave_ph = fph[rph[kc - 1][1]] if kc > 0 else (0, (), tuple(sorted((flags or {}).items())), False)
-    return leave_pl == leave_ph
+    spl = [(d, f) for i, d, f in _significant(pl.events, fpl, flags) if i < ci]
+    sph = [(d, f) for i, d, f in _significant(ph.events, fph, flags) if i < cj]
+    if spl != sph:
+        return False                                    # V2
+    return _leave(pl.events, fpl, ci) == _leave(ph.events, fph, cj)   # V3

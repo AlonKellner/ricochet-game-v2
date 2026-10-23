@@ -12,17 +12,6 @@
    "y": "322.6983502121172937477447763409878773201"
   },
   {
-   "kind": "hit",
-   "surface_id": 5,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1050.675912535859024425061427724629831173",
-   "y": "371.3962276645399851201560700304505664463"
-  },
-  {
    "kind": "cursor",
    "surface_id": -1,
    "side": "",

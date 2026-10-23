@@ -244,6 +244,8 @@ const ojson REFL = {{"type", "reflection"}, {"interactive", true}};
 const ojson INV = {{"type", "inversion"}, {"interactive", true}};
 const ojson TERM = {{"type", "terminal"}, {"interactive", false}};
 const ojson PASS = {{"type", "pass"}, {"interactive", false}};
+// a pass that writes a flag (Stage 134: a pure pass-through is never computed)
+const ojson WRITE = {{"type", "pass"}, {"interactive", false}, {"states", ojson::array({{{"key", "w"}, {"op", "set"}, {"value", true}}})}};
 
 ojson vdef(int id, double x0, double y0, double x1, double y1, double vx, double vy, const ojson &l, const ojson &r, bool line = true) {
 	return {{"id", id}, {"line", line}, {"start", {x0, y0}}, {"end", {x1, y1}}, {"via", {vx, vy}}, {"full", false}, {"left", l}, {"right", r}};
@@ -436,8 +438,8 @@ TEST_CASE("ported: test_invariant_detects: test_event_checks_detect_corrupted_ev
 
 TEST_CASE("ported: test_stage83_invariants: test_BEAM_ORDER_detects_reordered_events") {
 	// a beam with two passes before an effect: swap them
-	const std::vector<SurfaceDef> defs = defs_from_json(ojson::array({vdef(1, 100, -500, 100, 500, 100, 0, PASS, PASS),
-		vdef(2, 200, -500, 200, 500, 200, 0, PASS, PASS), vdef(3, 300, -500, 300, 500, 300, 0, TERM, TERM)}));
+	const std::vector<SurfaceDef> defs = defs_from_json(ojson::array({vdef(1, 100, -500, 100, 500, 100, 0, WRITE, WRITE),
+		vdef(2, 200, -500, 200, 500, 200, 0, WRITE, WRITE), vdef(3, 300, -500, 300, 500, 300, 0, TERM, TERM)}));
 	const Scene<F64> sc = Scene<F64>::from_defs(defs, F64{1.0});
 	std::vector<inv::EvInfo> ev = trace_direction(sc, 0, 0, 1, 0);
 	REQUIRE(ev.size() >= 2);
@@ -531,8 +533,10 @@ TEST_CASE("ported: test_stage107_provenance: test_stage107_categorical_side_reso
 	auto sd = [](const char *type, ojson states = ojson::array()) { return ojson{{"type", type}, {"interactive", true}, {"states", states}}; };
 	const ojson tog = sd("pass", ojson::array({{{"key", "open"}, {"op", "toggle"}, {"value", true}}}));
 	ojson gate = vline(2, 500.0, nullptr, nullptr);
+	// (open: a pass that writes a flag -- Stage 134 computes no pure pass-through)
+	const ojson seen = sd("pass", ojson::array({{{"key", "seen"}, {"op", "set"}, {"value", true}}}));
 	gate["resolver"] = {{"key", "open"},
-		{"table", {{"true", {{"left", sd("pass")}, {"right", sd("pass")}}}, {"DEFAULT", {{"left", sd("terminal")}, {"right", sd("terminal")}}}}}};
+		{"table", {{"true", {{"left", seen}, {"right", seen}}}, {"DEFAULT", {{"left", sd("terminal")}, {"right", sd("terminal")}}}}}};
 	const std::vector<SurfaceDef> defs = defs_from_json(ojson::array({vline(1, 300.0, tog, tog), gate, vline(3, 900.0, sd("terminal"), sd("terminal"))}));
 	const std::optional<TracePair> pair = trace_pair(defs, V2{100, 0}, V2{200, 0});
 	REQUIRE(pair);

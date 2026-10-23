@@ -138,6 +138,8 @@ def _side_def(side, host_id, **portal):
     w = _writes(side.get("hits", []), host_id)
     if w:
         d["states"] = w
+    if any(h.get("deferred", False) for h in side.get("hits", [])):
+        d["landing"] = True      # (Stage 134: its hit changes the game at the landing)
     return d
 
 

@@ -27,6 +27,9 @@ ojson side(const std::optional<rc::SideDef> &s) {
 		states.push_back({{"key", c.key}, {"op", c.toggle ? "toggle" : "set"}, {"value", flag_value(c.value)}});
 	}
 	o["states"] = states;
+	if (s->landing) {
+		o["landing"] = true; // (Stage 134; absent when false: older defs read back as written)
+	}
 	return o;
 }
 

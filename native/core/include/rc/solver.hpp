@@ -125,7 +125,6 @@ struct Event {
 	bool anchored = false;  // cursor: reached on the anchored path
 	int beam_view = -1;     // identity of the beam as the events see it (Backend::views_per_run)
 	bool off_plan = false;  // Stage 129: the walk has left the plan by this event (GAME_SPEC 14.2: a part of its frame)
-	int lap = 0;            // Stage 131: the loops its beam had gone round with nothing fired (no loop detection: they repeat)
 };
 
 // Stage 123: the exact incidence of a point on a surface's carrier (Solver::
@@ -496,7 +495,6 @@ struct Walk {
 	int max_events = MAX_HITS;
 	int max_sig = MAX_SIGNIFICANT; // Stage 131
 	int sig = 0;                    // ... the significant events so far
-	int lap = 0;                    // ... the loops the current beam has gone round with nothing fired
 	// Workflow W2.0: a decision walk (realize, R2) needs the cursor event alone:
 	// it stops there (the events up to it are the same walk's)
 	bool stop_at_cursor = false;
@@ -2535,15 +2533,77 @@ private:
 	// Candidates in walk order: [t, surf (nullptr = cursor), rehit, exact point].
 	// keep_cursor (K4): a restart after a derivative-only seed keeps the cursor
 	// candidate the loop listed (the oracle lists it once per loop).
+	// Stage 134 (GAME_SPEC 12.1, the user): a surface whose crossing could matter to
+	// the walk now -- the plan's remaining entries' surfaces; in PHYSICAL mode (the
+	// planned walk past its cursor too) also a present surface with a side whose
+	// effect is not a pass or which changes the state, and a target. A pure
+	// pass-through (in ghost mode, what the ghost passes) is never computed.
+	// (Oracle: trace2._candidate.)
+	static bool candidate(const Walk<N> &w, const Surf<N> &s) {
+		for (size_t i = size_t(std::max(w.plan_index, 0)); i < w.plan.size(); i++) {
+			if (w.plan[i].surface_id == s.id) {
+				return true;
+			}
+		}
+		if (w.mode != Mode::Physical || !s.present(w.flags)) {
+			return false;
+		}
+		if (s.is_target) {
+			return true;
+		}
+		for (const bool left : {true, false}) {
+			// (or which changes the game at the landing: a deferred effect, ghost or not)
+			if (s.effect(left, w.flags) != EffectType::Pass || !s.state_changes(left, w.flags).empty() || s.landing(left, w.flags)) {
+				return true;
+			}
+		}
+		return false;
+	}
+
+	// The candidates' order along the walk from t0 (by parameter; at a tie the hits
+	// by id, then the ray's origin, then the passage of infinity).
+	static bool cand_order(const Candidate<N> &a, const Candidate<N> &b, const N &t0) {
+		const int c = a.t.cmp(b.t);
+		if (c != 0) {
+			return before(a.t, b.t, t0);
+		}
+		if (a.inf != b.inf) {
+			return b.inf; // at a tie the passage of infinity comes after the cursor and the hits
+		}
+		if (a.origin != b.origin) {
+			return b.origin; // (and the ray's origin after them, before infinity)
+		}
+		const int ia = a.surf == nullptr ? -1 : a.surf->id;
+		const int ib = b.surf == nullptr ? -1 : b.surf->id;
+		return ia < ib;
+	}
+
+	// Stage 134: whether candidate c comes after prev on the walk's loop (the
+	// departure re-hit last)
+	static bool after_candidate(const Candidate<N> &prev, const Candidate<N> &c, const N &t0) {
+		if (!prev.rehit && prev.surf == nullptr && !prev.inf && !prev.origin && prev.t.cmp(t0) == 0) {
+			return true; // (the cursor at the departure point: reached first, as the sort puts it)
+		}
+		return c.rehit ? !prev.rehit : (!prev.rehit && cand_order(prev, c, t0));
+	}
+
 	// (into cands: the walk's step buffer, refilled)
-	void candidates(Walk<N> &w, const Beam<N> &beam, int depart, bool fresh, const N &t0, bool keep_cursor, std::vector<Candidate<N>> &cands) const {
+	// (keep_shared: a rebuild within the loop reuses the loop's carrier roots, so a
+	// carrier's crossing stays one point -- Stage 134)
+	void candidates(Walk<N> &w, const Beam<N> &beam, int depart, bool fresh, const N &t0, bool keep_cursor, std::vector<Candidate<N>> &cands,
+			bool keep_shared = false) const {
 		cands.clear();
 		std::vector<std::pair<int, InlineVec<N, 4>>> &shared = w.scratch->shared; // K6: carrier rep -> its roots this loop
-		shared.clear();
+		if (!keep_shared) {
+			shared.clear();
+		}
 		const Surf<N> *dep_surf = depart >= 0 ? w.scene->find(depart) : nullptr;
 		const int dep_rep = dep_surf != nullptr ? dep_surf->carrier_rep : -1;
 		for (const auto &sp : w.scene->surfaces) {
 			const Surf<N> &s = *sp;
+			if (!candidate(w, s)) {
+				continue; // Stage 134: hitting it now could not matter
+			}
 			if (w.pole && pole_tangent(w, s)) {
 				continue; // tangent at the frame's infinity point: a touch, not a crossing (exact, Stage 105)
 			}
@@ -2603,7 +2663,7 @@ private:
 		}
 		bool cursor_now = false;
 		// the cursor is on the beam only on the planned path
-		if (!w.cursor_done && w.cursor && (keep_cursor || (w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan && !(w.point && w.point->pending)))) {
+		if (!w.cursor_done && w.cursor && (keep_cursor || (w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan))) {
 			N tc = Backend<N>::param_of(beam, *w.cursor);
 			const int ki = known_index(w.known, *w.cursor);
 			// the cursor exactly at the departure point is reached immediately
@@ -2723,26 +2783,14 @@ private:
 			if (cursor_now && a_cursor != b_cursor) {
 				return a_cursor;
 			}
-			const int c = a.t.cmp(b.t);
-			if (c != 0) {
-				return before(a.t, b.t, t0);
-			}
-			if (a.inf != b.inf) {
-				return b.inf; // at a tie the passage of infinity comes after the cursor and the hits
-			}
-			if (a.origin != b.origin) {
-				return b.origin; // (and the ray's origin after them, before infinity)
-			}
-			const int ia = a.surf == nullptr ? -1 : a.surf->id;
-			const int ib = b.surf == nullptr ? -1 : b.surf->id;
-			return ia < ib;
+			return cand_order(a, b, t0);
 		});
 		if (w.line) {
 			concurrent_ties(w, cands);
 		} else if (w.rec) {
 			concurrent_ties_circle(w, beam, cands);
 		}
-		if (depart >= 0) {
+		if (depart >= 0 && dep_surf != nullptr && candidate(w, *dep_surf)) {
 			// the departure re-hit is at the departure point (exact when known)
 			std::optional<CN<N>> dep_pt;
 			for (const Known<N> &k : w.known) {
@@ -3267,7 +3315,6 @@ private:
 		e.kind = kind;
 		e.beam = beam;
 		e.off_plan = w.left_plan;
-		e.lap = w.lap;
 		if (Backend<N>::views_per_run()) {
 			if (w.hp_view < 0 || w.hp_src != beam) {
 				w.hp_src = beam;
@@ -3342,12 +3389,15 @@ private:
 		w.scratch = &lease.get();
 		bool fresh = !t_start.has_value();
 		N t0 = fresh ? beam->kappa.like(0.0) : *t_start;
-		size_t skip = 0; // candidates already processed (in-place reseed)
+		std::optional<Candidate<N>> resume; // the last candidate processed before an in-place reseed
 		N t_prev = t0;
 		bool fired_state = false; // a state change in the current loop
 		bool keep_cursor = false; // K4: the seed restart keeps the listed cursor
+		int sig0 = w.sig; // (every loop passes something significant: checked at its end)
 		while (!w.done) {
-			const int count0 = w.count; // (Stage 131: a lap that counts nothing ends at its departure)
+			if (!resume) {
+				sig0 = w.sig; // (a loop resumed in place after a reseed began before)
+			}
 			// Stage 124: past what the caller reads (and two events more): done (the
 			// events so far are the whole walk's: it is decided step by step)
 			if (w.read_horizon != nullptr && (*w.read_horizon)(w.events) + 2 <= w.events.size()) {
@@ -3367,9 +3417,42 @@ private:
 			gaps(w, *beam, cands, gp, &gw);
 			std::optional<Next> next;
 			bool restart = false;
-			size_t ci = skip;
-			skip = 0;
-			while (ci < cands.size()) {
+			// (Stage 134: resumed past the candidate processed last, by order -- the
+			// recomputed list follows the walk's mode, so it may list others before it)
+			size_t ci = 0;
+			if (resume) {
+				while (ci < cands.size() && !after_candidate(*resume, cands[ci], t0)) {
+					ci++;
+				}
+				resume.reset();
+			}
+			Mode seen_mode = w.mode;
+			int seen_index = w.plan_index;
+			Flags seen_flags = w.flags;
+			while (true) {
+				// Stage 134: where the walk's state changed (its flags, an entry consumed,
+				// the cursor), the candidates are rebuilt for the rest of the loop (after
+				// its last candidate too: the cursor last in PLANNED mode)
+				if (ci > 0 && (w.mode != seen_mode || w.plan_index != seen_index || !(w.flags == seen_flags))) {
+					const Candidate<N> prev = cands[ci - 1];
+					std::vector<Candidate<N>> rebuilt;
+					candidates(w, *beam, depart, fresh, t0, false, rebuilt, true);
+					cands.resize(ci);
+					for (const Candidate<N> &c : rebuilt) {
+						// (the cursor at the current point too: it is reached there, as late_cursor)
+						const bool cursor = c.surf == nullptr && !c.inf && !c.origin;
+						if (after_candidate(prev, c, t0) || (!c.rehit && cursor && !before(c.t, prev.t, t0))) {
+							cands.push_back(c);
+						}
+					}
+					gaps(w, *beam, cands, gp, &gw);
+				}
+				seen_mode = w.mode;
+				seen_index = w.plan_index;
+				seen_flags = w.flags;
+				if (ci >= cands.size()) {
+					break;
+				}
 				// Stage 127: past what the caller reads within a step too (a straight beam
 				// crosses many carriers in one step; the events so far are complete)
 				if (w.read_horizon != nullptr && (*w.read_horizon)(w.events) + 2 <= w.events.size()) {
@@ -3499,7 +3582,7 @@ private:
 						BeamPtr<N> sb = Backend<N>::seed(beam);
 						if (sb != beam) {
 							beam = sb;
-							skip = ci;
+							resume = cand;
 							restart = true;
 							break;
 						}
@@ -3613,7 +3696,7 @@ private:
 						BeamPtr<N> sb = Backend<N>::seed(beam);
 						if (sb != beam) {
 							beam = sb;
-							skip = ci + 1;
+							resume = cand;
 							// K4: the recomputed loop keeps a cursor this loop still lists
 							for (size_t k = ci + 1; k < cands.size(); k++) {
 								keep_cursor = keep_cursor || (cands[k].surf == nullptr && !cands[k].inf && !cands[k].origin);
@@ -3691,13 +3774,16 @@ private:
 				// back at the departure: when it is the ray's origin (the player, a
 				// projected ray's start), its passage -- a significant event (the user);
 				// unplanned before the cursor, a divergence: the walk leaves the plan.
-				// Another departure is no event: the beam goes round again (a lap that
-				// counted nothing ends there all the same)
-				if ((!w.O || !geom::eq(*w.O, fresh ? beam->p : beam->at(t0))) && w.count > count0) {
-					// (the next event runs on from the last one, across the departure)
-					if (!fired_state) {
-						w.lap++;
+				// Another departure is no event: the beam goes round again. Stage 134 (the
+				// user): no loop detection at all -- every loop passes the ray's origin and
+				// the frame's infinity, both significant, so the limits end the walk
+				if (!w.O || !geom::eq(*w.O, fresh ? beam->p : beam->at(t0))) {
+					if (w.sig == sig0) {
+						RC_ASSERT(false, "a loop that passed nothing significant (the origin and infinity are on every beam)");
+						w.done = true; // (release: recover, the walk ends)
+						return;
 					}
+					// (the next event runs on from the last one, across the departure)
 					fired_state = false;
 					continue;
 				}
@@ -3718,14 +3804,10 @@ private:
 				oe.flags = w.flags;
 				origin_passage(w, *beam);
 				t_prev = t0; // (the next arc runs on from the origin)
-				if (!fired_state) {
-					w.lap++;
-				}
 				fired_state = false;
 				continue;
 			}
 			fired_state = false;
-			w.lap = 0;
 			beam = next->beam;
 			if (aim_known && aim_known->j > 0) {
 				add_aim_known(w, *beam); // (Stage 124: the beam after the member's own entries)

@@ -72,8 +72,10 @@ def main():
     T.EMIT_INFINITY = True
     fx = []
     # --- the event itself (direction traces, no plan) ---
-    ahead = line(1, (50, -500), (50, 500), PASS, PASS)
-    behind = line(2, (-50, -500), (-50, 500), PASS, PASS)
+    # (Stage 134: walls crossed off their segments -- candidates that fire nothing)
+    term = dict(PASS, type="terminal")
+    ahead = line(1, (50, 100), (50, 200), term, term)
+    behind = line(2, (-50, 100), (-50, 200), term, term)
     f = fixture("wrap_between_ahead_and_wrapped_crossings", [ahead, behind], (0.0, 0.0), direction=(1.0, 0.0))
     # (Stage 131: no loop detection -- each loop passes infinity and the ray's
     # origin, both significant, until the 11th)

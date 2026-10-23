@@ -290,13 +290,17 @@ public:
 		// ---- planned: the physical walk that reached the cursor anchored decided
 		// as the planned walk decides: one trajectory, no planned pass needed
 		const int ci = cursor_index(cp);
-		if (!verify && !plan.empty() && ci >= 0 && cp.limbs == 0 && cp.f64_events[size_t(ci)].anchored && max_planned == max_physical) {
+		// (Stage 134: when it computed nothing the planned walk would not -- before the
+		// cursor, only crossings of the remaining entries' surfaces and the passages)
+		if (!verify && !plan.empty() && ci >= 0 && cp.limbs == 0 && cp.f64_events[size_t(ci)].anchored && max_planned == max_physical
+				&& planned_computes(cp.f64_events, ci, plan)) {
 			r.planned = cp;
 			r.planned_from_physical = true;
 			r.usec = clock_() - t0;
 			return r;
 		}
-		if (!verify && !plan.empty() && ci >= 0 && cp.limbs > 0 && cp.big_events[size_t(ci)].anchored && max_planned == max_physical) {
+		if (!verify && !plan.empty() && ci >= 0 && cp.limbs > 0 && cp.big_events[size_t(ci)].anchored && max_planned == max_physical
+				&& planned_computes(cp.big_events, ci, plan)) {
 			r.planned = cp;
 			r.planned_from_physical = true;
 			r.usec = clock_() - t0;
@@ -467,6 +471,34 @@ private:
 		}
 		return -1;
 	}
+	// Stage 134: whether every event before the cursor (index ci) is one the
+	// planned walk computes too (Solver::candidate in PLANNED mode: a crossing of
+	// a remaining entry's surface, a passage of infinity or of the ray's origin)
+	template <class Events>
+	static bool planned_computes(const Events &events, int ci, const std::vector<PlanItem> &plan) {
+		size_t j = 0;
+		for (int i = 0; i < ci; i++) {
+			const auto &e = events[size_t(i)];
+			if (e.kind == EventKind::Hit) {
+				bool remaining = false;
+				for (size_t k = j; k < plan.size() && !remaining; k++) {
+					remaining = plan[k].surface_id == e.surface_id;
+				}
+				if (!remaining) {
+					return false;
+				}
+			}
+			if (j < plan.size()) {
+				const PlanItem &item = plan[j];
+				const bool consumed = item.is_infinity() ? (e.kind == EventKind::Infinity && e.applied)
+					: item.is_origin()                   ? (e.kind == EventKind::Origin && e.applied)
+														 : (e.kind == EventKind::Hit && e.surface_id == item.surface_id && e.left == item.left);
+				j += consumed ? 1 : 0;
+			}
+		}
+		return true;
+	}
+
 	static int cursor_index(const Climb &c) {
 		if (c.limbs == 0) {
 			return cursor_index_of(c.f64_events);
@@ -547,7 +579,6 @@ private:
 		// the cast finds it, vis::Builder::cast_core), and the next two
 		if (plan_ != nullptr && !plan_->empty()) {
 			size_t j = 0;
-			int base = 0; // the lap of the walk's last progress (a consumption, a new beam)
 			for (size_t i = 0; i < ev.size(); i++) {
 				const PlanItem &item = (*plan_)[j];
 				const bool consumed = item.is_infinity() ? (ev[i].kind == EventKind::Infinity && ev[i].applied)
@@ -555,14 +586,6 @@ private:
 														 : (ev[i].kind == EventKind::Hit && ev[i].surface_id == item.surface_id && ev[i].left == item.left);
 				if (consumed && ++j == plan_->size()) {
 					return std::min(ev.size(), i + 3);
-				}
-				// F27 (TDD_38): the planned walk fires only its entries, so a beam that goes
-				// round twice without consuming one repeats itself: it never meets the plan
-				// (nor reaches its cursor) -- nothing further is read
-				if (consumed || ev[i].lap < base) {
-					base = ev[i].lap;
-				} else if (ev[i].lap >= base + 2) {
-					return std::min(ev.size(), i + 1);
 				}
 			}
 		}

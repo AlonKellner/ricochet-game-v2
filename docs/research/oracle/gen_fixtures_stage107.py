@@ -89,9 +89,10 @@ def main():
              line(3, (600, -400), (600, 400), gt, gt), line(4, (800, -400), (800, 400), REFL, REFL)] + walls
     f = fixture("multi_state_ghost_in_list", scene, (100.0, 0.0), direction=dirn)
     ks = kinds(f)
-    assert [k[1] for k in ks[:4]] == [1, 2, 3, 4] and not ks[1][3] and ks[3][3], ks
-    assert ks[0][4] and ks[2][4], ks
-    assert [e["fired"] for e in f["expected"][:4]] == [True, False, True, True], f["expected"][:4]
+    # (Stage 134: while ghosted the mirror 2 is passed -- no candidate, never computed)
+    assert [k[1] for k in ks[:3]] == [1, 3, 4] and ks[2][3], ks
+    assert ks[0][4] and ks[1][4], ks
+    assert [e["fired"] for e in f["expected"][:3]] == [True, True, True], f["expected"][:3]
     fx.append(f)
 
     # N1: planned -- a consumed entry applies all its writes; the next entry is

@@ -23,39 +23,10 @@ struct TracePair {
 	LadderResult result;
 	Flags final_flags; // the physical trace's flags at its end (promoted after a shot)
 	bool shared = false; // one trajectory: planned is the physical path (the GDScript shares the step objects)
-	// B4 (Stage 110): both walks leave the cursor's own point in one frame
-	// (cursor_point_agrees); the visibility definition's third condition
+	// B4 (Stage 110), Stage 134: both walks reach the cursor with the same
+	// significant events before it and leave its point in one frame (V1-V3)
 	bool cursor_point_agrees = true;
 };
-
-// B4 (Stage 110): whether both walks leave the cursor's own point in the same
-// frame (GAME_SPEC 15.1, V3). n = the planned cursor_index: the planned walk
-// leaves the point in the frame after its last event drawn at the end of step
-// n - 1 (the cursor event and the events at its point); the physical one, when
-// its step n - 1 ends at the same drawn point, in the frame after its last
-// event there, else in the frame it passes the point in (its step n - 1's).
-// Raw paths (trace_pair's), not display ones.
-inline bool cursor_point_agrees(const TracePath &pl, const TracePath &ph) {
-	const int n = pl.cursor_index;
-	if (n <= 0 || pl.event_frames.size() != pl.event_steps.size() || ph.event_frames.size() != ph.event_steps.size()) {
-		return true; // no step before the cursor (not classified) or no frame data
-	}
-	if (int(ph.steps.size()) < n || int(pl.steps.size()) < n) {
-		return false;
-	}
-	// the frame after the last event with event_steps == k (the frame step k is walked in)
-	auto frame_at = [](const TracePath &p, int k) -> const std::string & {
-		int f = 0; // (the start frame)
-		for (size_t i = 0; i < p.event_steps.size() && p.event_steps[i] <= k; i++) {
-			f = p.event_frames[i];
-		}
-		return p.frame_keys[size_t(f)];
-	};
-	const std::string &leave_pl = frame_at(pl, n);
-	const bool same_end = ph.steps[size_t(n - 1)].end == pl.steps[size_t(n - 1)].end;
-	const std::string &leave_ph = same_end ? frame_at(ph, n) : frame_at(ph, n - 1);
-	return leave_pl == leave_ph;
-}
 
 // One projective firing's mark in an epoch key: the surface and the side
 // (K14, Stage 113: two walks firing different projectives at one point are in
@@ -63,6 +34,192 @@ inline bool cursor_point_agrees(const TracePath &pl, const TracePath &ph) {
 inline std::string firing_key(int sid, bool left, bool first) {
 	return (first ? "" : ",") + std::to_string(sid) + (left ? "L" : "R");
 }
+
+namespace vis {
+
+// (moved from rc/visibility.hpp: the tracer compares the walks as the region does)
+struct Pt {
+	double x = 0.0;
+	double y = 0.0;
+	bool operator==(const Pt &) const = default;
+	bool operator<(const Pt &o) const { return x < o.x || (x == o.x && y < o.y); }
+	Pt operator+(const Pt &o) const { return {x + o.x, y + o.y}; }
+	Pt operator-(const Pt &o) const { return {x - o.x, y - o.y}; }
+	Pt operator*(double s) const { return {x * s, y * s}; }
+	bool finite() const { return std::isfinite(x) && std::isfinite(y); }
+};
+
+struct CastEvent {
+	EventKind kind = EventKind::Hit;
+	int sid = -1;
+	bool left = false;
+	bool applied = false;
+	bool rehit = false; // the departure point, re-hit after the full loop
+	bool terminal = false;
+	std::string flags;
+	std::string frame;  // the frame after the event: epoch, transform stack, flags, off the plan (Tracer::frame_id)
+	bool off_plan = false; // Stage 129: the walk has left the plan by this event
+	bool has_pt = false;
+	Pt pt;
+};
+
+template <Num N>
+std::vector<CastEvent> cast_events(const std::vector<Event<N>> &events, const std::string &init_flags) {
+	std::vector<CastEvent> out;
+	out.reserve(events.size());
+	std::vector<int> stack;
+	std::string epoch_key; // K14: the projective firings so far
+	std::string flags_now = init_flags;
+	for (const Event<N> &e : events) {
+		CastEvent c;
+		c.kind = e.kind;
+		c.sid = e.surface_id;
+		c.left = e.left;
+		c.applied = e.applied;
+		c.rehit = e.rehit;
+		c.terminal = e.terminal;
+		c.off_plan = e.off_plan;
+		c.flags = e.flags.canonical_key();
+		// the frame as Tracer::to_path_events keeps it
+		if (e.kind == EventKind::Hit && e.applied && !e.terminal) {
+			if (e.projective) {
+				stack.clear();
+				epoch_key += firing_key(e.surface_id, e.left, epoch_key.empty());
+			} else if (e.popped) {
+				if (!stack.empty()) stack.pop_back();
+			} else {
+				stack.push_back(e.surface_id);
+			}
+		}
+		if (e.kind == EventKind::Hit) {
+			flags_now = c.flags;
+		}
+		// (the projective's own event leaves in the frame its firing opens, as event_frames reads it)
+		c.frame = epoch_key + "|";
+		for (int sid : stack) {
+			c.frame += std::to_string(sid) + ",";
+		}
+		c.frame += "|" + flags_now + (e.off_plan ? "|off" : "");
+		std::optional<CN<N>> p = e.point;
+		if (!p && e.beam && e.kind != EventKind::Escape && e.kind != EventKind::Origin) {
+			p = e.t_to ? std::optional<CN<N>>(e.beam->at(*e.t_to)) : e.beam->at_infinity();
+		}
+		if (p) {
+			c.has_pt = true;
+			c.pt = Pt{p->fx(), p->fy()};
+		}
+		out.push_back(std::move(c));
+	}
+	return out;
+}
+
+inline std::vector<CastEvent> cast_events(const Climb &c, const std::string &init_flags) {
+	return c.limbs == 0 ? cast_events(c.f64_events, init_flags) : cast_events(c.big_events, init_flags);
+}
+
+// Decisions equal at an event: both walks leave it in the same frame.
+inline bool same_decision(const CastEvent &a, const CastEvent &b) {
+	return a.kind == b.kind && a.sid == b.sid && (a.kind != EventKind::Hit || a.left == b.left) && a.applied == b.applied
+		&& (a.kind != EventKind::Hit || a.flags == b.flags) && a.off_plan == b.off_plan;
+}
+
+
+// Two events at one drawn point (float32, as drawn), or both without one
+inline bool same_drawn(const CastEvent &a, const CastEvent &b) {
+	return a.has_pt == b.has_pt && (!a.has_pt || (float(a.pt.x) == float(b.pt.x) && float(a.pt.y) == float(b.pt.y)));
+}
+
+// Stage 134 (GAME_SPEC 12.6, 14.5): the significant points of a walk -- the runs
+// of events at one drawn point holding a significant event (an applied effect, a
+// firing state change, a passage of infinity or of the ray's origin), each by
+// the index of its last event (the frame the run leaves in). The walks compute
+// different candidates, so they are compared by these, not event by event; by
+// point, as surfaces crossed at one point in another order leave it in one
+// frame (B5; visibility.py _significant)
+inline std::vector<int> significant_events(const std::vector<CastEvent> &ev, const std::string &flags0) {
+	std::vector<int> out;
+	const std::string *prev = &flags0;
+	bool run_sig = false;
+	for (size_t i = 0; i < ev.size(); i++) {
+		const CastEvent &e = ev[i];
+		bool sig = e.kind == EventKind::Infinity || e.kind == EventKind::Origin;
+		if (e.kind == EventKind::Hit) {
+			sig = e.applied || e.flags != *prev;
+			prev = &e.flags;
+		}
+		run_sig = run_sig || sig;
+		if (i + 1 == ev.size() || !e.has_pt || !same_drawn(ev[i + 1], e)) {
+			if (run_sig) {
+				out.push_back(int(i));
+			}
+			run_sig = false;
+		}
+	}
+	return out;
+}
+
+// Two significant events alike: the drawn point and the frame after
+inline bool same_significant(const CastEvent &a, const CastEvent &b) {
+	return same_drawn(a, b) && a.frame == b.frame;
+}
+
+// The frame after the run of events at event i's drawn point (visibility.py _leave)
+inline const std::string &leave_frame(const std::vector<CastEvent> &ev, size_t i) {
+	size_t j = i;
+	while (ev[i].has_pt && j + 1 < ev.size() && same_drawn(ev[j + 1], ev[i])) {
+		j++;
+	}
+	return ev[j].frame;
+}
+
+inline int cursor_event(const std::vector<CastEvent> &ev) {
+	for (size_t i = 0; i < ev.size(); i++) {
+		if (ev[i].kind == EventKind::Cursor) {
+			return int(i);
+		}
+	}
+	return -1;
+}
+
+// The first n significant events of both walks alike
+inline bool significant_alike(const std::vector<CastEvent> &pl, const std::vector<int> &spl, const std::vector<CastEvent> &ph,
+		const std::vector<int> &sph, size_t n) {
+	if (n > spl.size() || n > sph.size()) {
+		return false;
+	}
+	for (size_t k = 0; k < n; k++) {
+		if (!same_significant(pl[size_t(spl[k])], ph[size_t(sph[k])])) {
+			return false;
+		}
+	}
+	return true;
+}
+
+// The significant events before index i
+inline size_t significant_before(const std::vector<int> &sig, int i) {
+	return size_t(std::lower_bound(sig.begin(), sig.end(), i) - sig.begin());
+}
+
+// Stage 134 (GAME_SPEC 15.1, visibility.py visible): both walks reach the
+// cursor (V1) with the same significant events before it (V2), and leave its
+// point in one frame (V3)
+inline bool walks_agree_at_cursor(const std::vector<CastEvent> &pl, const std::vector<CastEvent> &ph, const std::string &flags0) {
+	const int cpl = cursor_event(pl);
+	int cph = cursor_event(ph);
+	if (cpl >= 0 && cph < 0 && !ph.empty() && ph.back().kind == EventKind::Hit && ph.back().terminal && same_drawn(ph.back(), pl[size_t(cpl)])) {
+		cph = int(ph.size()) - 1; // (a physical walk that ends at the cursor's point -- a terminal there -- reaches it)
+	}
+	if (cpl < 0 || cph < 0) {
+		return false;
+	}
+	const std::vector<int> spl = significant_events(pl, flags0);
+	const std::vector<int> sph = significant_events(ph, flags0);
+	const size_t n = significant_before(spl, cpl);
+	return n == significant_before(sph, cph) && significant_alike(pl, spl, ph, sph, n)
+		&& leave_frame(pl, size_t(cpl)) == leave_frame(ph, size_t(cph));
+}
+
+} // namespace vis
 
 class Tracer {
 public:
@@ -183,7 +340,9 @@ private:
 			pair.planned = to_path(res.planned, frames, aim, flags);
 		}
 		pair.shared = shared;
-		pair.cursor_point_agrees = shared || cursor_point_agrees(pair.planned, pair.physical);
+		// Stage 134: the walks compared by their significant events (V1-V3)
+		const std::string flags0 = flags.canonical_key();
+		pair.cursor_point_agrees = shared || vis::walks_agree_at_cursor(vis::cast_events(res.planned, flags0), vis::cast_events(res.physical, flags0), flags0);
 		pair.result = std::move(res);
 		if (pair_cache_ && exact == nullptr) {
 			cache_key_ = key;
@@ -496,6 +655,12 @@ public:
 					path.targets_hit.push_back(surf->id);
 				}
 			}
+			if (e.kind == EventKind::Hit && !appended && !lean && (e.applied || e.state) && e.point && !path.steps.empty()
+					&& path.steps.back().end == V2::of(e.point->fx(), e.point->fy())) {
+				// Stage 134: a significant event at the end of the step drawn last (one
+				// at the same point draws nothing): the step ends at a significant point
+				path.steps.back().significant = true;
+			}
 			if (e.kind == EventKind::Hit && !lean) {
 				HitRecord h;
 				h.surface_id = e.surface_id;
@@ -536,6 +701,7 @@ public:
 				last.surface_id = INFINITY_ID;
 				last.hit_on_segment = true;
 				last.significant = true; // (Stage 131: a passage of infinity)
+				last.to_infinity = true;
 			}
 			if (e.kind == EventKind::Hit) {
 				if (!(e.flags == *keyed)) {

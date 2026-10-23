@@ -199,6 +199,51 @@ inline ArcParams arc_params(const V2 &start, const V2 &via, const V2 &end_v) {
 	return p;
 }
 
+// Stage 134: two drawn points within tol px (the merge by segments)
+inline bool near_pt(const V2 &a, const V2 &b, double tol = 0.01) {
+	if (a == b) {
+		return true;
+	}
+	return std::isfinite(a.x) && std::isfinite(b.x) && std::hypot(double(a.x) - double(b.x), double(a.y) - double(b.y)) <= tol;
+}
+
+// where p lies on a drawn step, as the fraction of the way along it (nullopt: off it)
+inline std::optional<double> fraction_on(const TraceStep &st, const V2 &p, double tol = 0.01) {
+	if (!std::isfinite(st.start.x) || !std::isfinite(st.end.x) || !std::isfinite(p.x)) {
+		return std::nullopt;
+	}
+	if (near_pt(p, st.end, tol)) {
+		return 1.0;
+	}
+	if (near_pt(p, st.start, tol)) {
+		return 0.0;
+	}
+	if (st.is_arc_step && is_arc(st.start, st.via, st.end)) {
+		const ArcParams a = arc_params(st.start, st.via, st.end);
+		const double dx = double(p.x) - double(a.center.x);
+		const double dy = double(p.y) - double(a.center.y);
+		if (std::abs(std::hypot(dx, dy) - a.radius) > tol || !(a.span > 0.0)) {
+			return std::nullopt;
+		}
+		const double ang = std::atan2(dy, dx);
+		const double d = a.clockwise ? fposmod(a.start_angle - ang, TAU) : fposmod(ang - a.start_angle, TAU);
+		return d <= a.span ? std::optional<double>(d / a.span) : std::nullopt;
+	}
+	const double dx = double(st.end.x) - double(st.start.x);
+	const double dy = double(st.end.y) - double(st.start.y);
+	const double l2 = dx * dx + dy * dy;
+	if (!(l2 > 0.0)) {
+		return std::nullopt;
+	}
+	const double px = double(p.x) - double(st.start.x);
+	const double py = double(p.y) - double(st.start.y);
+	const double f = (px * dx + py * dy) / l2;
+	if (std::abs(px * dy - py * dx) / std::sqrt(l2) > tol || f < 0.0 || f > 1.0) {
+		return std::nullopt;
+	}
+	return f;
+}
+
 // VisualConverter.project_onto_carrier
 inline V2 project_onto_carrier(const V2 &point, const GeneralizedCircle &g) {
 	if (g.is_line()) {

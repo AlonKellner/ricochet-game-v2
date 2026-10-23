@@ -307,7 +307,7 @@ class Surface:
 
     def effect(self, side, flags=None):
         cfg = self.cfg(side, flags)
-        if cfg is None or cfg.get("type", "pass") == "pass":
+        if cfg is None or cfg.get("type", "pass") in ("pass", ""):   # (an empty type is a pass, as the game reads it)
             return None
         return cfg["type"]
 
@@ -856,6 +856,167 @@ def physical_decision(walk: Walk, surf: Surface, side, full_block):
     return surf.effect(side, walk.flags)
 
 
+def _candidate(walk: Walk, s: Surface):
+    """Stage 134 (GAME_SPEC 12.1, the user): a surface whose crossing could matter
+    to the walk now -- the plan's remaining entries' surfaces; in PHYSICAL mode
+    (the planned walk past its cursor too) also a present surface with a side
+    whose effect is not a pass or which changes the state, and a target. A pure
+    pass-through (in ghost mode, what the ghost passes) is never computed."""
+    if any(sid == s.id for sid, _ in walk.plan[walk.plan_index:]):
+        return True
+    if walk.mode != PHYSICAL:
+        return False
+    f = walk.flags
+    if not s.present(f):
+        return False
+    if s.is_target:
+        return True
+    # (or whose hit changes the game at the landing: a deferred effect, ghost or not)
+    return any(s.effect(side, f) is not None or s.state_changes(side, f) or (s._base_cfg(side, f) or {}).get("landing", False)
+               for side in (LEFT, RIGHT))
+
+
+def _cand_state(walk: Walk):
+    """What the candidates depend on: rebuilt where it changes (Stage 134)."""
+    return walk.mode, walk.plan_index, tuple(sorted((k, repr(v)) for k, v in walk.flags.items()))
+
+
+def _build_cands(walk: Walk, beam: Beam, depart, fresh, t0, by_id, shared=None):
+    """The loop's candidates (Stage 134: of the walk's candidate surfaces only,
+    _candidate), the crossings snapped to known points and those pinned at Q."""
+    cands = []
+    # surfaces on one carrier (exactly) are crossed at the same points: their
+    # roots are computed once per loop and shared (K6, Stage 109) -- on the
+    # departing member's own segment when the beam departs that carrier
+    if walk.carrier_groups is None:
+        walk.carrier_groups = carrier_groups(walk.surfaces)
+    groups = walk.carrier_groups
+    dep_key = groups.get(depart) if depart is not None else None
+    if shared is None:
+        shared = {}     # (the loop's: a rebuild reuses them, so a carrier's crossing stays one point)
+    for s in walk.surfaces:
+        if not _candidate(walk, s):
+            continue        # Stage 134: hitting it now could not matter
+        if walk.line is not None and s.seg.kind != "line" and _tangent(walk.line, s.seg):
+            continue        # a tangent touch is not a crossing (exact)
+        if walk.line is not None and s.seg.kind == "line" and _parallel(walk.line, s.seg):
+            continue        # an exact line never meets a parallel carrier (exact, Stage 112 / K10)
+        if walk.pole is not None and _pole_tangent(walk.pole, s.seg):
+            continue        # tangent at the frame's infinity point (exact, Stage 105)
+        key = groups[s.id]
+        if key not in shared:
+            departing = dep_key == key
+            src = by_id[depart] if departing else s
+            if fresh:
+                rs = roots(beam, src, departing)
+                rs = [t for t in rs if t != 0] if departing else [t for t in rs]
+            else:
+                rs = roots(beam, src, False)
+                if departing and rs:
+                    # a resumed beam departs this carrier at t0: its root nearest t0
+                    # is the departure (identified, not compared for equality: the
+                    # roots are recomputed on the restored beam and can land an ulp
+                    # off t0; Stage 106)
+                    rs.remove(min(rs, key=lambda t: abs(t - t0)))
+            shared[key] = rs
+        rs = shared[key]
+        for t in rs:
+            cands.append((sort_key(t, t0), 1, s.id, t, False))
+    # the cursor is on the beam only on the planned path (its final
+    # anchored beam passes through the cursor by construction); off it, a
+    # cursor is never "reached" at its projection
+    if not walk.cursor_done and walk.plan_index >= len(walk.plan) and walk.plan_matched \
+            and walk.cursor is not None and walk.on_plan:
+        tc = beam.param_of(walk.cursor)
+        # the cursor exactly at the departure point is reached immediately
+        dep = beam.p if fresh else beam.at(t0)
+        if (fresh and walk.cursor == dep) or (depart is not None and any(
+                k[0] == walk.cursor and k[2] == depart and k[1] == t0 for k in walk.known)):
+            tc = t0
+        cands.append(((-1, 0) if tc == t0 else sort_key(tc, t0), 0, -1, tc, False))
+        if not any(k[0] == walk.cursor for k in walk.known):
+            walk.known.append((walk.cursor, tc, None))
+    # K7: the cursor is a known point of every beam whose exact circle passes
+    # it, so a carrier through the cursor is crossed exactly there (the
+    # departure point after it is the cursor exactly: reached at once)
+    if walk.cursor is not None and walk.gc is not None and not any(k[0] == walk.cursor for k in walk.known) \
+            and gc_at(walk.gc, FC(walk.cursor)) == 0:
+        walk.known.append((walk.cursor, beam.param_of(walk.cursor), None))
+    # Stage 113 (K11): a planned projective's hit point that is a data point
+    # of its segment (an endpoint, the via: exact, _exact_data_hit) is a
+    # known point of every beam whose exact circle passes it (an exact line
+    # has it through _add_line_endpoints), so the crossing there is the
+    # endpoint exactly -- blocked on one side, not fired physically
+    if walk.gc is not None:
+        for hj in walk.proj_hits.values():
+            D = hj[2] if len(hj) > 2 else None
+            if D is not None and not any(k[0] == D for k in walk.known) and gc_at(walk.gc, FC(D)) == 0:
+                walk.known.append((D, beam.param_of(D), None))
+    # Stage 131: the ray's origin, where the beam passes it -- not at its
+    # departure (a loop's return there is the loop's end, below). A known
+    # point of the beam: a carrier exactly through it is crossed there, at
+    # its parameter (the crossing first, then the passage)
+    if walk.O is not None and walk.O != (beam.p if fresh else beam.at(t0)):
+        ko = next((k for k in walk.known if k[0] == walk.O), None)
+        to = ko[1] if ko is not None else beam.param_of(walk.O)
+        if to != t0:
+            cands.append((sort_key(to, t0), 3, ORIGIN_ID, to, False))
+            if ko is None:
+                walk.known.append((walk.O, to, None))
+    snapped = {}
+    for kp, kt, skip in walk.known:
+        for s in walk.surfaces:
+            if s.id == skip or not incident(kp, s):
+                continue
+            idx = [i for i, c in enumerate(cands) if c[1] == 1 and c[2] == s.id]
+            if not idx:
+                continue
+            best = min(idx, key=lambda i: abs(beam.at(cands[i][3]) - kp))
+            cands[best] = (sort_key(kt, t0), 1, s.id, kt, False)
+            snapped[(s.id, kt)] = kp
+    pinned = set()
+    if walk.pole is not None and walk.Q is not None:
+        # Stage 105: a carrier through the frame's infinity point is crossed
+        # exactly there (the record makes Q exact): its root nearest Q becomes
+        # Q's parameter, so simultaneous crossings at Q tie exactly (by id,
+        # the passage of Q last). When the beam departs from Q (depart_q), the
+        # crossing of another carrier through Q is at the departure point:
+        # the end of the loop, like a known departure point's
+        tq = t0 if walk.depart_q else beam.param_of(walk.Q)
+        if walk.depart_q or tq != t0:
+            for s in walk.surfaces:
+                if not _pole_on(walk.pole, s.seg) or (walk.depart_q and s.id == depart):
+                    continue
+                idx = [i for i, c in enumerate(cands) if c[1] == 1 and c[2] == s.id]
+                if not idx:
+                    continue
+                best = min(idx, key=lambda i: abs(beam.at(cands[i][3]) - walk.Q))
+                cands[best] = (sort_key(tq, t0), 1, s.id, tq, False)
+                snapped[(s.id, tq)] = walk.Q
+                pinned.add((s.id, tq))
+    if EMIT_INFINITY:
+        if walk.Q is None:
+            if beam.kappa == 0:
+                # the wrap through infinity: after every crossing ahead (t > t0),
+                # before the wrapped ones (no root of a straight beam is at inf)
+                cands.append(((0, mp.inf), 3, INFINITY_ID, mp.inf, False))
+        elif not walk.depart_q:
+            # the frame's image of infinity is a finite point on this beam:
+            # an ordinary crossing (not at the departure point)
+            tq = beam.param_of(walk.Q)
+            if tq != t0:
+                cands.append((sort_key(tq, t0), 3, INFINITY_ID, tq, False))
+                snapped[(INFINITY_ID, tq)] = walk.Q
+    cands.sort(key=lambda c: (c[0], c[1], c[2]))
+    if walk.line is not None:
+        cands = _concurrent_ties(walk, cands)
+    elif walk.gc is not None:
+        cands = _concurrent_ties_gc(walk, beam, cands)
+    if depart is not None and depart in by_id and _candidate(walk, by_id[depart]):
+        cands.append(((2, 0), 2, depart, t0, True))      # departure re-hit, last
+    return cands, snapped, pinned
+
+
 def walk_from(walk: Walk, beam: Beam, depart, t0=None):
     """Forward walk. depart: surface id the beam departs from (or None).
     t0 None: fresh (beam.p is the departure point, t = 0); else resumed at t0."""
@@ -864,140 +1025,30 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
     if fresh:
         t0 = mp.mpf(0)
     while not walk.done:
-        count0 = walk.count             # (a lap that counts nothing ends at its departure, below)
+        sig0 = walk.sig                 # (every loop passes something significant: checked below)
         if POLE_HOOK is not None:
             POLE_HOOK(walk, beam)       # tests: the record beside each beam
-        cands = []
-        # surfaces on one carrier (exactly) are crossed at the same points: their
-        # roots are computed once per loop and shared (K6, Stage 109) -- on the
-        # departing member's own segment when the beam departs that carrier
-        if walk.carrier_groups is None:
-            walk.carrier_groups = carrier_groups(walk.surfaces)
-        groups = walk.carrier_groups
-        dep_key = groups.get(depart) if depart is not None else None
         shared = {}
-        for s in walk.surfaces:
-            if walk.line is not None and s.seg.kind != "line" and _tangent(walk.line, s.seg):
-                continue        # a tangent touch is not a crossing (exact)
-            if walk.line is not None and s.seg.kind == "line" and _parallel(walk.line, s.seg):
-                continue        # an exact line never meets a parallel carrier (exact, Stage 112 / K10)
-            if walk.pole is not None and _pole_tangent(walk.pole, s.seg):
-                continue        # tangent at the frame's infinity point (exact, Stage 105)
-            key = groups[s.id]
-            if key not in shared:
-                departing = dep_key == key
-                src = by_id[depart] if departing else s
-                if fresh:
-                    rs = roots(beam, src, departing)
-                    rs = [t for t in rs if t != 0] if departing else [t for t in rs]
-                else:
-                    rs = roots(beam, src, False)
-                    if departing and rs:
-                        # a resumed beam departs this carrier at t0: its root nearest t0
-                        # is the departure (identified, not compared for equality: the
-                        # roots are recomputed on the restored beam and can land an ulp
-                        # off t0; Stage 106)
-                        rs.remove(min(rs, key=lambda t: abs(t - t0)))
-                shared[key] = rs
-            rs = shared[key]
-            for t in rs:
-                cands.append((sort_key(t, t0), 1, s.id, t, False))
-        # the cursor is on the beam only on the planned path (its final
-        # anchored beam passes through the cursor by construction); off it, a
-        # cursor is never "reached" at its projection
-        if not walk.cursor_done and walk.plan_index >= len(walk.plan) and walk.plan_matched \
-                and walk.cursor is not None and walk.on_plan:
-            tc = beam.param_of(walk.cursor)
-            # the cursor exactly at the departure point is reached immediately
-            dep = beam.p if fresh else beam.at(t0)
-            if (fresh and walk.cursor == dep) or (depart is not None and any(
-                    k[0] == walk.cursor and k[2] == depart and k[1] == t0 for k in walk.known)):
-                tc = t0
-            cands.append(((-1, 0) if tc == t0 else sort_key(tc, t0), 0, -1, tc, False))
-            if not any(k[0] == walk.cursor for k in walk.known):
-                walk.known.append((walk.cursor, tc, None))
-        # K7: the cursor is a known point of every beam whose exact circle passes
-        # it, so a carrier through the cursor is crossed exactly there (the
-        # departure point after it is the cursor exactly: reached at once)
-        if walk.cursor is not None and walk.gc is not None and not any(k[0] == walk.cursor for k in walk.known) \
-                and gc_at(walk.gc, FC(walk.cursor)) == 0:
-            walk.known.append((walk.cursor, beam.param_of(walk.cursor), None))
-        # Stage 113 (K11): a planned projective's hit point that is a data point
-        # of its segment (an endpoint, the via: exact, _exact_data_hit) is a
-        # known point of every beam whose exact circle passes it (an exact line
-        # has it through _add_line_endpoints), so the crossing there is the
-        # endpoint exactly -- blocked on one side, not fired physically
-        if walk.gc is not None:
-            for hj in walk.proj_hits.values():
-                D = hj[2] if len(hj) > 2 else None
-                if D is not None and not any(k[0] == D for k in walk.known) and gc_at(walk.gc, FC(D)) == 0:
-                    walk.known.append((D, beam.param_of(D), None))
-        # Stage 131: the ray's origin, where the beam passes it -- not at its
-        # departure (a loop's return there is the loop's end, below). A known
-        # point of the beam: a carrier exactly through it is crossed there, at
-        # its parameter (the crossing first, then the passage)
-        if walk.O is not None and walk.O != (beam.p if fresh else beam.at(t0)):
-            ko = next((k for k in walk.known if k[0] == walk.O), None)
-            to = ko[1] if ko is not None else beam.param_of(walk.O)
-            if to != t0:
-                cands.append((sort_key(to, t0), 3, ORIGIN_ID, to, False))
-                if ko is None:
-                    walk.known.append((walk.O, to, None))
-        snapped = {}
-        for kp, kt, skip in walk.known:
-            for s in walk.surfaces:
-                if s.id == skip or not incident(kp, s):
-                    continue
-                idx = [i for i, c in enumerate(cands) if c[1] == 1 and c[2] == s.id]
-                if not idx:
-                    continue
-                best = min(idx, key=lambda i: abs(beam.at(cands[i][3]) - kp))
-                cands[best] = (sort_key(kt, t0), 1, s.id, kt, False)
-                snapped[(s.id, kt)] = kp
-        pinned = set()
-        if walk.pole is not None and walk.Q is not None:
-            # Stage 105: a carrier through the frame's infinity point is crossed
-            # exactly there (the record makes Q exact): its root nearest Q becomes
-            # Q's parameter, so simultaneous crossings at Q tie exactly (by id,
-            # the passage of Q last). When the beam departs from Q (depart_q), the
-            # crossing of another carrier through Q is at the departure point:
-            # the end of the loop, like a known departure point's
-            tq = t0 if walk.depart_q else beam.param_of(walk.Q)
-            if walk.depart_q or tq != t0:
-                for s in walk.surfaces:
-                    if not _pole_on(walk.pole, s.seg) or (walk.depart_q and s.id == depart):
-                        continue
-                    idx = [i for i, c in enumerate(cands) if c[1] == 1 and c[2] == s.id]
-                    if not idx:
-                        continue
-                    best = min(idx, key=lambda i: abs(beam.at(cands[i][3]) - walk.Q))
-                    cands[best] = (sort_key(tq, t0), 1, s.id, tq, False)
-                    snapped[(s.id, tq)] = walk.Q
-                    pinned.add((s.id, tq))
-        if EMIT_INFINITY:
-            if walk.Q is None:
-                if beam.kappa == 0:
-                    # the wrap through infinity: after every crossing ahead (t > t0),
-                    # before the wrapped ones (no root of a straight beam is at inf)
-                    cands.append(((0, mp.inf), 3, INFINITY_ID, mp.inf, False))
-            elif not walk.depart_q:
-                # the frame's image of infinity is a finite point on this beam:
-                # an ordinary crossing (not at the departure point)
-                tq = beam.param_of(walk.Q)
-                if tq != t0:
-                    cands.append((sort_key(tq, t0), 3, INFINITY_ID, tq, False))
-                    snapped[(INFINITY_ID, tq)] = walk.Q
-        cands.sort(key=lambda c: (c[0], c[1], c[2]))
-        if walk.line is not None:
-            cands = _concurrent_ties(walk, cands)
-        elif walk.gc is not None:
-            cands = _concurrent_ties_gc(walk, beam, cands)
-        if depart is not None:
-            cands.append(((2, 0), 2, depart, t0, True))      # departure re-hit, last
+        cands, snapped, pinned = _build_cands(walk, beam, depart, fresh, t0, by_id, shared)
         applied = False
         fired_state = False
         ci = 0
-        while ci < len(cands):
+        seen = _cand_state(walk)
+        while True:
+            # Stage 134: where the walk's state changed (its flags, an entry consumed,
+            # the cursor), the candidates are rebuilt for the rest of the loop (after
+            # its last candidate too: the cursor last in PLANNED mode)
+            now = _cand_state(walk)
+            if now != seen and ci > 0:
+                prev = cands[ci - 1][:3]
+                new, snapped2, pinned2 = _build_cands(walk, beam, depart, fresh, t0, by_id, shared)
+                # (the cursor at the current point too: it is reached there, as _late_cursor)
+                cands = cands[:ci] + [c for c in new if c[:3] > prev or (c[2] == -1 and c[0] >= prev[0])]
+                snapped.update(snapped2)
+                pinned |= pinned2
+            seen = now
+            if ci >= len(cands):
+                break
             key, _, sid, t, rehit = cands[ci]
             ci += 1
             if walk.mode == PHYSICAL:
@@ -1193,9 +1244,12 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             # back at the departure: when it is the ray's origin (the player, a
             # projected ray's start), its passage -- a significant event (the user);
             # unplanned before the cursor, a divergence: the walk leaves the plan.
-            # Another departure is no event: the beam goes round again
+            # Another departure is no event: the beam goes round again. Stage 134 (the
+            # user): no loop detection at all -- every loop passes the ray's origin and
+            # the frame's infinity, both significant, so the limits end the walk
             o = beam.p if fresh else beam.at(t0)
-            if (walk.O is None or walk.O != o) and walk.count > count0:
+            if walk.O is None or walk.O != o:
+                assert walk.sig > sig0, "a loop that passed nothing significant (the origin and infinity are on every beam)"
                 continue
             walk.count += 1
             if walk.count > walk.max_hits or walk.sig + 1 > walk.max_sig:

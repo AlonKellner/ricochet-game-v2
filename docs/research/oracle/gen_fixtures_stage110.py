@@ -28,15 +28,27 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")
 
 def side_toward(surfs, player, cursor, sid):
     """The side the straight shot player -> cursor crosses surface sid from."""
-    w = T.trace_physical_direction(T.scene_from_json(surfs), player, T.P(cursor) - T.P(player))
+    # (Stage 134: the surface as a mirror -- a pass surface is no candidate, never
+    # computed; only the side is read)
+    refl = {"type": "reflection", "interactive": True}
+    probe = [dict(d, left=refl, right=refl, resolver=None) if d["id"] == sid else d for d in surfs]
+    w = T.trace_physical_direction(T.scene_from_json(probe), player, T.P(cursor) - T.P(player))
     return next(e.side for e in w.events if e.kind == "hit" and e.surface_id == sid)
 
 
 def decisions(f):
-    """(kind, surface, side, applied, flags) per event, up to and including the cursor."""
+    """(kind, surface, side, applied, flags) per significant event, up to and
+    including the cursor (Stage 134: the walks compute different candidates --
+    a crossing that fires nothing is no decision)."""
     out = []
+    prev = json.dumps(f.get("flags") or {}, sort_keys=True)
     for e in f["expected"]:
-        out.append((e["kind"], e["surface_id"], e["side"], e["applied"], json.dumps(e["flags"], sort_keys=True)))
+        flags = json.dumps(e["flags"] or {}, sort_keys=True)
+        sig = e["kind"] != "hit" or e["applied"] or flags != prev
+        if e["kind"] == "hit":
+            prev = flags
+        if sig:
+            out.append((e["kind"], e["surface_id"], e["side"], e["applied"], flags))
         if e["kind"] == "cursor":
             break
     return out

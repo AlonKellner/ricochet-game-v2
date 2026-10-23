@@ -2,28 +2,6 @@
  "planned": [
   {
    "kind": "hit",
-   "surface_id": 5,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "901.3597304634577060543900961708420624793",
-   "y": "552.7011333620929206597478884940562265529"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 5,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "977.2521654516087857356447031426736984634",
-   "y": "597.4661882086354864759670576141771395350"
-  },
-  {
-   "kind": "hit",
    "surface_id": 9,
    "side": "LEFT",
    "applied": true,
@@ -32,28 +10,6 @@
    "rehit": false,
    "x": "1106.166285700797618813778927283264021056",
    "y": "673.5060156874838269130160886194080954968"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 8,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "985.8883142905837045951429494916163064886",
-   "y": "645.8724175378951591968802557313954170046"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 8,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "934.7010904625888150698458956130818387688",
-   "y": "645.5944380029221149767702108259817757225"
   },
   {
    "kind": "hit",
@@ -98,28 +54,6 @@
    "rehit": false,
    "x": "769.1202319928504598401345840985062891301",
    "y": "699.9290695556996307902170767326018650968"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "813.2119814205278452442580116299955497560",
-   "y": "672.2784373943062257084469516766701028947"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 5,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "922.9631213233952495061837923336583837254",
-   "y": "587.2045508176326188594435378658067228271"
   },
   {
    "kind": "cursor",

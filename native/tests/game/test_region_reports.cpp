@@ -7,11 +7,25 @@
 
 #include <doctest/doctest.h>
 
+#include <cmath>
+#include <cstdio>
 #include <filesystem>
 
 namespace {
 
 const std::filesystem::path ROOT = RC_REPO_ROOT;
+
+// the merged steps as "type: start -> end" lines (a failing check's message)
+std::string steps_text(const std::vector<rc::TraceStep> &m) {
+	std::string out;
+	for (size_t i = 0; i < m.size(); i++) {
+		char b[160];
+		std::snprintf(b, sizeof b, "\n  %zu type %d: (%.2f, %.2f) -> (%.2f, %.2f)%s", i, int(m[i].type), m[i].start.x, m[i].start.y, m[i].end.x, m[i].end.y,
+			m[i].significant ? " sig" : "");
+		out += b;
+	}
+	return out;
+}
 
 } // namespace
 
@@ -67,12 +81,15 @@ TEST_CASE("region reports: crossings [17 L, western piece] -- a hit on the easte
 	s.settle();
 	const std::string t = s.debug_summary();
 	CHECK(t.find("cursor: preview not visible, region outside") != std::string::npos);
-	// the merged steps: aligned to the hit on 17, diverged from there on
+	// the merged steps: aligned to the hit on 17, diverged from there on (Stage
+	// 134: by segments -- the first is the run to that hit)
 	const std::vector<rc::TraceStep> &m = s.preview_steps();
-	REQUIRE(m.size() >= 3);
+	INFO(steps_text(m));
+	REQUIRE(m.size() >= 2);
 	CHECK(m[0].type == rc::StepType::Aligned);
-	CHECK(m[1].type == rc::StepType::Aligned);
-	CHECK(m[2].type != rc::StepType::Aligned);
+	CHECK(m[0].significant);
+	CHECK(m[1].type != rc::StepType::Aligned);
+	CHECK(m[1].start == m[0].end);
 	// control: the whole surface planned, the same hit is the planned one
 	it.span.reset();
 	s.set_plan({it});
@@ -97,12 +114,14 @@ TEST_CASE("region reports: open_room_playable [5 L] -- an unplanned infinity bef
 	s.settle();
 	CHECK(s.debug_summary().find("cursor: preview not visible, region outside") != std::string::npos);
 	// the merged steps: aligned to the level's edge, diverged past the wrap
+	// (Stage 134: the mirror, then the step toward infinity)
 	const std::vector<rc::TraceStep> &m = s.preview_steps();
-	REQUIRE(m.size() >= 6);
-	for (size_t i = 0; i < 5; i++) {
-		CHECK(m[i].type == rc::StepType::Aligned);
-	}
-	CHECK(m[5].type != rc::StepType::Aligned);
+	INFO(steps_text(m));
+	REQUIRE(m.size() >= 3);
+	CHECK(m[0].type == rc::StepType::Aligned);
+	CHECK(m[1].type == rc::StepType::Aligned);
+	CHECK(m[1].to_infinity);
+	CHECK(m[2].type != rc::StepType::Aligned);
 	// control: infinity planned after the mirror, the wrap is the plan's
 	rc::PlanItem inf;
 	inf.surface_id = rc::INFINITY_ID;
@@ -131,12 +150,17 @@ TEST_CASE("region reports: open_room_playable [5 L, inf] -- the player's image p
 	s.set_cursor(rc::V2::of(0x1.d7fddcp+9, 0x1.b24de8p+9));
 	s.settle();
 	CHECK(s.debug_summary().find("cursor: preview not visible, region outside") != std::string::npos);
+	// the merged steps: aligned to the player's image, diverged past it (Stage
+	// 134: the mirror, the wrap, the run back to the image)
 	const std::vector<rc::TraceStep> &m = s.preview_steps();
-	REQUIRE(m.size() >= 12);
-	for (size_t i = 0; i < 11; i++) {
+	INFO(steps_text(m));
+	REQUIRE(m.size() >= 4);
+	for (size_t i = 0; i < 3; i++) {
 		CHECK(m[i].type == rc::StepType::Aligned);
 	}
-	CHECK(m[11].type != rc::StepType::Aligned);
+	CHECK(m[1].to_infinity);
+	CHECK(std::abs(m[2].end.x - 872.11f) < 0.01f); // (the player's image in the mirror x = 1200)
+	CHECK(m[3].type != rc::StepType::Aligned);
 }
 
 // Stage 132 (GAME_SPEC 4.2): after [5 L, inf] the walk is behind the ray's origin,
@@ -188,4 +212,34 @@ TEST_CASE("region reports: open_room_playable [5 L, inf] -- the ray's origin is 
 	s.click(false);
 	s.click(true);
 	CHECK(s.plan().size() == 2);
+}
+
+// The user's report (F12, 2026-10-23, Stage 134): on ghost_room, [6 L, 11 R, inf,
+// 12 R, the ray's origin] -- the beam departs mirror 6, passes the togglers, the
+// wrap and the origin (the player's image, (660, 660)) on one beam and comes back
+// to mirror 6, its departure. The region read that re-hit as the end of a full
+// loop from the cast's start; the cast starts at the origin, and the re-hit lies
+// ahead of it: visible from the origin to the mirror, not past it.
+TEST_CASE("region reports: ghost_room [6 L, 11 R, inf, 12 R, origin] -- the departure re-hit ahead of the ray's origin") {
+	rcg::Session s(rcg::load_level((ROOT / "data" / "levels" / "test_levels" / "ghost_room.json").string()));
+	s.teleport(rc::V2::of(900.0, 540.0));
+	auto entry = [](int sid, bool left, float cx, float cy) {
+		rc::PlanItem it;
+		it.surface_id = sid;
+		it.left = left;
+		it.hint = rc::effects::F32Point{cx, cy};
+		return it;
+	};
+	s.set_plan({entry(6, true, 771.803955078125f, 558.033447265625f), entry(11, false, 991.0322875976562f, 443.8219299316406f),
+		entry(rc::INFINITY_ID, true, 1757.8310546875f, 2.0037107467651367f), entry(12, false, 637.6641845703125f, 673.246826171875f),
+		entry(rc::ORIGIN_ID, true, 668.696533203125f, 658.218994140625f)});
+	REQUIRE(s.plan().size() == 5);
+	// before the mirror: both walks reach the cursor alike
+	s.set_cursor(rc::V2::of(0x1.7663d6p+9, 0x1.2f8fecp+9));
+	s.settle();
+	CHECK(s.debug_summary().find("cursor: preview visible, region inside") != std::string::npos);
+	// past it: the physical walk reflects there, the planned one passes (no entry plans it)
+	s.set_cursor(rc::V2::of(0x1.ab71fcp+9, 0x1.0cff88p+9));
+	s.settle();
+	CHECK(s.debug_summary().find("cursor: preview not visible, region outside") != std::string::npos);
 }
