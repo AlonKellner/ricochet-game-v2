@@ -14,7 +14,7 @@ F27 (TDD_36). Along the way, a request from the user's testing of Stage 132.
 | 133.5 | F21: a circle normal's hit point that is floats exactly is exact data (no unconverged climbs) | Done (4 GUT rows re-recorded, approved) |
 | 133.6 | F26: the long looping paths' side-by-side lanes (pre_inverted's preview cost) | Done (F26 closed) |
 | 133.7 | F27: region casts skip precision on the order of pass-through crossings in the planned walk | Done (F27 closed) |
-| 133.8 | F22; the user's idea: crossings that cannot be significant are not candidates | Proposed |
+| 133.8 | F22 (thread scaling) | Open (a later stage); the user's idea -- crossings that cannot be significant are not candidates, the merge by significant segments -- is Stage 134 |
 
 ## 133.1 Open boundary chains (F23)
 
