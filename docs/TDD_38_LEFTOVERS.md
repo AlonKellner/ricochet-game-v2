@@ -11,7 +11,8 @@ F27 (TDD_36). Along the way, a request from the user's testing of Stage 132.
 | 133.2 | A circular portal's marker follows its circle (the user) | Done |
 | 133.3 | F23's remaining cells and whisker: a piece's end that rounds a crossing is the crossing (the user's option 1) | Done (5 → 0; F23 closed) |
 | 133.4 | F24: DIRECTION-ONLY at a beam exactly through two mirrors' crossing (a checker false positive) | Done (F24 closed) |
-| 133.5 | F21, F22, F26, F27 | Open |
+| 133.5 | F21: a circle normal's hit point that is floats exactly is exact data (no unconverged climbs) | Done (4 GUT rows re-recorded, approved) |
+| 133.6 | F22, F26, F27 | Open |
 
 ## 133.1 Open boundary chains (F23)
 
@@ -80,3 +81,34 @@ This makes the check more lenient only past such hits. The sweeps, goldens and s
 The sweep's positions no longer reached the case (they were trimmed in Stage 129). The bounded position rule now
 takes `extra` positions, and the piece-plan group lists F24's player and cursor: 26,000 combos, no violation. F24's
 known entry is gone from `data/sweeps.json`.
+
+## 133.5 A circle normal's exact float hit (F21 closed)
+
+F21 (TDD_33): on the projective playground with [9 R], four region casts climbed all six tiers and took the 64-limb
+walk unconverged. The casts' cursors are line 6's endpoints, (700, 800) and (700, 200). Under circle 9's normal
+projection (centre (700, 500), r 250), their back-propagated hit points H are (700, 750) and (700, 250): exactly
+where circle 9's carrier crosses line 6. The hits of 6 and 9 there are one point, with a margin of exactly 0.
+
+Stage 125 made a projective's hit point exact data when it is floats exactly (K11), but only for line normal and
+directional projections: a circle normal's H is a root. The rule now covers it by proof, not by computation:
+
+- the numeric H, rounded to floats;
+- exactly on the circle, from the circle's exact record;
+- exactly collinear with the target X and the centre.
+
+H is then exact data (`exact_float_hit`, `_exact_float_hit`). Line 6's crossing there is snapped to it and ties by
+id. Full circles keep the earlier rule: they have no data points, and return before it.
+
+**The cost:** on the [9 R] region from the player's start, the unconverged climbs go from 4 to 0, and the BigFloat
+walking from 18 ms to 1 ms. At 8 threads the region takes 12 ms instead of 18. On one thread it stays about 60 ms:
+the time saved roughly matches what Stage 131's longer walks added.
+
+**What changes:**
+
+- the oracle's K14 test (`test_stage113.py`): at the exact crossing (700, 250) the planned walk passes 6 (unapplied,
+  the tie by id) before 9 fires, and physically 6 fires first. The test's point -- the walks fire different
+  projectives there, two frames -- stands.
+- 4 GUT trace rows (`test_a_circle_normal_fork_follows_the_click`): the same decisions, hits, cursor and agreement.
+  The first step's parameter moves by a few ulps (340.5877273185287 → 340.58772731852804): the hit point is now the
+  exact float point, not a rounded computation.
+- Nothing else: no fixture, corpus entry, sweep golden, region digest or session.

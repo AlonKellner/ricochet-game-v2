@@ -2012,18 +2012,29 @@ def _exact_data_hit(surf: Surface, etype, cfg, X, H):
         if ok and not any(D == q for q in found):
             found.append(D)
     if not found:
-        return _exact_float_hit(surf, etype, cfg, X)
+        return _exact_float_hit(surf, etype, cfg, X, H)
     return min(found, key=lambda D: abs(H - D))
 
 
-def _exact_float_hit(surf: Surface, etype, cfg, X):
+def _exact_float_hit(surf: Surface, etype, cfg, X, H=None):
     """Stage 125 (K11): with no data point the hit point, H computed exactly from
     the exact target X -- a line normal's foot on its line, a directional's
     crossing of its line carrier (rationals) -- when both its coordinates are
-    binary floats exactly: exact data like a data point. None for a circle
-    carrier (a root) or a point between floats."""
+    binary floats exactly: exact data like a data point. Stage 133 (F21): a
+    circle normal's H (a root) when the numeric H rounded to floats is it
+    exactly: on the circle and collinear with X and the centre, both exactly.
+    None for a point between floats."""
     seg = surf.seg
-    if seg.kind != "line" or etype == "circle_normal_projection":
+    if etype == "circle_normal_projection":
+        if H is None or seg.kind == "line":
+            return None
+        hx, hy = float(H.real), float(H.imag)
+        nx, ny, w, rr = _center_h(seg)
+        K = (Fraction(hx), Fraction(hy))
+        on_circle = (K[0] - nx / w) ** 2 + (K[1] - ny / w) ** 2 == rr
+        collinear = (nx - w * X[0]) * (K[1] - X[1]) - (ny - w * X[1]) * (K[0] - X[0]) == 0
+        return mp.mpc(mp.mpf(hx), mp.mpf(hy)) if on_circle and collinear else None
+    if seg.kind != "line":
         return None
     S, E = FC(seg.S), FC(seg.E)
     d = _sub(E, S)

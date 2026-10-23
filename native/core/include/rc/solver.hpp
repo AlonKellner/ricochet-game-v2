@@ -1286,7 +1286,34 @@ public:
 		using exact::mul;
 		using exact::of;
 		using exact::sub;
-		if (!surf.line || etype == EffectType::CircleNormalProjection) {
+		if (etype == EffectType::CircleNormalProjection) {
+			// Stage 133 (F21): a circle normal's H (a root) when the numeric H rounded
+			// to floats is it exactly: on the circle and collinear with X and the
+			// centre, both exactly
+			if (surf.line) {
+				return std::nullopt;
+			}
+			const double fx = H.fx();
+			const double fy = H.fy();
+			if (!std::isfinite(fx) || !std::isfinite(fy)) {
+				return std::nullopt;
+			}
+			const auto &ec = surf.exact_circle();
+			const BigFloat ux = sub(mul(of(fx), ec.C[2]), ec.C[0]);
+			const BigFloat uy = sub(mul(of(fy), ec.C[2]), ec.C[1]);
+			if (!sub(add(mul(ux, ux), mul(uy, uy)), ec.rw2).is_zero()) {
+				return std::nullopt;
+			}
+			const exact::Point3 &C = ec.C;
+			const BigFloat t1 = mul(X[0], sub(C[1], mul(C[2], of(fy))));
+			const BigFloat t2 = mul(X[1], sub(C[0], mul(C[2], of(fx))));
+			const BigFloat t3 = mul(X[2], sub(mul(C[0], of(fy)), mul(C[1], of(fx))));
+			if (!sub(add(t1, t3), t2).is_zero()) {
+				return std::nullopt;
+			}
+			return std::make_pair(CN<N>{H.re.like(fx), H.re.like(fy)}, exact::Point3{of(fx), of(fy), of(1.0)});
+		}
+		if (!surf.line) {
 			return std::nullopt;
 		}
 		const BigFloat sx = of(surf.sx), sy = of(surf.sy);
