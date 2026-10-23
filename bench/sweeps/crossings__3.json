@@ -819,13 +819,6 @@
    }
   }
  ],
- "known": [
-  {
-   "finding": "F24 (TDD_34): a piece plan's physical walk against the unplanned shot at its image",
-   "kinds": ["DIRECTION-ONLY"],
-   "surfaces": [15]
-  }
- ],
  "plans": [
   [
    {
@@ -1292,7 +1285,9 @@
   [1530.0, 650.0],
   [1370.0, 650.0],
   [1450.0, 730.0],
-  [1450.0, 570.0]
+  [1450.0, 570.0],
+  [1000.0, 250.0],
+  [0.0, 540.0]
  ],
  "scene": "res://scenes/test_levels/crossings.tscn",
  "schema": "sweep-manifest/1",

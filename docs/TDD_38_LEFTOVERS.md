@@ -10,7 +10,8 @@ F27 (TDD_36). Along the way, a request from the user's testing of Stage 132.
 | 133.1 | F23: the region's open boundary chains on the overlapping circles' pieces | Done (337 → 5 violations) |
 | 133.2 | A circular portal's marker follows its circle (the user) | Done |
 | 133.3 | F23's remaining cells and whisker: a piece's end that rounds a crossing is the crossing (the user's option 1) | Done (5 → 0; F23 closed) |
-| 133.4 | F24, F21, F22, F26, F27 | Open |
+| 133.4 | F24: DIRECTION-ONLY at a beam exactly through two mirrors' crossing (a checker false positive) | Done (F24 closed) |
+| 133.5 | F21, F22, F26, F27 | Open |
 
 ## 133.1 Open boundary chains (F23)
 
@@ -60,3 +61,22 @@ of a crossing of its carrier with another surface's carrier is that crossing, co
 F23 has no violations left, and its known entry is gone from `data/sweeps.json`. Nothing else changed: the
 fixtures, the corpus, the goldens, the region digests and the sessions are all identical. Tests:
 `test_stage133.py` (oracle) and `crossings: a piece's end that rounds a crossing is the crossing (F23)` (every tier).
+
+## 133.4 DIRECTION-ONLY at a crossing of carriers (F24 closed)
+
+F24 (TDD_34): on crossings, the plan [15 L, the piece (900, 250)–(1000, 450)] with player (1000, 250) and cursor
+(0, 540) failed DIRECTION-ONLY ("hit 5 s=16 vs s=18 without plan"). The physical walk reflects off 15, 16, 14 and
+10, and then passes **exactly** through the crossing of mirrors 15 and 16 at (1000, 450): the oracle puts the hit
+there at 50 digits. The game's walk follows the plan's exact line. It knows the carriers are concurrent there, hits
+15 and then 16 at the same point, and orders them by provenance.
+
+The check's reference is a shot aimed at the cursor's image without the plan, (1672, −296), outside the level where
+no cursor can be. It decides at a numerical tier and passes beside the crossing, so its next hit is 18.
+
+As with the hit exactly at a segment's endpoint (Stage 131), the comparison ends at a hit of the game's walk within
+rounding of a crossing of two carriers. The game's point is stored rounded, so an exact incidence test misses it.
+This makes the check more lenient only past such hits. The sweeps, goldens and sessions are unchanged.
+
+The sweep's positions no longer reached the case (they were trimmed in Stage 129). The bounded position rule now
+takes `extra` positions, and the piece-plan group lists F24's player and cursor: 26,000 combos, no violation. F24's
+known entry is gone from `data/sweeps.json`.

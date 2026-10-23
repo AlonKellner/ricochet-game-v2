@@ -564,6 +564,10 @@ std::vector<std::pair<std::string, json>> manifests(const json &recipes, const s
 				if (pos.value("on_surface", false)) {
 					for (const V2 &p : on_surface_positions(surfaces)) positions.push_back(p);
 				}
+				// explicit positions (a finding's player and cursor, kept in the sweep)
+				for (const json &p : pos.value("extra", json::array())) {
+					positions.push_back(V2::of(p.at(0).get<double>(), p.at(1).get<double>()));
+				}
 			} else {
 				throw std::runtime_error("unknown position rule '" + rule + "'");
 			}

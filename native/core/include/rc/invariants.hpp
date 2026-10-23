@@ -1017,6 +1017,39 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 		if (at_endpoint(a[size_t(i)]) || at_endpoint(b[size_t(i)])) {
 			break;
 		}
+		// F24 (TDD_38): so is a hit of the game's walk at a crossing of carriers (two
+		// mirrors', a piece's end), within rounding of it: the game's walk on the
+		// plan's exact line decides it by exact data (concurrent carriers, ordered
+		// by provenance), while the reference, aimed without the plan, passes beside it
+		const auto at_crossing = [&](const EvInfo &e) {
+			if (!e.has_point) {
+				return false;
+			}
+			const double tol = 1e-9 * gd_maxf(1.0, gd_maxf(std::fabs(e.fx), std::fabs(e.fy)));
+			for (const auto &sf : sc.surfaces) {
+				if (sf->id == e.surface_id) {
+					continue;
+				}
+				double d = INF_D;
+				if (sf->line) {
+					const double lx = sf->ex - sf->sx;
+					const double ly = sf->ey - sf->sy;
+					const double len = std::hypot(lx, ly);
+					if (len > 0.0) {
+						d = std::fabs(lx * (e.fy - sf->sy) - ly * (e.fx - sf->sx)) / len;
+					}
+				} else if (sf->full) {
+					d = std::fabs(std::hypot(e.fx - sf->cx, e.fy - sf->cy) - sf->r);
+				}
+				if (d <= tol) {
+					return true;
+				}
+			}
+			return false;
+		};
+		if (at_crossing(a[size_t(i)])) {
+			break;
+		}
 		if (a[size_t(i)].surface_id != b[size_t(i)].surface_id || a[size_t(i)].left != b[size_t(i)].left) {
 			out.push_back(v("DIRECTION-ONLY: hit %d s=%d vs s=%d without plan", I(i), I(a[size_t(i)].surface_id), I(b[size_t(i)].surface_id)));
 			return out;
