@@ -662,10 +662,13 @@ inline Violations check_plan_effects_applied_events(const std::vector<EvInfo> &e
 		if (e.kind == EventKind::Infinity && e.applied) {
 			applied.emplace_back(INFINITY_ID, false); // the consumed infinity entry (no side)
 		}
+		if (e.kind == EventKind::Origin && e.applied) {
+			applied.emplace_back(ORIGIN_ID, false); // Stage 132: the consumed origin entry (no side)
+		}
 	}
 	PairList want;
 	for (const PlanItem &item : plan) {
-		want.emplace_back(item.surface_id, item.is_infinity() ? false : item.left);
+		want.emplace_back(item.surface_id, item.is_infinity() || item.is_origin() ? false : item.left);
 	}
 	if (applied != want) {
 		out.push_back(v("PLAN-EFFECTS: applied %s, plan %s", applied, want));
@@ -690,7 +693,7 @@ inline Violations check_PLAN_EFFECTS_APPLIED(const Input &in) {
 	const std::vector<EffectType> effs = Solver<F64>(*in.scene).plan_effects(in.plan, in.flags);
 	std::vector<PlanItem> items;
 	for (size_t j = 0; j < in.plan.size(); j++) {
-		if (is_transformative(effs[j]) || in.plan[j].is_infinity()) {
+		if (is_transformative(effs[j]) || in.plan[j].is_infinity() || in.plan[j].is_origin()) {
 			items.push_back(in.plan[j]);
 		}
 	}
@@ -793,6 +796,9 @@ inline Violations check_ON_SEGMENT_CONSISTENCY(const Input &in) {
 			if (planned && e.kind == EventKind::Infinity && j < in.plan.size() && in.plan[j].is_infinity() && e.applied) {
 				j++;
 			}
+			if (planned && e.kind == EventKind::Origin && j < in.plan.size() && in.plan[j].is_origin() && e.applied) {
+				j++; // (Stage 132: a consumed origin entry)
+			}
 			if (e.kind != EventKind::Hit || !e.has_point) {
 				continue;
 			}
@@ -805,7 +811,7 @@ inline Violations check_ON_SEGMENT_CONSISTENCY(const Input &in) {
 			std::optional<std::array<double, 6>> piece_span;
 			// Stage 108 (GAME_SPEC 9.7): the hit consuming an entry that names a piece is on
 			// its segment only inside the piece's span
-			if (planned && j < in.plan.size() && !in.plan[j].is_infinity() && in.plan[j].surface_id == e.surface_id && in.plan[j].left == e.left) {
+			if (planned && j < in.plan.size() && !in.plan[j].is_infinity() && !in.plan[j].is_origin() && in.plan[j].surface_id == e.surface_id && in.plan[j].left == e.left) {
 				if (const auto &sp = in.plan[j].span) {
 					Seg<F64> piece;
 					piece.s = CN<F64>{F64{(*sp)[0]}, F64{(*sp)[1]}};

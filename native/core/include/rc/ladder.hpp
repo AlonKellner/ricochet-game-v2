@@ -550,6 +550,7 @@ private:
 			for (size_t i = 0; i < ev.size(); i++) {
 				const PlanItem &item = (*plan_)[j];
 				const bool consumed = item.is_infinity() ? (ev[i].kind == EventKind::Infinity && ev[i].applied)
+					: item.is_origin()                   ? (ev[i].kind == EventKind::Origin && ev[i].applied) // (Stage 132)
 														 : (ev[i].kind == EventKind::Hit && ev[i].surface_id == item.surface_id && ev[i].left == item.left);
 				if (consumed && ++j == plan_->size()) {
 					return std::min(ev.size(), i + 3);

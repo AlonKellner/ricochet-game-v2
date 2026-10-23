@@ -789,7 +789,6 @@ TEST_CASE("present: significant events are ringed dots, other crossings small do
 // Stage 131 (the user): a passage of infinity off the level and a portal are one
 // significant event drawn as two half rings -- out and back in, each facing the level
 TEST_CASE("present: a wrap and a portal are marked by two half rings") {
-	rcg::Session s(level("test_levels/crossings.json")); // (bounds 0..1920 x 0..1080)
 	auto polys = [](const std::vector<rcg::render::Call> &out) {
 		std::vector<const rcg::render::Call *> v;
 		for (const auto &c : out) {
@@ -799,56 +798,72 @@ TEST_CASE("present: a wrap and a portal are marked by two half rings") {
 		}
 		return v;
 	};
-	// the wrap: out through the right edge, back in through the left
-	rc::TraceStep out_step;
-	out_step.start = rc::V2{1000, 100};
-	out_step.end = rc::V2{3000, 100};
-	out_step.via = rc::V2{2000, 100};
-	out_step.type = rc::StepType::AlignedPostPlanned;
-	out_step.significant = true;
-	out_step.surface_id = rc::INFINITY_ID;
-	rc::TraceStep in_step = out_step;
-	in_step.start = rc::V2{-1000, 200};
-	in_step.end = rc::V2{500, 200};
-	in_step.via = rc::V2{-250, 200};
-	in_step.significant = false;
-	in_step.surface_id = -1;
-	in_step.after_infinity = true;
-	std::vector<rcg::render::Call> out;
-	s.paint_steps({out_step, in_step}, out, 0.0);
-	const auto wrap = polys(out);
-	REQUIRE(wrap.size() == 4); // (two half rings: a white half and a coloured one each)
-	CHECK(wrap[0]->pts[0] == rc::V2{1920, 100}); // leaving the bounds
-	for (const auto &q : wrap[0]->pts) {
-		CHECK(q.x <= 1920.0f + 1e-3f); // facing back into the level
+	auto step = [](rc::V2 a, rc::V2 b) {
+		rc::TraceStep st;
+		st.start = a;
+		st.end = b;
+		st.via = (a + b) * 0.5f;
+		st.type = rc::StepType::AlignedPostPlanned;
+		return st;
+	};
+	// the wrap as the game draws it (the user: the half rings were off screen): the
+	// path leaves the level at the right edge two steps before the passage of
+	// infinity, and enters again at the left edge a step after it
+	{
+		rcg::Session s(level("test_levels/crossings.json")); // (bounds 0..1920 x 0..1080)
+		rc::TraceStep a = step(rc::V2{1420, 840}, rc::V2{1920, 1006.67f});
+		rc::TraceStep b = step(rc::V2{1920, 1006.67f}, rc::V2{2140, 1080});
+		rc::TraceStep c = step(rc::V2{2140, 1080}, rc::V2{2234.87f, 1111.62f});
+		c.significant = true; // (the passage of infinity: no id -- an unplanned wrap)
+		rc::TraceStep d = step(rc::V2{-1194.87f, -31.62f}, rc::V2{-1100, 0});
+		d.after_infinity = true;
+		rc::TraceStep e = step(rc::V2{-1100, 0}, rc::V2{-380, 240});
+		rc::TraceStep f = step(rc::V2{-380, 240}, rc::V2{0, 366.667f});
+		rc::TraceStep g = step(rc::V2{0, 366.667f}, rc::V2{560, 553.333f});
+		std::vector<rcg::render::Call> out;
+		s.paint_steps({a, b, c, d, e, f, g}, out, 0.0);
+		const auto wrap = polys(out);
+		REQUIRE(wrap.size() == 4); // (two half rings: a white half and a coloured one each)
+		CHECK(wrap[0]->pts[0].x == doctest::Approx(1920.0)); // leaving the bounds, on screen
+		for (const auto &q : wrap[0]->pts) {
+			CHECK(q.x <= 1920.0f + 1e-3f); // facing back into the level
+		}
+		CHECK(wrap[2]->pts[0].x == doctest::Approx(0.0)); // entering them
+		for (const auto &q : wrap[2]->pts) {
+			CHECK(q.x >= -1e-3f);
+		}
 	}
-	CHECK(wrap[2]->pts[0] == rc::V2{0, 200}); // entering them
-	for (const auto &q : wrap[2]->pts) {
-		CHECK(q.x >= -1e-3f);
-	}
-	// a portal: half at its entry facing back, half at its exit facing on
-	rc::TraceStep to_portal = out_step;
-	to_portal.end = rc::V2{1200, 100};
-	to_portal.via = rc::V2{1100, 100};
-	to_portal.surface_id = 12;
-	to_portal.teleports = true;
-	rc::TraceStep from_portal = to_portal;
-	from_portal.start = rc::V2{1550, 100};
-	from_portal.end = rc::V2{1700, 100};
-	from_portal.via = rc::V2{1625, 100};
-	from_portal.teleports = false;
-	from_portal.significant = false;
-	from_portal.after_portal = true;
-	out.clear();
-	s.paint_steps({to_portal, from_portal}, out, 0.0);
-	const auto portal = polys(out);
-	REQUIRE(portal.size() == 4);
-	CHECK(portal[0]->pts[0] == rc::V2{1200, 100});
-	for (const auto &q : portal[0]->pts) {
-		CHECK(q.x <= 1200.0f + 1e-3f); // the half the beam came from
-	}
-	CHECK(portal[2]->pts[0] == rc::V2{1550, 100});
-	for (const auto &q : portal[2]->pts) {
-		CHECK(q.x >= 1550.0f - 1e-3f); // the half it leaves by
+	// a portal: the halves normal to the portal (the user), not along the way --
+	// portals x = 550 (10) and x = 1350 (11), a beam in at a slant
+	{
+		rcg::Session s(level("playground/portals.json"));
+		rc::TraceStep to_portal = step(rc::V2{350, 600}, rc::V2{550, 700});
+		to_portal.surface_id = 10;
+		to_portal.significant = true;
+		to_portal.teleports = true;
+		rc::TraceStep from_portal = step(rc::V2{1350, 700}, rc::V2{1550, 800});
+		from_portal.after_portal = true;
+		std::vector<rcg::render::Call> out;
+		s.paint_steps({to_portal, from_portal}, out, 0.0);
+		const auto portal = polys(out);
+		REQUIRE(portal.size() == 4);
+		auto symmetric_about = [](const rcg::render::Call *c, float y0) {
+			float lo = 1e9f, hi = -1e9f;
+			for (const auto &q : c->pts) {
+				lo = std::min(lo, q.y);
+				hi = std::max(hi, q.y);
+			}
+			return std::abs((hi - y0) - (y0 - lo)) < 1e-3f;
+		};
+		CHECK(portal[0]->pts[0] == rc::V2{550, 700});
+		CHECK(symmetric_about(portal[0], 700.0f)); // (along the normal: no tilt)
+		for (const auto &q : portal[0]->pts) {
+			CHECK(q.x <= 550.0f + 1e-3f); // the side the beam came from
+		}
+		CHECK(portal[2]->pts[0] == rc::V2{1350, 700});
+		CHECK(symmetric_about(portal[2], 700.0f));
+		for (const auto &q : portal[2]->pts) {
+			CHECK(q.x >= 1350.0f - 1e-3f); // the side it leaves by
+		}
 	}
 }

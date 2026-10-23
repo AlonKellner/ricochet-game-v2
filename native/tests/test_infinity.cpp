@@ -287,3 +287,30 @@ TEST_CASE("Stage 111: the realization-by-entry fixtures match the oracle at f64,
 	}
 	CHECK(fixtures == 32);
 }
+
+// Stage 132 (GAME_SPEC 4.2, 12.6): the ray's origin as a plan entry -- consumed by
+// its passage in both walks; the realization by the parity of the infinity and
+// origin entries (bench/fixtures/stage132_origin_entry.json, the oracle's)
+TEST_CASE("origin entry: the Stage 132 fixtures match the oracle at f64, Dual and 4 limbs") {
+	const ojson fxs = load_json("bench/fixtures/stage132_origin_entry.json");
+	int fixtures = 0;
+	int consumed = 0;
+	for (const ojson &fx : fxs["fixtures"]) {
+		const std::string name = fx["name"].get<std::string>();
+		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
+		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
+		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
+		for (const Event<F64> &e : r64) {
+			if (e.kind == EventKind::Origin && e.applied) {
+				consumed++;
+			}
+		}
+		fixtures++;
+	}
+	CHECK(fixtures == 14);
+	CHECK(consumed == 8);
+}

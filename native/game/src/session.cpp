@@ -96,6 +96,22 @@ json events_json(const rc::Climb &c) {
 	return out;
 }
 
+// Stage 132: the consumed origin entries of a walk (applied passages of the ray's origin)
+int count_origin(const rc::Climb &c) {
+	int n = 0;
+	auto add = [&](const auto &events) {
+		for (const auto &e : events) {
+			n += e.kind == rc::EventKind::Origin && e.applied ? 1 : 0;
+		}
+	};
+	if (c.limbs == 0) {
+		add(c.f64_events);
+	} else {
+		add(c.big_events);
+	}
+	return n;
+}
+
 int count_infinity(const rc::Climb &c) {
 	int n = 0;
 	auto add = [&](const auto &events) {
@@ -412,6 +428,21 @@ std::optional<V2> Session::pole(size_t n) {
 	return q;
 }
 
+rc::Tracer::OriginPoint Session::origin_at(size_t n) {
+	use_defs(gm_tracer_, gm_defs_);
+	return gm_tracer_.origin_point(player_, cursor_, items(n), flags_);
+}
+
+// the origin's marker: where the plan so far leaves the walk behind it, on screen
+std::optional<V2> Session::plannable_origin() {
+	const rc::Tracer::OriginPoint o = origin_at(plan_.size());
+	const rc::Rect2f b = bounds();
+	if (!o.behind || !o.point || (has_area(b) && !b.has_point(*o.point))) {
+		return std::nullopt;
+	}
+	return o.point;
+}
+
 void Session::set_flags(const rc::Flags &f) {
 	if (digest::encode(flags_json(f)) != digest::encode(flags_json(flags_))) {
 		flags_version_++;
@@ -455,6 +486,30 @@ Session::Hit Session::detect_click() {
 			}
 		}
 	}
+	// Stage 132: the ray's origin, where plannable: like a surface, the nearest wins;
+	// else a planned origin entry's mark (a right-click there removes the latest)
+	if (const std::optional<V2> o = plannable_origin()) {
+		const float d = cursor_.distance_to(*o);
+		if (d <= CLICK_TOLERANCE && double(d) < best_dist) {
+			best = Hit{};
+			best.origin = true;
+			best.point = o;
+			best.distance = d;
+			best_dist = d;
+		}
+	} else {
+		for (const OriginMark &m : origin_marks_) {
+			const float d = cursor_.distance_to(m.point);
+			if (d <= CLICK_TOLERANCE && double(d) < best_dist) {
+				best = Hit{};
+				best.origin = true;
+				best.origin_mark = true;
+				best.point = m.point;
+				best.distance = d;
+				best_dist = d;
+			}
+		}
+	}
 	if (infinity_on()) {
 		const std::optional<V2> q = pole(plan_.size());
 		const rc::Rect2f b = bounds();
@@ -468,7 +523,7 @@ Session::Hit Session::detect_click() {
 				h.distance = dq;
 				return h;
 			}
-		} else if (!best.has_surface && has_area(b)) {
+		} else if (!best.has_surface && !best.origin && has_area(b)) {
 			const double d = edge_distance(cursor_, b);
 			if (d >= 0.0 && d <= CLICK_TOLERANCE) {
 				Hit h;
@@ -519,14 +574,17 @@ void Session::set_plan(const std::vector<rc::PlanItem> &items) {
 
 void Session::click(bool right) {
 	const Hit r = detect_click();
-	if (!r.infinity && !r.has_surface) {
+	if (r.origin_mark && !right) {
+		return; // (a planned origin's mark, not plannable here)
+	}
+	if (!r.infinity && !r.has_surface && !r.origin) {
 		if (!right) {
 			return;
 		}
 		plan_.clear();
 		plan_changed();
 	} else {
-		const int sid = r.infinity ? rc::INFINITY_ID : r.surface;
+		const int sid = r.infinity ? rc::INFINITY_ID : r.origin ? rc::ORIGIN_ID : r.surface;
 		if (right) {
 			bool has = false;
 			for (const PlanEntry &e : plan_) {
@@ -545,9 +603,9 @@ void Session::click(bool right) {
 				plan_changed();
 			}
 		} else {
-			const Side side = r.infinity ? Side::Left : r.side;
+			const Side side = r.infinity || r.origin ? Side::Left : r.side;
 			V2 click = cursor_;
-			if (!r.infinity) {
+			if (r.has_surface) {
 				click = snap_click(*world_->by_id(r.surface), side, click);
 			}
 			PlanEntry e{sid, side, click, -1, std::nullopt};
@@ -636,7 +694,7 @@ void Session::land() {
 	const size_t before = plan_.size();
 	plan_.erase(std::remove_if(plan_.begin(), plan_.end(),
 					[&](const PlanEntry &e) {
-						if (e.surface_id == rc::INFINITY_ID) {
+						if (e.surface_id == rc::INFINITY_ID || e.surface_id == rc::ORIGIN_ID) {
 							return false;
 						}
 						const BuiltSurface *s = world_->by_id(e.surface_id);
@@ -759,6 +817,7 @@ void Session::clear_hover() {
 	}
 	hovered_serial_ = partner_serial_ = 0;
 	edge_hovered_ = false;
+	origin_hovered_ = false;
 	hover_inputs_.reset();
 }
 
@@ -893,6 +952,10 @@ std::string Session::hud_text() const {
 			out += "\xe2\x88\x9e"; // ∞
 			continue;
 		}
+		if (e.surface_id == rc::ORIGIN_ID) {
+			out += "origin"; // (Stage 132: the ray's origin)
+			continue;
+		}
 		std::string name = "Surface " + std::to_string(e.surface_id);
 		if (const BuiltSurface *s = world_->by_id(e.surface_id)) {
 			const BuiltSide *cfg = active_side(*s, Side::Left, rc::Flags{});
@@ -994,6 +1057,8 @@ void Session::update_hover() {
 		edge_point_ = q;
 	}
 	edge_hovered_ = r.infinity;
+	origin_point_ = plannable_origin();
+	origin_hovered_ = r.origin;
 	if (!r.has_surface) {
 		return;
 	}
@@ -1072,6 +1137,20 @@ void Session::update_overlays(bool force) {
 	if (const std::optional<V2> q = pole(plan_.size()); q && b.has_point(*q)) {
 		edge_point_ = q;
 	}
+	// Stage 132: the origin entries' marks (valid: met by the physical walk)
+	const int passes = preview_.last_result ? count_origin(preview_.last_result->physical) : 0;
+	origin_marks_.clear();
+	int ko = 0;
+	for (size_t i = 0; i < plan_.size(); i++) {
+		const PlanEntry &e = plan_[i];
+		if (e.surface_id != rc::ORIGIN_ID) {
+			continue;
+		}
+		ko++;
+		const rc::Tracer::OriginPoint o = origin_at(i);
+		origin_marks_.push_back(OriginMark{int(i + 1), o.point ? *o.point : e.click, ko <= passes});
+	}
+	origin_point_ = plannable_origin();
 }
 
 void Session::update_visibility() {
@@ -1393,6 +1472,14 @@ json Session::record(const json &extra) const {
 		}
 		return marks;
 	}()}};
+	// Stage 132: the ray's origin (recorded where there is one to show)
+	if (origin_point_ || origin_hovered_ || !origin_marks_.empty()) {
+		json marks = json::array();
+		for (const OriginMark &m : origin_marks_) {
+			marks.push_back({{"index", m.index}, {"point", digest::vec(m.point)}, {"valid", m.valid}});
+		}
+		r["origin"] = {{"hovered", origin_hovered_}, {"point", origin_point_ ? digest::vec(*origin_point_) : json(nullptr)}, {"marks", marks}};
+	}
 	// the visibility region
 	if (!level_.features.preview) {
 		r["visibility"] = nullptr;

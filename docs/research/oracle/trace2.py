@@ -1031,15 +1031,9 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     walk.done = True
                     return
                 walk.sig += 1
-                ev = Event("origin", point=walk.O, t=t, beam=beam, flags=walk.flags)
-                _append(walk, ev)
-                if walk.mode == PHYSICAL and not walk.cursor_done:
-                    # unplanned before the cursor: a divergence, like infinity's
-                    walk.left_plan = True
-                    walk.wrapped_off = True
-                    walk.plan_matched = False
-                    walk.on_plan = False
-                    ev.off_plan = True
+                _origin_passage(walk, Event("origin", point=walk.O, t=t, beam=beam, flags=walk.flags))
+                if walk.events[-1].applied:
+                    _late_cursor(walk, beam, cands, ci, key, t0)
                 continue
             if sid == INFINITY_ID:
                 q_pt = snapped.get((INFINITY_ID, t))   # None: the real infinity
@@ -1209,15 +1203,28 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 walk.done = True
                 return
             walk.sig += 1
-            ev = Event("origin", point=o, t=t0, beam=beam, flags=walk.flags)
-            _append(walk, ev)
-            if walk.mode == PHYSICAL and not walk.cursor_done:
-                walk.left_plan = True
-                walk.wrapped_off = True
-                walk.plan_matched = False
-                walk.on_plan = False
-                ev.off_plan = True
+            _origin_passage(walk, Event("origin", point=o, t=t0, beam=beam, flags=walk.flags))
             continue
+
+
+def _origin_passage(walk: Walk, ev):
+    """Stage 132: the passage of the ray's origin consumes an origin entry next in
+    the plan, in both walks (applied, like infinity's); unplanned before the
+    cursor it is a divergence (Stage 131)."""
+    consumed = walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index][0] == ORIGIN_ID
+    if consumed:
+        walk.plan_index += 1
+    ev.applied = consumed
+    _append(walk, ev)
+    if walk.mode == PHYSICAL:
+        _point_step(walk, None, ORIGIN_ID, None, None)
+        consumed = _point_sync(walk) or consumed
+        if not consumed and not walk.cursor_done:
+            walk.left_plan = True
+            walk.wrapped_off = True
+            walk.plan_matched = False
+            walk.on_plan = False
+            ev.off_plan = True
 
 
 def _late_cursor(walk: Walk, beam, cands, ci, key, t0):
@@ -1354,8 +1361,8 @@ def _point_step(walk: Walk, surf, sid, side, pt):
     p = walk.point
     if p is None or p.broke or p.index >= len(walk.plan):
         return
-    if sid == INFINITY_ID:
-        if walk.plan[p.index][0] == INFINITY_ID:
+    if sid in (INFINITY_ID, ORIGIN_ID):
+        if walk.plan[p.index][0] == sid:
             p.index += 1
         return
     if walk.plan[p.index] != (sid, side) or not in_planned_span(walk, p.index, pt):
@@ -2142,16 +2149,24 @@ def fixes_cursor(surfaces, cursor, plan, flags=None):
     return True
 
 
+def behind_origin(plan):
+    """Stage 132 (GAME_SPEC 4.2): the entries leave the walk behind the ray's
+    origin -- an odd number of infinity and origin entries (each passage turns
+    the half of the ray's line the walk is on)."""
+    return sum(1 for e in plan if e[0] in (INFINITY_ID, ORIGIN_ID)) % 2 == 1
+
+
 def via_infinity(surfaces, plan, flags=None):
     """Stage 88: the plan's first epoch (its entries before the first
-    projective) holds an infinity entry: the aim is the second realization,
-    away from the aim image, reaching it through infinity."""
+    projective) leaves the walk behind the ray's origin (an infinity entry;
+    Stage 132: an odd number of infinity and origin entries): the aim is the
+    second realization, away from the aim image, reaching it through infinity."""
+    first = []
     for entry, eff in zip(plan, plan_effects(surfaces, plan, flags)):
         if eff in PROJECTIVE:
-            return False
-        if entry[0] == INFINITY_ID:
-            return True
-    return False
+            break
+        first.append(entry)
+    return behind_origin(first)
 
 
 def first_entry(surfaces, plan, flags=None):
@@ -2162,7 +2177,7 @@ def first_entry(surfaces, plan, flags=None):
     by_id = {s.id: s for s in surfaces}
     f = dict(flags or {})
     for j, (sid, side) in enumerate(plan):
-        if sid == INFINITY_ID:
+        if sid in (INFINITY_ID, ORIGIN_ID):
             continue
         surf = by_id.get(sid)
         if surf is None or not surf.present(f):
@@ -2271,7 +2286,7 @@ def realization(surfaces, player, cursor, plan, flags=None, hints=None):
     if len(reaching) == 1:
         return reaching[0]
     if found["direct"] != found["reversed"]:
-        before = any(sid == INFINITY_ID for sid, _ in plan[:j])
+        before = behind_origin(plan[:j])
         return "direct" if found["direct"] == before else "reversed"
     return fallback
 

@@ -203,6 +203,8 @@ private:
 	};
 	struct Hit {
 		bool infinity = false;
+		bool origin = false; // Stage 132: the ray's origin (GAME_SPEC 4.2)
+		bool origin_mark = false; // ... a planned origin entry's mark, where it is not plannable (removed by a right-click)
 		bool has_surface = false;
 		int surface = 0;
 		Side side = Side::Left;
@@ -238,6 +240,10 @@ private:
 	bool visibility_on() const;
 	rc::Rect2f bounds() const;
 	std::optional<V2> pole(size_t n);
+	// Stage 132: the ray's origin after the first n entries, and whether they leave
+	// the walk behind it (the origin entry plannable)
+	rc::Tracer::OriginPoint origin_at(size_t n);
+	std::optional<V2> plannable_origin();
 	Hit detect_click();
 	V2 snap_click(const BuiltSurface &s, Side side, const V2 &click) const;
 	void plan_changed() { plan_version_++; }
@@ -294,6 +300,16 @@ private:
 		bool valid = false;
 	};
 	std::vector<EdgeMark> edge_marks_;
+	// Stage 132: the ray's origin -- its marker where plannable, hovered, and the
+	// planned origin entries' marks
+	bool origin_hovered_ = false;
+	std::optional<V2> origin_point_;
+	struct OriginMark {
+		int index = 0;
+		V2 point;
+		bool valid = false;
+	};
+	std::vector<OriginMark> origin_marks_;
 	// the derived state and the inputs it was made from
 	Preview preview_;
 	// what each derived part was made from (Stage 120: typed keys, not JSON; the

@@ -581,6 +581,9 @@ bool clip_line(V2 &from, V2 &to, const rc::Rect2f &rect) {
 struct PathPainter {
 	const rc::Rect2f bounds; // the draw bounds: the level's, grown by 50
 	std::vector<Call> &out;
+	// a portal surface's unit normal at a point (pair: of its pair, where the beam
+	// comes out), for its half rings (the user: normal to the portal, not along the way)
+	std::function<std::optional<V2>(int sid, const V2 &at, bool pair)> portal_normal = {};
 
 	void step(const rc::TraceStep &st, const Color &col, bool dashed_step, double phase = 0.0, const Shift &sh = {}) {
 		const bool arcs = st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end);
@@ -717,6 +720,21 @@ struct PathPainter {
 		return leaving ? to : from;
 	}
 
+	// the inward normal of the level's edge nearest a point on its bounds
+	static V2 inward(const V2 &p, const rc::Rect2f &level) {
+		const V2 end = level.position + level.size;
+		const double d[4] = {std::abs(double(p.x) - double(level.position.x)), std::abs(double(end.x) - double(p.x)),
+			std::abs(double(p.y) - double(level.position.y)), std::abs(double(end.y) - double(p.y))};
+		const V2 n[4] = {V2{1, 0}, V2{-1, 0}, V2{0, 1}, V2{0, -1}};
+		int best = 0;
+		for (int k = 1; k < 4; k++) {
+			if (d[k] < d[best]) {
+				best = k;
+			}
+		}
+		return n[best];
+	}
+
 	void event_marks(const std::vector<rc::TraceStep> &steps, const std::vector<Shift> &shifts, const rc::Rect2f &level) {
 		for (size_t i = 0; i < steps.size(); i++) {
 			const rc::TraceStep &st = steps[i];
@@ -731,27 +749,59 @@ struct PathPainter {
 			} else {
 				at = st.end + shifts[i].by;
 			}
-			// the incoming half of a passage of infinity off the level: where it
-			// enters, facing in; of a portal: at its exit, facing the way out
-			if (st.after_infinity && !level.has_point(st.start)) {
-				if (const std::optional<V2> in = bounds_crossing(st, shifts[i], level, false)) {
-					half_ring(*in, way_at(st, false), st);
-				}
-			}
+			// a portal: at its exit, the half facing the way out -- along the pair's
+			// normal (the user)
 			if (st.after_portal && bounds.has_point(st.start)) {
-				half_ring(st.start + shifts[i].by, way_at(st, false), st);
+				const V2 w = way_at(st, false);
+				V2 face = w;
+				if (i > 0 && steps[i - 1].teleports && portal_normal) {
+					if (const std::optional<V2> n = portal_normal(steps[i - 1].surface_id, st.start, true)) {
+						face = n->dot(w) >= 0.0f ? *n : -*n;
+					}
+				}
+				half_ring(st.start + shifts[i].by, face, st);
 			}
-			if (st.significant && st.surface_id == rc::INFINITY_ID && !level.has_point(st.end)) {
-				// the outgoing half: where it leaves, facing back in
-				if (const std::optional<V2> outp = bounds_crossing(st, shifts[i], level, true)) {
-					half_ring(*outp, -way_at(st, true), st);
+			// a passage of infinity off the level (the user: on screen): the step that
+			// reaches it, and the step after it, lie off the level -- the outgoing half
+			// where the path last leaves the level before the wrap, the incoming one
+			// where it first enters again after it, each facing into the level
+			if (i + 1 < steps.size() && steps[i + 1].after_infinity && !level.has_point(st.end)) {
+				for (size_t j = i + 1; j-- > 0;) {
+					if (j < i && steps[j + 1].after_infinity) {
+						break; // (the previous wrap)
+					}
+					if (level.has_point(steps[j].start)) {
+						if (const std::optional<V2> outp = bounds_crossing(steps[j], shifts[j], level, true)) {
+							half_ring(*outp, inward(*outp, level), steps[j]); // (normal to the edge, like a portal's)
+						}
+						break;
+					}
+				}
+				for (size_t k = i + 1; k < steps.size(); k++) {
+					if (k > i + 1 && steps[k].after_infinity) {
+						break; // (the next wrap)
+					}
+					if (level.has_point(steps[k].end)) {
+						if (const std::optional<V2> in = bounds_crossing(steps[k], shifts[k], level, false)) {
+							half_ring(*in, inward(*in, level), steps[k]);
+						}
+						break;
+					}
 				}
 				continue;
 			}
 			if (st.teleports) {
-				// a portal's entry: the half facing back the way the beam came
+				// a portal's entry: the half facing back the way the beam came -- along
+				// the portal's normal (the user)
 				if (bounds.has_point(at)) {
-					half_ring(at, -way_at(st, true), st);
+					const V2 w = way_at(st, true);
+					V2 face = -w;
+					if (portal_normal) {
+						if (const std::optional<V2> n = portal_normal(st.surface_id, st.end, false)) {
+							face = n->dot(w) >= 0.0f ? -*n : *n;
+						}
+					}
+					half_ring(at, face, st);
 				}
 				continue;
 			}
@@ -972,6 +1022,29 @@ std::vector<Shift> side_by_side(const std::vector<rc::TraceStep> &steps) {
 // another are set side by side.
 void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<Call> &out, double dash_phase) const {
 	PathPainter pp{bounds().grow(50.0f), out};
+	pp.portal_normal = [&](int sid, const V2 &at, bool pair) -> std::optional<V2> {
+		const BuiltSurface *s = world_->by_id(sid);
+		if (s != nullptr && pair && s->portal_pair != 0) {
+			s = world_->by_id(s->portal_pair);
+		}
+		if (s == nullptr) {
+			return std::nullopt;
+		}
+		// a line's normal, or an arc's radius at the point
+		V2 n;
+		if (rc::arc::is_arc(s->seg.s, s->seg.v, s->seg.e)) {
+			const rc::arc::ArcParams p = rc::arc::arc_params(s->seg.s, s->seg.v, s->seg.e);
+			n = at - V2::of(double(p.center.x), double(p.center.y));
+		} else {
+			const V2 d = s->seg.e - s->seg.s;
+			n = V2{-d.y, d.x};
+		}
+		const float len = n.length();
+		if (!(len > 0.0f)) {
+			return std::nullopt;
+		}
+		return n / len;
+	};
 	const std::vector<Shift> shifts = side_by_side(steps);
 	for (size_t i = 0; i < steps.size(); i++) {
 		const rc::TraceStep &ms = steps[i];
@@ -1153,6 +1226,19 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 			edge_gradient(out, pt - vs(along, MARK_HALF_LENGTH), pt + vs(along, MARK_HALF_LENGTH), o, color);
 			edge_chevrons(out, pt, o, color);
 			out.push_back(text(pt - vs(o, HOVER_WIDTH + 14.0) + V2{-5, 5}, idx, 1, 14, WHITE));
+		}
+		// Stage 132: the ray's origin -- the planned entries' marks, and its marker where plannable
+		for (const auto &m : origin_marks_) {
+			const Color color = m.valid ? PLAN_VALID_COLOR : PLAN_INVALID_COLOR;
+			point_overlay(out, m.point, color);
+			point_marker(out, m.point, render::with_alpha(color, 0.9), false);
+			out.push_back(text(m.point + V2::of(POINT_RADIUS + OUTER_CHEVRON_DIST, -POINT_RADIUS - 4.0), std::to_string(m.index), 0, 14, WHITE));
+		}
+		if (origin_point_) {
+			if (origin_hovered_) {
+				point_overlay(out, *origin_point_, HOVER_COLOR);
+			}
+			point_marker(out, *origin_point_, POINT_COLOR, origin_hovered_);
 		}
 		if (edge_point_) {
 			if (edge_hovered_) {

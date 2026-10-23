@@ -138,3 +138,54 @@ TEST_CASE("region reports: open_room_playable [5 L, inf] -- the player's image p
 	}
 	CHECK(m[11].type != rc::StepType::Aligned);
 }
+
+// Stage 132 (GAME_SPEC 4.2): after [5 L, inf] the walk is behind the ray's origin,
+// the player's image in the mirror x = 1200: its marker is there, plannable; a
+// click plans it, and the user's cursor past it is visible on the plan
+TEST_CASE("region reports: open_room_playable [5 L, inf] -- the ray's origin is plannable, and planned the cursor is visible") {
+	rcg::Session s(rcg::load_level((ROOT / "data" / "levels" / "open_room_playable.json").string()));
+	const rc::V2 player = rc::V2::of(0x1.7df8aep+10, 0x1.cef2e4p+9);
+	s.teleport(player);
+	rc::PlanItem it;
+	it.surface_id = 5;
+	it.left = true;
+	it.hint = rc::effects::F32Point{0x1.2d906ap+10f, 0x1.36933ep+9f};
+	rc::PlanItem inf;
+	inf.surface_id = rc::INFINITY_ID;
+	inf.left = true;
+	inf.hint = rc::effects::F32Point{0x1.dc7f1p+10f, 0x1.90bdfep+4f};
+	// [5 L] alone leaves the walk in front of it: no marker
+	s.set_plan({it});
+	s.set_cursor(rc::V2::of(0x1.d7fddcp+9, 0x1.b24de8p+9));
+	s.settle();
+	CHECK(!s.record(nlohmann::json::object()).contains("origin"));
+	s.set_plan({it, inf});
+	s.settle();
+	const nlohmann::json r = s.record(nlohmann::json::object());
+	REQUIRE(r.contains("origin"));
+	REQUIRE(!r["origin"]["point"].is_null());
+	// the image of the player in the mirror (the line x = 1200)
+	const rc::V2 image = rc::V2::of(2400.0 - double(player.x), double(player.y));
+	s.set_cursor(image + rc::V2::of(3.0, 2.0));
+	s.settle();
+	CHECK(s.record(nlohmann::json::object())["origin"]["hovered"] == true);
+	s.click(false);
+	REQUIRE(s.plan().size() == 3);
+	CHECK(s.plan()[2].surface_id == rc::ORIGIN_ID);
+	s.set_cursor(rc::V2::of(0x1.d7fddcp+9, 0x1.b24de8p+9));
+	s.settle();
+	CHECK(s.debug_summary().find("cursor: preview visible, region inside") != std::string::npos);
+	const nlohmann::json r2 = s.record(nlohmann::json::object());
+	REQUIRE(r2.contains("origin"));
+	REQUIRE(r2["origin"]["marks"].size() == 1);
+	CHECK(r2["origin"]["marks"][0]["valid"] == true);
+	CHECK(r2["origin"]["point"].is_null()); // (in front of it again: not plannable)
+	// right-click on its mark removes it
+	s.set_cursor(image);
+	s.settle();
+	s.set_plan({it, inf});
+	s.settle();
+	s.click(false);
+	s.click(true);
+	CHECK(s.plan().size() == 2);
+}

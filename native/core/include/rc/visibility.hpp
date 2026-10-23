@@ -1263,7 +1263,7 @@ private:
 		K = plan_.size();
 		effs_ = solver_.plan_effects(plan_, flags_);
 		for (size_t j = 0; j < K; j++) {
-			const bool present = !plan_[j].is_infinity() && scene_.find(plan_[j].surface_id) != nullptr;
+			const bool present = !plan_[j].is_infinity() && !plan_[j].is_origin() && scene_.find(plan_[j].surface_id) != nullptr;
 			moves_.push_back(present && is_transformative(effs_[j]));
 			changes_.push_back(present && (is_transformative(effs_[j]) || is_projective(effs_[j])));
 			if (present && is_projective(effs_[j])) {
@@ -1272,7 +1272,7 @@ private:
 		}
 		res_.near_transforms = K > 0 && changes_[K - 1];
 		for (const PlanItem &item : plan_) {
-			const Surf<F64> *ps = item.is_infinity() ? nullptr : scene_.find(item.surface_id);
+			const Surf<F64> *ps = item.is_infinity() || item.is_origin() ? nullptr : scene_.find(item.surface_id);
 			for (const Surf<F64> *q : {ps, ps != nullptr && ps->portal ? scene_.find(ps->pair) : nullptr}) {
 				if (q == nullptr) {
 					continue;
@@ -1526,7 +1526,7 @@ private:
 		if (!exact_data) {
 			return std::nullopt;
 		}
-		const Surf<F64> *dep = j > 0 && !plan_[j - 1].is_infinity() ? scene_.find(plan_[j - 1].surface_id) : nullptr;
+		const Surf<F64> *dep = j > 0 && !plan_[j - 1].is_infinity() && !plan_[j - 1].is_origin() ? scene_.find(plan_[j - 1].surface_id) : nullptr;
 		if (dep != nullptr && on_carrier_exact(*dep, z)) {
 			return std::nullopt;
 		}
@@ -2433,8 +2433,9 @@ private:
 				}
 				const PlanItem &item = plan_[j];
 				const bool consumed = item.is_infinity() ? (e.kind == EventKind::Infinity && e.applied)
+					: item.is_origin()                   ? (e.kind == EventKind::Origin && e.applied) // (Stage 132)
 														 : (e.kind == EventKind::Hit && e.sid == item.surface_id && e.left == item.left);
-				if (consumed && !item.is_infinity()) {
+				if (consumed && !item.is_infinity() && !item.is_origin()) {
 					r.has_depart = true;
 					r.depart_pt = e.pt;
 					r.depart_sid = e.sid;
@@ -2496,6 +2497,17 @@ private:
 			r.near_kind = End::PoleP;
 		} else if (eK >= 0 && pl[size_t(eK)].kind == EventKind::Infinity) {
 			r.near_kind = End::PoleQ;
+		} else if (eK >= 0 && pl[size_t(eK)].kind == EventKind::Origin) {
+			// Stage 132: from the ray's origin -- P_K, or its own point (after a line
+			// normal or directional projection, the departure)
+			const CastEvent &oe = pl[size_t(eK)];
+			if (!oe.has_pt || (!res_.pk_none && norm(oe.pt - res_.pk) <= 1e-9 * std::max({1.0, std::abs(oe.pt.x), std::abs(oe.pt.y)}))) {
+				r.near_kind = End::PoleP;
+			} else {
+				r.near_kind = End::Near;
+				r.near_sid = -1;
+				r.near_pt = oe.pt;
+			}
 		} else if (eK >= 0) {
 			// the departure point of the last entry: the hit, moved by the entry's
 			// map when it changes the frame (a portal departs its pair at T(h))
@@ -2610,7 +2622,7 @@ private:
 					lap_kind = End::Stop;
 					lap_pt = last.pt;
 				}
-			} else if (K > 0 && !plan_.back().is_infinity() && !changes_[K - 1]) {
+			} else if (K > 0 && !plan_.back().is_infinity() && !plan_.back().is_origin() && !changes_[K - 1]) {
 				Pt o = res_.player;
 				for (size_t i = 0; i < ph.size() && steps_after(esph, int(i)) <= nK; i++) {
 					const CastEvent &e = ph[i];
