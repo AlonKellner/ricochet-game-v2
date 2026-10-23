@@ -601,7 +601,6 @@ std::vector<std::pair<std::string, json>> manifests(const json &recipes, const s
 				{"plans", plans_json},
 				{"flags", flags_json(flags)},
 				{"skip_equal", g.value("skip_equal", true)},
-				{"emit_infinity", true},
 				{"visibility", g.value("visibility", false)},
 				{"carrier_cursors", g.value("carrier_cursors", false)},
 			};

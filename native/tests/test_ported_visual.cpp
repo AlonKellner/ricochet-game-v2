@@ -104,7 +104,6 @@ SurfaceDef full_circle_mirror_def(int id, V2 center, double r) {
 // TestTrace.trace_pair: a fresh tracer with the game's switches (infinity event on)
 std::optional<TracePair> trace_pair(const std::vector<SurfaceDef> &defs, V2 player, V2 cursor) {
 	Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(defs);
 	return t.trace_pair(player, cursor, {}, Flags());
 }

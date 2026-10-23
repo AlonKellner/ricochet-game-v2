@@ -162,7 +162,6 @@ struct Input {
 	std::vector<PlanItem> plan;
 	bool plan_applied = false;                // a plan was set on the renderer
 	Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
-	bool emit_infinity = false;               // Stage 88: the renderer's tracer emitted infinity events
 	const vis::Result *visibility = nullptr;  // Stage 110: the player's visibility region (null: not checked)
 	bool cursor_point_agrees = true;          // Stage 110, B4: TracePair::cursor_point_agrees (both walks leave the cursor's point in one frame)
 };
@@ -748,18 +747,12 @@ inline Violations check_PHYSICS_COMPLIANCE(const Input &in) {
 	size_t check_limit = in.physical->cursor_index >= 0 ? size_t(in.physical->cursor_index) : steps.size();
 	check_limit = std::min(check_limit, steps.size());
 	bool portal_seen = false;
-	// the trailing escape step of a loop on which nothing fired retraces the
-	// loop's start (GAME_SPEC 12.5): its crossings were the loop's events
-	const bool ends_in_escape = in.has_result() && !in.physical_events->empty() && in.physical_events->back().kind == EventKind::Escape;
 	for (size_t i = 0; i < check_limit; i++) {
 		const TraceStep &step = steps[i];
 		if (step.after_portal) {
 			portal_seen = true;
 		}
 		if (portal_seen || step.is_arc_step || step.start == step.end || step.frame_id != IDENTITY_FRAME) {
-			continue;
-		}
-		if (ends_in_escape && i + 1 == steps.size() && !step.hit) {
 			continue;
 		}
 		for (const SurfaceInfo &s : *in.surfaces) {
@@ -1000,7 +993,6 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 	}
 	// the reference: the physical ladder aimed at the image, with its float64 sensitivities
 	LadderContext ctx(*in.defs);
-	ctx.set_emit_infinity(in.emit_infinity);
 	Ladder ladder(ctx);
 	const LadderResult ref = ladder.solve_physical(double(in.player.x), double(in.player.y), X->fx(), X->fy(), ref_plan, MAX_HITS, TRACE_TOL, in.flags);
 	// ErrorEstimate.physical_sensitivity's events (the float64 walk) and gains

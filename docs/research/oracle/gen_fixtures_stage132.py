@@ -41,7 +41,6 @@ def pair(fx, name, surfs, player, cursor, plan):
 
 def main():
     mp.mp.dps = 80
-    T.EMIT_INFINITY = True
     fx = []
     # an open scene: [inf, O] aims at the cursor, passes it pending, wraps, passes
     # the player and reaches it -- aligned

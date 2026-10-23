@@ -208,7 +208,6 @@ std::vector<SurfaceDef> coincidence_scene(std::mt19937_64 &rng, double &q0x, dou
 template <Num N>
 std::vector<std::string> structure(const std::vector<SurfaceDef> &defs, const N &like, double px, double py, double dx, double dy, bool &cut) {
 	Scene<N> sc = Scene<N>::from_defs(defs, like);
-	sc.emit_infinity = true;
 	Solver<N> solver(sc, nullptr);
 	solver.set_record_poles(true);
 	const Walk<N> w = solver.run_direction(CN<N>{like.like(px), like.like(py)}, CN<N>{like.like(dx), like.like(dy)}, {}, std::nullopt,
@@ -319,7 +318,6 @@ TEST_CASE("Stage 105: wherever the record exists it rides on the beam: Q on it, 
 		for (int tier = 0; tier < 2; tier++) {
 			if (tier == 0) {
 				Scene<F64> sc = Scene<F64>::from_defs(defs, F64{1});
-				sc.emit_infinity = true;
 				Solver<F64> solver(sc, nullptr);
 				solver.set_record_poles(true);
 				const Walk<F64> w = solver.run_direction(CN<F64>{F64{px}, F64{py}}, CN<F64>{F64{std::cos(ang)}, F64{std::sin(ang)}}, {}, std::nullopt,
@@ -339,7 +337,6 @@ TEST_CASE("Stage 105: wherever the record exists it rides on the beam: Q on it, 
 			} else {
 				const BigFloat l = BigFloat::from_int(1, 8);
 				Scene<BigFloat> sc = Scene<BigFloat>::from_defs(defs, l);
-				sc.emit_infinity = true;
 				Solver<BigFloat> solver(sc, nullptr);
 				solver.set_record_poles(true);
 				const Walk<BigFloat> w = solver.run_direction(CN<BigFloat>{l.like(px), l.like(py)}, CN<BigFloat>{l.like(std::cos(ang)), l.like(std::sin(ang))}, {},

@@ -123,7 +123,6 @@ TEST_CASE("B2: the replay of a seeded float64 walk reproduces its tangent-linear
 			}
 			const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
 			Scene<Dual> scene = Scene<Dual>::from_defs(defs, Dual{1.0, 0.0});
-			scene.emit_infinity = true;
 			Solver<Dual> solver(scene, nullptr);
 			const CN<Dual> P{Dual{fx["player"][0].get<double>(), 0.0}, Dual{fx["player"][1].get<double>(), 0.0}};
 			const CN<Dual> D{Dual{fx["direction"][0].get<double>(), 0.0}, Dual{fx["direction"][1].get<double>(), 0.0}};
@@ -317,8 +316,6 @@ TEST_CASE("props: walker invariants on random scenes (and the float64 twin is bi
 		const std::vector<SurfaceDef> defs = random_scene(rng);
 		Scene<F64> s64 = Scene<F64>::from_defs(defs, F64{1});
 		Scene<Dual> sd = Scene<Dual>::from_defs(defs, Dual{1, 0});
-		s64.emit_infinity = true;
-		sd.emit_infinity = true;
 		const double px = x(rng), py = y(rng), ang = a(rng);
 		const double dx = std::cos(ang), dy = std::sin(ang);
 		Solver<F64> solver(s64, nullptr);

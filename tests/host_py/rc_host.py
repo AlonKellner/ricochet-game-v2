@@ -272,8 +272,7 @@ def replay(script, levels_dir=ROOT / "data" / "levels", draw_list=False):
     the golden's records (bench/sessions/<name>.jsonl lines)."""
     level = Level((pathlib.Path(levels_dir) / (script["level"] + ".json")).read_text())
     sw = script.get("switches", {})
-    game = Game(level, int(sw["infinity"]) if "infinity" in sw else -1,
-                int(sw["visibility"]) if "visibility" in sw else -1)
+    game = Game(level, -1, int(sw["visibility"]) if "visibility" in sw else -1)   # (Stage 136: infinity always on)
     lines = []
     game.advance(0)
     lines.append(game.record({"i": 0, "op": "start"}, draw_list))

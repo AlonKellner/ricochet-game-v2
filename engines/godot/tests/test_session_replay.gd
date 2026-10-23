@@ -63,7 +63,6 @@ func test_the_host_plays_the_golden() -> void:
 		var game := RicochetGame.new()
 		game.level_path = "res://data/levels/%s.json" % script["level"]
 		var sw: Dictionary = script.get("switches", {})
-		game.infinity = int(sw["infinity"]) if sw.has("infinity") else -1
 		game.visibility = int(sw["visibility"]) if sw.has("visibility") else -1
 		game.physics = false   # teleport sessions: the player moves only by teleport
 		game.asynchronous = false   # every step's state at once (the golden's)

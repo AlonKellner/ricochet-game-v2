@@ -126,7 +126,6 @@ TEST_CASE("ported: test_precision_integration: test_merged_view_aligned_until_fi
 	const V2 player = V2::of(scn["player"][0].get<double>(), scn["player"][1].get<double>());
 	const V2 cursor = V2::of(scn["cursor"][0].get<double>(), scn["cursor"][1].get<double>());
 	Tracer tracer;
-	tracer.set_emit_infinity(true);
 	tracer.set_defs(rcg::defs_of(surfaces));
 	const std::optional<TracePair> pair = tracer.trace_pair(player, cursor, plan, Flags());
 	REQUIRE(pair);

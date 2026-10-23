@@ -74,7 +74,6 @@ def no_reapply_in_place(f):
 
 def main():
     mp.mp.dps = 80
-    assert T.EMIT_INFINITY
     fx = []
     # (i) K2, from tangent_infinity.tscn: the player on the inversion circle's top,
     # the aim image under the mirror plan at its bottom

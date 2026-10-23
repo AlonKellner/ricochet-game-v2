@@ -637,7 +637,6 @@ public:
 		: tracer_(tracer), plan_(std::move(plan)), flags_(std::move(flags)),
 		  scene_(Scene<F64>::from_defs(tracer.defs(), F64{1.0})), solver_(scene_, nullptr), half_(half) {
 		flags_.erase(GHOST);
-		scene_.emit_infinity = tracer.emit_infinity();
 		res_.player = player;
 		res_.domain = bounds.grown(50.0);
 		res_.half = half;
@@ -2555,8 +2554,6 @@ private:
 				r.end_sid = carrier_through(b.pt);
 				r.end_pt = b.pt;
 			}
-		} else if (!ph.empty() && ph.back().kind == EventKind::Escape) {
-			r.end_kind = End::PoleQ; // (a line with the infinity switch off leaves through infinity)
 		} else {
 			r.end_kind = End::Loop; // (nothing past the departure: a terminal entry ends the walk there -- not alive)
 		}

@@ -101,8 +101,6 @@ RicochetGame::~RicochetGame() { rc_game_destroy(game_); }
 void RicochetGame::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("set_level_path", "path"), &RicochetGame::set_level_path);
 	ClassDB::bind_method(D_METHOD("get_level_path"), &RicochetGame::get_level_path);
-	ClassDB::bind_method(D_METHOD("set_infinity", "value"), &RicochetGame::set_infinity);
-	ClassDB::bind_method(D_METHOD("get_infinity"), &RicochetGame::get_infinity);
 	ClassDB::bind_method(D_METHOD("set_visibility", "value"), &RicochetGame::set_visibility);
 	ClassDB::bind_method(D_METHOD("get_visibility"), &RicochetGame::get_visibility);
 	ClassDB::bind_method(D_METHOD("aim", "at"), &RicochetGame::aim);
@@ -120,7 +118,6 @@ void RicochetGame::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("layer_count"), &RicochetGame::layer_count);
 	ClassDB::bind_method(D_METHOD("is_flying"), &RicochetGame::is_flying);
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "level_path", PROPERTY_HINT_FILE, "*.json"), "set_level_path", "get_level_path");
-	ADD_PROPERTY(PropertyInfo(Variant::INT, "infinity", PROPERTY_HINT_ENUM, "Default:-1,Off:0,On:1"), "set_infinity", "get_infinity");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "visibility", PROPERTY_HINT_ENUM, "Default:-1,Off:0,On:1"), "set_visibility", "get_visibility");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "physics"), "set_physics", "get_physics");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "asynchronous"), "set_asynchronous", "get_asynchronous");
@@ -181,7 +178,7 @@ bool RicochetGame::start(const String &level_path) {
 		report(level_path.utf8().get_data());
 		return false;
 	}
-	const rc_game_config cfg{sizeof(rc_game_config), infinity_, visibility_, asynchronous_ ? 1 : 0, animate_ ? 1 : 0, float(solve_budget_ms_), 0.0f};
+	const rc_game_config cfg{sizeof(rc_game_config), -1, visibility_, asynchronous_ ? 1 : 0, animate_ ? 1 : 0, float(solve_budget_ms_), 0.0f};
 	const rc_status s = rc_game_create(level, &cfg, &game_);
 	rc_level_release(level);
 	if (s != RC_OK) {

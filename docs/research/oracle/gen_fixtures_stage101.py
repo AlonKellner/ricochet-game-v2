@@ -43,7 +43,6 @@ def near(pt, x, y):
 
 def main():
     mp.mp.dps = 80
-    assert T.EMIT_INFINITY
     fx = []
     Q0 = pre(9, (500.0, 0.0), 200.0)          # Q0 = (500, 0), on screen
     # --- the pre-transform frame, direction traces ---

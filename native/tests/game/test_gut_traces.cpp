@@ -78,7 +78,6 @@ std::string check_trace(const json &row, const std::string &line) {
 	const std::vector<rc::SurfaceDef> defs = rc::defs_from_json(in["defs"]);
 	CHECK(rcg::trace_json::defs(defs) == in["defs"]); // the defs read back as written
 	rc::Tracer t;
-	t.set_emit_infinity(row["emit_infinity"].get<bool>());
 	t.set_defs(defs);
 	const std::optional<rc::TracePair> pair =
 		t.trace_pair(v2(row["player"]), v2(row["cursor"]), rc::plan_from_json(in["plan"]), rc::flags_from_json(in["flags"]));

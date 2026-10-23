@@ -45,7 +45,6 @@ def inside_box(f):
 
 def main():
     mp.mp.dps = 80
-    T.EMIT_INFINITY = True
     fx = []
     player = (200.0, -200.0)
     cursor = (250.0, 300.0)

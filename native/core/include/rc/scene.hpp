@@ -261,7 +261,6 @@ struct Scene {
 	// Stage 88: a straight beam passing t = infinity emits the `infinity` event
 	// (counted toward MAX_HITS). Off reproduces the pre-Stage-88 traces; the
 	// game turns it on (B9) and so do the Stage 88 fixture tests.
-	bool emit_infinity = false;
 
 	const Surf<N> *find(int id) const {
 		auto it = by_id.find(id);

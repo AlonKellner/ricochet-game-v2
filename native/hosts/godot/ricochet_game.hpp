@@ -55,8 +55,6 @@ public:
 
 	void set_level_path(const godot::String &p) { level_path_ = p; }
 	godot::String get_level_path() const { return level_path_; }
-	void set_infinity(int v) { infinity_ = v; }
-	int get_infinity() const { return infinity_; }
 	void set_visibility(int v) { visibility_ = v; }
 	int get_visibility() const { return visibility_; }
 
@@ -106,7 +104,6 @@ private:
 	void show_violation(int index);
 
 	godot::String level_path_;
-	int infinity_ = -1;
 	int visibility_ = -1;
 	bool physics_ = true;
 	bool asynchronous_ = true;

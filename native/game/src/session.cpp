@@ -148,14 +148,13 @@ std::optional<Action> action_of(const std::string &name) {
 }
 
 Session::Session(const Level &level, const SessionConfig &config)
-	: level_(level), infinity_override_(config.infinity), visibility_override_(config.visibility), async_(config.async), budget_(config.budget) {
+	: level_(level), visibility_override_(config.visibility), async_(config.async), budget_(config.budget) {
 	world_ = std::make_unique<World>(build_level(level_));
 	player_ = level_.player_start.value_or(V2{});
 	tick_from_ = player_;
 	settled_player_ = player_; // (a new session is standing still)
 	gravity_ = level_.gravity;
 	for (rc::Tracer *t : {&gm_tracer_, &renderer_tracer_, &vis_tracer_}) {
-		t->set_emit_infinity(infinity_on());
 		t->set_pair_cache(false); // the session caches by its own inputs
 	}
 	// the initial checkpoint: taken before the level built its world (GameManager._ready)
@@ -170,10 +169,8 @@ Session::Session(const Level &level, const SessionConfig &config)
 	sync_nodes();
 	if (async_) {
 		// each job keeps its own tracer (its caches, its helpers), its defs swapped when the world changes
-		const bool inf = infinity_on();
-		auto tracer_for = [inf](rc::Tracer &t, int &held, int world, const std::vector<rc::SurfaceDef> &defs) {
+		auto tracer_for = [](rc::Tracer &t, int &held, int world, const std::vector<rc::SurfaceDef> &defs) {
 			if (held != world) {
-				t.set_emit_infinity(inf);
 				t.set_pair_cache(false);
 				t.set_defs(defs);
 				held = world;
@@ -292,7 +289,6 @@ void Session::use_defs(rc::Tracer &t, int &held) {
 	}
 }
 
-bool Session::infinity_on() const { return infinity_override_.value_or(true); }
 bool Session::visibility_on() const { return visibility_override_.value_or(true); }
 rc::Rect2f Session::bounds() const { return rc::Rect2f::of(level_.bounds.x, level_.bounds.y, level_.bounds.w, level_.bounds.h); }
 
@@ -336,7 +332,7 @@ void Session::update_prefetch() {
 	std::vector<rc::PlanItem> it = items();
 	it.push_back(item_of(*e));
 	const rc::Rect2f b = bounds();
-	VisJobIn in{defs_snapshot(), world_->version(), infinity_on(), player_, std::move(it), flags_,
+	VisJobIn in{defs_snapshot(), world_->version(), player_, std::move(it), flags_,
 		rc::vis::Rect{double(b.position.x), double(b.position.y), double(b.position.x) + double(b.size.x), double(b.position.y) + double(b.size.y)}};
 	if (!prefetch_in_ || !same_inputs(*prefetch_in_, in)) {
 		prefetch_in_ = in;
@@ -366,7 +362,7 @@ bool Session::same_inputs(const VisJobIn &a, const VisJobIn &b) {
 	// exact: the same bits (a -0 is not a 0 here)
 	auto same_f = [](double x, double y) { return std::memcmp(&x, &y, sizeof x) == 0; };
 	auto same_v = [&](const V2 &x, const V2 &y) { return same_f(x.x, y.x) && same_f(x.y, y.y); };
-	if (a.world != b.world || a.infinity != b.infinity || !same_v(a.player, b.player) || a.items.size() != b.items.size()
+	if (a.world != b.world || !same_v(a.player, b.player) || a.items.size() != b.items.size()
 		|| digest::encode(flags_json(a.flags)) != digest::encode(flags_json(b.flags))) {
 		return false;
 	}
@@ -409,9 +405,6 @@ void Session::teleport(const V2 &p) {
 }
 
 std::optional<V2> Session::pole(size_t n) {
-	if (!infinity_on()) {
-		return std::nullopt;
-	}
 	const std::array<int, 3> key{plan_version_, flags_version_, world_->version()};
 	if (key != pole_key_) {
 		pole_key_ = key;
@@ -510,7 +503,7 @@ Session::Hit Session::detect_click() {
 			}
 		}
 	}
-	if (infinity_on()) {
+	{
 		const std::optional<V2> q = pole(plan_.size());
 		const rc::Rect2f b = bounds();
 		const bool on_screen = q && (!has_area(b) || b.has_point(*q));
@@ -1016,7 +1009,7 @@ void Session::update_preview() {
 	make_preview(p, std::move(pair));
 	provisional_ = std::move(p);
 	provisional_version_++;
-	preview_job_->submit(PreviewJobIn{defs_snapshot(), world_->version(), infinity_on(), player_, cursor_, items(), flags_}, preview_ticket_);
+	preview_job_->submit(PreviewJobIn{defs_snapshot(), world_->version(), player_, cursor_, items(), flags_}, preview_ticket_);
 }
 
 void Session::make_preview(Preview &p, std::optional<rc::TracePair> pair) const {
@@ -1162,7 +1155,7 @@ void Session::update_visibility() {
 	if (!level_.features.preview) {
 		return;
 	}
-	const VisKey inputs{player_, plan_version_, flags_version_, world_->version(), infinity_on(), visibility_on()};
+	const VisKey inputs{player_, plan_version_, flags_version_, world_->version(), visibility_on()};
 	if (vis_computed_ && vis_inputs_ == inputs) {
 		return;
 	}
@@ -1173,7 +1166,7 @@ void Session::update_visibility() {
 	const rc::vis::Rect vb{double(b.position.x), double(b.position.y), double(b.position.x) + double(b.size.x), double(b.position.y) + double(b.size.y)};
 	if (async_ && visibility_on()) {
 		// Stage 121: in the background; the last region shows meanwhile
-		VisJobIn in{defs_snapshot(), world_->version(), infinity_on(), player_, items(), flags_, vb};
+		VisJobIn in{defs_snapshot(), world_->version(), player_, items(), flags_, vb};
 		if (prefetch_in_ && same_inputs(*prefetch_in_, in)) {
 			// the hovered side's region, prefetched: shown now if it is ready, when it is if it runs
 			prefetch_in_.reset();
@@ -1349,7 +1342,6 @@ json Session::record(const json &extra) const {
 	r["camera"] = level_.camera ? digest::vec(player_) : json(nullptr);
 	r["display_mode"] = level_.features.preview ? display_mode_ : -1;
 	r["gravity"] = digest::vec(gravity_);
-	r["infinity"] = infinity_on();
 	r["visibility_on"] = visibility_on();
 	r["flying"] = false;
 	json plan = json::array();

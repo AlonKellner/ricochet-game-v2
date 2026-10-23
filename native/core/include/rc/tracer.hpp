@@ -101,7 +101,7 @@ std::vector<CastEvent> cast_events(const std::vector<Event<N>> &events, const st
 		}
 		c.frame += "|" + flags_now + (e.off_plan ? "|off" : "");
 		std::optional<CN<N>> p = e.point;
-		if (!p && e.beam && e.kind != EventKind::Escape && e.kind != EventKind::Origin) {
+		if (!p && e.beam && e.kind != EventKind::Origin) {
 			p = e.t_to ? std::optional<CN<N>>(e.beam->at(*e.t_to)) : e.beam->at_infinity();
 		}
 		if (p) {
@@ -235,26 +235,10 @@ public:
 		realization_memo_.clear();
 		defs_ = defs;
 		ctx_ = std::make_unique<LadderContext>(defs);
-		ctx_->set_emit_infinity(emit_infinity_);
 		cache_valid_ = false;
 	}
 	const std::vector<SurfaceDef> &defs() const { return defs_; }
 
-	// Stage 88: whether straight beams emit the `infinity` event (and the
-	// infinity plan entry can be consumed). A change invalidates the caches.
-	bool emit_infinity() const { return emit_infinity_; }
-	void set_emit_infinity(bool on) {
-		if (on == emit_infinity_) {
-			return;
-		}
-		emit_infinity_ = on;
-		cache_valid_ = false;
-		tie_memo_.clear();
-		realization_memo_.clear();
-		if (ctx_) {
-			ctx_->set_emit_infinity(on);
-		}
-	}
 
 	// Whether planning `surface_id`'s side after `plan` is refused: inside a
 	// ghost stretch of the plan only ghost togglers can be planned (GAME_SPEC
@@ -540,7 +524,6 @@ public:
 			helpers_.push_back(std::make_unique<Tracer>());
 		}
 		Tracer &h = *helpers_[i];
-		h.set_emit_infinity(emit_infinity_);
 		h.set_defs(defs_);
 		return h;
 	}
@@ -744,7 +727,6 @@ private:
 	};
 
 	std::vector<SurfaceDef> defs_;
-	bool emit_infinity_ = false;
 	std::unique_ptr<LadderContext> ctx_;
 	std::vector<std::unique_ptr<Tracer>> helpers_;
 	Ladder::Clock clock_ = Ladder::steady_usec;

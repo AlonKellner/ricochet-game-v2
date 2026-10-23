@@ -73,7 +73,7 @@ nlohmann::json Session::debug_dump() const {
 	j["player"] = point(player_);
 	j["cursor"] = point(cursor_);
 	j["flying"] = flying_;
-	j["switches"] = {{"infinity", infinity_on()}, {"visibility", visibility_on()}, {"display_mode", display_mode_}};
+	j["switches"] = {{"visibility", visibility_on()}, {"display_mode", display_mode_}};
 	j["flags"] = trace_json::flags(flags_);
 	nlohmann::json plan = nlohmann::json::array();
 	for (const PlanEntry &e : plan_) {
@@ -145,8 +145,7 @@ std::string Session::debug_summary() const {
 			plan += " (piece " + std::to_string(e.piece) + ")";
 		}
 	}
-	line("plan [%s]  flags %s  infinity %s  visibility %s", plan.c_str(), trace_json::flags(flags_).dump().c_str(), infinity_on() ? "on" : "off",
-		visibility_on() ? "on" : "off");
+	line("plan [%s]  flags %s  visibility %s", plan.c_str(), trace_json::flags(flags_).dump().c_str(), visibility_on() ? "on" : "off");
 	const Preview &p = shown();
 	if (p.last_result) {
 		const rc::LadderResult &r = *p.last_result;

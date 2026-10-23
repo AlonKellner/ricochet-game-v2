@@ -16,13 +16,13 @@ TEST_CASE("Stage 112: the parallel-carrier fixtures match the oracle at f64, Dua
 	for (const ojson &fx : fxs["fixtures"]) {
 		const std::string name = fx["name"].get<std::string>();
 		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
-		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1});
 		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
-		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0});
 		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
-		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4));
 		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
-		const auto rb64 = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
+		const auto rb64 = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64));
 		CHECK_MESSAGE(diff_against_oracle(rb64, fx["expected"]) == "", (name + " big64: " + diff_against_oracle(rb64, fx["expected"])));
 		fixtures++;
 	}

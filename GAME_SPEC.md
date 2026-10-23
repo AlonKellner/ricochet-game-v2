@@ -1142,15 +1142,15 @@ The frame id of subsequent steps follows the stack (§10.7).
 ### 12.5 Beyond-infinity in the visual frame
 
 - **The frame's infinity** `Q = F(∞)` (§6.3, §13.1) is passed exactly once per loop of a beam; the passage is the `infinity` event (Stages 88, 101): it counts toward the hit limit; a trace cut by the limit there ends with a `max` event at `Q` (surface id `INFINITY_ID`; no point when `Q` is the real infinity). The event is **applied** when the next plan entry is ∞ (the entry is consumed, in both modes); otherwise it **passes**. **An unplanned passage before the cursor is a divergence** (Stage 131, the user, 2026-10-22): the physical walk leaves the plan there (§14.2), so a cursor reached only through infinity unplanned is not visible, and the path is drawn diverged from the passage on. The aim prefers not going through infinity; when only the way through infinity reaches the cursor, the aim takes it all the same, shown as a divergence. After the cursor a passage is the continuation, not a divergence. An ∞ entry that is not reached when another entry fires is a divergence too, like any unmet entry.
-- **Straight beam, `Q = ∞`:** passing `t = ∞` means the arrow travels to the viewport edge, leaves, and returns from the opposite edge (two escape steps, §12.3; the outgoing one carries `surface_id = INFINITY_ID`). If no effect fires on the whole loop, the arrow loops again: there is no loop detection (Stage 131); the event limits end the trace (§12.6). With the infinity switch off the beam does not wrap: it leaves through infinity, an `escape` event.
-- **A finite `Q`** (every circle beam, after an inversion or in a pre-transform level; a straight beam through an inversion center): the arrow simply passes the point `Q`; the step ending there carries `surface_id = INFINITY_ID` and the next step continues from it. `t = ∞` of a circle beam (the antipode of `p`) is an ordinary point. If no effect fires on the whole circle, the arrow goes round again (Stage 131): every circle beam passes `Q` once per cycle, a significant hit, so the event limits end it (§12.6) -- with the infinity switch off too, where the passage is counted though no event is emitted. A straight beam with a finite `Q` passes the real `t = ∞` silently (its pre-image there is a finite point).
+- **Straight beam, `Q = ∞`:** passing `t = ∞` means the arrow travels to the viewport edge, leaves, and returns from the opposite edge (two escape steps, §12.3; the outgoing one carries `surface_id = INFINITY_ID`). If no effect fires on the whole loop, the arrow loops again: there is no loop detection (Stage 131); the event limits end the trace (§12.6). There is no escape: infinity is always on (Stage 136, the user: the switch that let a line leave through infinity is gone).
+- **A finite `Q`** (every circle beam, after an inversion or in a pre-transform level; a straight beam through an inversion center): the arrow simply passes the point `Q`; the step ending there carries `surface_id = INFINITY_ID` and the next step continues from it. `t = ∞` of a circle beam (the antipode of `p`) is an ordinary point. If no effect fires on the whole circle, the arrow goes round again (Stage 131): every circle beam passes `Q` once per cycle, a significant hit, so the event limits end it (§12.6). A straight beam with a finite `Q` passes the real `t = ∞` silently (its pre-image there is a finite point).
 - **Ties:** at one parameter the cursor comes first, then the hits by id, then the passage of infinity.
 - **A touch at `Q`** (Stage 105): a beam tangent to a surface's carrier at `Q` touches it without crossing (no event; §11.4). A pre-transform level with a mirror through `Q_0` makes such grazes reachable on purpose (`scenes/playground/tangent_infinity.tscn`).
 
 ### 12.6 Event limits
 
-There is **no loop detection** (Stage 131, the user, 2026-10-22). A trace ends at a block (§10.5), at an escape (a straight beam with the infinity switch off), or at a limit:
-- at most **10 significant events**: an applied effect (reflection, inversion, portal, projective, block, a pop), a hit whose state change fires, the passage of the frame's infinity (`infinity` events, applied or not; with the switch off a circle beam's passage of `Q` counts, unseen), and the passage of the **ray's origin** (`origin` events, below);
+There is **no loop detection** (Stage 131, the user, 2026-10-22). A trace ends at a block (§10.5) or at a limit:
+- at most **10 significant events**: an applied effect (reflection, inversion, portal, projective, block, a pop), a hit whose state change fires, the passage of the frame's infinity (`infinity` events, applied or not), and the passage of the **ray's origin** (`origin` events, below);
 - at most **64 events** in all: every computed crossing -- the candidates' (Stage 134), significant or not. A safety limit, not a game rule (the user).
 
 These are the only two limits (the user, 2026-10-22). Nothing counts or reads laps (Stage 134, the user): every loop of a beam passes the frame's infinity and the ray's origin, both significant, so even a beam with nothing on it ends within five loops. A loop that passes nothing significant is an invariant violation, not a case.
@@ -1992,7 +1992,7 @@ The arrow is animated step-by-step along the computed physical `TracePath` (from
 
 ### 21.3 Ray escape during flight
 
-When the ray escapes (a straight beam with the infinity switch off, nothing hit on its way), the arrow animates flying to the viewport edge and disappears. With the switch on there is no escape: the arrow loops until a hit limit (§12.6). The shot still counts — checkpoint is saved, game time unfreezes, state changes from prior hits take effect. Win condition is evaluated normally.
+A ray never escapes (Stage 136: infinity is always on): a beam with nothing to hit wraps through infinity and loops until a limit (§12.6), and the arrow flies it. The shot still counts — checkpoint is saved, game time unfreezes, state changes from prior hits take effect. Win condition is evaluated normally.
 
 ### 21.4 After the shot
 
@@ -2686,4 +2686,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.47.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.48.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -88,7 +88,6 @@ template <Num N>
 std::optional<Walk<N>> run(const std::vector<SurfaceDef> &defs, const N &like, double px, double py, double cx, double cy,
 		const std::vector<PlanItem> &plan, Mode mode, bool record = false) {
 	Scene<N> sc = Scene<N>::from_defs(defs, like);
-	sc.emit_infinity = true;
 	Solver<N> solver(sc, nullptr);
 	solver.set_record_poles(record);
 	return solver.run(CN<N>{like.like(px), like.like(py)}, CN<N>{like.like(cx), like.like(cy)}, plan, mode, MAX_HITS, Flags());

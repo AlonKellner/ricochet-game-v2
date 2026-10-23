@@ -11,11 +11,10 @@
 
 namespace rc::test {
 
-// The fixture walked at tier N (emit: Scene::emit_infinity).
+// The fixture walked at tier N.
 template <rc::Num N>
-std::vector<Event<N>> walk_oracle_fixture(const ojson &fx, const std::vector<SurfaceDef> &defs, const N &like, bool emit) {
+std::vector<Event<N>> walk_oracle_fixture(const ojson &fx, const std::vector<SurfaceDef> &defs, const N &like) {
 	Scene<N> scene = Scene<N>::from_defs(defs, like);
-	scene.emit_infinity = emit;
 	SolveCache<N> cache;
 	Solver<N> solver(scene, &cache);
 	const CN<N> player{like.like(fx["player"][0].get<double>()), like.like(fx["player"][1].get<double>())};

@@ -18,13 +18,13 @@ TEST_CASE("quiet entries: the Stage 110 fixtures match the oracle at f64, Dual, 
 	for (const ojson &fx : fxs["fixtures"]) {
 		const std::string name = fx["name"].get<std::string>();
 		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
-		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1});
 		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
-		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0});
 		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
-		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4));
 		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
-		const auto r64l = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
+		const auto r64l = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64));
 		CHECK_MESSAGE(diff_against_oracle(r64l, fx["expected"]) == "", (name + " big64: " + diff_against_oracle(r64l, fx["expected"])));
 		fixtures++;
 	}
@@ -40,7 +40,6 @@ TEST_CASE("quiet entries: the preview's two paths agree up to the cursor") {
 			continue; // one shot per planned / physical pair; the toggler diverges on purpose
 		}
 		Tracer tracer;
-		tracer.set_emit_infinity(true);
 		tracer.set_defs(defs_from_json(fx["surfaces"]));
 		const V2 player{float(fx["player"][0].get<double>()), float(fx["player"][1].get<double>())};
 		const V2 cursor{float(fx["cursor"][0].get<double>()), float(fx["cursor"][1].get<double>())};
@@ -65,13 +64,13 @@ TEST_CASE("frame entries: the Stage 110 B5 fixtures match the oracle at f64, Dua
 	for (const ojson &fx : fxs["fixtures"]) {
 		const std::string name = fx["name"].get<std::string>();
 		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
-		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1});
 		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
-		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0});
 		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
-		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4));
 		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
-		const auto r64l = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
+		const auto r64l = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64));
 		CHECK_MESSAGE(diff_against_oracle(r64l, fx["expected"]) == "", (name + " big64: " + diff_against_oracle(r64l, fx["expected"])));
 		fixtures++;
 	}
@@ -87,7 +86,6 @@ TEST_CASE("frame entries: the preview's two paths agree up to the cursor") {
 			continue; // one shot per pair; the controls diverge on purpose
 		}
 		Tracer tracer;
-		tracer.set_emit_infinity(true);
 		tracer.set_defs(defs_from_json(fx["surfaces"]));
 		const V2 player{float(fx["player"][0].get<double>()), float(fx["player"][1].get<double>())};
 		const V2 cursor{float(fx["cursor"][0].get<double>()), float(fx["cursor"][1].get<double>())};

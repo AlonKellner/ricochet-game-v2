@@ -98,7 +98,6 @@ std::vector<inv::SurfaceInfo> infos_of(const std::vector<GameSurf> &ss) {
 // TestTrace.fresh_tracer: the game's switches (FeatureFlags.infinity_event() is true)
 Tracer fresh_tracer(const std::vector<SurfaceDef> &defs) {
 	Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(defs);
 	return t;
 }
@@ -676,15 +675,11 @@ TEST_CASE("ported: test_stage88_infinity: test_tracer_infinity_entry_reaches_the
 	const V2 player{float(fx["player"][0].get<double>()), float(fx["player"][1].get<double>())};
 	const V2 cursor{float(fx["cursor"][0].get<double>()), float(fx["cursor"][1].get<double>())};
 	const std::vector<PlanItem> plan = plan_from_json(fx["plan"]);
-	Tracer t; // BeamTracer.new(): the switch off
+	Tracer t; // (Stage 136: infinity is always on -- the switch-off half is gone)
 	t.set_defs(defs_from_json(fx["surfaces"]));
-	const std::optional<TracePair> off = t.trace_pair(player, cursor, plan, Flags());
-	REQUIRE(off);
-	CHECK_MESSAGE(off->planned.cursor_index == -1, "switch off: the infinity entry is never consumed, the cursor is not reached");
-	t.set_emit_infinity(true);
 	const std::optional<TracePair> on = t.trace_pair(player, cursor, plan, Flags());
 	REQUIRE(on);
-	CHECK_MESSAGE(on->planned.cursor_index > 0, "switch on: the planned path reaches the cursor");
+	CHECK_MESSAGE(on->planned.cursor_index > 0, "the planned path reaches the cursor");
 	const std::vector<TraceStep> &steps = on->planned.steps;
 	REQUIRE(steps.size() >= 2);
 	CHECK_MESSAGE(steps[0].surface_id == INFINITY_ID, "the outgoing half of the wrap carries INFINITY_ID");

@@ -64,7 +64,6 @@ def no_hits_on(f, sid):
 
 def main():
     mp.mp.dps = 80
-    assert T.EMIT_INFINITY
     fx = []
     Q0 = pre(9, (500.0, 0.0), 200.0)
     mirror_q0 = line(1, (500.0, -300.0), (500.0, 300.0), REFL, REFL)

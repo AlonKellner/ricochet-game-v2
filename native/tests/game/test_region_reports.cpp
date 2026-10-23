@@ -37,7 +37,6 @@ TEST_CASE("region reports: crossings [17 L] -- the mirror circle's disc is not i
 	const rcg::Level lv = rcg::load_level((ROOT / "data" / "levels" / "test_levels" / "crossings.json").string());
 	rcg::Session s(lv);
 	rc::Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(s.world().defs());
 	const rc::V2 player = rc::V2::of(0x1.204d26p+10, 0x1.cdac8cp+7);
 	rc::PlanItem it;

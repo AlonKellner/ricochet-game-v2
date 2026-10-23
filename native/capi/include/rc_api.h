@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 6
+#define RC_API_VERSION_MINOR 7
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -71,7 +71,7 @@ typedef struct rc_game rc_game;
 
 typedef struct rc_game_config {
 	uint32_t size;
-	int32_t infinity;   /* the infinity switch: -1 the game's default (on), 0 off, 1 on */
+	int32_t infinity;   /* ignored since 1.7 (Stage 136: infinity is always on); kept for the struct's layout */
 	int32_t visibility; /* the visibility region: -1 default (on), 0 off, 1 on */
 	/* 1.2: 1 for a live host -- the visibility region and the preview's exact
 	 * climbs are computed in the background, the frame never waits for them

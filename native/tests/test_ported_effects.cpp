@@ -310,7 +310,6 @@ std::optional<TracePair> grazing_trace(Tracer &tr, double y) {
 
 TEST_CASE("ported: test_stage45_grazing: test_grazing_arc_radius_equals_half_surface_radius") {
 	Tracer tr;
-	tr.set_emit_infinity(true);
 	tr.set_defs(grazing_scene());
 	const auto pair = grazing_trace(tr, 341);
 	REQUIRE(pair);
@@ -329,7 +328,6 @@ TEST_CASE("ported: test_stage45_grazing: test_grazing_arc_radius_equals_half_sur
 
 TEST_CASE("ported: test_stage45_grazing: test_grazing_arc_radius_multiple_angles") {
 	Tracer tr;
-	tr.set_emit_infinity(true);
 	tr.set_defs(grazing_scene());
 	const double r = 200.0;
 	for (double y_offset : {1.0, 5.0, 10.0, 20.0, 50.0}) {
@@ -707,13 +705,13 @@ TEST_CASE("ported: the stage 81-87 fixtures match the oracle") {
 			const std::string name = std::string(f) + "/" + fx["name"].get<std::string>();
 			const double tol = degenerate_fixture(fx["name"].get<std::string>()) ? 0.01 : 1e-9;
 			const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
-			const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
+			const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1});
 			CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"], tol) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"], tol)));
-			const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+			const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0});
 			CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"], tol) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"], tol)));
-			const auto r4 = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+			const auto r4 = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4));
 			CHECK_MESSAGE(diff_against_oracle(r4, fx["expected"], tol) == "", (name + " big4: " + diff_against_oracle(r4, fx["expected"], tol)));
-			const auto r64l = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
+			const auto r64l = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64));
 			CHECK_MESSAGE(diff_against_oracle(r64l, fx["expected"], tol) == "", (name + " big64: " + diff_against_oracle(r64l, fx["expected"], tol)));
 			fixtures++;
 		}
@@ -730,7 +728,7 @@ TEST_CASE("ported: the stage 81-87 fixtures match the oracle") {
 		FAIL("no fixture " << n);
 		return rules;
 	};
-	auto walk64 = [](const ojson &fx) { return walk_oracle_fixture<F64>(fx, defs_from_json(fx["surfaces"]), F64{1}, true); };
+	auto walk64 = [](const ojson &fx) { return walk_oracle_fixture<F64>(fx, defs_from_json(fx["surfaces"]), F64{1}); };
 	{
 		INFO("test_terminal_ends_trace_at_hit: the oracle's block hit is the last event");
 		CHECK(rule("terminal_ends_trace")["expected"].back()["terminal"].get<bool>());
@@ -758,7 +756,6 @@ TEST_CASE("ported: the stage 81-87 fixtures match the oracle") {
 		INFO("test_targets_recorded_on_segment: the on-segment target hits");
 		const ojson &fx = rule("target_recorded_on_segment");
 		Scene<F64> scene = Scene<F64>::from_defs(defs_from_json(fx["surfaces"]), F64{1});
-		scene.emit_infinity = true;
 		Solver<F64> solver(scene);
 		const Walk<F64> w = solver.run_direction(cn64(fx["player"][0].get<double>(), fx["player"][1].get<double>()),
 			cn64(fx["direction"][0].get<double>(), fx["direction"][1].get<double>()), {}, std::nullopt, Mode::Physical, MAX_HITS, Flags());
@@ -792,16 +789,15 @@ TEST_CASE("ported: test_stage83_projective: test_degenerate_inputs_native") {
 			continue;
 		}
 		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
-		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1});
 		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"], 0.01) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"], 0.01)));
-		const auto r4 = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		const auto r4 = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4));
 		CHECK_MESSAGE(diff_against_oracle(r4, fx["expected"], 0.01) == "", (name + " big4: " + diff_against_oracle(r4, fx["expected"], 0.01)));
 		n++;
 	}
 	CHECK(n == 4);
 	// the game path on the inversion grid: player at an inversion center, the beam solver, no fallback
 	Tracer tr;
-	tr.set_emit_infinity(true);
 	tr.set_defs(scene_dump("playground__inversion_grid"));
 	CHECK(tr.trace_pair(V2::of(760, 380), V2::of(1000, 700), {PlanItem{1, false, std::nullopt, std::nullopt}}, Flags()).has_value());
 }
@@ -814,7 +810,6 @@ TEST_CASE("ported: test_stage87_click_forks: test_hits_match_oracle") {
 	for (const ojson &fx : fxs["fixtures"]) {
 		const std::string name = fx["name"].get<std::string>();
 		Scene<F64> scene = Scene<F64>::from_defs(defs_from_json(fx["surfaces"]), F64{1});
-		scene.emit_infinity = true;
 		Solver<F64> solver(scene);
 		const auto chain = solver.anchor_chain(cn64(fx["player"][0].get<double>(), fx["player"][1].get<double>()),
 			cn64(fx["cursor"][0].get<double>(), fx["cursor"][1].get<double>()), plan_from_json(fx["plan"]), Flags());
@@ -945,7 +940,6 @@ TEST_CASE("ported: test_stage87_mixed_planning: test_back_propagation_per_type")
 
 TEST_CASE("ported: test_stage87_mixed_planning: test_planned_exit_beam_exactly_straight") {
 	Tracer tr;
-	tr.set_emit_infinity(true);
 	tr.set_defs(scene_dump("playground__projective"));
 	const std::vector<PlanItem> plan{PlanItem{6, true, std::nullopt, std::nullopt}, PlanItem{7, true, std::nullopt, std::nullopt}};
 	const auto pair = tr.trace_pair(V2::of(1243.33337402344, 390.0), V2::of(1810.0, 90.0), plan, Flags());
@@ -975,7 +969,6 @@ TEST_CASE("ported: test_stage87_mixed_planning: test_planned_pass_shared_when_ph
 		const double px = fx["player"][0].get<double>(), py = fx["player"][1].get<double>();
 		const double cx = fx["cursor"][0].get<double>(), cy = fx["cursor"][1].get<double>();
 		LadderContext ctx(defs);
-		ctx.set_emit_infinity(true);
 		Ladder ladder(ctx);
 		const LadderResult r = ladder.solve(px, py, cx, cy, plan, MAX_HITS, MAX_HITS, 0.01, false, flags);
 		// the physical cursor event: reached anchored?
@@ -1005,7 +998,6 @@ TEST_CASE("ported: test_stage87_mixed_planning: test_planned_pass_shared_when_ph
 			continue;
 		}
 		Scene<F64> scene = Scene<F64>::from_defs(defs, F64{1});
-		scene.emit_infinity = true;
 		Solver<F64> solver(scene);
 		const std::optional<Walk<F64>> w = solver.run(cn64(px, py), cn64(cx, cy), plan, Mode::Planned, MAX_HITS, flags);
 		const std::vector<Event<F64>> own = w ? w->events : std::vector<Event<F64>>{};
@@ -1031,7 +1023,7 @@ TEST_CASE("ported: test_stage106_pop_departure: test_no_fixture_re_applies_in_pl
 	const ojson fxs = load_json("bench/fixtures/stage106_pop_departure.json");
 	int n = 0;
 	for (const ojson &fx : fxs["fixtures"]) {
-		const auto events = walk_oracle_fixture<F64>(fx, defs_from_json(fx["surfaces"]), F64{1}, true);
+		const auto events = walk_oracle_fixture<F64>(fx, defs_from_json(fx["surfaces"]), F64{1});
 		std::vector<inv::EvInfo> infos;
 		for (const Event<F64> &e : events) {
 			infos.push_back(inv::ev_info(e));
@@ -1062,7 +1054,6 @@ TEST_CASE("ported: test_stage111_orientation: test_region_covers_both_sides_of_t
 	const PlanItem inf{INFINITY_ID, true, std::nullopt, std::nullopt};
 	{
 		Tracer tr;
-		tr.set_emit_infinity(true);
 		tr.set_defs(defs);
 		const vis::Result region = vis::compute(tr, player, {mirror}, Flags(), bounds);
 		CHECK(region.supported);
@@ -1074,7 +1065,6 @@ TEST_CASE("ported: test_stage111_orientation: test_region_covers_both_sides_of_t
 	}
 	{
 		Tracer tr;
-		tr.set_emit_infinity(true);
 		tr.set_defs(defs);
 		const vis::Result with_inf = vis::compute(tr, player, {mirror, inf}, Flags(), bounds);
 		CHECK_MESSAGE(vis::contains(with_inf, at(1000, 600)) == vis::Membership::Outside, "with the entry: the player's side is passed with the wrap pending");

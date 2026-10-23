@@ -25,9 +25,9 @@ the earlier beam is restored, resumed at T^-1 of the point hit (on S).
 
 Rules (TDD_09 "Target architecture" + "Legacy quirks"):
 - Every carrier crossing is an event (counts toward MAX_HITS = 32, as do the
-  cursor and the final origin/escape event). A full loop around the beam
-  without an effect ends the trace (escape / origin) -- unless it changed the
-  state: then the next loop differs and is walked too. A trace cut by MAX_HITS ends with
+  cursor and the final origin event). (Stage 131: no loop detection -- a
+  loop without an effect goes round again, through infinity and the ray's
+  origin, and the limits end it; Stage 136: infinity always on, no escape.) A trace cut by MAX_HITS ends with
   a "max" event at the next crossing (drawn up to it, no effect).
 - PHYSICAL: an effect fires only on a fully blocked hit: on-segment interior,
   or at an endpoint where blocked sides (incl. other segments sharing the
@@ -143,7 +143,7 @@ plan and reaches the cursor, else the one that fires e before the passage of
 Q_0 -- after it when an infinity entry precedes e; R3 -- otherwise (no e, no
 crossing, both orientations alike) direct, reversed by an infinity entry in
 the first epoch (via_infinity). In a later epoch the projective's exit fixes
-the orientation. Infinity entries are otherwise only matched. With EMIT_INFINITY, a beam passing the current frame's image
+the orientation. Infinity entries are otherwise only matched. A beam passing the current frame's image
 of infinity Q = F(inf) emits an "infinity" event, counted toward MAX_HITS like
 a pass. On a straight beam with Q = inf that is the passage of t = inf (the
 visual wrap: out through one screen edge, back in through the opposite one),
@@ -201,7 +201,6 @@ ORIGIN_ID = -4          # event id of the ray's origin (Stage 131: the player's 
 # Stage 88: emit the "infinity" event at the wrap of a straight beam. Off until
 # Stage 88b regenerates the fixtures (the shipped solver does not emit it yet);
 # gen_fixtures_stage88 turns it on.
-EMIT_INFINITY = True
 
 
 # ---------------------------------------------------------------- scene
@@ -527,7 +526,7 @@ def sort_key(t, t0):
 
 @dataclass
 class Event:
-    kind: str                 # hit | cursor | origin | escape | max | infinity
+    kind: str                 # hit | cursor | origin | max | infinity
     surface_id: int = -1
     side: str = ""
     applied: bool = False
@@ -994,7 +993,7 @@ def _build_cands(walk: Walk, beam: Beam, depart, fresh, t0, by_id, shared=None):
                 cands[best] = (sort_key(tq, t0), 1, s.id, tq, False)
                 snapped[(s.id, tq)] = walk.Q
                 pinned.add((s.id, tq))
-    if EMIT_INFINITY:
+    if True:   # (Stage 136: infinity is always on -- the switch is gone)
         if walk.Q is None:
             if beam.kappa == 0:
                 # the wrap through infinity: after every crossing ahead (t > t0),
@@ -1224,23 +1223,8 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
         if not applied:
             # nothing fired on the full loop (or the loop only changed the state:
             # the next one differs, e.g. a ghost toggler re-hit). Stage 131: no loop
-            # detection -- the arrow goes round again and the limits end it. A line
-            # with the infinity switch off leaves through infinity (it does not wrap).
-            if beam.kappa == 0 and not EMIT_INFINITY:
-                if fired_state:
-                    continue   # (walked again on the same beam, as before)
-                _append(walk, Event("escape"))
-                walk.done = True
-                return
-            if not EMIT_INFINITY:
-                # the passage of the frame's infinity, unseen (a circle with the
-                # switch off): significant all the same
-                walk.sig += 1
-                if walk.sig > walk.max_sig:
-                    _append(walk, Event("max", INFINITY_ID, point=walk.Q, beam=beam,
-                                        t=beam.param_of(walk.Q) if walk.Q is not None else None))
-                    walk.done = True
-                    return
+            # detection -- the arrow goes round again and the limits end it (every
+            # loop passes infinity and the ray's origin; Stage 136: always on).
             # back at the departure: when it is the ray's origin (the player, a
             # projected ray's start), its passage -- a significant event (the user);
             # unplanned before the cursor, a divergence: the walk leaves the plan.
