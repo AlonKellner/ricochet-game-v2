@@ -497,6 +497,33 @@ inline double arc_reentry(const StepGeom &s, double t_now, const Rect2f &rect) {
 	return best;
 }
 
+// Where a straight step from a to b enters the rect, as its parameter in [0, 1]
+// (Liang-Barsky; nullopt: the segment misses it).
+inline std::optional<double> segment_entry(const V2 &a, const V2 &b, const Rect2f &rect) {
+	const double dx = double(b.x) - double(a.x);
+	const double dy = double(b.y) - double(a.y);
+	const V2 e = rect.end();
+	double t0 = 0.0;
+	double t1 = 1.0;
+	auto clip = [&](double p, double q) { // p t <= q
+		if (p == 0.0) {
+			return q >= 0.0;
+		}
+		const double r = q / p;
+		if (p < 0.0) {
+			t0 = std::max(t0, r);
+		} else {
+			t1 = std::min(t1, r);
+		}
+		return t0 <= t1;
+	};
+	if (clip(-dx, double(a.x) - double(rect.position.x)) && clip(dx, double(e.x) - double(a.x)) && clip(-dy, double(a.y) - double(rect.position.y))
+			&& clip(dy, double(e.y) - double(a.y))) {
+		return t0;
+	}
+	return std::nullopt;
+}
+
 inline void update_direction(AdvanceResult &r, const std::vector<StepGeom> &steps) {
 	if (r.step_index < int(steps.size())) {
 		const StepGeom &s = steps[size_t(r.step_index)];
@@ -563,9 +590,25 @@ inline AdvanceResult advance(const std::vector<StepGeom> &steps, int step_index,
 				}
 			}
 			while (!tolerant.has_point(r.position) && r.step_index < n) {
-				if (tolerant.has_point(steps[size_t(r.step_index)].start)) {
-					r.position = steps[size_t(r.step_index)].start;
+				const StepGeom &next = steps[size_t(r.step_index)];
+				if (tolerant.has_point(next.start)) {
+					r.position = next.start;
 					r.progress = 0.0;
+					break;
+				}
+				// Stage 136 (the user's F12): a step from outside that enters the
+				// bounds resumes where it enters, not at its end (a wrap's return
+				// through crossings far outside the level skipped its visible part)
+				if (step_is_arc(next)) {
+					const double t_in = arc_reentry(next, 0.0, bounds);
+					if (t_in >= 0.0) {
+						r.progress = t_in * arc_length(next);
+						r.position = arc_interpolate(next, t_in).position;
+						break;
+					}
+				} else if (const std::optional<double> t_in = segment_entry(next.start, next.end, bounds)) {
+					r.position = next.start.lerp(next.end, float(*t_in));
+					r.progress = *t_in * double(next.start.distance_to(next.end));
 					break;
 				}
 				r.position = steps[size_t(r.step_index)].end;

@@ -371,7 +371,6 @@ inline inv::Violations check_combo(Tracer &tracer, const Scene<F64> &scene, cons
 	in.plan_applied = !plan.empty();
 	in.surfaces = &surfaces;
 	in.scene = &scene;
-	in.emit_infinity = tracer.emit_infinity();
 	in.defs = &defs;
 	in.bounds = bounds;
 	const std::vector<TraceStep> no_steps;
@@ -454,13 +453,11 @@ inline std::vector<V2> carrier_extension_cursors(const std::vector<SurfaceDef> &
 
 inline std::vector<Combo> run(const std::vector<SurfaceDef> &defs, const std::vector<inv::SurfaceInfo> &surfaces, const std::vector<V2> &positions,
 		const std::vector<std::vector<PlanItem>> &plans, const Flags &flags, int shard_i, int shard_n, bool skip_equal, bool only_failures,
-		bool emit_infinity = false, bool visibility = false, bool carrier_cursors = false) {
+		bool visibility = false, bool carrier_cursors = false) {
 	std::vector<Combo> out;
 	Tracer tracer;
-	tracer.set_emit_infinity(emit_infinity);
 	tracer.set_defs(defs);
 	Scene<F64> scene = Scene<F64>::from_defs(defs, F64{1.0});
-	scene.emit_infinity = emit_infinity;
 	const Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
 	for (size_t pli = 0; pli < plans.size(); pli++) {
 		std::vector<V2> cursors = positions;

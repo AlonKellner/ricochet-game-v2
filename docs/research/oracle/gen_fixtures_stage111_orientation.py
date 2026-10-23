@@ -42,7 +42,6 @@ INV_CIRCLE = {"id": 1, "line": False, "start": [700, 0], "end": [400, -150], "vi
 
 def main():
     mp.mp.dps = 80
-    T.EMIT_INFINITY = True
     fx = []
     mw = mirror_and_wall()
     player = (1306.67, 540.0)

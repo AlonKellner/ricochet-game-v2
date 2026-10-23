@@ -163,9 +163,7 @@ rc_status rc_game_create(const rc_level *level, const rc_game_config *config, rc
 			std::memcpy(&cfg, config, std::min<size_t>(config->size, sizeof(rc_game_config)));
 		}
 		rcg::SessionConfig sc;
-		if (cfg.infinity >= 0) {
-			sc.infinity = cfg.infinity != 0;
-		}
+		// (cfg.infinity: ignored since 1.7 -- infinity is always on, Stage 136)
 		if (cfg.visibility >= 0) {
 			sc.visibility = cfg.visibility != 0;
 		}

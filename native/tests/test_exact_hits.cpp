@@ -19,13 +19,13 @@ TEST_CASE("Stage 113: the exact-hit fixtures match the oracle at f64, Dual, 4 an
 	for (const ojson &fx : fxs["fixtures"]) {
 		const std::string name = fx["name"].get<std::string>();
 		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
-		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1}, true);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1});
 		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
-		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0}, true);
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0});
 		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
-		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4), true);
+		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4));
 		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
-		const auto rb64 = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64), true);
+		const auto rb64 = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 64));
 		CHECK_MESSAGE(diff_against_oracle(rb64, fx["expected"]) == "", (name + " big64: " + diff_against_oracle(rb64, fx["expected"])));
 		fixtures++;
 	}
@@ -39,7 +39,6 @@ TEST_CASE("Stage 113: the exact image runs through a projective whose hit point 
 	const ojson &fx = fxs["fixtures"][0];
 	const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
 	Scene<F64> scene = Scene<F64>::from_defs(defs, F64{1});
-	scene.emit_infinity = true;
 	Solver<F64> solver(scene, nullptr);
 	const std::vector<PlanItem> plan = plan_from_json(fx["plan"]);
 	const std::optional<exact::Point3> X = solver.exact_image_h(CN<F64>{F64{940.0}, F64{180.0}}, plan, 0, Flags());

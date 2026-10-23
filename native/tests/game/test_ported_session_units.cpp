@@ -106,15 +106,9 @@ json spawn_template(const json &surface, const std::string &orientation) {
 	return {{"surface", surface}, {"orientation", orientation}, {"mirror_with_side", false}, {"offset", {0, 0}}};
 }
 
-rcg::SessionConfig no_infinity() {
-	rcg::SessionConfig c;
-	c.infinity = false;
-	return c;
-}
-
 // ClickDetector.detect_click(p, surfaces): a left click on a session of these surfaces alone
 std::vector<rcg::PlanEntry> click_on(const std::vector<json> &surfaces, V2 p) {
-	rcg::Session s(level_of(surfaces), no_infinity());
+	rcg::Session s(level_of(surfaces), rcg::SessionConfig{});
 	s.set_cursor(p);
 	s.click(false);
 	return s.plan();
@@ -266,7 +260,7 @@ TEST_CASE("ported: test_stage101_infinity_point: test_pre_transform_surface_is_n
 		CHECK_MESSAGE(info["id"].get<int>() != pre->id, "not a surface the invariant kernel checks");
 	}
 	// not clickable as a surface (the detector alone)
-	rcg::Session s(lv, no_infinity());
+	rcg::Session s(lv, rcg::SessionConfig{});
 	s.set_cursor(v(960 + 260, 540));
 	s.click(false);
 	CHECK(s.plan().empty());
@@ -275,7 +269,6 @@ TEST_CASE("ported: test_stage101_infinity_point: test_pre_transform_surface_is_n
 TEST_CASE("ported: test_stage101_infinity_point: test_infinity_point_follows_the_frame") {
 	const V2 Q0 = v(960, 540);
 	rc::Tracer t;
-	t.set_emit_infinity(true);
 	const std::vector<rcg::BuiltSurface> built = rcg::build_level(level_file("playground/pre_inverted"));
 	t.set_defs(rcg::defs_of(built));
 	CHECK_MESSAGE(t.infinity_point({}, {}) == std::optional<V2>(Q0), "the pre-transform's image of infinity");
@@ -577,7 +570,6 @@ std::vector<json> trapped_mirrors() {
 
 TEST_CASE("ported: test_stage110_truncation: test_a_path_cut_by_the_limit_is_truncated") {
 	rc::Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(defs_of_level(level_of(trapped_mirrors())));
 	const std::optional<rc::TracePair> pair = t.trace_pair(v(50, 300), v(90, 300), {}, {});
 	REQUIRE(pair.has_value());
@@ -596,7 +588,6 @@ TEST_CASE("ported: test_stage110_truncation: test_the_preview_marks_the_cut") {
 	s.settle();
 	// the path's last point (the display path of the same trace)
 	rc::Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(defs_of_level(lv));
 	const std::optional<rc::TracePair> pair = t.trace_pair(v(50, 300), v(90, 300), {}, {});
 	REQUIRE(pair.has_value());
@@ -728,7 +719,7 @@ TEST_CASE("ported: test_stage22_plan: test_stage22_full_circle_click_accepted") 
 // ================================================================ test_stage23_plan_removal.gd
 
 TEST_CASE("ported: test_stage23_plan_removal: test_stage23_remove_only_instance") {
-	rcg::Session s(level_of({double_mirror(400)}), no_infinity());
+	rcg::Session s(level_of({double_mirror(400)}), rcg::SessionConfig{});
 	s.set_cursor(v(398, 300));
 	s.click(false);
 	REQUIRE(s.plan().size() == 1);
@@ -763,7 +754,6 @@ TEST_CASE("ported: test_stage82_portals: test_after_portal_gap_flag") {
 	const rcg::Level lv = level_file("test_levels/portals");
 	const std::vector<rcg::BuiltSurface> built = rcg::build_level(lv);
 	rc::Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(rcg::defs_of(built));
 	const std::optional<rc::TracePair> pair = t.trace_pair(v(760, 500), v(1250, 560), {}, {});
 	REQUIRE(pair.has_value());
@@ -801,7 +791,7 @@ TEST_CASE("ported: test_stage86_ghost: test_click_near_refused_side_takes_toggle
 	const json mir = side("reflection", true);
 	rcg::Session s(level_of({line_json(v(0, -100), v(0, 100), tog, tog), line_json(v(10, -100), v(10, 100), mir, mir),
 					   line_json(v(-200, -100), v(-200, 100), tog, tog)}),
-		no_infinity());
+		rcg::SessionConfig{});
 	// the plan [s3 RIGHT]: a click on the x = -200 toggler's right side
 	for (double x : {-198.0, -202.0}) {
 		s.set_cursor(v(x, 0));
@@ -823,7 +813,6 @@ TEST_CASE("ported: test_stage86_ghost: test_click_near_refused_side_takes_toggle
 TEST_CASE("ported: test_stage86_ghost: test_ghost_is_per_shot") {
 	const rcg::Level lv = level_file("test_levels/ghost_room");
 	rc::Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(defs_of_level(lv));
 	rc::Flags ghost;
 	ghost.set("ghost", true);

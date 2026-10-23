@@ -23,7 +23,7 @@ approval, then `make sessions`).
 
 ```json
 {"schema": "rc-session/1", "level": "test_levels/hit_effects", "kind": "teleport",
- "switches": {"infinity": true, "visibility": true},
+ "switches": {"visibility": true},
  "steps": [{"op": "teleport", "at": [x, y]}, {"op": "cursor", "at": [x, y]},
            {"op": "click", "button": "left|right"}, {"op": "key", "action": "<action>"},
            {"op": "fire", "speedup_at": 20}, {"op": "hold", "actions": ["move_right"], "ticks": 45}]}
@@ -108,6 +108,6 @@ through it), `shots` (the player at a free point, a shot at every interactive su
 effects accumulate, undo, reset, shots along one-entry plans) and `walk` (kinematic: main,
 open_room_playable, plannable_inversion, inversion_grid). Stage 119 adds 8 `ported` sessions (the GUT
 tests' interactions: undo after moving, the cursor on the player, Q0 on screen, the edge band and its right
-clicks, the infinity switch off, ghost refusal, hit effects armed / registered / re-armed, a spawn trimmed by
+clicks, the infinity switch off (retired in Stage 136 with the switch), ghost refusal, hit effects armed / registered / re-armed, a spawn trimmed by
 the floor, a landing that changes the flags). The B7 snap band is tested natively ("ported:
 test_stage113_projective_visibility: test_b7_..." in rcg_tests).

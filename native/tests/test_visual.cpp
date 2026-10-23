@@ -81,6 +81,38 @@ TEST_CASE("visual: arrow advance along a two-step path") {
 	CHECK(r.position == V2{100.0f, 100.0f});
 }
 
+// Stage 136 (the user's F12, open_room_playable): a wrap whose return comes in
+// through off-segment crossings far outside the level -- the arrow skips them and
+// re-enters where the step crossing into the bounds enters (the bottom edge), not
+// at that step's end (it appeared at the floor's crossing)
+TEST_CASE("visual: the arrow re-enters the bounds where a step from outside enters them") {
+	const Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
+	auto step = [](V2 a, V2 b) {
+		StepGeom s;
+		s.start = a;
+		s.end = b;
+		s.via = (a + b) / 2.0f;
+		return s;
+	};
+	const std::vector<StepGeom> steps = {
+		step(V2{1481.0f, 240.0f}, V2{1481.0f, 0.0f}),        // the wrap's way out (clipped at the top)
+		step(V2{558.0f, 56479.0f}, V2{560.0f, 56379.0f}),    // its way back, outside
+		step(V2{560.0f, 56379.0f}, V2{1200.0f, 17378.0f}),   // an off-segment crossing, outside
+		step(V2{1200.0f, 17378.0f}, V2{1471.0f, 840.0f}),    // enters through the bottom edge
+		step(V2{1471.0f, 840.0f}, V2{1473.0f, 727.0f}),
+	};
+	AdvanceResult r = advance(steps, 0, 0.0, steps[0].start, 241.0, bounds);
+	REQUIRE(r.step_index == 3);
+	CHECK(r.position.y == doctest::Approx(1080.0).epsilon(1e-5));
+	CHECK(r.position.x > 1200.0f);
+	CHECK(r.position.x < 1471.0f);
+	CHECK(r.progress == doctest::Approx(double(steps[3].start.distance_to(r.position))).epsilon(1e-6));
+	// and flies on along that step to its end
+	r = advance(steps, r.step_index, r.progress, r.position, 100.0, bounds);
+	CHECK(r.step_index == 3);
+	CHECK(r.position.y == doctest::Approx(980.0).epsilon(1e-3));
+}
+
 TEST_CASE("visual: display pieces of a path leaving the bounds") {
 	std::vector<StepGeom> steps(2);
 	steps[0].start = V2{100.0f, 100.0f};

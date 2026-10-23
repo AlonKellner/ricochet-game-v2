@@ -55,15 +55,6 @@ def test_the_cursor_counts_toward_neither():
     assert counted(pl) == counted(ph) == T.MAX_HITS
 
 
-def test_a_circle_beam_with_the_switch_off_counts_its_passages_unseen():
-    sc = T.scene_from_json([PRE])
-    with emit_infinity(False):
-        w = T.trace_physical_direction(sc, (0, 0), mp.mpc(1, 0.5))
-    # (each loop: the passage of Q unseen, then the ray's origin -- both significant)
-    assert kinds(w) == ["origin"] * (T.MAX_SIGNIFICANT // 2) + ["max"] and w.sig == T.MAX_SIGNIFICANT + 1
-    assert w.events[-1].surface_id == T.INFINITY_ID   # the max at the frame's infinity
-
-
 def test_an_unplanned_passage_of_infinity_before_the_cursor_is_a_divergence():
     # Stage 131 (the user): the mirror x = 200, the cursor (300, 50) past it; plan [M]:
     # the reflected beam heads back, wraps (unplanned) and returns onto the cursor --

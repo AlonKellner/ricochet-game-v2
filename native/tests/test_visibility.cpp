@@ -132,7 +132,6 @@ TEST_CASE("visibility: the region and the traces agree with the oracle's labels"
 		const std::string name = c["name"].get<std::string>();
 		const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + c["scene"].get<std::string>() + ".surfaces.json");
 		Tracer t;
-		t.set_emit_infinity(true);
 		t.set_defs(defs_from_json(d["surfaces"]));
 		const std::vector<PlanItem> plan = plan_from_json(c["plan"]); // (Stage 113: with the clicks)
 		const V2 player{float(c["player"][0].get<double>()), float(c["player"][1].get<double>())};
@@ -162,7 +161,6 @@ TEST_CASE("visibility: the region and the traces agree with the oracle's labels"
 TEST_CASE("visibility: a directional normal along its line carrier is a supported empty region") {
 	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/fixtures/stage113_degenerate_directional.json");
 	Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(defs_from_json(d["surfaces"]));
 	for (const bool left : {true, false}) {
 		const std::vector<PlanItem> plan{PlanItem{5, left, std::nullopt, std::nullopt}};
@@ -189,7 +187,6 @@ TEST_CASE("visibility: a directional normal along its line carrier is a supporte
 TEST_CASE("K15: an inversion centred on the circle normal's centre, on the beam through it" * doctest::may_fail(true)) {
 	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/playground__projective_concentric.surfaces.json");
 	Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(defs_from_json(d["surfaces"]));
 	const std::vector<PlanItem> plan{PlanItem{7, true, std::nullopt, std::nullopt}, PlanItem{6, true, std::nullopt, std::nullopt},
 		PlanItem{5, true, std::nullopt, std::nullopt}};
@@ -216,7 +213,6 @@ TEST_CASE("visibility: the empty plan's region is the non-divergence set on ever
 		const std::string &file = files[fi];
 		const ojson d = load_dump(file);
 		Tracer t;
-		t.set_emit_infinity(true);
 		t.set_defs(defs_from_json(d["surfaces"]));
 		std::vector<V2> cursors;
 		for (int i = 0; i <= 16; i++) {
@@ -334,7 +330,6 @@ TEST_CASE("visibility: plans' regions are the non-divergence set on the shipped 
 		const ojson d = load_dump(file);
 		const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
 		Tracer t;
-		t.set_emit_infinity(true);
 		t.set_defs(defs);
 		std::vector<V2> cursors;
 		for (int i = 0; i <= 12; i++) {
@@ -482,7 +477,6 @@ TEST_CASE("K13: the pin beside every member and around every key of the projecti
 	for (const Case &cs : cases) {
 		const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + cs.scene + ".surfaces.json");
 		Tracer t;
-		t.set_emit_infinity(true);
 		t.set_defs(defs_from_json(d["surfaces"]));
 		const vis::Rect vb{0, 0, 1920, 1080};
 		const vis::Result r = vis::compute(t, cs.player, cs.plan, Flags(), vb);
@@ -510,7 +504,6 @@ TEST_CASE("visibility flip scan" * doctest::skip(true)) {
 	std::sscanf(fl, "%lf,%lf", &k0, &w);
 	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + scene + ".surfaces.json");
 	Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(defs_from_json(d["surfaces"]));
 	std::vector<PlanItem> plan;
 	if (const char *ps = std::getenv("RC_VIS_PLAN")) {
@@ -610,7 +603,6 @@ TEST_CASE("visibility debug" * doctest::skip(true)) {
 	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + scene + ".surfaces.json");
 	Tracer t;
 	// RC_VIS_EMIT=0: no infinity events (as a sweep manifest without them); RC_VIS_BOUNDS="x0,y0,x1,y1": the level bounds
-	t.set_emit_infinity(std::getenv("RC_VIS_EMIT") == nullptr || std::string(std::getenv("RC_VIS_EMIT")) != "0");
 	t.set_defs(defs_from_json(d["surfaces"]));
 	vis::Rect vbounds{0, 0, 1920, 1080};
 	if (const char *pb = std::getenv("RC_VIS_BOUNDS")) {
@@ -1124,7 +1116,6 @@ TEST_CASE("visibility: the regions' structure checks hold on the shipped levels"
 		const ojson d = load_dump(file);
 		const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
 		Tracer t;
-		t.set_emit_infinity(true);
 		t.set_defs(defs);
 		const std::string name = std::filesystem::path(file).filename().string();
 		std::vector<std::vector<PlanItem>> plans{{}};
@@ -1186,7 +1177,6 @@ TEST_CASE("visibility bench" * doctest::skip(true)) {
 	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + scene + ".surfaces.json");
 	const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
 	Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(defs);
 	const char *np = std::getenv("RC_VIS_BENCH_PLANS");
 	const size_t n_plans = np ? size_t(std::atoi(np)) : 3;
@@ -1312,7 +1302,6 @@ TEST_CASE("visibility: the regions' digest matches bench/goldens/regions.json") 
 		const ojson d = load_dump(file);
 		const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
 		Tracer t;
-		t.set_emit_infinity(true);
 		t.set_defs(defs);
 		const std::string name = std::filesystem::path(file).filename().string();
 		ojson &level = out[name];
@@ -1363,7 +1352,6 @@ TEST_CASE("visibility digest" * doctest::skip(true)) {
 		const ojson d = load_dump(file);
 		const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
 		Tracer t;
-		t.set_emit_infinity(true);
 		t.set_defs(defs);
 		const std::vector<std::vector<PlanItem>> plans = digest_plans(defs);
 		uint64_t fh = 14695981039346656037ULL;
@@ -1404,7 +1392,6 @@ TEST_CASE("visibility census" * doctest::skip(true)) {
 		const ojson d = load_dump(file);
 		const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
 		Tracer t;
-		t.set_emit_infinity(true);
 		t.set_defs(defs);
 		std::vector<std::vector<PlanItem>> plans{{}};
 		const std::vector<std::vector<PlanItem>> lp = level_plans(defs);
@@ -1451,7 +1438,6 @@ TEST_CASE("visibility census" * doctest::skip(true)) {
 namespace {
 vis::Result region_of(Tracer &t, const char *scene, const std::vector<PlanItem> &plan, vis::Pt player) {
 	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/" + scene + ".surfaces.json");
-	t.set_emit_infinity(true);
 	t.set_defs(defs_from_json(d["surfaces"]));
 	return vis::compute(t, player, plan, Flags(), vis::Rect{0, 0, 1920, 1080});
 }
@@ -1519,7 +1505,6 @@ TEST_CASE("visibility: the display's cursor index counts drawn steps (B3)") {
 	// drawn; the cursor index used to keep counting it (one past the steps)
 	Tracer t;
 	const ojson d = load_dump(std::string(RC_REPO_ROOT) + "/bench/scenes/playground__directional_arcs.surfaces.json");
-	t.set_emit_infinity(true);
 	t.set_defs(defs_from_json(d["surfaces"]));
 	const std::vector<PlanItem> inf{PlanItem{INFINITY_ID, true, std::nullopt, std::nullopt}};
 	const V2 cursor{1360, 300};

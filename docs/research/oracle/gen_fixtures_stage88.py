@@ -69,7 +69,6 @@ def pair_search(fx, name, surfs, player, cursor, entries):
 
 def main():
     mp.mp.dps = 80
-    T.EMIT_INFINITY = True
     fx = []
     # --- the event itself (direction traces, no plan) ---
     # (Stage 134: walls crossed off their segments -- candidates that fire nothing)

@@ -69,9 +69,6 @@ std::vector<std::string> replay(const json &script, const std::string &level_tex
 	rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0, 0, 0.0f, 0.0f}; // (synchronous, unanimated: the replay is the golden's)
 	if (script.contains("switches")) {
 		const json &sw = script["switches"];
-		if (sw.contains("infinity")) {
-			cfg.infinity = sw["infinity"].get<bool>() ? 1 : 0;
-		}
 		if (sw.contains("visibility")) {
 			cfg.visibility = sw["visibility"].get<bool>() ? 1 : 0;
 		}

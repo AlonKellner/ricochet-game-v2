@@ -142,10 +142,8 @@ struct SweepResult {
 SweepResult sweep(const Grid &g, const std::vector<std::vector<int>> &plans, const std::vector<V2> &positions) {
 	SweepResult r;
 	rc::Tracer tracer;
-	tracer.set_emit_infinity(true);
 	tracer.set_defs(g.defs);
 	rc::Scene<rc::F64> scene = rc::Scene<rc::F64>::from_defs(g.defs, rc::F64{1.0});
-	scene.emit_infinity = true;
 	const rc::Rect2f bounds = rc::Rect2f::of(0, 0, 1920, 1080);
 	for (const std::vector<int> &ids : plans) {
 		std::vector<rc::PlanItem> plan;

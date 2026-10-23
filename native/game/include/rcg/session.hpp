@@ -72,8 +72,7 @@ enum class Action { Undo, Reset, ClearPlan, CycleDisplay, ToggleGravity, ToggleV
 std::optional<Action> action_of(const std::string &name);
 
 struct SessionConfig {
-	std::optional<bool> infinity;   // the switches (default: the game's: on)
-	std::optional<bool> visibility;
+	std::optional<bool> visibility; // the switch (default: the game's: on; Stage 136: infinity is always on)
 	// Stage 121: a live host's session -- the visibility region and the preview's
 	// exact climbs are computed in the background (the frame shows the last
 	// region, a provisional float64 preview meanwhile); off (the default): all in
@@ -94,6 +93,9 @@ struct Flight {
 // Stage 135: each drawn step's lane offset (px to the left of its group's way;
 // 0 for a step drawn alone) -- the preview's side-by-side lanes
 std::vector<double> lane_offsets(const std::vector<rc::TraceStep> &steps);
+// Stage 136: each drawn step's distance from the player along its walk (px) --
+// where the preview's dash pattern stands at the step's start
+std::vector<double> dash_offsets(const std::vector<rc::TraceStep> &steps);
 
 class Session {
 public:
@@ -242,7 +244,6 @@ private:
 	std::vector<rc::PlanItem> items(size_t n) const;
 	std::vector<rc::PlanItem> items() const { return items(plan_.size()); }
 	std::vector<rc::inv::SurfaceInfo> infos() const;
-	bool infinity_on() const;
 	bool visibility_on() const;
 	rc::Rect2f bounds() const;
 	std::optional<V2> pole(size_t n);
@@ -290,7 +291,7 @@ private:
 	std::vector<Checkpoint> checkpoints_;
 	Checkpoint initial_;
 	int display_mode_ = 0;
-	std::optional<bool> infinity_override_, visibility_override_;
+	std::optional<bool> visibility_override_;
 	std::string hud_;
 	// the nodes (one per piece of every labelled surface), the hover's tracked ones
 	std::vector<Node> nodes_;
@@ -337,7 +338,7 @@ private:
 	struct VisKey {
 		V2 player;
 		int plan = 0, flags = 0, world = 0;
-		bool infinity = false, visibility = false;
+		bool visibility = false;
 		bool operator==(const VisKey &) const = default;
 	};
 	struct SpawnKey {
@@ -372,7 +373,6 @@ private:
 	struct VisJobIn {
 		std::shared_ptr<const std::vector<rc::SurfaceDef>> defs;
 		int world = 0;
-		bool infinity = true;
 		V2 player;
 		std::vector<rc::PlanItem> items;
 		rc::Flags flags;
@@ -387,7 +387,6 @@ private:
 	struct PreviewJobIn {
 		std::shared_ptr<const std::vector<rc::SurfaceDef>> defs;
 		int world = 0;
-		bool infinity = true;
 		V2 player, cursor;
 		std::vector<rc::PlanItem> items;
 		rc::Flags flags;

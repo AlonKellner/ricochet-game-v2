@@ -145,7 +145,7 @@ of interest, the plans from `SweepPlans`) and hand them to the native kernel (`S
   files, now data: `data/sweeps.json` (rc-sweeps/1, 13 groups in the GUT order) expanded by the headless host
   (`make manifests` = `rc_tool manifests`, 0.5 s, no Godot; Stage 116: `rcg/sweeps.hpp`, Godot's RNG as
   `rcg::GodotRng`). A manifest holds the defs, the infos (segment and carrier), the positions, the plans,
-  the flags and the switches (`skip_equal`, `emit_infinity`, `visibility`, `carrier_cursors`), in the
+  the flags and the switches (`skip_equal`, `visibility`, `carrier_cursors`; Stage 136 dropped `emit_infinity`), in the
   canonical spelling.
 - **`native/tests/test_sweeps.cpp`** replays every manifest through `rc::sweep::run` as the binding calls it:
   the `rc_sweeps_inv_{k}` (6 parts) and `rc_sweeps_vis_{k}` (12 parts) ctest entries, `RC_SWEEPS_PART=k/n`

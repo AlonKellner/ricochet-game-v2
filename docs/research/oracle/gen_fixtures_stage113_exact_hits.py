@@ -50,7 +50,6 @@ def stable(f, player, cursor, plan, mode):
 
 def main():
     mp.mp.dps = 80
-    T.EMIT_INFINITY = True
     fx = []
     walls = room(10, 560, 40, 1360, 840)   # (the top at y = 40: the players sit above the arcs)
     # K11: the arc's top endpoint (850, 300); the cursor on the radial through it

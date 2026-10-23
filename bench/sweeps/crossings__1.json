@@ -488,7 +488,6 @@
    "via": [450.0, 775.0]
   }
  ],
- "emit_infinity": true,
  "flags": {
   "chan:t": "g1"
  },

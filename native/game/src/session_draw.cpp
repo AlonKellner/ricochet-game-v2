@@ -611,11 +611,14 @@ struct PathPainter {
 			return;
 		}
 		V2 from = st.start + sh.by, to = st.end + sh.by;
+		const V2 drawn_from = from;
 		if (!clip_line(from, to, bounds)) {
 			return;
 		}
 		if (dashed_step) {
-			const std::vector<V2> pts = rc::arc::dash_line(from, to, 10.0, 5.0, 4000.0, phase);
+			// (the pattern runs on from where the step begins, not where it is clipped)
+			const double clipped = double(drawn_from.distance_to(from));
+			const std::vector<V2> pts = rc::arc::dash_line(from, to, 10.0, 5.0, 4000.0, phase - clipped);
 			if (!pts.empty()) {
 				out.push_back(stroke(Kind::Multiline, pts, col, 2.0));
 			}
@@ -826,8 +829,10 @@ struct PathPainter {
 			// a passage of infinity off the level (the user: on screen): the step that
 			// reaches it, and the step after it, lie off the level -- the outgoing half
 			// where the path last leaves the level before the wrap, the incoming one
-			// where it first enters again after it, each facing into the level
-			if (i + 1 < steps.size() && steps[i + 1].after_infinity && !level.has_point(st.end)) {
+			// where it first enters again after it, each facing into the level. Stage
+			// 136 (the user's F12): off the level's interior -- a wrap's way out is
+			// clipped onto the edge, which has_point counts in on the top and left
+			if (i + 1 < steps.size() && steps[i + 1].after_infinity && !level.grow(-0.5f).has_point(st.end)) {
 				for (size_t j = i + 1; j-- > 0;) {
 					if (j < i && steps[j + 1].after_infinity) {
 						break; // (the previous wrap)
@@ -1201,7 +1206,38 @@ std::vector<Shift> side_by_side(const std::vector<rc::TraceStep> &steps) {
 	return out;
 }
 
+// a step's length as drawn (an arc at its lane's radius; 0 for a step to or from
+// infinity)
+double drawn_length(const rc::TraceStep &st, const Shift &sh) {
+	if (st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end)) {
+		const rc::arc::ArcParams p = rc::arc::arc_params(st.start, st.via, st.end);
+		return std::abs(p.span) * (p.radius + sh.dr);
+	}
+	const double d = double(st.start.distance_to(st.end));
+	return std::isfinite(d) ? d : 0.0;
+}
+
+// Stage 136 (the user): each step's distance from the player along its walk, as
+// drawn -- the common part's steps in turn, each branch past the divergence on
+// from the common part's length (the merge lists the common part first)
+std::vector<double> walk_lengths(const std::vector<rc::TraceStep> &steps, const std::vector<Shift> &shifts) {
+	std::vector<double> out;
+	double common = 0.0;
+	std::optional<double> planned, physical;
+	for (size_t i = 0; i < steps.size(); i++) {
+		const rc::StepType t = steps[i].type;
+		const bool pl = t == rc::StepType::DivergedPlanned || t == rc::StepType::DivergedPostPlanned;
+		const bool ph = t == rc::StepType::DivergedPhysical;
+		double &walk = pl ? (planned ? *planned : planned.emplace(common)) : ph ? (physical ? *physical : physical.emplace(common)) : common;
+		out.push_back(walk);
+		walk += drawn_length(steps[i], shifts[i]);
+	}
+	return out;
+}
+
 } // namespace
+
+std::vector<double> dash_offsets(const std::vector<rc::TraceStep> &steps) { return walk_lengths(steps, side_by_side(steps)); }
 
 std::vector<double> lane_offsets(const std::vector<rc::TraceStep> &steps) {
 	std::vector<double> out;
@@ -1248,17 +1284,20 @@ void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<C
 		return out;
 	};
 	const std::vector<Shift> shifts = side_by_side(steps);
+	const std::vector<double> along = walk_lengths(steps, shifts);
 	for (size_t i = 0; i < steps.size(); i++) {
 		const rc::TraceStep &ms = steps[i];
 		if (ms.start == ms.end) {
 			continue;
 		}
 		auto tint = [&](const Color &c) { return ms.ghost ? ghost_color(c) : c; };
+		// (Stage 136, the user: the dashes run on across the steps, by the walk's length)
+		const double phase = dash_phase - along[i];
 		if (is_solid(ms.type)) {
 			pp.step(ms, tint(solid_under(ms.type)), false, 0.0, shifts[i]);
-			pp.step(ms, tint(dashes_over(ms.type)), true, dash_phase, shifts[i]);
+			pp.step(ms, tint(dashes_over(ms.type)), true, phase, shifts[i]);
 		} else {
-			pp.step(ms, tint(step_color(ms.type)), true, dash_phase, shifts[i]);
+			pp.step(ms, tint(step_color(ms.type)), true, phase, shifts[i]);
 		}
 	}
 	pp.event_marks(steps, shifts, bounds(), dots);

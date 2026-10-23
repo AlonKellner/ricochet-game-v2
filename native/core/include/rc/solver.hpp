@@ -50,13 +50,12 @@ constexpr double INF_D = std::numeric_limits<double>::infinity();
 
 enum class Mode { Physical = 0, Planned = 1 };
 
-enum class EventKind { Hit, Cursor, Origin, Escape, Max, Infinity };
+enum class EventKind { Hit, Cursor, Origin, Max, Infinity };
 inline const char *event_kind_name(EventKind k) {
 	switch (k) {
 		case EventKind::Hit: return "hit";
 		case EventKind::Cursor: return "cursor";
 		case EventKind::Origin: return "origin";
-		case EventKind::Escape: return "escape";
 		case EventKind::Max: return "max";
 		case EventKind::Infinity: return "infinity";
 	}
@@ -86,12 +85,11 @@ struct PlanItem {
 
 // Stage 132 (GAME_SPEC 4.2): the entries leave the walk behind the ray's origin --
 // an odd number of infinity and origin entries (each passage turns the half of the
-// ray's line the walk is on); with the infinity switch off an infinity entry is
-// never consumed and turns nothing.
-inline bool behind_origin(const std::vector<PlanItem> &plan, size_t n, bool emit_infinity) {
+// ray's line the walk is on).
+inline bool behind_origin(const std::vector<PlanItem> &plan, size_t n) {
 	int k = 0;
 	for (size_t i = 0; i < n && i < plan.size(); i++) {
-		k += (plan[i].is_origin() || (emit_infinity && plan[i].is_infinity())) ? 1 : 0;
+		k += (plan[i].is_origin() || plan[i].is_infinity()) ? 1 : 0;
 	}
 	return k % 2 == 1;
 }
@@ -747,7 +745,7 @@ public:
 		while (n < plan.size() && !is_projective(effs[n])) {
 			n++;
 		}
-		return behind_origin(plan, n, scene_.emit_infinity);
+		return behind_origin(plan, n);
 	}
 
 	// Stage 111: the index of the first planned entry of the first epoch that
@@ -1011,7 +1009,7 @@ public:
 			// entries before e that leave the walk behind the ray's origin ask for the
 			// passage of Q_0 first (Stage 132: the parity of infinity and origin entries;
 			// with the switch off an infinity entry can never be consumed)
-			const bool before_e = behind_origin(plan, size_t(j), scene_.emit_infinity);
+			const bool before_e = behind_origin(plan, size_t(j));
 			return Realization{*qr == before_e, RealizationKind::Entry};
 		}
 		return fallback;
@@ -1148,7 +1146,7 @@ public:
 		// the half: the orientation's own parity (behind_origin, as the realization
 		// reads it) over the entries since the last projection, from its start
 		const std::vector<PlanItem> since(plan.begin() + std::ptrdiff_t(start), plan.end());
-		o.behind = o.behind != behind_origin(since, since.size(), scene_.emit_infinity);
+		o.behind = o.behind != behind_origin(since, since.size());
 		std::vector<const Surf<N> *> st;
 		for (size_t j = start; j < plan.size(); j++) {
 			const Surf<N> *surf = scene_.find(plan[j].surface_id);
@@ -2818,7 +2816,7 @@ private:
 				}
 			}
 		}
-		if (w.scene->emit_infinity) {
+		{ // (Stage 136: infinity is always on)
 			if (!w.Q) {
 				if (beam.kappa.is_zero()) {
 					// the wrap through infinity: after every crossing ahead (t > t0),
@@ -3449,7 +3447,6 @@ private:
 		N t0 = fresh ? beam->kappa.like(0.0) : *t_start;
 		std::optional<Candidate<N>> resume; // the last candidate processed before an in-place reseed
 		N t_prev = t0;
-		bool fired_state = false; // a state change in the current loop
 		bool keep_cursor = false; // K4: the seed restart keeps the listed cursor
 		int sig0 = w.sig; // (every loop passes something significant: checked at its end)
 		while (!w.done) {
@@ -3717,7 +3714,6 @@ private:
 				}
 				if (fires_state) {
 					w.flags = w.flags.applied(changes);
-					fired_state = true;
 				}
 				Event<N> &e = emit(w, EventKind::Hit, beam, t_prev, t, gp[ci]);
 				e.why = gw[ci];
@@ -3803,32 +3799,8 @@ private:
 			if (!next) {
 				// nothing fired on the full loop (or the loop only changed the state:
 				// the next one differs, e.g. a ghost toggler re-hit). Stage 131: no loop
-				// detection -- the arrow goes round again and the limits end it. A line
-				// with the infinity switch off leaves through infinity (it does not wrap).
-				if (beam->kappa.is_zero() && !w.scene->emit_infinity) {
-					if (fired_state) {
-						fired_state = false;
-						continue; // (walked again on the same beam, as before)
-					}
-					emit(w, EventKind::Escape, beam, t_prev, std::nullopt, INF_D);
-					w.done = true;
-					return;
-				}
-				if (!w.scene->emit_infinity) {
-					// the passage of the frame's infinity, unseen (a circle with the
-					// switch off): significant all the same
-					w.sig++;
-					if (w.sig > w.max_sig) {
-						const std::optional<N> tq = w.Q ? std::optional<N>(Backend<N>::param_of(*beam, *w.Q)) : std::nullopt;
-						Event<N> &me = emit(w, EventKind::Max, beam, t_prev, tq, INF_D);
-						me.surface_id = INFINITY_ID;
-						if (w.Q) {
-							me.point = w.Q;
-						}
-						w.done = true;
-						return;
-					}
-				}
+				// detection -- the arrow goes round again and the limits end it (every
+				// loop passes infinity and the ray's origin; Stage 136: always on).
 				// back at the departure: when it is the ray's origin (the player, a
 				// projected ray's start), its passage -- a significant event (the user);
 				// unplanned before the cursor, a divergence: the walk leaves the plan.
@@ -3842,7 +3814,6 @@ private:
 						return;
 					}
 					// (the next event runs on from the last one, across the departure)
-					fired_state = false;
 					continue;
 				}
 				w.count++;
@@ -3862,10 +3833,8 @@ private:
 				oe.flags = w.flags;
 				origin_passage(w, *beam);
 				t_prev = t0; // (the next arc runs on from the origin)
-				fired_state = false;
 				continue;
 			}
-			fired_state = false;
 			beam = next->beam;
 			if (aim_known && aim_known->j > 0) {
 				add_aim_known(w, *beam); // (Stage 124: the beam after the member's own entries)

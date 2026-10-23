@@ -934,3 +934,85 @@ TEST_CASE("present: side by side by passes -- one lane per pass, packed, centred
 	}
 	CHECK(l.front() + l.back() == doctest::Approx(0.0));
 }
+
+// Stage 136 (the user's F12 dumps, open_room_playable, no plan): a steep shot up
+// through the ceiling wraps through infinity and comes back up through the floor,
+// five laps. The two cursors differ only in where the off-segment crossings fall:
+// before the wrap (far above) or after it (far below, the way back entering the
+// level through the bottom edge). Either way each wrap is marked by two half rings
+// (out at the top edge, back in at the bottom), and the arrow flies the way back
+// from the bottom edge to the floor -- the second used to get a full ring on the
+// top edge and no half ring at the bottom, and its arrow appeared at the floor.
+TEST_CASE("present: a wrap whose way back crosses far off the level -- half rings and the arrow's re-entry") {
+	for (const rc::V2 cur : {rc::V2::of(0x1.70222ap+10, 0x1.d3dddp+8), rc::V2::of(0x1.71628p+10, 0x1.d1dcdcp+8)}) {
+		CAPTURE(cur.x);
+		rcg::Session s(level("open_room_playable.json"));
+		s.teleport(rc::V2::of(0x1.704f62p+10, 0x1.6be93cp+9));
+		s.set_cursor(cur);
+		s.settle();
+		std::vector<rcg::render::Call> out;
+		s.paint_steps(s.preview_steps(), out, 0.0);
+		int top = 0, bottom = 0, edge_rings = 0;
+		for (const auto &c : out) {
+			if (c.kind == rcg::render::Kind::Polygon) {
+				top += std::abs(c.pts[0].y) < 1.0f ? 1 : 0;
+				bottom += std::abs(c.pts[0].y - 1080.0f) < 1.0f ? 1 : 0;
+			} else if (c.kind == rcg::render::Kind::Circle && c.radius == 5.5) {
+				edge_rings += std::abs(c.pts[0].y) < 1.0f ? 1 : 0;
+			}
+		}
+		CHECK(top == 10);    // five laps, a half ring each (a white one under a coloured one)
+		CHECK(bottom == 10);
+		CHECK(edge_rings == 0);
+		const rcg::Flight f = s.fire(-1, 1.0 / 60.0);
+		int on_the_way_back = 0; // between the bottom edge and the floor (y = 840)
+		for (const auto &[pos, dir] : f.stream) {
+			on_the_way_back += (pos.y > 860.0f && pos.y < 1080.0f && dir.y < 0.0f) ? 1 : 0;
+		}
+		CHECK(on_the_way_back >= 5 * 5); // ~9 frames a lap at 1600 px/s
+	}
+}
+
+// Stage 136 (the user): the dashes run on across the path's steps -- their pattern
+// is the distance from the player along the walk, through every hit point, not
+// each step's own start (they jumped at every step). A branch past the divergence
+// goes on from the common part's length.
+TEST_CASE("present: the dashes run on across the steps, by the walk's length from the player") {
+	rcg::Session s(level("test_levels/crossings.json"));
+	auto st = [](rc::V2 a, rc::V2 b, rc::StepType t) {
+		rc::TraceStep x;
+		x.start = a;
+		x.end = b;
+		x.via = (a + b) / 2.0f;
+		x.type = t;
+		return x;
+	};
+	const std::vector<rc::TraceStep> steps = {
+		st(rc::V2{100, 100}, rc::V2{113, 100}, rc::StepType::DivergedPhysical), // 13 px: a dash, then 3 of the 5 px gap
+		st(rc::V2{113, 100}, rc::V2{113, 160}, rc::StepType::DivergedPhysical),
+	};
+	CHECK(rcg::dash_offsets(steps) == std::vector<double>{0.0, 13.0});
+	std::vector<rcg::render::Call> out;
+	s.paint_steps(steps, out, 0.0);
+	std::vector<const rcg::render::Call *> dashes;
+	for (const auto &c : out) {
+		if (c.kind == rcg::render::Kind::Multiline) {
+			dashes.push_back(&c);
+		}
+	}
+	REQUIRE(dashes.size() == 2);
+	REQUIRE(dashes[1]->pts.size() >= 2);
+	// the second step's first dash begins where the gap left at the corner ends
+	CHECK(dashes[1]->pts[0].y == doctest::Approx(102.0));
+	CHECK(dashes[1]->pts[1].y == doctest::Approx(112.0));
+
+	// a divergence: both branches go on from the common part's length
+	const std::vector<rc::TraceStep> forked = {
+		st(rc::V2{0, 0}, rc::V2{30, 0}, rc::StepType::Aligned),
+		st(rc::V2{30, 0}, rc::V2{30, 40}, rc::StepType::DivergedPlanned),
+		st(rc::V2{30, 0}, rc::V2{30, -20}, rc::StepType::DivergedPhysical),
+		st(rc::V2{30, 40}, rc::V2{60, 40}, rc::StepType::DivergedPlanned),
+		st(rc::V2{30, -20}, rc::V2{60, -20}, rc::StepType::DivergedPhysical),
+	};
+	CHECK(rcg::dash_offsets(forked) == std::vector<double>{0.0, 30.0, 30.0, 70.0, 50.0});
+}

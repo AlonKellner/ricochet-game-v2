@@ -876,7 +876,6 @@ TEST_CASE("ported: test_stage85_state_changes: test_state_change_starts_new_fram
 	REQUIRE(tog != nullptr);
 	// TestTrace: a fresh tracer with the game's switches (the infinity event on)
 	rc::Tracer t;
-	t.set_emit_infinity(true);
 	t.set_defs(rcg::defs_of(surfaces));
 	const V2 player{700, 520}, cursor{1000, 530};
 	const std::optional<rc::TracePair> pair = t.trace_pair(player, cursor, {}, {});

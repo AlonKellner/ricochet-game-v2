@@ -754,7 +754,6 @@
    "via": [600.0, 560.0]
   }
  ],
- "emit_infinity": true,
  "flags": {
   "chan:a": "g1",
   "chan:b": "g1",

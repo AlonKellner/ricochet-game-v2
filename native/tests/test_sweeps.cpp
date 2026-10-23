@@ -38,7 +38,6 @@ struct Manifest {
 	std::vector<std::vector<PlanItem>> plans;
 	Flags flags;
 	bool skip_equal = false;
-	bool emit_infinity = false;
 	bool visibility = false;
 	bool carrier_cursors = false;
 	// Stage 129: known findings -- a violation whose kind is listed (all kinds when
@@ -92,7 +91,6 @@ Manifest load_manifest(const std::filesystem::path &path) {
 	}
 	m.flags = flags_from_json(j["flags"]);
 	m.skip_equal = j["skip_equal"].get<bool>();
-	m.emit_infinity = j["emit_infinity"].get<bool>();
 	m.visibility = j["visibility"].get<bool>();
 	m.carrier_cursors = j["carrier_cursors"].get<bool>();
 	for (const ojson &k : j.value("known", ojson::array())) {
@@ -188,7 +186,7 @@ void run_manifests(bool visibility, Totals &t) {
 		for (const size_t pi : players) {
 			// one player: the shard rule pi % n == i with n = the position count
 			std::vector<sweep::Combo> f = sweep::run(m.defs, m.infos, m.positions, m.plans, m.flags, int(pi), int(m.positions.size()), m.skip_equal, true,
-				m.emit_infinity, m.visibility, m.carrier_cursors);
+				m.visibility, m.carrier_cursors);
 			failing.insert(failing.end(), f.begin(), f.end());
 		}
 		for (const sweep::Combo &c : failing) {
@@ -286,10 +284,8 @@ TEST_CASE("sweeps timing" * doctest::skip(true)) {
 			continue;
 		}
 		Tracer tracer;
-		tracer.set_emit_infinity(m.emit_infinity);
 		tracer.set_defs(m.defs);
 		Scene<F64> scene = Scene<F64>::from_defs(m.defs, F64{1.0});
-		scene.emit_infinity = m.emit_infinity;
 		const Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
 		const vis::Rect vb{0, 0, 1920, 1080};
 		for (size_t pli = 0; pli < m.plans.size(); pli++) {

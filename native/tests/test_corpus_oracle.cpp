@@ -48,7 +48,6 @@ TEST_CASE("corpus: every scene corpus scenario matches the oracle through the la
 		const std::vector<SurfaceDef> defs = defs_from_json(scn["surfaces"]);
 		const std::vector<PlanItem> plan = plan_from_json(scn["plan"]);
 		LadderContext lctx(defs);
-		lctx.set_emit_infinity(true);
 		Ladder lad(lctx, []() { return 0LL; });
 		const LadderResult lr = lad.solve(scn["player"][0].get<double>(), scn["player"][1].get<double>(), scn["cursor"][0].get<double>(),
 			scn["cursor"][1].get<double>(), plan, MAX_HITS, MAX_HITS, CORPUS_TOL, false);

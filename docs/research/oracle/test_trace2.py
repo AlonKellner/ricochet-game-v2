@@ -364,29 +364,20 @@ import contextlib
 
 
 @contextlib.contextmanager
-def emit_infinity(on=True):
-    old = T.EMIT_INFINITY
-    T.EMIT_INFINITY = on
-    try:
-        yield
-    finally:
-        T.EMIT_INFINITY = old
+def emit_infinity():
+    yield   # (Stage 136: infinity is always on; the tests' blocks keep their shape)
 
 
 def kinds(walk):
     return [e.kind for e in walk.events]
 
 
-def test_infinity_on_by_default_and_off_reproduces_the_legacy_trace():
-    assert T.EMIT_INFINITY is True          # Stage 88b (B9 approved)
+def test_infinity_always_on():
     p = off(1, 50)
     w = T.trace_physical_direction([p], (0, 0), mp.mpc(1, 0))
     # Stage 131: no loop detection -- the arrow loops until the 11th passage of infinity
     # (each loop: the line, the wrap, the ray's origin -- the last two significant)
     assert kinds(w) == ["hit", "infinity", "origin"] * (T.MAX_SIGNIFICANT // 2) + ["hit", "max"]
-    with emit_infinity(False):
-        w = T.trace_physical_direction([p], (0, 0), mp.mpc(1, 0))
-        assert kinds(w) == ["hit", "escape"]
 
 
 def test_infinity_event_between_ahead_and_wrapped_crossings():

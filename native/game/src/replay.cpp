@@ -21,9 +21,6 @@ std::vector<std::string> replay_session(const json &script, const std::string &l
 	SessionConfig cfg;
 	if (script.contains("switches")) {
 		const json &sw = script["switches"];
-		if (sw.contains("infinity")) {
-			cfg.infinity = sw["infinity"].get<bool>();
-		}
 		if (sw.contains("visibility")) {
 			cfg.visibility = sw["visibility"].get<bool>();
 		}
