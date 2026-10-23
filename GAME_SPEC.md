@@ -686,7 +686,7 @@ Levels are designed with **design surfaces**, which may cross each other. The pl
 - one line crossing two others: 3 + 2 + 2 = 7 pieces;
 - three lines crossing in a triangle: 3 × 3 = 9 pieces.
 
-A piece spans its design surface's carrier between two consecutive cut points: design endpoints, or crossings. A crossing's position is computed once, rounded to float32, and shared by the pieces that end there.
+A piece spans its design surface's carrier between two consecutive cut points: design endpoints, or crossings. A crossing's position is computed once, rounded to float32, and shared by the pieces that end there. **The walk and the region read a piece's end that is a crossing as the crossing itself** (Stage 133, the user): an end within one float32 ulp, in each coordinate, of a crossing of its carrier with another surface's carrier is that crossing by provenance -- computed at the walk's own precision -- not its rounding, which lies off the other carrier and would leave a sliver between the two (F23).
 
 **The solver works on design surfaces.** Splitting would not change any physical outcome:
 - away from crossings, a piece behaves exactly as its design surface (same carrier, sides, effects);

@@ -824,6 +824,7 @@ private:
 	Flags flags_;
 	Scene<F64> scene_;
 	mutable Solver<F64> solver_;
+	std::vector<std::optional<Seg<F64>>> piece_spans_; // Stage 133: the plan's pieces, ends that are crossings read as the crossings
 	Result res_;
 	Half half_ = Half::Single;
 	std::vector<EffectType> effs_;
@@ -1271,6 +1272,7 @@ private:
 			}
 		}
 		res_.near_transforms = K > 0 && changes_[K - 1];
+		piece_spans_ = solver_.plan_piece_spans(plan_);
 		for (const PlanItem &item : plan_) {
 			const Surf<F64> *ps = item.is_infinity() || item.is_origin() ? nullptr : scene_.find(item.surface_id);
 			for (const Surf<F64> *q : {ps, ps != nullptr && ps->portal ? scene_.find(ps->pair) : nullptr}) {
@@ -1967,10 +1969,11 @@ private:
 				if (e > j && changes_[e - 1]) {
 					break;
 				}
-				if (plan_[e].span) {
-					const auto &sp = *plan_[e].span;
-					add_poi(pois, CN<F64>{F64{sp[0]}, F64{sp[1]}}, j, "piece end", -1, true);
-					add_poi(pois, CN<F64>{F64{sp[2]}, F64{sp[3]}}, j, "piece end", -1, true);
+				if (plan_[e].span && piece_spans_[e]) {
+					// (Stage 133: its ends that are crossings, the crossings themselves)
+					const auto &sp = *piece_spans_[e];
+					add_poi(pois, sp.s, j, "piece end", -1, true);
+					add_poi(pois, sp.e, j, "piece end", -1, true);
 				}
 			}
 		}
@@ -2012,10 +2015,10 @@ private:
 				if (e > j && changes_[e - 1]) {
 					break;
 				}
-				if (plan_[e].span) {
-					const auto &sp = *plan_[e].span;
-					add_pushed(pois, CN<F64>{F64{sp[0]}, F64{sp[1]}}, j, "piece end", true);
-					add_pushed(pois, CN<F64>{F64{sp[2]}, F64{sp[3]}}, j, "piece end", true);
+				if (plan_[e].span && piece_spans_[e]) {
+					const auto &sp = *piece_spans_[e];
+					add_pushed(pois, sp.s, j, "piece end", true);
+					add_pushed(pois, sp.e, j, "piece end", true);
 				}
 			}
 		}
@@ -2125,10 +2128,11 @@ private:
 				if (e > j && changes_[e - 1]) {
 					break;
 				}
-				if (plan_[e].span) {
-					const auto &sp = *plan_[e].span;
-					add_poi(pois, CN<F64>{F64{sp[0]}, F64{sp[1]}}, j, "piece end", -1, true);
-					add_poi(pois, CN<F64>{F64{sp[2]}, F64{sp[3]}}, j, "piece end", -1, true);
+				if (plan_[e].span && piece_spans_[e]) {
+					// (Stage 133: its ends that are crossings, the crossings themselves)
+					const auto &sp = *piece_spans_[e];
+					add_poi(pois, sp.s, j, "piece end", -1, true);
+					add_poi(pois, sp.e, j, "piece end", -1, true);
 				}
 			}
 		}

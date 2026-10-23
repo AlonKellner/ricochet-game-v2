@@ -488,6 +488,9 @@ struct Walk {
 	bool plan_matched = true;
 	bool left_plan = false; // Stage 129: a surface fired out of plan while entries remained (GAME_SPEC 14.2; sticky)
 	bool wrapped_off = false; // Stage 131: an unplanned passage of infinity or of the ray's origin before the cursor
+	// Stage 133 (GAME_SPEC 9.7): the plan's pieces, per entry (nullopt: the whole
+	// surface) -- an end that is a crossing read as the crossing itself
+	std::vector<std::optional<Seg<N>>> spans;
 	bool cursor_done = false;
 	int count = 0;
 	int max_events = MAX_HITS;
@@ -1121,6 +1124,9 @@ public:
 		}
 		return o;
 	}
+
+	// Stage 133: the plan's pieces, ends that are crossings read as the crossings (the region's points of interest)
+	std::vector<std::optional<Seg<N>>> plan_piece_spans(const std::vector<PlanItem> &plan) const { return piece_spans(plan); }
 
 	Flags plan_flags(const std::vector<PlanItem> &plan, const Flags &flags) const {
 		Flags f = flags;
@@ -1990,6 +1996,7 @@ private:
 		w.post_mode = Mode::Physical;
 		w.max_events = max_events;
 		w.max_sig = max_events == MAX_HITS ? MAX_SIGNIFICANT : (max_events / MAX_HITS) * MAX_SIGNIFICANT; // (the realization's wide budget: 8 x each)
+		w.spans = piece_spans(plan);
 		w.Q = effects::scene_pre_q(scene_);
 		w.record_poles = record_poles_;
 		w.pole_memo = cache_ ? &cache_->poles : nullptr;
@@ -3061,23 +3068,115 @@ private:
 		return Classified{pt, on_seg, geom::side_left(surf.seg, pt, tang), full_block(scene, surf, pt, tang, on_seg, flags)};
 	}
 
-	// Stage 108: a plan item naming a piece accepts only points inside its span.
-	static bool in_span(const PlanItem &item, const CN<N> &pt) {
-		if (!item.span) {
+	// Stage 108: a plan item naming a piece accepts only points inside its span
+	// (Stage 133: its ends that are crossings, the crossings themselves).
+	static bool in_span(const Walk<N> &w, int i, const CN<N> &pt) {
+		if (i < 0 || size_t(i) >= w.spans.size() || !w.spans[size_t(i)]) {
 			return true;
 		}
-		const std::array<double, 6> &a = *item.span;
-		Seg<N> sg;
-		sg.s = CN<N>{pt.re.like(a[0]), pt.re.like(a[1])};
-		sg.e = CN<N>{pt.re.like(a[2]), pt.re.like(a[3])};
-		sg.v = CN<N>{pt.re.like(a[4]), pt.re.like(a[5])};
-		return geom::on_segment(sg, pt);
+		return geom::on_segment(*w.spans[size_t(i)], pt);
+	}
+
+	// The points where two surfaces' carriers cross, at the tier's precision.
+	static std::vector<CN<N>> carrier_crossings(const Surf<N> &a, const Surf<N> &b) {
+		std::vector<CN<N>> out;
+		const N two = a.seg.s.re.like(2.0);
+		const N four = a.seg.s.re.like(4.0);
+		if (a.line && b.line) {
+			const CN<N> r = a.seg.e.sub(a.seg.s);
+			const CN<N> q = b.seg.e.sub(b.seg.s);
+			const N den = CN<N>::cross(r, q);
+			if (den.is_zero()) {
+				return out;
+			}
+			out.push_back(a.seg.s.add(r.scale(CN<N>::cross(b.seg.s.sub(a.seg.s), q).div(den))));
+			return out;
+		}
+		if (a.line != b.line) {
+			const Surf<N> &l = a.line ? a : b;
+			const Surf<N> &c = a.line ? b : a;
+			const CN<N> d = l.seg.e.sub(l.seg.s);
+			const CN<N> w = l.seg.s.sub(c.seg.circ->c);
+			const N A2 = d.abs2();
+			const N B2 = two.mul(CN<N>::dot(w, d));
+			const N C2 = w.abs2().sub(c.seg.circ->r2);
+			const N disc = B2.mul(B2).sub(four.mul(A2).mul(C2));
+			if (disc.is_negative() || A2.is_zero()) {
+				return out;
+			}
+			const N sq = disc.sqrt_val();
+			for (const N &u : {B2.neg().sub(sq).div(two.mul(A2)), B2.neg().add(sq).div(two.mul(A2))}) {
+				out.push_back(l.seg.s.add(d.scale(u)));
+			}
+			return out;
+		}
+		const CN<N> c0 = a.seg.circ->c;
+		const CN<N> c1 = b.seg.circ->c;
+		const N dd = c1.sub(c0).abs_val();
+		if (dd.is_zero()) {
+			return out;
+		}
+		const N x = dd.mul(dd).add(a.seg.circ->r2).sub(b.seg.circ->r2).div(two.mul(dd));
+		const N h2 = a.seg.circ->r2.sub(x.mul(x));
+		if (h2.is_negative()) {
+			return out;
+		}
+		const N h = h2.sqrt_val();
+		const CN<N> e = c1.sub(c0).div_real(dd);
+		const CN<N> base = c0.add(e.scale(x));
+		out.push_back(base.add(e.mul_i().scale(h)));
+		out.push_back(base.sub(e.mul_i().scale(h)));
+		return out;
+	}
+
+	// Stage 133 (GAME_SPEC 9.7, the user): the plan's pieces as segments -- a piece's
+	// end stored as the float32 rounding of a crossing of its carrier with another
+	// surface's carrier is that crossing, by provenance (the nearest within an ulp
+	// in each coordinate), at the tier's precision.
+	std::vector<std::optional<Seg<N>>> piece_spans(const std::vector<PlanItem> &plan) const {
+		std::vector<std::optional<Seg<N>>> out(plan.size());
+		for (size_t i = 0; i < plan.size(); i++) {
+			if (!plan[i].span) {
+				continue;
+			}
+			const std::array<double, 6> &a = *plan[i].span;
+			const Surf<N> *me = scene_.find(plan[i].surface_id);
+			if (me == nullptr) {
+				continue; // (no such surface: nothing to match)
+			}
+			auto like = [&](double v) { return me->seg.s.re.like(v); };
+			auto end = [&](double x, double y) {
+				CN<N> best{like(x), like(y)};
+				auto ulp = [](double v) { return v == 0.0 ? std::ldexp(1.0, -149) : std::ldexp(1.0, std::ilogb(v) - 23); };
+				double best_d = INF_D;
+				for (const auto &sp : scene_.surfaces) {
+					if (sp->id == me->id) {
+						continue;
+					}
+					for (const CN<N> &c : carrier_crossings(*me, *sp)) {
+						const double dx = std::fabs(c.fx() - x);
+						const double dy = std::fabs(c.fy() - y);
+						if (dx <= ulp(x) && dy <= ulp(y) && std::hypot(dx, dy) < best_d) {
+							best_d = std::hypot(dx, dy);
+							best = c;
+						}
+					}
+				}
+				return best;
+			};
+			Seg<N> sg;
+			sg.s = end(a[0], a[1]);
+			sg.e = end(a[2], a[3]);
+			sg.v = CN<N>{like(a[4]), like(a[5])};
+			out[i] = sg;
+		}
+		return out;
 	}
 
 	// defer (B5): the event keeps the beam and only changes the flags -- a
 	// mismatch then waits for the point's frame (point_sync).
 	static void plan_bookkeeping(Walk<N> &w, int sid, const CN<N> &pt, bool defer = false) {
-		if (w.plan_index < int(w.plan.size()) && sid == w.plan[size_t(w.plan_index)].surface_id && in_span(w.plan[size_t(w.plan_index)], pt)) {
+		if (w.plan_index < int(w.plan.size()) && sid == w.plan[size_t(w.plan_index)].surface_id && in_span(w, w.plan_index, pt)) {
 			w.plan_index++;
 			return;
 		}
@@ -3114,7 +3213,7 @@ private:
 			}
 			return;
 		}
-		if (item.is_infinity() || item.is_origin() || item.surface_id != surf->id || item.left != left || !in_span(item, pt)) {
+		if (item.is_infinity() || item.is_origin() || item.surface_id != surf->id || item.left != left || !in_span(w, p.index, pt)) {
 			return;
 		}
 		const EffectType eff = surf->effect(left, p.flags);
@@ -3394,7 +3493,7 @@ private:
 				// Stage 108: a planned piece -- physically, only a hit inside its span is
 				// the planned one; on the planned path the entry is consumed as before
 				// and its hit is off its segment outside the span
-				const bool in_piece = plan_hit && in_span(w.plan[size_t(w.plan_index)], pt);
+				const bool in_piece = plan_hit && in_span(w, w.plan_index, pt);
 				const bool plan_match = w.mode == Mode::Physical ? in_piece : plan_hit;
 				if (w.mode != Mode::Physical && plan_hit && !in_piece) {
 					on_seg = false;

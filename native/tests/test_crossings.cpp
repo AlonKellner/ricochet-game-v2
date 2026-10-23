@@ -104,3 +104,34 @@ TEST_CASE("K6: surfaces on one carrier share their crossings and tie by id, at e
 	CHECK(first_hits<Dual>(defs, Dual{1, 0}) == std::vector<int>{3, 5, 9});
 	CHECK(first_hits<BigFloat>(defs, BigFloat::from_int(1, 4)) == std::vector<int>{3, 5, 9});
 }
+
+// Stage 133 (GAME_SPEC 9.7, the user; F23): a piece's end stored as the float32
+// rounding of two carriers' crossing is read as the crossing, at every tier
+TEST_CASE("crossings: a piece's end that rounds a crossing is the crossing (F23)") {
+	const ojson d = load_json("bench/scenes/test_levels__crossings.surfaces.json");
+	const std::vector<SurfaceDef> defs = defs_from_json(d["surfaces"]);
+	PlanItem it;
+	it.surface_id = 20;
+	it.left = true;
+	it.span = std::array<double, 6>{1400.0, 587.550048828125, 1400.0, 712.449951171875, 1530.0, 650.0};
+	auto check = [&](auto one) {
+		using N = decltype(one);
+		const Scene<N> scene = Scene<N>::from_defs(defs, one);
+		Solver<N> solver(scene, nullptr);
+		const auto spans = solver.plan_piece_spans({it});
+		REQUIRE(spans.size() == 1);
+		REQUIRE(spans[0]);
+		for (const CN<N> &x : {spans[0]->s, spans[0]->e}) {
+			CHECK(x.fy() != 587.550048828125);
+			CHECK(x.fy() != 712.449951171875);
+			for (int sid : {19, 20}) {
+				const Surf<N> *s = scene.find(sid);
+				// on both circles, to the tier's precision
+				CHECK(std::abs(x.sub(s->seg.circ->c).abs2().sub(s->seg.circ->r2).to_float()) < 1e-6);
+			}
+		}
+	};
+	check(F64{1});
+	check(Dual{1, 0});
+	check(BigFloat::from_int(1, 4));
+}

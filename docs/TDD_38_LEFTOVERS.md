@@ -9,7 +9,7 @@ F27 (TDD_36). Along the way, a request from the user's testing of Stage 132.
 |---|---|---|
 | 133.1 | F23: the region's open boundary chains on the overlapping circles' pieces | Done (337 → 5 violations) |
 | 133.2 | A circular portal's marker follows its circle (the user) | Done |
-| 133.3 | F23's remaining cells and whisker | Open |
+| 133.3 | F23's remaining cells and whisker: a piece's end that rounds a crossing is the crossing (the user's option 1) | Done (5 → 0; F23 closed) |
 | 133.4 | F24, F21, F22, F26, F27 | Open |
 
 ## 133.1 Open boundary chains (F23)
@@ -41,3 +41,22 @@ ring's arc between those points on the chosen side, closed along the circle. A l
 
 The test `present: a wrap and a portal are marked by two half rings` checks it on the portals playground's circular
 portals 12 and 13. Two sessions' draw lists are re-recorded (playground portals: shots and tour).
+
+## 133.3 A piece's end is the crossing it rounds (F23 closed)
+
+The last 5 F23 violations (4 VIS-CELL-CONSTANT, 1 VIS-REGULAR) came from the pieces' stored ends. A piece of
+circle 19 or 20 ends at the float32 rounding of the circles' crossing, (1400, 587.550049), not at the crossing
+(1400, 587.550020): 3·10⁻⁵ px off the other carrier. That left sub-pixel slivers between the true crossing (a point
+of interest: the member through it) and the stored end (another), where a walk departs from one piece and stops at
+the other circle at once.
+
+The user chose to read the end as the crossing (GAME_SPEC 9.7). An end within one float32 ulp, in each coordinate,
+of a crossing of its carrier with another surface's carrier is that crossing, computed at the walk's own precision:
+
+- oracle: `_carrier_crossings`, `_piece_end`, `plan_spans_of(spans, surfaces, plan)`;
+- native: `Solver::carrier_crossings`, `piece_spans` (resolved once per walk into `Walk::spans`, read by `in_span`),
+  and `plan_piece_spans` for the region's piece-end points of interest.
+
+F23 has no violations left, and its known entry is gone from `data/sweeps.json`. Nothing else changed: the
+fixtures, the corpus, the goldens, the region digests and the sessions are all identical. Tests:
+`test_stage133.py` (oracle) and `crossings: a piece's end that rounds a crossing is the crossing (F23)` (every tier).
