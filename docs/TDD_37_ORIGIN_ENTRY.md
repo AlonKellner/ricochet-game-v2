@@ -18,7 +18,8 @@ asked for it to be plannable, like ∞, "only when the plan so far provably reac
 | 132.2 | The realization by the parity of ∞ and origin entries (`behind_origin`) | Done |
 | 132.3 | The region from the ray's origin after an origin entry; the checks | Done |
 | 132.4 | The session: plannable where the plan leaves the walk behind the origin; marker, marks, click, record | Done |
-| 132.5 | Sessions judged and re-recorded (approved); docs; `make gates`; sign-off | Sign-off pending |
+| 132.5 | Sessions judged and re-recorded (approved); docs; `make gates`; sign-off | Done (user, 2026-10-23) |
+| 132.6 | The user's interactive findings: a portal's half rings along its normal; a wrap's half rings on screen | Done |
 
 ## 132.1 The entry
 
@@ -93,3 +94,20 @@ The session (`plannable_origin`):
 |---|---|---|
 | sessions | 20 of 48 | 19 with an ∞ plan: the origin's marker after `[∞]` (at the player) and the record's `origin` field (64 records). The 15 tours also plan `[∞, ∞]`, which now aims at the cursor (the parity): preview, facing and 12 flights. In hit_effects' tour the shot lands elsewhere after that. `[∞, ∞]` diverges at the unplanned origin between its wraps either way |
 | everything else | none | the fixtures (but the two new region cases), the corpus, the sweep goldens and the region digests are unchanged |
+
+## 132.6 The user's interactive findings (2026-10-23)
+
+The user signed off with two findings on the Stage 131 marks:
+
+- **A portal's half rings were aligned with the path.** They are now normal to the portal surface: at the entry the
+  half faces the side the beam came from, at the exit the side it leaves by. The session gives the painter the
+  surface's normal (a line's, or an arc's radius at the point), of the pair at the exit.
+- **A wrap's half rings were not on screen.** The step that reaches infinity, and the one after it, usually lie off
+  the level already: the path left the level a step or two earlier. The halves were looked for on those steps, and
+  only when the step carried ∞'s id, which an unplanned wrap never does. The wrap is now found by the step after it
+  (`after_infinity`). The outgoing half sits where the path last leaves the level before the wrap, the incoming half
+  where it first enters again after it, each normal to the level's edge.
+
+The test `present: a wrap and a portal are marked by two half rings` now uses the steps as the game draws them (a
+wrap from open_room_playable; portals 10 and 11 of the portals playground, a beam in at a slant). The sessions'
+draw lists are re-recorded: 38 sessions, 588 records, the draw only.
