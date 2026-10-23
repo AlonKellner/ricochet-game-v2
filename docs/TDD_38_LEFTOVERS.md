@@ -12,7 +12,8 @@ F27 (TDD_36). Along the way, a request from the user's testing of Stage 132.
 | 133.3 | F23's remaining cells and whisker: a piece's end that rounds a crossing is the crossing (the user's option 1) | Done (5 → 0; F23 closed) |
 | 133.4 | F24: DIRECTION-ONLY at a beam exactly through two mirrors' crossing (a checker false positive) | Done (F24 closed) |
 | 133.5 | F21: a circle normal's hit point that is floats exactly is exact data (no unconverged climbs) | Done (4 GUT rows re-recorded, approved) |
-| 133.6 | F22, F26, F27 | Open |
+| 133.6 | F26: the long looping paths' side-by-side lanes (pre_inverted's preview cost) | Done (F26 closed) |
+| 133.7 | F22, F27 | Open |
 
 ## 133.1 Open boundary chains (F23)
 
@@ -112,3 +113,23 @@ the time saved roughly matches what Stage 131's longer walks added.
   The first step's parameter moves by a few ulps (340.5877273185287 → 340.58772731852804): the hit point is now the
   exact float point, not a rounded computation.
 - Nothing else: no fixture, corpus entry, sweep golden, region digest or session.
+
+## 133.6 The lanes of a long path (F26 closed)
+
+F26 (TDD_36): since Stage 131 a circle beam laps until its tenth significant event, so pre_inverted's previews grew
+to about 130 merged steps. The bench's cursor orbit cost 0.69 ms per frame on average, 5.2 ms at worst. The solve
+was not the cost (0.07 ms on average, no climbs). Painting the path was, and almost all of that (4.8 of 5 ms) was the
+side-by-side lanes. Those compare every pair of steps (about 8,400 pairs), sampling 15 points of each for a pair on
+one carrier, each sample with an `atan2`. Every lap of a circle beam lies on one circle.
+
+`on_one_another` now answers no sooner where no sample could lie inside the other step:
+
+- arcs: their angle ranges on the circle, with a pixel's margin, do not meet;
+- lines: neither step's ends could run through the other (more than half a pixel off its line on one side, or short
+  of 2 px into its extent at one end).
+
+That runs after the "same ends" rule, which short steps rely on. The lanes are identical: every session's draw list
+is unchanged.
+
+**The result:** painting averages 0.22 ms instead of 0.58, and 1.2 ms at worst instead of 5.1. The bench's cursor
+orbit on pre_inverted is 0.26 ms on average instead of 0.69, and 1.4 ms at worst instead of 5.2.

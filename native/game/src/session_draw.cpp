@@ -982,6 +982,37 @@ bool on_one_another(const StepGeom &a, const StepGeom &b) {
 	if ((near(a.a, b.a) && near(a.b, b.b)) || (near(a.a, b.b) && near(a.b, b.a))) {
 		return a.arcs ? near(along(a, 0.5), along(b, 0.5)) : true;
 	}
+	// F26: before sampling, steps no sample of which can lie inside the other (a
+	// loop's many steps on one carrier): the same answer, sooner
+	if (a.arcs) {
+		// the angle ranges on the circle, with a pixel's margin (the centres agree to
+		// half a pixel; a sample inside must be 2 px from the other's ends)
+		const double tau = 2.0 * PI;
+		const double m = 1.0 / std::max(a.p.radius, 1.0);
+		auto span = [&](const StepGeom &g) {
+			const double sw = g.p.end_angle - g.p.start_angle;
+			return sw >= 0.0 ? std::pair{g.p.start_angle - m, sw + 2.0 * m} : std::pair{g.p.end_angle - m, -sw + 2.0 * m};
+		};
+		const auto [a0, sa] = span(a);
+		const auto [b0, sb] = span(b);
+		auto inside = [&](double x, double s0, double w) { return std::fmod(std::fmod(x - s0, tau) + tau, tau) <= w; };
+		if (sa < tau && sb < tau && !inside(b0, a0, sa) && !inside(a0, b0, sb)) {
+			return false;
+		}
+	} else {
+		// no point of q's step can run through p's: q's ends both more than half a
+		// pixel off p's line on one side, or both short of 2 px into p's extent at one end
+		auto cannot = [](const StepGeom &p, const StepGeom &q) {
+			const double ux = (double(p.b.x) - double(p.a.x)) / p.len, uy = (double(p.b.y) - double(p.a.y)) / p.len;
+			auto off = [&](const V2 &v) { return (double(v.x) - double(p.a.x)) * uy - (double(v.y) - double(p.a.y)) * ux; };
+			auto at = [&](const V2 &v) { return (double(v.x) - double(p.a.x)) * ux + (double(v.y) - double(p.a.y)) * uy; };
+			const double o0 = off(q.a), o1 = off(q.b), t0 = at(q.a), t1 = at(q.b);
+			return (o0 > 0.5 && o1 > 0.5) || (o0 < -0.5 && o1 < -0.5) || (t0 <= 2.0 && t1 <= 2.0) || (t0 >= p.len - 2.0 && t1 >= p.len - 2.0);
+		};
+		if (cannot(a, b) && cannot(b, a)) {
+			return false;
+		}
+	}
 	for (int k = 1; k < 16; k++) {
 		if (runs_through(a, along(b, k / 16.0), 2.0) || runs_through(b, along(a, k / 16.0), 2.0)) {
 			return true;
