@@ -10,11 +10,11 @@ the GUT rows and `rc_tool regions`' 256 hashes are the proof.
 | Phase | Topic | Status |
 |---|---|---|
 | 141.0 | The profile after Stage 140 (five levels, one thread) and the limb-size histogram | Done (below) |
-| 141.1 | The limb storage: the inline capacity measured at 8, 16 and 32 limbs | Measured; decided after 141.2 |
+| 141.1 | The limb storage: the inline capacity measured at 8, 16 and 32 limbs | Done (stays at 8: no gain once the copies are gone) |
 | 141.2 | BigFloat without the spare copies: `exact::mul`/`add` with the result's precision passed, `sub` without `neg()`, `add` without `place`'s buffer | Done |
 | 141.3 | Fewer products: the duplicated `mx my + my mx` (three sites), `gc_through`'s shared minors | Done |
-| 141.4 | The flags without strings (the deferred part of A.7), if hit_effects still shows them at five percent | Pending |
-| 141.5 | The measurement after, docs, `make gates`, sign-off | Pending |
+| 141.4 | The flags' lookups compared in place, the canonical key kept with the value; the keys' interning deferred | Done |
+| 141.5 | The measurement after, docs, `make gates`, sign-off | Measured; gates and sign-off pending |
 
 ## 141.0 The profile
 
@@ -73,11 +73,49 @@ After 141.2 and 141.3 (one thread, three repetitions, hashes equal): crossings 9
 73.5 -> 60.3 (0.82x), tangent_infinity 97.2 -> 80.7 (0.83x), hit_effects 65.8 -> 64.1 (0.97x). `make check` passes
 as it is: every golden, digest and session unchanged.
 
-<!-- INLINE2 -->
+**141.1 decided.** Thirty-two inline limbs re-measured on top of 141.2 (one thread, three repetitions): crossings
+85.2 -> 85.6 ms, projective 60.3 -> 59.3, tangent_infinity 80.7 -> 81.5, hit_effects 64.1 -> 64.1 -- within noise once
+the spare copies are gone. The capacity stays at 8 (the value stays small).
+
+**141.4 The flags.** The presence conditions and the categorical tables compared `flag_key(v)` -- a `std::string`
+built per check -- against their values; `flag_key_is(v, s)` compares the same spelling in place (`present()`,
+`entry()`): hit_effects 64.1 -> 62.7 ms (0.98x). The canonical key (`canonical_key()`: sorted entries, one string) is
+now computed once per value and carried by its copies (every event's flags): no measurable change on its own (kept:
+it removes an allocation per event). What remains of `Flags::` on hit_effects (12.9% inclusive) is `get`'s string
+compares and the frame strings of `cast_events` (8%); interning the keys would touch every consumer of a flag key
+(the scene, the walker, the tracer, the session's JSON) for a few percent of one level: deferred, with the plan's
+other deferred items.
 
 ## 141.5 The measurement after
 
-<!-- MEASURE -->
+`rc_tool regions --all` (six players, three repetitions), main@04fe6fd against the branch, paired; `make judge`:
+no sweep combo, golden field, digest, session or GUT row changed; all 256 region hashes equal at both thread counts.
+
+| | main | Stage 141 |
+|---|---|---|
+| medians summed, 256 plans, six threads | 209 ms | 194 ms (0.93x) |
+| plans over 4 ms, six threads | 12 | 7 |
+| the worst side, six threads | 5.22 ms | 5.19 ms |
+| medians summed, one thread | 622 ms | 567 ms (0.91x) |
+| by level, one thread | tangent_infinity 95.2 -> 80.6 (0.85x), projective 73.4 -> 60.4 (0.82x), crossings 88.0 -> 83.8, hit_effects 66.0 -> 62.2, portals 102.0 -> 98.7, inversion_grid 57.8 -> 53.7 | |
+
+## The cast-cost program's end state
+
+The plan's §1 table (docs/TDD_42_CAST_COST.md), main@1b9f4f0 before Stage 137 against the end of Stage 141, every
+plannable side of every level (`rc_tool regions --all`, 256 plans, six players):
+
+| | main 1b9f4f0 (8 threads) | Stage 141 (6 threads) |
+|---|---|---|
+| plans over 4 ms | 57 | 7 |
+| the worst side | 12.7 ms (tangent_infinity) | 5.19 ms (crossings) |
+| every plan summed, in parallel | 679 ms | 194 ms (0.29x) |
+| every plan summed, one thread | 2809 ms | 567 ms (0.20x) |
+
+Stages 137 (A+B, bit-exact: caches, lazy exact values, the schedule), 138 (shared points stop the arrow, the user's
+rule), 139 (C: off-segment crossings are not events), 140 (D: spared members, the empty region at once) and 141 (E:
+the exact layer's copies) -- three of the five judged, every judged change approved on its evidence. The deferred
+items and their triggers are the plan's table: a pencil index above ~50 surfaces, regions updated from the previous
+one, a bounding-volume tree above ~100 surfaces, the flags' interning, the union and fill (F31, judged).
 
 ## Tests
 
