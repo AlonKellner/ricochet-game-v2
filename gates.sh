@@ -105,6 +105,18 @@ dumps_current() {
 	rm -rf "$d"
 }
 
+# the committed lowerings are what the level data lowers to (rc-level/2: rc_tool lower)
+lowered_current() {
+	local d
+	d=$(mktemp -d "${TMPDIR:-/tmp}/ricochet_lowered.XXXXXX")
+	make -s lowered LOWERED_DIR="$d" > /dev/null || return 1
+	if ! diff -r bench/lowered "$d"; then
+		echo "!! bench/lowered is stale: make lowered"
+		return 1
+	fi
+	rm -rf "$d"
+}
+
 goldens_unchanged() {
 	local d
 	d=$(git diff --stat bench/goldens bench/sessions bench/scenes)
@@ -127,6 +139,7 @@ wall0=$(date +%s)
 gate core make core
 gate oracle make -s oracle-test
 gate dumps dumps_current
+gate lowered lowered_current
 gate manifests manifests_current
 # side by side: ctest, the Python host, the Godot extension and suite
 if [ "$LEVEL" = commit ]; then

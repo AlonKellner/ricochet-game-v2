@@ -1,6 +1,9 @@
-// rc-level/1 reader (docs/LEVEL_FORMAT.md). Strict: an unknown key, a missing
-// required key or a value of the wrong type is a LevelError naming its path.
+// The level reader (docs/LEVEL_FORMAT.md): rc-level/1, and rc-level/2 through
+// its lowering (rcg/level2.hpp). Strict: an unknown key, a missing required key
+// or a value of the wrong type is a LevelError naming its path.
 #include "rcg/level.hpp"
+
+#include "rcg/level2.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -272,20 +275,12 @@ SurfaceSpec surface_spec(const json &j, const std::string &path, bool in_level) 
 	return s;
 }
 
-} // namespace
-
-Level parse_level(std::string_view json_text) {
-	json j;
-	try {
-		j = json::parse(json_text);
-	} catch (const json::parse_error &e) {
-		throw LevelError(std::string("not JSON: ") + e.what());
-	}
+Level parse_v1(const json &j) {
 	const std::string P = "level";
 	only_keys(j, P, {"schema", "name", "bounds", "gravity", "room", "player", "camera", "background", "colliders", "features",
 			"surfaces"});
 	if (str(req(j, "schema", P), P + ".schema") != "rc-level/1") {
-		fail(P + ".schema", "rc-level/1 expected");
+		fail(P + ".schema", "rc-level/1 or rc-level/2 expected");
 	}
 	Level lv;
 	if (const json *v = opt(j, "name")) {
@@ -384,6 +379,51 @@ Level parse_level(std::string_view json_text) {
 		lv.surfaces.push_back(std::move(ls));
 	}
 	return lv;
+}
+
+} // namespace
+
+Level parse_level_json(const json &j) {
+	if (!j.is_object() || j.value("schema", json()) != "rc-level/2") {
+		if (j.is_object() && j.contains("schema") && j["schema"] != "rc-level/1") {
+			fail("level.schema", "rc-level/1 or rc-level/2 expected");
+		}
+		return parse_v1(j);
+	}
+	const Lowered low = lower_level(j);
+	Level lv;
+	try {
+		lv = parse_v1(low.level);
+	} catch (const LevelError &e) {
+		// a lowered surface's path names the element it came from
+		const std::string m = e.what(), head = "level.surfaces[";
+		const size_t close = m.find(']');
+		if (m.rfind(head, 0) == 0 && close != std::string::npos) {
+			const size_t k = std::stoul(m.substr(head.size(), close - head.size()));
+			if (k < low.origins.size()) {
+				throw LevelError(low.origins[k] + m.substr(close + 1));
+			}
+		}
+		throw;
+	}
+	for (auto it = low.flags.begin(); it != low.flags.end(); ++it) {
+		const json &v = it.value();
+		rc::FlagValue f = v.is_boolean() ? rc::FlagValue(v.get<bool>())
+				: v.is_number()			 ? rc::FlagValue(v.get<double>())
+										 : rc::FlagValue(v.get<std::string>());
+		lv.flags.emplace_back(it.key(), std::move(f));
+	}
+	return lv;
+}
+
+Level parse_level(std::string_view json_text) {
+	json j;
+	try {
+		j = json::parse(json_text);
+	} catch (const json::parse_error &e) {
+		throw LevelError(std::string("not JSON: ") + e.what());
+	}
+	return parse_level_json(j);
 }
 
 Level load_level(const std::string &path) {

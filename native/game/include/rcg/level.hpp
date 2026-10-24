@@ -1,9 +1,11 @@
-// The level data, rc-level/1 (docs/LEVEL_FORMAT.md): the authoring form of a
-// level -- its surfaces as specs in build order with the ids they take, and
-// the level's own parts (bounds, gravity, room, player, camera, background,
-// colliders). Engine-free: any host reads a level through parse_level.
+// The level data (docs/LEVEL_FORMAT.md): the authoring form of a level -- its
+// surfaces as specs in build order with the ids they take, the level's own parts
+// (bounds, gravity, room, player, camera, background, colliders) and its initial
+// flags. rc-level/2 (elements, rcg/level2.hpp) lowers to rc-level/1 (surfaces).
+// Engine-free: any host reads a level through parse_level.
 #pragma once
 
+#include "rc/flags.hpp"
 #include "rc/trace_types.hpp"
 
 #include <nlohmann/json.hpp>
@@ -139,10 +141,14 @@ struct Level {
 		bool game = true, preview = true, arrow = true, hud = true, cursor = true;
 	} features;
 	std::vector<LevelSurface> surfaces;
+	// rc-level/2: the flags the level starts with (in key order; a number as a float64)
+	std::vector<std::pair<std::string, rc::FlagValue>> flags;
 };
 
-// The level in a JSON text (rc-level/1). Throws LevelError.
+// The level in a JSON text (rc-level/1 or rc-level/2). Throws LevelError.
 Level parse_level(std::string_view json_text);
+// ... in a JSON document.
+Level parse_level_json(const nlohmann::json &doc);
 
 // The level of a file. Throws LevelError (an unreadable file too).
 Level load_level(const std::string &path);

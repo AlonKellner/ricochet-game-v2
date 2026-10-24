@@ -1,0 +1,23 @@
+{
+ "doc": "An arrow-block barrier (an energy field): stops the arrow at either side; the player and objects pass.",
+ "label": "ArrowBlock",
+ "params": {},
+ "priority": 11,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   }
+  }
+ ]
+}

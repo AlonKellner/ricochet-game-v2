@@ -1,0 +1,78 @@
+{
+ "doc": "A door: a barrier that exists while its flag is unset or false, and is gone (for the arrow and the player) while it is true. A button opens it (opens: the door's name, the flag door:<name>).",
+ "label": "Door",
+ "params": {
+  "closed": {
+   "default": "wall",
+   "doc": "what the closed door is",
+   "enum": ["wall", "mirror", "fence"]
+  },
+  "flag": {
+   "default": "door:${name}",
+   "doc": "the flag that opens it",
+   "type": "string"
+  },
+  "solid": {
+   "default": true,
+   "doc": "the player collides with the closed door"
+  }
+ },
+ "priority": 34,
+ "surfaces": [
+  {
+   "left": {
+    "$switch": "closed",
+    "cases": {
+     "fence": {
+      "effect": {
+       "type": "pass"
+      },
+      "interactive": false
+     },
+     "mirror": {
+      "effect": {
+       "type": "reflection"
+      },
+      "interactive": true
+     },
+     "wall": {
+      "effect": {
+       "type": "terminal"
+      },
+      "interactive": false
+     }
+    }
+   },
+   "player_solid": "$solid",
+   "presence": [
+    {
+     "key": "$flag",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "$switch": "closed",
+    "cases": {
+     "fence": {
+      "effect": {
+       "type": "pass"
+      },
+      "interactive": false
+     },
+     "mirror": {
+      "effect": {
+       "type": "reflection"
+      },
+      "interactive": true
+     },
+     "wall": {
+      "effect": {
+       "type": "terminal"
+      },
+      "interactive": false
+     }
+    }
+   }
+  }
+ ]
+}

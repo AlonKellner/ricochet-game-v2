@@ -1,5 +1,6 @@
-"""The level data (rc-level/1, data/levels/*.json, docs/LEVEL_FORMAT.md) as
-scene defs: an independent Python builder of what the game builds from a level
+"""The level data (data/levels/*.json, docs/LEVEL_FORMAT.md), through its
+rc-level/1 lowering (bench/lowered/<dir>__<name>.json, `make lowered`: the
+rc-level/2 elements expanded by the native reader), as scene defs: an independent Python builder of what the game builds from a level
 (SurfaceSpec.build, RigidMotionEffect.create_portal_pair,
 Surface.pre_transform_circle, SceneDefs.defs_from_surfaces), including the
 float32 rounding of Vector2. Checked against the level dumps
@@ -215,8 +216,8 @@ def build_defs(level):
 
 
 def load_level(name):
-    """A level's data by name ("test_levels/portals")."""
-    with open(os.path.join(ROOT, "data", "levels", name + ".json")) as f:
+    """A level's rc-level/1 lowering by name ("test_levels/portals")."""
+    with open(os.path.join(ROOT, "bench", "lowered", name.replace("/", "__") + ".json")) as f:
         return json.load(f)
 
 

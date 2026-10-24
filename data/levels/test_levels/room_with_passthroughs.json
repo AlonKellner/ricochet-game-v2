@@ -6,6 +6,25 @@
  "bounds": [0.0, 0.0, 1920.0, 1080.0],
  "camera": null,
  "colliders": [],
+ "elements": [
+  {
+   "kind": "edges"
+  },
+  {
+   "end": [800.0, 840.0],
+   "kind": "passthrough",
+   "name": "passthrough_1",
+   "start": [800.0, 240.0],
+   "via": [800.0, 540.0]
+  },
+  {
+   "end": [1100.0, 840.0],
+   "kind": "passthrough",
+   "name": "passthrough_2",
+   "start": [1100.0, 240.0],
+   "via": [1100.0, 540.0]
+  }
+ ],
  "features": {
   "arrow": false,
   "cursor": true,
@@ -22,207 +41,5 @@
   "built": true,
   "rect": [560.0, 240.0, 800.0, 600.0]
  },
- "schema": "rc-level/1",
- "surfaces": [
-  {
-   "end": [1360.0, 240.0],
-   "ids": [1],
-   "label": "Surface",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [560.0, 240.0],
-   "via": [960.0, 240.0]
-  },
-  {
-   "end": [1360.0, 840.0],
-   "ids": [2],
-   "label": "Surface",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [1360.0, 240.0],
-   "via": [1360.0, 540.0]
-  },
-  {
-   "end": [560.0, 840.0],
-   "ids": [3],
-   "label": "Surface",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [1360.0, 840.0],
-   "via": [960.0, 840.0]
-  },
-  {
-   "end": [560.0, 240.0],
-   "ids": [4],
-   "label": "Surface",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [560.0, 840.0],
-   "via": [560.0, 540.0]
-  },
-  {
-   "end": [1920.0, 0.0],
-   "ids": [5],
-   "label": null,
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "start": [0.0, 0.0],
-   "via": [960.0, 0.0]
-  },
-  {
-   "end": [1920.0, 1080.0],
-   "ids": [6],
-   "label": null,
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "start": [1920.0, 0.0],
-   "via": [1920.0, 540.0]
-  },
-  {
-   "end": [0.0, 1080.0],
-   "ids": [7],
-   "label": null,
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "start": [1920.0, 1080.0],
-   "via": [960.0, 1080.0]
-  },
-  {
-   "end": [0.0, 0.0],
-   "ids": [8],
-   "label": null,
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "start": [0.0, 1080.0],
-   "via": [0.0, 540.0]
-  },
-  {
-   "end": [800.0, 840.0],
-   "ids": [9],
-   "label": "PassThrough",
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "start": [800.0, 240.0],
-   "via": [800.0, 540.0]
-  },
-  {
-   "end": [1100.0, 840.0],
-   "ids": [10],
-   "label": "PassThrough",
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "start": [1100.0, 240.0],
-   "via": [1100.0, 540.0]
-  }
- ]
+ "schema": "rc-level/2"
 }

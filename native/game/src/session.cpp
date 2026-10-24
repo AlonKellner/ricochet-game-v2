@@ -157,8 +157,12 @@ Session::Session(const Level &level, const SessionConfig &config)
 	for (rc::Tracer *t : {&gm_tracer_, &renderer_tracer_, &vis_tracer_}) {
 		t->set_pair_cache(false); // the session caches by its own inputs
 	}
+	// rc-level/2: the flags the level starts with (none in an rc-level/1 level)
+	for (const auto &[key, value] : level_.flags) {
+		flags_.set(key, value);
+	}
 	// the initial checkpoint: taken before the level built its world (GameManager._ready)
-	initial_ = Checkpoint{player_, V2{}, rc::Flags{}, {}, {}, std::nullopt};
+	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt};
 	for (const BuiltSurface &s : world_->surfaces()) {
 		for (const BuiltSide *side : s.all_sides()) {
 			for (const HitSpec &h : side ? side->hits : std::vector<HitSpec>{}) {

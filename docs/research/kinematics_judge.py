@@ -102,7 +102,7 @@ def main():
         if not nf.exists():
             continue
         script = json.loads((ROOT / "data" / "sessions" / gf.name.replace(".jsonl", ".json")).read_text())
-        level = json.loads((ROOT / "data" / "levels" / (script["level"] + ".json")).read_text())
+        level = json.loads((ROOT / "bench" / "lowered" / (script["level"].replace("/", "__") + ".json")).read_text())
         sol = solids(level)
         g_recs = [json.loads(l) for l in gf.read_text().splitlines() if l]
         n_recs = [json.loads(l) for l in nf.read_text().splitlines() if l]

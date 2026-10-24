@@ -112,7 +112,7 @@ TEST_CASE("level data: the schema is strict") {
 	auto parse = [&](const std::string &surfaces) { return rcg::parse_level(head + surfaces + "]}"); };
 	const std::string wall = R"({"ids": [1], "start": [0, 0], "end": [10, 0], "via": [5, 0], "left": null, "right": null})";
 	CHECK(parse(wall).surfaces.size() == 1);
-	CHECK_THROWS_WITH_AS(rcg::parse_level(R"({"schema": "rc-level/2", "surfaces": []})"), doctest::Contains("rc-level/1"), rcg::LevelError);
+	CHECK_THROWS_WITH_AS(rcg::parse_level(R"({"schema": "rc-level/3", "surfaces": []})"), doctest::Contains("rc-level/1 or rc-level/2"), rcg::LevelError);
 	CHECK_THROWS_WITH_AS(parse(R"({"ids": [1], "start": [0, 0], "end": [10, 0], "via": [5, 0], "colour": 1})"),
 			doctest::Contains("unknown key 'colour'"), rcg::LevelError);
 	CHECK_THROWS_WITH_AS(parse(R"({"ids": [1], "end": [10, 0], "via": [5, 0]})"), doctest::Contains("'start' required"), rcg::LevelError);

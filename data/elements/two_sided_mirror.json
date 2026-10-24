@@ -1,0 +1,28 @@
+{
+ "doc": "A mirror reflecting on both sides, both plannable.",
+ "label": "MirrorB",
+ "params": {
+  "solid": {
+   "default": false,
+   "doc": "the player collides with it"
+  }
+ },
+ "priority": 21,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "player_solid": "$solid",
+   "right": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   }
+  }
+ ]
+}

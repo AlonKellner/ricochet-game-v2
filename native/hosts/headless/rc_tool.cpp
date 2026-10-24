@@ -3,6 +3,10 @@
 //   rc_tool fmt [--check] <file or dir>...    the canonical spelling (rcg/canon.hpp) of JSON data;
 //                                             --check: list the files not in it, exit 1 if any
 //   rc_tool dumps <levels dir> <out dir>       every level's scene defs (bench/scenes/<dir>__<name>.surfaces.json)
+//   rc_tool lower <levels dir> <out dir>       every level's rc-level/1 lowering (bench/lowered/<dir>__<name>.json:
+//                                             what the oracle's level_json.py reads)
+//   rc_tool migrate [--check] <file or dir>... rc-level/1 levels rewritten as rc-level/2 elements (each checked to
+//                                             lower to the original byte for byte); --check: report, write nothing
 //   rc_tool manifests <sweeps recipes> <levels dir> <out dir>
 //                                             the sweep manifests (bench/sweeps) from data/sweeps.json
 //   rc_tool replay <sessions dir> <levels dir> (<out dir> | --check <golden dir>)
@@ -29,6 +33,7 @@
 #include "rcg/build.hpp"
 #include "rcg/canon.hpp"
 #include "rcg/level.hpp"
+#include "rcg/level2.hpp"
 #include "rcg/digest.hpp"
 #include "bench.hpp"
 #include "regions.hpp"
@@ -43,6 +48,7 @@
 #include <filesystem>
 #include <fstream>
 #include <iostream>
+#include <map>
 #include <sstream>
 #include <string>
 #include <vector>
@@ -55,6 +61,8 @@ namespace {
 int usage() {
 	std::cerr << "usage: rc_tool fmt [--check] <file or dir>...\n"
 				 "       rc_tool dumps <levels dir> <out dir>\n"
+				 "       rc_tool lower <levels dir> <out dir>\n"
+				 "       rc_tool migrate [--check] <file or dir>...\n"
 				 "       rc_tool manifests <sweeps recipes> <levels dir> <out dir>\n"
 				 "       rc_tool replay <sessions dir> <levels dir> (<out dir> | --check <golden dir>) [--only <substring>] [--shard i/n] [--full]\n"
 				 "       rc_tool bench (<level json> | --all <levels dir>) [--frames N] [--click-frames N] [--budget ms] [--strict] [--json out] [--md out]\n"
@@ -109,7 +117,8 @@ int fmt(std::vector<std::string> args) {
 		json doc;
 		try {
 			doc = json::parse(text);
-			if (doc.is_object() && doc.value("schema", "") == "rc-level/1") {
+			const std::string schema = doc.is_object() ? doc.value("schema", "") : "";
+			if (schema == "rc-level/1" || schema == "rc-level/2") {
 				rcg::build_level(rcg::parse_level(text)); // a level must also be valid
 			}
 		} catch (const std::exception &e) {
@@ -161,6 +170,84 @@ int dumps(const std::vector<std::string> &args) {
 	}
 	std::cout << n << " level dumps in " << out.string() << "\n";
 	return 0;
+}
+
+// <dir>__<name> of a level file under the levels directory
+std::string flat_name(const fs::path &levels, const fs::path &p) {
+	std::string file = fs::relative(p, levels).replace_extension("").generic_string();
+	for (size_t at = file.find('/'); at != std::string::npos; at = file.find('/', at + 2)) {
+		file.replace(at, 1, "__");
+	}
+	return file;
+}
+
+int lower(const std::vector<std::string> &args) {
+	if (args.size() != 2) {
+		return usage();
+	}
+	const fs::path levels = args[0], out = args[1];
+	int n = 0;
+	for (const fs::path &p : json_files({levels.string()})) {
+		try {
+			const json doc = json::parse(read(p));
+			const json low = doc.value("schema", "") == "rc-level/2" ? rcg::lower_level(doc).level : doc;
+			if (!write(out / (flat_name(levels, p) + ".json"), rcg::canonical(low))) {
+				std::cerr << p.string() << ": cannot write\n";
+				return 1;
+			}
+		} catch (const std::exception &e) {
+			std::cerr << p.string() << ": " << e.what() << "\n";
+			return 1;
+		}
+		n++;
+	}
+	std::cout << n << " lowered levels in " << out.string() << "\n";
+	return 0;
+}
+
+int migrate(std::vector<std::string> args) {
+	bool check = false;
+	if (!args.empty() && args.front() == "--check") {
+		check = true;
+		args.erase(args.begin());
+	}
+	if (args.empty()) {
+		return usage();
+	}
+	int bad = 0, n = 0, skipped = 0;
+	std::map<std::string, int> kinds;
+	for (const fs::path &p : json_files(args)) {
+		try {
+			const json doc = json::parse(read(p));
+			if (doc.value("schema", "") != "rc-level/1") {
+				skipped++;
+				continue;
+			}
+			const json v2 = rcg::migrate_level(doc);
+			rcg::build_level(rcg::parse_level_json(v2)); // it builds
+			int raw = 0;
+			for (const json &e : v2["elements"]) {
+				kinds[e["kind"].get<std::string>()]++;
+				raw += e["kind"] == "raw";
+			}
+			std::cout << p.string() << ": " << v2["elements"].size() << " elements, " << raw << " raw\n";
+			if (!check && !write(p, rcg::canonical(v2))) {
+				std::cerr << p.string() << ": cannot write\n";
+				bad++;
+			}
+			n++;
+		} catch (const std::exception &e) {
+			std::cerr << p.string() << ": " << e.what() << "\n";
+			bad++;
+		}
+	}
+	std::string summary;
+	for (const auto &[k, c] : kinds) {
+		summary += (summary.empty() ? "" : ", ") + k + " " + std::to_string(c);
+	}
+	std::cout << n << " levels " << (check ? "migratable" : "migrated") << " (" << summary << "), " << skipped << " not rc-level/1, " << bad
+			  << " problems\n";
+	return bad ? 1 : 0;
 }
 
 int manifests(const std::vector<std::string> &args) {
@@ -260,6 +347,12 @@ int main(int argc, char **argv) {
 	}
 	if (cmd == "manifests") {
 		return manifests(args);
+	}
+	if (cmd == "lower") {
+		return lower(args);
+	}
+	if (cmd == "migrate") {
+		return migrate(args);
 	}
 	if (cmd == "bench") {
 		return bench::run(args);

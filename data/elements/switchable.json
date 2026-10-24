@@ -1,0 +1,144 @@
+{
+ "doc": "A surface that switches with a flag (a categorical resolver, GAME_SPEC 9.4): its 'on' sides while the flag is true, its 'off' sides otherwise. Present either way (see door for one that disappears).",
+ "label": {
+  "$switch": "on",
+  "cases": {
+   "mirror": "FlagMirror",
+   "pass": "Gate",
+   "wall": "Gate"
+  }
+ },
+ "params": {
+  "flag": {
+   "doc": "the flag it reads",
+   "type": "string"
+  },
+  "off": {
+   "default": "wall",
+   "doc": "the sides otherwise",
+   "enum": ["pass", "wall", "mirror"]
+  },
+  "on": {
+   "default": "pass",
+   "doc": "the sides while the flag is true",
+   "enum": ["pass", "wall", "mirror"]
+  },
+  "solid": {
+   "default": false,
+   "doc": "the player collides with it (in either state)"
+  }
+ },
+ "priority": 33,
+ "surfaces": [
+  {
+   "left": null,
+   "player_solid": "$solid",
+   "resolver": {
+    "key": "$flag",
+    "table": [
+     [
+      "true",
+      {
+       "$switch": "on",
+       "cases": {
+        "mirror": {
+         "left": {
+          "effect": {
+           "type": "reflection"
+          },
+          "interactive": true
+         },
+         "right": {
+          "effect": {
+           "type": "reflection"
+          },
+          "interactive": true
+         }
+        },
+        "pass": {
+         "left": {
+          "effect": {
+           "type": "pass"
+          },
+          "interactive": false
+         },
+         "right": {
+          "effect": {
+           "type": "pass"
+          },
+          "interactive": false
+         }
+        },
+        "wall": {
+         "left": {
+          "effect": {
+           "type": "terminal"
+          },
+          "interactive": false
+         },
+         "right": {
+          "effect": {
+           "type": "terminal"
+          },
+          "interactive": false
+         }
+        }
+       }
+      }
+     ],
+     [
+      "DEFAULT",
+      {
+       "$switch": "off",
+       "cases": {
+        "mirror": {
+         "left": {
+          "effect": {
+           "type": "reflection"
+          },
+          "interactive": true
+         },
+         "right": {
+          "effect": {
+           "type": "reflection"
+          },
+          "interactive": true
+         }
+        },
+        "pass": {
+         "left": {
+          "effect": {
+           "type": "pass"
+          },
+          "interactive": false
+         },
+         "right": {
+          "effect": {
+           "type": "pass"
+          },
+          "interactive": false
+         }
+        },
+        "wall": {
+         "left": {
+          "effect": {
+           "type": "terminal"
+          },
+          "interactive": false
+         },
+         "right": {
+          "effect": {
+           "type": "terminal"
+          },
+          "interactive": false
+         }
+        }
+       }
+      }
+     ]
+    ]
+   },
+   "right": null
+  }
+ ]
+}

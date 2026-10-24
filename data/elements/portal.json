@@ -1,0 +1,40 @@
+{
+ "doc": "A portal pair: the surface and its image, the surface moved by z -> e^{i theta} z + d (two ids). The arrow entering one leaves the other.",
+ "label": "Portal",
+ "params": {
+  "d": {
+   "doc": "the displacement of the image",
+   "type": "point"
+  },
+  "solid": {
+   "default": false,
+   "doc": "the player collides with it"
+  },
+  "theta": {
+   "default": 0.0,
+   "doc": "the rotation of the image (radians)"
+  }
+ },
+ "priority": 24,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "d": "$d",
+     "theta": "$theta",
+     "type": "portal"
+    },
+    "interactive": true
+   },
+   "player_solid": "$solid",
+   "right": {
+    "effect": {
+     "d": "$d",
+     "theta": "$theta",
+     "type": "portal"
+    },
+    "interactive": true
+   }
+  }
+ ]
+}
