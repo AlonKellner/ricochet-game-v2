@@ -52,6 +52,7 @@ run it:
 | P | the player's start: click where the player starts |
 | O | the goal: two corners (a rectangle; a circle through the panel's `goal`) |
 | D | a detector: two corners (a rectangle, mode `enter`, flag `det:<name>`) |
+| B | an object: one click (a pullable circle of radius 16; edit it in the panel's `objects`) |
 | Tab / Shift+Tab, 1-9 | what the line, arc and circle tools place (the palette: every kind, the level's own last) |
 | Delete, Backspace | remove the selected element |
 | Ctrl+D | duplicate it (offset by 20, 20) |
@@ -92,8 +93,8 @@ Click a field to edit it:
 
 A parameter left at its default shows the default in parentheses. Renaming an element carries the buttons that
 open it (their `opens`). With nothing selected, the panel edits the level: its name, bounds, gravity, room,
-player's start, initial flags, goal, the goal's conditions (`requires`) and detectors. The goal (green) and the
-detectors (yellow) are drawn on the canvas.
+player's start, initial flags, goal, the goal's conditions (`requires`), detectors and objects. The goal (green),
+the detectors (yellow) and the objects (orange: pullable; gray: static) are drawn on the canvas.
 
 **Problems.** Every element is checked as the game checks it after every change (the reader's errors, then the
 builder's, `validate_spec`). Each problem names its element. Clicking a problem selects that element. A level
@@ -128,7 +129,7 @@ Every action is a command, a JSON object, which is also how scripts and tests dr
 | `{"op": "duplicate", "name": n, "by": [dx, dy]?}` | duplicate it; `{"name": ...}` |
 | `{"op": "undo"}`, `{"op": "redo"}` | undo, redo |
 | `{"op": "select", "name": n \| null}` | select |
-| `{"op": "tool", "tool": "select" \| "line" \| "arc" \| "circle" \| "player" \| "goal" \| "detector"}`, `{"op": "kind", "kind": k}` | the tool; what it places |
+| `{"op": "tool", "tool": "select" \| "line" \| "arc" \| "circle" \| "player" \| "goal" \| "detector" \| "object"}`, `{"op": "kind", "kind": k}` | the tool; what it places |
 | `{"op": "snap", "grid": bool}`, `{"op": "view", "center": [x, y], "zoom": z}`, `{"op": "frame"}` | the grid; the view |
 | `{"op": "validate"}` | `{"errors": [{"element", "name", "message"}]}` |
 | `{"op": "save"}`, `{"op": "saved"}`, `{"op": "save_cancelled"}` | request a save; the host saved; the host could not |

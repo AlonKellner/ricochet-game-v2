@@ -29,7 +29,8 @@ too).
 | `templates` | `{kind: template}`: the level's own element kinds, added to the builtin ones or replacing one (docs/ELEMENTS.md) | `{}` |
 | `objective` | `{"goal": region, "requires": [{"key", "values"}]}`: reach the goal while every condition holds to win (GAME_SPEC 24.6); none: every target hit wins | none |
 | `detectors` | `[{"name", "region": region \| "segment": {"a", "b"}, "mode": "while" \| "enter" \| "toggle", "flag", "value", "for"}]`: flags written as the player moves (GAME_SPEC 24.5; flag default `det:<name>`, mode `while`, value `true`, for `player`) | `[]` |
-| `carriers`, `objects` | reserved for the editor program's later stages (an error until then) | |
+| `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "wall" \| "mirror" \| "pass", "solid", "label"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, wall, solid, label `Object` by default); their surfaces take the ids after the level's | `[]` |
+| `carriers` | reserved for the editor program's later stages (an error until then) | |
 
 A region is `{"rect": [x, y, w, h]}` or `{"circle": {"center": [x, y], "radius": r}}`. The objective and the
 detectors are not surfaces: the lowering leaves them out.
@@ -106,7 +107,7 @@ An effect (GAME_SPEC 10): `{"type": "pass" | "terminal" | "reflection" | "invers
 and `d` for a portal (the motion `z -> e^{i theta} z + d`; both sides the same).
 
 A hit effect (GAME_SPEC 10.6): `{"kind": "state", "key": flag, "op": "set" | "toggle", "value": v}`,
-`{"kind": "target"}`, `{"kind": "reset", "channels": [...]}` or `{"kind": "spawn", "channel": name,
+`{"kind": "target"}`, `{"kind": "grapple"}`, `{"kind": "pull"}` (Stage 146: journeys at landing, GAME_SPEC 25.6), `{"kind": "reset", "channels": [...]}` or `{"kind": "spawn", "channel": name,
 "template": {"surface": surface (no ids, no label), "orientation": "CARRIER_TANGENT" | ..., "mirror_with_side":
 bool, "offset": [x, y], "trim": bool}}`; any of them `"deferred": true` (applied when the shot lands).
 

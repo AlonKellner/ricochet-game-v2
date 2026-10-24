@@ -42,6 +42,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done |
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
+| Objects, the pull and the grapple: circle bodies (pullable ones fall under gravity); a pull brings an object back along the arrow's path, a grapple takes the player along it, either stopped by what blocks the traveller (§10.6, §25.5-25.6; docs/TDD_51, Stage 146) | Done |
 | The goal and detectors: a level's goal region gated by flag conditions, won when the player stands in it; detectors writing flags as the player moves; a level without a goal won when every target is hit (§3.2, §24.5-24.6; docs/TDD_50, Stage 145) | Done |
 | Level editor: native (`rcg::Editor`, the C API's `rc_editor_*`), its tools, panel, validation and play-test; the Python host (tkinter) and the Godot host (`RicochetEditor`) (§19.2; docs/EDITOR.md, docs/TDD_48-49, Stages 143-144) | Done |
 | Menus, HUD, save system | Planned |
@@ -814,6 +815,8 @@ Hit effects are the second axis of a side (§9.1), orthogonal to the path effect
 HitEffect:
     deferred: bool      # per instance: apply at landing instead of in the shot (only if it has an in-shot form)
 
+GrappleHit                        # at landing (Stage 146): the player travels the shot's path to the hit (§25.6)
+PullHit                           # at landing (Stage 146): the hit object travels the path back to the player (§25.6)
 StateChangeHit(key, op, value)    # in shot: the flag write
 TargetHit                         # in shot: SET "target:<surface id>" = true
 ResetHit(channels)                # in shot: SET "chan:<c>" = "armed" for each channel
@@ -823,7 +826,7 @@ SpawnHit(channel, template)       # in shot: SET "chan:<c>" = "pending" (consume
 
 **Timing.**
 - **IN_SHOT is the default.** A hit effect is applied *in the shot* (the solver sees it) whenever it has an elegant in-shot form, which is a flag write. Flags drive resolvers (§9.4) and presence (§9.6), so an in-shot write can change the rest of the same shot.
-- **ON_LANDING** is used only for what has no in-shot form. Today that is one thing: placing a spawned surface, whose geometry comes from the shot itself. Letting the shot see a surface it creates would make the path depend on itself.
+- **ON_LANDING** is used only for what has no in-shot form: placing a spawned surface, whose geometry comes from the shot itself (letting the shot see a surface it creates would make the path depend on itself), and a journey (§25.6), which moves the player or an object along the finished path.
 - **Deferral is per instance.** Any in-shot effect may be marked `deferred`: it then fires by the same rule but applies only when the arrow lands. The reverse is not possible in general.
 
 **Firing.** One rule applies to every hit effect, whatever its timing: it fires when its side fires.
@@ -2242,6 +2245,32 @@ a floor stays on it).
 - **Clear plan** (C): clears the plan without affecting player position or game state.
 - **Full reset** (R): reverts to the level's initial state — player returns to spawn, all surfaces restored, all state reset, checkpoint stack cleared.
 
+### 25.5 Objects
+
+> **Status: implemented (Stage 146, docs/TDD_51_BODIES.md).**
+
+An **object** is a circle body with a surface: a full circle whose sides are a wall's (terminal), a mirror's or a
+pass, player-solid by default. A **pullable** object falls under the level's gravity and rests on what holds it,
+moved by the player's controller at its own radius. It meets the player (a falling object stops on the player),
+but not other objects (v1). A **static** object stays. Its surface takes the next ids after the level's
+surfaces, so it is planned and hit like any surface, and it moves with the body. While an object moves, nothing
+is fired. The bodies' positions are part of the checkpoint, and detectors `for` objects see their centers
+(§24.5, regions only).
+
+### 25.6 The pull and the grapple
+
+A **pull** (a pullable object's sides carry it) and a **grapple** (the `grapple` element's sides) are hit
+effects applied when the shot lands (§10.6). The first one the shot fired starts a **journey** along the
+physical path:
+- a grapple takes the player forward, from the origin to the hit;
+- a pull takes the object back, from the hit to the player, keeping its center's offset from the hit point.
+
+The traveller moves at 900 px/s, swept against what it collides with: present player-solid surfaces and
+colliders, and for an object the player. It stops at the first contact or at the path's end. A fence (an
+arrow-pass barrier) stops it; an arrow-block barrier is not solid and does not. A step that starts where the last
+did not end (a portal) is crossed by a jump, and a step through infinity ends the path. The game is paused during
+a journey as during a flight (`flying`), and the journey is part of the shot.
+
 ### 25.4 Visual
 
 Simple shape (triangle pointing toward cursor, or circle). Wireframe aesthetic.
@@ -2756,4 +2785,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.57.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.58.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
