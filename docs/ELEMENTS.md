@@ -39,9 +39,11 @@ surface already does (GAME_SPEC 9-10).
 | `burnable` | A burnable barrier: solid, but an arrow on fire burns it away for good (flag `el:<name>:burnt`) and goes on. | `fire`="shot:fire", `solid`=true | `Burnable` |
 | `charger` | A charger: an arrow passing it is charged for the rest of the shot (flag `shot:charge`, or `charge`). | `charge`="shot:charge" | `Charger` |
 | `conditional_button` | A button only a charged (or burning, frosted...) arrow presses: while `when` is true the hit sets or toggles `flag`; otherwise it is a wall. | `when`="shot:charge", `flag` (required), `op`="set", `value`=true | `CondButton` |
-| `conductor` | A conductor (a wire, a plate): tagged `conductive`, it passes charge to every conductive element and object it touches (GAME_SPEC 24.7). | `face`="pass", `solid`=true | `Conductor` |
+| `conductor` | A conductor (a wire, a plate): tagged `conductive`, it passes charge to every conductive element and object it touches (GAME_SPEC 10.6). | `face`="pass", `solid`=true | `Conductor` |
 | `battery` | A battery: tagged `conductive` and `powered`, the source of the charge (flag `el:<name>:charge`) in what conducts from it. | `solid`=true | `Battery` |
 | `charged_door` | A charged door: a conductive wall that is gone while charge reaches it (`el:<name>:charge`) and back when the circuit breaks. | `solid`=true | `ChargedDoor` |
+| `dark` | A dark barrier: one side of its line (or the inside or outside of its circle) is a dark region (GAME_SPEC 9.9). Its surface is never present: the shadow's boundary is the game's. | `side`="auto" (left, inside), `when`="" (always) | none (drawn by the shadow) |
+| `light` | A light region: one side of its line, the inside of its circle (a light source's reach) or its outside. Light undoes the shadow wherever it reaches. | `side`="auto", `when`="" | none |
 
 The format's own kinds are `edges`, which places the four edge walls where it stands, and `raw`, which takes an
 `rc-level/1` surface as it is.
@@ -82,6 +84,7 @@ A template is an object:
 | `geometry` | `"any"` (default), `"segment"` or `"circle"`: what the element needs (the editor's tools) |
 | `params` | `{name: {"default": v, "enum": [...], "type": t, "doc": "..."}}`; without a default a parameter is required; `type` is one of string, number, bool, point, array, object, any (by default the default's) |
 | `example` | parameter values a new element starts with (the editor's palette: a portal placed with `d` already set) |
+| `shade` | `{"type": "dark" \| "light", "side", "when"}` (expressions): the element bounds a region of that kind (GAME_SPEC 9.9) |
 | `surfaces` | the surfaces, as `rc-level/1` surfaces without geometry, ids or (optionally) label; expressions anywhere |
 
 Expressions:
@@ -142,13 +145,13 @@ flag) and state writes on hits:
 | a state that comes back | two surfaces on one geometry, each present in one state, each writing the other | `toggle_surface` |
 
 What the kit cannot say needs a primitive. Moving surfaces have one: the level's `cycle` and an element's `motion`
-(GAME_SPEC 24.6, docs/TDD_56_MOTION.md). Spreading has one: tags and the level's `spread` rules (below). Light and
-shadow still need a region the arrow tests against (docs/TDD_52_KIT.md sketches it).
+(GAME_SPEC 9.8, docs/TDD_56_MOTION.md). Spreading has one: tags and the level's `spread` rules (below). Light and
+shadow have one: a template's `shade` (below).
 
 ## Tags and spreading
 
 An element or an object carries `tags` (a template's `tags`, plus the element's own). A spread rule
-(GAME_SPEC 24.7) flows a flag through every tagged thing that touches another (within half a pixel): an element
+(GAME_SPEC 10.6) flows a flag through every tagged thing that touches another (within half a pixel): an element
 by its segment or arc, an object by its circle.
 
 ```json
@@ -167,6 +170,30 @@ Without `spread`, a level has the two rules above. With it, the level's rules re
 `burnable` is `flammable`; `conductor`, `battery` and `charged_door` are `conductive`, and the battery is
 `powered`. An object becomes conductive by its own `"tags": ["conductive"]`: a box dropped across a gap
 closes the circuit.
+
+## Light and shadow
+
+A template with a `shade` makes its element bound a region (GAME_SPEC 9.9): `dark` or `light`, on one `side` of
+the element's line (`left`, `right`, as the editor's side marks show them), or `inside` or `outside` its circle (an
+arc: its circle's), active while the flag `when` is true (empty: always). A point is in the **shadow** when it is
+in an active dark region and in no active light one.
+
+- The arrow stops where it would enter the shadow: the shadow's edge is a wall from the light and a pass from the
+  dark. An arrow already in the shadow (fired from it, or through a portal) passes out.
+- A surface lying wholly in the shadow is gone for the arrow (a pass, no hits). It stays solid for the player and is
+  drawn under the shadow. One the shadow's edge crosses stays whole.
+- Regions follow their carriers: a line's region is a half-plane, clipped to the bounds; a circle's is its disk or
+  the rest of the plane.
+
+```json
+{"kind": "dark", "name": "night", "side": "left", "start": [1000, 240], "end": [1000, 840]},
+{"kind": "light", "name": "lamp", "when": "lamp", "circle": {"center": [1250, 500], "radius": 320}},
+{"kind": "button", "name": "switch", "flag": "lamp", "start": [800, 300], "end": [900, 300]}
+```
+
+A light under a flag is a lamp: switched by a button, a detector or charge (`"when": "el:wire:charge"`). The
+shadow follows the flags when a shot lands and as the player moves. A shot sees the shadow of its moment. A shade
+does not move (v1).
 
 ## Migration
 

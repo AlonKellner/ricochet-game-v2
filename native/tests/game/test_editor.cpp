@@ -98,7 +98,7 @@ TEST_CASE("editor: every level loads and saves byte for byte") {
 		CHECK_FALSE(ed.draw().empty());
 		n++;
 	}
-	CHECK(n == 44);
+	CHECK(n == 45);
 	// an rc-level/1 document is migrated
 	const json v1 = json::parse(read_text(ROOT / "bench" / "lowered" / "test_levels__flag_switches.json"));
 	rcg::Editor ed(&v1);
@@ -614,4 +614,25 @@ TEST_CASE("editor: an element's tags and the level's spread rules are panel fiel
 	ed.text(R"([{"flag": "glow"}])"); // no tag: the level's problem, shown
 	ed.key(rcg::Editor::KeyEnter, 0, true);
 	CHECK_FALSE(ed.errors().empty());
+}
+
+TEST_CASE("editor: shades are drawn in their colours over a faint shadow (Stage 153)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	auto shadow = [&] {
+		for (const auto &n : ed.draw()) {
+			if (n.key.a == 11 && !n.calls->empty() && n.calls->front().kind == rcg::render::Kind::Triangles) {
+				return true;
+			}
+		}
+		return false;
+	};
+	CHECK_FALSE(shadow());
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "dark", "name": "night", "start": [1000, 240], "end": [1000, 840]})")}});
+	CHECK(ed.errors().empty());
+	CHECK(shadow());
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "light", "name": "sun", "start": [1000, 240], "end": [1000, 840]})")}});
+	CHECK_FALSE(shadow()); // the same line and side: the light covers the dark
+	ok(ed, {{"op", "undo"}});
+	CHECK(shadow());
 }

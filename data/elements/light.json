@@ -1,0 +1,44 @@
+{
+ "doc": "A light region: one side of its line, or the inside (a light source's reach) or outside of its circle. Light undoes the shadow wherever it reaches (GAME_SPEC 9.9).",
+ "label": null,
+ "params": {
+  "side": {
+   "default": "auto",
+   "doc": "the region: a side of the line, the inside or outside of the circle (auto: left, inside)",
+   "enum": ["auto", "left", "right", "inside", "outside"]
+  },
+  "when": {
+   "default": "",
+   "doc": "the flag under which it is active (empty: always), e.g. el:wire:charge, det:plate, door:gate",
+   "type": "string"
+  }
+ },
+ "priority": 71,
+ "shade": {
+  "side": "$side",
+  "type": "light",
+  "when": "$when"
+ },
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "presence": [
+    {
+     "key": "el:${name}:barrier",
+     "values": ["true"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   }
+  }
+ ]
+}

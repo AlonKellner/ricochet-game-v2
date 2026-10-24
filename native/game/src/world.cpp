@@ -1,5 +1,7 @@
 #include "rcg/world.hpp"
 
+#include "rcg/shade.hpp"
+
 #include <algorithm>
 
 namespace rcg {
@@ -106,7 +108,48 @@ void World::rebuild() {
 	for (const auto &[ch, g] : groups_) { // channels in sorted order
 		surfaces_.insert(surfaces_.end(), g.surfaces.begin(), g.surfaces.end());
 	}
+	if (!darkened_.empty()) { // Stage 153
+		for (BuiltSurface &s : surfaces_) {
+			if (std::binary_search(darkened_.begin(), darkened_.end(), s.id)) {
+				s = shade::darkened(s);
+			}
+		}
+	}
+	surfaces_.insert(surfaces_.end(), shade_.begin(), shade_.end());
 	version_++;
+}
+
+bool World::set_shade(std::vector<BuiltSurface> boundary, std::vector<int> darkened) {
+	auto left = [](const BuiltSurface &s) { return s.left ? s.left->effect.type : std::string("pass"); };
+	auto same = [&](const BuiltSurface &a, const BuiltSurface &b) { return a.id == b.id && left(a) == left(b); };
+	if (darkened == darkened_ && boundary.size() == shade_.size() && std::equal(boundary.begin(), boundary.end(), shade_.begin(), same)) {
+		return false;
+	}
+	shade_ = std::move(boundary);
+	darkened_ = std::move(darkened);
+	rebuild();
+	return true;
+}
+
+const BuiltSurface *World::undarkened(int id) const {
+	for (const BuiltSurface &s : static_) {
+		if (s.id == id) {
+			return &s;
+		}
+	}
+	for (const Body &b : bodies_) {
+		if (b.id == id) {
+			return &b.built;
+		}
+	}
+	for (const auto &[ch, g] : groups_) {
+		for (const BuiltSurface &s : g.surfaces) {
+			if (s.id == id) {
+				return &s;
+			}
+		}
+	}
+	return by_id(id);
 }
 
 World::Change World::diff(const std::vector<int> &before) const {

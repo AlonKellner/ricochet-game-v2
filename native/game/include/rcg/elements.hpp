@@ -41,6 +41,10 @@ json params_of(const json &tmpl, const json &element, const std::string &name, c
 // The element's surfaces: rc-level/1 surfaces without ids, labelled.
 std::vector<json> expand(const json &tmpl, const json &element, const std::string &name, const std::string &path);
 
+// The template's key `key` (a template key holding expressions: "shade") evaluated
+// for the element; null when the template has none.
+json evaluate(const json &tmpl, const json &element, const std::string &name, const std::string &key, const std::string &path);
+
 // The element of kind `kind` whose expansion is surfaces[at, at + n) (n: the
 // template's surface count), labels compared after the match (a differing one is
 // the element's `label`). The element's name: what the match bound, else

@@ -62,7 +62,8 @@ struct Node {
 // content version a host compares to skip what did not change.
 // Editor (rcg/editor.hpp): a layer (a) and an index (b), key ["editor", a, b];
 // Goal, Detector (Stage 145): the level's goal ["goal"], a detector ["detector", a]
-enum class NodeKind : uint8_t { Background, Player, Cursor, Path, Arrow, Hud, Surface, Edge, Visibility, Spawn, Editor, Goal, Detector };
+// Shadow (Stage 153): the level's shadow and its shades ["shadow"]
+enum class NodeKind : uint8_t { Background, Player, Cursor, Path, Arrow, Hud, Surface, Edge, Visibility, Spawn, Editor, Goal, Detector, Shadow };
 struct NodeKey {
 	NodeKind kind = NodeKind::Background;
 	int a = 0, b = 0; // a surface's id and piece

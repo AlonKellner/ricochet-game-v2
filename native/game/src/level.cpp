@@ -4,6 +4,7 @@
 #include "rcg/level.hpp"
 
 #include "rcg/level2.hpp"
+#include "rcg/build.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -677,6 +678,52 @@ Level parse_level_json(const json &j) {
 			fail(mp, "the element has no surfaces to move");
 		}
 		lv.motions.push_back(std::move(mo));
+	}
+	// Stage 153: the shades (their regions' sides checked against their geometry; they do not move)
+	for (const Lowered::Shaded &sd : low.shaded) {
+		const std::string sp = "level.elements[" + std::to_string(sd.element) + "] (" + sd.name + ")";
+		Shade sh;
+		sh.name = sd.name;
+		const json &d = sd.shade;
+		if (!d.is_object() || !d.contains("type") || !(d["type"] == "dark" || d["type"] == "light")) {
+			fail(sp + ".shade.type", "dark or light expected");
+		}
+		sh.dark = d["type"] == "dark";
+		if (d.contains("side") && !d["side"].is_null()) {
+			if (!d["side"].is_string()) {
+				fail(sp + ".side", "auto, left, right, inside or outside expected");
+			}
+			sh.side = d["side"].get<std::string>();
+		}
+		if (sh.side != "auto" && sh.side != "left" && sh.side != "right" && sh.side != "inside" && sh.side != "outside") {
+			fail(sp + ".side", "auto, left, right, inside or outside expected");
+		}
+		if (d.contains("when") && !d["when"].is_null()) {
+			if (!d["when"].is_string()) {
+				fail(sp + ".when", "a flag key expected (empty: always)");
+			}
+			sh.when = d["when"].get<std::string>();
+		}
+		const std::string prefix = "level.elements[" + std::to_string(sd.element) + "]";
+		bool found = false;
+		for (size_t k = 0; k < low.origins.size() && !found; k++) {
+			if (low.origins[k].rfind(prefix, 0) == 0) {
+				sh.surface = k;
+				found = true;
+			}
+		}
+		if (!found) {
+			fail(sp, "a shade needs its element's surface (its geometry)");
+		}
+		if (segment_of(lv.surfaces[sh.surface].spec).is_line() && (sh.side == "inside" || sh.side == "outside")) {
+			fail(sp + ".side", "a line has a left and a right side, not an inside");
+		}
+		for (const Motion &mo : lv.motions) {
+			if (std::find(mo.surfaces.begin(), mo.surfaces.end(), sh.surface) != mo.surfaces.end()) {
+				fail(sp + ".motion", "a shade does not move (Stage 153)");
+			}
+		}
+		lv.shades.push_back(std::move(sh));
 	}
 	for (auto it = low.flags.begin(); it != low.flags.end(); ++it) {
 		const json &v = it.value();

@@ -1,5 +1,6 @@
 // The level editor: the document and its commands (rcg/editor.hpp,
 // docs/EDITOR.md). Input and drawing: editor_view.cpp.
+#include "rcg/shade.hpp"
 #include "rcg/editor.hpp"
 
 #include "rcg/canon.hpp"
@@ -262,9 +263,31 @@ void Editor::refresh() {
 		}
 	}
 	// what only the whole level shows (names, the level's own keys, ...)
+	shade_fill_ = {};
+	shade_of_.assign(es.size(), 0);
 	if (errors_.empty()) {
 		try {
-			build_level(parse_level_json(doc_));
+			const Level lv = parse_level_json(doc_);
+			build_level(lv);
+			// Stage 153: the shadow under the level's starting flags, and which elements are shades
+			if (!lv.shades.empty()) {
+				std::vector<shade::Region> regions;
+				std::vector<bool> active;
+				for (const Shade &sh : lv.shades) {
+					regions.push_back(shade::region_of(segment_of(lv.surfaces[sh.surface].spec), sh.side, sh.dark));
+					bool on = sh.when.empty();
+					for (const auto &[k, v] : lv.flags) {
+						on = on || (k == sh.when && std::holds_alternative<bool>(v) && std::get<bool>(v));
+					}
+					active.push_back(on);
+					for (size_t i = 0; i < es.size(); i++) {
+						if (es[i].is_object() && es[i].value("name", "") == sh.name) {
+							shade_of_[i] = sh.dark ? 1 : 2;
+						}
+					}
+				}
+				shade_fill_ = shade::fill(regions, active, lv.bounds);
+			}
 		} catch (const std::exception &ex) {
 			errors_.push_back({-1, "", ex.what()});
 		}

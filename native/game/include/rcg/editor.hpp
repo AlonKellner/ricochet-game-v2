@@ -8,6 +8,7 @@
 // I/O when a save is requested, and plays the document with an ordinary game.
 #pragma once
 
+#include "rc/visibility.hpp"
 #include "rcg/build.hpp"
 #include "rcg/render.hpp"
 
@@ -150,6 +151,8 @@ private:
 	std::string item_;          // Stage 148: the selected item: "goal", "detector:<name>", "object:<name>"; "" none
 	std::vector<Error> errors_;
 	std::vector<Drawn> drawn_;  // per element
+	std::vector<int> shade_of_;  // Stage 153: per element, 1 a dark shade, 2 a light one
+	rc::vis::Fill shade_fill_;    // ... the shadow under the starting flags (world units)
 	// the view
 	float width_ = 1920, height_ = 1080;
 	V2 center_{960, 540};

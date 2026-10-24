@@ -61,6 +61,10 @@ const Color GHOST_TOGGLER_COLOR = rgba(0.75, 0.95, 1.0);
 const Color FLAG_TOGGLER_COLOR = rgba(1.0, 0.85, 0.2);
 const Color PRE_TRANSFORM_COLOR = rgba(0.55, 0.45, 0.85, 0.35);
 const Color ABSENT_COLOR = rgba(0.6, 0.6, 0.6, 0.35);
+// Stage 153: the shadow, a dark shade's edge, a light one's
+const Color SHADOW_FILL = rgba(0.02, 0.02, 0.05, 0.82);
+const Color SHADE_DARK = rgba(0.55, 0.45, 0.95);
+const Color SHADE_LIGHT = rgba(1.0, 0.85, 0.35);
 const Color CROSSING_COLOR = rgba(1.0, 1.0, 1.0, 0.6);
 const Color TARGET_COLOR = rgba(1.0, 0.85, 0.3);
 const Color SPAWN_COLOR = rgba(0.6, 0.95, 1.0);
@@ -1447,6 +1451,30 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		}
 		fresh(NodeKind::Detector, 0, V2{}, WHITE, std::move(dc), int(i));
 	}
+	// Stage 153: the shadow (over the surfaces it hides) and the shades' edges, dashed (faint while inactive)
+	if (!level_.shades.empty()) {
+		cached(shade_draw_, {shade_serial_, 0, 0}, NodeKind::Shadow, 15, V2{}, WHITE, [&](std::vector<Call> &out) {
+			if (!shade_fill_.indices.empty()) {
+				Call k;
+				k.kind = Kind::Triangles;
+				for (const rc::vis::Pt &p : shade_fill_.points) {
+					k.pts.push_back(V2::of(p.x, p.y));
+				}
+				for (uint32_t i : shade_fill_.indices) {
+					k.indices.push_back(int(i));
+				}
+				k.colors = {SHADOW_FILL};
+				out.push_back(k);
+			}
+			for (size_t i = 0; i < level_.shades.size(); i++) {
+				const Shade &sh = level_.shades[i];
+				const bool on = i < shade_active_.size() && shade_active_[i];
+				Color c = sh.dark ? SHADE_DARK : SHADE_LIGHT;
+				c[3] = on ? 1.0f : 0.35f;
+				dashed(out, segment_of(level_.surfaces[sh.surface].spec), c, 2.0);
+			}
+		});
+	}
 	if (level_.player_start) {
 		Call k;
 		k.kind = Kind::Polygon2D;
@@ -1488,7 +1516,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 	}
 	// the surfaces, one node per piece
 	for (const Node &n : nodes_) {
-		const BuiltSurface *s = world_->by_id(n.surface);
+		const BuiltSurface *s = level_.shades.empty() ? world_->by_id(n.surface) : world_->undarkened(n.surface); // (Stage 153: drawn as it is, under the shadow)
 		if (s == nullptr) {
 			continue;
 		}

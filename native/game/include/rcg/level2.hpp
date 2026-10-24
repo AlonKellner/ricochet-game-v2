@@ -27,6 +27,13 @@ struct Lowered {
 		std::vector<std::string> tags;
 	};
 	std::vector<Tagged> tagged;
+	// Stage 153: per element whose kind bounds a region: its index, name and its kind's `shade` evaluated
+	struct Shaded {
+		size_t element = 0;
+		std::string name;
+		nlohmann::json shade;
+	};
+	std::vector<Shaded> shaded;
 };
 
 // The lowering of an rc-level/2 document. Throws LevelError naming the element.

@@ -1,5 +1,5 @@
 {
- "doc": "A conductor (a wire, a metal plate): it passes charge to every conductive element and object it touches (GAME_SPEC 24.7). face: wall stops the arrow, pass lets it through.",
+ "doc": "A conductor (a wire, a metal plate): it passes charge to every conductive element and object it touches (GAME_SPEC 10.6). face: wall stops the arrow, pass lets it through.",
  "label": "Conductor",
  "params": {
   "face": {

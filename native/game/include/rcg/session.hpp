@@ -16,6 +16,7 @@
 #include "rc/tracer.hpp"
 #include "rc/region_union.hpp"
 #include "rc/visibility.hpp"
+#include "rcg/shade.hpp"
 #include "rcg/jobs.hpp"
 #include "rcg/kinematics.hpp"
 #include "rcg/landing.hpp"
@@ -328,6 +329,15 @@ private:
 	void apply_phase();                  // the moving surfaces placed for phase_
 	// Stage 152: spreading -- the tagged elements' and objects' flags along what touches
 	void spread();
+	// Stage 153: light and shadow -- the boundary and the darkened surfaces under the flags (when they or the world changed)
+	void shadow();
+	std::vector<shade::Region> shade_regions_;
+	std::vector<shade::Piece> shade_pieces_;
+	int shade_first_id_ = 0;
+	std::vector<bool> shade_active_;
+	int shade_world_ = -1;
+	int shade_serial_ = 0; // bumped when the shadow's fill changes
+	rc::vis::Fill shade_fill_;
 	int touch_version_ = -1;                       // the world version the touches are of
 	std::vector<std::vector<bool>> touches_;       // per pair of tagged nodes (elements, then objects)
 	bool bodies_moving_ = false;
@@ -516,7 +526,7 @@ private:
 		uint64_t version = 0;
 	};
 	mutable std::map<int, SurfaceDraw> surface_draw_; // by node serial
-	mutable CachedDraw path_draw_, vis_draw_, spawn_draw_, static_draw_[3];
+	mutable CachedDraw path_draw_, vis_draw_, spawn_draw_, static_draw_[3], shade_draw_;
 	void clear_hover();
 	// (last: destroyed first, before the state their results go to)
 	std::unique_ptr<LatestJob<VisJobIn, VisJobOut>> vis_job_;

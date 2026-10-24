@@ -58,7 +58,7 @@ const Color OBJECT = rgba(0.95, 0.6, 0.3);
 const Color CARRIER = rgba(0.45, 0.7, 1.0, 0.45);
 
 // An element's layers (the draw nodes' keys: ["editor", layer, index])
-enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS, L_GOALS, L_CARRIERS };
+enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS, L_GOALS, L_CARRIERS, L_SHADOW };
 
 const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle"};
 
@@ -1388,6 +1388,19 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 		}
 		out.add(L_GOALS, 0, 2, std::move(g));
 	}
+	// Stage 153: the shadow under the starting flags, faint
+	if (!shade_fill_.indices.empty()) {
+		Call k;
+		k.kind = Kind::Triangles;
+		for (const rc::vis::Pt &p : shade_fill_.points) {
+			k.pts.push_back(to_screen(V2::of(p.x, p.y)));
+		}
+		for (uint32_t i : shade_fill_.indices) {
+			k.indices.push_back(int(i));
+		}
+		k.colors = {rgba(0.0, 0.0, 0.05, 0.45)};
+		out.add(L_SHADOW, 0, 1, {k});
+	}
 	// the elements
 	const int sel = index_of(selected_);
 	const bool hovering = tool_ == Tool::Select && !drag_ && mouse_.x < cw && mouse_.y < ch;
@@ -1456,6 +1469,10 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			}
 		}
 		for (const BuiltSurface &b : drawn_[i].built) {
+			if (i < shade_of_.size() && shade_of_[i] != 0) { // Stage 153: a shade, in its colour
+				stroke(b.seg, shade_of_[i] == 1 ? rgba(0.55, 0.45, 0.95) : rgba(1.0, 0.85, 0.35), 2.0, true);
+				continue;
+			}
 			if (b.pre_transform) {
 				stroke(b.seg, PRE_TRANSFORM, 1.5, true);
 				continue;

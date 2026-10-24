@@ -371,6 +371,11 @@ Lowered lower_level(const json &v2) {
 			if (!tags.empty()) {
 				out.tagged.push_back({i, name, tags});
 			}
+			// Stage 153: the region it bounds
+			const json shade = elements::evaluate(it->second, g, name, "shade", origin);
+			if (!shade.is_null()) {
+				out.shaded.push_back({i, name, shade});
+			}
 		}
 	}
 	if (!edges) {

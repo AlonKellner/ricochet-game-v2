@@ -153,7 +153,20 @@ struct Tagged {
 	std::vector<size_t> surfaces;
 };
 
-// Stage 152 (GAME_SPEC 24.7): a spreading rule -- the flag el:<name>:<flag> of
+// Stage 153 (GAME_SPEC 9.9): an element bounding a dark or a light region -- a
+// side of its line (left, right) or of its circle (inside, outside; an arc: its
+// circle's), active while the flag `when` is true (always when empty). Its
+// surface (an index into Level::surfaces) is never present: the shadow's
+// boundary is the game's (rcg/shade.hpp).
+struct Shade {
+	std::string name;
+	size_t surface = 0;
+	bool dark = true;
+	std::string side = "auto"; // auto (left for a line, inside for a circle) | left | right | inside | outside
+	std::string when;
+};
+
+// Stage 152 (GAME_SPEC 10.6): a spreading rule -- the flag el:<name>:<flag> of
 // every element (and object) tagged `tag` that touches, through others so
 // tagged, one that has it. Persisting (fire): set ones stay set, through absent
 // ones too. Not persisting (charge): recomputed from the present elements with a
@@ -233,6 +246,7 @@ struct Level {
 	Cycle cycle;
 	std::vector<Tagged> tagged;     // Stage 152
 	std::vector<SpreadRule> spread; // ... (default: burnt through flammable; charge through conductive from powered)
+	std::vector<Shade> shades;      // Stage 153
 };
 
 // Stage 146: an object's surface (a full circle at `center`, its sides by its face, a pull on them if pullable).

@@ -63,6 +63,18 @@ public:
 	// the moving surfaces placed by their transforms (one per Moving); a structural change when any moved
 	bool place_moving(const std::vector<rc::Xf2> &xfs);
 
+	// Stage 153: the shadow -- ids for its boundary's pieces (taken once, before any spawn), then the
+	// boundary under the current flags (after every other surface) and the surfaces darkened in it
+	int reserve_ids(int n) {
+		const int first = next_id_;
+		next_id_ += n;
+		return first;
+	}
+	// a structural change when the boundary or the darkened surfaces changed
+	bool set_shade(std::vector<BuiltSurface> boundary, std::vector<int> darkened);
+	// the surfaces as they are without the shadow (none: no surface of that id)
+	const BuiltSurface *undarkened(int id) const;
+
 	// the static surfaces, then the groups by channel name
 	const std::vector<BuiltSurface> &surfaces() const { return surfaces_; }
 	const BuiltSurface *by_id(int id) const;
@@ -94,6 +106,8 @@ private:
 	std::map<std::string, Group> groups_;
 	std::map<std::string, int> generations_;
 	std::vector<BuiltSurface> surfaces_;
+	std::vector<BuiltSurface> shade_; // Stage 153
+	std::vector<int> darkened_;       // ... sorted
 	Snapshot initial_;
 	int next_id_ = 1;
 	int version_ = 0;

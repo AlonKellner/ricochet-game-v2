@@ -43,6 +43,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
 | Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| Light and shadow: dark and light regions bounded by elements (sides of lines, insides or outsides of circles, under flags); the arrow stops entering the shadow, surfaces wholly in it are passes (§9.9; docs/ELEMENTS.md, docs/TDD_58, Stage 153) | Done |
 | Spreading: tags on elements and objects, the level's spread rules (fire kept for good; charge recomputed from powered sources through what touches and is present); conductor, battery and charged door templates (§10.6; docs/ELEMENTS.md, docs/TDD_57, Stage 152) | Done |
 | Bubbles: objects with their own gravity (floating up), popped by the arrow, carrying an object until they pop (§25.5; docs/TDD_55, Stage 150) | Done |
 | Carriers: lines and circles elements are placed on (`carrier`, `from`, `to`), an authoring construct the lowering projects onto (§19.1; docs/TDD_53, Stage 149) | Done |
@@ -726,6 +727,30 @@ So the solver traces whole design surfaces, and pieces live where they matter.
 **Everything else is the design surface's:** hit effects (one target, `target:<id>`), presence, the resolver, consumption of a spawn host. **Splitting ignores presence**, so the pieces never change within a shot.
 
 **Not split (v1).** Portal pairs and pre-transform circles. A design surface crossing a portal is reported by level validation.
+
+### 9.9 Light and shadow
+
+> **Status: implemented (Stage 153, docs/TDD_58_SHADOW.md).**
+
+An element whose kind has a `shade` bounds a **region**: dark or light, one side of its line (a half-plane,
+clipped to the level bounds) or the inside or outside of its circle (an arc: its carrier circle), active while its
+flag `when` holds (always without one). The element's own surface is never present. A point is in the **shadow**
+when it lies in an active dark region and in no active light one (a point on a region's boundary is in neither).
+
+- **The shadow's edge stops the arrow from the light.** The regions' boundaries, split where they cross, are the
+  candidate pieces (their ids fixed when the level starts, after the bodies). Under the current flags a piece with
+  the shadow on one side and the light on the other is present: its lit side terminal, its shadowed side a pass,
+  neither plannable, not drawn. An arrow in the shadow passes out.
+- **A surface wholly in the shadow is darkened:** a point of it (a line's middle, an arc's via, a point of a circle)
+  is in the shadow and no present edge piece crosses it. A darkened surface is a pass on both sides, without hits or
+  a resolver, for the arrow. Its presence and player solidity are kept, and it is drawn as it is, under the shadow.
+  Portal pairs and pre-transform circles are never darkened.
+- **When.** The shadow follows the flags and the world: at the start, when a shot lands, every physics tick (a
+  detector, a moving surface, an object), after a journey and an undo. A shot sees the shadow of the moment it was
+  fired. Shades do not move (v1).
+- **Display.** The shadow (the dark regions' union minus the light ones', within the bounds) is drawn over the
+  surfaces it hides, below the path and the arrow (the node `["shadow"]`, z 15); each shade's edge is dashed in its
+  colour, faint while inactive. The editor shows the shadow under the starting flags.
 
 ## 10. Effect system
 
@@ -2839,4 +2864,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.63.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.64.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

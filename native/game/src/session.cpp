@@ -178,6 +178,14 @@ Session::Session(const Level &level, const SessionConfig &config)
 		flags_.set(key, value);
 	}
 	spread(); // (Stage 152: a powered circuit is lit from the start)
+	if (!level_.shades.empty()) { // Stage 153: the shades' regions, their boundary's pieces (ids taken once)
+		for (const Shade &sh : level_.shades) {
+			shade_regions_.push_back(shade::region_of(segment_of(level_.surfaces[sh.surface].spec), sh.side, sh.dark));
+		}
+		shade_pieces_ = shade::arrange(shade_regions_, level_.bounds);
+		shade_first_id_ = world_->reserve_ids(int(shade_pieces_.size()));
+		shadow();
+	}
 	// the initial checkpoint: taken before the level built its world (GameManager._ready)
 	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt, false, {}, 0.0, true};
 	hud_ = hud_text(); // (Stage 145: a goal's line; "" without a goal and a plan)
@@ -646,6 +654,7 @@ void Session::restore(const Checkpoint &c) {
 	velocity_ = c.velocity;
 	set_flags(c.flags);
 	world_->restore(c.world ? *c.world : world_->initial_snapshot());
+	shadow(); // Stage 153: the restored flags' shadow
 	sync_nodes();
 	plan_ = c.plan;
 	plan_changed();
@@ -725,6 +734,7 @@ void Session::land() {
 	}
 	pending_flags_.reset();
 	spread(); // Stage 152: fire and charge along what touches
+	shadow(); // Stage 153
 	if (!level_.motions.empty() && !cycle_auto_) {
 		cycle_auto_ = true; // Stage 151: a shot resumes the cycle
 		idle_ = 0.0;
@@ -920,6 +930,7 @@ void Session::tick(const kinematics::Input &in) {
 	if (!level_.tagged.empty() || std::any_of(level_.objects.begin(), level_.objects.end(), [](const Object &o) { return !o.tags.empty(); })) {
 		spread(); // Stage 152: bodies moved, detectors wrote, surfaces moved
 	}
+	shadow(); // Stage 153 (a no-op unless the flags or the world changed)
 	if (!won_ && level_.objective) {
 		check_won();
 	}
@@ -1173,11 +1184,53 @@ void Session::advance_journey(double dt) {
 	if (done) {
 		journey_.reset();
 		spread();
+		shadow();
 		check_won();
 	}
 }
 
-// Stage 152 (GAME_SPEC 24.7): the spreading rules over the tagged elements and
+// Stage 153 (GAME_SPEC 9.9): the shadow under the flags -- its boundary's pieces
+// (the lit side a terminal) and the surfaces lying wholly in it, darkened.
+void Session::shadow() {
+	if (level_.shades.empty()) {
+		return;
+	}
+	std::vector<bool> active;
+	for (const Shade &sh : level_.shades) {
+		active.push_back(sh.when.empty() || flags_.is_true(sh.when));
+	}
+	if (active == shade_active_ && shade_world_ == world_->version()) {
+		return;
+	}
+	if (active != shade_active_) {
+		shade_fill_ = shade::fill(shade_regions_, active, level_.bounds);
+		shade_serial_++;
+	}
+	std::vector<BuiltSurface> edge = shade::boundary(shade_pieces_, shade_regions_, active, shade_first_id_);
+	const int last = shade_first_id_ + int(shade_pieces_.size());
+	std::vector<int> dark;
+	for (const BuiltSurface &s : world_->surfaces()) {
+		if ((s.id >= shade_first_id_ && s.id < last) || s.pre_transform || s.portal_pair != 0) {
+			continue; // (the boundary itself; a portal pair stays whole)
+		}
+		const V2 p = shade::point_of(s.seg);
+		if (!shade::shadowed(shade_regions_, active, p.x, p.y)) {
+			continue;
+		}
+		const bool crossed = std::any_of(edge.begin(), edge.end(), [&](const BuiltSurface &b) { return !crossings_of(b.seg, s.seg).empty(); });
+		if (!crossed) {
+			dark.push_back(s.id);
+		}
+	}
+	std::sort(dark.begin(), dark.end());
+	shade_active_ = std::move(active);
+	if (world_->set_shade(std::move(edge), std::move(dark))) {
+		sync_nodes();
+	}
+	shade_world_ = world_->version();
+}
+
+// Stage 152 (GAME_SPEC 10.6): the spreading rules over the tagged elements and
 // objects. Touching: two surfaces crossing, or an end within half a pixel of the
 // other; an object's circle within half a pixel of a surface or another object.
 void Session::spread() {
