@@ -1,0 +1,35 @@
+{
+ "schema": "rc-session/1",
+ "level": "objectives/plate_door",
+ "kind": "kinematic",
+ "steps": [
+  {
+   "op": "hold",
+   "actions": [
+    "move_right"
+   ],
+   "ticks": 60
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_down"
+   ],
+   "ticks": 45
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_up"
+   ],
+   "ticks": 45
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_right"
+   ],
+   "ticks": 120
+  }
+ ]
+}

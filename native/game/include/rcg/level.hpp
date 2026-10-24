@@ -1,9 +1,11 @@
-// The level data, rc-level/1 (docs/LEVEL_FORMAT.md): the authoring form of a
-// level -- its surfaces as specs in build order with the ids they take, and
-// the level's own parts (bounds, gravity, room, player, camera, background,
-// colliders). Engine-free: any host reads a level through parse_level.
+// The level data (docs/LEVEL_FORMAT.md): the authoring form of a level -- its
+// surfaces as specs in build order with the ids they take, the level's own parts
+// (bounds, gravity, room, player, camera, background, colliders) and its initial
+// flags. rc-level/2 (elements, rcg/level2.hpp) lowers to rc-level/1 (surfaces).
+// Engine-free: any host reads a level through parse_level.
 #pragma once
 
+#include "rc/flags.hpp"
 #include "rc/trace_types.hpp"
 
 #include <nlohmann/json.hpp>
@@ -116,6 +118,49 @@ struct Collider {
 	V2 a, b;
 };
 
+// rc-level/2: a region of the plane (a goal, a detector): a rectangle or a circle.
+struct Region {
+	bool circle = false;
+	Rect rect;
+	V2 center;
+	double radius = 0.0;
+	bool contains(const V2 &p) const; // the boundary included
+};
+
+// rc-level/2 (Stage 146): an object (GAME_SPEC 25.5) -- a circle body: pullable
+// (it falls under gravity, and a pull brings it back along the arrow's path) or
+// static; its surface (a full circle) takes the next ids after the level's.
+struct Object {
+	std::string name;
+	V2 center;
+	double radius = 16.0;
+	bool pullable = true;
+	bool solid = true;          // the player collides with it
+	std::string face = "wall";  // its sides: wall (terminal) | mirror (reflection) | pass
+	std::string label = "Object";
+};
+
+// rc-level/2: the level's goal (GAME_SPEC 3.2): the player inside the region
+// while every condition holds (the presence form, GAME_SPEC 9.6) wins.
+struct Objective {
+	Region goal;
+	std::vector<PresenceSpec> conditions; // (its JSON key: "requires")
+};
+
+// rc-level/2: a detector (GAME_SPEC 24.5): a region the player is in, or a
+// segment the player crosses, that writes a flag -- while inside (unset
+// outside), on entering, or toggled on entering.
+struct Detector {
+	std::string name;
+	std::string target = "player"; // "for": player | object | any (objects: a later stage)
+	bool segment = false;
+	Region region;
+	V2 a, b;          // a segment's ends
+	std::string flag; // default det:<name>
+	std::string mode = "while"; // while | enter | toggle
+	rc::FlagValue value = true;
+};
+
 struct Level {
 	std::string name;
 	Rect bounds{0, 0, 1920, 1080};
@@ -139,10 +184,21 @@ struct Level {
 		bool game = true, preview = true, arrow = true, hud = true, cursor = true;
 	} features;
 	std::vector<LevelSurface> surfaces;
+	// rc-level/2: the flags the level starts with (in key order; a number as a float64)
+	std::vector<std::pair<std::string, rc::FlagValue>> flags;
+	// rc-level/2: the goal (none: the level is won when every target is hit), the detectors
+	std::optional<Objective> objective;
+	std::vector<Detector> detectors;
+	std::vector<Object> objects; // Stage 146
 };
 
-// The level in a JSON text (rc-level/1). Throws LevelError.
+// Stage 146: an object's surface (a full circle at `center`, its sides by its face, a pull on them if pullable).
+SurfaceSpec object_spec(const Object &o, const V2 &center);
+
+// The level in a JSON text (rc-level/1 or rc-level/2). Throws LevelError.
 Level parse_level(std::string_view json_text);
+// ... in a JSON document.
+Level parse_level_json(const nlohmann::json &doc);
 
 // The level of a file. Throws LevelError (an unreadable file too).
 Level load_level(const std::string &path);

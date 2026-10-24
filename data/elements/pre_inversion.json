@@ -1,0 +1,12 @@
+{
+ "doc": "A pre-transform inversion circle (GAME_SPEC 9.5): never hit, never clicked; the level starts after it (the horizon). Built after every other surface.",
+ "geometry": "circle",
+ "label": "PreTransform",
+ "params": {},
+ "priority": 25,
+ "surfaces": [
+  {
+   "pre_transform": true
+  }
+ ]
+}

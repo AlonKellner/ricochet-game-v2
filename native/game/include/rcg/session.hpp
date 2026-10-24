@@ -130,7 +130,11 @@ public:
 	bool start_fire();
 	void speed_up();
 	void advance(double dt, const kinematics::Input &in);
-	bool flying() const { return flying_; }
+	// the arrow in flight, or (Stage 146) a journey under way: the game paused
+	bool flying() const { return flying_ || journey_.has_value(); }
+	// Stage 145: the level won (latched): its goal reached while its conditions
+	// hold, or, a level without a goal, every target hit
+	bool won() const { return won_; }
 	V2 player() const { return player_; }
 	// Stage 122: the player before the last physics tick, and how far the time
 	// not yet ticked is into the next (the presenter draws the player between)
@@ -168,6 +172,8 @@ public:
 	// provisional ones while its climb runs), how long the shown exact preview's
 	// climb took (0: computed in its frame), and the path's painter for steps
 	const std::vector<rc::TraceStep> &preview_steps() const { return shown().merged; }
+	// Stage 147 (tests, tools): the preview's physical trace -- the path a shot now takes (none: no trace)
+	const rc::TracePath *physical_trace() const { return preview_.pair ? &preview_.pair->physical : nullptr; }
 	double preview_seconds() const { return provisional_ ? 0.0 : preview_climb_seconds_; }
 	void paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<render::Call> &out, double dash_phase = 0.0,
 		const std::vector<rc::sweep::EventDot> *dots = nullptr) const;
@@ -227,6 +233,8 @@ private:
 		std::vector<PlanEntry> plan;
 		std::vector<std::pair<int, bool>> targets;
 		std::optional<World::Snapshot> world;
+		bool won = false;         // Stage 145
+		std::vector<bool> inside; // ... the detectors the player is in
 	};
 	// PathRenderer's state: the last pair, its display paths and merge; the last
 	// ladder result and physical hits stay when there is no trace (as the node keeps them)
@@ -288,6 +296,27 @@ private:
 	int plan_version_ = 0;
 	int flags_version_ = 0; // bumped when the flags change (their encoding: the record's)
 	void set_flags(const rc::Flags &f);
+	// Stage 145: the goal and the detectors
+	bool won_ = false;
+	std::vector<bool> inside_; // per detector: the player inside (a region's)
+	void detect(const V2 &from, const V2 &to); // the detectors after a move from -> to
+	bool goal_open() const;                    // the objective's conditions hold
+	void check_won();
+	// Stage 146: the bodies and the journeys (a grapple takes the player, a pull an
+	// object, along the shot's path: forward to the hit, back from it)
+	struct Journey {
+		int body = -1;            // the pulled body's index; -1: the player (a grapple)
+		V2 offset;                // a pulled body's center from the path (its center minus the hit)
+		std::vector<V2> path;     // the points travelled, every few pixels
+		std::vector<bool> jump;   // jump[i]: path[i] is reached by a jump (a portal), not a move
+		size_t next = 1;
+	};
+	std::optional<Journey> journey_;
+	bool bodies_moving_ = false;
+	void step_bodies();
+	void start_journey();             // at landing: the first fired grapple or pull of the shot
+	void advance_journey(double dt);
+	std::vector<kinematics::Collider> colliders_except(int body) const; // what a body or the player meets
 	std::vector<Checkpoint> checkpoints_;
 	Checkpoint initial_;
 	int display_mode_ = 0;

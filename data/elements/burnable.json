@@ -1,0 +1,83 @@
+{
+ "doc": "A burnable barrier: solid, but an arrow on fire burns it away (for good: flag el:<name>:burnt) and goes on.",
+ "label": "Burnable",
+ "params": {
+  "fire": {
+   "default": "shot:fire",
+   "doc": "the fire's flag"
+  },
+  "solid": {
+   "default": true,
+   "doc": "the player collides with it until it burns"
+  }
+ },
+ "priority": 56,
+ "surfaces": [
+  {
+   "left": null,
+   "player_solid": "$solid",
+   "presence": [
+    {
+     "key": "el:${name}:burnt",
+     "values": ["DEFAULT"]
+    }
+   ],
+   "resolver": {
+    "key": "$fire",
+    "table": [
+     [
+      "DEFAULT",
+      {
+       "left": {
+        "effect": {
+         "type": "terminal"
+        },
+        "interactive": false
+       },
+       "right": {
+        "effect": {
+         "type": "terminal"
+        },
+        "interactive": false
+       }
+      }
+     ],
+     [
+      "true",
+      {
+       "left": {
+        "effect": {
+         "type": "pass"
+        },
+        "hits": [
+         {
+          "key": "el:${name}:burnt",
+          "kind": "state",
+          "op": "set",
+          "value": true
+         }
+        ],
+        "interactive": true
+       },
+       "right": {
+        "effect": {
+         "type": "pass"
+        },
+        "hits": [
+         {
+          "key": "el:${name}:burnt",
+          "kind": "state",
+          "op": "set",
+          "value": true
+         }
+        ],
+        "interactive": true
+       }
+      }
+     ]
+    ]
+   },
+   "right": null
+  }
+ ]
+}

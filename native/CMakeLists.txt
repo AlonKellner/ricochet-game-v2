@@ -101,7 +101,15 @@ rc_apply_flags(ricochet_core)
 # the level data (rc-level/1) and its builder. JSON through the vendored
 # nlohmann (native/extern).
 file(GLOB RC_GAME_SOURCES CONFIGURE_DEPENDS game/src/*.cpp)
-add_library(ricochet_game STATIC ${RC_GAME_SOURCES})
+# rc-level/2's builtin element templates (data/elements, docs/ELEMENTS.md), embedded
+get_filename_component(RC_ELEMENTS_DIR "${CMAKE_CURRENT_SOURCE_DIR}/../data/elements" ABSOLUTE)
+file(GLOB RC_ELEMENT_FILES CONFIGURE_DEPENDS "${RC_ELEMENTS_DIR}/*.json")
+set(RC_ELEMENTS_CPP "${CMAKE_CURRENT_BINARY_DIR}/generated/elements_embedded.cpp")
+add_custom_command(OUTPUT "${RC_ELEMENTS_CPP}"
+    COMMAND "${CMAKE_COMMAND}" -DSRC_DIR=${RC_ELEMENTS_DIR} -DOUT=${RC_ELEMENTS_CPP} -P "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_elements.cmake"
+    DEPENDS ${RC_ELEMENT_FILES} "${CMAKE_CURRENT_SOURCE_DIR}/cmake/embed_elements.cmake"
+    COMMENT "Embedding the element templates (data/elements)")
+add_library(ricochet_game STATIC ${RC_GAME_SOURCES} "${RC_ELEMENTS_CPP}")
 target_include_directories(ricochet_game PUBLIC game/include)
 target_include_directories(ricochet_game SYSTEM PUBLIC extern)
 target_link_libraries(ricochet_game PUBLIC ricochet_core)
@@ -287,7 +295,7 @@ if(RC_BUILD_TESTS)
     endforeach()
 
     # the level data is in its canonical spelling (rc_tool fmt)
-    add_test(NAME rcg_levels_canonical COMMAND rc_tool fmt --check ${RC_REPO_ROOT}/data/levels)
+    add_test(NAME rcg_levels_canonical COMMAND rc_tool fmt --check ${RC_REPO_ROOT}/data/levels ${RC_REPO_ROOT}/data/elements)
 
     # The API file godot-cpp generated its bindings from must describe the installed binary.
     find_package(Python3 COMPONENTS Interpreter REQUIRED)

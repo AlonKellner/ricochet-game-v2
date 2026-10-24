@@ -62,8 +62,10 @@ const BuiltSide *active_side(const BuiltSurface &s, Side side, const rc::Flags &
 	return cfg ? &*cfg : nullptr;
 }
 
-bool present(const BuiltSurface &s, const rc::Flags &flags) {
-	for (const PresenceSpec &c : s.presence) {
+bool present(const BuiltSurface &s, const rc::Flags &flags) { return holds(s.presence, flags); }
+
+bool holds(const std::vector<PresenceSpec> &conditions, const rc::Flags &flags) {
+	for (const PresenceSpec &c : conditions) {
 		const rc::FlagValue *v = flags.get(c.key);
 		const std::string k = v ? rc::flag_key(*v) : std::string("DEFAULT");
 		if (std::find(c.values.begin(), c.values.end(), k) == c.values.end()) {

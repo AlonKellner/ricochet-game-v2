@@ -1,0 +1,38 @@
+{
+ "doc": "A grappling surface: when the arrow hits it, the player is pulled along the arrow's path to the hit (when the shot lands), stopping at whatever blocks the player first (a fence does; an arrow-block barrier does not).",
+ "label": "Grapple",
+ "params": {
+  "solid": {
+   "default": true,
+   "doc": "the player collides with it"
+  }
+ },
+ "priority": 35,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "hits": [
+     {
+      "kind": "grapple"
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": "$solid",
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "hits": [
+     {
+      "kind": "grapple"
+     }
+    ],
+    "interactive": true
+   }
+  }
+ ]
+}

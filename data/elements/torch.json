@@ -1,0 +1,44 @@
+{
+ "doc": "A fire source: an arrow passing it is on fire for the rest of the shot (flag shot:fire, or `fire`).",
+ "label": "Torch",
+ "params": {
+  "fire": {
+   "default": "shot:fire",
+   "doc": "the fire's flag"
+  }
+ },
+ "priority": 54,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "$fire",
+      "kind": "state",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "$fire",
+      "kind": "state",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "interactive": true
+   }
+  }
+ ]
+}

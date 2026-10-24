@@ -10,7 +10,6 @@
 namespace rcg::kinematics {
 namespace {
 
-constexpr double R0 = RADIUS + SKIN; // the distance kept from a collider
 constexpr double EPS = 1e-9;
 
 // Is a point of the arc's circle (at direction (ux, uy) from its center) on the arc?
@@ -84,7 +83,7 @@ void consider(Hit &best, double t, double nx, double ny) {
 }
 
 // The first contact of the moving circle (P along d) with a collider.
-void sweep(const Collider &c, double px, double py, double dx, double dy, Hit &best) {
+void sweep(const Collider &c, double px, double py, double dx, double dy, Hit &best, double R0) {
 	if (!c.arc) {
 		const double ex = c.bx - c.ax, ey = c.by - c.ay;
 		const double len = std::sqrt(ex * ex + ey * ey);
@@ -231,7 +230,10 @@ std::vector<Collider> colliders_of(const std::vector<BuiltSurface> &world, const
 	return out;
 }
 
-void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders) {
+void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders) { step_body(body, in, gravity, colliders, RADIUS); }
+
+void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, double radius) {
+	const double R0 = radius + SKIN;
 	// the velocity (player.gd), float32 as the engine keeps it
 	V2 v = body.vel;
 	const bool has_gravity = gravity.length_squared() > 0.0f;
@@ -263,7 +265,7 @@ void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Coll
 		}
 		Hit best;
 		for (const Collider &c : colliders) {
-			sweep(c, px, py, mx, my, best);
+			sweep(c, px, py, mx, my, best, R0);
 		}
 		if (best.t > 1.0) {
 			px += mx;
@@ -326,6 +328,27 @@ void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Coll
 	body.pos = V2::of(px, py);
 	body.vel = V2::of(vx, vy);
 	body.on_floor = on_floor;
+}
+
+double sweep_fraction(double px, double py, double dx, double dy, const std::vector<Collider> &colliders, double radius) {
+	Hit best;
+	for (const Collider &c : colliders) {
+		sweep(c, px, py, dx, dy, best, radius + SKIN);
+	}
+	return std::min(best.t, 1.0);
+}
+
+Collider circle_collider(const V2 &center, double r) {
+	Collider c;
+	c.arc = true;
+	c.full = true;
+	c.cx = center.x;
+	c.cy = center.y;
+	c.r = r;
+	c.ax = c.bx = double(center.x) + r;
+	c.ay = c.by = center.y;
+	c.seg = rc::arc::SegGeom::full_from_carrier(rc::arc::from_circle(center, r));
+	return c;
 }
 
 } // namespace rcg::kinematics

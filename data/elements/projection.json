@@ -1,0 +1,114 @@
+{
+ "doc": "A projection (GAME_SPEC 10.4) on both sides: the arrow leaves along the carrier's normal (line/circle normal) or along a fixed direction (directional: normal), forward or back.",
+ "label": {
+  "$switch": "type",
+  "cases": {
+   "circle_directional_projection": {
+    "$switch": "back",
+    "cases": {
+     "false": "CircleDir",
+     "true": "CircleDirBack"
+    }
+   },
+   "circle_normal_projection": {
+    "$switch": "back",
+    "cases": {
+     "false": "CircleProjection",
+     "true": "CircleProjectionBack"
+    }
+   },
+   "line_directional_projection": {
+    "$switch": "back",
+    "cases": {
+     "false": "LineDir",
+     "true": "LineDirBack"
+    }
+   },
+   "line_normal_projection": {
+    "$switch": "back",
+    "cases": {
+     "false": "Projection",
+     "true": "ProjectionBack"
+    }
+   }
+  }
+ },
+ "params": {
+  "back": {
+   "default": false,
+   "doc": "project back instead of through"
+  },
+  "normal": {
+   "default": null,
+   "doc": "the direction of a directional projection",
+   "type": "point"
+  },
+  "solid": {
+   "default": false,
+   "doc": "the player collides with it"
+  },
+  "type": {
+   "default": "line_normal_projection",
+   "doc": "the projection (line_* on a line, circle_* on a circle)",
+   "enum": ["line_normal_projection", "circle_normal_projection", "line_directional_projection", "circle_directional_projection"]
+  }
+ },
+ "priority": 23,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "$switch": "type",
+     "cases": {
+      "circle_directional_projection": {
+       "back": "$back",
+       "normal": "$normal",
+       "type": "circle_directional_projection"
+      },
+      "circle_normal_projection": {
+       "back": "$back",
+       "type": "circle_normal_projection"
+      },
+      "line_directional_projection": {
+       "back": "$back",
+       "normal": "$normal",
+       "type": "line_directional_projection"
+      },
+      "line_normal_projection": {
+       "back": "$back",
+       "type": "line_normal_projection"
+      }
+     }
+    },
+    "interactive": true
+   },
+   "player_solid": "$solid",
+   "right": {
+    "effect": {
+     "$switch": "type",
+     "cases": {
+      "circle_directional_projection": {
+       "back": "$back",
+       "normal": "$normal",
+       "type": "circle_directional_projection"
+      },
+      "circle_normal_projection": {
+       "back": "$back",
+       "type": "circle_normal_projection"
+      },
+      "line_directional_projection": {
+       "back": "$back",
+       "normal": "$normal",
+       "type": "line_directional_projection"
+      },
+      "line_normal_projection": {
+       "back": "$back",
+       "type": "line_normal_projection"
+      }
+     }
+    },
+    "interactive": true
+   }
+  }
+ ]
+}

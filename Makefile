@@ -25,7 +25,7 @@ BUILD_EXT := native/build
 BUILD_ASAN := native/build-asan
 
 .PHONY: violations quick gate-clear-cache test run test-verbose frame-bench perf perf-diff oracle-test pyhost \
-	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps \
+	core check native native-debug native-asan ctest gates gate manifests judge rebless regen regen-apply dumps lowered \
 	sessions sessions-check godot-data
 
 # ---------------------------------------------------------------- native (C++)
@@ -191,6 +191,12 @@ regen-apply:
 DUMPS_DIR ?= $(CURDIR)/bench/scenes
 dumps: core
 	$(BUILD_CORE)/rc_tool dumps data/levels "$(DUMPS_DIR)"
+# the levels' rc-level/1 lowerings (bench/lowered/<dir>__<name>.json): what the
+# oracle's independent builder (docs/research/oracle/level_json.py) reads; the
+# lowered gate fails while they are stale
+LOWERED_DIR ?= $(CURDIR)/bench/lowered
+lowered: core
+	$(BUILD_CORE)/rc_tool lower data/levels "$(LOWERED_DIR)"
 
 # Stage 118: the Python host (tests/host_py, ctypes over the C API's shared
 # library): every session through the C API equals the golden, the errors, the draw list

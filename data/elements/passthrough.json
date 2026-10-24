@@ -1,0 +1,23 @@
+{
+ "doc": "A surface nothing collides with: the arrow passes (a step boundary, nothing else) and so does the player. A marker.",
+ "label": "PassThrough",
+ "params": {},
+ "priority": 13,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   }
+  }
+ ]
+}

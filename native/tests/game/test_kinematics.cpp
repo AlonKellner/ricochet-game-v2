@@ -103,7 +103,12 @@ TEST_CASE("kinematics: no penetration, no tunnelling, on random input over every
 		CAPTURE(e.path().filename().string());
 		levels++;
 		for (const V2 &g : {V2{}, V2{0, 980}}) {
-			rcg::GodotRng rng(std::uint64_t(levels) * 7919u + (g.y > 0 ? 1u : 0u));
+			// seeded by the level's own path (FNV-1a), so a level added elsewhere changes no other level's walk
+			std::uint64_t seed = 0xcbf29ce484222325ull;
+			for (const char c : std::filesystem::relative(e.path(), root).generic_string()) {
+				seed = (seed ^ std::uint64_t(static_cast<unsigned char>(c))) * 0x100000001b3ull;
+			}
+			rcg::GodotRng rng(seed + (g.y > 0 ? 1u : 0u));
 			k::Body b{*lv.player_start, V2{}, false};
 			if (clearance(cs, b.pos.x, b.pos.y) < k::RADIUS) {
 				continue; // a start inside a solid (none today)
@@ -120,10 +125,14 @@ TEST_CASE("kinematics: no penetration, no tunnelling, on random input over every
 				// no penetration (the float32 rounding of the position aside)
 				const double cl = clearance(cs, b.pos.x, b.pos.y);
 				REQUIRE_MESSAGE(cl >= k::RADIUS - 1e-3, "tick " << t << " at " << b.pos.x << "," << b.pos.y << ": clearance " << cl);
-				// no tunnelling: the straight path between the ticks keeps its distance
+				// no tunnelling: the straight path between the ticks keeps its distance -- but for the sagitta
+				// of a slide around a convex corner within the tick (the true path keeps outside it; its chord
+				// of length L cuts in by at most L^2 / 8r); a tunnel would leave no clearance at all
+				const double chord = std::hypot(double(b.pos.x) - before.x, double(b.pos.y) - before.y);
+				const double sagitta = chord * chord / (8.0 * k::RADIUS);
 				for (int s = 1; s < 8; s++) {
 					const double x = before.x + (b.pos.x - before.x) * s / 8.0, y = before.y + (b.pos.y - before.y) * s / 8.0;
-					REQUIRE_MESSAGE(clearance(cs, x, y) >= k::RADIUS - 1e-3, "tick " << t << " between the ticks");
+					REQUIRE_MESSAGE(clearance(cs, x, y) >= k::RADIUS - 1e-3 - sagitta, "tick " << t << " between the ticks");
 				}
 				ticks++;
 			}

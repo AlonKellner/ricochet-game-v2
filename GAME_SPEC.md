@@ -41,7 +41,12 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the levels as data (`rc-level/1`, §19.1), the session replay golden, the headless host `rc_tool` (docs/TDD_20, Stage 115) | Done |
 | Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done |
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
-| Level editor | Planned |
+| Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
+| Carriers: lines and circles elements are placed on (`carrier`, `from`, `to`), an authoring construct the lowering projects onto (§19.1; docs/TDD_53, Stage 149) | Done |
+| The novel-element kit: per-shot flags (`shot:*`, erased at landing) and templates for breakable, toggle, frost, fire and charge elements (§10.6; docs/ELEMENTS.md, docs/TDD_52, Stage 147) | Done |
+| Objects, the pull and the grapple: circle bodies (pullable ones fall under gravity); a pull brings an object back along the arrow's path, a grapple takes the player along it, either stopped by what blocks the traveller (§10.6, §25.5-25.6; docs/TDD_51, Stage 146) | Done |
+| The goal and detectors: a level's goal region gated by flag conditions, won when the player stands in it; detectors writing flags as the player moves; a level without a goal won when every target is hit (§3.2, §24.5-24.6; docs/TDD_50, Stage 145) | Done |
+| Level editor: native (`rcg::Editor`, the C API's `rc_editor_*`), its tools, panel, validation and play-test; the Python host (tkinter) and the Godot host (`RicochetEditor`) (§19.2; docs/EDITOR.md, docs/TDD_48-49, Stages 143-144) | Done |
 | Menus, HUD, save system | Planned |
 
 *Historical:* versions v0.7.0–v1.6.0 of the legacy `Tracer` (three-tier endpoint detection, boundless tracer, Hermitian carrier transform, DRY refactor) were superseded by the beam solver and deleted in Stage 84. See `docs/TDD_09_PRECISION_INTEGRATION.md`.
@@ -132,7 +137,7 @@ A **puzzle** is a level: a scene containing surfaces, a player spawn point, and 
 
 | Condition | Trigger |
 |-----------|---------|
-| **Win** | All target surfaces in the level have been hit (across one or more shots). |
+| **Win** | A level with a **goal** (§24.6, Stage 145): the player stands in the goal region while the goal's conditions hold. A level without one: all target surfaces in the level have been hit (across one or more shots). The win is latched: it holds until an undo or a reset takes the game back before it. |
 | **No failure state** | There is no intended failure. As long as the player has not won, they can continue making shot attempts without limit. A shot that misses all targets is not "failure" — it is simply an attempt. The player can always try again. |
 | **Exception** | A specific puzzle may explicitly design a failure condition (e.g., a breakable surface that cannot be restored). This must be opt-in per level, not a default engine behavior. |
 
@@ -812,6 +817,8 @@ Hit effects are the second axis of a side (§9.1), orthogonal to the path effect
 HitEffect:
     deferred: bool      # per instance: apply at landing instead of in the shot (only if it has an in-shot form)
 
+GrappleHit                        # at landing (Stage 146): the player travels the shot's path to the hit (§25.6)
+PullHit                           # at landing (Stage 146): the hit object travels the path back to the player (§25.6)
 StateChangeHit(key, op, value)    # in shot: the flag write
 TargetHit                         # in shot: SET "target:<surface id>" = true
 ResetHit(channels)                # in shot: SET "chan:<c>" = "armed" for each channel
@@ -821,7 +828,7 @@ SpawnHit(channel, template)       # in shot: SET "chan:<c>" = "pending" (consume
 
 **Timing.**
 - **IN_SHOT is the default.** A hit effect is applied *in the shot* (the solver sees it) whenever it has an elegant in-shot form, which is a flag write. Flags drive resolvers (§9.4) and presence (§9.6), so an in-shot write can change the rest of the same shot.
-- **ON_LANDING** is used only for what has no in-shot form. Today that is one thing: placing a spawned surface, whose geometry comes from the shot itself. Letting the shot see a surface it creates would make the path depend on itself.
+- **ON_LANDING** is used only for what has no in-shot form: placing a spawned surface, whose geometry comes from the shot itself (letting the shot see a surface it creates would make the path depend on itself), and a journey (§25.6), which moves the player or an object along the finished path.
 - **Deferral is per instance.** Any in-shot effect may be marked `deferred`: it then fires by the same rule but applies only when the arrow lands. The reverse is not possible in general.
 
 **Firing.** One rule applies to every hit effect, whatever its timing: it fires when its side fires.
@@ -876,6 +883,13 @@ State changes can write to **any** key in the game state dictionary, not just th
 Note the asymmetry: surfaces read from their resolver's configured key(s) via `ConfigResolver`, but `StateChange` can write to any key. A surface can affect surfaces it has no read-relationship with.
 
 State changes are applied sequentially along the trace. If multiple hits write to the same key, the last writer wins. Deterministic because hit ordering is deterministic (§11.3).
+
+#### Per-shot flags (Stage 147)
+
+A flag whose key starts with `shot:` is a state of the arrow, not of the world: like `ghost`, it is erased from
+the flags promoted when the arrow lands, so every shot starts without it. Elements use per-shot flags for what the
+arrow carries (fire, frost, charge) and for what a shot does to the world only while it lasts (a breakable surface
+gone for the rest of the shot). docs/ELEMENTS.md ("The kit") lists the patterns.
 
 #### Ghost mode (Stage 86)
 
@@ -1811,13 +1825,43 @@ Scene state = Scene + GameState. Both trajectory and visibility use the same sce
 
 ### 19.1 Level data format
 
-A level is a JSON file, `data/levels/<dir>/<name>.json`, in the format `rc-level/1` (Stage 115; the full
-schema: `docs/LEVEL_FORMAT.md`). It is engine-neutral and the source of truth of the level: every host reads
-it through the native reader (`rcg::parse_level`), which is strict (an unknown key, a missing one or a value of
-the wrong type is an error naming its path) and correctly rounded (no engine's own decimal parser is used).
+A level is a JSON file, `data/levels/<dir>/<name>.json` (the full schema: `docs/LEVEL_FORMAT.md`). It is
+engine-neutral and the source of truth of the level: every host reads it through the native reader
+(`rcg::parse_level`), which is strict (an unknown key, a missing one or a value of the wrong type is an error
+naming its path) and correctly rounded (no engine's own decimal parser is used).
+
+Levels are written in **`rc-level/2`** (Stage 142): the level's parts, its initial flags and its **elements**.
+An element is an instance of a kind -- a wall, a mirror, a door, a button, ... -- with a name, a geometry and
+parameters. Every kind is a **template**, data that expands the element into surfaces (§9.1): the builtin kinds
+are `data/elements/<kind>.json`, and a level may add or replace kinds with its own `templates`
+(`docs/ELEMENTS.md`). New elements are designed as templates, without code, as long as they are expressible with
+surfaces' path effects, hit effects, resolvers and presence (§9.4, §9.6, §10.6); behaviour beyond that is a new
+primitive in the game.
 
 ```
-Level:
+Level (rc-level/2):
+    schema:      "rc-level/2"
+    name, bounds, gravity, room, player, camera, background, colliders, features   # as in rc-level/1
+    flags:       {key: value}                # the flags the level starts with (default none)
+    elements:    [Element]                   # in build order
+    templates:   {kind: Template}            # the level's own kinds (docs/ELEMENTS.md)
+    carriers:    [{name, line {a, b} | circle {center, radius}}]   # Stage 149: what elements are placed on
+
+Element:
+    kind:        String                      # a template's kind, "edges" (the edge walls here) or "raw"
+    name:        String                      # unique; flags derive from it (door:<name>)
+    start, end, via | circle {center, radius}    # the geometry, shared by the element's surfaces
+      | carrier, from, to (, via)            # ... or on a carrier: projected onto it by the lowering
+    straight, label, flip                    # flip: left and right swapped
+    <parameters>                             # the kind's own
+```
+
+The reader **lowers** an `rc-level/2` level to `rc-level/1`: the room's walls when the room is built, every
+element's surfaces in order, the four edge walls (where an `edges` element stands, else here), the
+pre-transform circles last, with consecutive ids in that order (a portal two). `rc-level/1` is read as it is:
+
+```
+Level (rc-level/1):
     schema:      "rc-level/1"
     name:        String                      # its path under data/levels
     bounds:      [x, y, w, h]                # the level's edge (default 0, 0, 1920, 1080)
@@ -1842,16 +1886,15 @@ Surface:
     player_solid:   bool
 ```
 
-Every point is read as float32 (the game's vectors); other numbers stay float64. Surface ids are explicit and
-consecutive in build order (the room's walls, the surfaces, the four edge walls, the pre-transform circles).
-Initial flags are not part of the format yet (every level starts with none); cycle overrides (§17) are
-not either.
+Every point is read as float32 (the game's vectors); other numbers stay float64. Surface ids are derived from
+the build order and never written in `rc-level/2`; an element's identity is its name. Cycle overrides (§17) are
+not part of the format.
 
 **Level discovery:** the levels are the files under `data/levels/`.
 
 ### 19.2 Editor requirements
 
-> **Status: PLANNED** — The level editor is not yet implemented. Levels are currently created programmatically in code.
+> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
 
 The level editor must support:
 
@@ -1873,15 +1916,17 @@ The editor previews the compound effect's combined Mobius matrix and indicates w
 
 The editor validates constraints in real time as surfaces are edited (not just on save). Invalid surfaces (zero-length, wrong carrier type for effect) are highlighted in red. Deleting a surface referenced in a cache override shows a warning.
 
-Surface IDs are assigned by a monotonically incrementing counter persisted in the level file. Deleted IDs are never reused.
+Elements are identified by their names (§19.1); surface ids are derived from the build order, never stored.
 
 ### 19.3 Serialization
 
 Levels serialize to JSON (§19.1) in one canonical spelling: object keys sorted, one per line, indented by one
 space per level; an array of scalars on one line, any other array one element per line; every float as its
 shortest round-trip decimal (`rc_tool fmt`; ctest `rcg_levels_canonical`). The data is the authoring form:
-the three points of a surface (or its circle), its sides and resolver; the carriers and everything else are
-derived when the level is built (Principle 21). The scene defs the solver reads are derived from it too
+the elements, each with the three points of its surfaces (or their circle) and its parameters; the surfaces,
+their ids, the carriers and everything else are derived when the level is built (Principle 21). The lowering
+(`rc_tool lower` -> `bench/lowered`) is what the oracle's independent builder reads; `rc_tool migrate` turns an
+`rc-level/1` level into elements, exactly (its lowering is the original byte for byte). The scene defs the solver reads are derived from it too
 (`rc_tool dumps` -> `bench/scenes`).
 
 ---
@@ -2138,6 +2183,37 @@ A level may have multiple target surfaces. The level is complete when all target
 
 The target system is extensible to point targets (tolerance-based) or region targets. The spec defines surface targets as the default.
 
+### 24.5 Detectors
+
+> **Status: implemented (Stage 145, docs/TDD_50_OBJECTIVE.md).**
+
+A **detector** writes a flag as the player moves, so a level reacts to where the player goes: a door opens as
+the player steps on a plate. It is a region (a rectangle or a circle) or a segment, with a flag (default
+`det:<name>`), a value (default `true`) and a mode:
+
+| Mode | Writes |
+|---|---|
+| `while` | the value while the player's center is in the region; the flag is unset outside (a region only) |
+| `enter` | the value when the player enters the region, or crosses the segment |
+| `toggle` | the flag's negation (a missing flag is false) on entering, or on crossing |
+
+Detectors are checked after every physics tick, against the player's center: a region on its boundary counts
+as inside, and a segment is crossed when a tick's move goes from one side of its line onto or past it within the
+segment (a move off the line is no crossing). Their writes are ordinary flag writes (§10.6): presence (§9.6) and
+resolvers (§9.4) follow at once, so does the player's collision. The flags, and which regions the player is in,
+are part of the checkpoint (§3.3). A detector `for` objects waits for objects (a later stage).
+
+### 24.6 The goal
+
+> **Status: implemented (Stage 145).**
+
+A level may have a **goal**: a region and conditions (the presence form, §9.6: `{key, values}`, all required).
+The goal is **open** while its conditions hold. The player wins by standing in it while it is open (checked
+after every physics tick and when a shot lands). Targets are then ordinary flag writers that open doors or the
+goal; a level without a goal keeps the all-targets rule (§3.2). The goal is drawn green: dashed while locked,
+solid when open, filled when won. A level with a goal shows `Goal: locked | open | reached!` as the HUD's first
+line, and its session record holds `won`.
+
 ---
 
 ## 25. Player character
@@ -2179,6 +2255,32 @@ a floor stays on it).
 - **Undo last shot** (Z): reverts to the checkpoint before the most recent shot — player position, game state, and plan are restored. Checkpoint stack allows stepping back through multiple shots.
 - **Clear plan** (C): clears the plan without affecting player position or game state.
 - **Full reset** (R): reverts to the level's initial state — player returns to spawn, all surfaces restored, all state reset, checkpoint stack cleared.
+
+### 25.5 Objects
+
+> **Status: implemented (Stage 146, docs/TDD_51_BODIES.md).**
+
+An **object** is a circle body with a surface: a full circle whose sides are a wall's (terminal), a mirror's or a
+pass, player-solid by default. A **pullable** object falls under the level's gravity and rests on what holds it,
+moved by the player's controller at its own radius. It meets the player (a falling object stops on the player),
+but not other objects (v1). A **static** object stays. Its surface takes the next ids after the level's
+surfaces, so it is planned and hit like any surface, and it moves with the body. While an object moves, nothing
+is fired. The bodies' positions are part of the checkpoint, and detectors `for` objects see their centers
+(§24.5, regions only).
+
+### 25.6 The pull and the grapple
+
+A **pull** (a pullable object's sides carry it) and a **grapple** (the `grapple` element's sides) are hit
+effects applied when the shot lands (§10.6). The first one the shot fired starts a **journey** along the
+physical path:
+- a grapple takes the player forward, from the origin to the hit;
+- a pull takes the object back, from the hit to the player, keeping its center's offset from the hit point.
+
+The traveller moves at 900 px/s, swept against what it collides with: present player-solid surfaces and
+colliders, and for an object the player. It stops at the first contact or at the path's end. A fence (an
+arrow-pass barrier) stops it; an arrow-block barrier is not solid and does not. A step that starts where the last
+did not end (a portal) is crossed by a jump, and a step through infinity ends the path. The game is paused during
+a journey as during a flight (`flying`), and the journey is part of the shot.
 
 ### 25.4 Visual
 
@@ -2694,4 +2796,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.53.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.60.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

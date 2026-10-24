@@ -233,8 +233,8 @@ json describe_config(const std::optional<BuiltSide> &cfg, int host_id) {
 		d["states"] = writes;
 	}
 	for (const HitSpec &h : cfg->hits) {
-		if (h.deferred) {
-			d["landing"] = true; // (Stage 134: its hit changes the game at the landing)
+		if (h.deferred || h.kind == "grapple" || h.kind == "pull") {
+			d["landing"] = true; // (Stage 134: its hit changes the game at the landing; Stage 146: a journey)
 		}
 	}
 	return d;
@@ -276,7 +276,7 @@ std::optional<rc::SideDef> side_def(const std::optional<BuiltSide> &cfg, int hos
 		d.states.push_back(std::move(c));
 	}
 	for (const HitSpec &h : cfg->hits) {
-		d.landing = d.landing || h.deferred; // (Stage 134: its hit matters at the landing)
+		d.landing = d.landing || h.deferred || h.kind == "grapple" || h.kind == "pull"; // (Stage 134; Stage 146: a journey)
 	}
 	return d;
 }

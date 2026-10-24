@@ -60,7 +60,9 @@ struct Node {
 // Stage 120: a node's identity without JSON -- its kind and ids -- and a node
 // of a frame whose calls are shared (a painter's cached output) with the
 // content version a host compares to skip what did not change.
-enum class NodeKind : uint8_t { Background, Player, Cursor, Path, Arrow, Hud, Surface, Edge, Visibility, Spawn };
+// Editor (rcg/editor.hpp): a layer (a) and an index (b), key ["editor", a, b];
+// Goal, Detector (Stage 145): the level's goal ["goal"], a detector ["detector", a]
+enum class NodeKind : uint8_t { Background, Player, Cursor, Path, Arrow, Hud, Surface, Edge, Visibility, Spawn, Editor, Goal, Detector };
 struct NodeKey {
 	NodeKind kind = NodeKind::Background;
 	int a = 0, b = 0; // a surface's id and piece

@@ -1,0 +1,77 @@
+{
+ "doc": "A freezable wall: a solid barrier that a frosted arrow (frost_barrier) freezes into a mirror for that one hit, which uses the frost up.",
+ "label": "Freezable",
+ "params": {
+  "frost": {
+   "default": "shot:frost",
+   "doc": "the frost's flag"
+  },
+  "solid": {
+   "default": true,
+   "doc": "the player collides with it"
+  }
+ },
+ "priority": 53,
+ "surfaces": [
+  {
+   "left": null,
+   "player_solid": "$solid",
+   "resolver": {
+    "key": "$frost",
+    "table": [
+     [
+      "DEFAULT",
+      {
+       "left": {
+        "effect": {
+         "type": "terminal"
+        },
+        "interactive": false
+       },
+       "right": {
+        "effect": {
+         "type": "terminal"
+        },
+        "interactive": false
+       }
+      }
+     ],
+     [
+      "true",
+      {
+       "left": {
+        "effect": {
+         "type": "reflection"
+        },
+        "hits": [
+         {
+          "key": "$frost",
+          "kind": "state",
+          "op": "set",
+          "value": false
+         }
+        ],
+        "interactive": true
+       },
+       "right": {
+        "effect": {
+         "type": "reflection"
+        },
+        "hits": [
+         {
+          "key": "$frost",
+          "kind": "state",
+          "op": "set",
+          "value": false
+         }
+        ],
+        "interactive": true
+       }
+      }
+     ]
+    ]
+   },
+   "right": null
+  }
+ ]
+}

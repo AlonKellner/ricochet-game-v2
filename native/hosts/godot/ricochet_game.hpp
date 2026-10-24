@@ -46,6 +46,10 @@ private:
 	std::string blob_;
 };
 
+// A draw list (rc_game_draw_changes, rc_editor_draw_changes) onto `layers`: a
+// RicochetLayer per node key (by_key), the HUD's label (hud) made on first use.
+void apply_draw_list(godot::Node2D *layers, std::map<std::string, RicochetLayer *> &by_key, const rc_draw_list &l, godot::Label *&hud);
+
 class RicochetGame : public godot::Node2D {
 	GDCLASS(RicochetGame, godot::Node2D)
 
@@ -55,6 +59,9 @@ public:
 
 	void set_level_path(const godot::String &p) { level_path_ = p; }
 	godot::String get_level_path() const { return level_path_; }
+	// the level's JSON text itself, instead of a file (the editor's play-test)
+	void set_level_json(const godot::String &t) { level_json_ = t; }
+	godot::String get_level_json() const { return level_json_; }
 	void set_visibility(int v) { visibility_ = v; }
 	int get_visibility() const { return visibility_; }
 
@@ -100,10 +107,12 @@ private:
 	void sync();
 	godot::Vector2 cursor() const;
 	bool start(const godot::String &level_path); // the game of a level (its layers, camera)
+	bool start_text(const godot::String &text, const godot::String &what);
 	void stop();
 	void show_violation(int index);
 
 	godot::String level_path_;
+	godot::String level_json_;
 	int visibility_ = -1;
 	bool physics_ = true;
 	bool asynchronous_ = true;

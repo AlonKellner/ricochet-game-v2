@@ -149,7 +149,7 @@ std::optional<Action> action_of(const std::string &name) {
 
 Session::Session(const Level &level, const SessionConfig &config)
 	: level_(level), visibility_override_(config.visibility), async_(config.async), budget_(config.budget) {
-	world_ = std::make_unique<World>(build_level(level_));
+	world_ = std::make_unique<World>(build_level(level_), level_.objects);
 	player_ = level_.player_start.value_or(V2{});
 	tick_from_ = player_;
 	settled_player_ = player_; // (a new session is standing still)
@@ -157,8 +157,13 @@ Session::Session(const Level &level, const SessionConfig &config)
 	for (rc::Tracer *t : {&gm_tracer_, &renderer_tracer_, &vis_tracer_}) {
 		t->set_pair_cache(false); // the session caches by its own inputs
 	}
+	// rc-level/2: the flags the level starts with (none in an rc-level/1 level)
+	for (const auto &[key, value] : level_.flags) {
+		flags_.set(key, value);
+	}
 	// the initial checkpoint: taken before the level built its world (GameManager._ready)
-	initial_ = Checkpoint{player_, V2{}, rc::Flags{}, {}, {}, std::nullopt};
+	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt, false, {}};
+	hud_ = hud_text(); // (Stage 145: a goal's line; "" without a goal and a plan)
 	for (const BuiltSurface &s : world_->surfaces()) {
 		for (const BuiltSide *side : s.all_sides()) {
 			for (const HitSpec &h : side ? side->hits : std::vector<HitSpec>{}) {
@@ -614,7 +619,7 @@ void Session::click(bool right) {
 }
 
 Session::Checkpoint Session::capture() const {
-	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot()};
+	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot(), won_, inside_};
 }
 
 void Session::restore(const Checkpoint &c) {
@@ -627,6 +632,8 @@ void Session::restore(const Checkpoint &c) {
 	plan_ = c.plan;
 	plan_changed();
 	targets_ = c.targets;
+	won_ = c.won;
+	inside_ = c.inside;
 	refresh_ui();
 }
 
@@ -674,6 +681,16 @@ void Session::land() {
 	sync_nodes();
 	rc::Flags kept = l.flags;
 	kept.erase("ghost");
+	// Stage 147: the per-shot flags (shot:*) last one shot, like ghost
+	std::vector<std::string> per_shot;
+	for (const auto &[k, v] : kept.entries()) {
+		if (k.rfind("shot:", 0) == 0) {
+			per_shot.push_back(k);
+		}
+	}
+	for (const std::string &k : per_shot) {
+		kept.erase(k);
+	}
 	set_flags(kept);
 	targets_.clear();
 	for (const auto &[k, v] : flags_.entries()) {
@@ -683,6 +700,8 @@ void Session::land() {
 		}
 	}
 	pending_flags_.reset();
+	start_journey();
+	check_won();
 	// Plan entries on surfaces no longer in the world, or absent, are dropped (the ∞ entry stays)
 	const size_t before = plan_.size();
 	plan_.erase(std::remove_if(plan_.begin(), plan_.end(),
@@ -748,8 +767,8 @@ std::vector<std::pair<int, Overlay>> plan_overlays(const std::vector<PlanEntry> 
 }
 
 bool Session::start_fire() {
-	if (flying_ || player_ == cursor_) {
-		return false;
+	if (flying_ || journey_ || bodies_moving_ || player_ == cursor_) {
+		return false; // (Stage 146: nothing is fired while anything moves)
 	}
 	checkpoints_.push_back(capture());
 	std::optional<rc::TracePair> pair;
@@ -815,6 +834,11 @@ void Session::clear_hover() {
 }
 
 void Session::advance(double dt, const kinematics::Input &in) {
+	if (journey_) {
+		advance_journey(dt);
+		settle();
+		return;
+	}
 	if (flying_) {
 		const double distance = ARROW_SPEED * flight_multiplier_ * dt;
 		const rc::arc::AdvanceResult r = rc::arc::advance(flight_geoms_, flight_index_, flight_progress_, arrow_pos_, distance, bounds());
@@ -849,6 +873,257 @@ void Session::tick(const kinematics::Input &in) {
 	player_ = body.pos;
 	velocity_ = body.vel;
 	on_floor_ = body.on_floor;
+	if (!world_->bodies().empty()) {
+		step_bodies();
+	}
+	if (!level_.detectors.empty()) {
+		detect(tick_from_, player_);
+	}
+	if (!won_ && level_.objective) {
+		check_won();
+	}
+}
+
+namespace {
+
+// The move from -> to crosses segment a-b: from strictly on one side to the
+// other side or onto the line, within the segment (a move off the line is no crossing).
+bool crosses(const V2 &from, const V2 &to, const V2 &a, const V2 &b) {
+	auto orient = [](const V2 &p, const V2 &q, const V2 &r) {
+		return (double(q.x) - p.x) * (double(r.y) - p.y) - (double(q.y) - p.y) * (double(r.x) - p.x);
+	};
+	const double d1 = orient(a, b, from), d2 = orient(a, b, to);
+	if (!((d1 < 0 && d2 >= 0) || (d1 > 0 && d2 <= 0))) {
+		return false;
+	}
+	const double d3 = orient(from, to, a), d4 = orient(from, to, b);
+	return (d3 <= 0 && d4 >= 0) || (d3 >= 0 && d4 <= 0);
+}
+
+} // namespace
+
+// Stage 145 (GAME_SPEC 24.5): a region's detector writes on entering (enter,
+// toggle) or while the player is in it (while: the value inside, unset
+// outside); a segment's when the player crosses it.
+void Session::detect(const V2 &from, const V2 &to) {
+	if (inside_.size() != level_.detectors.size()) {
+		inside_.assign(level_.detectors.size(), false);
+	}
+	rc::Flags f = flags_;
+	for (size_t i = 0; i < level_.detectors.size(); i++) {
+		const Detector &d = level_.detectors[i];
+		// the player (for player | any), the objects (for object | any: a region only, by their centers)
+		bool in = false;
+		if (!d.segment) {
+			in = d.target != "object" && d.region.contains(to);
+			if (d.target != "player") {
+				for (const World::Body &b : world_->bodies()) {
+					in = in || d.region.contains(b.pos);
+				}
+			}
+		}
+		const bool fire = d.segment ? d.target != "object" && crosses(from, to, d.a, d.b) : in && !inside_[i];
+		if (d.mode == "while") {
+			if (in != inside_[i]) {
+				if (in) {
+					f.set(d.flag, d.value);
+				} else {
+					f.erase(d.flag);
+				}
+			}
+		} else if (fire) {
+			f = f.applied(rc::StateChangeDef{d.flag, d.mode == "toggle", d.value});
+		}
+		inside_[i] = in;
+	}
+	const int before = flags_version_;
+	set_flags(f);
+	if (flags_version_ != before) {
+		hud_ = hud_text();
+	}
+}
+
+// ---------------------------------------------------------------- Stage 146: bodies and journeys
+
+namespace {
+constexpr double JOURNEY_SPEED = 900.0; // px/s along the path
+constexpr double JOURNEY_SAMPLE = 4.0;  // px between the path's points
+} // namespace
+
+std::vector<kinematics::Collider> Session::colliders_except(int body) const {
+	std::vector<kinematics::Collider> out;
+	const int skip = body >= 0 ? world_->bodies()[size_t(body)].id : -1;
+	for (const BuiltSurface &s : world_->surfaces()) {
+		if (s.id != skip && s.player_solid && !s.pre_transform && present(s, flags_)) {
+			out.push_back(kinematics::collider_of(s.seg));
+		}
+	}
+	for (const auto &k : level_.colliders) {
+		out.push_back(kinematics::segment_collider(k.a, k.b));
+	}
+	if (body >= 0) {
+		out.push_back(kinematics::circle_collider(player_, kinematics::RADIUS)); // a body meets the player
+	}
+	return out;
+}
+
+// Pullable bodies fall under gravity and rest on what holds them (no body meets
+// another, GAME_SPEC 25.5); static ones stay. A body that moved rebuilds its surface.
+void Session::step_bodies() {
+	bool moved = false;
+	for (size_t i = 0; i < world_->bodies().size(); i++) {
+		const World::Body &b = world_->bodies()[i];
+		if (!b.object.pullable || (gravity_.length_squared() == 0.0f && b.vel.length_squared() == 0.0f)) {
+			continue;
+		}
+		kinematics::Body k{b.pos, b.vel, b.on_floor};
+		kinematics::step_body(k, kinematics::Input{}, gravity_, colliders_except(int(i)), b.object.radius);
+		moved = moved || k.pos != b.pos;
+		world_->set_body(i, k.pos, k.vel, k.on_floor);
+	}
+	if (moved) {
+		sync_nodes();
+	}
+	bodies_moving_ = moved;
+}
+
+void Session::start_journey() {
+	for (const rc::HitRecord &h : pending_path_.hits) {
+		if (!h.fired) {
+			continue;
+		}
+		const BuiltSurface *s = world_->by_id(h.surface_id);
+		const BuiltSide *cfg = s ? active_side(*s, h.side == rc::Side::Left ? Side::Left : Side::Right, h.flags_before) : nullptr;
+		if (cfg == nullptr) {
+			continue;
+		}
+		bool grapple = false, pull = false;
+		for (const HitSpec &hs : cfg->hits) {
+			grapple = grapple || hs.kind == "grapple";
+			pull = pull || hs.kind == "pull";
+		}
+		const int body = pull ? world_->body_of(h.surface_id) : -1;
+		if (!grapple && body < 0) {
+			continue;
+		}
+		// the path: the shot's steps up to the hit, every few pixels; a step that does not start where the
+		// last ended (a portal) is reached by a jump; a step through infinity ends the path
+		Journey j;
+		j.body = grapple ? -1 : body;
+		std::vector<int> leg;
+		for (int k = 0; k <= h.step_index && k < int(pending_path_.steps.size()); k++) {
+			const rc::TraceStep &st = pending_path_.steps[size_t(k)];
+			if (st.start.is_inf() || st.end.is_inf()) {
+				break;
+			}
+			const rc::arc::StepGeom g = rc::sweep::step_geom(st);
+			const bool arc = rc::arc::step_is_arc(g);
+			const double len = arc ? rc::arc::arc_length(g) : double((st.end - st.start).length());
+			const int n = std::max(1, int(std::ceil(len / JOURNEY_SAMPLE)));
+			for (int m = j.path.empty() ? 0 : (st.start == j.path.back() ? 1 : 0); m <= n; m++) {
+				const double t = double(m) / n;
+				j.path.push_back(arc ? rc::arc::arc_interpolate(g, t).position : st.start + (st.end - st.start) * float(t));
+				leg.push_back(k);
+			}
+		}
+		if (j.path.empty() || j.path.back() != h.point) {
+			j.path.push_back(h.point);
+			leg.push_back(leg.empty() ? 0 : leg.back());
+		}
+		if (j.body >= 0) {
+			std::reverse(j.path.begin(), j.path.end());
+			std::reverse(leg.begin(), leg.end());
+			j.offset = world_->bodies()[size_t(j.body)].pos - h.point;
+		}
+		j.jump.assign(j.path.size(), false);
+		for (size_t m = 1; m < j.path.size(); m++) {
+			j.jump[m] = leg[m] != leg[m - 1] && (j.path[m] - j.path[m - 1]).length() > 1e-3f;
+		}
+		if (j.path.size() >= 2) {
+			journey_ = std::move(j);
+		}
+		return; // the first fired grapple or pull of the shot
+	}
+}
+
+// The traveller moves along the path at JOURNEY_SPEED, swept against what it
+// meets: it stops at the first contact (a fence stops it, an arrow-only barrier
+// does not), or at the path's end.
+void Session::advance_journey(double dt) {
+	Journey &j = *journey_;
+	const bool player = j.body < 0;
+	const double radius = player ? kinematics::RADIUS : world_->bodies()[size_t(j.body)].object.radius;
+	V2 pos = player ? player_ : world_->bodies()[size_t(j.body)].pos;
+	const V2 from = pos;
+	const std::vector<kinematics::Collider> cs = colliders_except(j.body);
+	double left = JOURNEY_SPEED * dt;
+	bool done = false;
+	while (left > 0 && j.next < j.path.size()) {
+		const V2 target = j.path[j.next] + j.offset;
+		if (j.jump[j.next]) {
+			pos = target;
+			j.next++;
+			continue;
+		}
+		const V2 d = target - pos;
+		const double len = d.length();
+		const double frac = len <= left ? 1.0 : left / len;
+		const double t = kinematics::sweep_fraction(pos.x, pos.y, double(d.x) * frac, double(d.y) * frac, cs, radius);
+		pos = V2::of(double(pos.x) + double(d.x) * frac * t, double(pos.y) + double(d.y) * frac * t);
+		if (t < 1.0) {
+			done = true; // blocked
+			break;
+		}
+		left -= len * frac;
+		if (frac == 1.0) {
+			j.next++;
+		}
+	}
+	done = done || j.next >= j.path.size();
+	if (player) {
+		player_ = pos;
+		tick_from_ = pos;
+		velocity_ = V2{};
+		if (!level_.detectors.empty()) {
+			detect(from, pos);
+		}
+	} else {
+		world_->set_body(size_t(j.body), pos, V2{}, false);
+		sync_nodes();
+		if (!level_.detectors.empty()) {
+			detect(player_, player_);
+		}
+	}
+	if (done) {
+		journey_.reset();
+		check_won();
+	}
+}
+
+bool Session::goal_open() const { return level_.objective && holds(level_.objective->conditions, flags_); }
+
+void Session::check_won() {
+	if (won_) {
+		return;
+	}
+	bool w = false;
+	if (level_.objective) {
+		w = goal_open() && level_.objective->goal.contains(player_);
+	} else {
+		int targets = 0;
+		bool all = true;
+		for (const BuiltSurface &s : world_->surfaces()) {
+			if (s.is_target()) {
+				targets++;
+				all = all && flags_.is_true("target:" + std::to_string(s.id));
+			}
+		}
+		w = targets > 0 && all;
+	}
+	if (w) {
+		won_ = true;
+		hud_ = hud_text();
+	}
 }
 
 Flight Session::fire(int speedup_at, double frame_dt) {
@@ -856,7 +1131,7 @@ Flight Session::fire(int speedup_at, double frame_dt) {
 	if (!start_fire()) {
 		return f;
 	}
-	while (flying_) {
+	while (flying()) {
 		f.stream.push_back({arrow_pos_, arrow_dir_});
 		f.frames++;
 		advance(frame_dt, {});
@@ -934,10 +1209,12 @@ void Session::refresh_ui() {
 }
 
 std::string Session::hud_text() const {
+	// Stage 145: a level with a goal says where it stands
+	const std::string goal = !level_.objective ? std::string() : std::string("Goal: ") + (won_ ? "reached!" : goal_open() ? "open" : "locked");
 	if (plan_.empty()) {
-		return "";
+		return goal;
 	}
-	std::string out = "Plan:";
+	std::string out = goal.empty() ? std::string("Plan:") : goal + "\nPlan:";
 	for (size_t i = 0; i < plan_.size(); i++) {
 		const PlanEntry &e = plan_[i];
 		out += "\n  " + std::to_string(i + 1) + ". ";
@@ -1373,6 +1650,9 @@ json Session::record(const json &extra) const {
 		targets.push_back(id);
 	}
 	r["targets"] = targets;
+	if (level_.objective) {
+		r["won"] = won_; // Stage 145 (only a level with a goal: the older records are unchanged)
+	}
 	r["checkpoints"] = int(checkpoints_.size());
 	const std::optional<V2> q = self.pole(plan_.size());
 	r["pole"] = q ? digest::vec(*q) : json(nullptr);

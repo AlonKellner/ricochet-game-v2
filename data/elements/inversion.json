@@ -1,0 +1,51 @@
+{
+ "doc": "A circle inversion (an arc or a full circle): both sides invert, or only the left one (the other passes; flip for the right).",
+ "geometry": "circle",
+ "label": {
+  "$switch": "sides",
+  "cases": {
+   "both": "FullInversion",
+   "left": "Inversion"
+  }
+ },
+ "params": {
+  "sides": {
+   "default": "both",
+   "doc": "which sides invert",
+   "enum": ["both", "left"]
+  },
+  "solid": {
+   "default": true,
+   "doc": "the player collides with it"
+  }
+ },
+ "priority": 22,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "inversion"
+    },
+    "interactive": true
+   },
+   "player_solid": "$solid",
+   "right": {
+    "$switch": "sides",
+    "cases": {
+     "both": {
+      "effect": {
+       "type": "inversion"
+      },
+      "interactive": true
+     },
+     "left": {
+      "effect": {
+       "type": "pass"
+      },
+      "interactive": false
+     }
+    }
+   }
+  }
+ ]
+}

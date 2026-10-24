@@ -1,0 +1,39 @@
+{
+ "doc": "A ghost toggler (GAME_SPEC 10.6, ghost mode): crossing it turns the arrow into a ghost that passes every surface until the next ghost gate.",
+ "label": "GhostToggle",
+ "params": {},
+ "priority": 30,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "ghost",
+      "kind": "state",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "ghost",
+      "kind": "state",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "interactive": true
+   }
+  }
+ ]
+}

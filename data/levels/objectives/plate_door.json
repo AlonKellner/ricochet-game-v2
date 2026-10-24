@@ -1,0 +1,58 @@
+{
+ "background": {
+  "color": [0.10000000149011612, 0.10000000149011612, 0.10000000149011612, 1.0],
+  "rect": [0.0, 0.0, 1920.0, 1080.0]
+ },
+ "bounds": [0.0, 0.0, 1920.0, 1080.0],
+ "camera": null,
+ "colliders": [],
+ "detectors": [
+  {
+   "mode": "enter",
+   "name": "plate",
+   "region": {
+    "rect": [800.0, 640.0, 120.0, 120.0]
+   }
+  }
+ ],
+ "elements": [
+  {
+   "end": [960.0, 840.0],
+   "flag": "det:plate",
+   "kind": "door",
+   "name": "gate",
+   "start": [960.0, 240.0]
+  }
+ ],
+ "features": {
+  "arrow": true,
+  "cursor": true,
+  "game": true,
+  "hud": true,
+  "preview": true
+ },
+ "gravity": [0.0, 0.0],
+ "name": "objectives/plate_door",
+ "objective": {
+  "goal": {
+   "circle": {
+    "center": [1200.0, 540.0],
+    "radius": 70.0
+   }
+  },
+  "requires": [
+   {
+    "key": "det:plate",
+    "values": ["true"]
+   }
+  ]
+ },
+ "player": {
+  "start": [660.0, 540.0]
+ },
+ "room": {
+  "built": true,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}

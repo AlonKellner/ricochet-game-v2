@@ -11,6 +11,7 @@
 #include "rcg/geom.hpp"
 #include "rcg/landing.hpp"
 #include "rcg/level.hpp"
+#include "rcg/level2.hpp"
 #include "rcg/model.hpp"
 #include "rcg/session.hpp"
 #include "rcg/sweeps.hpp"
@@ -81,7 +82,7 @@ rcg::Level level_of(const std::vector<json> &surfaces) {
 // test_levels/combo_base with surface specs added (scene.surface_specs.append:
 // built after the level's own, before the edge walls; ids renumbered in order)
 rcg::Level combo_with(const std::vector<json> &extra) {
-	json lv = read_json(LEVELS / "test_levels" / "combo_base.json");
+	json lv = rcg::lower_level(read_json(LEVELS / "test_levels" / "combo_base.json")).level; // its rc-level/1 surfaces
 	json out = json::array();
 	int next = 1;
 	bool added = false;

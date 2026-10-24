@@ -1,0 +1,69 @@
+{
+ "doc": "A target: hitting it (either side) registers the flag target:<id> (GAME_SPEC 24).",
+ "label": "Target",
+ "params": {
+  "face": {
+   "default": "terminal",
+   "doc": "the path effect of both sides",
+   "enum": ["pass", "terminal", "reflection"]
+  },
+  "interactive": {
+   "default": true,
+   "doc": "plannable"
+  },
+  "solid": {
+   "default": false,
+   "doc": "the player collides with it"
+  }
+ },
+ "priority": 32,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "pass": {
+       "type": "pass"
+      },
+      "reflection": {
+       "type": "reflection"
+      },
+      "terminal": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": [
+     {
+      "kind": "target"
+     }
+    ],
+    "interactive": "$interactive"
+   },
+   "player_solid": "$solid",
+   "right": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "pass": {
+       "type": "pass"
+      },
+      "reflection": {
+       "type": "reflection"
+      },
+      "terminal": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": [
+     {
+      "kind": "target"
+     }
+    ],
+    "interactive": "$interactive"
+   }
+  }
+ ]
+}

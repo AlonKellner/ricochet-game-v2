@@ -6,6 +6,7 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/font.hpp>
+#include <godot_cpp/classes/geometry2d.hpp>
 #include <godot_cpp/classes/input.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
@@ -46,6 +47,11 @@ void append(std::string &blob, const T &v) {
 
 Color color_at(const float *c) { return Color(c[0], c[1], c[2], c[3]); }
 
+// A polygon Godot can fill: one its triangulation accepts. A degenerate one (a
+// sliver, coincident points: the arrow's head at some frame times) fills
+// nothing and makes canvas_item_add_polygon report an error; it is skipped.
+bool fillable(const PackedVector2Array &pts) { return pts.size() >= 3 && !Geometry2D::get_singleton()->triangulate_polygon(pts).is_empty(); }
+
 } // namespace
 
 // ---------------------------------------------------------------- RicochetLayer
@@ -67,8 +73,16 @@ void RicochetLayer::_draw() {
 		switch (k.kind) {
 			case RC_DRAW_LINE: draw_line(c.points[0], c.points[1], col, width); break;
 			case RC_DRAW_ARC: draw_arc(c.points[0], float(k.radius), float(k.start_angle), float(k.end_angle), k.arc_point_count, col, width); break;
-			case RC_DRAW_POLYGON: draw_polygon(c.points, c.colors); break;
-			case RC_DRAW_COLORED_POLYGON: draw_colored_polygon(c.points, col); break;
+			case RC_DRAW_POLYGON:
+				if (fillable(c.points)) {
+					draw_polygon(c.points, c.colors);
+				}
+				break;
+			case RC_DRAW_COLORED_POLYGON:
+				if (fillable(c.points)) {
+					draw_colored_polygon(c.points, col);
+				}
+				break;
 			case RC_DRAW_CIRCLE: draw_circle(c.points[0], float(k.radius), col); break;
 			case RC_DRAW_RECT: draw_rect(Rect2(c.points[0], c.points[1]), col); break;
 			case RC_DRAW_POLYLINE: draw_polyline(c.points, col, width); break;
@@ -83,9 +97,11 @@ void RicochetLayer::_draw() {
 				break;
 			case RC_DRAW_POLYGON2D:
 				// the player's Polygon2D: its polygon rotated in the node's frame
-				draw_set_transform(Vector2(), float(k.rotation), Vector2(1, 1));
-				draw_colored_polygon(c.points, col);
-				draw_set_transform(Vector2(), 0.0f, Vector2(1, 1));
+				if (fillable(c.points)) {
+					draw_set_transform(Vector2(), float(k.rotation), Vector2(1, 1));
+					draw_colored_polygon(c.points, col);
+					draw_set_transform(Vector2(), 0.0f, Vector2(1, 1));
+				}
 				break;
 			default: break; // RC_DRAW_LABEL: the HUD's Label (RicochetGame)
 		}
@@ -118,6 +134,9 @@ void RicochetGame::_bind_methods() {
 	ClassDB::bind_method(D_METHOD("layer_count"), &RicochetGame::layer_count);
 	ClassDB::bind_method(D_METHOD("is_flying"), &RicochetGame::is_flying);
 	ADD_PROPERTY(PropertyInfo(Variant::STRING, "level_path", PROPERTY_HINT_FILE, "*.json"), "set_level_path", "get_level_path");
+	ClassDB::bind_method(D_METHOD("set_level_json", "text"), &RicochetGame::set_level_json);
+	ClassDB::bind_method(D_METHOD("get_level_json"), &RicochetGame::get_level_json);
+	ADD_PROPERTY(PropertyInfo(Variant::STRING, "level_json", PROPERTY_HINT_NONE, "", PROPERTY_USAGE_NONE), "set_level_json", "get_level_json");
 	ADD_PROPERTY(PropertyInfo(Variant::INT, "visibility", PROPERTY_HINT_ENUM, "Default:-1,Off:0,On:1"), "set_visibility", "get_visibility");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "physics"), "set_physics", "get_physics");
 	ADD_PROPERTY(PropertyInfo(Variant::BOOL, "asynchronous"), "set_asynchronous", "get_asynchronous");
@@ -164,6 +183,10 @@ void RicochetGame::_ready() {
 		show_violation(0);
 		return;
 	}
+	if (!level_json_.is_empty()) {
+		start_text(level_json_, "level_json");
+		return;
+	}
 	start(level_path_);
 }
 
@@ -172,10 +195,14 @@ bool RicochetGame::start(const String &level_path) {
 		UtilityFunctions::push_error(String("RicochetGame: no level at ") + level_path);
 		return false;
 	}
-	const CharString text = FileAccess::get_file_as_string(level_path).utf8();
+	return start_text(FileAccess::get_file_as_string(level_path), level_path);
+}
+
+bool RicochetGame::start_text(const String &level_text, const String &what) {
+	const CharString text = level_text.utf8();
 	rc_level *level = nullptr;
 	if (rc_level_parse(text.get_data(), size_t(text.length()), &level) != RC_OK) {
-		report(level_path.utf8().get_data());
+		report(what.utf8().get_data());
 		return false;
 	}
 	const rc_game_config cfg{sizeof(rc_game_config), -1, visibility_, asynchronous_ ? 1 : 0, animate_ ? 1 : 0, float(solve_budget_ms_), 0.0f};
@@ -381,6 +408,13 @@ void RicochetGame::sync() {
 		report("rc_game_draw_list");
 		return;
 	}
+	apply_draw_list(layers_, by_key_, l, hud_);
+}
+
+// A draw list (rc_*_draw_changes) onto layers: one RicochetLayer per node key, in
+// draw order, its z, position and modulate set, its commands replaced unless the
+// node is unchanged; the HUD's label made on first use; the nodes gone removed.
+void apply_draw_list(Node2D *layers_, std::map<std::string, RicochetLayer *> &by_key_, const rc_draw_list &l, Label *&hud_) {
 	std::set<std::string> live;
 	for (uint32_t i = 0; i < l.node_count; i++) {
 		const rc_draw_node &n = l.nodes[i];

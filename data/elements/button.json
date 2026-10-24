@@ -1,0 +1,122 @@
+{
+ "doc": "A button: when the arrow hits it (either side), it sets or toggles a flag -- usually a door's (opens: the door's name).",
+ "example": {
+  "flag": "switch"
+ },
+ "label": "Button",
+ "params": {
+  "deferred": {
+   "default": false,
+   "doc": "applied when the arrow lands instead of in the shot"
+  },
+  "face": {
+   "default": "pass",
+   "doc": "the path effect of both sides",
+   "enum": ["pass", "terminal", "reflection"]
+  },
+  "flag": {
+   "default": "door:${opens}",
+   "doc": "the flag it writes",
+   "type": "string"
+  },
+  "op": {
+   "default": "toggle",
+   "doc": "toggle, or set to value (a one-shot button)",
+   "enum": ["toggle", "set"]
+  },
+  "opens": {
+   "default": null,
+   "doc": "the door it opens (its flag door:<name>)",
+   "type": "string"
+  },
+  "value": {
+   "default": true,
+   "doc": "the value set",
+   "type": "any"
+  }
+ },
+ "priority": 31,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "pass": {
+       "type": "pass"
+      },
+      "reflection": {
+       "type": "reflection"
+      },
+      "terminal": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": {
+     "$switch": "deferred",
+     "cases": {
+      "false": [
+       {
+        "key": "$flag",
+        "kind": "state",
+        "op": "$op",
+        "value": "$value"
+       }
+      ],
+      "true": [
+       {
+        "deferred": true,
+        "key": "$flag",
+        "kind": "state",
+        "op": "$op",
+        "value": "$value"
+       }
+      ]
+     }
+    },
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "pass": {
+       "type": "pass"
+      },
+      "reflection": {
+       "type": "reflection"
+      },
+      "terminal": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": {
+     "$switch": "deferred",
+     "cases": {
+      "false": [
+       {
+        "key": "$flag",
+        "kind": "state",
+        "op": "$op",
+        "value": "$value"
+       }
+      ],
+      "true": [
+       {
+        "deferred": true,
+        "key": "$flag",
+        "kind": "state",
+        "op": "$op",
+        "value": "$value"
+       }
+      ]
+     }
+    },
+    "interactive": true
+   }
+  }
+ ]
+}

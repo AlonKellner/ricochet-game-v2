@@ -24,16 +24,35 @@ public:
 		int generation = 0;
 		std::vector<BuiltSurface> surfaces;
 	};
+	// Stage 146: an object's body, its surface where it is
+	struct Body {
+		Object object;
+		int id = 0; // its surface's
+		V2 pos, vel;
+		bool on_floor = false;
+		BuiltSurface built;
+	};
+	struct BodyState {
+		V2 pos, vel;
+		bool on_floor = false;
+	};
 	struct Snapshot {
 		std::map<std::string, Group> groups;
 		std::map<std::string, int> generations;
+		std::vector<BodyState> bodies; // Stage 146
 	};
 	// a structural change: the ids that joined and left
 	struct Change {
 		std::vector<int> added, removed;
 	};
 
-	explicit World(std::vector<BuiltSurface> static_surfaces);
+	explicit World(std::vector<BuiltSurface> static_surfaces, const std::vector<Object> &objects = {});
+
+	// Stage 146: the bodies (their surfaces after the static ones, before the groups)
+	const std::vector<Body> &bodies() const { return bodies_; }
+	int body_of(int surface_id) const; // the body whose surface it is, -1: none
+	// a body moved: its surface rebuilt where it is (a structural change when it moved)
+	void set_body(size_t index, const V2 &pos, const V2 &vel, bool on_floor);
 
 	// the static surfaces, then the groups by channel name
 	const std::vector<BuiltSurface> &surfaces() const { return surfaces_; }
@@ -60,6 +79,7 @@ private:
 	Change diff(const std::vector<int> &before) const;
 
 	std::vector<BuiltSurface> static_;
+	std::vector<Body> bodies_;
 	std::map<std::string, Group> groups_;
 	std::map<std::string, int> generations_;
 	std::vector<BuiltSurface> surfaces_;

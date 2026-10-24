@@ -1,0 +1,76 @@
+{
+ "doc": "A resetter: when hit it re-arms spawn channels (their spawned surfaces go, their spawners come back).",
+ "example": {
+  "channels": ["spawner_1"]
+ },
+ "label": "Resetter",
+ "params": {
+  "channels": {
+   "doc": "the channels re-armed",
+   "type": "array"
+  },
+  "deferred": {
+   "default": false,
+   "doc": "applied when the arrow lands"
+  },
+  "face": {
+   "default": "pass",
+   "doc": "the path effect of both sides",
+   "enum": ["pass", "terminal", "reflection"]
+  }
+ },
+ "priority": 41,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "pass": {
+       "type": "pass"
+      },
+      "reflection": {
+       "type": "reflection"
+      },
+      "terminal": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": [
+     {
+      "channels": "$channels",
+      "deferred": "$deferred",
+      "kind": "reset"
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "pass": {
+       "type": "pass"
+      },
+      "reflection": {
+       "type": "reflection"
+      },
+      "terminal": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": [
+     {
+      "channels": "$channels",
+      "deferred": "$deferred",
+      "kind": "reset"
+     }
+    ],
+    "interactive": true
+   }
+  }
+ ]
+}

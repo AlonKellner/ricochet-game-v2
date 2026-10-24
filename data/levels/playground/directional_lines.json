@@ -6,6 +6,27 @@
  "bounds": [0.0, 0.0, 1920.0, 1080.0],
  "camera": null,
  "colliders": [],
+ "elements": [
+  {
+   "end": [750.0, 780.0],
+   "kind": "projection",
+   "name": "projection_1",
+   "normal": [1.0, 0.0],
+   "start": [750.0, 300.0],
+   "type": "line_directional_projection",
+   "via": [750.0, 540.0]
+  },
+  {
+   "back": true,
+   "end": [1150.0, 780.0],
+   "kind": "projection",
+   "name": "projection_2",
+   "normal": [1.0, 0.0],
+   "start": [1150.0, 300.0],
+   "type": "line_directional_projection",
+   "via": [1150.0, 540.0]
+  }
+ ],
  "features": {
   "arrow": false,
   "cursor": true,
@@ -22,215 +43,5 @@
   "built": true,
   "rect": [560.0, 240.0, 800.0, 600.0]
  },
- "schema": "rc-level/1",
- "surfaces": [
-  {
-   "end": [1360.0, 240.0],
-   "ids": [1],
-   "label": "Surface",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [560.0, 240.0],
-   "via": [960.0, 240.0]
-  },
-  {
-   "end": [1360.0, 840.0],
-   "ids": [2],
-   "label": "Surface",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [1360.0, 240.0],
-   "via": [1360.0, 540.0]
-  },
-  {
-   "end": [560.0, 840.0],
-   "ids": [3],
-   "label": "Surface",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [1360.0, 840.0],
-   "via": [960.0, 840.0]
-  },
-  {
-   "end": [560.0, 240.0],
-   "ids": [4],
-   "label": "Surface",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [560.0, 840.0],
-   "via": [560.0, 540.0]
-  },
-  {
-   "end": [750.0, 780.0],
-   "ids": [5],
-   "label": "LineDir",
-   "left": {
-    "effect": {
-     "back": false,
-     "normal": [1.0, 0.0],
-     "type": "line_directional_projection"
-    },
-    "interactive": true
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "back": false,
-     "normal": [1.0, 0.0],
-     "type": "line_directional_projection"
-    },
-    "interactive": true
-   },
-   "start": [750.0, 300.0],
-   "via": [750.0, 540.0]
-  },
-  {
-   "end": [1150.0, 780.0],
-   "ids": [6],
-   "label": "LineDirBack",
-   "left": {
-    "effect": {
-     "back": true,
-     "normal": [1.0, 0.0],
-     "type": "line_directional_projection"
-    },
-    "interactive": true
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "back": true,
-     "normal": [1.0, 0.0],
-     "type": "line_directional_projection"
-    },
-    "interactive": true
-   },
-   "start": [1150.0, 300.0],
-   "via": [1150.0, 540.0]
-  },
-  {
-   "end": [1920.0, 0.0],
-   "ids": [7],
-   "label": null,
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "start": [0.0, 0.0],
-   "via": [960.0, 0.0]
-  },
-  {
-   "end": [1920.0, 1080.0],
-   "ids": [8],
-   "label": null,
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "start": [1920.0, 0.0],
-   "via": [1920.0, 540.0]
-  },
-  {
-   "end": [0.0, 1080.0],
-   "ids": [9],
-   "label": null,
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "start": [1920.0, 1080.0],
-   "via": [960.0, 1080.0]
-  },
-  {
-   "end": [0.0, 0.0],
-   "ids": [10],
-   "label": null,
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "start": [0.0, 1080.0],
-   "via": [0.0, 540.0]
-  }
- ]
+ "schema": "rc-level/2"
 }

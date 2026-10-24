@@ -212,6 +212,41 @@ checked against its scenes with screenshots: 36 pairs, 0 differing pixels (docs/
 **Other engines.** Stroke and fill with your own primitives. Pixel identity with Godot is not required; the
 geometry is exact.
 
+## The win (1.9)
+
+`rc_frame.won` is 1 once the level is won: its goal reached while open, or, a level without a goal, every target
+hit. It stays 1 until an undo or a reset takes the game back before the win. A goal level also says where it
+stands in the HUD's first line (`Goal: locked | open | reached!`), and draws its goal.
+
+## Hosting the editor
+
+The level editor (docs/EDITOR.md) is native too (`rc_editor_*`, API 1.8): an `rc-level/2` document, its
+tools, its inspector panel and its draw list. A host keeps no editor state:
+
+1. `rc_editor_create(text, length, &ed)` with a level's JSON text (`NULL`: a new level), then
+   `rc_editor_resize(ed, w, h)` with the window's size in pixels, and again whenever it changes.
+2. **Input**, in window pixels: `rc_editor_pointer(ed, RC_PTR_DOWN | RC_PTR_UP, x, y, button, mods)` for a
+   press or a release (the button that changed), `RC_PTR_MOVE` for a move. `rc_editor_key(ed, code, mods,
+   down)` for every key: letters and digits as their ASCII upper case, space 32, `RC_EDKEY_*` for the rest.
+   `rc_editor_text(ed, utf8, n)` with what a key types (the panel's text fields read it). `rc_editor_scroll(ed,
+   0, dy, mods)` for the wheel (`dy > 0`: down, zoom out). Map Command to `RC_MOD_CTRL` on a Mac.
+3. **Drawing**: `rc_editor_draw_list` / `rc_editor_draw_changes`, exactly as the game's list (the same
+   commands, the same changes protocol), in window pixels. Paint it at identity: no camera, no scale. Nodes
+   are keyed `["editor", layer, index]`.
+4. **After input**, read `rc_editor_get_status`:
+   - `save_requested`: write `rc_editor_document`'s text to the level's file, then send the command
+     `{"op": "saved"}`, or `{"op": "save_cancelled"}` when the write did not happen (a dialog cancelled).
+   - `mode == RC_EDITOR_PLAY`: play the document. Parse `rc_editor_document`'s text with `rc_level_parse`,
+     create a game, and run the ordinary game loop (above) instead of the editor's. When the player presses
+     Esc, send the editor `RC_EDKEY_ESCAPE` (or `{"op": "stop"}`), destroy the game, and paint the editor
+     again (`mode == RC_EDITOR_EDIT`).
+5. `rc_editor_command(ed, json, n, &result, &length)`: every action as JSON (docs/EDITOR.md's table), for
+   menus, scripts and tests.
+
+The reference hosts are `tests/host_py/rc_editor_tk.py` (tkinter, about 300 lines) and Godot's `RicochetEditor`
+(`native/hosts/godot/ricochet_editor.cpp`, which paints through the game's layers); the C one is
+`native/tests/capi/smoke.c`'s editor block.
+
 ## Errors and logging
 
 **Return statuses.** Every call returns `RC_OK` or an error status:
