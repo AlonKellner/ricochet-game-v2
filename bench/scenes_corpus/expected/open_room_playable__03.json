@@ -77,17 +77,6 @@
  "physical": [
   {
    "kind": "hit",
-   "surface_id": 4,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "800.0000000000000000000000000000000000000",
-   "y": "812.3895414817826872892208194003249284786"
-  },
-  {
-   "kind": "hit",
    "surface_id": 2,
    "side": "RIGHT",
    "applied": true,

@@ -2731,11 +2731,20 @@ private:
 	// effect is not a pass or which changes the state, and a target. A pure
 	// pass-through (in ghost mode, what the ghost passes) is never computed.
 	// (Oracle: trace2._candidate.)
-	static bool candidate(const Walk<N> &w, const Surf<N> &s) {
+	// Stage 139: a remaining plan entry names s (its crossings are events on or off
+	// its segment: the bookkeeping, the quiet entries and the planned shadow read them)
+	static bool planned_surface(const Walk<N> &w, const Surf<N> &s) {
 		for (size_t i = size_t(std::max(w.plan_index, 0)); i < w.plan.size(); i++) {
 			if (w.plan[i].surface_id == s.id) {
 				return true;
 			}
+		}
+		return false;
+	}
+
+	static bool candidate(const Walk<N> &w, const Surf<N> &s) {
+		if (planned_surface(w, s)) {
+			return true;
 		}
 		if (w.mode != Mode::Physical || !s.present(w.flags)) {
 			return false;
@@ -2806,6 +2815,14 @@ private:
 			if (!w.cand_mask[si]) {
 				continue; // Stage 134: hitting it now could not matter
 			}
+			// Stage 139 (GAME_SPEC 12.1, the user): a crossing off its segment on a surface
+			// no remaining plan entry names is no event -- not computed where the beam's
+			// exact line proves it off by its rigorously bounded float64 shadow: both
+			// endpoints strictly on one side (a line carrier), or the circle missed (an
+			// arc's carrier). Certain, or kept and classified at the tier's precision.
+			if (w.line && !planned_surface(w, s) && (s.line ? w.line->misses_segment(s.sx, s.sy, s.ex, s.ey) : w.line->misses_circle(s.cx, s.cy, s.r))) {
+				continue;
+			}
 			if (w.pole && pole_tangent(w, s)) {
 				continue; // tangent at the frame's infinity point: a touch, not a crossing (exact, Stage 105)
 			}
@@ -2826,7 +2843,10 @@ private:
 				continue;
 			}
 			const bool departing = dep_rep >= 0 && dep_rep == s.carrier_rep;
-			const Surf<N> &src = departing ? *w.scene->find(depart) : s;
+			// Stage 139: the carrier's roots come from its representative's segment (the
+			// lowest id on it, candidate or not): one source, whatever the candidates are
+			const Surf<N> *rep = departing ? w.scene->find(depart) : w.scene->find(s.carrier_rep);
+			const Surf<N> &src = rep != nullptr ? *rep : s;
 			InlineVec<N, 4> rs;
 			if (fresh) {
 				rs = geom::hits(beam, src.seg, departing);
@@ -3643,6 +3663,12 @@ private:
 		N t_prev = t0;
 		bool keep_cursor = false; // K4: the seed restart keeps the listed cursor
 		int sig0 = w.sig; // (every loop passes something significant: checked at its end)
+		// Stage 139: the margin of a silent decision (a crossing classified off its
+		// segment on an unplanned surface: no event), kept for the next event's
+		struct Carry {
+			double margin = INF_D;
+			uint8_t why = 0;
+		} carry;
 		while (!w.done) {
 			if (!resume) {
 				sig0 = w.sig; // (a loop resumed in place after a reseed began before)
@@ -3664,6 +3690,15 @@ private:
 			std::vector<uint8_t> &gw = w.scratch->why; // (reused across the walk's steps)
 			std::vector<double> &gp = w.scratch->gaps;
 			gaps(w, *beam, cands, gp, w.record_why ? &gw : nullptr);
+			// the event's margin: its own gap, or a smaller one carried from a silent decision
+			auto fold = [&](size_t i) {
+				std::pair<double, uint8_t> f{gp[i], w.record_why ? gw[i] : uint8_t(0)};
+				if (carry.margin < f.first) {
+					f = {carry.margin, carry.why};
+				}
+				carry = Carry{};
+				return f;
+			};
 			std::optional<Next> next;
 			bool restart = false;
 			// (Stage 134: resumed past the candidate processed last, by order -- the
@@ -3734,6 +3769,21 @@ private:
 					ci++; // absent under the current flags (Stage 107): no crossing at all
 					continue;
 				}
+				// Stage 139 (GAME_SPEC 12.1, 12.6, the user): a crossing off its segment on a
+				// surface no remaining plan entry names is not an event -- not counted, not
+				// drawn, no decision; the margin that made it off the segment is kept for
+				// the next event's, so a crossing a hair off an endpoint still climbs
+				std::optional<Classified> pre;
+				if (surf != nullptr && !cand.inf && !rehit) {
+					pre = classify(*w.scene, *beam, t, *surf, false, cand.pt, w.flags);
+					if (!pre->on_seg && !planned_surface(w, *surf)) {
+						if (gp[ci] < carry.margin) {
+							carry = Carry{gp[ci], w.record_why ? gw[ci] : uint8_t(0)};
+						}
+						ci++;
+						continue;
+					}
+				}
 				const bool is_cursor = surf == nullptr && !cand.inf && !cand.origin; // (Stage 131: the cursor counts toward neither limit)
 				if (!is_cursor) {
 					w.count++;
@@ -3759,8 +3809,9 @@ private:
 					// Stage 131: the passage of the ray's origin -- significant; unplanned
 					// before the cursor, a divergence, like infinity's
 					w.sig++;
-					Event<N> &oe = emit(w, EventKind::Origin, beam, t_prev, t, gp[ci]);
-					oe.why = w.record_why ? gw[ci] : uint8_t(0);
+					const auto [om, oy] = fold(ci);
+					Event<N> &oe = emit(w, EventKind::Origin, beam, t_prev, t, om);
+					oe.why = oy;
 					oe.point = cand.pt;
 					oe.flags = w.flags;
 					t_prev = t;
@@ -3778,8 +3829,9 @@ private:
 					if (consumed) {
 						w.plan_index++;
 					}
-					Event<N> &ie = emit(w, EventKind::Infinity, beam, t_prev, cand.pt ? std::optional<N>(t) : std::nullopt, gp[ci]);
-					ie.why = w.record_why ? gw[ci] : uint8_t(0);
+					const auto [im, iy] = fold(ci);
+					Event<N> &ie = emit(w, EventKind::Infinity, beam, t_prev, cand.pt ? std::optional<N>(t) : std::nullopt, im);
+					ie.why = iy;
 					ie.surface_id = INFINITY_ID;
 					if (cand.pt) {
 						ie.point = cand.pt; // the frame's image of infinity, exact by provenance
@@ -3811,8 +3863,9 @@ private:
 					continue;
 				}
 				if (surf == nullptr) {
-					Event<N> &ce = emit(w, EventKind::Cursor, beam, t_prev, t, gp[ci]);
-					ce.why = w.record_why ? gw[ci] : uint8_t(0);
+					const auto [cm, cy] = fold(ci);
+					Event<N> &ce = emit(w, EventKind::Cursor, beam, t_prev, t, cm);
+					ce.why = cy;
 					if (cand.pt) {
 						ce.point = cand.pt; // (a known point: exact by provenance)
 					}
@@ -3839,7 +3892,7 @@ private:
 					ci++;
 					continue;
 				}
-				const Classified cl = classify(*w.scene, *beam, t, *surf, rehit && fresh, cand.pt, w.flags);
+				const Classified cl = pre ? *pre : classify(*w.scene, *beam, t, *surf, rehit && fresh, cand.pt, w.flags);
 				const CN<N> pt = cl.pt;
 				bool on_seg = cl.on_seg;
 				const bool left = cl.left;
@@ -3883,8 +3936,9 @@ private:
 							return;
 						}
 						w.sig++;
-						Event<N> &se = emit(w, EventKind::Hit, beam, t_prev, t, gp[ci]);
-						se.why = w.record_why ? gw[ci] : uint8_t(0);
+						const auto [sm, sy] = fold(ci);
+						Event<N> &se = emit(w, EventKind::Hit, beam, t_prev, t, sm);
+						se.why = sy;
 						se.surface_id = stop->id;
 						se.left = stop_left;
 						se.state = false;
@@ -3969,8 +4023,9 @@ private:
 				if (fires_state) {
 					w.flags = w.flags.applied(changes);
 				}
-				Event<N> &e = emit(w, EventKind::Hit, beam, t_prev, t, gp[ci]);
-				e.why = w.record_why ? gw[ci] : uint8_t(0);
+				const auto [hm, hy] = fold(ci);
+				Event<N> &e = emit(w, EventKind::Hit, beam, t_prev, t, hm);
+				e.why = hy;
 				e.surface_id = surf->id;
 				e.left = left;
 				e.state = fires_state;

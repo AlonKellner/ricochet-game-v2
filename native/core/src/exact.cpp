@@ -804,6 +804,26 @@ bool Line::parallel_to(double sx, double sy, double ex, double ey) const {
 	return add(mul((*L)[0], Dx), mul((*L)[1], Dy)).is_zero();
 }
 
+bool Line::misses_segment(double sx, double sy, double ex, double ey) const {
+	// a x + b y - c at both endpoints, with rigorous bounds; the data are exact float64
+	const EB vs = eadd(esub(emul(EB{fa, ea}, EB{sx, 0.0}), EB{fc, ec}), emul(EB{fb, eb}, EB{sy, 0.0}));
+	const EB ve = eadd(esub(emul(EB{fa, ea}, EB{ex, 0.0}), EB{fc, ec}), emul(EB{fb, eb}, EB{ey, 0.0}));
+	if (!(std::fabs(vs.v) > vs.e) || !(std::fabs(ve.v) > ve.e)) {
+		return false; // an endpoint on or near the line: not certain
+	}
+	return (vs.v > 0.0) == (ve.v > 0.0);
+}
+
+bool Line::misses_circle(double cx, double cy, double r) const {
+	// (a cx + b cy - c)^2 > r^2 (a^2 + b^2), with rigorous bounds
+	const EB d = eadd(esub(emul(EB{fa, ea}, EB{cx, 0.0}), EB{fc, ec}), emul(EB{fb, eb}, EB{cy, 0.0}));
+	const EB d2 = emul(d, d);
+	const EB n2 = eadd(emul(EB{fa, ea}, EB{fa, ea}), emul(EB{fb, eb}, EB{fb, eb}));
+	const EB rhs = emul(emul(EB{r, 0.0}, EB{r, 0.0}), n2);
+	const EB diff = esub(d2, rhs);
+	return diff.v > diff.e;
+}
+
 // ---------------------------------------------------------------- the exact beam (Perf P2b)
 
 GCircle gc_from_line(const Line3 &L) {

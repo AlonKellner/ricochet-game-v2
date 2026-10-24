@@ -24,11 +24,16 @@ T^-1). A hit at h maps the beam onto S': p' = T(h), tau' = a tau_h, kappa'
 the earlier beam is restored, resumed at T^-1 of the point hit (on S).
 
 Rules (TDD_09 "Target architecture" + "Legacy quirks"):
-- Every carrier crossing is an event (counts toward MAX_HITS = 32, as do the
-  cursor and the final origin event). (Stage 131: no loop detection -- a
-  loop without an effect goes round again, through infinity and the ray's
-  origin, and the limits end it; Stage 136: infinity always on, no escape.) A trace cut by MAX_HITS ends with
-  a "max" event at the next crossing (drawn up to it, no effect).
+- Every candidate's crossing on its segment is an event, and every crossing
+  of a surface a remaining plan entry names (counts toward MAX_HITS = 64; the
+  cursor counts toward neither limit). Stage 139 (the user): a crossing off its
+  segment on a surface no remaining entry names is not an event -- not
+  counted, not drawn (the walk's goal is the sequence of significant hit
+  points; such a crossing is a byproduct of computing the carrier). (Stage
+  131: no loop detection -- a loop without an effect goes round again, through
+  infinity and the ray's origin, and the limits end it; Stage 136: infinity
+  always on, no escape.) A trace cut by MAX_HITS ends with a "max" event at
+  the next crossing (drawn up to it, no effect).
 - PHYSICAL: an effect fires only on a fully blocked hit: on-segment interior,
   or at an endpoint where blocked sides (incl. other segments sharing the
   exact endpoint = junction) cover both sides. Blockage is per hit point.
@@ -882,6 +887,12 @@ def _candidate(walk: Walk, s: Surface):
                for side in (LEFT, RIGHT))
 
 
+def _planned_surface(walk: Walk, s: Surface):
+    """A remaining plan entry names s (Stage 139: its crossings are events on or
+    off its segment -- the bookkeeping, the quiet entries and the shadow read them)."""
+    return any(sid == s.id for sid, _ in walk.plan[walk.plan_index:])
+
+
 def _cand_state(walk: Walk):
     """What the candidates depend on: rebuilt where it changes (Stage 134)."""
     return walk.mode, walk.plan_index, tuple(sorted((k, repr(v)) for k, v in walk.flags.items()))
@@ -912,7 +923,10 @@ def _build_cands(walk: Walk, beam: Beam, depart, fresh, t0, by_id, shared=None):
         key = groups[s.id]
         if key not in shared:
             departing = dep_key == key
-            src = by_id[depart] if departing else s
+            # Stage 139: the carrier's roots come from its representative's segment
+            # (the lowest id on the carrier, candidate or not): one source,
+            # whatever the walk's candidates are
+            src = by_id[depart] if departing else by_id.get(key, s)
             if fresh:
                 rs = roots(beam, src, departing)
                 rs = [t for t in rs if t != 0] if departing else [t for t in rs]
@@ -1072,6 +1086,14 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     if _point_sync(walk):
                         _late_cursor(walk, beam, cands, ci, key, t0)
                 continue        # absent under the current flags (Stage 107): no crossing at all
+            # Stage 139 (the user): a crossing off its segment on a surface no remaining
+            # plan entry names is not an event -- not counted, not drawn; the walk's
+            # goal is the sequence of significant hit points, and such a crossing is a
+            # byproduct of computing a candidate's carrier (GAME_SPEC 12.1, 12.6)
+            if sid in by_id and not rehit:
+                _pt, _on, _side, _ep = classify(walk, beam, t, by_id[sid], point=snapped.get((sid, t)))
+                if not _on and not _planned_surface(walk, by_id[sid]):
+                    continue
             if sid == -1:
                 if walk.mode == PHYSICAL and walk.wrapped_off:
                     continue   # (Stage 131: the walk left the plan by an unplanned wrap: no cursor after it)

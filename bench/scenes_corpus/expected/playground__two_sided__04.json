@@ -13,17 +13,6 @@
   },
   {
    "kind": "hit",
-   "surface_id": 7,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "692.4260530030298186856398164582619755955",
-   "y": "621.7344019104075641582838660267784714773"
-  },
-  {
-   "kind": "hit",
    "surface_id": 5,
    "side": "LEFT",
    "applied": true,
@@ -32,28 +21,6 @@
    "rehit": false,
    "x": "688.0562661028256609273827105297355232485",
    "y": "626.6700772935631724514370105427305115926"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "695.8588740807901371325644716771826300804",
-   "y": "630.2991196238984963514192385334378493806"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "976.8571096839244104753762492203320454454",
-   "y": "760.9931766152563584354582743254644906247"
   },
   {
    "kind": "hit",
@@ -81,17 +48,6 @@
   },
   {
    "kind": "hit",
-   "surface_id": 7,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "692.4260530030298186856398164582619755955",
-   "y": "621.7344019104075641582838660267784714773"
-  },
-  {
-   "kind": "hit",
    "surface_id": 5,
    "side": "LEFT",
    "applied": true,
@@ -100,28 +56,6 @@
    "rehit": false,
    "x": "688.0562661028256609273827105297355232485",
    "y": "626.6700772935631724514370105427305115926"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "695.8588740807901371325644716771826300804",
-   "y": "630.2991196238984963514192385334378493806"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "976.8571096839244104753762492203320454454",
-   "y": "760.9931766152563584354582743254644906247"
   },
   {
    "kind": "hit",

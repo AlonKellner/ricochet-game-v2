@@ -71,10 +71,18 @@ def main():
     mp.mp.dps = 80
     fx = []
     # --- the event itself (direction traces, no plan) ---
-    # (Stage 134: walls crossed off their segments -- candidates that fire nothing)
+    # (Stage 134: candidates that fire nothing; Stage 139: crossed on their segments
+    # -- a wall on the far side only, approached from its pass side -- since a
+    # crossing off the segment is no event)
     term = dict(PASS, type="terminal")
-    ahead = line(1, (50, 100), (50, 200), term, term)
-    behind = line(2, (-50, 100), (-50, 200), term, term)
+
+    def thin(sid, x):
+        s = line(sid, (x, -500), (x, 500), PASS, term)
+        w = T.trace_physical_direction(T.scene_from_json([s]), (x - 10.0, 0.0), mp.mpc(1, 0))
+        return s if not w.events[0].applied else line(sid, (x, 500), (x, -500), PASS, term)
+
+    ahead = thin(1, 50)
+    behind = thin(2, -50)
     f = fixture("wrap_between_ahead_and_wrapped_crossings", [ahead, behind], (0.0, 0.0), direction=(1.0, 0.0))
     # (Stage 131: no loop detection -- each loop passes infinity and the ray's
     # origin, both significant, until the 11th)

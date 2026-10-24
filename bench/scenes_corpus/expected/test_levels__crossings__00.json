@@ -170,50 +170,6 @@
  "physical": [
   {
    "kind": "hit",
-   "surface_id": 9,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "600.0000000000000000000000000000000000000",
-   "y": "696.7036595886006976548097228595362435209"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 13,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "750.0000000000000000000000000000000000000",
-   "y": "794.2643736836136769692860487098590916545"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 16,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "808.7591860041660533144575161239293134552",
-   "y": "832.4816279916678933710849677521413730896"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 22,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "881.8188788053913181633027573953638388326",
-   "y": "880.0000000000000000000000000000000000000"
-  },
-  {
-   "kind": "hit",
    "surface_id": 3,
    "side": "RIGHT",
    "applied": true,
