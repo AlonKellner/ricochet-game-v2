@@ -43,6 +43,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
 | Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| Spreading: tags on elements and objects, the level's spread rules (fire kept for good; charge recomputed from powered sources through what touches and is present); conductor, battery and charged door templates (§10.6; docs/ELEMENTS.md, docs/TDD_57, Stage 152) | Done |
 | Bubbles: objects with their own gravity (floating up), popped by the arrow, carrying an object until they pop (§25.5; docs/TDD_55, Stage 150) | Done |
 | Carriers: lines and circles elements are placed on (`carrier`, `from`, `to`), an authoring construct the lowering projects onto (§19.1; docs/TDD_53, Stage 149) | Done |
 | The novel-element kit: per-shot flags (`shot:*`, erased at landing) and templates for breakable, toggle, frost, fire and charge elements (§10.6; docs/ELEMENTS.md, docs/TDD_52, Stage 147) | Done |
@@ -908,6 +909,24 @@ A flag whose key starts with `shot:` is a state of the arrow, not of the world: 
 the flags promoted when the arrow lands, so every shot starts without it. Elements use per-shot flags for what the
 arrow carries (fire, frost, charge) and for what a shot does to the world only while it lasts (a breakable surface
 gone for the rest of the shot). docs/ELEMENTS.md ("The kit") lists the patterns.
+
+#### Spreading (Stage 152)
+
+Some states flow from thing to thing without an arrow: fire through what burns, charge through what conducts.
+Elements and objects carry **tags**; a level's **spread rules** (default: `burnt` through `flammable`, kept for
+good; `charge` through `conductive`, sourced by `powered`) write `el:<name>:<flag>` = true on every tagged thing
+connected to a lit one by touching (a segment, arc or object circle within 0.5 px of another).
+
+- **Persistent** rules (fire): a lit thing stays lit; the flow passes through every tagged thing, present or not
+  (a burnt barrier is gone, yet what touched it burns).
+- **Recomputed** rules (charge): the flags are recomputed from the sources whenever the world changes (a shot
+  lands, a detector or a journey changes flags, an object or a moving surface moves). The flow passes only
+  through present things. An absent thing it reaches is lit but passes nothing on, so a charged door stays open
+  without closing the circuit through itself.
+
+Spreading runs when the level starts, when a shot lands (after the landing's writes), every physics tick, and when
+a journey ends; the result rides the checkpoint like any flag. It is a game-layer rule: the solver sees only
+the flags (docs/ELEMENTS.md, "Tags and spreading"; docs/TDD_57_SPREAD.md).
 
 #### Ghost mode (Stage 86)
 
@@ -2820,4 +2839,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.62.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.63.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -226,7 +226,7 @@ Lowered lower_level(const json &v2) {
 			fail(P, "'" + k + "' is reserved for a later stage of rc-level/2");
 		}
 		const bool known = k == "schema" || k == "flags" || k == "templates" || k == "elements" || k == "objective" || k == "detectors"
-				|| k == "objects" || k == "carriers" || k == "cycle" || std::find(META.begin(), META.end(), k) != META.end();
+				|| k == "objects" || k == "carriers" || k == "cycle" || k == "spread" || std::find(META.begin(), META.end(), k) != META.end();
 		if (!known) {
 			fail(P, "unknown key '" + k + "'");
 		}
@@ -351,6 +351,26 @@ Lowered lower_level(const json &v2) {
 			}
 			const json g = e.contains("carrier") ? on_carrier(e, carriers, origin) : e; // Stage 149: on a carrier
 			push(elements::expand(it->second, g, name, origin), origin);
+			// Stage 152: its tags
+			std::vector<std::string> tags;
+			for (const json *src : {static_cast<const json *>(&it->second), &e}) {
+				if (src->contains("tags")) {
+					if (!(*src)["tags"].is_array()) {
+						fail(origin + ".tags", "an array of strings expected");
+					}
+					for (const json &tg : (*src)["tags"]) {
+						if (!tg.is_string()) {
+							fail(origin + ".tags", "an array of strings expected");
+						}
+						if (std::find(tags.begin(), tags.end(), tg.get<std::string>()) == tags.end()) {
+							tags.push_back(tg.get<std::string>());
+						}
+					}
+				}
+			}
+			if (!tags.empty()) {
+				out.tagged.push_back({i, name, tags});
+			}
 		}
 	}
 	if (!edges) {

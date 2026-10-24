@@ -98,7 +98,7 @@ TEST_CASE("editor: every level loads and saves byte for byte") {
 		CHECK_FALSE(ed.draw().empty());
 		n++;
 	}
-	CHECK(n == 43);
+	CHECK(n == 44);
 	// an rc-level/1 document is migrated
 	const json v1 = json::parse(read_text(ROOT / "bench" / "lowered" / "test_levels__flag_switches.json"));
 	rcg::Editor ed(&v1);
@@ -593,4 +593,25 @@ TEST_CASE("editor: a moving element shows its keys faint; its motion is a panel 
 		}
 	}
 	CHECK(after > before); // the key's faint copy
+}
+
+TEST_CASE("editor: an element's tags and the level's spread rules are panel fields (Stage 152)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "wall", "name": "w", "start": [700, 400], "end": [700, 600]})")}});
+	click_row(ed, "tags");
+	ed.text(R"(["conductive", "powered"])");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(element(ed, "w")["tags"] == json::array({"conductive", "powered"}));
+	CHECK(ed.errors().empty());
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	click_row(ed, "spread");
+	ed.text(R"([{"flag": "glow", "tag": "conductive"}])");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(ok(ed, {{"op", "document"}})["document"]["spread"][0]["flag"] == "glow");
+	CHECK(ed.errors().empty());
+	click_row(ed, "spread");
+	ed.text(R"([{"flag": "glow"}])"); // no tag: the level's problem, shown
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK_FALSE(ed.errors().empty());
 }

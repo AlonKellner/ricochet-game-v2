@@ -177,6 +177,7 @@ Session::Session(const Level &level, const SessionConfig &config)
 	for (const auto &[key, value] : level_.flags) {
 		flags_.set(key, value);
 	}
+	spread(); // (Stage 152: a powered circuit is lit from the start)
 	// the initial checkpoint: taken before the level built its world (GameManager._ready)
 	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt, false, {}, 0.0, true};
 	hud_ = hud_text(); // (Stage 145: a goal's line; "" without a goal and a plan)
@@ -723,6 +724,7 @@ void Session::land() {
 		}
 	}
 	pending_flags_.reset();
+	spread(); // Stage 152: fire and charge along what touches
 	if (!level_.motions.empty() && !cycle_auto_) {
 		cycle_auto_ = true; // Stage 151: a shot resumes the cycle
 		idle_ = 0.0;
@@ -914,6 +916,9 @@ void Session::tick(const kinematics::Input &in) {
 	}
 	if (!level_.detectors.empty()) {
 		detect(tick_from_, player_);
+	}
+	if (!level_.tagged.empty() || std::any_of(level_.objects.begin(), level_.objects.end(), [](const Object &o) { return !o.tags.empty(); })) {
+		spread(); // Stage 152: bodies moved, detectors wrote, surfaces moved
 	}
 	if (!won_ && level_.objective) {
 		check_won();
@@ -1167,7 +1172,131 @@ void Session::advance_journey(double dt) {
 	}
 	if (done) {
 		journey_.reset();
+		spread();
 		check_won();
+	}
+}
+
+// Stage 152 (GAME_SPEC 24.7): the spreading rules over the tagged elements and
+// objects. Touching: two surfaces crossing, or an end within half a pixel of the
+// other; an object's circle within half a pixel of a surface or another object.
+void Session::spread() {
+	struct Node {
+		std::string name;
+		std::vector<std::string> tags;
+		std::vector<const BuiltSurface *> surfaces; // an element's
+		int body = -1;                              // an object's
+	};
+	std::vector<Node> nodes;
+	for (const Tagged &t : level_.tagged) {
+		Node n{t.name, t.tags, {}, -1};
+		for (const size_t k : t.surfaces) {
+			for (const int id : level_.surfaces[k].ids) {
+				if (const BuiltSurface *b = world_->by_id(id)) {
+					n.surfaces.push_back(b);
+				}
+			}
+		}
+		nodes.push_back(std::move(n));
+	}
+	for (size_t i = 0; i < world_->bodies().size(); i++) {
+		const World::Body &b = world_->bodies()[i];
+		if (!b.object.tags.empty()) {
+			nodes.push_back({b.object.name, b.object.tags, {&b.built}, int(i)});
+		}
+	}
+	if (nodes.empty()) {
+		return;
+	}
+	if (touch_version_ != world_->version() || touches_.size() != nodes.size()) {
+		constexpr double TOUCH = 0.5;
+		auto near = [&](const SegGeom &seg, const V2 &p, double reach) {
+			double nx = 0, ny = 0;
+			return kinematics::distance(kinematics::collider_of(seg), p.x, p.y, nx, ny) <= reach;
+		};
+		auto touch = [&](const Node &a, const Node &b) {
+			if (a.body >= 0 && b.body >= 0) {
+				const World::Body &x = world_->bodies()[size_t(a.body)], &y = world_->bodies()[size_t(b.body)];
+				return (x.pos - y.pos).length() <= x.object.radius + y.object.radius + TOUCH;
+			}
+			if (a.body >= 0 || b.body >= 0) {
+				const World::Body &x = world_->bodies()[size_t(a.body >= 0 ? a.body : b.body)];
+				for (const BuiltSurface *s : (a.body >= 0 ? b : a).surfaces) {
+					if (near(s->seg, x.pos, x.object.radius + TOUCH)) {
+						return true;
+					}
+				}
+				return false;
+			}
+			for (const BuiltSurface *s : a.surfaces) {
+				for (const BuiltSurface *t : b.surfaces) {
+					if (!crossings_of(s->seg, t->seg).empty()) {
+						return true;
+					}
+					for (const auto &[p, q] : {std::pair{s, t}, std::pair{t, s}}) {
+						if (!p->seg.full && (near(q->seg, p->seg.s, TOUCH) || near(q->seg, p->seg.e, TOUCH))) {
+							return true;
+						}
+					}
+				}
+			}
+			return false;
+		};
+		touches_.assign(nodes.size(), std::vector<bool>(nodes.size(), false));
+		for (size_t i = 0; i < nodes.size(); i++) {
+			for (size_t j = i + 1; j < nodes.size(); j++) {
+				touches_[i][j] = touches_[j][i] = touch(nodes[i], nodes[j]);
+			}
+		}
+		touch_version_ = world_->version();
+	}
+	auto has = [](const Node &n, const std::string &tag) { return std::find(n.tags.begin(), n.tags.end(), tag) != n.tags.end(); };
+	for (int round = 0; round < 8; round++) { // (presence follows the flags: until nothing changes)
+		rc::Flags f = flags_;
+		for (const SpreadRule &r : level_.spread) {
+			std::vector<size_t> members;
+			for (size_t i = 0; i < nodes.size(); i++) {
+				if (has(nodes[i], r.tag)) {
+					members.push_back(i);
+				}
+			}
+			std::vector<bool> lit(nodes.size(), false), here(nodes.size(), false);
+			for (const size_t i : members) {
+				here[i] = std::any_of(nodes[i].surfaces.begin(), nodes[i].surfaces.end(), [&](const BuiltSurface *s) { return present(*s, flags_); });
+				const std::string key = "el:" + nodes[i].name + ":" + r.flag;
+				lit[i] = r.persist ? f.is_true(key)
+								   : here[i] && std::any_of(r.sources.begin(), r.sources.end(), [&](const std::string &t) { return has(nodes[i], t); });
+			}
+			// the flood: persisting through every member; not, through the present ones
+			for (bool grew = true; grew;) {
+				grew = false;
+				for (const size_t i : members) {
+					if (!lit[i] || (!r.persist && !here[i])) {
+						continue;
+					}
+					for (const size_t j : members) {
+						if (!lit[j] && touches_[i][j]) {
+							lit[j] = true; // (an absent one is lit, and passes nothing on)
+							grew = true;
+						}
+					}
+				}
+			}
+			for (const size_t i : members) {
+				const std::string key = "el:" + nodes[i].name + ":" + r.flag;
+				if (lit[i] && !f.is_true(key)) {
+					f.set(key, true);
+				} else if (!lit[i] && !r.persist && f.has(key)) {
+					f.erase(key);
+				}
+			}
+		}
+		const int before = flags_version_;
+		set_flags(f);
+		if (flags_version_ == before) {
+			break;
+		}
+		hud_ = hud_text();
 	}
 }
 

@@ -143,6 +143,26 @@ struct Object {
 	double gravity = 1.0;
 	bool pops = false;
 	std::string carries;
+	std::vector<std::string> tags; // Stage 152 (an object conducts, burns, ...)
+};
+
+// Stage 152: an element with tags, and its surfaces (indices into Level::surfaces).
+struct Tagged {
+	std::string name;
+	std::vector<std::string> tags;
+	std::vector<size_t> surfaces;
+};
+
+// Stage 152 (GAME_SPEC 24.7): a spreading rule -- the flag el:<name>:<flag> of
+// every element (and object) tagged `tag` that touches, through others so
+// tagged, one that has it. Persisting (fire): set ones stay set, through absent
+// ones too. Not persisting (charge): recomputed from the present elements with a
+// source tag; an absent one touching a lit one is lit (it does not pass it on).
+struct SpreadRule {
+	std::string flag;
+	std::string tag;
+	bool persist = true;
+	std::vector<std::string> sources;
 };
 
 // rc-level/2 (Stage 151): an element's motion over the level's cycle -- keys
@@ -211,6 +231,8 @@ struct Level {
 	std::vector<Object> objects; // Stage 146
 	std::vector<Motion> motions; // Stage 151
 	Cycle cycle;
+	std::vector<Tagged> tagged;     // Stage 152
+	std::vector<SpreadRule> spread; // ... (default: burnt through flammable; charge through conductive from powered)
 };
 
 // Stage 146: an object's surface (a full circle at `center`, its sides by its face, a pull on them if pullable).

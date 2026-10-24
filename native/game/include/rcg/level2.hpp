@@ -20,6 +20,13 @@ struct Lowered {
 	nlohmann::json level;             // the rc-level/1 document (no flags: the surfaces' view)
 	std::vector<std::string> origins; // per surface: where it came from ("level.elements[3] (m1)", "level.room", ...)
 	nlohmann::json flags = nlohmann::json::object(); // the initial flags
+	// Stage 152: per element with tags: its index, name and tags (its own and its kind's)
+	struct Tagged {
+		size_t element = 0;
+		std::string name;
+		std::vector<std::string> tags;
+	};
+	std::vector<Tagged> tagged;
 };
 
 // The lowering of an rc-level/2 document. Throws LevelError naming the element.

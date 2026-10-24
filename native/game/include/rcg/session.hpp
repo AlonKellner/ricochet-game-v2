@@ -326,6 +326,10 @@ private:
 	std::vector<size_t> moving_motion_;  // per World::Moving: its motion's index
 	std::vector<V2> moving_pivot_;       // ... and pivot
 	void apply_phase();                  // the moving surfaces placed for phase_
+	// Stage 152: spreading -- the tagged elements' and objects' flags along what touches
+	void spread();
+	int touch_version_ = -1;                       // the world version the touches are of
+	std::vector<std::vector<bool>> touches_;       // per pair of tagged nodes (elements, then objects)
 	bool bodies_moving_ = false;
 	void step_bodies();
 	void start_journey();             // at landing: the first fired grapple or pull of the shot

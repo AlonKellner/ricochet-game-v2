@@ -1,0 +1,29 @@
+{
+ "doc": "A battery: a powered conductor -- the source of the charge in everything conductive it touches, through others.",
+ "label": "Battery",
+ "params": {
+  "solid": {
+   "default": true,
+   "doc": "the player and objects collide with it"
+  }
+ },
+ "priority": 61,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": "$solid",
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   }
+  }
+ ],
+ "tags": ["conductive", "powered"]
+}

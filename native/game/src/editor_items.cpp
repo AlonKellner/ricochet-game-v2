@@ -354,6 +354,7 @@ std::vector<Editor::Row> Editor::item_rows() const {
 		row("gravity", *path + "/gravity", "its gravity, a factor of the level's (a bubble: negative, it floats up)", "1");
 		row("pops", *path + "/pops", "the arrow pops it (gone for good)", "false", "bool");
 		row("carries", *path + "/carries", "an object it holds until it pops (or is removed)", "none");
+		row("tags", *path + "/tags", "[tag, ...]: what spread rules flow through (conductive: it carries charge)", "none");
 	}
 	Row keys;
 	keys.kind = Row::Text;

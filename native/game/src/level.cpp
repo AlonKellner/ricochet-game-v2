@@ -390,7 +390,7 @@ void parse_goals(const json &j, Level &lv) {
 		for (size_t i = 0; i < os->size(); i++) {
 			const json &o = (*os)[i];
 			const std::string op = P + ".objects[" + std::to_string(i) + "]";
-			only_keys(o, op, {"name", "circle", "kind", "solid", "face", "label", "gravity", "pops", "carries"});
+			only_keys(o, op, {"name", "circle", "kind", "solid", "face", "label", "gravity", "pops", "carries", "tags"});
 			Object ob;
 			ob.name = str(req(o, "name", op), op + ".name");
 			for (const Object &other : lv.objects) {
@@ -434,6 +434,9 @@ void parse_goals(const json &j, Level &lv) {
 			}
 			if (const json *v = opt(o, "carries")) {
 				ob.carries = str(*v, op + ".carries");
+			}
+			if (const json *v = opt(o, "tags")) {
+				ob.tags = strings(*v, op + ".tags");
 			}
 			lv.objects.push_back(std::move(ob));
 		}
@@ -600,6 +603,38 @@ Level parse_level_json(const json &j) {
 			if (lv.cycle.resume_after < 0) {
 				fail("level.cycle.resume_after", "a number of seconds >= 0 expected");
 			}
+		}
+	}
+	// Stage 152: the tagged elements' surfaces, the spreading rules
+	for (const Lowered::Tagged &t : low.tagged) {
+		Tagged tg{t.name, t.tags, {}};
+		const std::string prefix = "level.elements[" + std::to_string(t.element) + "]";
+		for (size_t k = 0; k < low.origins.size(); k++) {
+			if (low.origins[k].rfind(prefix, 0) == 0) {
+				tg.surfaces.push_back(k);
+			}
+		}
+		lv.tagged.push_back(std::move(tg));
+	}
+	lv.spread = {{"burnt", "flammable", true, {}}, {"charge", "conductive", false, {"powered"}}};
+	if (const json *sp = opt(j, "spread")) {
+		if (!sp->is_array()) {
+			fail("level.spread", "an array of rules expected");
+		}
+		lv.spread.clear(); // (the level's rules replace the defaults)
+		for (size_t i = 0; i < sp->size(); i++) {
+			const std::string rp = "level.spread[" + std::to_string(i) + "]";
+			only_keys((*sp)[i], rp, {"flag", "tag", "persist", "sources"});
+			SpreadRule r;
+			r.flag = str(req((*sp)[i], "flag", rp), rp + ".flag");
+			r.tag = str(req((*sp)[i], "tag", rp), rp + ".tag");
+			if (const json *v = opt((*sp)[i], "persist")) {
+				r.persist = boolean(*v, rp + ".persist");
+			}
+			if (const json *v = opt((*sp)[i], "sources")) {
+				r.sources = strings(*v, rp + ".sources");
+			}
+			lv.spread.push_back(std::move(r));
 		}
 	}
 	const json &es = j["elements"];

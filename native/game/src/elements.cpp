@@ -23,7 +23,7 @@ namespace {
 
 [[noreturn]] void fail(const std::string &path, const std::string &what) { throw LevelError(path + ": " + what); }
 
-const std::set<std::string> COMMON = {"kind", "name", "start", "end", "via", "circle", "straight", "label", "flip", "carrier", "from", "to", "motion"};
+const std::set<std::string> COMMON = {"kind", "name", "start", "end", "via", "circle", "straight", "label", "flip", "carrier", "from", "to", "motion", "tags"};
 const std::set<std::string> GEOMETRY = {"start", "end", "via", "circle", "straight"};
 const std::set<std::string> TYPES = {"string", "number", "bool", "point", "array", "object", "any"};
 
@@ -420,7 +420,7 @@ void check_template(const json &t, const std::string &path) {
 		fail(path, "a template object expected");
 	}
 	for (auto it = t.begin(); it != t.end(); ++it) {
-		static const std::set<std::string> keys = {"doc", "label", "priority", "geometry", "params", "surfaces", "example"};
+		static const std::set<std::string> keys = {"doc", "label", "priority", "geometry", "params", "surfaces", "example", "tags"};
 		if (!keys.count(it.key())) {
 			fail(path, "unknown key '" + it.key() + "'");
 		}
@@ -465,6 +465,11 @@ void check_template(const json &t, const std::string &path) {
 			if (!why.empty()) {
 				fail(pp + ".default", why);
 			}
+		}
+	}
+	if (t.contains("tags")) { // Stage 152: the kind's own tags (flammable, conductive, powered, ...)
+		if (!t["tags"].is_array() || !std::all_of(t["tags"].begin(), t["tags"].end(), [](const json &v) { return v.is_string(); })) {
+			fail(path + ".tags", "an array of strings expected");
 		}
 	}
 	if (t.contains("example")) { // the parameters a new element starts with (the editor's palette)

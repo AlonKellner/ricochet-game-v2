@@ -1,0 +1,80 @@
+{
+ "background": {
+  "color": [0.10000000149011612, 0.10000000149011612, 0.10000000149011612, 1.0],
+  "rect": [0.0, 0.0, 1920.0, 1080.0]
+ },
+ "bounds": [0.0, 0.0, 1920.0, 1080.0],
+ "camera": null,
+ "colliders": [],
+ "elements": [
+  {
+   "end": [620.0, 380.0],
+   "kind": "battery",
+   "name": "cell",
+   "start": [620.0, 300.0]
+  },
+  {
+   "end": [900.0, 380.0],
+   "kind": "conductor",
+   "name": "wire1",
+   "start": [620.0, 380.0]
+  },
+  {
+   "end": [1150.0, 380.0],
+   "kind": "conductor",
+   "name": "wire2",
+   "start": [940.0, 380.0]
+  },
+  {
+   "end": [1150.0, 840.0],
+   "kind": "charged_door",
+   "name": "gate",
+   "start": [1150.0, 240.0]
+  }
+ ],
+ "features": {
+  "arrow": true,
+  "cursor": true,
+  "game": true,
+  "hud": true,
+  "preview": true
+ },
+ "gravity": [0.0, 980.0],
+ "name": "objectives/circuit",
+ "objective": {
+  "goal": {
+   "rect": [1200.0, 760.0, 140.0, 80.0]
+  }
+ },
+ "objects": [
+  {
+   "carries": "box",
+   "circle": {
+    "center": [920.0, 270.0],
+    "radius": 24.0
+   },
+   "face": "pass",
+   "gravity": -0.5,
+   "label": "Bubble",
+   "name": "bubble",
+   "pops": true,
+   "solid": false
+  },
+  {
+   "circle": {
+    "center": [920.0, 320.0],
+    "radius": 24.0
+   },
+   "name": "box",
+   "tags": ["conductive"]
+  }
+ ],
+ "player": {
+  "start": [700.0, 827.92]
+ },
+ "room": {
+  "built": true,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}

@@ -1027,6 +1027,9 @@ std::vector<Editor::Row> Editor::rows() const {
 			add({Row::Value, "motion", e.contains("motion") ? spell(e["motion"]) : "(none)",
 					"{\"keys\": [[phase, dx, dy, angle], ...], \"pivot\": [x, y]?}: it moves over the level's cycle (its keys drawn faint)",
 					Field{selected_, "motion"}, "", -1, 0, {}});
+			add({Row::Value, "tags", e.contains("tags") ? spell(e["tags"]) : "(the kind's)",
+					"[tag, ...]: added to the kind's tags; the level's spread rules flow through them (flammable, conductive, powered)",
+					Field{selected_, "tags"}, "", -1, 0, {}});
 			const json params = ks.contains(kind) ? ks[kind].value("params", json::object()) : json::object();
 			for (auto it = params.begin(); it != params.end(); ++it) {
 				const json &spec = it.value();
@@ -1064,6 +1067,7 @@ std::vector<Editor::Row> Editor::rows() const {
 		field("detectors", "/detectors", "[{name, region | segment, mode, flag?}]: they write flags (D)");
 		field("objects", "/objects", "[{name, circle, kind, face, solid}]: bodies a pull brings back (B)");
 		field("cycle", "/cycle", "{\"period\": s, \"resume_after\": s}: the moving elements' cycle");
+		field("spread", "/spread", "[{flag, tag, persist?, sources?}]: flags flowing through tagged things that touch (default: fire and charge)");
 	}
 	y += 8;
 	add({Row::Header, errors_.empty() ? "no problems" : std::to_string(errors_.size()) + " problem(s)", "", "", std::nullopt, "", -1, 0, {}});

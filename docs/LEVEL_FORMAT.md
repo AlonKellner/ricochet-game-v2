@@ -29,8 +29,9 @@ too).
 | `templates` | `{kind: template}`: the level's own element kinds, added to the builtin ones or replacing one (docs/ELEMENTS.md) | `{}` |
 | `objective` | `{"goal": region, "requires": [{"key", "values"}]}`: reach the goal while every condition holds to win (GAME_SPEC 24.6); none: every target hit wins | none |
 | `detectors` | `[{"name", "region": region \| "segment": {"a", "b"}, "mode": "while" \| "enter" \| "toggle", "flag", "value", "for"}]`: flags written as the player moves (GAME_SPEC 24.5; flag default `det:<name>`, mode `while`, value `true`, for `player`) | `[]` |
-| `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "wall" \| "mirror" \| "pass", "solid", "label", "gravity", "pops", "carries"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, wall, solid, label `Object` by default); their surfaces take the ids after the level's. Stage 150: `gravity` a factor of the level's (default 1; negative floats up), `pops` (the arrow pops it: flag `obj:<name>:popped`), `carries` another object until it pops | `[]` |
+| `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "wall" \| "mirror" \| "pass", "solid", "label", "gravity", "pops", "carries", "tags"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, wall, solid, label `Object` by default); their surfaces take the ids after the level's. Stage 150: `gravity` a factor of the level's (default 1; negative floats up), `pops` (the arrow pops it: flag `obj:<name>:popped`), `carries` another object until it pops. Stage 152: `tags` (what spread rules flow through: `["conductive"]`) | `[]` |
 | `cycle` | `{"period": s, "resume_after": s}`: the moving elements' cycle (GAME_SPEC 9.8; 4 and 10 by default) | |
+| `spread` | `[{"flag", "tag", "persist", "sources"}]`: flags flowing through tagged elements and objects that touch (GAME_SPEC 10.6, docs/ELEMENTS.md "Tags and spreading"; `persist` false and `sources` `[]` by default) | `burnt` through `flammable` (persist), `charge` through `conductive` from `powered` |
 | `carriers` | `[{"name", "line": {"a": [x, y], "b": [x, y]}} \| {"name", "circle": {"center": [x, y], "radius": r}}]`: lines and circles elements are placed on (Stage 149, below) | `[]` |
 
 A region is `{"rect": [x, y, w, h]}` or `{"circle": {"center": [x, y], "radius": r}}`. The objective and the
@@ -48,6 +49,7 @@ An element:
 | `label` | the node prefix, overriding the kind's (`null`: not drawn) |
 | `flip` | `true`: left and right swapped (a mirror facing right) |
 | `motion` | `{"keys": [[phase, dx, dy, angle], ...], "pivot": [x, y]}` (Stage 151): the element moves over the level's cycle -- phases in [0, 1), increasing; offsets and angles (radians, about the pivot: default its middle) interpolated, looping |
+| `tags` | `[tag, ...]` (Stage 152): added to the kind's own tags; the level's spread rules flow through them |
 | `carrier`, `from`, `to` | instead of the geometry (Stage 149): on the named carrier, from one point to another (both projected onto it); on a circle `via` picks the arc (default: the shorter one), and neither `from` nor `to` is the whole circle |
 | *parameters* | the kind's own (`back`, `flag`, `d`, ...), each with a default unless required |
 

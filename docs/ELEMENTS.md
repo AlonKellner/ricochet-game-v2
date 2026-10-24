@@ -39,6 +39,9 @@ surface already does (GAME_SPEC 9-10).
 | `burnable` | A burnable barrier: solid, but an arrow on fire burns it away for good (flag `el:<name>:burnt`) and goes on. | `fire`="shot:fire", `solid`=true | `Burnable` |
 | `charger` | A charger: an arrow passing it is charged for the rest of the shot (flag `shot:charge`, or `charge`). | `charge`="shot:charge" | `Charger` |
 | `conditional_button` | A button only a charged (or burning, frosted...) arrow presses: while `when` is true the hit sets or toggles `flag`; otherwise it is a wall. | `when`="shot:charge", `flag` (required), `op`="set", `value`=true | `CondButton` |
+| `conductor` | A conductor (a wire, a plate): tagged `conductive`, it passes charge to every conductive element and object it touches (GAME_SPEC 24.7). | `face`="pass", `solid`=true | `Conductor` |
+| `battery` | A battery: tagged `conductive` and `powered`, the source of the charge (flag `el:<name>:charge`) in what conducts from it. | `solid`=true | `Battery` |
+| `charged_door` | A charged door: a conductive wall that is gone while charge reaches it (`el:<name>:charge`) and back when the circuit breaks. | `solid`=true | `ChargedDoor` |
 
 The format's own kinds are `edges`, which places the four edge walls where it stands, and `raw`, which takes an
 `rc-level/1` surface as it is.
@@ -63,6 +66,7 @@ Flags are named after what writes or reads them, so levels and templates agree w
 | `det:<name>` | the detector `<name>` (GAME_SPEC 24.5) | a door (`"flag": "det:plate"`), the goal's `requires` |
 | `shot:*` | anything in a shot: `shot:fire`, `shot:frost`, `shot:charge`, `shot:<name>:broken` | erased when the arrow lands (GAME_SPEC 10.6): a state of the arrow, not of the world |
 | `el:<name>:*` | an element's own state: `el:<name>:off`, `el:<name>:burnt` | the element (kept across shots) |
+| `el:<name>:<flag>` | a spread rule (`burnt`, `charge`): the element or object `<name>` lit | the element: `burnable`, `charged_door` |
 
 The level's `flags` sets any of them at the start. For example, `{"door:gate": true}` starts with the door open.
 
@@ -137,9 +141,32 @@ flag) and state writes on hits:
 | gone for good | the same with `el:<name>:x` | `burnable` |
 | a state that comes back | two surfaces on one geometry, each present in one state, each writing the other | `toggle_surface` |
 
-What the kit cannot say needs a primitive. Moving surfaces need a schedule and a world that moves them. Light and
-shadow need a region the arrow tests against. Charge or fire spreading between surfaces needs a propagation rule
-that is no arrow's. docs/TDD_52_KIT.md sketches each.
+What the kit cannot say needs a primitive. Moving surfaces have one: the level's `cycle` and an element's `motion`
+(GAME_SPEC 24.6, docs/TDD_56_MOTION.md). Spreading has one: tags and the level's `spread` rules (below). Light and
+shadow still need a region the arrow tests against (docs/TDD_52_KIT.md sketches it).
+
+## Tags and spreading
+
+An element or an object carries `tags` (a template's `tags`, plus the element's own). A spread rule
+(GAME_SPEC 24.7) flows a flag through every tagged thing that touches another (within half a pixel): an element
+by its segment or arc, an object by its circle.
+
+```json
+"spread": [{"flag": "burnt", "tag": "flammable", "persist": true},
+           {"flag": "charge", "tag": "conductive", "persist": false, "sources": ["powered"]}]
+```
+
+| Key | Meaning |
+|---|---|
+| `flag` | the flag written, per thing: `el:<name>:<flag>` = true |
+| `tag` | what carries it |
+| `persist` | `true`: once lit, lit for good, and it flows through every tagged thing, present or not (fire). `false`: recomputed whenever the world changes; it flows only through present things, and an absent thing it reaches is lit but passes nothing on (charge: an open door is charged, so it stays open, yet breaks the circuit) |
+| `sources` | tags lit by themselves (a battery is `powered`); without sources only things already lit spread |
+
+Without `spread`, a level has the two rules above. With it, the level's rules replace them. The builtin
+`burnable` is `flammable`; `conductor`, `battery` and `charged_door` are `conductive`, and the battery is
+`powered`. An object becomes conductive by its own `"tags": ["conductive"]`: a box dropped across a gap
+closes the circuit.
 
 ## Migration
 
