@@ -15,7 +15,7 @@ shape: their members split cells into two cells of one shape.
 | 140.2 | The native builder: `Surf::never_candidate`, `Builder::spared_surface`, `Builder::cannot_start`, `vis::spare_members()`; the arc-cancellation fix in `merge_cells_of` | Done |
 | 140.3 | The tests (`test_spared_members.cpp`): the loops equal the full build's on every test-level region; the rules' cases | Done |
 | 140.4 | The judge (region digests: cell counts; sessions: the fill), the user's approval, the re-bless | Done (approved 2026-10-24; re-blessed: 118 region digests, 46 sessions) |
-| 140.5 | The measurement after, docs, `make gates`, sign-off | Measured; gates and sign-off pending |
+| 140.5 | The measurement after, docs, `make gates`, sign-off | Done (`make gates` ok; the user's interactive sign-off 2026-10-24) |
 
 ## 140.0 The measurement
 
