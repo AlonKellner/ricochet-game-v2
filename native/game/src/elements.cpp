@@ -23,7 +23,7 @@ namespace {
 
 [[noreturn]] void fail(const std::string &path, const std::string &what) { throw LevelError(path + ": " + what); }
 
-const std::set<std::string> COMMON = {"kind", "name", "start", "end", "via", "circle", "straight", "label", "flip", "carrier", "from", "to"};
+const std::set<std::string> COMMON = {"kind", "name", "start", "end", "via", "circle", "straight", "label", "flip", "carrier", "from", "to", "motion"};
 const std::set<std::string> GEOMETRY = {"start", "end", "via", "circle", "straight"};
 const std::set<std::string> TYPES = {"string", "number", "bool", "point", "array", "object", "any"};
 

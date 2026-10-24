@@ -81,6 +81,10 @@ With Alt held, the point stays exactly under the pointer.
 line when dragged), a circle's center and radius, and the player's start. When an endpoint moves, the via
 stays where it is (GAME_SPEC 19.2).
 
+**Motion.** An element's `motion` field takes its keys (`{"keys": [[phase, dx, dy, angle], ...]}`). The element is
+drawn faint and dashed where each key puts it, and the level's `cycle` field sets the period. Play-test (F5) to
+see it move; the wheel sets the cycle there.
+
 **Carriers.** A point placed near a carrier snaps onto it, a grid step along it. When both clicks of the line
 tool (or the three of the arc tool on a circle) land on one carrier, the element is placed on it (`carrier`,
 `from`, `to`), and its handles move along it. A carrier is selected by a click on its line or circle. Its handles

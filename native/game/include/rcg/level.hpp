@@ -145,6 +145,20 @@ struct Object {
 	std::string carries;
 };
 
+// rc-level/2 (Stage 151): an element's motion over the level's cycle -- keys
+// (phase in [0, 1), an offset dx, dy, an angle in radians about the pivot),
+// interpolated linearly and looping; its surfaces (indices into
+// Level::surfaces) move together.
+struct Motion {
+	std::vector<size_t> surfaces;
+	std::vector<std::array<double, 4>> keys;
+	std::optional<V2> pivot; // default: the first surface's middle (a circle: its center)
+};
+struct Cycle {
+	double period = 4.0;       // seconds per cycle while it runs on its own
+	double resume_after = 10.0; // seconds of no scroll and no plan change before a paused cycle runs again
+};
+
 // rc-level/2: the level's goal (GAME_SPEC 3.2): the player inside the region
 // while every condition holds (the presence form, GAME_SPEC 9.6) wins.
 struct Objective {
@@ -195,6 +209,8 @@ struct Level {
 	std::optional<Objective> objective;
 	std::vector<Detector> detectors;
 	std::vector<Object> objects; // Stage 146
+	std::vector<Motion> motions; // Stage 151
+	Cycle cycle;
 };
 
 // Stage 146: an object's surface (a full circle at `center`, its sides by its face, a pull on them if pullable).

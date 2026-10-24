@@ -319,6 +319,8 @@ rc_status rc_game_frame(const rc_game *game, rc_frame *out) {
 		f.region_pending = s.region_pending() ? 1 : 0;
 		f.preview_exact = s.preview_exact() ? 1 : 0;
 		f.won = s.won() ? 1 : 0;
+		f.phase = float(s.phase());
+		f.cycle_auto = s.cycle_auto() ? 1 : 0;
 		fill(out, f);
 		return RC_OK;
 	});
@@ -433,6 +435,16 @@ rc_status draw_list(rc_game *game, rc_draw_list *out, bool changes_only) {
 }
 
 } // namespace
+
+rc_status rc_game_scroll(rc_game *game, float delta) {
+	return guarded([&]() -> rc_status {
+		if (game == nullptr) {
+			return fail(RC_E_ARGUMENT, "rc_game_scroll: null game");
+		}
+		game->session->scroll(delta);
+		return RC_OK;
+	});
+}
 
 rc_status rc_game_draw_list(rc_game *game, rc_draw_list *out) {
 	return guarded([&]() -> rc_status { return draw_list(game, out, false); });

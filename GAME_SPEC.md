@@ -42,6 +42,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done |
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
+| Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
 | Bubbles: objects with their own gravity (floating up), popped by the arrow, carrying an object until they pop (§25.5; docs/TDD_55, Stage 150) | Done |
 | Carriers: lines and circles elements are placed on (`carrier`, `from`, `to`), an authoring construct the lowering projects onto (§19.1; docs/TDD_53, Stage 149) | Done |
 | The novel-element kit: per-shot flags (`shot:*`, erased at landing) and templates for breakable, toggle, frost, fire and charge elements (§10.6; docs/ELEMENTS.md, docs/TDD_52, Stage 147) | Done |
@@ -675,6 +676,22 @@ Presence differs from a pass. A pass side is still hit: it produces events and s
 Presence is evaluated under the walk's **current** flags, so a surface can vanish or appear mid-shot when a hit effect writes its key (§10.6). The planned path evaluates presence under the plan's simulated flags (§13.7). A plan entry on a surface that is absent at that point is not reached, and the preview shows this (principle 13).
 
 Presence is orthogonal to the resolver. The resolver chooses *how* a present surface behaves, presence chooses *whether* it is there, and both may read flags. Unlike categorical sides, presence works with every path effect, portals and projectives included (a portal pair shares one presence).
+
+### 9.8 Moving surfaces
+
+> **Status: implemented (Stage 151, docs/TDD_56_MOTION.md).**
+
+An element may move over the level's **cycle**: its `motion` keys an offset and a rotation (about a pivot,
+default its first surface's middle) at phases in [0, 1), interpolated linearly and looping. All its surfaces
+move together; a portal's image moves with it. The cycle:
+- runs on its own, a period per cycle (default 4 s), advanced per physics tick (so every host's frames agree);
+- the **mouse wheel** sets it: each notch moves it a fiftieth of a cycle and **pauses** it;
+- a paused cycle runs again after a **shot** lands, or after `resume_after` seconds (default 10) with no scroll and
+  no plan change;
+- it is frozen while the arrow flies (the game is paused), and the checkpoint holds it (an undo restores it).
+
+The surfaces are where the cycle puts them when a shot is fired; the shot's world is that one. A level with a
+cycle shows `Cycle: running` or `Cycle: paused` in its HUD and records `phase` and `cycle_auto`.
 
 ### 9.7 Design surfaces and pieces (crossings)
 
@@ -2803,4 +2820,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.61.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.62.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -49,6 +49,8 @@ std::vector<std::string> replay_session(const json &script, const std::string &l
 			s.teleport(at(step["at"]));
 		} else if (op == "cursor") {
 			s.set_cursor(at(step["at"]));
+		} else if (op == "scroll") { // Stage 151: the cycle
+			s.scroll(step["by"].get<double>());
 		} else if (op == "click") {
 			s.click(step["button"] == "right");
 		} else if (op == "key") {

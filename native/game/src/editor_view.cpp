@@ -1024,6 +1024,9 @@ std::vector<Editor::Row> Editor::rows() const {
 			if (e.contains("circle")) {
 				add({Row::Value, "circle", spell(e["circle"]), "{\"center\": [x, y], \"radius\": r}", Field{selected_, "circle"}, "", -1, 0, {}});
 			}
+			add({Row::Value, "motion", e.contains("motion") ? spell(e["motion"]) : "(none)",
+					"{\"keys\": [[phase, dx, dy, angle], ...], \"pivot\": [x, y]?}: it moves over the level's cycle (its keys drawn faint)",
+					Field{selected_, "motion"}, "", -1, 0, {}});
 			const json params = ks.contains(kind) ? ks[kind].value("params", json::object()) : json::object();
 			for (auto it = params.begin(); it != params.end(); ++it) {
 				const json &spec = it.value();
@@ -1060,6 +1063,7 @@ std::vector<Editor::Row> Editor::rows() const {
 		field("requires", "/objective/requires", "[{\"key\", \"values\"}]: the goal opens when they hold");
 		field("detectors", "/detectors", "[{name, region | segment, mode, flag?}]: they write flags (D)");
 		field("objects", "/objects", "[{name, circle, kind, face, solid}]: bodies a pull brings back (B)");
+		field("cycle", "/cycle", "{\"period\": s, \"resume_after\": s}: the moving elements' cycle");
 	}
 	y += 8;
 	add({Row::Header, errors_.empty() ? "no problems" : std::to_string(errors_.size()) + " problem(s)", "", "", std::nullopt, "", -1, 0, {}});
@@ -1472,6 +1476,43 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 		if (bad[i]) {
 			for (const BuiltSurface &b : drawn_[i].built) {
 				stroke(b.seg, ERROR_TEXT, 1.5, true);
+			}
+		}
+		// Stage 151: a moving element, faint where its keys put it
+		const json &me = doc_["elements"][i];
+		if (me.is_object() && me.contains("motion") && me["motion"].is_object() && me["motion"].value("keys", json()).is_array() && !drawn_[i].built.empty()) {
+			const rc::arc::SegGeom &f0 = drawn_[i].built.front().seg;
+			V2 pivot = f0.full ? rc::arc::center_of(f0.get_carrier()) : V2::of((double(f0.s.x) + f0.e.x) / 2, (double(f0.s.y) + f0.e.y) / 2);
+			if (is_point(me["motion"].value("pivot", json()))) {
+				pivot = pt(me["motion"]["pivot"]);
+			}
+			for (const json &k : me["motion"]["keys"]) {
+				if (!k.is_array() || k.size() != 4 || !k[1].is_number() || !k[2].is_number() || !k[3].is_number()) {
+					continue;
+				}
+				const double dx = k[1].get<double>(), dy = k[2].get<double>(), a = k[3].get<double>();
+				if (dx == 0 && dy == 0 && a == 0) {
+					continue;
+				}
+				const double c = std::cos(a), sn = std::sin(a);
+				auto T = [&](const V2 &p) {
+					const double x = double(p.x) - pivot.x, y = double(p.y) - pivot.y;
+					return V2::of(pivot.x + c * x - sn * y + dx, pivot.y + sn * x + c * y + dy);
+				};
+				for (const BuiltSurface &b : drawn_[i].built) {
+					rc::arc::SegGeom g;
+					if (b.seg.full) {
+						const rc::arc::GeneralizedCircle &gc = b.seg.get_carrier();
+						g = rc::arc::SegGeom::full_from_carrier(rc::arc::from_circle(T(rc::arc::center_of(gc)), gc.radius()));
+					} else if (b.seg.is_line()) {
+						const V2 s0 = T(b.seg.s), e0 = T(b.seg.e);
+						g = rc::arc::SegGeom::make(s0, e0, V2::of((double(s0.x) + e0.x) / 2, (double(s0.y) + e0.y) / 2));
+						g.carrier = rc::arc::straight_carrier(s0, e0);
+					} else {
+						g = rc::arc::SegGeom::make(T(b.seg.s), T(b.seg.e), T(b.seg.v));
+					}
+					stroke(g, rgba(0.75, 0.75, 0.85, 0.35), 1.0, true);
+				}
 			}
 		}
 		// the name, by the element's first surface

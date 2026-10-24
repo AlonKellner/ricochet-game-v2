@@ -135,6 +135,11 @@ public:
 	// Stage 145: the level won (latched): its goal reached while its conditions
 	// hold, or, a level without a goal, every target hit
 	bool won() const { return won_; }
+	// Stage 151: the level's cycle -- its phase in [0, 1), and whether it runs on its own; a scroll moves it
+	// by delta notches (pausing it: it runs again after a shot, or after the level's resume_after idle seconds)
+	double phase() const { return phase_; }
+	bool cycle_auto() const { return cycle_auto_; }
+	void scroll(double delta);
 	V2 player() const { return player_; }
 	// Stage 122: the player before the last physics tick, and how far the time
 	// not yet ticked is into the next (the presenter draws the player between)
@@ -235,6 +240,8 @@ private:
 		std::optional<World::Snapshot> world;
 		bool won = false;         // Stage 145
 		std::vector<bool> inside; // ... the detectors the player is in
+		double phase = 0.0;       // Stage 151
+		bool cycle_auto = true;
 	};
 	// PathRenderer's state: the last pair, its display paths and merge; the last
 	// ladder result and physical hits stay when there is no trace (as the node keeps them)
@@ -312,6 +319,13 @@ private:
 		size_t next = 1;
 	};
 	std::optional<Journey> journey_;
+	// Stage 151: the cycle
+	double phase_ = 0.0;
+	bool cycle_auto_ = true;
+	double idle_ = 0.0;                  // seconds without a scroll or a plan change while paused
+	std::vector<size_t> moving_motion_;  // per World::Moving: its motion's index
+	std::vector<V2> moving_pivot_;       // ... and pivot
+	void apply_phase();                  // the moving surfaces placed for phase_
 	bool bodies_moving_ = false;
 	void step_bodies();
 	void start_journey();             // at landing: the first fired grapple or pull of the shot

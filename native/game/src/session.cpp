@@ -150,6 +150,22 @@ std::optional<Action> action_of(const std::string &name) {
 Session::Session(const Level &level, const SessionConfig &config)
 	: level_(level), visibility_override_(config.visibility), async_(config.async), budget_(config.budget) {
 	world_ = std::make_unique<World>(build_level(level_), level_.objects);
+	if (!level_.motions.empty()) { // Stage 151: the moving surfaces, from their base specs
+		std::vector<World::Moving> moving;
+		for (size_t m = 0; m < level_.motions.size(); m++) {
+			const Motion &mo = level_.motions[m];
+			const SurfaceSpec &first = level_.surfaces[mo.surfaces.front()].spec;
+			const V2 pivot = mo.pivot ? *mo.pivot : first.full_circle ? first.center : V2::of((double(first.start.x) + first.end.x) / 2, (double(first.start.y) + first.end.y) / 2);
+			for (const size_t k : mo.surfaces) {
+				const LevelSurface &ls = level_.surfaces[k];
+				moving.push_back({ls.ids, ls.spec, ls.label});
+				moving_motion_.push_back(m);
+				moving_pivot_.push_back(pivot);
+			}
+		}
+		world_->set_moving(std::move(moving));
+		apply_phase();
+	}
 	player_ = level_.player_start.value_or(V2{});
 	tick_from_ = player_;
 	settled_player_ = player_; // (a new session is standing still)
@@ -162,7 +178,7 @@ Session::Session(const Level &level, const SessionConfig &config)
 		flags_.set(key, value);
 	}
 	// the initial checkpoint: taken before the level built its world (GameManager._ready)
-	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt, false, {}};
+	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt, false, {}, 0.0, true};
 	hud_ = hud_text(); // (Stage 145: a goal's line; "" without a goal and a plan)
 	for (const BuiltSurface &s : world_->surfaces()) {
 		for (const BuiltSide *side : s.all_sides()) {
@@ -571,6 +587,7 @@ void Session::set_plan(const std::vector<rc::PlanItem> &items) {
 }
 
 void Session::click(bool right) {
+	idle_ = 0.0; // (Stage 151: a plan change keeps a paused cycle paused)
 	const Hit r = detect_click();
 	if (r.origin_mark && !right) {
 		return; // (a planned origin's mark, not plannable here)
@@ -619,7 +636,7 @@ void Session::click(bool right) {
 }
 
 Session::Checkpoint Session::capture() const {
-	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot(), won_, inside_};
+	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot(), won_, inside_, phase_, cycle_auto_};
 }
 
 void Session::restore(const Checkpoint &c) {
@@ -634,6 +651,12 @@ void Session::restore(const Checkpoint &c) {
 	targets_ = c.targets;
 	won_ = c.won;
 	inside_ = c.inside;
+	if (!level_.motions.empty()) {
+		phase_ = c.phase;
+		cycle_auto_ = c.cycle_auto;
+		idle_ = 0.0;
+		apply_phase();
+	}
 	refresh_ui();
 }
 
@@ -700,6 +723,10 @@ void Session::land() {
 		}
 	}
 	pending_flags_.reset();
+	if (!level_.motions.empty() && !cycle_auto_) {
+		cycle_auto_ = true; // Stage 151: a shot resumes the cycle
+		idle_ = 0.0;
+	}
 	start_journey();
 	check_won();
 	// Plan entries on surfaces no longer in the world, or absent, are dropped (the ∞ entry stays)
@@ -867,6 +894,15 @@ void Session::advance(double dt, const kinematics::Input &in) {
 }
 
 void Session::tick(const kinematics::Input &in) {
+	if (!level_.motions.empty()) { // Stage 151: the cycle, per tick (every host's frames agree)
+		if (cycle_auto_) {
+			phase_ = std::fmod(phase_ + kinematics::STEP / level_.cycle.period, 1.0);
+		} else if ((idle_ += kinematics::STEP) >= level_.cycle.resume_after) {
+			cycle_auto_ = true;
+			hud_ = hud_text();
+		}
+		apply_phase();
+	}
 	tick_from_ = player_;
 	kinematics::Body body{player_, velocity_, on_floor_};
 	kinematics::step(body, in, gravity_, kinematics::colliders_of(world_->surfaces(), flags_, level_));
@@ -1135,6 +1171,53 @@ void Session::advance_journey(double dt) {
 	}
 }
 
+void Session::scroll(double delta) {
+	if (level_.motions.empty() || flying()) {
+		return;
+	}
+	phase_ = std::fmod(phase_ + delta * 0.02, 1.0); // a notch: a fiftieth of the cycle
+	if (phase_ < 0) {
+		phase_ += 1.0;
+	}
+	cycle_auto_ = false;
+	idle_ = 0.0;
+	apply_phase();
+	hud_ = hud_text();
+}
+
+// The moving surfaces where the cycle puts them: each motion's keys interpolated at
+// the phase -- an offset and a rotation about its pivot.
+void Session::apply_phase() {
+	std::vector<rc::Xf2> xfs;
+	for (size_t i = 0; i < moving_motion_.size(); i++) {
+		const std::vector<std::array<double, 4>> &keys = level_.motions[moving_motion_[i]].keys;
+		std::array<double, 3> v{keys.front()[1], keys.front()[2], keys.front()[3]};
+		if (keys.size() > 1) {
+			size_t k = keys.size() - 1;
+			for (size_t q = 0; q < keys.size(); q++) {
+				if (keys[q][0] <= phase_) {
+					k = q;
+				}
+			}
+			const size_t n = (k + 1) % keys.size();
+			const double p0 = keys[k][0] > phase_ ? keys[k][0] - 1.0 : keys[k][0]; // (before the first key: the last, a cycle back)
+			const double p1 = n == 0 ? keys[0][0] + 1.0 : keys[n][0];
+			const double t = (phase_ - p0) / (p1 - p0);
+			for (size_t q = 0; q < 3; q++) {
+				v[q] = keys[k][q + 1] + (keys[n][q + 1] - keys[k][q + 1]) * t;
+			}
+		}
+		const double c = std::cos(v[2]), s = std::sin(v[2]);
+		const V2 p = moving_pivot_[i];
+		const rc::Xf2 xf = rc::Xf2::of(V2::of(c, s), V2::of(-s, c),
+				V2::of(double(p.x) + v[0] - (c * p.x - s * p.y), double(p.y) + v[1] - (s * p.x + c * p.y)));
+		xfs.push_back(xf);
+	}
+	if (world_->place_moving(xfs)) {
+		sync_nodes();
+	}
+}
+
 bool Session::goal_open() const { return level_.objective && holds(level_.objective->conditions, flags_); }
 
 void Session::check_won() {
@@ -1245,7 +1328,10 @@ void Session::refresh_ui() {
 
 std::string Session::hud_text() const {
 	// Stage 145: a level with a goal says where it stands
-	const std::string goal = !level_.objective ? std::string() : std::string("Goal: ") + (won_ ? "reached!" : goal_open() ? "open" : "locked");
+	std::string goal = !level_.objective ? std::string() : std::string("Goal: ") + (won_ ? "reached!" : goal_open() ? "open" : "locked");
+	if (!level_.motions.empty()) { // Stage 151
+		goal += std::string(goal.empty() ? "" : "\n") + (cycle_auto_ ? "Cycle: running (scroll to set it)" : "Cycle: paused (a shot runs it again)");
+	}
 	if (plan_.empty()) {
 		return goal;
 	}
@@ -1687,6 +1773,10 @@ json Session::record(const json &extra) const {
 	r["targets"] = targets;
 	if (level_.objective) {
 		r["won"] = won_; // Stage 145 (only a level with a goal: the older records are unchanged)
+	}
+	if (!level_.motions.empty()) {
+		r["phase"] = phase_; // Stage 151 (only a level with a cycle)
+		r["cycle_auto"] = cycle_auto_;
 	}
 	r["checkpoints"] = int(checkpoints_.size());
 	const std::optional<V2> q = self.pole(plan_.size());

@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 9
+#define RC_API_VERSION_MINOR 10
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -131,6 +131,10 @@ enum { RC_KEY_LEFT = 1, RC_KEY_RIGHT = 2, RC_KEY_UP = 4, RC_KEY_DOWN = 8 };
  * events whose effect should show before the next frame (dt 0). */
 RC_API rc_status rc_game_advance(rc_game *game, double dt, uint32_t held, uint32_t pressed);
 
+/* 1.10: the mouse wheel: moves the level's cycle (moving surfaces) by delta
+ * notches and pauses it; a shot, or the level's idle seconds, runs it again. */
+RC_API rc_status rc_game_scroll(rc_game *game, float delta);
+
 /* Moves the player (tests, debugging, level editors). */
 RC_API rc_status rc_game_teleport(rc_game *game, float x, float y);
 
@@ -151,6 +155,8 @@ typedef struct rc_frame {
 	int32_t region_pending; /* 1.2 (async): a newer visibility region is being computed */
 	int32_t preview_exact;  /* 1.2 (async): 0 while the path shown is provisional (its exact climb runs) */
 	int32_t won;            /* 1.9: the level is won (its goal reached, or every target hit; latched until undo or reset) */
+	float phase;            /* 1.10: the level's cycle (moving surfaces), in [0, 1) */
+	int32_t cycle_auto;     /* 1.10: the cycle runs on its own (0: paused by a scroll) */
 } rc_frame;
 RC_API rc_status rc_game_frame(const rc_game *game, rc_frame *out);
 

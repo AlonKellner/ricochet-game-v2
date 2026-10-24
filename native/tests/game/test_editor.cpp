@@ -98,7 +98,7 @@ TEST_CASE("editor: every level loads and saves byte for byte") {
 		CHECK_FALSE(ed.draw().empty());
 		n++;
 	}
-	CHECK(n == 42);
+	CHECK(n == 43);
 	// an rc-level/1 document is migrated
 	const json v1 = json::parse(read_text(ROOT / "bench" / "lowered" / "test_levels__flag_switches.json"));
 	rcg::Editor ed(&v1);
@@ -569,4 +569,28 @@ TEST_CASE("editor: an element's kind picked from the palette") {
 	ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
 	CHECK(element(ed, "w")["kind"] == "fence");
 	CHECK(ok(ed, {{"op", "state"}})["kind"] == "wall"); // what the tools place did not change
+}
+
+TEST_CASE("editor: a moving element shows its keys faint; its motion is a panel field (Stage 151)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "wall", "name": "w", "start": [700, 400], "end": [700, 600]})")}});
+	size_t before = 0;
+	for (const auto &n : ed.draw()) {
+		if (n.key.a == 3) {
+			before = n.calls->size();
+		}
+	}
+	click_row(ed, "motion");
+	ed.text(R"({"keys": [[0, 0, 0, 0], [0.5, 100, 0, 0]]})");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(element(ed, "w")["motion"]["keys"][1][1] == 100);
+	CHECK(ed.errors().empty());
+	size_t after = 0;
+	for (const auto &n : ed.draw()) {
+		if (n.key.a == 3) {
+			after = n.calls->size();
+		}
+	}
+	CHECK(after > before); // the key's faint copy
 }

@@ -226,7 +226,7 @@ Lowered lower_level(const json &v2) {
 			fail(P, "'" + k + "' is reserved for a later stage of rc-level/2");
 		}
 		const bool known = k == "schema" || k == "flags" || k == "templates" || k == "elements" || k == "objective" || k == "detectors"
-				|| k == "objects" || k == "carriers" || std::find(META.begin(), META.end(), k) != META.end();
+				|| k == "objects" || k == "carriers" || k == "cycle" || std::find(META.begin(), META.end(), k) != META.end();
 		if (!known) {
 			fail(P, "unknown key '" + k + "'");
 		}

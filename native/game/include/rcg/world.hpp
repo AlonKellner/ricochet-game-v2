@@ -53,6 +53,15 @@ public:
 	int body_of(int surface_id) const; // the body whose surface it is, -1: none
 	// a body moved: its surface rebuilt where it is (a structural change when it moved)
 	void set_body(size_t index, const V2 &pos, const V2 &vel, bool on_floor);
+	// Stage 151: static surfaces that move -- each rebuilt from its base spec through a rigid transform
+	struct Moving {
+		std::vector<int> ids;
+		SurfaceSpec base;
+		std::optional<std::string> label;
+	};
+	void set_moving(std::vector<Moving> moving);
+	// the moving surfaces placed by their transforms (one per Moving); a structural change when any moved
+	bool place_moving(const std::vector<rc::Xf2> &xfs);
 
 	// the static surfaces, then the groups by channel name
 	const std::vector<BuiltSurface> &surfaces() const { return surfaces_; }
@@ -80,6 +89,8 @@ private:
 
 	std::vector<BuiltSurface> static_;
 	std::vector<Body> bodies_;
+	std::vector<Moving> moving_;
+	std::vector<rc::Xf2> moving_at_;
 	std::map<std::string, Group> groups_;
 	std::map<std::string, int> generations_;
 	std::vector<BuiltSurface> surfaces_;

@@ -61,7 +61,8 @@ class Frame(ctypes.Structure):
                 ("display_mode", ctypes.c_int32),
                 ("gravity_x", ctypes.c_float), ("gravity_y", ctypes.c_float),
                 ("region_pending", ctypes.c_int32), ("preview_exact", ctypes.c_int32),  # 1.2
-                ("won", ctypes.c_int32)]  # 1.9
+                ("won", ctypes.c_int32),  # 1.9
+                ("phase", ctypes.c_float), ("cycle_auto", ctypes.c_int32)]  # 1.10
 
 
 class DrawCmd(ctypes.Structure):
@@ -126,6 +127,7 @@ def _load():
         "rc_game_set_cursor": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_float, ctypes.c_float]),
         "rc_game_advance": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_double, ctypes.c_uint32, ctypes.c_uint32]),
         "rc_game_teleport": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_float, ctypes.c_float]),
+        "rc_game_scroll": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_float]),
         "rc_game_frame": (ctypes.c_int32, [ctypes.c_void_p, P(Frame)]),
         "rc_game_draw_list": (ctypes.c_int32, [ctypes.c_void_p, P(DrawList)]),
         "rc_game_draw_changes": (ctypes.c_int32, [ctypes.c_void_p, P(DrawList)]),
@@ -231,6 +233,9 @@ class Game:
 
     def teleport(self, x, y):
         check(lib.rc_game_teleport(self._h, x, y))
+
+    def scroll(self, delta):
+        check(lib.rc_game_scroll(self._h, delta))
 
     def advance(self, dt, held=0, pressed=0):
         check(lib.rc_game_advance(self._h, dt, held, pressed))
@@ -378,6 +383,8 @@ def replay(script, levels_dir=ROOT / "data" / "levels", draw_list=False):
             game.teleport(*step["at"])
         elif op == "cursor":
             game.set_cursor(*step["at"])
+        elif op == "scroll":
+            game.scroll(step["by"])
         elif op == "click":
             game.event(EVENT_PLAN_REMOVE if step["button"] == "right" else EVENT_PLAN_ADD)
         elif op == "key":

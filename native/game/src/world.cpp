@@ -20,6 +20,33 @@ World::World(std::vector<BuiltSurface> static_surfaces, const std::vector<Object
 	initial_ = snapshot();
 }
 
+void World::set_moving(std::vector<Moving> moving) {
+	moving_ = std::move(moving);
+	moving_at_.clear();
+}
+
+bool World::place_moving(const std::vector<rc::Xf2> &xfs) {
+	if (xfs == moving_at_) {
+		return false;
+	}
+	for (size_t i = 0; i < moving_.size() && i < xfs.size(); i++) {
+		if (i < moving_at_.size() && moving_at_[i] == xfs[i]) {
+			continue;
+		}
+		const Moving &m = moving_[i];
+		for (BuiltSurface &b : build_spec(mapped(m.base, xfs[i]), m.ids.front(), m.label)) {
+			for (BuiltSurface &s : static_) {
+				if (s.id == b.id) {
+					s = b;
+				}
+			}
+		}
+	}
+	moving_at_ = xfs;
+	rebuild();
+	return true;
+}
+
 int World::body_of(int surface_id) const {
 	for (size_t i = 0; i < bodies_.size(); i++) {
 		if (bodies_[i].id == surface_id) {

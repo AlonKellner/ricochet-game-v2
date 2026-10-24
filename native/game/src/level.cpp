@@ -586,6 +586,63 @@ Level parse_level_json(const json &j) {
 		throw;
 	}
 	parse_goals(j, lv);
+	// Stage 151: the cycle and the elements' motions (their surfaces: the lowering's from that element)
+	if (const json *c = opt(j, "cycle")) {
+		only_keys(*c, "level.cycle", {"period", "resume_after"});
+		if (const json *v = opt(*c, "period")) {
+			lv.cycle.period = num(*v, "level.cycle.period");
+			if (!(lv.cycle.period > 0)) {
+				fail("level.cycle.period", "a positive number of seconds expected");
+			}
+		}
+		if (const json *v = opt(*c, "resume_after")) {
+			lv.cycle.resume_after = num(*v, "level.cycle.resume_after");
+			if (lv.cycle.resume_after < 0) {
+				fail("level.cycle.resume_after", "a number of seconds >= 0 expected");
+			}
+		}
+	}
+	const json &es = j["elements"];
+	for (size_t i = 0; i < es.size(); i++) {
+		if (!es[i].is_object() || !es[i].contains("motion")) {
+			continue;
+		}
+		const std::string mp = "level.elements[" + std::to_string(i) + "].motion";
+		const json &m = es[i]["motion"];
+		only_keys(m, mp, {"keys", "pivot"});
+		Motion mo;
+		const json &keys = req(m, "keys", mp);
+		if (!keys.is_array() || keys.empty()) {
+			fail(mp + ".keys", "an array of [phase, dx, dy, angle] expected");
+		}
+		for (size_t k = 0; k < keys.size(); k++) {
+			const std::string kp = mp + ".keys[" + std::to_string(k) + "]";
+			if (!keys[k].is_array() || keys[k].size() != 4) {
+				fail(kp, "[phase, dx, dy, angle] expected");
+			}
+			std::array<double, 4> key{};
+			for (size_t q = 0; q < 4; q++) {
+				key[q] = num(keys[k][q], kp);
+			}
+			if (key[0] < 0 || key[0] >= 1 || (!mo.keys.empty() && key[0] <= mo.keys.back()[0])) {
+				fail(kp, "phases in [0, 1), increasing");
+			}
+			mo.keys.push_back(key);
+		}
+		if (const json *p = opt(m, "pivot")) {
+			mo.pivot = vec(*p, mp + ".pivot");
+		}
+		const std::string prefix = "level.elements[" + std::to_string(i) + "]";
+		for (size_t k = 0; k < low.origins.size(); k++) {
+			if (low.origins[k].rfind(prefix, 0) == 0 && (low.origins[k].size() == prefix.size() || low.origins[k][prefix.size()] != '[')) {
+				mo.surfaces.push_back(k);
+			}
+		}
+		if (mo.surfaces.empty()) {
+			fail(mp, "the element has no surfaces to move");
+		}
+		lv.motions.push_back(std::move(mo));
+	}
 	for (auto it = low.flags.begin(); it != low.flags.end(); ++it) {
 		const json &v = it.value();
 		rc::FlagValue f = v.is_boolean() ? rc::FlagValue(v.get<bool>())

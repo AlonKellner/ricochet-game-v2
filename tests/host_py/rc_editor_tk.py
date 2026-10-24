@@ -234,6 +234,11 @@ def main(argv):
             schedule()
 
     def on_wheel(e):
+        if state["game"] is not None:  # playing: the wheel moves the level's cycle
+            delta = e.delta if e.num not in (4, 5) else (1 if e.num == 4 else -1)
+            state["game"].scroll(1.0 if delta > 0 else -1.0)
+            schedule()
+            return
         if state["game"] is None:
             delta = e.delta if e.num not in (4, 5) else (1 if e.num == 4 else -1)
             editor.scroll(0.0, -1.0 if delta > 0 else 1.0, mods_of(e.state))
