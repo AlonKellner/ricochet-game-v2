@@ -267,7 +267,7 @@ bool certainly_nonzero(const EB &x) {
 
 } // namespace
 
-bool pole_on_line(const ExactPole &p, double sx, double sy, double ex, double ey) {
+bool pole_on_line(const ExactPole &p, double sx, double sy, double ex, double ey, const Line3 *line) {
 	// filter: (e - s) x (Q - s w), homogeneous
 	const std::optional<EB> qx = eb_of(p.Q[0]), qy = eb_of(p.Q[1]), qw = eb_of(p.Q[2]);
 	if (qx && qy && qw) {
@@ -277,7 +277,7 @@ bool pole_on_line(const ExactPole &p, double sx, double sy, double ex, double ey
 			return false;
 		}
 	}
-	return on_line_h(line_through(sx, sy, ex, ey), p.Q);
+	return on_line_h(line ? *line : line_through(sx, sy, ex, ey), p.Q);
 }
 
 bool pole_on_circle(const ExactPole &p, const Point3 &C, const BigFloat &rw2) {
@@ -297,8 +297,8 @@ bool pole_on_circle(const ExactPole &p, const Point3 &C, const BigFloat &rw2) {
 	return sub(add(mul(Uq.re, Uq.re), mul(Uq.im, Uq.im)), mul(rw2, mul(p.Q[2], p.Q[2]))).is_zero();
 }
 
-bool pole_tangent_line(const ExactPole &p, double sx, double sy, double ex, double ey) {
-	if (!pole_on_line(p, sx, sy, ex, ey)) {
+bool pole_tangent_line(const ExactPole &p, double sx, double sy, double ex, double ey, const Line3 *line) {
+	if (!pole_on_line(p, sx, sy, ex, ey, line)) {
 		return false;
 	}
 	const BigFloat mx = sub(of(ex), of(sx));
@@ -320,6 +320,244 @@ int pole_limbs(const ExactPole &p) {
 		n = std::max(n, int(b->limbs.size()));
 	}
 	return n;
+}
+
+// ---------------------------------------------------------------- the lazy pole (A.3)
+
+namespace {
+
+// complex product / conjugate on running-error pairs
+struct E2 {
+	EB re, im;
+};
+E2 ecmul(const E2 &a, const E2 &b) {
+	return {esub(emul(a.re, b.re), emul(a.im, b.im)), eadd(emul(a.re, b.im), emul(a.im, b.re))};
+}
+E2 econj(const E2 &a) {
+	return {a.re, EB{-a.im.v, a.im.e}};
+}
+EB ef(double x) {
+	return EB{x, 0.0};
+}
+bool eb_finite(const EB &x) {
+	return std::isfinite(x.v) && std::isfinite(x.e);
+}
+using EP = std::array<EB, 3>;
+// a homogeneous exact point as float64 with bounds (nullopt: float64 cannot bound a coordinate)
+std::optional<EP> eb_point(const Point3 &X) {
+	const std::optional<EB> x = eb_of(X[0]), y = eb_of(X[1]), w = eb_of(X[2]);
+	if (!x || !y || !w) {
+		return std::nullopt;
+	}
+	return EP{*x, *y, *w};
+}
+// rel and rel_f on the shadow: Q - C up to the positive factor Qw Cw; P - X up to Xw
+E2 erel(const EP &Q, const EP &C) {
+	return {esub(emul(Q[0], C[2]), emul(C[0], Q[2])), esub(emul(Q[1], C[2]), emul(C[1], Q[2]))};
+}
+E2 erel_f(double px, double py, const EP &X) {
+	return {esub(emul(ef(px), X[2]), X[0]), esub(emul(ef(py), X[2]), X[1])};
+}
+PoleShadow shadow_of(const EP &Q, const E2 &D) {
+	PoleShadow s;
+	s.qx = Q[0];
+	s.qy = Q[1];
+	s.qw = Q[2];
+	s.dx = D.re;
+	s.dy = D.im;
+	s.ok = eb_finite(s.qx) && eb_finite(s.qy) && eb_finite(s.qw) && eb_finite(s.dx) && eb_finite(s.dy);
+	return s;
+}
+
+} // namespace
+
+std::shared_ptr<const PoleRec> PoleRec::start_aimed(double px, double py, const Point3 &X, const Point3 &Q0, Source exact) {
+	auto r = std::make_shared<PoleRec>();
+	r->kind_ = Kind::Source;
+	r->source_ = std::move(exact);
+	const std::optional<EP> ex = eb_point(X), eq = eb_point(Q0);
+	if (ex && eq) {
+		// conj(P - X) (X - Q0) (P - Q0), as pole_start_aimed
+		const E2 PX = erel_f(px, py, *ex), XQ = erel(*ex, *eq), PQ = erel_f(px, py, *eq);
+		r->shadow_ = shadow_of(*eq, ecmul(econj(PX), ecmul(XQ, PQ)));
+	}
+	return r;
+}
+
+std::shared_ptr<const PoleRec> PoleRec::start_direction(double px, double py, double dx, double dy, const Point3 &Q0) {
+	auto r = std::make_shared<PoleRec>();
+	r->kind_ = Kind::Source;
+	r->source_ = [px, py, dx, dy, Q0] { return pole_start_direction(px, py, dx, dy, Q0); };
+	if (const std::optional<EP> eq = eb_point(Q0)) {
+		const E2 W = erel_f(px, py, *eq);
+		r->shadow_ = shadow_of(*eq, ecmul(econj(E2{ef(dx), ef(dy)}), ecmul(W, W)));
+	}
+	return r;
+}
+
+std::shared_ptr<const PoleRec> PoleRec::from_line(std::shared_ptr<const Line> line, const Point3 *C) {
+	auto r = std::make_shared<PoleRec>();
+	r->kind_ = Kind::Source;
+	r->source_ = [line, C]() -> std::optional<ExactPole> {
+		const std::optional<Line3> L = line->exact();
+		return L ? pole_from_line(*L, *C) : std::nullopt;
+	};
+	if (const std::optional<EP> ec = eb_point(*C)) {
+		r->shadow_ = shadow_of(*ec, E2{EB{line->fb, line->eb}, EB{-line->fa, line->ea}}); // D = (b, -a)
+	}
+	return r;
+}
+
+std::shared_ptr<const PoleRec> PoleRec::reflected(double sx, double sy, double ex, double ey) const {
+	auto r = std::make_shared<PoleRec>();
+	r->kind_ = Kind::Reflect;
+	r->parent_ = shared_from_this();
+	r->m_[0] = sx;
+	r->m_[1] = sy;
+	r->m_[2] = ex;
+	r->m_[3] = ey;
+	if (shadow_.ok) {
+		// reflect_point_h on the shadow, and the differential M^2 conj(D)
+		const EB mx = esub(ef(ex), ef(sx)), my = esub(ef(ey), ef(sy));
+		const EB mm = eadd(emul(mx, mx), emul(my, my));
+		const EB m2r = esub(emul(mx, mx), emul(my, my));
+		const EB m2i = eadd(emul(mx, my), emul(my, mx));
+		const EB &w = shadow_.qw;
+		const EB cx = esub(shadow_.qx, emul(ef(sx), w));
+		const EB cy = esub(emul(ef(sy), w), shadow_.qy);
+		const EB swm = emul(w, mm);
+		const EB rx = eadd(emul(ef(sx), swm), esub(emul(m2r, cx), emul(m2i, cy)));
+		const EB ry = eadd(emul(ef(sy), swm), eadd(emul(m2r, cy), emul(m2i, cx)));
+		const E2 M{mx, my};
+		r->shadow_ = shadow_of(EP{rx, ry, swm}, ecmul(ecmul(M, M), econj(E2{shadow_.dx, shadow_.dy})));
+	}
+	return r;
+}
+
+std::shared_ptr<const PoleRec> PoleRec::translated(double dx, double dy) const {
+	auto r = std::make_shared<PoleRec>();
+	r->kind_ = Kind::Translate;
+	r->parent_ = shared_from_this();
+	r->m_[0] = dx;
+	r->m_[1] = dy;
+	if (shadow_.ok) {
+		r->shadow_ = shadow_of(EP{eadd(shadow_.qx, emul(ef(dx), shadow_.qw)), eadd(shadow_.qy, emul(ef(dy), shadow_.qw)), shadow_.qw},
+			E2{shadow_.dx, shadow_.dy});
+	}
+	return r;
+}
+
+std::shared_ptr<const PoleRec> PoleRec::inverted(const Point3 *C, const BigFloat *rw2, ImageSource image) const {
+	auto r = std::make_shared<PoleRec>();
+	r->kind_ = Kind::Invert;
+	r->parent_ = shared_from_this();
+	r->c_ = C;
+	r->rw2_ = rw2;
+	r->image_ = std::move(image);
+	const std::optional<EP> ec = shadow_.ok ? eb_point(*C) : std::nullopt;
+	const std::optional<EB> er2 = shadow_.ok ? eb_of(*rw2) : std::nullopt;
+	if (ec && er2) {
+		// invert_point_h on the shadow (the sign of w is immaterial to the filters),
+		// and the differential conj(D) (Q - C)^2
+		const EB &qw = shadow_.qw, &cw = (*ec)[2];
+		const EB dxx = esub(emul(shadow_.qx, cw), emul((*ec)[0], qw));
+		const EB dyy = esub(emul(shadow_.qy, cw), emul((*ec)[1], qw));
+		const EB dd = eadd(emul(dxx, dxx), emul(dyy, dyy));
+		const EB rw = emul(*er2, qw);
+		const E2 Uq{dxx, dyy};
+		r->shadow_ = shadow_of(EP{eadd(emul((*ec)[0], dd), emul(rw, dxx)), eadd(emul((*ec)[1], dd), emul(rw, dyy)), emul(cw, dd)},
+			ecmul(econj(E2{shadow_.dx, shadow_.dy}), ecmul(Uq, Uq)));
+	}
+	return r;
+}
+
+const std::optional<ExactPole> &PoleRec::exact() const {
+	if (done_) {
+		return exact_;
+	}
+	done_ = true;
+	switch (kind_) {
+	case Kind::Source:
+		exact_ = source_();
+		break;
+	case Kind::Reflect:
+		if (const std::optional<ExactPole> &p = parent_->exact()) {
+			exact_ = pole_reflect(*p, m_[0], m_[1], m_[2], m_[3]);
+		}
+		break;
+	case Kind::Translate:
+		if (const std::optional<ExactPole> &p = parent_->exact()) {
+			exact_ = pole_translate(*p, m_[0], m_[1]);
+		}
+		break;
+	case Kind::Invert:
+		if (const std::optional<ExactPole> &p = parent_->exact()) {
+			exact_ = pole_invert_from(*p, image_(p->Q), *c_);
+		}
+		break;
+	}
+	if (exact_ && pole_limbs(*exact_) > EXACT_LIMBS) {
+		exact_.reset(); // past the exact-data budget: no exact claim (and none after)
+	}
+	return exact_;
+}
+
+std::optional<bool> PoleRec::on_line(double sx, double sy, double ex, double ey) const {
+	if (!shadow_.ok) {
+		return std::nullopt;
+	}
+	// (e - s) x (Q - s w), homogeneous, as pole_on_line's filter
+	const EB dx = esub(ef(ex), ef(sx)), dy = esub(ef(ey), ef(sy));
+	const EB rx = esub(shadow_.qx, emul(ef(sx), shadow_.qw)), ry = esub(shadow_.qy, emul(ef(sy), shadow_.qw));
+	if (certainly_nonzero(esub(emul(dx, ry), emul(dy, rx)))) {
+		return false;
+	}
+	return std::nullopt;
+}
+
+std::optional<bool> PoleRec::on_circle(const Point3 &C, const BigFloat &rw2) const {
+	if (!shadow_.ok) {
+		return std::nullopt;
+	}
+	const std::optional<EP> ec = eb_point(C);
+	const std::optional<EB> r2 = eb_of(rw2);
+	if (!ec || !r2) {
+		return std::nullopt;
+	}
+	const EB ux = esub(emul(shadow_.qx, (*ec)[2]), emul((*ec)[0], shadow_.qw));
+	const EB uy = esub(emul(shadow_.qy, (*ec)[2]), emul((*ec)[1], shadow_.qw));
+	if (certainly_nonzero(esub(eadd(emul(ux, ux), emul(uy, uy)), emul(*r2, emul(shadow_.qw, shadow_.qw))))) {
+		return false;
+	}
+	return std::nullopt;
+}
+
+std::optional<bool> PoleRec::tangent_line(double sx, double sy, double ex, double ey) const {
+	if (!shadow_.ok) {
+		return std::nullopt;
+	}
+	const EB mx = esub(ef(ex), ef(sx)), my = esub(ef(ey), ef(sy));
+	if (certainly_nonzero(esub(emul(shadow_.dx, my), emul(shadow_.dy, mx)))) {
+		return false;
+	}
+	return std::nullopt;
+}
+
+std::optional<bool> PoleRec::tangent_circle(const Point3 &C, const BigFloat &rw2) const {
+	(void)rw2;
+	if (!shadow_.ok) {
+		return std::nullopt;
+	}
+	const std::optional<EP> ec = eb_point(C);
+	if (!ec) {
+		return std::nullopt;
+	}
+	const EB ux = esub(emul(shadow_.qx, (*ec)[2]), emul((*ec)[0], shadow_.qw));
+	const EB uy = esub(emul(shadow_.qy, (*ec)[2]), emul((*ec)[1], shadow_.qw));
+	if (certainly_nonzero(eadd(emul(shadow_.dx, ux), emul(shadow_.dy, uy)))) {
+		return false;
+	}
+	return std::nullopt;
 }
 
 Line3 line_through_h(double px, double py, const Point3 &X) {
@@ -465,7 +703,7 @@ std::shared_ptr<Line> Line::reflected(double sx, double sy, double ex, double ey
 	return o;
 }
 
-bool Line::concurrent(double px, double py, double qx, double qy, double rx, double ry, double sx, double sy) const {
+bool Line::concurrent(double px, double py, double qx, double qy, double rx, double ry, double sx, double sy, const Line3 *Ap, const Line3 *Bp) const {
 	// float filter (scalar; first-order rigorous bound with generous constants)
 	const double a1 = py - qy;
 	const double b1 = qx - px;
@@ -491,8 +729,8 @@ bool Line::concurrent(double px, double py, double qx, double qy, double rx, dou
 	if (!L) {
 		return false;
 	}
-	const Line3 A = line_through(px, py, qx, qy);
-	const Line3 B = line_through(rx, ry, sx, sy);
+	const Line3 A = Ap ? *Ap : line_through(px, py, qx, qy);
+	const Line3 B = Bp ? *Bp : line_through(rx, ry, sx, sy);
 	const BigFloat e1 = sub(mul(A[1], B[2]), mul(B[1], A[2]));
 	const BigFloat e2 = sub(mul(A[0], B[2]), mul(B[0], A[2]));
 	const BigFloat e3 = sub(mul(A[0], B[1]), mul(B[0], A[1]));
@@ -642,13 +880,15 @@ int gc_limbs(const GCircle &g) {
 }
 
 // a circle (A != 0) tangent to a x + b y = c: (a B + b C + 2 A c)^2 = (a^2 + b^2)(B^2 + C^2 - 4 A D)
-bool gc_tangent_line(const GCircle &g, double sx, double sy, double ex, double ey) {
+bool gc_tangent_line(const GCircle &g, double sx, double sy, double ex, double ey, const Line3 *line) {
 	if (g.A.is_zero()) {
 		return false; // two lines meet once or never touch
 	}
-	const BigFloat a = sub(of(ey), of(sy));
-	const BigFloat b = sub(of(sx), of(ex));
-	const BigFloat c = add(mul(a, of(sx)), mul(b, of(sy)));
+	// (the carrier's line a x + b y = c: line_through(s, e), cached per surface when given)
+	const Line3 L = line ? *line : line_through(sx, sy, ex, ey);
+	const BigFloat &a = L[0];
+	const BigFloat &b = L[1];
+	const BigFloat &c = L[2];
 	const BigFloat lhs0 = add(add(mul(a, g.B), mul(b, g.C)), mul(add(g.A, g.A), c));
 	const BigFloat delta = sub(add(mul(g.B, g.B), mul(g.C, g.C)), mul(mul(of(4.0), g.A), g.D));
 	return sub(mul(lhs0, lhs0), mul(add(mul(a, a), mul(b, b)), delta)).is_zero();

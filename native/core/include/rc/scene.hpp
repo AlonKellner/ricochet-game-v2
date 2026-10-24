@@ -247,8 +247,18 @@ struct Surf {
 		return *exact_circle_;
 	}
 
+	// The line carrier's exact coefficients (A.2: computed once per surface; the
+	// predicates rebuilt the line from the endpoints at every call).
+	const exact::Line3 &exact_line() const {
+		if (!exact_line_) {
+			exact_line_ = exact::line_through(sx, sy, ex, ey);
+		}
+		return *exact_line_;
+	}
+
 private:
 	mutable std::optional<ExactCircle> exact_circle_;
+	mutable std::optional<exact::Line3> exact_line_;
 };
 
 template <Num N>
