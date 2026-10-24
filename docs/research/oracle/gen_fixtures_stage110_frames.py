@@ -3,7 +3,9 @@
 Surfaces on one carrier are crossed at one point (K6). When the physical walk
 fires an unplanned surface there that writes what the planned entry writes, it
 leaves the point in the frame the planned walk leaves it in: the entry counts
-as consumed, whatever the order of the surfaces at the point. Both walks then
+as consumed, whatever the order of the surfaces at the point. (Stage 138: two
+surfaces with a consequence at one point stop the arrow instead; the rescue
+remains where one surface alone is hit at the point.) Both walks then
 reach the cursor together, as the merge (frame ids) says. Controls: a different
 value, a different point, a transformative effect (stack frames carry surface
 ids) -- each a divergence.
@@ -71,12 +73,14 @@ def main():
     # the planned surface comes first (lower id, off the shot); the physical
     # walk fires the next one
     case("upper_fires_lower_planned", [line(1, *UPPER, f_p, f_p), line(2, *ON, f_p, f_p)] + walls, [1], True)
-    # one entry, two unplanned writes
+    # one entry, two unplanned writes at one point: Stage 138 (the user) -- two
+    # surfaces with a consequence hold the point, so the physical walk stops
+    # there, neither writes, and the cursor is not reached (no rescue)
     ab = writes(set_("a", 1), set_("b", 1))
     case("two_writes_one_entry",
          [line(1, *ON, writes(set_("a", 1)), writes(set_("a", 1))),
           line(2, (300, 25), (300, 75), writes(set_("b", 1)), writes(set_("b", 1))),
-          line(3, *UPPER, ab, ab)] + walls, [3], True)
+          line(3, *UPPER, ab, ab)] + walls, [3], False)
     # a rescue, then a mirror consumed by its surface id (cursor behind the mirror's image)
     mirror = line(4, (400, -400), (400, 400), REFL, REFL)
     cur = (350.0, 150.0)

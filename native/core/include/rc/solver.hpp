@@ -487,6 +487,7 @@ struct PointSurf {
 
 template <Num N>
 struct StepScratch {
+	std::vector<const Surf<N> *> shared_surfs; // Stage 138: the surfaces holding a hit point
 	std::vector<Candidate<N>> cands;
 	std::vector<double> gaps;
 	std::vector<uint8_t> why; // (Stage 123: the margins' classes, the instrument)
@@ -3306,46 +3307,49 @@ private:
 		return;
 	}
 
-	// Blocked sides at an exact endpoint, incl. other segments sharing it.
-	static bool full_block(const Scene<N> &scene, const Surf<N> &surf, const CN<N> &pt, const CN<N> &tang, bool on_seg,
-			const Flags &flags) {
-		if (!on_seg) {
-			return false;
-		}
-		if (geom::endpoint_at(surf.seg, pt) == 0) {
-			return true;
-		}
-		bool bl = false;
-		bool br = false;
-		for (const auto &s : scene.surfaces) {
-			if (!s->present(flags)) {
-				continue; // an absent surface blocks no junction (Stage 107)
-			}
-			const int which = geom::endpoint_at(s->seg, pt);
-			if (which == 0) {
+	// Stage 138 (GAME_SPEC 11.1, the user): the other present surfaces holding the
+	// hit point exactly -- a crossing at the same parameter (an exact tie, or one
+	// known point) on its segment, or an exact endpoint equal to the point by data.
+	// Never by distance. (The oracle's _shared_surfaces.)
+	static void shared_surfaces(const Walk<N> &w, const std::vector<Candidate<N>> &cands, size_t ci, const N &t, const CN<N> &pt,
+			const Surf<N> &surf, std::vector<const Surf<N> *> &out) {
+		out.clear();
+		for (size_t k = 0; k < cands.size(); k++) {
+			const Candidate<N> &c = cands[k];
+			if (k == ci || c.surf == nullptr || c.inf || c.origin || c.surf == &surf || c.t.cmp(t) != 0) {
 				continue;
 			}
-			const geom::Blocked b = geom::blocked_sides(s->seg, which, tang);
-			bl = bl || b.left;
-			br = br || b.right;
+			if (c.surf->present(w.flags) && geom::on_segment(c.surf->seg, pt) && std::find(out.begin(), out.end(), c.surf) == out.end()) {
+				out.push_back(c.surf);
+			}
 		}
-		return bl && br;
+		for (const auto &sp : w.scene->surfaces) {
+			const Surf<N> *s = sp.get();
+			if (s == &surf || s->seg.full || !s->present(w.flags) || std::find(out.begin(), out.end(), s) != out.end()) {
+				continue;
+			}
+			if (geom::endpoint_at(s->seg, pt) != 0) {
+				out.push_back(s);
+			}
+		}
 	}
 
 	struct Classified {
 		CN<N> pt;
 		bool on_seg;
 		bool left;
-		bool full_block;
+		int at_ep; // 0: not at an endpoint of surf; 1 its start, 2 its end (Stage 138: solid is decided with the shared surfaces)
 	};
 
-	// [point, on_segment, side LEFT, fully blocked] of the hit at t on surf.
+	// [point, on_segment, side LEFT, at endpoint] of the hit at t on surf.
 	static Classified classify(const Scene<N> &scene, const Beam<N> &beam, const N &t, const Surf<N> &surf, bool at_origin,
 			const std::optional<CN<N>> &known_pt, const Flags &flags) {
+		(void)scene;
+		(void)flags;
 		const CN<N> pt = known_pt ? *known_pt : (at_origin ? beam.p : beam.at(t));
 		const CN<N> tang = beam.tangent_at(t);
 		const bool on_seg = geom::on_segment(surf.seg, pt);
-		return Classified{pt, on_seg, geom::side_left(surf.seg, pt, tang), full_block(scene, surf, pt, tang, on_seg, flags)};
+		return Classified{pt, on_seg, geom::side_left(surf.seg, pt, tang), geom::endpoint_at(surf.seg, pt)};
 	}
 
 	// Stage 108: a plan item naming a piece accepts only points inside its span
@@ -3839,7 +3843,67 @@ private:
 				const CN<N> pt = cl.pt;
 				bool on_seg = cl.on_seg;
 				const bool left = cl.left;
-				const bool fb = cl.full_block;
+				// Stage 138 (the user): a point two or more present surfaces hold -- a
+				// junction, a proper crossing, a planned piece's end -- is solid; if two
+				// or more of them have a consequence there (an effect, a state change, a
+				// landing effect, a target: a candidate's side), no one owns the hit: the
+				// physical walk stops, nothing fires, the event carries the lowest id (the
+				// planned walk computes its entries' surfaces alone: it follows its plan,
+				// and the walks diverge). One alone owns it. A lone endpoint is a graze.
+				std::vector<const Surf<N> *> &others = w.scratch->shared_surfs;
+				if (on_seg) {
+					shared_surfaces(w, cands, ci, t, pt, *surf, others);
+				} else {
+					others.clear();
+				}
+				const bool fb = on_seg && (cl.at_ep == 0 || !others.empty());
+				if (!others.empty() && w.mode == Mode::Physical) {
+					const CN<N> tang = beam->tangent_at(t);
+					const Surf<N> *stop = nullptr;
+					bool stop_left = false;
+					int owners = 0;
+					for (size_t k = 0; k <= others.size(); k++) {
+						const Surf<N> *s = k == 0 ? surf : others[k - 1];
+						const bool sl = k == 0 ? left : geom::side_left(s->seg, pt, tang);
+						const bool consequence = s->is_target || s->effect(sl, w.flags) != EffectType::Pass || !s->state_changes(sl, w.flags).empty()
+							|| s->landing(sl, w.flags);
+						if (consequence) {
+							owners++;
+							if (stop == nullptr || s->id < stop->id) {
+								stop = s;
+								stop_left = sl;
+							}
+						}
+					}
+					if (owners >= 2) {
+						if (w.sig + 1 > w.max_sig) {
+							Event<N> &me = emit(w, EventKind::Max, beam, t_prev, t, INF_D);
+							me.point = pt;
+							w.done = true;
+							return;
+						}
+						w.sig++;
+						Event<N> &se = emit(w, EventKind::Hit, beam, t_prev, t, gp[ci]);
+						se.why = w.record_why ? gw[ci] : uint8_t(0);
+						se.surface_id = stop->id;
+						se.left = stop_left;
+						se.state = false;
+						se.fired = false;
+						se.flags = w.flags;
+						se.applied = true;
+						se.terminal = true;
+						se.on_segment = true;
+						se.rehit = rehit;
+						if ((rehit && fresh) || cand.pt) {
+							se.point = pt;
+						}
+						if (w.mode == Mode::Physical && w.point) {
+							point_close(w);
+						}
+						w.done = true;
+						return;
+					}
+				}
 				const EffectType eff = surf->effect(left, w.flags);
 				const std::vector<StateChangeDef> &changes = surf->state_changes(left, w.flags);
 				const bool has_change = !changes.empty();

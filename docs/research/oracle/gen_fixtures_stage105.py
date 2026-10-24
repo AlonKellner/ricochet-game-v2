@@ -116,12 +116,16 @@ def main():
     fx.append(f)
     # (ix) a straight beam through Q0 = (448, 704) (the player, Q0 and the direction
     # are collinear): the concurrent mirror and pass line through Q tie exactly there
+    # (Stage 138: both have a consequence -- the shared point stops the arrow at Q,
+    # the terminal hit carries the lowest id, 2)
     q2 = pre(1, (448.0, 704.0), 96.0)
     f = fixture("straight_beam_concurrent_at_q", [q2, line(2, (448.0, 505.0), (448.0, 903.0), REFL, REFL),
                 # (Stage 134: line 3 passes and writes a flag -- a candidate; a pure pass is never computed)
                 line(3, (313.0, 704.0), (583.0, 704.0), W3, W3), line(4, (720.0, 136.0), (816.0, 176.0), REFL, REFL)],
                 (672.0, 592.0), direction=(2.0, -1.0))
-    assert sum(1 for e in f["expected"] if e["kind"] == "hit" and e["surface_id"] == 3) >= 3, kinds(f)
+    last = f["expected"][-1]
+    assert (last["kind"], last["surface_id"], last["terminal"], last["applied"]) == ("hit", 2, True, True), kinds(f)
+    assert not any(e["kind"] == "hit" and e["surface_id"] == 3 for e in f["expected"]), kinds(f)
     fx.append(f)
     # (vii) K1: the portals playground, a vertical aim (translation portal moves the pole)
     dump = json.load(open(os.path.join(ROOT, "bench", "scenes", "playground__portals.surfaces.json")))

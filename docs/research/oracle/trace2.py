@@ -186,7 +186,7 @@ from fractions import Fraction
 import mpmath as mp
 
 from beam import Beam, Circle, circle_hits, cross, dot, invert_beam, invert_point
-from geometry import (LEFT, RIGHT, P, Seg, endpoint_blocked_sides, line_hits, on_segment,
+from geometry import (LEFT, RIGHT, P, Seg, line_hits, on_segment,
                       side_at, winding)
 
 MAX_HITS = 64          # Stage 131: events in all (every carrier crossing; not the cursor)
@@ -818,34 +818,41 @@ def _concurrent_ties_gc(walk: Walk, beam, cands):
     return out
 
 
-def _junction_blocked(walk: Walk, surf: Surface, pt, direction):
-    """Blocked sides at an exact endpoint, incl. other segments sharing it."""
-    bl = br = False
+def _consequence(s: Surface, side, flags):
+    """Stage 138: the side would do something at a solid hit (as _candidate reads it)."""
+    return s.is_target or s.effect(side, flags) is not None or bool(s.state_changes(side, flags)) \
+        or bool((s._base_cfg(side, flags) or {}).get("landing", False))
+
+
+def _shared_surfaces(walk: Walk, cands, ci, t, pt, surf: Surface, by_id):
+    """Stage 138 (GAME_SPEC 11.1, the user): the other present surfaces holding
+    the hit point exactly -- a crossing at the same parameter (an exact tie, or
+    one known point) on its segment, or an exact endpoint equal to the point by
+    data. Never by distance."""
+    out = []
+    for k, c in enumerate(cands):
+        if k == ci or c[1] != 1 or c[2] == surf.id or c[3] != t or c[2] not in by_id:
+            continue
+        s = by_id[c[2]]
+        if s.present(walk.flags) and on_segment(s.seg, pt) and s not in out:
+            out.append(s)
     for s in walk.surfaces:
-        if not s.present(walk.flags):
-            continue        # an absent surface blocks no junction (Stage 107)
-        for which, ep in ((1, s.seg.S), (2, s.seg.E)):
-            if s.seg.full or ep != pt:
-                continue
-            a, b = endpoint_blocked_sides(direction, s.seg, which)
-            bl, br = bl or a, br or b
-    return bl, br
+        if s is surf or s.seg.full or not s.present(walk.flags) or s in out:
+            continue
+        if s.seg.S == pt or s.seg.E == pt:
+            out.append(s)
+    return out
 
 
 def classify(walk: Walk, beam: Beam, t, surf: Surface, point=None):
+    """[point, on_segment, side, at_endpoint] of the hit at t on surf (Stage 138:
+    whether it is solid is decided with the shared surfaces, in the loop)."""
     pt = beam.at(t) if point is None else point
     tang = beam.tangent_at(t)
     on_seg = on_segment(surf.seg, pt)
     side = side_at(surf.seg, pt, tang)
     at_ep = 0 if surf.seg.full else (1 if pt == surf.seg.S else 2 if pt == surf.seg.E else 0)
-    if not on_seg:
-        full_block = False
-    elif at_ep == 0:
-        full_block = True
-    else:
-        bl, br = _junction_blocked(walk, surf, pt, tang)
-        full_block = bl and br
-    return pt, on_seg, side, full_block
+    return pt, on_seg, side, at_ep
 
 
 def physical_decision(walk: Walk, surf: Surface, side, full_block):
@@ -1125,7 +1132,34 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             else:
                 known_pt = snapped.get((sid, t))
             pt_exact = known_pt is not None and any(k[0] == known_pt for k in walk.known)
-            pt, on_seg, side, full_block = classify(walk, beam, t, surf, point=known_pt)
+            pt, on_seg, side, at_ep = classify(walk, beam, t, surf, point=known_pt)
+            # Stage 138 (the user): a point two or more present surfaces hold -- a
+            # junction, a proper crossing, a planned piece's end -- is solid; if two
+            # or more of them have a consequence there (an effect, a state change,
+            # a landing effect, a target: a candidate's side), no one owns the hit:
+            # the physical walk stops, nothing fires, the event carries the lowest id
+            # (the planned walk computes its entries' surfaces alone: it follows its
+            # plan, and the walks diverge). One alone owns it. A lone endpoint is a
+            # graze.
+            others = _shared_surfaces(walk, cands, ci - 1, t, pt, surf, by_id) if on_seg else []
+            full_block = on_seg and (at_ep == 0 or bool(others))
+            if others and walk.mode == PHYSICAL:
+                tang = beam.tangent_at(t)
+                owners = [s for s in [surf] + others if _consequence(s, side_at(s.seg, pt, tang), walk.flags)]
+                if len(owners) >= 2:
+                    stop = min(owners, key=lambda s: s.id)
+                    stop_side = side if stop is surf else side_at(stop.seg, pt, tang)
+                    if walk.sig + 1 > walk.max_sig:
+                        _append(walk, Event("max", point=pt, t=t, beam=beam))
+                        walk.done = True
+                        return
+                    walk.sig += 1
+                    walk.flags_before = walk.flags
+                    _append(walk, Event("hit", stop.id, stop_side, True, True, True, pt, t, beam, rehit, False, walk.flags, False))
+                    if walk.point is not None:
+                        _point_close(walk)
+                    walk.done = True
+                    return
             if surf.is_target and on_seg:
                 walk.targets.add(sid)
             do = None

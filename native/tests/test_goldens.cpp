@@ -51,6 +51,7 @@ ojson dump_events(const std::vector<Event<N>> &evs) {
 		j["kind"] = event_kind_name(e.kind);
 		j["sid"] = e.surface_id;
 		j["applied"] = e.applied;
+		j["terminal"] = e.terminal; // (Stage 138's judge reads it)
 		j["rehit"] = e.rehit;
 		j["popped"] = e.popped;
 		j["teleport"] = e.teleport;
