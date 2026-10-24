@@ -42,6 +42,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done |
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
+| The novel-element kit: per-shot flags (`shot:*`, erased at landing) and templates for breakable, toggle, frost, fire and charge elements (§10.6; docs/ELEMENTS.md, docs/TDD_52, Stage 147) | Done |
 | Objects, the pull and the grapple: circle bodies (pullable ones fall under gravity); a pull brings an object back along the arrow's path, a grapple takes the player along it, either stopped by what blocks the traveller (§10.6, §25.5-25.6; docs/TDD_51, Stage 146) | Done |
 | The goal and detectors: a level's goal region gated by flag conditions, won when the player stands in it; detectors writing flags as the player moves; a level without a goal won when every target is hit (§3.2, §24.5-24.6; docs/TDD_50, Stage 145) | Done |
 | Level editor: native (`rcg::Editor`, the C API's `rc_editor_*`), its tools, panel, validation and play-test; the Python host (tkinter) and the Godot host (`RicochetEditor`) (§19.2; docs/EDITOR.md, docs/TDD_48-49, Stages 143-144) | Done |
@@ -881,6 +882,13 @@ State changes can write to **any** key in the game state dictionary, not just th
 Note the asymmetry: surfaces read from their resolver's configured key(s) via `ConfigResolver`, but `StateChange` can write to any key. A surface can affect surfaces it has no read-relationship with.
 
 State changes are applied sequentially along the trace. If multiple hits write to the same key, the last writer wins. Deterministic because hit ordering is deterministic (§11.3).
+
+#### Per-shot flags (Stage 147)
+
+A flag whose key starts with `shot:` is a state of the arrow, not of the world: like `ghost`, it is erased from
+the flags promoted when the arrow lands, so every shot starts without it. Elements use per-shot flags for what the
+arrow carries (fire, frost, charge) and for what a shot does to the world only while it lasts (a breakable surface
+gone for the rest of the shot). docs/ELEMENTS.md ("The kit") lists the patterns.
 
 #### Ghost mode (Stage 86)
 
@@ -2785,4 +2793,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.58.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.59.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

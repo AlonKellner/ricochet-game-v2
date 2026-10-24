@@ -30,6 +30,15 @@ surface already does (GAME_SPEC 9-10).
 | `grapple` | A grappling surface: when the arrow hits it, the player is pulled along the arrow's path to the hit (when the shot lands), stopping at whatever blocks the player first (a fence does; an arrow-block barrier does not). | `solid`=true | `Grapple` |
 | `spawner` | A spawner (GAME_SPEC 10.6.1): when hit it places `surface` (an `rc-level/1` surface in a local frame, centred on the origin) at the hit when the arrow lands; it is gone until a resetter re-arms its channel. | `surface` (required), `channel`="${name}", `orientation`="CARRIER_TANGENT", `mirror_with_side`=false, `offset`=[0.0, 0.0], `trim`=true, `deferred`=false, `face`="pass" | `Spawner` |
 | `resetter` | A resetter: when hit it re-arms spawn channels (their spawned surfaces go, their spawners come back). | `channels` (required), `deferred`=false, `face`="pass" | `Resetter` |
+| `breakable` | A breakable surface: hit, it does what its face does (a wall stops the arrow, a mirror reflects it), then it is gone for the rest of the shot; it is back when the arrow lands. Flag `shot:<name>:broken`. | `face`="wall" (or "mirror", "pass"), `solid`=true | `Breakable` |
+| `toggle_surface` | A toggle surface: the hit removes it, and the arrow passing where it was brings it back (a twin pass-through stands in its place while it is gone). Flag `el:<name>:off`, kept across shots. | `face`="wall", `solid`=true | `Toggle` |
+| `frost_barrier` | A frost barrier: an arrow passing it is frosted for the rest of the shot (flag `shot:frost`, or `frost`); the barrier stays. | `frost`="shot:frost" | `Frost` |
+| `freezable` | A freezable wall: a solid barrier that a frosted arrow freezes into a mirror for that one hit, which uses the frost up. | `frost`="shot:frost", `solid`=true | `Freezable` |
+| `torch` | A fire source: an arrow passing it is on fire for the rest of the shot (flag `shot:fire`, or `fire`). | `fire`="shot:fire" | `Torch` |
+| `water` | Water: an arrow passing it is put out (its fire flag set to false); the player passes it too. | `fire`="shot:fire" | `Water` |
+| `burnable` | A burnable barrier: solid, but an arrow on fire burns it away for good (flag `el:<name>:burnt`) and goes on. | `fire`="shot:fire", `solid`=true | `Burnable` |
+| `charger` | A charger: an arrow passing it is charged for the rest of the shot (flag `shot:charge`, or `charge`). | `charge`="shot:charge" | `Charger` |
+| `conditional_button` | A button only a charged (or burning, frosted...) arrow presses: while `when` is true the hit sets or toggles `flag`; otherwise it is a wall. | `when`="shot:charge", `flag` (required), `op`="set", `value`=true | `CondButton` |
 
 The format's own kinds are `edges`, which places the four edge walls where it stands, and `raw`, which takes an
 `rc-level/1` surface as it is.
@@ -52,6 +61,8 @@ Flags are named after what writes or reads them, so levels and templates agree w
 | `chan:<channel>` | spawners and resetters | the spawner and its spawned surface (GAME_SPEC 10.6) |
 | `ghost` | ghost gates | every side (the per-shot ghost mode) |
 | `det:<name>` | the detector `<name>` (GAME_SPEC 24.5) | a door (`"flag": "det:plate"`), the goal's `requires` |
+| `shot:*` | anything in a shot: `shot:fire`, `shot:frost`, `shot:charge`, `shot:<name>:broken` | erased when the arrow lands (GAME_SPEC 10.6): a state of the arrow, not of the world |
+| `el:<name>:*` | an element's own state: `el:<name>:off`, `el:<name>:burnt` | the element (kept across shots) |
 
 The level's `flags` sets any of them at the start. For example, `{"door:gate": true}` starts with the door open.
 
@@ -105,6 +116,30 @@ program adds four of them: the goal objective, detectors, bodies, and grapple an
 3. To make it a builtin kind, move the template to `data/elements/<kind>.json` and rebuild (`make core`); give
    it a `priority` if `rc_tool migrate` should recognise it. The `rc-level/2` tests check that every builtin
    kind expands and builds.
+
+## The kit: elements that remember, and arrows that carry
+
+Two kinds of flags make most novel elements templates:
+- **A per-shot flag** (`shot:*`) is a state of the arrow: set when the arrow passes something, read by what it
+  meets later in the same shot, and erased when it lands. Fire, frost and charge are per-shot flags.
+- **An element's flag** (`el:<name>:*`) is a state of the world, kept across shots (and undone by undo).
+
+They combine with presence (a surface that exists only under a flag), resolvers (a surface whose sides depend on a
+flag) and state writes on hits:
+
+| Pattern | How | Examples |
+|---|---|---|
+| the arrow picks up a property | a pass-through side writing `shot:<p>` = true | `torch`, `frost_barrier`, `charger` |
+| it loses it | a pass-through side writing false | `water` |
+| a surface reacts only to it | a resolver on `shot:<p>`: the default row the plain surface, the `true` row the reaction | `freezable`, `conditional_button`, `burnable` |
+| a reaction that uses it up | the reaction's side writes `shot:<p>` = false | `freezable` (one hit) |
+| gone for the shot | presence `[{"key": "shot:<name>:x", "values": ["DEFAULT"]}]` and a hit setting it | `breakable` |
+| gone for good | the same with `el:<name>:x` | `burnable` |
+| a state that comes back | two surfaces on one geometry, each present in one state, each writing the other | `toggle_surface` |
+
+What the kit cannot say needs a primitive. Moving surfaces need a schedule and a world that moves them. Light and
+shadow need a region the arrow tests against. Charge or fire spreading between surfaces needs a propagation rule
+that is no arrow's. docs/TDD_52_KIT.md sketches each.
 
 ## Migration
 
