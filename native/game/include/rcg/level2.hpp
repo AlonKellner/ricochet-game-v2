@@ -31,6 +31,10 @@ Lowered lower_level(const nlohmann::json &v2);
 // else a `raw` element). Throws LevelError when there is none.
 nlohmann::json migrate_level(const nlohmann::json &v1);
 
+// Stage 149: an element on a carrier ("carrier", "from", "to") as one with its own geometry (start/end/via or
+// circle), as the lowering places it; the carriers are the document's. Throws LevelError.
+nlohmann::json off_carrier(const nlohmann::json &element, const nlohmann::json &doc);
+
 // The walls of a rectangle [x, y, w, h] as rc-level/1 surfaces (no ids): top, right, bottom, left.
 std::vector<nlohmann::json> rect_walls(const nlohmann::json &rect, const nlohmann::json &side, const nlohmann::json &label, bool solid);
 

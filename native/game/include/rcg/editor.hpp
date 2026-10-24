@@ -24,7 +24,7 @@ namespace rcg {
 class Editor {
 public:
 	enum class Mode { Edit, Play };
-	enum class Tool { Select, Line, Arc, Circle, Player, Goal, Detector, Object };
+	enum class Tool { Select, Line, Arc, Circle, Player, Goal, Detector, Object, CarrierLine, CarrierCircle };
 	// pointer events and buttons (rc_api.h's RC_PTR_* / RC_BTN_* / RC_MOD_*)
 	enum : int { PtrMove = 0, PtrDown = 1, PtrUp = 2 };
 	enum : unsigned { BtnLeft = 1, BtnRight = 2, BtnMiddle = 4 };
@@ -125,7 +125,8 @@ private:
 	std::vector<Handle> handles() const;
 	std::optional<Handle> handle_at(const V2 &screen) const;
 	int element_at(const V2 &screen) const;
-	nlohmann::json snap(const V2 &screen, unsigned mods, const Handle *moving) const;
+	nlohmann::json snap(const V2 &screen, unsigned mods, const Handle *moving, std::string *carrier = nullptr) const;
+	std::string carrier_near(const V2 &screen) const; // Stage 149: the carrier within reach of the pointer ("": none)
 	void place(const nlohmann::json &p, unsigned mods);
 	void drag_to(const V2 &screen, unsigned mods);
 	void commit_field();
@@ -159,6 +160,8 @@ private:
 	V2 mouse_;
 	unsigned buttons_ = 0;
 	std::vector<nlohmann::json> clicks_; // a placement's points so far
+	std::vector<std::string> click_carriers_; // ... the carrier each landed on ("" none)
+	std::string carrier_of_click_;            // the carrier the click being placed snapped onto
 	std::optional<Handle> drag_;          // the handle being dragged
 	bool drag_changed_ = false;
 	V2 drag_last_;                        // a body drag's last world point

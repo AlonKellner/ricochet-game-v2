@@ -250,7 +250,7 @@ TEST_CASE("rc-level/2: the schema is strict, and names the element") {
 		return std::string("no error");
 	};
 	CHECK(err(level_of({}, {{"colour", 1}})).find("unknown key 'colour'") != std::string::npos);
-	CHECK(err(level_of({}, {{"carriers", nullptr}})).find("reserved for a later stage") != std::string::npos);
+	CHECK(err(level_of({}, {{"carriers", nullptr}})).find("an array of carriers expected") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "crystal"}})})).find("level.elements[0].kind: unknown element kind 'crystal'") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "mirror"}, {"shiny", true}})})).find("unknown key 'shiny' (parameters: back, solid)") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "mirror"}, {"back", "maybe"}})})).find("level.elements[0] (mirror_1).back: one of pass, block expected")
@@ -284,4 +284,58 @@ TEST_CASE("rc-level/2: the initial flags start the session, and a reset restores
 	CHECK_FALSE(rcg::present(*door, s.flags())); // open: gone
 	s.key(rcg::Action::Reset);
 	CHECK(std::get<bool>(*s.flags().get("door:d1")) == true);
+}
+
+TEST_CASE("rc-level/2: carriers -- elements on a line or a circle, projected onto it (Stage 149)") {
+	const json lv = json::parse(R"({"schema": "rc-level/2", "carriers": [
+		{"name": "floor", "line": {"a": [600, 500], "b": [1200, 503]}},
+		{"name": "ring", "circle": {"center": [900, 400], "radius": 100}}],
+		"elements": [
+			{"kind": "wall", "name": "w1", "carrier": "floor", "from": [600, 480], "to": [800, 520]},
+			{"kind": "door", "name": "d", "carrier": "floor", "from": [800, 520], "to": [900, 490]},
+			{"kind": "mirror", "name": "arc1", "carrier": "ring", "from": [1000, 400], "to": [900, 300]},
+			{"kind": "two_sided_mirror", "name": "arc2", "carrier": "ring", "from": [900, 300], "to": [800, 400], "via": [820, 330]},
+			{"kind": "inversion", "name": "whole", "carrier": "ring"}]})");
+	const json low = rcg::lower_level(lv).level;
+	std::map<std::string, json> by_label_id;
+	const json &ss = low["surfaces"];
+	// the room's walls first (ids 1-4), then the elements
+	const json &w1 = ss[4], &door = ss[5], &arc1 = ss[6], &arc2 = ss[7], &whole = ss[8];
+	auto on_line = [](const json &p) { // (600, 500) + t (600, 3)
+		const double t = (p[0].get<double>() - 600) / 600;
+		return std::abs(p[1].get<double>() - (500 + 3 * t)) < 1e-9;
+	};
+	CHECK(on_line(w1["start"]));
+	CHECK(on_line(w1["end"]));
+	CHECK(w1["straight"] == true);
+	CHECK(rcg::canonical(w1["end"]) == rcg::canonical(door["start"])); // one point, by provenance: the same value
+	auto on_ring = [](const json &p) { return std::abs(std::hypot(p[0].get<double>() - 900, p[1].get<double>() - 400) - 100) < 1e-9; };
+	CHECK(on_ring(arc1["start"]));
+	CHECK(on_ring(arc1["via"]));
+	// the default via: the middle of the shorter arc from from to to (here a quarter, at -45 degrees)
+	CHECK(arc1["via"][0].get<double>() == doctest::Approx(900 + 100 * std::sqrt(0.5)).epsilon(1e-9));
+	CHECK(arc1["via"][1].get<double>() == doctest::Approx(400 - 100 * std::sqrt(0.5)).epsilon(1e-9));
+	CHECK(rcg::canonical(arc1["end"]) == rcg::canonical(arc2["start"]));
+	CHECK(on_ring(arc2["via"]));
+	CHECK(whole["circle"] == json::parse(R"({"center": [900, 400], "radius": 100})"));
+	CHECK_NOTHROW(rcg::build_level(rcg::parse_level_json(lv)));
+	// the errors
+	auto err = [](const char *j) {
+		try {
+			rcg::lower_level(json::parse(j));
+		} catch (const rcg::LevelError &e) {
+			return std::string(e.what());
+		}
+		return std::string("no error");
+	};
+	CHECK(err(R"({"schema": "rc-level/2", "elements": [{"kind": "wall", "carrier": "x", "from": [0, 0], "to": [9, 0]}]})").find("no carrier named 'x'")
+			!= std::string::npos);
+	CHECK(err(R"({"schema": "rc-level/2", "carriers": [{"name": "l", "line": {"a": [0, 0], "b": [9, 0]}}],
+		"elements": [{"kind": "wall", "carrier": "l", "start": [0, 0], "end": [9, 0]}]})").find("an element on a carrier takes from and to") != std::string::npos);
+	CHECK(err(R"({"schema": "rc-level/2", "carriers": [{"name": "l", "line": {"a": [0, 0], "b": [9, 0]}}],
+		"elements": [{"kind": "wall", "carrier": "l", "from": [3, 5], "to": [3, -5]}]})").find("land on one point") != std::string::npos);
+	CHECK(err(R"({"schema": "rc-level/2", "carriers": [{"name": "l", "line": {"a": [0, 0], "b": [0, 0]}}], "elements": []})").find("two distinct points")
+			!= std::string::npos);
+	CHECK(err(R"({"schema": "rc-level/2", "carriers": [{"name": "c", "circle": {"center": [0, 0], "radius": 5}},
+		{"name": "c", "circle": {"center": [0, 0], "radius": 6}}], "elements": []})").find("names another carrier") != std::string::npos);
 }

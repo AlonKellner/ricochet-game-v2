@@ -55,11 +55,12 @@ const Color HOVER = rgba(1, 1, 1, 0.15);
 const Color GOAL = rgba(0.3, 0.95, 0.45);
 const Color DETECTOR = rgba(1.0, 0.8, 0.25, 0.85);
 const Color OBJECT = rgba(0.95, 0.6, 0.3);
+const Color CARRIER = rgba(0.45, 0.7, 1.0, 0.45);
 
 // An element's layers (the draw nodes' keys: ["editor", layer, index])
-enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS, L_GOALS };
+enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS, L_GOALS, L_CARRIERS };
 
-const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object"};
+const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle"};
 
 Call line(const V2 &a, const V2 &b, const Color &c, double w) {
 	Call k;
@@ -294,7 +295,20 @@ std::vector<Editor::Handle> Editor::handles() const {
 	if (i >= 0) {
 		json e = doc_["elements"][size_t(i)];
 		const json &g = e.value("kind", "") == "raw" ? e.value("surface", json::object()) : e;
-		if (g.contains("circle") && g["circle"].is_object() && is_point(g["circle"].value("center", json()))) {
+		if (e.contains("carrier")) {
+			// Stage 149: on a carrier -- its from, to (and via) where the lowering puts them (the first surface's)
+			const size_t k = size_t(i);
+			if (k < drawn_.size() && !drawn_[k].built.empty()) {
+				const rc::arc::SegGeom &sg = drawn_[k].built.front().seg;
+				if (!sg.full) {
+					out.push_back({selected_, "from", sg.s, ""});
+					out.push_back({selected_, "to", sg.e, ""});
+					if (!sg.is_line()) {
+						out.push_back({selected_, "via", sg.v, ""});
+					}
+				}
+			}
+		} else if (g.contains("circle") && g["circle"].is_object() && is_point(g["circle"].value("center", json()))) {
 			const V2 c = pt(g["circle"]["center"]);
 			out.push_back({selected_, "center", c, ""});
 			if (g["circle"].value("radius", json()).is_number()) {
@@ -363,8 +377,11 @@ int Editor::element_at(const V2 &screen) const {
 // A point placed at the pointer: another handle's point exactly (the same
 // value: an endpoint shared by provenance, GAME_SPEC 31.4), else the grid (10
 // units; off: whole units), Alt: the pointer as it is (float32).
-json Editor::snap(const V2 &screen, unsigned mods, const Handle *moving) const {
+json Editor::snap(const V2 &screen, unsigned mods, const Handle *moving, std::string *carrier) const {
 	const V2 w = to_world(screen);
+	if (carrier != nullptr) {
+		carrier->clear();
+	}
 	if (mods & ModAlt) {
 		return jpoint(w.x, w.y);
 	}
@@ -400,8 +417,68 @@ json Editor::snap(const V2 &screen, unsigned mods, const Handle *moving) const {
 	if (best) {
 		return *best;
 	}
+	// Stage 149: onto a carrier within reach (its point nearest the pointer, a grid step along it)
+	if (moving == nullptr || moving->item.rfind("carrier:", 0) != 0) {
+		const std::string near = carrier_near(screen);
+		if (!near.empty()) {
+			const json &cs = doc_["carriers"];
+			for (const json &c : cs) {
+				if (c.value("name", "") != near) {
+					continue;
+				}
+				if (carrier != nullptr) {
+					*carrier = near;
+				}
+				const double step = grid_ ? 10.0 : 1.0;
+				if (c.contains("line")) {
+					const double ax = c["line"]["a"][0].get<double>(), ay = c["line"]["a"][1].get<double>();
+					const double dx = c["line"]["b"][0].get<double>() - ax, dy = c["line"]["b"][1].get<double>() - ay;
+					const double len = std::hypot(dx, dy);
+					const double t = std::round(((double(w.x) - ax) * dx + (double(w.y) - ay) * dy) / len / step) * step / len;
+					return jpoint(ax + t * dx, ay + t * dy);
+				}
+				const double cx = c["circle"]["center"][0].get<double>(), cy = c["circle"]["center"][1].get<double>(), r = c["circle"]["radius"].get<double>();
+				const double a = std::atan2(double(w.y) - cy, double(w.x) - cx);
+				const double da = step / r; // a grid step along the arc
+				const double sa = std::round(a / da) * da;
+				return jpoint(cx + r * std::cos(sa), cy + r * std::sin(sa));
+			}
+		}
+	}
 	const double step = grid_ ? 10.0 : 1.0;
 	return jpoint(std::round(double(w.x) / step) * step, std::round(double(w.y) / step) * step);
+}
+
+std::string Editor::carrier_near(const V2 &screen) const {
+	if (!doc_.contains("carriers") || !doc_["carriers"].is_array()) {
+		return "";
+	}
+	const V2 w = to_world(screen);
+	std::string best;
+	double best_d = PICK / zoom_;
+	for (const json &c : doc_["carriers"]) {
+		if (!c.is_object()) {
+			continue;
+		}
+		double d = 1e300;
+		if (c.contains("line") && c["line"].is_object() && is_point(c["line"].value("a", json())) && is_point(c["line"].value("b", json()))) {
+			const double ax = c["line"]["a"][0].get<double>(), ay = c["line"]["a"][1].get<double>();
+			const double dx = c["line"]["b"][0].get<double>() - ax, dy = c["line"]["b"][1].get<double>() - ay;
+			const double len = std::hypot(dx, dy);
+			if (len > 0) {
+				d = std::abs((double(w.x) - ax) * dy - (double(w.y) - ay) * dx) / len;
+			}
+		} else if (c.contains("circle") && c["circle"].is_object() && is_point(c["circle"].value("center", json()))
+				&& c["circle"].value("radius", json()).is_number()) {
+			const V2 ctr = pt(c["circle"]["center"]);
+			d = std::abs(std::hypot(double(w.x) - ctr.x, double(w.y) - ctr.y) - c["circle"]["radius"].get<double>());
+		}
+		if (d <= best_d) {
+			best_d = d;
+			best = c.value("name", "");
+		}
+	}
+	return best;
 }
 
 // ---------------------------------------------------------------- input
@@ -417,8 +494,41 @@ void Editor::place(const json &p, unsigned) {
 		return;
 	}
 	clicks_.push_back(p);
+	click_carriers_.resize(clicks_.size());
+	click_carriers_.back() = carrier_of_click_;
 	const size_t need = tool_ == Tool::Arc ? 3 : 2;
 	if (clicks_.size() < need) {
+		return;
+	}
+	if (tool_ == Tool::CarrierLine || tool_ == Tool::CarrierCircle) { // Stage 149: a carrier
+		json cs = doc_.value("carriers", json::array());
+		if (!cs.is_array()) {
+			cs = json::array();
+		}
+		std::string name;
+		for (int n = 1;; n++) {
+			name = "carrier_" + std::to_string(n);
+			bool used = false;
+			for (const json &c : cs) {
+				used = used || (c.is_object() && c.value("name", "") == name);
+			}
+			if (!used) {
+				break;
+			}
+		}
+		json c = {{"name", name}};
+		if (tool_ == Tool::CarrierLine) {
+			c["line"] = {{"a", clicks_[0]}, {"b", clicks_[1]}};
+		} else {
+			const V2 ctr = pt(clicks_[0]), q = pt(clicks_[1]);
+			const double step = grid_ ? 10.0 : 1.0;
+			c["circle"] = {{"center", clicks_[0]}, {"radius", std::max(step, std::round(std::hypot(double(q.x) - ctr.x, double(q.y) - ctr.y) / step) * step)}};
+		}
+		clicks_.clear();
+		click_carriers_.clear();
+		cs.push_back(c);
+		const json res = command({{"op", "set"}, {"path", "/carriers"}, {"value", cs}});
+		hint_ = res.value("ok", false) ? name + " placed: line and arc clicks on it place elements on it" : res.value("error", std::string());
 		return;
 	}
 	if (tool_ == Tool::Goal || tool_ == Tool::Detector) {
@@ -462,7 +572,22 @@ void Editor::place(const json &p, unsigned) {
 			e[it.key()] = it.value();
 		}
 	}
-	if (tool_ == Tool::Circle) {
+	// Stage 149: every click on one carrier (a line's two, an arc's three on a circle): the element is on it
+	const bool on_one = (tool_ == Tool::Line || tool_ == Tool::Arc) && !click_carriers_.empty() && !click_carriers_[0].empty()
+			&& std::all_of(click_carriers_.begin(), click_carriers_.end(), [&](const std::string &c) { return c == click_carriers_[0]; });
+	if (on_one) {
+		e["carrier"] = click_carriers_[0];
+		e["from"] = clicks_[0];
+		e["to"] = clicks_[1];
+		if (tool_ == Tool::Arc) {
+			e["via"] = clicks_[2];
+		}
+		clicks_.clear();
+		click_carriers_.clear();
+		const json r = command({{"op", "add"}, {"element", e}});
+		hint_ = r.value("ok", false) ? "placed " + r.value("name", std::string()) + " on " + e["carrier"].get<std::string>() : r.value("error", std::string());
+		return;
+	} else if (tool_ == Tool::Circle) {
 		const V2 c = pt(clicks_[0]), q = pt(clicks_[1]);
 		const double step = grid_ ? 10.0 : 1.0;
 		const double r = std::max(step, std::round(std::hypot(double(q.x) - c.x, double(q.y) - c.y) / step) * step);
@@ -475,6 +600,7 @@ void Editor::place(const json &p, unsigned) {
 		}
 	}
 	clicks_.clear();
+	click_carriers_.clear();
 	const json r = command({{"op", "add"}, {"element", e}});
 	hint_ = r.value("ok", false) ? "placed " + r.value("name", std::string()) : r.value("error", std::string());
 }
@@ -513,7 +639,7 @@ void Editor::drag_to(const V2 &screen, unsigned mods) {
 		if (dx == 0 && dy == 0) {
 			return;
 		}
-		for (const char *k : {"start", "end", "via"}) {
+		for (const char *k : {"start", "end", "via", "from", "to"}) {
 			if (is_point(g.value(k, json()))) {
 				g[k] = jpoint(g[k][0].get<double>() + dx, g[k][1].get<double>() + dy);
 			}
@@ -534,6 +660,15 @@ void Editor::drag_to(const V2 &screen, unsigned mods) {
 		const double r = std::max(step, std::round(std::hypot(double(q.x) - c.x, double(q.y) - c.y) / step) * step);
 		if (g["circle"]["radius"] != r) {
 			g["circle"]["radius"] = r;
+			drag_changed_ = true;
+			refresh();
+		}
+		return;
+	}
+	if (drag_->kind == "from" || drag_->kind == "to" || (drag_->kind == "via" && e.contains("carrier"))) {
+		const json p2 = snap(screen, mods, &*drag_);
+		if (canonical(e.value(drag_->kind, json())) != canonical(p2)) {
+			e[drag_->kind] = p2;
 			drag_changed_ = true;
 			refresh();
 		}
@@ -670,8 +805,10 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 			hint_ = r.value("ok", false) ? name + " placed (a pull brings it back)" : r.value("error", std::string());
 			return;
 		}
-		default:
-			place(snap(mouse_, mods, nullptr), mods);
+		default: {
+			const json p = snap(mouse_, mods, nullptr, &carrier_of_click_);
+			place(p, mods);
+		}
 	}
 }
 
@@ -733,6 +870,7 @@ void Editor::key(int code, unsigned mods, bool down) {
 		case 'O': tool_ = Tool::Goal; clicks_.clear(); return;
 		case 'D': tool_ = Tool::Detector; clicks_.clear(); return;
 		case 'B': tool_ = Tool::Object; clicks_.clear(); return;
+		case 'K': tool_ = (mods & ModShift) ? Tool::CarrierCircle : Tool::CarrierLine; clicks_.clear(); click_carriers_.clear(); return;
 		case 'G': grid_ = !grid_; return;
 		case 'F': frame_all(); view_touched_ = false; return;
 		case KeyDelete:
@@ -842,7 +980,7 @@ std::vector<Editor::Row> Editor::rows() const {
 	};
 	add({Row::Header, "Ricochet level editor", "", "", std::nullopt, "", -1, 0, {}});
 	add({Row::Buttons, "", "", "undo (ctrl+z), redo (ctrl+shift+z), save (ctrl+s), play (F5)", std::nullopt, "", -1, 0, {}});
-	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector, B an object", std::nullopt,
+	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector, B an object, K a line carrier, shift+K a circle carrier", std::nullopt,
 			"tool", -1, 0, {}});
 	const json ks = kinds();
 	add({Row::Value, "place", kind_, "Tab / shift+Tab / 1-9, or a kind below: what the line, arc and circle tools place", std::nullopt, "place", -1, 0, {}});
@@ -966,7 +1104,7 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		return opts[size_t(((k + (back ? -1 : 1)) % n + n) % n)];
 	};
 	if (r.choice == "tool") {
-		const std::string t = cycle({"select", "line", "arc", "circle", "player", "goal", "detector", "object"}, r.value);
+		const std::string t = cycle({"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle"}, r.value);
 		run({{"op", "tool"}, {"tool", t}});
 		return;
 	}
@@ -1110,6 +1248,43 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			box(room.is_object() ? room.value("rect", json::array({560.0, 240.0, 800.0, 600.0})) : json(), RED, false);
 		}
 		out.add(L_ROOM, 0, 2, std::move(r));
+	}
+	// Stage 149: the carriers, faint across the canvas
+	{
+		std::vector<Call> cg;
+		if (doc_.contains("carriers") && doc_["carriers"].is_array()) {
+			for (const json &c : doc_["carriers"]) {
+				if (!c.is_object()) {
+					continue;
+				}
+				const bool picked = item_ == "carrier:" + c.value("name", "");
+				const Color col = picked ? rgba(0.6, 0.85, 1.0, 0.9) : CARRIER;
+				V2 label_at;
+				if (c.contains("line") && c["line"].is_object() && is_point(c["line"].value("a", json())) && is_point(c["line"].value("b", json()))) {
+					const V2 a = pt(c["line"]["a"]), b = pt(c["line"]["b"]);
+					const double dx = double(b.x) - a.x, dy = double(b.y) - a.y, len = std::hypot(dx, dy);
+					if (len <= 0) {
+						continue;
+					}
+					const double far = 4.0 * (cw + ch) / zoom_; // past the canvas both ways
+					const V2 p0 = to_screen(V2::of(a.x - dx / len * far, a.y - dy / len * far)), p1 = to_screen(V2::of(a.x + dx / len * far, a.y + dy / len * far));
+					cg.push_back(dashed(p0, p1, col, picked ? 2.0 : 1.0, 12.0));
+					label_at = to_screen(a);
+				} else if (c.contains("circle") && c["circle"].is_object() && is_point(c["circle"].value("center", json()))
+						&& c["circle"].value("radius", json()).is_number()) {
+					const V2 ctr = to_screen(pt(c["circle"]["center"]));
+					const double r = c["circle"]["radius"].get<double>() * zoom_;
+					for (int k = 0; k < 48; k += 2) {
+						cg.push_back(arc(ctr, r, TAU * k / 48, TAU * (k + 1) / 48, col, picked ? 2.0 : 1.0));
+					}
+					label_at = V2::of(ctr.x, double(ctr.y) - r - 6);
+				} else {
+					continue;
+				}
+				cg.push_back(text_at(V2::of(double(label_at.x) + 6, double(label_at.y) - 6), c.value("name", ""), col, 11));
+			}
+		}
+		out.add(L_CARRIERS, 0, 2, std::move(cg));
 	}
 	// the goal and the detectors
 	{
@@ -1312,7 +1487,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				pts.push_back(to_screen(pt(c)));
 				pv.push_back(circle(pts.back(), 3.0, ACCENT));
 			}
-			if (tool_ == Tool::Circle && pts.size() == 1) {
+			if ((tool_ == Tool::Circle || tool_ == Tool::CarrierCircle) && pts.size() == 1) {
 				pv.push_back(arc(pts[0], std::hypot(double(at.x) - pts[0].x, double(at.y) - pts[0].y), 0, TAU, ACCENT, 1.0));
 			} else if (tool_ == Tool::Arc && pts.size() == 2) {
 				const rc::arc::SegGeom seg = rc::arc::SegGeom::make(pts[0], pts[1], at);

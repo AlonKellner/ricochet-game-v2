@@ -5,6 +5,8 @@
 #include "rcg/elements.hpp"
 
 #include <algorithm>
+#include <array>
+#include <cmath>
 #include <map>
 #include <set>
 
@@ -18,7 +20,7 @@ using json = nlohmann::json;
 // The level keys rc-level/2 shares with rc-level/1 (copied to the lowering as they are).
 const std::vector<std::string> META = {"name", "bounds", "gravity", "room", "player", "camera", "background", "colliders", "features"};
 // Keys of the format's later stages (docs/LEVEL_FORMAT.md), refused until they exist.
-const std::vector<std::string> RESERVED = {"carriers"};
+const std::vector<std::string> RESERVED = {};
 
 const json DEFAULT_BOUNDS = json::array({0.0, 0.0, 1920.0, 1080.0});
 const json DEFAULT_ROOM = json::array({560.0, 240.0, 800.0, 600.0});
@@ -56,6 +58,131 @@ std::vector<json> edge_walls(const json &lv) { return rect_walls(bounds_of(lv), 
 
 std::string text(const json &j) { return canonical(j); }
 
+// Stage 149: the declared carriers (name -> {"line": {a, b}} | {"circle": {center, radius}}), checked
+std::map<std::string, json> carriers_of(const json &v2) {
+	std::map<std::string, json> out;
+	if (!v2.contains("carriers")) {
+		return out;
+	}
+	const json &cs = v2["carriers"];
+	if (!cs.is_array()) {
+		fail("level.carriers", "an array of carriers expected");
+	}
+	auto point = [](const json &p) { return p.is_array() && p.size() == 2 && p[0].is_number() && p[1].is_number(); };
+	for (size_t i = 0; i < cs.size(); i++) {
+		const std::string cp = "level.carriers[" + std::to_string(i) + "]";
+		const json &c = cs[i];
+		if (!c.is_object() || !c.contains("name") || !c["name"].is_string() || c["name"].get<std::string>().empty()) {
+			fail(cp, "{\"name\", \"line\": {\"a\", \"b\"}} or {\"name\", \"circle\": {\"center\", \"radius\"}} expected");
+		}
+		for (auto it = c.begin(); it != c.end(); ++it) {
+			if (it.key() != "name" && it.key() != "line" && it.key() != "circle") {
+				fail(cp, "unknown key '" + it.key() + "'");
+			}
+		}
+		const bool line = c.contains("line"), circle = c.contains("circle");
+		if (line == circle) {
+			fail(cp, "a line or a circle expected");
+		}
+		if (line) {
+			const json &l = c["line"];
+			if (!l.is_object() || !point(l.value("a", json())) || !point(l.value("b", json())) || l["a"] == l["b"]) {
+				fail(cp + ".line", "{\"a\": [x, y], \"b\": [x, y]}, two distinct points expected");
+			}
+		} else {
+			const json &k = c["circle"];
+			if (!k.is_object() || !point(k.value("center", json())) || !k.value("radius", json()).is_number() || !(k["radius"].get<double>() > 0)) {
+				fail(cp + ".circle", "{\"center\": [x, y], \"radius\": r > 0} expected");
+			}
+		}
+		if (!out.emplace(c["name"].get<std::string>(), c).second) {
+			fail(cp + ".name", "'" + c["name"].get<std::string>() + "' names another carrier");
+		}
+	}
+	return out;
+}
+
+// A point onto a carrier (float64): the line's nearest point, the circle's point in its direction.
+std::array<double, 2> project(const json &carrier, const json &p) {
+	const double px = p[0].get<double>(), py = p[1].get<double>();
+	if (carrier.contains("line")) {
+		const double ax = carrier["line"]["a"][0].get<double>(), ay = carrier["line"]["a"][1].get<double>();
+		const double dx = carrier["line"]["b"][0].get<double>() - ax, dy = carrier["line"]["b"][1].get<double>() - ay;
+		const double t = ((px - ax) * dx + (py - ay) * dy) / (dx * dx + dy * dy);
+		return {ax + t * dx, ay + t * dy};
+	}
+	const double cx = carrier["circle"]["center"][0].get<double>(), cy = carrier["circle"]["center"][1].get<double>();
+	const double r = carrier["circle"]["radius"].get<double>();
+	const double vx = px - cx, vy = py - cy, n = std::sqrt(vx * vx + vy * vy);
+	return n > 0 ? std::array<double, 2>{cx + r * vx / n, cy + r * vy / n} : std::array<double, 2>{cx + r, cy};
+}
+
+// An element on a carrier ("carrier": its name) as one with its own geometry: from, to (and an arc's via) projected onto it -- a
+// line straight between its ends, an arc through its via (default: the middle of the shorter arc from -> to);
+// neither from nor to on a circle: the full circle.
+json on_carrier(const json &e, const std::map<std::string, json> &carriers, const std::string &path) {
+	const json &on = e["carrier"];
+	if (!on.is_string() || !carriers.count(on.get<std::string>())) {
+		fail(path + ".carrier", on.is_string() ? "no carrier named '" + on.get<std::string>() + "'" : "a carrier's name expected");
+	}
+	for (const char *k : {"start", "end", "circle", "straight"}) {
+		if (e.contains(k)) {
+			fail(path, std::string("'") + k + "': an element on a carrier takes from and to");
+		}
+	}
+	const json &c = carriers.at(on.get<std::string>());
+	json out = e;
+	out.erase("carrier");
+	out.erase("from");
+	out.erase("to");
+	out.erase("via");
+	auto point = [](const json &p) { return p.is_array() && p.size() == 2 && p[0].is_number() && p[1].is_number(); };
+	if (!e.contains("from") && !e.contains("to")) {
+		if (!c.contains("circle")) {
+			fail(path, "from and to expected (a line carrier has no whole)");
+		}
+		out["circle"] = c["circle"];
+		return out;
+	}
+	if (!point(e.value("from", json())) || !point(e.value("to", json()))) {
+		fail(path, "from and to expected, [x, y] each");
+	}
+	const auto s = project(c, e["from"]), en = project(c, e["to"]);
+	if (s == en) {
+		fail(path, "from and to land on one point of the carrier");
+	}
+	out["start"] = json::array({s[0], s[1]});
+	out["end"] = json::array({en[0], en[1]});
+	if (c.contains("line")) {
+		out["straight"] = true;
+		out["via"] = json::array({(s[0] + en[0]) / 2, (s[1] + en[1]) / 2});
+		return out;
+	}
+	if (e.contains("via")) {
+		if (!point(e["via"])) {
+			fail(path + ".via", "[x, y] expected");
+		}
+		const auto v = project(c, e["via"]);
+		out["via"] = json::array({v[0], v[1]});
+		return out;
+	}
+	// no via: the shorter arc (a half circle: the one of increasing angle)
+	const double PI = 3.141592653589793;
+	const double cx = c["circle"]["center"][0].get<double>(), cy = c["circle"]["center"][1].get<double>(), r = c["circle"]["radius"].get<double>();
+	const double a0 = std::atan2(s[1] - cy, s[0] - cx), a1 = std::atan2(en[1] - cy, en[0] - cx);
+	double span = std::fmod(a1 - a0, 2 * PI);
+	if (span <= -PI) {
+		span += 2 * PI;
+	} else if (span > PI) {
+		span -= 2 * PI;
+	}
+	if (span == -PI) {
+		span = PI;
+	}
+	out["via"] = json::array({cx + r * std::cos(a0 + span / 2), cy + r * std::sin(a0 + span / 2)});
+	return out;
+}
+
 // The first line where two documents' canonical spellings differ (messages).
 std::string first_difference(const json &a, const json &b) {
 	const std::string x = canonical(a), y = canonical(b);
@@ -73,6 +200,8 @@ std::string first_difference(const json &a, const json &b) {
 }
 
 } // namespace
+
+json off_carrier(const json &element, const json &doc) { return on_carrier(element, carriers_of(doc), "element"); }
 
 std::vector<json> rect_walls(const json &rect, const json &side, const json &label, bool solid) {
 	const double x = rect[0].get<double>(), y = rect[1].get<double>(), w = rect[2].get<double>(), h = rect[3].get<double>();
@@ -97,7 +226,7 @@ Lowered lower_level(const json &v2) {
 			fail(P, "'" + k + "' is reserved for a later stage of rc-level/2");
 		}
 		const bool known = k == "schema" || k == "flags" || k == "templates" || k == "elements" || k == "objective" || k == "detectors"
-				|| k == "objects" || std::find(META.begin(), META.end(), k) != META.end();
+				|| k == "objects" || k == "carriers" || std::find(META.begin(), META.end(), k) != META.end();
 		if (!known) {
 			fail(P, "unknown key '" + k + "'");
 		}
@@ -172,6 +301,7 @@ Lowered lower_level(const json &v2) {
 		taken.insert(n);
 		return n;
 	};
+	const std::map<std::string, json> carriers = carriers_of(v2);
 	std::vector<json> surfaces;
 	auto push = [&](std::vector<json> ss, const std::string &origin) {
 		for (size_t i = 0; i < ss.size(); i++) {
@@ -219,7 +349,8 @@ Lowered lower_level(const json &v2) {
 			if (it == kinds.end()) {
 				fail(ep + ".kind", "unknown element kind '" + kind + "'");
 			}
-			push(elements::expand(it->second, e, name, origin), origin);
+			const json g = e.contains("carrier") ? on_carrier(e, carriers, origin) : e; // Stage 149: on a carrier
+			push(elements::expand(it->second, g, name, origin), origin);
 		}
 	}
 	if (!edges) {

@@ -494,3 +494,55 @@ TEST_CASE("editor: the goal, detectors and objects are selected, dragged and edi
 	CHECK(ed.command({{"op", "duplicate"}, {"item", "goal"}})["ok"] == false);
 	CHECK(ed.command({{"op", "select"}, {"item", "detector:nobody"}})["error"] == "no item 'detector:nobody'");
 }
+
+TEST_CASE("editor: carriers -- placed, built on, dragged, renamed, deleted (Stage 149)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ed.key('K', 0, true); // a line carrier: two clicks
+	click(ed, 600, 700);
+	click(ed, 1200, 700);
+	REQUIRE(ed.document()["carriers"].size() == 1);
+	CHECK(ed.document()["carriers"][0] == json::parse(R"({"line": {"a": [600.0, 700.0], "b": [1200.0, 700.0]}, "name": "carrier_1"})"));
+	// a wall on it: both line clicks land on the carrier
+	ok(ed, {{"op", "kind"}, {"kind", "wall"}});
+	ed.key('L', 0, true);
+	click(ed, 700, 704);
+	click(ed, 900, 696);
+	REQUIRE(ed.document()["elements"].size() == 1);
+	const json w = ed.document()["elements"][0];
+	CHECK(w["carrier"] == "carrier_1");
+	CHECK(w["from"] == json::parse("[700.0, 700.0]"));
+	CHECK(w["to"] == json::parse("[900.0, 700.0]"));
+	CHECK(ed.errors().empty());
+	// the carrier's point dragged: the wall follows (it lowers onto the moved line)
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	ed.key('V', 0, true);
+	click(ed, 1000, 700); // the carrier, past the wall
+	CHECK(ok(ed, {{"op", "state"}})["item"] == "carrier:carrier_1");
+	drag(ed, 1200, 700, 1200, 900); // its b
+	const json low = ok(ed, {{"op", "lower"}})["level"];
+	CHECK(low["surfaces"][4]["end"][1].get<double>() > 700.0); // (y rises along the tilted line)
+	// renamed: the wall follows; deleted: the wall keeps its place on its own
+	ok(ed, {{"op", "rename"}, {"item", "carrier:carrier_1"}, {"to", "floor"}});
+	CHECK(ed.document()["elements"][0]["carrier"] == "floor");
+	const json before = ok(ed, {{"op", "lower"}})["level"]["surfaces"][4];
+	ok(ed, {{"op", "remove"}, {"item", "carrier:floor"}});
+	CHECK_FALSE(ed.document()["elements"][0].contains("carrier"));
+	CHECK(ok(ed, {{"op", "lower"}})["level"]["surfaces"][4] == before);
+	CHECK(ed.errors().empty());
+	// a circle carrier, and an arc on it by three clicks
+	ed.key('K', rcg::Editor::ModShift, true);
+	click(ed, 900, 400);
+	click(ed, 1000, 400);
+	REQUIRE(ed.document()["carriers"].size() == 1);
+	CHECK(ed.document()["carriers"][0]["circle"] == json::parse(R"({"center": [900.0, 400.0], "radius": 100.0})"));
+	ok(ed, {{"op", "kind"}, {"kind", "mirror"}});
+	ed.key('A', 0, true);
+	click(ed, 1000, 402);
+	click(ed, 900, 302);
+	click(ed, 971, 330);
+	const json arc = ed.document()["elements"].back();
+	CHECK(arc["carrier"] == "carrier_1");
+	CHECK(arc.contains("via"));
+	CHECK(ed.errors().empty());
+}

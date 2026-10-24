@@ -22,7 +22,7 @@ json new_level() {
 		"room": {"built": true, "rect": [560.0, 240.0, 800.0, 600.0]}, "schema": "rc-level/2"})");
 }
 
-const char *const TOOLS[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object"};
+const char *const TOOLS[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle"};
 
 // The object an element's geometry lives in: the element, a raw element's surface.
 json *geometry_of(json &e) {
@@ -205,7 +205,7 @@ void Editor::refresh() {
 	const json &es = doc_["elements"];
 	drawn_.assign(es.size(), Drawn{});
 	json single = {{"schema", "rc-level/2"}, {"room", {{"rect", {0.0, 0.0, 1.0, 1.0}}, {"built", false}}}};
-	for (const char *k : {"bounds", "templates"}) {
+	for (const char *k : {"bounds", "templates", "carriers"}) {
 		if (doc_.contains(k)) {
 			single[k] = doc_[k];
 		}
@@ -324,6 +324,7 @@ json Editor::op(const json &cmd) {
 		return i;
 	};
 	if (cmd.contains("item") && (o == "select" || o == "remove" || o == "duplicate" || o == "move" || o == "rename")) {
+		// Stage 148: the goal, a detector, an object; Stage 149: a carrier
 		return item_op(o, cmd); // Stage 148: the goal, a detector, an object
 	}
 	if (o == "new") {
@@ -470,14 +471,14 @@ json Editor::op(const json &cmd) {
 	}
 	if (o == "tool") {
 		const std::string t = cmd.at("tool").get<std::string>();
-		for (int k = 0; k < 8; k++) {
+		for (int k = 0; k < 10; k++) {
 			if (t == TOOLS[k]) {
 				tool_ = Tool(k);
 				clicks_.clear();
 				return {};
 			}
 		}
-		refuse("tool: select, line, arc, circle, player, goal, detector or object expected");
+		refuse("tool: select, line, arc, circle, player, goal, detector, object, carrier_line or carrier_circle expected");
 	}
 	if (o == "kind") {
 		const std::string k = cmd.at("kind").get<std::string>();

@@ -4,6 +4,7 @@
 // "object:<name>"; its handles move the JSON they point at.
 #include "rcg/canon.hpp"
 #include "rcg/editor.hpp"
+#include "rcg/level2.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -53,6 +54,14 @@ void translate_item(json &j, double dx, double dy) {
 	if (j.contains("region") && j["region"].is_object()) {
 		translate_item(j["region"], dx, dy);
 	}
+	if (j.contains("line") && j["line"].is_object()) { // a carrier's defining points
+		for (const char *k : {"a", "b"}) {
+			if (is_point(j["line"].value(k, json()))) {
+				const json p = j["line"][k];
+				j["line"][k] = jpoint(p[0].get<double>() + dx, p[1].get<double>() + dy);
+			}
+		}
+	}
 	if (j.contains("segment") && j["segment"].is_object()) {
 		for (const char *k : {"a", "b"}) {
 			if (is_point(j["segment"].value(k, json()))) {
@@ -82,7 +91,7 @@ std::optional<std::string> Editor::item_path(const std::string &item) const {
 		}
 		return std::nullopt;
 	}
-	const char *list = kind == "detector" ? "detectors" : kind == "object" ? "objects" : nullptr;
+	const char *list = kind == "detector" ? "detectors" : kind == "object" ? "objects" : kind == "carrier" ? "carriers" : nullptr;
 	if (list == nullptr) {
 		return std::nullopt;
 	}
@@ -117,6 +126,12 @@ std::vector<Editor::Handle> Editor::item_handles() const {
 	};
 	if (split(item_).first == "goal") {
 		region(j, *path);
+	} else if (j.contains("line") && j["line"].is_object()) { // a line carrier: its two defining points
+		for (const char *k : {"a", "b"}) {
+			if (is_point(j["line"].value(k, json()))) {
+				out.push_back({*path, k, pt(j["line"][k]), item_});
+			}
+		}
 	} else if (j.contains("region")) {
 		region(j["region"], *path + "/region");
 	} else if (j.contains("segment") && j["segment"].is_object()) {
@@ -146,6 +161,12 @@ std::string Editor::item_at(const V2 &screen) const {
 		}
 		return false;
 	};
+	{
+		const std::string c = carrier_near(screen); // a carrier's line or circle (thin, like an element)
+		if (!c.empty()) {
+			return "carrier:" + c;
+		}
+	}
 	if (doc_.contains("objects") && doc_["objects"].is_array()) {
 		for (auto it = doc_["objects"].rbegin(); it != doc_["objects"].rend(); ++it) {
 			if (it->is_object() && in_region(*it)) {
@@ -219,6 +240,13 @@ void Editor::drag_item(const V2 &screen, unsigned mods) {
 		}
 	} else if ((k == "a" || k == "b") && j.contains("segment") && j["segment"].is_object()) {
 		j["segment"][k] = snap(screen, mods, &*drag_);
+	} else if ((k == "a" || k == "b") && j.contains("line") && j["line"].is_object()) {
+		const json p = snap(screen, mods, &*drag_);
+		const std::string other = k == "a" ? "b" : "a";
+		if (canonical(p) == canonical(j["line"].value(other, json()))) {
+			return; // (a line needs two points)
+		}
+		j["line"][k] = p; // the elements on it follow (the lowering projects them)
 	} else {
 		return;
 	}
@@ -267,6 +295,9 @@ std::vector<Editor::Row> Editor::item_rows() const {
 	Row head;
 	head.kind = Row::Header;
 	head.label = kind == "goal" ? "goal" : kind + " " + name;
+	if (kind == "carrier") {
+		head.label += j.contains("line") ? " (a line)" : " (a circle)";
+	}
 	out.push_back(head);
 	auto shape = [&](const std::string &p) {
 		const json::json_pointer ptr(p);
@@ -284,6 +315,23 @@ std::vector<Editor::Row> Editor::item_rows() const {
 	if (kind == "goal") {
 		shape(*path);
 		row("requires", "/objective/requires", "[{\"key\", \"values\"}]: the goal opens while they hold", "none: always open");
+	} else if (kind == "carrier") {
+		row("name", *path + "/name", "renaming carries the elements on it");
+		if (j.contains("line")) {
+			row("a", *path + "/line/a", "[x, y]: a defining point (drag it: the elements on the line follow)");
+			row("b", *path + "/line/b", "[x, y]: the other");
+		} else {
+			row("center", *path + "/circle/center", "[x, y]: drag it: the elements on the circle follow");
+			row("radius", *path + "/circle/radius", "drag its handle");
+		}
+		int on = 0;
+		for (const json &e : doc_["elements"]) {
+			on += e.is_object() && e.value("carrier", json()) == name;
+		}
+		Row r;
+		r.kind = Row::Text;
+		r.label = std::to_string(on) + " element(s) on it; Delete frees them (their own geometry)";
+		out.push_back(r);
 	} else if (kind == "detector") {
 		row("name", *path + "/name", "renaming carries det:<name> (doors, the goal's requires)");
 		row("for", *path + "/for", "who it sees: the player, objects (their centers), any", "player", "options", {"player", "object", "any"});
@@ -328,11 +376,22 @@ json Editor::item_op(const std::string &o, const json &cmd) {
 		return {};
 	}
 	if (o == "remove") {
+		json freed = doc_["elements"];
+		if (kind == "carrier") { // the elements on it keep their places, as their own geometry
+			for (json &e : freed) {
+				if (e.is_object() && e.value("carrier", json()) == name) {
+					e = off_carrier(e, doc_);
+				}
+			}
+		}
 		change([&](json &d) {
 			if (kind == "goal") {
 				d.erase("objective");
 			} else {
 				d[ptr.parent_pointer()].erase(std::stoul(ptr.back()));
+			}
+			if (kind == "carrier") {
+				d["elements"] = freed;
 			}
 		});
 		if (item_ == item) {
@@ -372,7 +431,7 @@ json Editor::item_op(const std::string &o, const json &cmd) {
 	if (kind == "goal") {
 		refuse("the goal is one: it is not " + std::string(o == "duplicate" ? "duplicated" : "renamed"));
 	}
-	const char *list = kind == "detector" ? "detectors" : "objects";
+	const char *list = kind == "detector" ? "detectors" : kind == "carrier" ? "carriers" : "objects";
 	if (o == "duplicate") {
 		json copy = doc_[ptr];
 		const std::string base = name.find('_') != std::string::npos ? name.substr(0, name.rfind('_')) : name;
@@ -393,6 +452,14 @@ json Editor::item_op(const std::string &o, const json &cmd) {
 		item_ = kind + ":" + to; // (before the refresh)
 		change([&](json &d) {
 			d[ptr]["name"] = to;
+			if (kind == "carrier") { // the elements on it follow
+				for (json &e : d["elements"]) {
+					if (e.is_object() && e.value("carrier", json()) == name) {
+						e["carrier"] = to;
+					}
+				}
+				return;
+			}
 			if (kind != "detector") {
 				return;
 			}
