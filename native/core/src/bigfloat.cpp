@@ -246,21 +246,41 @@ int BigFloat::cmp(const BigFloat &o) const {
 }
 
 BigFloat BigFloat::add(const BigFloat &o) const {
-	if (o.sign == 0) {
-		return *this;
+	return add_signed(o, o.sign, int(limbs.size()));
+}
+
+BigFloat BigFloat::add(const BigFloat &o, int n) const {
+	return add_signed(o, o.sign, n);
+}
+
+BigFloat BigFloat::sub(const BigFloat &o, int n) const {
+	return add_signed(o, -o.sign, n);
+}
+
+BigFloat BigFloat::add_signed(const BigFloat &o, int osign, int n) const {
+	// (the operands' values, not their limb counts, decide: a widened copy adds the same)
+	if (osign == 0) {
+		return with_limbs(n);
 	}
 	if (sign == 0) {
-		return o.with_limbs(int(limbs.size()));
+		BigFloat r = o.with_limbs(n);
+		r.sign = osign;
+		return r;
 	}
-	const int n = int(limbs.size());
 	const BigFloat *big = this;
 	const BigFloat *small = &o;
+	int big_sign = sign;
+	int small_sign = osign;
 	if (cmp_abs(o) < 0) {
 		big = &o;
 		small = this;
+		big_sign = osign;
+		small_sign = sign;
 	}
-	// working buffer: one guard limb below the n limbs of `big`
-	Limbs wb(size_t(n + 2), 0);
+	// working buffer: one guard limb below the n limbs of `big` (Stage 141: a
+	// per-thread scratch; normalize allocates the result alone)
+	thread_local Limbs wb;
+	wb.assign(size_t(n + 2), 0);
 	const Limbs &bl = big->limbs;
 	const int bn = int(bl.size());
 	for (int i = 0; i < n; i++) {
@@ -269,8 +289,9 @@ BigFloat BigFloat::add(const BigFloat &o) const {
 	}
 	const int64_t w_exp = big->exp + BITS * int64_t(bn - n) - BITS;
 	// align small into the same frame (bit p of ws has exponent w_exp + p)
-	const Limbs ws = place(small->limbs, small->exp, w_exp, n + 2);
-	if (big->sign == small->sign) {
+	thread_local Limbs ws;
+	place_into(ws, small->limbs, small->exp, w_exp, n + 2);
+	if (big_sign == small_sign) {
 		int64_t carry = 0;
 		for (int i = 0; i < n + 2; i++) {
 			const int64_t s = wb[size_t(i)] + ws[size_t(i)] + carry;
@@ -280,7 +301,7 @@ BigFloat BigFloat::add(const BigFloat &o) const {
 		if (carry > 0) {
 			wb.push_back(carry);
 		}
-		return normalize(wb, w_exp, big->sign, n);
+		return normalize(wb, w_exp, big_sign, n);
 	}
 	int64_t borrow = 0;
 	for (int i = 0; i < n + 2; i++) {
@@ -293,15 +314,18 @@ BigFloat BigFloat::add(const BigFloat &o) const {
 		}
 		wb[size_t(i)] = d;
 	}
-	return normalize(wb, w_exp, big->sign, n);
+	return normalize(wb, w_exp, big_sign, n);
 }
 
 BigFloat BigFloat::sub(const BigFloat &o) const {
-	return add(o.neg());
+	return add_signed(o, -o.sign, int(limbs.size()));
 }
 
 BigFloat BigFloat::mul(const BigFloat &o) const {
-	const int n = int(limbs.size());
+	return mul(o, int(limbs.size()));
+}
+
+BigFloat BigFloat::mul(const BigFloat &o, int n) const {
 	if (sign == 0 || o.sign == 0) {
 		return zero(n);
 	}
@@ -436,7 +460,13 @@ BigFloat BigFloat::sqrt_val() const {
 // Bits of the integer `src` (exponent src_exp) re-expressed in a frame whose
 // bit 0 has exponent frame_exp, truncated to `len` limbs.
 BigFloat::Limbs BigFloat::place(const Limbs &src, int64_t src_exp, int64_t frame_exp, int len) {
-	Limbs out(size_t(len), 0);
+	Limbs out;
+	place_into(out, src, src_exp, frame_exp, len);
+	return out;
+}
+
+void BigFloat::place_into(Limbs &out, const Limbs &src, int64_t src_exp, int64_t frame_exp, int len) {
+	out.assign(size_t(len), 0);
 	const int64_t sn = int64_t(src.size());
 	const int64_t b0 = frame_exp - src_exp; // source bit index for target bit 0
 	int64_t q = b0 / BITS;
@@ -460,7 +490,6 @@ BigFloat::Limbs BigFloat::place(const Limbs &src, int64_t src_exp, int64_t frame
 		}
 		out[size_t(i)] = (lo | hi) & MASK;
 	}
-	return out;
 }
 
 BigFloat BigFloat::normalize(const Limbs &arr, int64_t e, int s, int n) {
