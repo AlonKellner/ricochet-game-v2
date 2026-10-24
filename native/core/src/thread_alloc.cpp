@@ -37,12 +37,12 @@ inline void count_alloc() {
 		allocations.fetch_add(1, std::memory_order_relaxed);
 	}
 }
-inline void count_system() {
+[[maybe_unused]] inline void count_system() {
 	if (counting.load(std::memory_order_relaxed)) {
 		allocations_system.fetch_add(1, std::memory_order_relaxed);
 	}
 }
-inline void count_unsized() {
+[[maybe_unused]] inline void count_unsized() {
 	if (counting.load(std::memory_order_relaxed)) {
 		releases_unsized.fetch_add(1, std::memory_order_relaxed);
 	}
