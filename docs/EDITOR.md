@@ -45,7 +45,7 @@ run it:
 
 | Key | What |
 |---|---|
-| V | select: click an element to select it, drag it to move it, drag a handle to reshape it |
+| V | select: click an element, the goal, a detector or an object to select it; drag it to move it, drag a handle to reshape it |
 | L | line: two clicks, start and end (a line; its middle handle bends it into an arc) |
 | A | arc: three clicks, start, end, and a point on the arc between them |
 | C | circle: two clicks, the center and a point on the circle |
@@ -53,7 +53,7 @@ run it:
 | O | the goal: two corners (a rectangle; a circle through the panel's `goal`) |
 | D | a detector: two corners (a rectangle, mode `enter`, flag `det:<name>`) |
 | B | an object: one click (a pullable circle of radius 16; edit it in the panel's `objects`) |
-| Tab / Shift+Tab, 1-9 | what the line, arc and circle tools place (the palette: every kind, the level's own last) |
+| Tab / Shift+Tab, 1-9, or a kind in the panel's palette | what the line, arc and circle tools place (every kind, the level's own last; clicking a kind also picks the line tool, the circle tool for a circle-only kind) |
 | Delete, Backspace | remove the selected element |
 | Ctrl+D | duplicate it (offset by 20, 20) |
 | arrows (Shift: x10) | move it by a grid step |
@@ -61,8 +61,8 @@ run it:
 | Ctrl+S | save |
 | F5 | play the level (refused while it has problems); Esc returns |
 | G | the grid on or off (off: whole units) |
-| F | frame the level's bounds |
-| wheel | zoom about the pointer |
+| F | frame the level's bounds (the view frames them on every resize until you pan or zoom) |
+| wheel | zoom about the pointer (over the panel: scroll it) |
 | middle drag, Space+drag | pan |
 | right click, Esc | cancel a placement; else deselect |
 
@@ -79,6 +79,16 @@ With Alt held, the point stays exactly under the pointer.
 **Handles** (the selected element): its start and end, its via (or, on a line, its middle, which bends the
 line when dragged), a circle's center and radius, and the player's start. When an endpoint moves, the via
 stays where it is (GAME_SPEC 19.2).
+
+**The goal, detectors and objects** are selected like elements: a click inside one (an element's line above it
+wins the click). A rectangle has corner handles, a circle a center and a radius handle, a detector's segment its
+two ends, and the whole thing drags. The panel shows its own fields:
+- the goal: its shape (click: a rectangle becomes the circle in it, and back) and its `requires`;
+- a detector: its name, `for` and `mode` (they cycle), flag, value and shape;
+- an object: its name, `kind` and `face` (they cycle), solidity, center, radius and label.
+
+Renaming a detector carries `det:<name>` to the doors and the goal's conditions that use it. Delete removes the
+selected item, Ctrl+D duplicates a detector or an object, and the arrows move it.
 
 ## The panel
 
@@ -129,6 +139,9 @@ Every action is a command, a JSON object, which is also how scripts and tests dr
 | `{"op": "duplicate", "name": n, "by": [dx, dy]?}` | duplicate it; `{"name": ...}` |
 | `{"op": "undo"}`, `{"op": "redo"}` | undo, redo |
 | `{"op": "select", "name": n \| null}` | select |
+| `{"op": "select" \| "remove" \| "duplicate", "item": "goal" \| "detector:<name>" \| "object:<name>"}` | an item: select it, remove it, duplicate it (`{"item": ...}`) |
+| `{"op": "move", "item": i, "handle": "body", "by": [dx, dy]}`, `{"op": "move", "item": i, "handle": "corner0".."corner3" \| "center" \| "radius" \| "a" \| "b", "to": v}` | move an item, or a handle of it |
+| `{"op": "rename", "item": "detector:<name>" \| "object:<name>", "to": m}` | rename it (a detector's `det:<name>` follows) |
 | `{"op": "tool", "tool": "select" \| "line" \| "arc" \| "circle" \| "player" \| "goal" \| "detector" \| "object"}`, `{"op": "kind", "kind": k}` | the tool; what it places |
 | `{"op": "snap", "grid": bool}`, `{"op": "view", "center": [x, y], "zoom": z}`, `{"op": "frame"}` | the grid; the view |
 | `{"op": "validate"}` | `{"errors": [{"element", "name", "message"}]}` |

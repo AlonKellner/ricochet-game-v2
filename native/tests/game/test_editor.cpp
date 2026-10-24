@@ -430,3 +430,67 @@ TEST_CASE("editor: the object tool (Stage 146)") {
 	}
 	CHECK(drawn);
 }
+
+TEST_CASE("editor: the goal, detectors and objects are selected, dragged and edited like elements (Stage 148)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "set"}, {"path", "/objective"}, {"value", json::parse(R"({"goal": {"rect": [800, 300, 100, 100]},
+		"requires": [{"key": "det:detector_1", "values": ["true"]}]})")}});
+	ok(ed, {{"op", "set"}, {"path", "/detectors"}, {"value", json::parse(R"([{"name": "detector_1", "region": {"rect": [600, 600, 60, 60]}, "mode": "enter"}])")}});
+	ok(ed, {{"op", "set"}, {"path", "/objects"}, {"value", json::parse(R"([{"name": "object_1", "circle": {"center": [1100, 540], "radius": 16}}])")}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "door"}, {"name", "gate"}, {"flag", "det:detector_1"}, {"start", {1000.0, 240.0}}, {"end", {1000.0, 840.0}}}}});
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	// the goal: a click inside selects it; its corner and its body drag
+	click(ed, 850, 350);
+	CHECK(ok(ed, {{"op", "state"}})["item"] == "goal");
+	drag(ed, 900, 400, 950, 420); // the bottom-right corner
+	CHECK(ed.document()["objective"]["goal"]["rect"] == json::parse("[800.0, 300.0, 150.0, 120.0]"));
+	drag(ed, 850, 350, 883, 372); // the body, by whole grid steps
+	CHECK(ed.document()["objective"]["goal"]["rect"] == json::parse("[830.0, 320.0, 150.0, 120.0]"));
+	click_row(ed, "shape"); // a rect -> the circle in it
+	CHECK(ed.document()["objective"]["goal"] == json::parse(R"({"circle": {"center": [905.0, 380.0], "radius": 60.0}})"));
+	drag(ed, 965, 380, 985, 380); // its radius handle
+	CHECK(ed.document()["objective"]["goal"]["circle"]["radius"] == 80.0);
+	// a detector: options cycle; a rename carries det:<name> to the door and the goal
+	click(ed, 630, 630);
+	CHECK(ok(ed, {{"op", "state"}})["item"] == "detector:detector_1");
+	click_row(ed, "mode");
+	CHECK(ed.document()["detectors"][0]["mode"] == "toggle");
+	click_row(ed, "name");
+	for (int k = 0; k < 12; k++) {
+		ed.key(rcg::Editor::KeyBackspace, 0, true);
+	}
+	ed.text("plate");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(ed.document()["detectors"][0]["name"] == "plate");
+	CHECK(element(ed, "gate")["flag"] == "det:plate");
+	CHECK(ed.document()["objective"]["requires"][0]["key"] == "det:plate");
+	CHECK(ok(ed, {{"op", "state"}})["item"] == "detector:plate");
+	CHECK(ed.errors().empty());
+	// an object: its kind cycles, ctrl+D duplicates it, Delete removes the copy, arrows move it
+	click(ed, 1100, 540);
+	CHECK(ok(ed, {{"op", "state"}})["item"] == "object:object_1");
+	click_row(ed, "kind");
+	CHECK(ed.document()["objects"][0]["kind"] == "static");
+	ed.key('D', rcg::Editor::ModCtrl, true);
+	REQUIRE(ed.document()["objects"].size() == 2);
+	CHECK(ed.document()["objects"][1]["circle"]["center"] == json::parse("[1120.0, 560.0]"));
+	CHECK(ok(ed, {{"op", "state"}})["item"] == "object:object_2");
+	ed.key(rcg::Editor::KeyDelete, 0, true);
+	CHECK(ed.document()["objects"].size() == 1);
+	click(ed, 1100, 540);
+	ed.key(rcg::Editor::KeyRight, 0, true);
+	CHECK(ed.document()["objects"][0]["circle"]["center"] == json::parse("[1110.0, 540.0]"));
+	// an element above an item wins the click
+	click(ed, 1000, 400);
+	CHECK(ok(ed, {{"op", "state"}})["selected"] == "gate");
+	CHECK(ok(ed, {{"op", "state"}})["item"].is_null());
+	// the goal removed, and back by undo
+	ok(ed, {{"op", "select"}, {"item", "goal"}});
+	ed.key(rcg::Editor::KeyDelete, 0, true);
+	CHECK_FALSE(ed.document().contains("objective"));
+	ok(ed, {{"op", "undo"}});
+	CHECK(ed.document()["objective"]["goal"]["circle"]["radius"] == 80.0);
+	CHECK(ed.command({{"op", "duplicate"}, {"item", "goal"}})["ok"] == false);
+	CHECK(ed.command({{"op", "select"}, {"item", "detector:nobody"}})["error"] == "no item 'detector:nobody'");
+}

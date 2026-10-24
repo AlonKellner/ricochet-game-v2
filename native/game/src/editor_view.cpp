@@ -261,12 +261,25 @@ void Editor::frame_all() {
 void Editor::resize(float width, float height) {
 	width_ = std::max(width, PANEL_WIDTH + 100.0f);
 	height_ = std::max(height, STATUS_HEIGHT + 100.0f);
+	if (!view_touched_) {
+		frame_all(); // (the level fits the window until the user moves the view)
+	}
 }
 
 void Editor::scroll(float, float dy, unsigned) {
-	if (mode_ == Mode::Play || dy == 0.0f || mouse_.x >= width_ - PANEL_WIDTH) {
+	if (mode_ == Mode::Play || dy == 0.0f) {
 		return;
 	}
+	if (mouse_.x >= width_ - PANEL_WIDTH) {
+		// the panel: scrolled, as far as its rows reach
+		const float before_scroll = panel_scroll_;
+		panel_scroll_ = 0;
+		const std::vector<Row> rs = rows();
+		const float bottom = rs.empty() ? 0.0f : rs.back().y + ROW + 20.0f;
+		panel_scroll_ = std::clamp(before_scroll + dy * 3 * ROW, 0.0f, std::max(0.0f, bottom - height_));
+		return;
+	}
+	view_touched_ = true;
 	const V2 before = to_world(mouse_);
 	zoom_ = std::clamp(zoom_ * std::pow(1.1, -double(dy)), 0.05, 20.0);
 	const V2 after = to_world(mouse_);
@@ -283,23 +296,26 @@ std::vector<Editor::Handle> Editor::handles() const {
 		const json &g = e.value("kind", "") == "raw" ? e.value("surface", json::object()) : e;
 		if (g.contains("circle") && g["circle"].is_object() && is_point(g["circle"].value("center", json()))) {
 			const V2 c = pt(g["circle"]["center"]);
-			out.push_back({selected_, "center", c});
+			out.push_back({selected_, "center", c, ""});
 			if (g["circle"].value("radius", json()).is_number()) {
-				out.push_back({selected_, "radius", V2::of(double(c.x) + g["circle"]["radius"].get<double>(), c.y)});
+				out.push_back({selected_, "radius", V2::of(double(c.x) + g["circle"]["radius"].get<double>(), c.y), ""});
 			}
 		} else if (is_point(g.value("start", json())) && is_point(g.value("end", json()))) {
 			const V2 s = pt(g["start"]), en = pt(g["end"]);
-			out.push_back({selected_, "start", s});
-			out.push_back({selected_, "end", en});
+			out.push_back({selected_, "start", s, ""});
+			out.push_back({selected_, "end", en, ""});
 			if (is_point(g.value("via", json()))) {
-				out.push_back({selected_, "via", pt(g["via"])});
+				out.push_back({selected_, "via", pt(g["via"]), ""});
 			} else {
-				out.push_back({selected_, "mid", V2::of((double(s.x) + en.x) / 2, (double(s.y) + en.y) / 2)});
+				out.push_back({selected_, "mid", V2::of((double(s.x) + en.x) / 2, (double(s.y) + en.y) / 2), ""});
 			}
 		}
 	}
+	for (Handle &h : item_handles()) {
+		out.push_back(std::move(h));
+	}
 	if (doc_.contains("player") && doc_["player"].is_object() && is_point(doc_["player"].value("start", json()))) {
-		out.push_back({"", "player", pt(doc_["player"]["start"])});
+		out.push_back({"", "player", pt(doc_["player"]["start"]), ""});
 	}
 	return out;
 }
@@ -317,6 +333,7 @@ std::optional<Editor::Handle> Editor::handle_at(const V2 &screen) const {
 	}
 	return best;
 }
+// (the item helpers: editor_items.cpp)
 
 int Editor::element_at(const V2 &screen) const {
 	const V2 w = to_world(screen);
@@ -463,6 +480,10 @@ void Editor::place(const json &p, unsigned) {
 }
 
 void Editor::drag_to(const V2 &screen, unsigned mods) {
+	if (!drag_->item.empty()) {
+		drag_item(screen, mods);
+		return;
+	}
 	const int i = drag_->element.empty() ? -1 : index_of(drag_->element);
 	if (drag_->kind == "player") {
 		const json p = snap(screen, mods, &*drag_);
@@ -508,7 +529,7 @@ void Editor::drag_to(const V2 &screen, unsigned mods) {
 	}
 	const json p = snap(screen, mods, &*drag_);
 	if (drag_->kind == "radius") {
-		const V2 c = pt(g["circle"]["center"]), q = pt(p);
+		const V2 c = pt(g["circle"]["center"]), q = to_world(screen); // (the radius is rounded, not the point)
 		const double step = grid_ && !(mods & ModAlt) ? 10.0 : 1.0;
 		const double r = std::max(step, std::round(std::hypot(double(q.x) - c.x, double(q.y) - c.y) / step) * step);
 		if (g["circle"]["radius"] != r) {
@@ -540,6 +561,7 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 		if (panning_) {
 			center_ = V2::of(double(center_.x) - (double(x) - pan_last_.x) / zoom_, double(center_.y) - (double(y) - pan_last_.y) / zoom_);
 			pan_last_ = mouse_;
+			view_touched_ = true;
 		} else if (drag_) {
 			drag_to(mouse_, mods);
 		}
@@ -585,6 +607,7 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 			clicks_.clear();
 		} else {
 			selected_.clear();
+			item_.clear();
 		}
 		return;
 	}
@@ -596,14 +619,24 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 			std::optional<Handle> h = handle_at(mouse_);
 			if (!h) {
 				const int i = element_at(mouse_);
-				if (i < 0) {
+				if (i >= 0) {
+					select_element(doc_["elements"][size_t(i)].value("name", ""));
+					h = Handle{selected_, "body", to_world(mouse_), ""};
+				} else {
+					// Stage 148: an item (the goal, a detector, an object) under the pointer
+					const std::string it = item_at(mouse_);
 					selected_.clear();
-					return;
+					item_ = it;
+					if (it.empty()) {
+						return;
+					}
+					h = Handle{*item_path(it), "body", to_world(mouse_), it};
 				}
-				selected_ = doc_["elements"][size_t(i)].value("name", "");
-				h = Handle{selected_, "body", to_world(mouse_)};
+			} else if (!h->item.empty()) {
+				selected_.clear();
+				item_ = h->item;
 			} else if (!h->element.empty()) {
-				selected_ = h->element;
+				select_element(h->element);
 			}
 			undo_.push_back(doc_);
 			drag_ = h;
@@ -683,6 +716,8 @@ void Editor::key(int code, unsigned mods, bool down) {
 			run({{"op", "save"}});
 		} else if (code == 'D' && !selected_.empty()) {
 			run({{"op", "duplicate"}, {"name", selected_}});
+		} else if (code == 'D' && !item_.empty()) {
+			run({{"op", "duplicate"}, {"item", item_}});
 		}
 		return;
 	}
@@ -699,11 +734,13 @@ void Editor::key(int code, unsigned mods, bool down) {
 		case 'D': tool_ = Tool::Detector; clicks_.clear(); return;
 		case 'B': tool_ = Tool::Object; clicks_.clear(); return;
 		case 'G': grid_ = !grid_; return;
-		case 'F': frame_all(); return;
+		case 'F': frame_all(); view_touched_ = false; return;
 		case KeyDelete:
 		case KeyBackspace:
 			if (!selected_.empty()) {
 				run({{"op", "remove"}, {"name", selected_}});
+			} else if (!item_.empty()) {
+				run({{"op", "remove"}, {"item", item_}});
 			}
 			return;
 		case KeyEscape:
@@ -711,6 +748,7 @@ void Editor::key(int code, unsigned mods, bool down) {
 				clicks_.clear();
 			} else {
 				selected_.clear();
+				item_.clear();
 			}
 			return;
 		case KeyTab:
@@ -724,11 +762,15 @@ void Editor::key(int code, unsigned mods, bool down) {
 		case KeyRight:
 		case KeyUp:
 		case KeyDown:
-			if (!selected_.empty()) {
+			if (!selected_.empty() || !item_.empty()) {
 				const double step = (grid_ ? 10.0 : 1.0) * ((mods & ModShift) ? 10.0 : 1.0);
 				const double dx = code == KeyLeft ? -step : code == KeyRight ? step : 0.0;
 				const double dy = code == KeyUp ? -step : code == KeyDown ? step : 0.0;
-				run({{"op", "move"}, {"name", selected_}, {"handle", "body"}, {"by", jpoint(dx, dy)}});
+				if (!selected_.empty()) {
+					run({{"op", "move"}, {"name", selected_}, {"handle", "body"}, {"by", jpoint(dx, dy)}});
+				} else {
+					run({{"op", "move"}, {"item", item_}, {"handle", "body"}, {"by", jpoint(dx, dy)}});
+				}
 			}
 			return;
 		default:
@@ -766,7 +808,10 @@ void Editor::commit_field() {
 		}
 	}
 	json r;
-	if (f.element.empty()) {
+	const bool item_name = f.element.empty() && !item_.empty() && f.key.size() > 5 && f.key.compare(f.key.size() - 5, 5, "/name") == 0;
+	if (item_name) {
+		r = command({{"op", "rename"}, {"item", item_}, {"to", value.is_string() ? value : json(buffer_)}});
+	} else if (f.element.empty()) {
 		r = command({{"op", "set"}, {"path", f.key}, {"value", value}});
 	} else if (f.key == "name") {
 		r = command({{"op", "rename"}, {"name", f.element}, {"to", value.is_string() ? value : json(buffer_)}});
@@ -780,7 +825,7 @@ void Editor::commit_field() {
 
 std::vector<Editor::Row> Editor::rows() const {
 	std::vector<Row> out;
-	float y = 10.0f;
+	float y = 10.0f - panel_scroll_;
 	auto add = [&](Row r) {
 		r.y = y;
 		y += ROW;
@@ -795,12 +840,23 @@ std::vector<Editor::Row> Editor::rows() const {
 			add(r);
 		}
 	};
-	add({Row::Header, "Ricochet level editor", "", "", std::nullopt, "", -1, 0});
-	add({Row::Buttons, "", "", "undo (ctrl+z), redo (ctrl+shift+z), save (ctrl+s), play (F5)", std::nullopt, "", -1, 0});
+	add({Row::Header, "Ricochet level editor", "", "", std::nullopt, "", -1, 0, {}});
+	add({Row::Buttons, "", "", "undo (ctrl+z), redo (ctrl+shift+z), save (ctrl+s), play (F5)", std::nullopt, "", -1, 0, {}});
 	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector, B an object", std::nullopt,
-			"tool", -1, 0});
+			"tool", -1, 0, {}});
 	const json ks = kinds();
-	add({Row::Value, "place", kind_, "Tab / shift+Tab / 1-9: what the line, arc and circle tools place", std::nullopt, "place", -1, 0});
+	add({Row::Value, "place", kind_, "Tab / shift+Tab / 1-9, or a kind below: what the line, arc and circle tools place", std::nullopt, "place", -1, 0, {}});
+	{
+		// the palette: every kind, three to a row (a click: place it)
+		const std::vector<std::string> pal = palette();
+		for (size_t k = 0; k < pal.size(); k += 3) {
+			Row r;
+			r.kind = Row::Chips;
+			r.hint = "a kind: the line, arc and circle tools place it";
+			r.options.assign(pal.begin() + long(k), pal.begin() + long(std::min(k + 3, pal.size())));
+			add(r);
+		}
+	}
 	if (ks.contains(kind_)) {
 		text_rows(ks[kind_].value("doc", ""), Row::Text, -1);
 	}
@@ -809,22 +865,22 @@ std::vector<Editor::Row> Editor::rows() const {
 	if (i >= 0) {
 		const json &e = doc_["elements"][size_t(i)];
 		const std::string kind = e.value("kind", "");
-		add({Row::Header, "element", "", "", std::nullopt, "", -1, 0});
-		add({Row::Value, "name", selected_, "unique; flags derive from it (door:<name>)", Field{selected_, "name"}, "", -1, 0});
-		add({Row::Value, "kind", kind, "click: the next kind", Field{selected_, "kind"}, "kind", -1, 0});
+		add({Row::Header, "element", "", "", std::nullopt, "", -1, 0, {}});
+		add({Row::Value, "name", selected_, "unique; flags derive from it (door:<name>)", Field{selected_, "name"}, "", -1, 0, {}});
+		add({Row::Value, "kind", kind, "click: the next kind", Field{selected_, "kind"}, "kind", -1, 0, {}});
 		if (kind == "raw") {
-			add({Row::Value, "surface", spell(e.value("surface", json())), "an rc-level/1 surface (JSON)", Field{selected_, "surface"}, "", -1, 0});
+			add({Row::Value, "surface", spell(e.value("surface", json())), "an rc-level/1 surface (JSON)", Field{selected_, "surface"}, "", -1, 0, {}});
 		} else if (kind != "edges") {
 			add({Row::Value, "label", e.contains("label") ? spell(e["label"]) : "(the kind's)", "the node prefix; empty: the kind's",
-					Field{selected_, "label"}, "", -1, 0});
-			add({Row::Value, "flip", e.value("flip", false) ? "true" : "false", "left and right swapped", Field{selected_, "flip"}, "bool", -1, 0});
+					Field{selected_, "label"}, "", -1, 0, {}});
+			add({Row::Value, "flip", e.value("flip", false) ? "true" : "false", "left and right swapped", Field{selected_, "flip"}, "bool", -1, 0, {}});
 			for (const char *g : {"start", "end", "via"}) {
 				if (e.contains(g)) {
-					add({Row::Value, g, spell(e[g]), "[x, y]", Field{selected_, g}, "", -1, 0});
+					add({Row::Value, g, spell(e[g]), "[x, y]", Field{selected_, g}, "", -1, 0, {}});
 				}
 			}
 			if (e.contains("circle")) {
-				add({Row::Value, "circle", spell(e["circle"]), "{\"center\": [x, y], \"radius\": r}", Field{selected_, "circle"}, "", -1, 0});
+				add({Row::Value, "circle", spell(e["circle"]), "{\"center\": [x, y], \"radius\": r}", Field{selected_, "circle"}, "", -1, 0, {}});
 			}
 			const json params = ks.contains(kind) ? ks[kind].value("params", json::object()) : json::object();
 			for (auto it = params.begin(); it != params.end(); ++it) {
@@ -837,15 +893,19 @@ std::vector<Editor::Row> Editor::rows() const {
 				} else if (spec.value("default", json()).is_boolean() || spec.value("type", "") == "bool") {
 					choice = "bool";
 				}
-				add({Row::Value, it.key(), value, spec.value("doc", ""), Field{selected_, it.key()}, choice, -1, 0});
+				add({Row::Value, it.key(), value, spec.value("doc", ""), Field{selected_, it.key()}, choice, -1, 0, {}});
 			}
 		}
+	} else if (!item_.empty()) {
+		for (Row r : item_rows()) {
+			add(std::move(r));
+		}
 	} else {
-		add({Row::Header, "level", "", "", std::nullopt, "", -1, 0});
+		add({Row::Header, "level", "", "", std::nullopt, "", -1, 0, {}});
 		auto field = [&](const char *label, const std::string &path, const std::string &hint, const std::string &choice = "") {
 			const json::json_pointer ptr(path);
 			const json v = doc_.contains(ptr) ? doc_[ptr] : json();
-			add({Row::Value, label, spell(v), hint, Field{"", path}, choice, -1, 0});
+			add({Row::Value, label, v.is_null() ? std::string("(none)") : spell(v), hint, Field{"", path}, choice, -1, 0, {}});
 		};
 		field("name", "/name", "the level's path under data/levels");
 		field("bounds", "/bounds", "[x, y, w, h]: the arrow wraps there");
@@ -860,7 +920,7 @@ std::vector<Editor::Row> Editor::rows() const {
 		field("objects", "/objects", "[{name, circle, kind, face, solid}]: bodies a pull brings back (B)");
 	}
 	y += 8;
-	add({Row::Header, errors_.empty() ? "no problems" : std::to_string(errors_.size()) + " problem(s)", "", "", std::nullopt, "", -1, 0});
+	add({Row::Header, errors_.empty() ? "no problems" : std::to_string(errors_.size()) + " problem(s)", "", "", std::nullopt, "", -1, 0, {}});
 	for (const Error &er : errors_) {
 		text_rows(er.message, Row::Error, er.element);
 	}
@@ -882,8 +942,21 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		run({{"op", OPS[b]}});
 		return;
 	}
+	if (r.kind == Row::Chips) {
+		const float x0 = width_ - PANEL_WIDTH + 10;
+		const size_t c = size_t(std::clamp(int((mouse_.x - x0) / ((PANEL_WIDTH - 20) / 3)), 0, 2));
+		if (c < r.options.size()) {
+			kind_ = r.options[c];
+			if (tool_ == Tool::Select || tool_ == Tool::Player || tool_ == Tool::Goal || tool_ == Tool::Detector || tool_ == Tool::Object) {
+				const json ks = kinds();
+				tool_ = ks.contains(kind_) && ks[kind_].value("geometry", "any") == "circle" ? Tool::Circle : Tool::Line; // ready to place
+				clicks_.clear();
+			}
+		}
+		return;
+	}
 	if (r.kind == Row::Error && r.error_element >= 0 && size_t(r.error_element) < doc_["elements"].size()) {
-		selected_ = doc_["elements"][size_t(r.error_element)].value("name", "");
+		select_element(doc_["elements"][size_t(r.error_element)].value("name", ""));
 		return;
 	}
 	const bool back = (mods & ModShift) != 0;
@@ -916,6 +989,30 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		} else {
 			run({{"op", "set"}, {"name", f.element}, {"key", f.key}, {"value", !now}});
 		}
+		return;
+	}
+	if (r.choice == "options" && !r.options.empty()) {
+		run({{"op", "set"}, {"path", f.key}, {"value", cycle(r.options, r.value)}});
+		return;
+	}
+	if (r.choice == "shape") { // a region: a rect <-> the circle in it
+		const json::json_pointer ptr(f.key);
+		if (!doc_.contains(ptr) || !doc_[ptr].is_object()) {
+			return;
+		}
+		const json reg = doc_[ptr];
+		json next;
+		if (reg.contains("rect") && reg["rect"].is_array() && reg["rect"].size() == 4) {
+			const double x = reg["rect"][0].get<double>(), y = reg["rect"][1].get<double>(), w = reg["rect"][2].get<double>(), h = reg["rect"][3].get<double>();
+			next = {{"circle", {{"center", jpoint(x + w / 2, y + h / 2)}, {"radius", std::max(1.0, std::min(w, h) / 2)}}}};
+		} else if (reg.contains("circle") && reg["circle"].is_object() && is_point(reg["circle"].value("center", json()))) {
+			const V2 c = pt(reg["circle"]["center"]);
+			const double r2 = reg["circle"].value("radius", 10.0);
+			next = {{"rect", json::array({double(c.x) - r2, double(c.y) - r2, 2 * r2, 2 * r2})}};
+		} else {
+			return;
+		}
+		run({{"op", "set"}, {"path", f.key}, {"value", next}});
 		return;
 	}
 	if (r.choice == "enum") {
@@ -1017,7 +1114,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 	// the goal and the detectors
 	{
 		std::vector<Call> g;
-		auto region = [&](const json &reg, const Color &c, const std::string &label) {
+		auto region = [&](const json &reg, const Color &c, const std::string &label, bool picked = false) {
 			if (!reg.is_object()) {
 				return;
 			}
@@ -1026,14 +1123,21 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 					&& reg["circle"].value("radius", json()).is_number()) {
 				at = to_screen(pt(reg["circle"]["center"]));
 				const double r = reg["circle"]["radius"].get<double>() * zoom_;
+				if (picked) {
+					g.push_back(arc(at, r, 0, TAU, SELECT, 9.0));
+				}
 				for (int k = 0; k < 24; k += 2) {
 					g.push_back(arc(at, r, TAU * k / 24, TAU * (k + 1) / 24, c, 2.0));
 				}
+				at = V2::of(at.x, double(at.y) - r - 6); // (the label above: the center has a handle)
 			} else if (reg.contains("rect") && reg["rect"].is_array() && reg["rect"].size() == 4) {
 				const json &b = reg["rect"];
 				const double x = b[0].get<double>(), y = b[1].get<double>(), w = b[2].get<double>(), h = b[3].get<double>();
 				const V2 p[4] = {to_screen(V2::of(x, y)), to_screen(V2::of(x + w, y)), to_screen(V2::of(x + w, y + h)), to_screen(V2::of(x, y + h))};
 				for (int k = 0; k < 4; k++) {
+					if (picked) {
+						g.push_back(line(p[k], p[(k + 1) % 4], SELECT, 9.0));
+					}
 					g.push_back(dashed(p[k], p[(k + 1) % 4], c, 2.0, 8.0));
 				}
 				at = to_screen(V2::of(x + w / 2, y + h / 2));
@@ -1044,7 +1148,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			g.back().alignment = 1;
 		};
 		if (doc_.contains("objective") && doc_["objective"].is_object()) {
-			region(doc_["objective"].value("goal", json()), GOAL, "goal");
+			region(doc_["objective"].value("goal", json()), GOAL, "goal", item_ == "goal");
 		}
 		if (doc_.contains("detectors") && doc_["detectors"].is_array()) {
 			for (const json &d : doc_["detectors"]) {
@@ -1052,12 +1156,16 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 					continue;
 				}
 				const std::string name = d.value("name", "");
+				const bool picked = item_ == "detector:" + name;
 				if (d.contains("segment") && d["segment"].is_object() && is_point(d["segment"].value("a", json())) && is_point(d["segment"].value("b", json()))) {
 					const V2 a = to_screen(pt(d["segment"]["a"])), b = to_screen(pt(d["segment"]["b"]));
+					if (picked) {
+						g.push_back(line(a, b, SELECT, 9.0));
+					}
 					g.push_back(dashed(a, b, DETECTOR, 2.0, 8.0));
 					g.push_back(text_at(V2::of((double(a.x) + b.x) / 2 + 6, (double(a.y) + b.y) / 2 - 6), name, DETECTOR, 12));
 				} else {
-					region(d.value("region", json()), DETECTOR, name);
+					region(d.value("region", json()), DETECTOR, name, picked);
 				}
 			}
 		}
@@ -1069,6 +1177,9 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				const V2 c = to_screen(pt(o["circle"]["center"]));
 				const double r = o["circle"].value("radius", 16.0) * zoom_;
 				const bool pullable = o.value("kind", "pullable") == "pullable";
+				if (item_ == "object:" + o.value("name", "")) {
+					g.push_back(arc(c, r, 0, TAU, SELECT, 9.0));
+				}
 				g.push_back(arc(c, r, 0, TAU, pullable ? OBJECT : GRAY, 2.5));
 				g.push_back(text_at(V2::of(c.x, double(c.y) - r - 4), o.value("name", ""), pullable ? OBJECT : GRAY, 12));
 				g.back().alignment = 1;
@@ -1149,7 +1260,8 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				continue;
 			}
 			const Color left = side_color(shown_side(b, true)), right = side_color(shown_side(b, false));
-			stroke(b.seg, left, 3.0, !b.presence.empty());
+			const bool gated = std::any_of(b.presence.begin(), b.presence.end(), [](const PresenceSpec &c) { return c.key.rfind("chan:", 0) != 0; });
+			stroke(b.seg, left, 3.0, gated); // (dashed: present only under a flag; a spawner's channel is not drawn so)
 			V2 m, n;
 			frame_of(b.seg, m, n);
 			const V2 sm = to_screen(m);
@@ -1248,6 +1360,9 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 	const std::vector<Row> rs = rows();
 	std::string hover_hint;
 	for (const Row &r : rs) {
+		if (r.y < -ROW || r.y > height_) {
+			continue; // (scrolled out)
+		}
 		const float base = r.y + ROW - 6;
 		const bool over = mouse_.x >= x0 && mouse_.y >= r.y && mouse_.y < r.y + ROW;
 		if (over) {
@@ -1266,6 +1381,22 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 				}
 				p.push_back(text_at(V2{x0 + 14, base}, r.label, ERROR_TEXT, FONT - 2));
 				break;
+			case Row::Chips: {
+				const float cw = (PANEL_WIDTH - 20) / 3;
+				for (size_t c = 0; c < r.options.size(); c++) {
+					const float cx = x0 + 10 + float(c) * cw;
+					const bool cur = r.options[c] == kind_;
+					const bool hot = over && mouse_.x >= cx && mouse_.x < cx + cw;
+					p.push_back(rect(V2{cx + 2, r.y + 2}, V2{cw - 4, ROW - 4}, cur ? rgba(1.0, 0.8, 0.3, 0.30) : hot ? rgba(1, 1, 1, 0.16) : rgba(1, 1, 1, 0.05)));
+					std::string label = r.options[c];
+					if (label.size() > 15) {
+						label = label.substr(0, 14) + ".";
+					}
+					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
+					p.back().alignment = 1;
+				}
+				break;
+			}
 			case Row::Buttons: {
 				static const char *const LABELS[] = {"undo", "redo", "save", "play"};
 				const float bw = (PANEL_WIDTH - 20) / 4;

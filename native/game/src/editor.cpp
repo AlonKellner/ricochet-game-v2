@@ -179,6 +179,7 @@ void Editor::set_document(json doc, bool clean) {
 	dirty_ = !clean;
 	save_requested_ = false;
 	selected_.clear();
+	item_.clear();
 	clicks_.clear();
 	drag_.reset();
 	focus_.reset();
@@ -271,6 +272,9 @@ void Editor::refresh() {
 	if (index_of(selected_) < 0) {
 		selected_.clear();
 	}
+	if (!item_.empty() && !item_path(item_)) {
+		item_.clear(); // (an undo took it away)
+	}
 }
 
 Editor::Status Editor::status() const {
@@ -319,6 +323,9 @@ json Editor::op(const json &cmd) {
 		}
 		return i;
 	};
+	if (cmd.contains("item") && (o == "select" || o == "remove" || o == "duplicate" || o == "move" || o == "rename")) {
+		return item_op(o, cmd); // Stage 148: the goal, a detector, an object
+	}
 	if (o == "new") {
 		editing();
 		set_document(new_level(), true);
@@ -347,7 +354,7 @@ json Editor::op(const json &cmd) {
 		}
 		const std::string name = e["name"].get<std::string>();
 		change([&](json &d) { d["elements"].push_back(e); });
-		selected_ = name;
+		select_element(name);
 		return {{"name", name}};
 	}
 	if (o == "remove") {
@@ -449,14 +456,15 @@ json Editor::op(const json &cmd) {
 			translate(*g, by[0].get<double>(), by[1].get<double>());
 		}
 		change([&](json &d) { d["elements"].insert(d["elements"].begin() + i + 1, e); });
-		selected_ = name;
+		select_element(name);
 		return {{"name", name}};
 	}
 	if (o == "select") {
 		if (cmd.value("name", json()).is_null()) {
 			selected_.clear();
+			item_.clear();
 		} else {
-			selected_ = doc_["elements"][size_t(element("name"))]["name"].get<std::string>();
+			select_element(doc_["elements"][size_t(element("name"))]["name"].get<std::string>());
 		}
 		return {};
 	}
@@ -553,6 +561,7 @@ json Editor::op(const json &cmd) {
 	if (o == "state") {
 		const Status s = status();
 		return {{"tool", TOOLS[int(tool_)]}, {"kind", kind_}, {"selected", selected_.empty() ? json() : json(selected_)},
+				{"item", item_.empty() ? json() : json(item_)},
 				{"mode", mode_ == Mode::Play ? "play" : "edit"}, {"dirty", dirty_}, {"errors", s.errors}, {"grid", grid_},
 				{"placing", clicks_.size()}, {"undo", undo_.size()}, {"redo", redo_.size()},
 				{"view", {{"center", point(center_.x, center_.y)}, {"zoom", zoom_}}}, {"focus", focus_ ? json(focus_->key) : json()},

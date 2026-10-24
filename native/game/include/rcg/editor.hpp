@@ -84,21 +84,23 @@ private:
 		std::vector<rc::arc::SegGeom> broken; // the geometry of ones that do not build
 	};
 	struct Handle {
-		std::string element; // "" with kind "player": the player's start
-		std::string kind;    // start, end, via, mid, center, radius, body, player
+		std::string element; // "" with kind "player": the player's start; an item's handle: the JSON pointer of what it moves
+		std::string kind;    // start, end, via, mid, center, radius, body, player; an item's: corner0-3, center, radius, a, b, body
 		V2 at;
+		std::string item;    // Stage 148: the item it belongs to ("" an element's or the player's)
 	};
 	struct Field {           // a panel row's editable value
 		std::string element; // "": the level
 		std::string key;     // an element key, or a JSON pointer into the document (level fields)
 	};
 	struct Row {
-		enum Kind { Header, Text, Value, Error, Buttons } kind = Text;
+		enum Kind { Header, Text, Value, Error, Buttons, Chips } kind = Text; // Chips: the palette's kinds (options), one row of them
 		std::string label, value, hint;
 		std::optional<Field> field;
-		std::string choice; // a value that cycles ("enum", "bool", "kind", "tool", "place") or "" (typed)
+		std::string choice; // a value that cycles ("enum", "bool", "kind", "tool", "place", "options", "shape") or "" (typed)
 		int error_element = -1;
 		float y = 0;
+		std::vector<std::string> options; // "options": the values it cycles through (strings)
 	};
 
 	// the document
@@ -107,6 +109,14 @@ private:
 	void refresh();
 	int index_of(const std::string &name) const;
 	std::string fresh_name(const std::string &kind) const;
+	// Stage 148: the level's items -- the goal, a detector, an object -- selected and edited like elements
+	std::optional<std::string> item_path(const std::string &item) const; // its JSON pointer ("/objective/goal", "/detectors/2")
+	std::vector<Handle> item_handles() const;
+	std::string item_at(const V2 &screen) const;
+	void drag_item(const V2 &screen, unsigned mods);
+	std::vector<Row> item_rows() const;
+	nlohmann::json item_op(const std::string &op, const nlohmann::json &cmd);
+	void select_element(const std::string &name) { selected_ = name; item_.clear(); }
 	nlohmann::json kinds() const; // kind -> template (builtin and the level's)
 	std::vector<std::string> palette() const; // the kinds in the palette's order (builtin by priority, then the level's)
 	nlohmann::json op(const nlohmann::json &cmd); // throws std::runtime_error / LevelError
@@ -136,12 +146,15 @@ private:
 	std::string kind_ = "wall"; // what the placement tools place
 	bool grid_ = true;
 	std::string selected_;      // an element's name, "" none
+	std::string item_;          // Stage 148: the selected item: "goal", "detector:<name>", "object:<name>"; "" none
 	std::vector<Error> errors_;
 	std::vector<Drawn> drawn_;  // per element
 	// the view
 	float width_ = 1920, height_ = 1080;
 	V2 center_{960, 540};
 	double zoom_ = 1.0;
+	bool view_touched_ = false; // the user panned or zoomed: a resize keeps the view (else it frames the level again)
+	float panel_scroll_ = 0;    // the panel scrolled down by (px)
 	// the pointer
 	V2 mouse_;
 	unsigned buttons_ = 0;
