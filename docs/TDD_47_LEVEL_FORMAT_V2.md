@@ -18,7 +18,7 @@ migrated, and its lowering, its dump, its sessions and its manifests are what th
 | 142.3 | The lowering and the migration (`rcg/level2.hpp`), the reader on both schemas, the initial flags in the session | Done |
 | 142.4 | `rc_tool lower`/`migrate`, `fmt` on `rc-level/2`; `bench/lowered` and its gate; the oracle and the kinematics judge read the lowerings | Done |
 | 142.5 | The 37 levels migrated; the tests; the docs | Done (`make gate` ok) |
-| 142.6 | `make gates`, the user's review of the format and sign-off | Open |
+| 142.6 | `make gates`, the user's review of the format and sign-off | `make gates` ok (ASan+UBSan included); the user's review open |
 
 ## 142.0 The survey
 
