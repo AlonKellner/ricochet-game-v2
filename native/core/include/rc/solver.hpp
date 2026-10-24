@@ -595,6 +595,13 @@ struct Walk {
 	bool record_poles = false;
 	std::vector<std::pair<BeamPtr<N>, std::optional<exact::ExactPole>>> pole_trace;
 	bool record_why = false;  // A.8: fill Event::why (the margins' instrument, LadderStats::why*; RC_LADDER_WHY=1)
+	// A.7: candidate(w, s) per surface for the walk's state (its mode, plan index and
+	// flags) -- a pure function of them, asked for every surface at every step
+	std::vector<uint8_t> cand_mask;
+	bool cand_valid = false;
+	Mode cand_mode = Mode::Physical;
+	int cand_index = 0;
+	Flags cand_flags;
 	size_t horizon_size = SIZE_MAX, horizon_value = 0; // A.8: read_horizon's value at horizon_size events (pure in the events)
 	std::vector<std::vector<Known<N>>> known_trace; // and the known points (Stage 106)
 	// and whether the frame is exact there: Q finite with a record, or the
@@ -2783,9 +2790,19 @@ private:
 		}
 		const Surf<N> *dep_surf = depart >= 0 ? w.scene->find(depart) : nullptr;
 		const int dep_rep = dep_surf != nullptr ? dep_surf->carrier_rep : -1;
-		for (const auto &sp : w.scene->surfaces) {
-			const Surf<N> &s = *sp;
-			if (!candidate(w, s)) {
+		if (!w.cand_valid || w.cand_mode != w.mode || w.cand_index != w.plan_index || !(w.cand_flags == w.flags)) {
+			w.cand_mask.resize(w.scene->surfaces.size());
+			for (size_t si = 0; si < w.scene->surfaces.size(); si++) {
+				w.cand_mask[si] = candidate(w, *w.scene->surfaces[si]) ? 1 : 0;
+			}
+			w.cand_valid = true;
+			w.cand_mode = w.mode;
+			w.cand_index = w.plan_index;
+			w.cand_flags = w.flags;
+		}
+		for (size_t si = 0; si < w.scene->surfaces.size(); si++) {
+			const Surf<N> &s = *w.scene->surfaces[si];
+			if (!w.cand_mask[si]) {
 				continue; // Stage 134: hitting it now could not matter
 			}
 			if (w.pole && pole_tangent(w, s)) {
@@ -3002,7 +3019,7 @@ private:
 			// predicate answers for proportional rows (hit_effects' corners: three
 			// surfaces on one line at every crossing, 36% of a region in BigFloat)
 			const bool concurrent = p->carrier_rep == q->carrier_rep
-				? w.line->exact().has_value()
+				? w.line->has_exact()
 				: w.line->concurrent(p->sx, p->sy, p->ex, p->ey, q->sx, q->sy, q->ex, q->ey, &p->exact_line(), &q->exact_line());
 			if (!concurrent) {
 				continue;

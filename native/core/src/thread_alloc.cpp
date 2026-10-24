@@ -1,6 +1,7 @@
 // F22 (Stage 135): the compute threads' allocation cache (rc/thread_alloc.hpp).
 #include "rc/thread_alloc.hpp"
 
+#include <algorithm>
 #include <atomic>
 #include <cstddef>
 #include <cstdlib>
@@ -120,6 +121,29 @@ void *allocate(std::size_t n) {
 	throw std::bad_alloc();
 }
 
+// A.10: the sized delete knows the bytes asked for; the block holds at least
+// them (allocate gives at least n, every allocator at least GRAIN), so it serves
+// the classes up to n without asking malloc_size (a zone lookup per free).
+void release_sized(void *p, std::size_t n) noexcept {
+	if (p == nullptr) {
+		return;
+	}
+	Cache &c = tl_cache;
+	if (c.on) {
+		const std::size_t k = class_holding(std::max(n, GRAIN));
+		if (k < CLASSES) {
+			if (c.count[k] * class_size(k) < CLASS_BYTES) {
+				Node *b = static_cast<Node *>(p);
+				b->next = c.head[k];
+				c.head[k] = b;
+				c.count[k]++;
+				return;
+			}
+		}
+	}
+	std::free(p);
+}
+
 void release(void *p) noexcept {
 	if (p == nullptr) {
 		return;
@@ -150,6 +174,7 @@ void *allocate(std::size_t n) {
 	throw std::bad_alloc();
 }
 void release(void *p) noexcept { std::free(p); }
+void release_sized(void *p, std::size_t) noexcept { std::free(p); }
 #endif
 
 } // namespace
@@ -190,7 +215,7 @@ void *operator new[](std::size_t n, const std::nothrow_t &) noexcept {
 }
 void operator delete(void *p) noexcept { release(p); }
 void operator delete[](void *p) noexcept { release(p); }
-void operator delete(void *p, std::size_t) noexcept { release(p); }
-void operator delete[](void *p, std::size_t) noexcept { release(p); }
+void operator delete(void *p, std::size_t n) noexcept { release_sized(p, n); }
+void operator delete[](void *p, std::size_t n) noexcept { release_sized(p, n); }
 void operator delete(void *p, const std::nothrow_t &) noexcept { release(p); }
 void operator delete[](void *p, const std::nothrow_t &) noexcept { release(p); }

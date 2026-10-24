@@ -103,7 +103,7 @@ int pole_limbs(const ExactPole &p);
 // derived line (reflected / translated) keeps its parent and mirror; a line
 // from_approx computes its exact coefficients through `source` on demand
 // (which may answer nullopt: the line then makes no exact claim).
-class Line {
+class Line : public std::enable_shared_from_this<Line> {
 public:
 	using Source = std::function<std::optional<Line3>()>;
 
@@ -115,6 +115,9 @@ public:
 
 	// The exact coefficients, or nullopt when a lazy source could not afford them.
 	std::optional<Line3> exact() const;
+	// Whether exact() has a value -- the root's source decides; the reflections and
+	// translations since are not computed (A.2: the same-carrier tie asks only this)
+	bool has_exact() const;
 	std::shared_ptr<Line> translated(double dx, double dy) const;
 	std::shared_ptr<Line> reflected(double sx, double sy, double ex, double ey) const;
 	// (A, B: the two lines' exact coefficients when the caller has them cached, else built here)
@@ -128,8 +131,8 @@ public:
 	// False when the line has no exact coefficients.
 	bool parallel_to(double sx, double sy, double ex, double ey) const;
 
-	// enable_shared_from_this is not needed: derived lines capture the parent
-	// pointer handed to them by the caller through the shared_ptr factories.
+	// A.6: a derived line shares its parent (it copied it, its lazy source and any
+	// exact coefficients included; the parent's exact value is now computed once)
 	std::shared_ptr<const Line> parent;
 	std::vector<double> mirror; // 2 values: translation; 4 values: mirror line s -> e
 
@@ -221,7 +224,7 @@ bool gc_passes(const GCircle &g, double x, double y);
 // only when a decision asks (BeamRec::exact). Every beam of an epoch is the
 // image of a line under the frame's maps (see ExactPole); a beam whose record
 // is missing makes no exact claim.
-class BeamRec {
+class BeamRec : public std::enable_shared_from_this<BeamRec> {
 public:
 	static std::shared_ptr<const BeamRec> from_line(std::shared_ptr<const Line> line);
 	// a beam whose exact circle is known outright (K9: a pre-transform start)

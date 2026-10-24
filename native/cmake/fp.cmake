@@ -15,6 +15,7 @@ function(rc_apply_flags target)
     else()
         target_compile_options(${target} PRIVATE
             -ffp-contract=off -fno-fast-math
+            $<$<CONFIG:RelWithDebInfo>:-O3>
             -Wall -Wextra -Wpedantic -Werror -Wshadow)
         if(NOT RC_NO_CONVERSION)
             target_compile_options(${target} PRIVATE -Wconversion)

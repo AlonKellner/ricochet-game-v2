@@ -61,6 +61,7 @@ public:
 
 private:
 	std::vector<Entry> entries_;
+	bool ghost_ = false; // (A.7: is_true("ghost"), asked per effect lookup, kept current by set and erase)
 };
 
 } // namespace rc

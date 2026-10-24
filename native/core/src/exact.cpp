@@ -663,9 +663,23 @@ std::optional<Line3> Line::exact() const {
 	return exact_;
 }
 
+bool Line::has_exact() const {
+	if (exact_) {
+		return true;
+	}
+	if (source_) {
+		if (!source_done_) {
+			source_done_ = true;
+			exact_ = source_();
+		}
+		return exact_.has_value();
+	}
+	return parent && parent->has_exact();
+}
+
 std::shared_ptr<Line> Line::translated(double dx, double dy) const {
 	auto o = std::make_shared<Line>();
-	o->parent = std::shared_ptr<const Line>(std::make_shared<Line>(*this));
+	o->parent = shared_from_this();
 	o->mirror = {dx, dy};
 	o->fa = fa;
 	o->ea = ea;
@@ -679,7 +693,7 @@ std::shared_ptr<Line> Line::translated(double dx, double dy) const {
 
 std::shared_ptr<Line> Line::reflected(double sx, double sy, double ex, double ey) const {
 	auto o = std::make_shared<Line>();
-	o->parent = std::shared_ptr<const Line>(std::make_shared<Line>(*this));
+	o->parent = shared_from_this();
 	o->mirror = {sx, sy, ex, ey};
 	const EB mx = esub(EB{ex, 0.0}, EB{sx, 0.0});
 	const EB my = esub(EB{ey, 0.0}, EB{sy, 0.0});
@@ -961,7 +975,7 @@ std::shared_ptr<const BeamRec> BeamRec::from_gc_lazy(std::function<GCircle()> so
 std::shared_ptr<const BeamRec> BeamRec::reflected(double sx, double sy, double ex, double ey) const {
 	auto r = std::make_shared<BeamRec>();
 	r->kind_ = Kind::Reflect;
-	r->parent_ = std::make_shared<BeamRec>(*this);
+	r->parent_ = shared_from_this();
 	r->m_[0] = sx;
 	r->m_[1] = sy;
 	r->m_[2] = ex;
@@ -972,7 +986,7 @@ std::shared_ptr<const BeamRec> BeamRec::reflected(double sx, double sy, double e
 std::shared_ptr<const BeamRec> BeamRec::translated(double dx, double dy) const {
 	auto r = std::make_shared<BeamRec>();
 	r->kind_ = Kind::Translate;
-	r->parent_ = std::make_shared<BeamRec>(*this);
+	r->parent_ = shared_from_this();
 	r->m_[0] = dx;
 	r->m_[1] = dy;
 	return r;
@@ -981,7 +995,7 @@ std::shared_ptr<const BeamRec> BeamRec::translated(double dx, double dy) const {
 std::shared_ptr<const BeamRec> BeamRec::inverted(const Point3 &C, const BigFloat &rw2) const {
 	auto r = std::make_shared<BeamRec>();
 	r->kind_ = Kind::Invert;
-	r->parent_ = std::make_shared<BeamRec>(*this);
+	r->parent_ = shared_from_this();
 	r->c_ = C;
 	r->rw2_ = rw2;
 	return r;

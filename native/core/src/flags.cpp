@@ -58,18 +58,36 @@ const FlagValue *Flags::get(const std::string &key) const {
 	return nullptr;
 }
 
+namespace {
+const std::string GHOST_KEY = "ghost";
+bool truth_bool(const FlagValue &v) {
+	const bool *b = std::get_if<bool>(&v);
+	return b != nullptr && *b;
+}
+} // namespace
+
 void Flags::set(const std::string &key, FlagValue value) {
+	const bool ghost = key == GHOST_KEY;
 	for (Entry &e : entries_) {
 		if (e.first == key) {
 			e.second = std::move(value);
+			if (ghost) {
+				ghost_ = truth_bool(e.second);
+			}
 			return;
 		}
 	}
 	entries_.emplace_back(key, std::move(value));
+	if (ghost) {
+		ghost_ = truth_bool(entries_.back().second);
+	}
 }
 
 void Flags::erase(const std::string &key) {
 	entries_.erase(std::remove_if(entries_.begin(), entries_.end(), [&](const Entry &e) { return e.first == key; }), entries_.end());
+	if (key == GHOST_KEY) {
+		ghost_ = false;
+	}
 }
 
 Flags Flags::applied(const StateChangeDef &change) const {
@@ -84,6 +102,9 @@ Flags Flags::applied(const StateChangeDef &change) const {
 }
 
 bool Flags::is_true(const std::string &key) const {
+	if (key.size() == 5 && key == GHOST_KEY) {
+		return ghost_;
+	}
 	const FlagValue *v = get(key);
 	if (v == nullptr) {
 		return false;

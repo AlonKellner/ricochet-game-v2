@@ -52,6 +52,8 @@ make pyhost                     # the Python host on the C API
 ./run_tests_parallel.sh         # the Godot host's GUT suite
 make sessions-check             # the session replay golden (make sessions re-records: a behaviour change)
 make frame-bench                # the per-frame cost on a level (rc_tool bench)
+make regions [THREADS=1]        # every plannable side's region on every level: time, casts, phases, a hash per plan (rc_tool regions)
+make profile LEVEL=data/levels/test_levels/crossings.json [THREADS=1]   # a level's regions under sample: self and inclusive tables
 make violations [FILTER=crossings__4]   # the sweeps' violations -> engines/godot/violations.json (open scenes/violation_viewer.tscn)
 ```
 
@@ -92,3 +94,4 @@ record or fixture is a behaviour change: bring the evidence (the judge's report)
 - `docs/TDD_09_PRECISION_INTEGRATION.md` through `docs/TDD_19_FORK_RULE.md` — The beam solver, the native core, hit effects, crossings, spec import, visibility
 - `docs/TDD_20_ENGINE_AGNOSTIC_DATA.md` through `docs/TDD_24_ENGINE_SWITCH.md` — The engine-agnostic port
 - `docs/TDD_25_FRAME_COST.md` onward — Smoother frames: the measurement harness, asynchrony (`rcg/jobs.hpp`), presentation
+- `docs/TDD_42_CAST_COST.md` onward — The cast-cost program: regions under the frame budget (`rc_tool regions`, `make profile`)
