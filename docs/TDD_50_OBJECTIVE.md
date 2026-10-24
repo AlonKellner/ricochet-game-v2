@@ -15,7 +15,7 @@ reaches the solver. The rules: GAME_SPEC 3.2, 24.5, 24.6.
 | 145.3 | Drawing (the goal, the detectors: new node kinds), the C API 1.9 (`rc_frame.won`) | Done |
 | 145.4 | The editor: tools O (goal) and D (detector), their drawing, the panel's fields | Done |
 | 145.5 | Two demo levels and their sessions; tests; docs; `make gate` | Done |
-| 145.6 | The user's interactive sign-off (play both demo levels; author a goal level in the editor) | Open |
+| 145.6 | The user's interactive sign-off (play both demo levels; author a goal level in the editor) | Done (2026-10-24) |
 
 ## Decisions
 

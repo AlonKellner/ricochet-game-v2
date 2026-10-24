@@ -13,7 +13,7 @@ The user guide is docs/EDITOR.md; the host's contract is docs/PORTING.md ("Hosti
 | 144.2 | `RicochetEditor`: input (canvas pixels, Ctrl or Command, typed text), painting, resizing, saving, play-testing | Done |
 | 144.3 | `RicochetGame.level_json` (a level's text instead of a file); the scene; `--level=` | Done |
 | 144.4 | The GUT test (`test_editor_host.gd`, in the final suite), docs, `make gate` | Done |
-| 144.5 | The user's interactive sign-off (author a level, save it, `rc_tool fmt --check` it, play it) | Open |
+| 144.5 | The user's interactive sign-off (author a level, save it, `rc_tool fmt --check` it, play it) | Done (2026-10-24) |
 
 ## Decisions
 

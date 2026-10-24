@@ -15,7 +15,7 @@ is a landing effect that walks the finished path.
 | 146.3 | Bodies under gravity per tick; no shot while one moves; detectors `for` objects | Done |
 | 146.4 | The hit kinds `grapple` and `pull` (landing-time; their sides a candidate, Stage 134's rule) and the journeys | Done |
 | 146.5 | The `grapple` element; the editor's object tool; two demo levels and sessions; tests; docs; `make gate` | Done |
-| 146.6 | The user's interactive sign-off (play both demo levels; place objects in the editor) | Open |
+| 146.6 | The user's interactive sign-off (play both demo levels; place objects in the editor) | Done (2026-10-24) |
 
 ## Decisions
 

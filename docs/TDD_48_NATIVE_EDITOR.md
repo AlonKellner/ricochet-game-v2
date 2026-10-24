@@ -16,7 +16,7 @@ no engine. Godot's host is the next stage. The user guide is docs/EDITOR.md.
 | 143.3 | The panel (immediate mode, in the draw list) and live validation per element | Done |
 | 143.4 | The C API 1.8 (`rc_editor_*`, the draw pools shared with the game's), the C smoke | Done |
 | 143.5 | The Python host: `rc_host.Editor`, the tkinter front end, its tests | Done |
-| 143.6 | Docs, `make gates`, the user's interactive sign-off on the tkinter editor | Docs done, `make gate` ok; sign-off open |
+| 143.6 | Docs, `make gates`, the user's interactive sign-off on the tkinter editor | Done (`make gates` ok; the user's sign-off 2026-10-24) |
 
 ## Decisions
 

@@ -13,7 +13,7 @@ designer's guide to the patterns.
 | 147.1 | Per-shot flags: `shot:*` erased from the promoted flags when the arrow lands (GAME_SPEC 10.6) | Done |
 | 147.2 | The templates: `breakable`, `toggle_surface`, `frost_barrier`, `freezable`, `torch`, `water`, `burnable`, `charger`, `conditional_button` | Done |
 | 147.3 | Their behaviour in play (`rcg_tests` "kit: ..."), the docs, `make gate` | Done |
-| 147.4 | The user's interactive sign-off (each element in a level of the user's) | Open |
+| 147.4 | The user's interactive sign-off (each element in a level of the user's) | Done (2026-10-24) |
 
 ## Decisions
 

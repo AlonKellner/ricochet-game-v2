@@ -12,7 +12,7 @@ share a line or a circle, or move together when it moves.
 | 149.1 | The format: `carriers` (lines, circles); elements `carrier`, `from`, `to` (`via`), lowered by projection | Done |
 | 149.2 | The editor: the carrier tools (K, Shift+K), snapping onto carriers, elements placed on them and their handles, carriers as items (selected, their defining points dragged, renamed, deleted freeing their elements) | Done |
 | 149.3 | Tests, docs, `make gate` | Done |
-| 149.4 | The user's interactive sign-off; the exact carrier, if wanted | Open |
+| 149.4 | The user's interactive sign-off; the exact carrier, if wanted | Done (the user's sign-off 2026-10-24); the exact carrier not requested (deferred) |
 
 ## What carriers are
 
