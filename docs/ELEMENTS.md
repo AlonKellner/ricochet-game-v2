@@ -64,6 +64,7 @@ A template is an object:
 | `priority` | the order in which `rc_tool migrate` tries the kinds (lower first; default 100) |
 | `geometry` | `"any"` (default), `"segment"` or `"circle"`: what the element needs (the editor's tools) |
 | `params` | `{name: {"default": v, "enum": [...], "type": t, "doc": "..."}}`; without a default a parameter is required; `type` is one of string, number, bool, point, array, object, any (by default the default's) |
+| `example` | parameter values a new element starts with (the editor's palette: a portal placed with `d` already set) |
 | `surfaces` | the surfaces, as `rc-level/1` surfaces without geometry, ids or (optionally) label; expressions anywhere |
 
 Expressions:
