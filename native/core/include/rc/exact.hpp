@@ -226,6 +226,9 @@ public:
 	static std::shared_ptr<const BeamRec> from_line(std::shared_ptr<const Line> line);
 	// a beam whose exact circle is known outright (K9: a pre-transform start)
 	static std::shared_ptr<const BeamRec> from_gc(const GCircle &g);
+	// ... computed by `source` when a decision asks (A.4: gc_through was 27% of a
+	// tangent_infinity region, and every consumer filters in float first)
+	static std::shared_ptr<const BeamRec> from_gc_lazy(std::function<GCircle()> source);
 	std::shared_ptr<const BeamRec> reflected(double sx, double sy, double ex, double ey) const;
 	std::shared_ptr<const BeamRec> translated(double dx, double dy) const;
 	std::shared_ptr<const BeamRec> inverted(const Point3 &C, const BigFloat &rw2) const;
@@ -248,6 +251,7 @@ private:
 	double m_[4] = {0.0, 0.0, 0.0, 0.0};
 	Point3 c_;
 	BigFloat rw2_;
+	std::function<GCircle()> gc_source_; // (Kind::Circle, lazy)
 	mutable bool done_ = false;
 	mutable std::optional<GCircle> exact_;
 };

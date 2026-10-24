@@ -4895,6 +4895,13 @@ inline std::vector<std::pair<int, int>> parts_of(const Result &r) {
 inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanItem> &plan, const Flags &flags, const Rect &bounds,
 		const std::atomic<bool> *cancel = nullptr) {
 	const auto t0 = std::chrono::steady_clock::now();
+	// A.10: the whole build on this thread allocates through the compute threads'
+	// block cache (collect, cells, merge, the sequential casts; the batches did)
+	const bool was_compute = set_compute_thread(true);
+	struct Restore {
+		bool was;
+		~Restore() { set_compute_thread(was); }
+	} restore{was_compute};
 	Builder b(tracer, player, plan, flags, bounds);
 	b.set_cancel(cancel);
 	Result r;

@@ -951,6 +951,13 @@ std::shared_ptr<const BeamRec> BeamRec::from_gc(const GCircle &g) {
 	return r;
 }
 
+std::shared_ptr<const BeamRec> BeamRec::from_gc_lazy(std::function<GCircle()> source) {
+	auto r = std::make_shared<BeamRec>();
+	r->kind_ = Kind::Circle;
+	r->gc_source_ = std::move(source);
+	return r;
+}
+
 std::shared_ptr<const BeamRec> BeamRec::reflected(double sx, double sy, double ex, double ey) const {
 	auto r = std::make_shared<BeamRec>();
 	r->kind_ = Kind::Reflect;
@@ -993,6 +1000,10 @@ bool BeamRec::passes_h(const Point3 &X) const {
 	if (done_) {
 		return exact_ && gc_passes_h(*exact_, X);
 	}
+	if (kind_ == Kind::Circle) {
+		const std::optional<GCircle> g = exact(); // (a lazy start circle: as one born done answers, whatever X's size)
+		return g && gc_passes_h(*g, X);
+	}
 	if (point_limbs(X) > EXACT_LIMBS) {
 		return false; // (the exact-data budget, as exact()'s)
 	}
@@ -1001,7 +1012,7 @@ bool BeamRec::passes_h(const Point3 &X) const {
 			const std::optional<Line3> L = line_->exact();
 			return L && on_line_h(*L, X);
 		}
-		case Kind::Circle: return false; // (born done)
+		case Kind::Circle: return false; // (above)
 		case Kind::Reflect: return parent_->passes_h(reflect_point_h(X, m_[0], m_[1], m_[2], m_[3]));
 		case Kind::Translate: return parent_->passes_h(Point3{sub(X[0], mul(of(m_[0]), X[2])), sub(X[1], mul(of(m_[1]), X[2])), X[2]});
 		case Kind::Invert: {
@@ -1025,6 +1036,8 @@ std::optional<GCircle> BeamRec::exact() const {
 		if (const std::optional<Line3> L = line_->exact()) {
 			g = gc_from_line(*L);
 		}
+	} else if (kind_ == Kind::Circle) {
+		g = gc_source_();
 	} else if (const std::optional<GCircle> p = parent_->exact()) {
 		switch (kind_) {
 			case Kind::Reflect: g = gc_reflect(*p, m_[0], m_[1], m_[2], m_[3]); break;

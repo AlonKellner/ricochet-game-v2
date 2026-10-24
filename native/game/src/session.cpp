@@ -1208,6 +1208,11 @@ void Session::update_visibility() {
 Session::VisJobOut Session::run_visibility(rc::Tracer &t, const V2 &player, const std::vector<rc::PlanItem> &items, const rc::Flags &flags,
 		const rc::vis::Rect &vb, const std::atomic<bool> *cancel) {
 	VisJobOut out;
+	const bool was_compute = rc::set_compute_thread(true); // (A.10: the union and the fill too)
+	struct Restore {
+		bool was;
+		~Restore() { rc::set_compute_thread(was); }
+	} restore{was_compute};
 	out.region = rc::vis::compute(t, rc::vis::Pt{player.x, player.y}, items, flags, vb, cancel);
 	if (out.region->cancelled || !out.region->supported) {
 		return out;
