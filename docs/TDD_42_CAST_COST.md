@@ -1,4 +1,4 @@
-# TDD 42: The cast-cost program, Stage A (Stage 137)
+# TDD 42: The cast-cost program, Stages A and B (Stage 137)
 
 The user asked for a higher-quality optimisation plan than a first agent's (2026-10-24). The plan that replaced it
 (`~/.claude/plans/i-asked-a-weaker-transient-hanrahan.md`, approved 2026-10-24) measures first and removes measured
@@ -23,7 +23,14 @@ judged; timing is evidence, never a gate.
 | A.9 | A lap on an unchanged beam reusing its candidates | Deferred (previews only; regions stop at the horizon) |
 | A.10 | The whole build on the compute threads' allocator; the sized delete without `malloc_size` | Done in part (bit-exact) -- the limb buffers deferred |
 | A.11 | `-O3` on every rc target | Done (bit-exact; 1-5%) |
-| A.12 | Docs, `make gates`, sign-off | Pending |
+| A.12 | Docs, `make gates` (green 2026-10-24), sign-off | Pending (the user) |
+| B.1 | One batch for the side and the middle casts | Done (bit-exact) |
+| B.2 | Both halves of a split plan at once | Not done (they share one tracer's helpers; the pool runs one batch at a time) |
+| B.3 | The casts likely to be slow first in each batch; each cast's time recorded | Done (bit-exact) |
+| B.4 | The schedule's overheads: sized deallocation, the sized free's class, the decision keys, 64 memo shards, `scene_supported` once, the job thread's cache for life, the performance cores | Done (bit-exact) |
+| B.5 | Cross-worker exact memos | Not done (no evidence of lost hits) |
+| B.6 | A dependency-driven schedule | Not done (the tails are 0.3-0.4 ms at six threads after B.1 and B.3) |
+| B.7 | Stage C's measurement: the off-segment non-planned hits per walk | Done (below) |
 
 ## A.0 Measuring
 
@@ -146,6 +153,53 @@ of asking `malloc_size` per free (4% of hit_effects). Deferred: the BigFloat lim
 
 `rc_apply_flags` adds `-O3` for RelWithDebInfo on every rc target; `-ffp-contract=off -fno-fast-math` stay, and
 `fma_sensitive` and the goldens prove nothing moved. Worth 1-5%.
+
+## Stage B: the schedule
+
+**B.0 Measured** (after Stage A, crossings [17R], the regions tool at 1, 4, 6 and 8 threads): the casts' summed CPU was
+28 ms on one thread, 33.6 at four, 35.2 at six and 47.5 at eight -- the two threads past the six performance cores run on
+efficiency cores, each cast there about twice as long, and the batch waits for them: eight threads cost 35% more CPU than
+six for the same wall time. The serial part of a build was 1.2-1.7 ms (collect 0.3, the job-building loops in
+`cast_members` 0.9, cells and merge under 0.1), the three batches' tails 0.5-2.5 ms, and on hit_effects the union
+and the fill after the build 1.4 ms more.
+
+**B.1** The gaps' middle casts read the crit casts alone (`dead_gap`), like the side casts: one batch for both, so two
+barriers per half instead of three (`pre_mid_`; `build_cells` takes the mids where it would cast; a refinement's new
+gaps are cast there as before).
+
+**B.3** A batch waits for its slowest cast, so the casts likely to be slow run first: in the crit batch the members at a
+tangency or at a proper crossing (an irrational point the walk comes back to, F13: the climbs), then the exact
+endpoints; in the side-and-mid batch each cast by the time its member's (members') crit cast took (`Cast::usec`). The
+results land by slot: the order of the work changes nothing.
+
+**B.4** What the profile at six threads showed beyond one thread's:
+
+- Nearly every free was unsized (250k of 255k allocations per region), so the sized-delete path of A.10 never ran and
+  `malloc_size` ran per free: Apple clang emits sized deletes only under `-fsized-deallocation`, now on every rc
+  target. Then the sized free filed a block under the largest class *at most* its size -- one below the class the
+  request takes from, for any size that is not a class size -- so every free moved a block down a class and every
+  allocation of that size missed: 61k system mallocs per region on crossings. A block of up to 8 KiB is its class's
+  size on any thread now, and the sized free files it by the class the request takes from: 20k system mallocs per
+  region, and the single-threaded region 29.6 → 25.4 ms.
+- The tracer's tie and realization memo keys were strings of `%a`'s (a `snprintf` per double per decision):
+  `__vfprintf` 1.8% at six threads. They are the inputs' bits (`DecisionKey`).
+- The split plans' shared memo's 16 shards waited on each other: 64. `scene_supported(defs)` ran per decision: once
+  per `set_defs`.
+- The region job's thread (and the tool's) is a compute thread for its life, so a region's results freed there come
+  back for the next.
+- On macOS the default thread count is the performance cores' (`hw.perflevel0.logicalcpu`): the same wall time for
+  about 25% less CPU.
+
+**B.7 Stage C's measurement.** Of the walks' hit events (`LadderStats::hits`), those off their segment on a surface no
+remaining plan entry names: hit_effects 42% (its worst side 53%), crossings 36%, portals 34%, projective 26%,
+tangent_infinity 17%, inversion_grid 0%. Stage C's rule would remove them as events; the per-step work (the roots of
+every candidate surface) stays unless the filter runs before the roots, so its gain is their per-candidate work.
+
+**Not done, and why:** B.2 (the two halves of a split plan share one tracer's helpers and the pool runs one batch at a
+time; the memo already dedups their casts); B.5 (no evidence of lost memo hits); B.6 (after B.1 and B.3 the tails are
+0.3-0.4 ms at six threads: a dependency-driven schedule would buy at most that). The union and fill after the build
+(F31: Clipper2 on the cells' conforming rings, 1.3 ms of a 6.4 ms hit_effects region) are hashed by the session golden
+(the fill's points and indices), so a cheaper union is a judged change.
 
 ## Results
 

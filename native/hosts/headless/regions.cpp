@@ -57,8 +57,8 @@ struct Row {
 	std::array<long long, 5> phase_usec{};
 	long long batch_max_usec = 0, batch_sum_usec = 0, batch_wall_usec = 0;
 	long long members = 0, cells = 0;
-	long long walks = 0, climbs = 0, big_usec = 0, unconverged = 0;
-	long long allocs = 0;
+	long long walks = 0, climbs = 0, big_usec = 0, unconverged = 0, hits = 0, hits_off = 0;
+	long long allocs = 0, allocs_system = 0, frees_unsized = 0;
 	int regions = 0;
 	uint64_t hash = 14695981039346656037ULL;
 	bool supported = true;
@@ -154,7 +154,7 @@ std::vector<Row> run_level(const std::string &path, const Options &o) {
 			continue;
 		}
 		t.reset_ladder_stats();
-		const long long a0 = rc::alloc_count();
+		const long long a0 = rc::alloc_count(), s0 = rc::alloc_system_count(), u0 = rc::alloc_unsized_count();
 		for (int rep = 0; rep < o.reps; rep++) {
 			for (const rc::vis::Pt &P : players) {
 				const auto t0 = clk::now();
@@ -194,7 +194,11 @@ std::vector<Row> run_level(const std::string &path, const Options &o) {
 		r.climbs = (st.walks - st.f64) / n;
 		r.big_usec = st.big_usec / n;
 		r.unconverged = st.unconverged / n;
+		r.hits = st.hits / n;
+		r.hits_off = st.hits_off_nonplan / n;
 		r.allocs = o.allocs ? (rc::alloc_count() - a0) / n : 0;
+		r.allocs_system = o.allocs ? (rc::alloc_system_count() - s0) / n : 0;
+		r.frees_unsized = o.allocs ? (rc::alloc_unsized_count() - u0) / n : 0;
 		rows.push_back(r);
 	}
 	return rows;
@@ -209,7 +213,9 @@ json row_json(const Row &r) {
 		{"batch_max_ms", double(r.batch_max_usec) / n / 1000.0}, {"batch_sum_ms", double(r.batch_sum_usec) / n / 1000.0},
 		{"batch_wall_ms", double(r.batch_wall_usec) / n / 1000.0},
 		{"walks", double(r.walks) / n}, {"climbs", double(r.climbs) / n}, {"big_ms", double(r.big_usec) / n / 1000.0},
-		{"unconverged", double(r.unconverged) / n}, {"allocs", double(r.allocs) / n}, {"supported", r.supported}};
+		{"unconverged", double(r.unconverged) / n}, {"hits_per_walk", r.walks > 0 ? double(r.hits) / double(r.walks) : 0.0},
+		{"hits_off_nonplan_share", r.hits > 0 ? double(r.hits_off) / double(r.hits) : 0.0}, {"allocs", double(r.allocs) / n}, {"allocs_system", double(r.allocs_system) / n},
+		{"frees_unsized", double(r.frees_unsized) / n}, {"supported", r.supported}};
 	for (long long k : r.kinds) {
 		j["kinds"].push_back(double(k) / n);
 	}
@@ -280,6 +286,7 @@ int run(std::vector<std::string> args) {
 	if (o.allocs) {
 		rc::alloc_counting(true);
 	}
+	rc::set_compute_thread(true); // (the job thread of a session is one for its life: so is this one)
 	std::vector<std::string> levels;
 	if (all) {
 		for (const fs::directory_entry &e : fs::recursive_directory_iterator(args[0])) {
@@ -335,6 +342,15 @@ int run(std::vector<std::string> args) {
 	if (!md_out.empty()) {
 		fs::create_directories(fs::path(md_out).parent_path());
 		std::ofstream(md_out) << "# rc_tool regions (" << o.players << " players, " << rc::vis::vis_threads() << " threads; ms per region)\n\n" << md.str();
+	}
+	if (o.allocs) {
+		std::printf("system mallocs by class (block bytes: count): ");
+		for (int k = 0; k < 72; k++) {
+			if (rc::alloc_system_by_class(k) > 0) {
+				std::printf("%zu:%lld ", k == 71 ? size_t(0) : rc::alloc_class_size(k), rc::alloc_system_by_class(k));
+			}
+		}
+		std::printf("(0: over the largest class)\n");
 	}
 	std::printf("rc_tool regions: %zu levels at %d threads; the worst median %.2f ms (%s)\n", levels.size(), rc::vis::vis_threads(), worst,
 		worst_name.c_str());

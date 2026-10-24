@@ -4,7 +4,10 @@ of the top symbols (sample's own "top of stack" section) and the inclusive
 share of named functions (a node is counted once per path: a function that
 calls itself is not counted twice).
 
-    python3 -I tools/profile_incl.py <sample.txt> [--top N] [--min PCT] [--pats a,b,c]
+    python3 -I tools/profile_incl.py <sample.txt> [--top N] [--min PCT] [--pats a,b,c] [--main]
+
+--main reads the main thread's call tree alone (the serial part of a build at
+several threads: what the job thread does between and after the batches).
 
 The default patterns are the solver's, the region's and the exact layer's hot
 spots; --pats replaces them (substrings of the demangled names).
@@ -27,6 +30,7 @@ DEFAULT = [
 def main():
     args = sys.argv[1:]
     top, min_pct, pats = 25, 0.3, DEFAULT
+    main_only = False
     path = None
     i = 0
     while i < len(args):
@@ -36,6 +40,8 @@ def main():
             min_pct = float(args[i + 1]); i += 2
         elif args[i] == "--pats":
             pats = args[i + 1].split(","); i += 2
+        elif args[i] == "--main":
+            main_only = True; i += 1
         else:
             path = args[i]; i += 1
     if path is None:
@@ -61,6 +67,7 @@ def main():
     stack = []
     roots = []
     started = False
+    in_main = not main_only
     for ln in lines:
         if ln.startswith("Call graph"):
             started = True
@@ -68,6 +75,10 @@ def main():
         if ln.startswith("Total number in stack"):
             break
         if not started:
+            continue
+        if main_only and re.match(r"^\s*\d+ Thread_", ln):
+            in_main = "main-thread" in ln
+        if not in_main:
             continue
         m = rx.match(ln)
         if not m:
