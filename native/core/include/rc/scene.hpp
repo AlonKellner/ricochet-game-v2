@@ -140,6 +140,25 @@ struct Surf {
 	// K6 (Stage 109): the lowest id of the surfaces on exactly this carrier
 	int carrier_rep = 0;
 
+	// Stage 140 (GAME_SPEC 15.3): a pure pass-through in every state -- both sides
+	// pass, no state change, no landing effect, in the base row and every table
+	// row -- and not a target: never a candidate of any walk (Stage 134) unless a
+	// plan names it, so no walk's shape changes at its points.
+	bool never_candidate() const {
+		if (is_target || left_type != EffectType::Pass || right_type != EffectType::Pass || !left_states.empty() || !right_states.empty()
+				|| left_landing || right_landing) {
+			return false;
+		}
+		for (const auto &row : table) {
+			const TableEntry &e = row.second;
+			if (e.left_type != EffectType::Pass || e.right_type != EffectType::Pass || !e.left_states.empty() || !e.right_states.empty() || e.left_landing
+					|| e.right_landing) {
+				return false;
+			}
+		}
+		return true;
+	}
+
 	// Whether the surface exists under the flags (GAME_SPEC 9.6).
 	bool present(const Flags &flags) const {
 		for (const PresenceCond &c : presence) {

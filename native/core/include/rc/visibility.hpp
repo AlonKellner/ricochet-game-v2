@@ -59,6 +59,14 @@ namespace vis {
 // Threads a region build casts on (Perf P3): RC_VIS_THREADS=<n> (1: in order on
 // the caller's thread), else every core up to 8. The region is the same for any
 // count (the casts are independent; the visibility digest pins it).
+// Stage 140 (GAME_SPEC 15.3): the two rules that spare members -- a plan the
+// player cannot start builds an empty region at once, and the points of a surface
+// that is never a candidate are no members. Tests turn them off to compare.
+inline bool &spare_members() {
+	static bool on = true;
+	return on;
+}
+
 inline int vis_threads() {
 	static const int n = [] {
 		if (const char *e = std::getenv("RC_VIS_THREADS")) {
@@ -729,6 +737,9 @@ public:
 		if (empty_) {
 			return std::move(res_); // (supported, nothing visible)
 		}
+		if (spare_members() && cannot_start()) {
+			return std::move(res_); // Stage 140: the plan's first entry cannot be the player's first hit
+		}
 		collect_members();
 		lap(1);
 		cast_members();
@@ -1180,6 +1191,88 @@ private:
 	}
 	static std::tuple<uint64_t, uint64_t, uint64_t, uint64_t> p_bits(const Param &q) {
 		return {std::bit_cast<uint64_t>(q.dir.x), std::bit_cast<uint64_t>(q.dir.y), std::bit_cast<uint64_t>(q.key), std::bit_cast<uint64_t>(q.sub)};
+	}
+
+	// Stage 140 (GAME_SPEC 15.3): the surface's points are no members -- never a
+	// candidate (Surf::never_candidate) and named by no plan entry: no walk computes
+	// it, so no walk's shape changes there
+	bool spared_surface(const Surf<F64> &s) const {
+		if (!spare_members() || !s.never_candidate()) {
+			return false;
+		}
+		for (const PlanItem &it : plan_) {
+			if (!it.is_infinity() && !it.is_origin() && it.surface_id == s.id) {
+				return false;
+			}
+		}
+		return true;
+	}
+
+	// Stage 140 (GAME_SPEC 15.3, F28): whether the plan's first surface entry cannot
+	// be the player's first hit, so the region is empty: with no pre-transform the
+	// physical walk from the player P is a straight beam, and before the first
+	// entry every other event -- another surface's effect or state change, an
+	// unplanned passage of infinity -- is a divergence; so the entry must be the
+	// beam's first crossing of its carrier, approached from P's side (from the far
+	// side after an odd number of leading infinity entries). Decided exactly on the
+	// data (BigFloat), never when P lies on the carrier. A line carrier: P on the
+	// other side. A circle: P inside and the entry its outer side (the one crossing
+	// is from inside); P outside, the entry the inner side of a full circle whose
+	// outer side applies an effect (the first crossing is a divergence).
+	bool cannot_start() {
+		if (q0_ || plan_.empty()) {
+			return false;
+		}
+		size_t k = 0;
+		while (k < K && plan_[k].is_infinity()) {
+			k++;
+		}
+		if (k >= K || plan_[k].is_origin()) {
+			return false;
+		}
+		const Surf<F64> *e = scene_.find(plan_[k].surface_id);
+		if (e == nullptr || !e->present(flags_)) {
+			return false;
+		}
+		const bool wrapped = k % 2 == 1;
+		const Pt P = res_.player;
+		// f(P): the carrier's implicit value at the player, exactly (grad as geom::grad)
+		BigFloat f;
+		if (e->line) {
+			f = exact::sub(exact::mul(exact::sub(exact::of(e->ex), exact::of(e->sx)), exact::sub(exact::of(P.y), exact::of(e->sy))),
+				exact::mul(exact::sub(exact::of(e->ey), exact::of(e->sy)), exact::sub(exact::of(P.x), exact::of(e->sx))));
+		} else {
+			const BigFloat dx = exact::sub(exact::of(P.x), exact::of(e->cx));
+			const BigFloat dy = exact::sub(exact::of(P.y), exact::of(e->cy));
+			f = exact::sub(exact::add(exact::mul(dx, dx), exact::mul(dy, dy)), exact::mul(exact::of(e->r), exact::of(e->r)));
+		}
+		if (f.is_zero()) {
+			return false;
+		}
+		const bool approach_pos = !f.is_negative();
+		if (!e->seg.wind_nonneg) {
+			e->seg.wind_nonneg = !geom::winding(e->seg).is_negative();
+		}
+		bool side_left = *e->seg.wind_nonneg ? approach_pos : !approach_pos; // the side a beam from P approaches from (geom::side_left)
+		if (e->line) {
+			if (wrapped) {
+				side_left = !side_left;
+			}
+			if (side_left != plan_[k].left) {
+				res_.notes.push_back("the plan's first entry (" + std::to_string(e->id) + ") cannot be the player's first hit: the region is empty");
+				return true;
+			}
+			return false;
+		}
+		if (wrapped || side_left == plan_[k].left) {
+			return false;
+		}
+		const bool inside = f.is_negative();
+		if (inside || (e->full && e->effect(side_left, flags_) != EffectType::Pass)) {
+			res_.notes.push_back("the plan's first entry (" + std::to_string(e->id) + ") cannot be the player's first hit: the region is empty");
+			return true;
+		}
+		return false;
 	}
 
 	bool unsupported(const std::string &why) {
@@ -1879,6 +1972,9 @@ private:
 			}
 			for (size_t a = 0; a < surfs.size(); a++) {
 				const Surf<F64> &s = *surfs[a];
+				if (spared_surface(s)) {
+					continue; // Stage 140: never a candidate, named by no entry: no walk changes at its points
+				}
 				if (!s.full) {
 					add_poi(pois, CN<F64>{F64{s.sx}, F64{s.sy}}, j, "endpoint of " + std::to_string(s.id), -1, true);
 					add_poi(pois, CN<F64>{F64{s.ex}, F64{s.ey}}, j, "endpoint of " + std::to_string(s.id), -1, true);
@@ -1887,8 +1983,8 @@ private:
 					add_poi(pois, cn_of(t), j, "tangency to " + std::to_string(s.id), s.id);
 				}
 				for (size_t b = a + 1; b < surfs.size(); b++) {
-					if (surfs[b]->carrier_rep == s.carrier_rep) {
-						continue;
+					if (surfs[b]->carrier_rep == s.carrier_rep || spared_surface(*surfs[b])) {
+						continue; // (Stage 140: a spared surface's crossings are no members)
 					}
 					for (const Pt &x : carrier_points(s, *surfs[b])) {
 						add_poi(pois, cn_of(x), j, "crossing of " + std::to_string(s.id) + " and " + std::to_string(surfs[b]->id), -1, false, std::nullopt,
@@ -1923,6 +2019,9 @@ private:
 			const std::optional<Pt> B = fr.Q ? std::optional<Pt>(pt_of(*fr.Q)) : std::nullopt;
 			for (size_t a = 0; a < surfs.size(); a++) {
 				const Surf<F64> &s = *surfs[a];
+				if (spared_surface(s)) {
+					continue; // Stage 140: never a candidate, named by no entry: no walk changes at its points
+				}
 				if (!s.full) {
 					add_pushed(pois, CN<F64>{F64{s.sx}, F64{s.sy}}, j, "endpoint of " + std::to_string(s.id), true);
 					add_pushed(pois, CN<F64>{F64{s.ex}, F64{s.ey}}, j, "endpoint of " + std::to_string(s.id), true);
@@ -1933,8 +2032,8 @@ private:
 					}
 				}
 				for (size_t b = a + 1; b < surfs.size(); b++) {
-					if (surfs[b]->carrier_rep == s.carrier_rep) {
-						continue;
+					if (surfs[b]->carrier_rep == s.carrier_rep || spared_surface(*surfs[b])) {
+						continue; // (Stage 140: a spared surface's crossings are no members)
 					}
 					for (const Pt &x : carrier_points(s, *surfs[b])) {
 						add_pushed(pois, cn_of(x), j, "crossing of " + std::to_string(s.id) + " and " + std::to_string(surfs[b]->id),
@@ -2022,6 +2121,9 @@ private:
 			const auto &surfs = scene_.surfaces;
 			for (size_t a = 0; a < surfs.size(); a++) {
 				const Surf<F64> &s = *surfs[a];
+				if (spared_surface(s)) {
+					continue; // Stage 140: never a candidate, named by no entry: no walk changes at its points
+				}
 				if (!s.full) {
 					add_poi(pois, CN<F64>{F64{s.sx}, F64{s.sy}}, j, "endpoint of " + std::to_string(s.id), -1, true);
 					add_poi(pois, CN<F64>{F64{s.ex}, F64{s.ey}}, j, "endpoint of " + std::to_string(s.id), -1, true);
@@ -2045,8 +2147,8 @@ private:
 					}
 				}
 				for (size_t b = a + 1; b < surfs.size(); b++) {
-					if (surfs[b]->carrier_rep == s.carrier_rep) {
-						continue; // one carrier (K6)
+					if (surfs[b]->carrier_rep == s.carrier_rep || spared_surface(*surfs[b])) {
+						continue; // one carrier (K6); Stage 140: a spared surface's crossings are no members
 					}
 					for (const Pt &x : carrier_points(s, *surfs[b])) {
 						add_poi(pois, cn_of(x), j, "crossing of " + std::to_string(s.id) + " and " + std::to_string(surfs[b]->id), -1, false, std::nullopt,
@@ -4000,12 +4102,16 @@ private:
 				cancel(kv.first, kv.second, edges);
 			}
 			// a carrier piece two layers share (one's departure side, the other's
-			// stop on the same points, run the other way) is inside the region
+			// stop on the same points, run the other way) is inside the region.
+			// (Stage 140: on a circle the piece must be the same arc -- two arcs with
+			// the same ends run the other way round are complementary halves, not
+			// one piece: the player on a circle mirror, its two half-disc cells.)
 			std::vector<bool> gone(edges.size(), false);
 			for (size_t i = 0; i < edges.size(); i++) {
 				for (size_t j = i + 1; j < edges.size() && !gone[i]; j++) {
 					if (!gone[j] && edges[i].kind == EdgeKind::Carrier && edges[j].kind == EdgeKind::Carrier && edges[i].surface == edges[j].surface
-							&& edges[i].a == edges[j].b && edges[i].b == edges[j].a) {
+							&& edges[i].a == edges[j].b && edges[i].b == edges[j].a && edges[i].arc == edges[j].arc
+							&& (!edges[i].arc || on_arc_side(edges[i], edges[j].via))) {
 						gone[i] = gone[j] = true;
 					}
 				}
