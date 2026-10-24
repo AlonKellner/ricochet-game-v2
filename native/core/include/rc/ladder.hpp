@@ -222,7 +222,14 @@ public:
 		return *it->second;
 	}
 	SolveCache<Dual> &dual_cache() { return dual_cache_; }
-	SolveCache<BigFloat> &big_cache(int limbs) { return big_caches_[limbs]; }
+	SolveCache<BigFloat> &big_cache(int limbs) {
+		auto it = big_caches_.find(limbs);
+		if (it == big_caches_.end()) {
+			it = big_caches_.emplace(limbs, SolveCache<BigFloat>{}).first;
+			it->second.exact = dual_cache_.exact; // (A.1: the exact memos are the same at every tier)
+		}
+		return it->second;
+	}
 	LadderStats &stats() { return stats_; }
 
 private:

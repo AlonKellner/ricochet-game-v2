@@ -258,6 +258,8 @@ struct Scene {
 	// Stage 101: the pre-transform's surfaces, in order (not hittable); their
 	// composite image of infinity is the frame the shot starts in
 	std::vector<std::shared_ptr<Surf<N>>> pre_surfaces;
+	// (A.1: Q0 of the pre-transform as exact data, computed once: Solver::pre_q_exact)
+	mutable std::optional<std::optional<exact::Point3>> pre_q_exact;
 	// Stage 88: a straight beam passing t = infinity emits the `infinity` event
 	// (counted toward MAX_HITS). Off reproduces the pre-Stage-88 traces; the
 	// game turns it on (B9) and so do the Stage 88 fixture tests.

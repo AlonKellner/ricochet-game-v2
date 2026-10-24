@@ -607,23 +607,12 @@ struct Walk {
 	const std::function<size_t(const std::vector<Event<N>> &)> *read_horizon = nullptr; // Stage 124: Solver::read_horizon
 };
 
-// Caches owned by the caller (one per solve / tracer): the anchored chain of
-// the last inputs and the exact aim images (capped).
-template <Num N>
-struct SolveCache {
-	struct ChainKey {
-		const void *scene = nullptr;
-		double px = 0, py = 0, cx = 0, cy = 0;
-		std::string flags;
-		std::vector<std::tuple<int, bool, bool, float, float>> plan;
-		int force = 0; // Stage 111: 0 the plan's realization, 1 forced direct, 2 forced reversed
-		bool operator==(const ChainKey &o) const {
-			return scene == o.scene && px == o.px && py == o.py && cx == o.cx && cy == o.cy && flags == o.flags && plan == o.plan && force == o.force;
-		}
-	};
-	std::optional<ChainKey> chain_key;
-	std::shared_ptr<const AnchorChain<N>> chain;
-	bool chain_null = false;
+// The exact memos (the cast-cost program, A.1): the exact aim images, the
+// pre-transform starts, the pole predicates and the carrier incidences -- pure
+// functions of exact inputs (float64 data and exact arithmetic), the same at
+// every tier -- one per LadderContext, shared by its tiers' SolveCaches (a climb
+// through the tiers computes each once).
+struct ExactCache {
 	// Stage 128: the aim image's key as exact bits (the %.17g text it was told
 	// every number apart the same way, at a printf per cast)
 	struct ImageKey {
@@ -655,6 +644,30 @@ struct SolveCache {
 	std::vector<Start> starts;
 	PoleMemo poles; // Stage 120
 	IncidenceMemo incidence; // Stage 123
+};
+
+// Caches owned by the caller (one per solve / tracer): the anchored chains of
+// the last inputs and the exact memos.
+template <Num N>
+struct SolveCache {
+	struct ChainKey {
+		const void *scene = nullptr;
+		double px = 0, py = 0, cx = 0, cy = 0;
+		std::string flags;
+		std::vector<std::tuple<int, bool, bool, float, float>> plan;
+		int force = 0; // Stage 111: 0 the plan's realization, 1 forced direct, 2 forced reversed
+		bool operator==(const ChainKey &o) const {
+			return scene == o.scene && px == o.px && py == o.py && cx == o.cx && cy == o.cy && flags == o.flags && plan == o.plan && force == o.force;
+		}
+	};
+	// the last four chains (A.1: a split region's tie cast and own cast alternate
+	// the force on one cursor; one entry evicted the other every cast)
+	struct ChainEntry {
+		ChainKey key;
+		std::shared_ptr<const AnchorChain<N>> chain;
+	};
+	std::vector<ChainEntry> chains;
+	std::shared_ptr<ExactCache> exact = std::make_shared<ExactCache>();
 };
 
 // ---------------------------------------------------------------- the solver
@@ -1579,7 +1592,7 @@ private:
 		if (cache_ == nullptr) {
 			return exact_image_h(cursor, plan, EXACT_IMAGE_LIMBS, flags);
 		}
-		typename SolveCache<N>::ImageKey key;
+		ExactCache::ImageKey key;
 		auto put = [&key](double v) { key.words.push_back(std::bit_cast<uint64_t>(v)); };
 		put(cursor.fx());
 		put(cursor.fy());
@@ -1595,15 +1608,15 @@ private:
 				}
 			}
 		}
-		auto it = cache_->images.find(key);
-		if (it != cache_->images.end()) {
+		auto it = cache_->exact->images.find(key);
+		if (it != cache_->exact->images.end()) {
 			return it->second;
 		}
-		if (cache_->images.size() > 256) {
-			cache_->images.clear();
+		if (cache_->exact->images.size() > 256) {
+			cache_->exact->images.clear();
 		}
 		std::optional<exact::Point3> X = exact_image_h(cursor, plan, EXACT_IMAGE_LIMBS, flags);
-		cache_->images[std::move(key)] = X;
+		cache_->exact->images[std::move(key)] = X;
 		return X;
 	}
 
@@ -1615,30 +1628,30 @@ private:
 		return same_bits(a[0], b[0]) && same_bits(a[1], b[1]) && same_bits(a[2], b[2]);
 	}
 	// An aimed shot's exact start in a pre-transform frame (SolveCache::Start)
-	typename SolveCache<N>::Start *start_entry(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
+	ExactCache::Start *start_entry(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
 		if (cache_ == nullptr) {
 			return nullptr;
 		}
 		const uint64_t bx = std::bit_cast<uint64_t>(px);
 		const uint64_t by = std::bit_cast<uint64_t>(py);
-		for (auto &e : cache_->starts) {
+		for (auto &e : cache_->exact->starts) {
 			if (e.px == bx && e.py == by && same_bits(e.X0, X0) && same_bits(e.Q0, Q0)) {
 				return &e;
 			}
 		}
-		if (cache_->starts.size() >= 8) {
-			cache_->starts.erase(cache_->starts.begin());
+		if (cache_->exact->starts.size() >= 8) {
+			cache_->exact->starts.erase(cache_->exact->starts.begin());
 		}
-		typename SolveCache<N>::Start e;
+		ExactCache::Start e;
 		e.px = bx;
 		e.py = by;
 		e.X0 = X0;
 		e.Q0 = Q0;
-		cache_->starts.push_back(std::move(e));
-		return &cache_->starts.back();
+		cache_->exact->starts.push_back(std::move(e));
+		return &cache_->exact->starts.back();
 	}
 	std::optional<exact::ExactPole> start_pole(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
-		typename SolveCache<N>::Start *e = start_entry(px, py, X0, Q0);
+		ExactCache::Start *e = start_entry(px, py, X0, Q0);
 		if (e == nullptr) {
 			return exact::pole_start_aimed(px, py, X0, Q0);
 		}
@@ -1650,7 +1663,7 @@ private:
 	}
 	exact::GCircle start_gc(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
 		auto through = [&] { return exact::gc_through(exact::Point3{exact::of(px), exact::of(py), exact::of(1.0)}, X0, Q0); };
-		typename SolveCache<N>::Start *e = start_entry(px, py, X0, Q0);
+		ExactCache::Start *e = start_entry(px, py, X0, Q0);
 		if (e == nullptr) {
 			return through();
 		}
@@ -1719,12 +1732,16 @@ private:
 			key.plan.emplace_back(p.surface_id, p.left, p.hint.has_value(), p.hint ? p.hint->x : 0.0f, p.hint ? p.hint->y : 0.0f);
 		}
 		key.force = force_reversed ? (*force_reversed ? 2 : 1) : 0;
-		if (cache_->chain_key && *cache_->chain_key == key) {
-			return cache_->chain;
+		for (const auto &e : cache_->chains) {
+			if (e.key == key) {
+				return e.chain;
+			}
 		}
-		cache_->chain = build_chain(player, cursor, plan, flags);
-		cache_->chain_key = key;
-		return cache_->chain;
+		if (cache_->chains.size() >= 4) {
+			cache_->chains.erase(cache_->chains.begin());
+		}
+		cache_->chains.push_back({std::move(key), build_chain(player, cursor, plan, flags)});
+		return cache_->chains.back().chain;
 	}
 
 	int pop_id_of(int sid) const {
@@ -2080,8 +2097,8 @@ private:
 		w.spans = piece_spans(plan);
 		w.Q = effects::scene_pre_q(scene_);
 		w.record_poles = record_poles_;
-		w.pole_memo = cache_ ? &cache_->poles : nullptr;
-		w.incidence_memo = cache_ ? &cache_->incidence : nullptr;
+		w.pole_memo = cache_ ? &cache_->exact->poles : nullptr;
+		w.incidence_memo = cache_ ? &cache_->exact->incidence : nullptr;
 		w.read_horizon = read_horizon;
 		w.events.reserve(32); // (Stage 128: one allocation, not a growth per few events)
 		w.gains.reserve(32);
@@ -2330,7 +2347,7 @@ private:
 		}
 		const double kx = k.fx();
 		const double ky = k.fy();
-		const IncidenceMemo::Key mk{w.scene, std::bit_cast<uint64_t>(kx), std::bit_cast<uint64_t>(ky), surf.id};
+		const IncidenceMemo::Key mk{w.incidence_memo, std::bit_cast<uint64_t>(kx), std::bit_cast<uint64_t>(ky), surf.id}; // (A.1: one memo per defs, shared by the tiers: the memo is the token)
 		if (w.incidence_memo) {
 			if (const bool *hit = w.incidence_memo->find(mk)) {
 				return *hit;
@@ -2369,8 +2386,12 @@ private:
 
 	// ---- the exact pole (Stage 105)
 
-	// Q0 of the pre-transform as exact data (nullopt: none, or infinity)
+	// Q0 of the pre-transform as exact data (nullopt: none, or infinity); a pure
+	// function of the scene, computed once per scene (A.1; it was per walk)
 	std::optional<exact::Point3> pre_q_exact() const {
+		if (scene_.pre_q_exact) {
+			return *scene_.pre_q_exact;
+		}
 		std::optional<exact::Point3> q;
 		for (const auto &sp : scene_.pre_surfaces) {
 			const auto &ec = sp->exact_circle();
@@ -2380,9 +2401,10 @@ private:
 			}
 			q = exact::invert_point_h(*q, ec.C, ec.rw2);
 			if (!q) {
-				return std::nullopt;
+				break;
 			}
 		}
+		scene_.pre_q_exact = q;
 		return q;
 	}
 
@@ -2418,7 +2440,7 @@ private:
 			return std::nullopt;
 		}
 		if (w.pole_memo) {
-			PoleMemo::Entry &e = w.pole_memo->entry(w.pole->Q, w.scene, surf.id);
+			PoleMemo::Entry &e = w.pole_memo->entry(w.pole->Q, w.pole_memo, surf.id);
 			if (!e.image) {
 				e.image = exact::invert_point_h(w.pole->Q, ec.C, ec.rw2);
 			}
@@ -2442,7 +2464,7 @@ private:
 		if (it != w.pole_on.end()) {
 			return it->second;
 		}
-		PoleMemo::Entry *e = w.pole_memo ? &w.pole_memo->entry(w.pole->Q, w.scene, surf.id) : nullptr;
+		PoleMemo::Entry *e = w.pole_memo ? &w.pole_memo->entry(w.pole->Q, w.pole_memo, surf.id) : nullptr;
 		bool r;
 		if (e && e->on) {
 			r = *e->on;

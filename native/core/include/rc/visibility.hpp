@@ -421,6 +421,7 @@ struct Result {
 	std::array<long long, 5> phase_usec{}; // Stage 123 (benches): prepare, members, their casts, cells, merge
 	long long batch_max_usec = 0;  // ... the parallel batches' slowest casts, summed (each batch waits for its slowest)
 	long long batch_sum_usec = 0;  // ... and all their casts' time
+	long long batch_wall_usec = 0; // ... and the batches' wall time (the cast-cost program: the tail a batch waits beyond its casts' time shared over the threads)
 };
 
 // Angular order of aim directions, counterclockwise from the fixed reference
@@ -635,7 +636,7 @@ class Builder {
 public:
 	Builder(Tracer &tracer, Pt player, std::vector<PlanItem> plan, Flags flags, Rect bounds, Half half = Half::Single)
 		: tracer_(tracer), plan_(std::move(plan)), flags_(std::move(flags)),
-		  scene_(Scene<F64>::from_defs(tracer.defs(), F64{1.0})), solver_(scene_, nullptr), half_(half) {
+		  scene_(Scene<F64>::from_defs(tracer.defs(), F64{1.0})), solver_(scene_, &cache_), half_(half) {
 		flags_.erase(GHOST);
 		res_.player = player;
 		res_.domain = bounds.grown(50.0);
@@ -737,6 +738,7 @@ private:
 	std::vector<PlanItem> plan_;
 	Flags flags_;
 	Scene<F64> scene_;
+	mutable SolveCache<F64> cache_;
 	mutable Solver<F64> solver_;
 	std::vector<std::optional<Seg<F64>>> piece_spans_; // Stage 133: the plan's pieces, ends that are crossings read as the crossings
 	Result res_;
@@ -2177,6 +2179,7 @@ private:
 				out[i] = cast_on(tracer_, jobs[i].c, jobs[i].q, jobs[i].member, jobs[i].known, reads_cursor(jobs[i].kind));
 				const long long u = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
 				res_.batch_sum_usec += u;
+				res_.batch_wall_usec += u;
 				mx = std::max(mx, u);
 			}
 			res_.batch_max_usec += mx;
@@ -2189,6 +2192,7 @@ private:
 		// (Stage 120: on the persistent pool, not threads made per batch; worker k casts with tracers[k])
 		check_cancel();
 		std::vector<long long> usec(jobs.size(), 0);
+		const auto tb = std::chrono::steady_clock::now();
 		ThreadPool::shared().parallel_for(jobs.size(), nt - 1, [&](size_t worker, size_t i) {
 			if (cancel_ != nullptr && cancel_->load(std::memory_order_relaxed)) {
 				return; // (cancelled: the caller throws below, never a pool thread)
@@ -2197,6 +2201,7 @@ private:
 			out[i] = cast_on(*tracers[worker], jobs[i].c, jobs[i].q, jobs[i].member, jobs[i].known, reads_cursor(jobs[i].kind));
 			usec[i] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
 		});
+		res_.batch_wall_usec += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - tb).count();
 		check_cancel();
 		long long mx = 0;
 		for (long long u : usec) {
@@ -4830,6 +4835,7 @@ inline Result join_halves(Result a, Result b) {
 	}
 	r.batch_sum_usec += b.batch_sum_usec;
 	r.batch_max_usec += b.batch_max_usec;
+	r.batch_wall_usec += b.batch_wall_usec;
 	for (size_t k = 0; k < r.casts_by_kind.size(); k++) {
 		r.casts_by_kind[k] += b.casts_by_kind[k];
 	}

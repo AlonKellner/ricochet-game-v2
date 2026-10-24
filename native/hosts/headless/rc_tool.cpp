@@ -18,6 +18,12 @@
 //                                             the game's per-frame cost (bench.cpp): phases still, cursor,
 //                                             plan, hover, player, click, walk, flight, C API; fails when a
 //                                             still frame recomputes (--strict: a mean over budget too)
+//   rc_tool regions (<level json> | --all <levels dir>) [--players N] [--threads K] [--reps R] [--pairs]
+//                   [--allocs] [--only <plan substring>] [--json out] [--md out]
+//                                             every plannable side's region (regions.cpp): the build's time,
+//                                             casts by kind, refinements, phases, the batches' tail, union and
+//                                             fill, climbs, allocations, and a hash per plan (two runs agreeing
+//                                             on every hash built the same regions bit for bit)
 //
 // Exit status: 0 done, 1 a check failed or a file is invalid, 2 usage.
 #include "rcg/build.hpp"
@@ -25,6 +31,7 @@
 #include "rcg/level.hpp"
 #include "rcg/digest.hpp"
 #include "bench.hpp"
+#include "regions.hpp"
 #include "replay_capi.hpp"
 #include "rcg/sweeps.hpp"
 
@@ -50,7 +57,8 @@ int usage() {
 				 "       rc_tool dumps <levels dir> <out dir>\n"
 				 "       rc_tool manifests <sweeps recipes> <levels dir> <out dir>\n"
 				 "       rc_tool replay <sessions dir> <levels dir> (<out dir> | --check <golden dir>) [--only <substring>] [--shard i/n] [--full]\n"
-				 "       rc_tool bench (<level json> | --all <levels dir>) [--frames N] [--click-frames N] [--budget ms] [--strict] [--json out] [--md out]\n";
+				 "       rc_tool bench (<level json> | --all <levels dir>) [--frames N] [--click-frames N] [--budget ms] [--strict] [--json out] [--md out]\n"
+				 "       rc_tool regions (<level json> | --all <levels dir>) [--players N] [--threads K] [--reps R] [--pairs] [--allocs] [--only s] [--json out] [--md out]\n";
 	return 2;
 }
 
@@ -258,6 +266,9 @@ int main(int argc, char **argv) {
 	}
 	if (cmd == "replay") {
 		return replay(args);
+	}
+	if (cmd == "regions") {
+		return regions::run(args);
 	}
 	return usage();
 }

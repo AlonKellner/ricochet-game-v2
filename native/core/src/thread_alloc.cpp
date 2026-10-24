@@ -1,6 +1,7 @@
 // F22 (Stage 135): the compute threads' allocation cache (rc/thread_alloc.hpp).
 #include "rc/thread_alloc.hpp"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdlib>
 #include <new>
@@ -23,6 +24,17 @@
 #endif
 
 namespace {
+
+// The allocation counter (rc_tool regions --allocs): a flag read per
+// allocation, a relaxed atomic increment while it is on.
+std::atomic<bool> counting{false};
+std::atomic<long long> allocations{0};
+
+inline void count_alloc() {
+	if (counting.load(std::memory_order_relaxed)) {
+		allocations.fetch_add(1, std::memory_order_relaxed);
+	}
+}
 
 #if !defined(RC_NO_ALLOC_CACHE)
 constexpr std::size_t GRAIN = 16;
@@ -88,6 +100,7 @@ void *allocate(std::size_t n) {
 	if (n == 0) {
 		n = 1;
 	}
+	count_alloc();
 	Cache &c = tl_cache;
 	if (c.on && n <= MAX_BLOCK) {
 		const std::size_t k = class_for(n);
@@ -130,6 +143,7 @@ void release(void *p) noexcept {
 }
 #else
 void *allocate(std::size_t n) {
+	count_alloc();
 	if (void *p = std::malloc(n == 0 ? 1 : n)) {
 		return p;
 	}
@@ -152,6 +166,9 @@ bool set_compute_thread(bool on) {
 	return false;
 #endif
 }
+
+bool alloc_counting(bool on) { return counting.exchange(on); }
+long long alloc_count() { return allocations.load(std::memory_order_relaxed); }
 
 } // namespace rc
 

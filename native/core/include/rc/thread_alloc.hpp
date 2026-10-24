@@ -16,4 +16,10 @@ namespace rc {
 // returns what it was.
 bool set_compute_thread(bool on);
 
+// The allocation counter (every operator new in the process while on; a flag
+// read per allocation, an atomic increment while counting): rc_tool regions
+// --allocs reports allocations per region. Returns what it was.
+bool alloc_counting(bool on);
+long long alloc_count();
+
 } // namespace rc

@@ -255,7 +255,7 @@ public:
 		}
 		Flags start = flags;
 		start.erase(GHOST);
-		Solver<Dual> solver(scene, nullptr);
+		Solver<Dual> solver(scene, &ctx_->dual_cache());
 		const Flags after = solver.plan_flags(plan, start);
 		return !surf->present(after) || surf->ghosted(left, after);
 	}
@@ -371,7 +371,7 @@ public:
 		if (const auto it = tie_memo_.find(key); it != tie_memo_.end()) {
 			return it->second;
 		}
-		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		Solver<Dual> solver(ctx_->dual_scene(), &ctx_->dual_cache()); // (the cast-cost program, A.1: the exact memos, pure, shared with the solves)
 		const std::optional<bool> q = solver.tie_choice(CN<Dual>{Dual{px, 0.0}, Dual{py, 0.0}}, CN<Dual>{Dual{cx, 0.0}, Dual{cy, 0.0}}, plan, flags).reversed;
 		remember(tie_memo_, key, q);
 		return q;
@@ -388,7 +388,7 @@ public:
 		if (const auto it = realization_memo_.find(key); it != realization_memo_.end()) {
 			return it->second;
 		}
-		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		Solver<Dual> solver(ctx_->dual_scene(), &ctx_->dual_cache()); // (the cast-cost program, A.1: the exact memos, pure, shared with the solves)
 		const std::optional<bool> q = solver.realization(CN<Dual>{Dual{px, 0.0}, Dual{py, 0.0}}, CN<Dual>{Dual{cx, 0.0}, Dual{cy, 0.0}}, plan, flags).reversed;
 		remember(realization_memo_, key, q);
 		return q;
@@ -431,7 +431,7 @@ public:
 		if (!ctx_) {
 			return std::nullopt;
 		}
-		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		Solver<Dual> solver(ctx_->dual_scene(), &ctx_->dual_cache()); // (the cast-cost program, A.1: the exact memos, pure, shared with the solves)
 		const std::optional<CN<Dual>> q = solver.plan_pole(plan, flags);
 		if (!q) {
 			return std::nullopt;
@@ -450,7 +450,7 @@ public:
 		if (!ctx_) {
 			return {};
 		}
-		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		Solver<Dual> solver(ctx_->dual_scene(), &ctx_->dual_cache()); // (the cast-cost program, A.1: the exact memos, pure, shared with the solves)
 		auto cn = [](V2 p) { return CN<Dual>{Dual{double(p.x), 0.0}, Dual{double(p.y), 0.0}}; };
 		const auto o = solver.plan_origin(cn(player), cursor ? std::optional<CN<Dual>>(cn(*cursor)) : std::nullopt, plan, flags);
 		OriginPoint out;

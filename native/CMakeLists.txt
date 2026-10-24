@@ -124,7 +124,7 @@ rc_apply_flags(rc_capi_shared)
 
 # Stage 115: the headless host -- the data pipelines without an engine (Stage
 # 118: its replay plays the game through the C API alone)
-add_executable(rc_tool hosts/headless/rc_tool.cpp hosts/headless/replay_capi.cpp hosts/headless/bench.cpp)
+add_executable(rc_tool hosts/headless/rc_tool.cpp hosts/headless/replay_capi.cpp hosts/headless/bench.cpp hosts/headless/regions.cpp)
 target_link_libraries(rc_tool PRIVATE ricochet_game rc_capi)
 rc_apply_flags(rc_tool)
 

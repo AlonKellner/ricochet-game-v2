@@ -7,6 +7,7 @@
 #include "rc/sweep.hpp"
 #include "rc/earcut.hpp"
 #include "rc/visibility.hpp"
+#include "rc/region_digest.hpp"
 
 #include <doctest/doctest.h>
 
@@ -1239,24 +1240,8 @@ std::vector<std::string> digest_files() {
 	return files;
 }
 
-uint64_t digest_mix(uint64_t h, uint64_t v) { return (h ^ v) * 1099511628211ULL; }
-
-uint64_t region_hash(const vis::Result &r) {
-	auto bits = [](double x) { return std::bit_cast<uint64_t>(x); };
-	auto edge_hash = [&](uint64_t h, const vis::Edge &e) {
-		for (double x : {e.a.x, e.a.y, e.via.x, e.via.y, e.b.x, e.b.y}) h = digest_mix(h, bits(x));
-		h = digest_mix(h, uint64_t(int(e.kind)) | uint64_t(uint32_t(e.member)) << 8 | uint64_t(uint32_t(e.surface)) << 40);
-		return digest_mix(h, uint64_t(e.inclusive) | uint64_t(e.incl_a) << 1 | uint64_t(e.arc) << 2);
-	};
-	uint64_t h = digest_mix(14695981039346656037ULL, uint64_t(r.supported));
-	h = digest_mix(h, r.cells.size());
-	for (const vis::Loop &l : r.loops) {
-		h = digest_mix(h, l.edges.size());
-		for (const vis::Edge &e : l.edges) h = edge_hash(h, e);
-	}
-	for (const vis::Edge &e : r.whiskers) h = edge_hash(h, e);
-	return h;
-}
+using vis::digest_mix;
+uint64_t region_hash(const vis::Result &r) { return vis::result_hash(r); }
 
 std::vector<std::vector<PlanItem>> digest_plans(const std::vector<SurfaceDef> &defs) {
 	std::vector<std::vector<PlanItem>> plans{{}};
