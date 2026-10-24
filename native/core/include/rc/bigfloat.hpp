@@ -61,6 +61,12 @@ public:
 	BigFloat add(const BigFloat &o) const;
 	BigFloat sub(const BigFloat &o) const;
 	BigFloat mul(const BigFloat &o) const;
+	// Stage 141 (the cast-cost program's Stage E): the same operations with the
+	// result's precision given -- what exact::add / exact::mul used to get by
+	// widening a copy of the operand first (the value, so the result, is the same)
+	BigFloat add(const BigFloat &o, int n) const;
+	BigFloat sub(const BigFloat &o, int n) const;
+	BigFloat mul(const BigFloat &o, int n) const;
 	BigFloat div(const BigFloat &o) const;
 	BigFloat sqrt_val() const;
 
@@ -78,6 +84,10 @@ public:
 
 private:
 	static Limbs place(const Limbs &src, int64_t src_exp, int64_t frame_exp, int len);
+	// ... into a caller's buffer (Stage 141: add's per-thread scratch, no allocation)
+	static void place_into(Limbs &out, const Limbs &src, int64_t src_exp, int64_t frame_exp, int len);
+	// a + (osign * |o|) at precision n: add, sub and the exact layer's wrappers (Stage 141: no copy of o for its sign)
+	BigFloat add_signed(const BigFloat &o, int osign, int n) const;
 	static BigFloat normalize(const Limbs &arr, int64_t e, int s, int n);
 };
 

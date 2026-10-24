@@ -34,7 +34,7 @@ BigFloat mul(const BigFloat &a, const BigFloat &b) {
 	if (a.is_zero() || b.is_zero()) {
 		return BigFloat::zero(2);
 	}
-	return a.with_limbs(int(a.limbs.size() + b.limbs.size())).mul(b);
+	return a.mul(b, int(a.limbs.size() + b.limbs.size())); // (Stage 141: the precision given, no widened copy)
 }
 
 BigFloat add(const BigFloat &a, const BigFloat &b) {
@@ -46,11 +46,19 @@ BigFloat add(const BigFloat &a, const BigFloat &b) {
 	}
 	const int64_t gap = std::llabs(a.top_exp() - b.top_exp());
 	const int n = int(std::max(a.limbs.size(), b.limbs.size())) + int(gap / BigFloat::BITS) + 3;
-	return a.with_limbs(n).add(b.with_limbs(n));
+	return a.add(b, n); // (Stage 141: the precision given, no widened copies)
 }
 
 BigFloat sub(const BigFloat &a, const BigFloat &b) {
-	return add(a, b.neg());
+	if (a.is_zero()) {
+		return b.neg();
+	}
+	if (b.is_zero()) {
+		return a;
+	}
+	const int64_t gap = std::llabs(a.top_exp() - b.top_exp());
+	const int n = int(std::max(a.limbs.size(), b.limbs.size())) + int(gap / BigFloat::BITS) + 3;
+	return a.sub(b, n); // (Stage 141: o's sign flipped in place, no copy)
 }
 
 // ---------------------------------------------------------------- predicates
@@ -133,7 +141,8 @@ Point3 reflect_point_h(const Point3 &X, double sx, double sy, double ex, double 
 	const BigFloat my = sub(of(ey), of(sy));
 	const BigFloat mm = add(mul(mx, mx), mul(my, my));
 	const BigFloat m2r = sub(mul(mx, mx), mul(my, my));
-	const BigFloat m2i = add(mul(mx, my), mul(my, mx));
+	const BigFloat mxy = mul(mx, my);
+	const BigFloat m2i = add(mxy, mxy); // (Stage 141: mul is commutative bit for bit)
 	const BigFloat &w = X[2];
 	// conj(X - s w)
 	const BigFloat cx = sub(X[0], mul(of(sx), w));
@@ -601,7 +610,8 @@ Line3 reflect_line(const Line3 &L, double sx, double sy, double ex, double ey) {
 	const BigFloat my = sub(of(ey), of(sy));
 	const BigFloat mm = add(mul(mx, mx), mul(my, my));
 	const BigFloat m2r = sub(mul(mx, mx), mul(my, my));
-	const BigFloat m2i = add(mul(mx, my), mul(my, mx));
+	const BigFloat mxy = mul(mx, my);
+	const BigFloat m2i = add(mxy, mxy); // (Stage 141: mul is commutative bit for bit)
 	const BigFloat &a = L[0];
 	const BigFloat &b = L[1];
 	const BigFloat &c = L[2];
@@ -840,10 +850,17 @@ GCircle gc_through(const Point3 &P1, const Point3 &P2, const Point3 &P3) {
 		const Point3 &p = *ps[i];
 		r[i] = {add(mul(p[0], p[0]), mul(p[1], p[1])), mul(p[0], p[2]), mul(p[1], p[2]), mul(p[2], p[2])};
 	}
+	// Stage 141: the six 2x2 minors of rows 1 and 2 (columns j < k), each once; the
+	// four determinants used to compute each of them twice, the same way round
+	std::array<std::array<BigFloat, 4>, 4> minor;
+	for (size_t j = 0; j < 4; j++) {
+		for (size_t k = j + 1; k < 4; k++) {
+			minor[j][k] = sub(mul(r[1][j], r[2][k]), mul(r[1][k], r[2][j]));
+		}
+	}
 	auto det3 = [&](int a, int b, int c) {
-		const auto m = [&](int i, int j) -> const BigFloat & { return r[size_t(i)][size_t(j == 0 ? a : j == 1 ? b : c)]; };
-		return add(sub(mul(m(0, 0), sub(mul(m(1, 1), m(2, 2)), mul(m(1, 2), m(2, 1)))), mul(m(0, 1), sub(mul(m(1, 0), m(2, 2)), mul(m(1, 2), m(2, 0))))),
-			mul(m(0, 2), sub(mul(m(1, 0), m(2, 1)), mul(m(1, 1), m(2, 0)))));
+		return add(sub(mul(r[0][size_t(a)], minor[size_t(b)][size_t(c)]), mul(r[0][size_t(b)], minor[size_t(a)][size_t(c)])),
+			mul(r[0][size_t(c)], minor[size_t(a)][size_t(b)]));
 	};
 	return GCircle{det3(1, 2, 3), det3(0, 2, 3).neg(), det3(0, 1, 3), det3(0, 1, 2).neg()};
 }
@@ -855,7 +872,8 @@ GCircle gc_reflect(const GCircle &g, double sx, double sy, double ex, double ey)
 	const BigFloat my = sub(of(ey), of(sy));
 	const BigFloat mm = add(mul(mx, mx), mul(my, my));
 	const BigFloat r11 = sub(mul(mx, mx), mul(my, my));
-	const BigFloat r12 = add(mul(mx, my), mul(my, mx));
+	const BigFloat mxy = mul(mx, my);
+	const BigFloat r12 = add(mxy, mxy); // (Stage 141: mul is commutative bit for bit)
 	const BigFloat esx = of(sx);
 	const BigFloat esy = of(sy);
 	const BigFloat two_a = add(g.A, g.A);
