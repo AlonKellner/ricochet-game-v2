@@ -420,7 +420,7 @@ void check_template(const json &t, const std::string &path) {
 		fail(path, "a template object expected");
 	}
 	for (auto it = t.begin(); it != t.end(); ++it) {
-		static const std::set<std::string> keys = {"doc", "label", "priority", "geometry", "params", "surfaces"};
+		static const std::set<std::string> keys = {"doc", "label", "priority", "geometry", "params", "surfaces", "example"};
 		if (!keys.count(it.key())) {
 			fail(path, "unknown key '" + it.key() + "'");
 		}
@@ -464,6 +464,20 @@ void check_template(const json &t, const std::string &path) {
 			const std::string why = misfit(spec, spec["default"]);
 			if (!why.empty()) {
 				fail(pp + ".default", why);
+			}
+		}
+	}
+	if (t.contains("example")) { // the parameters a new element starts with (the editor's palette)
+		if (!t["example"].is_object()) {
+			fail(path + ".example", "an object of parameter values expected");
+		}
+		for (auto it = t["example"].begin(); it != t["example"].end(); ++it) {
+			if (!params.contains(it.key())) {
+				fail(path + ".example", "'" + it.key() + "' is not a parameter");
+			}
+			const std::string why = misfit(params[it.key()], it.value());
+			if (!why.empty()) {
+				fail(path + ".example." + it.key(), why);
 			}
 		}
 	}

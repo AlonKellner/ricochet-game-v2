@@ -26,9 +26,9 @@ uint64_t NodeKey::id() const {
 }
 
 json NodeKey::json() const {
-	static const char *const NAMES[] = {"background", "player", "cursor", "path", "arrow", "hud", "surface", "edge", "visibility", "spawn"};
+	static const char *const NAMES[] = {"background", "player", "cursor", "path", "arrow", "hud", "surface", "edge", "visibility", "spawn", "editor"};
 	nlohmann::json k = nlohmann::json::array({NAMES[size_t(kind)]});
-	if (kind == NodeKind::Surface) {
+	if (kind == NodeKind::Surface || kind == NodeKind::Editor) {
 		k.push_back(a);
 		k.push_back(b);
 	}

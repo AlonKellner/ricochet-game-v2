@@ -1,5 +1,25 @@
 {
  "doc": "A spawner (GAME_SPEC 10.6.1): when hit it places 'surface' (a surface in a local frame, centred on the origin) at the hit when the arrow lands; it is gone until a resetter re-arms its channel.",
+ "example": {
+  "surface": {
+   "end": [40.0, 0.0],
+   "left": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "start": [-40.0, 0.0],
+   "via": [0.0, 0.0]
+  }
+ },
  "label": "Spawner",
  "params": {
   "channel": {

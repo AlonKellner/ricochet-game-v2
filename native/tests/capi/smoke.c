@@ -167,6 +167,47 @@ int main(void) {
 	CHECK(written == 16 && fabsf(arc[0] - 10.0f) < 1e-5f && fabsf(arc[30] + 10.0f) < 1e-4f);
 
 	rc_game_destroy(game);
+
+	/* 1.8: the level editor -- a command, a line drawn with the pointer, the
+	 * draw list, the status, the document played as a level */
+	{
+		rc_editor *ed = NULL;
+		rc_editor_status st;
+		rc_draw_list el;
+		rc_level *played = NULL;
+		const char *res = NULL;
+		size_t res_length = 0;
+		const char *cmd = "{\"op\": \"add\", \"element\": {\"kind\": \"mirror\", \"start\": [700, 300], \"end\": [700, 700]}}";
+		CHECK(rc_editor_create(json, length, &ed) == RC_OK && ed != NULL);
+		CHECK(rc_editor_resize(ed, 1600.0f, 900.0f) == RC_OK);
+		CHECK(rc_editor_command(ed, cmd, strlen(cmd), &res, &res_length) == RC_OK);
+		CHECK(strstr(res, "\"ok\":true") != NULL && strstr(res, "\"name\":\"mirror_") != NULL);
+		CHECK(rc_editor_command(ed, "{\"op\": 1}", 10, &res, &res_length) == RC_OK && strstr(res, "\"ok\":false") != NULL);
+		CHECK(rc_editor_command(ed, "{", 1, &res, &res_length) == RC_OK && strstr(res, "not JSON") != NULL);
+		CHECK(rc_editor_key(ed, 'L', 0, 1) == RC_OK);
+		CHECK(rc_editor_pointer(ed, RC_PTR_DOWN, 300.0f, 300.0f, RC_BTN_LEFT, 0) == RC_OK);
+		CHECK(rc_editor_pointer(ed, RC_PTR_UP, 300.0f, 300.0f, RC_BTN_LEFT, 0) == RC_OK);
+		CHECK(rc_editor_pointer(ed, RC_PTR_DOWN, 400.0f, 300.0f, RC_BTN_LEFT, 0) == RC_OK);
+		CHECK(rc_editor_pointer(ed, RC_PTR_UP, 400.0f, 300.0f, RC_BTN_LEFT, 0) == RC_OK);
+		CHECK(rc_editor_text(ed, "x", 1) == RC_OK);
+		CHECK(rc_editor_scroll(ed, 0.0f, 1.0f, 0) == RC_OK);
+		memset(&el, 0, sizeof el);
+		el.size = sizeof el;
+		CHECK(rc_editor_draw_list(ed, &el) == RC_OK && el.node_count > 3 && el.text_length > 0);
+		CHECK(rc_editor_draw_changes(ed, &el) == RC_OK);
+		CHECK(rc_editor_draw_changes(ed, &el) == RC_OK && el.node_count > 3 && el.node_unchanged[0] == 1);
+		memset(&st, 0, sizeof st);
+		st.size = sizeof st;
+		CHECK(rc_editor_get_status(ed, &st) == RC_OK && st.dirty == 1 && st.errors == 0 && st.mode == RC_EDITOR_EDIT && st.tool == 1);
+		CHECK(rc_editor_document(ed, &res, &res_length) == RC_OK && strstr(res, "\"rc-level/2\"") != NULL);
+		CHECK(rc_level_parse(res, res_length, &played) == RC_OK); /* the host plays the document */
+		rc_level_release(played);
+		CHECK(rc_editor_key(ed, RC_EDKEY_F1 + 4, 0, 1) == RC_OK);
+		CHECK(rc_editor_get_status(ed, &st) == RC_OK && st.mode == RC_EDITOR_PLAY);
+		CHECK(rc_editor_create("[", 1, &ed) == RC_E_LEVEL);
+		CHECK(rc_editor_pointer(NULL, RC_PTR_MOVE, 0.0f, 0.0f, 0, 0) == RC_E_ARGUMENT);
+		rc_editor_destroy(ed);
+	}
 	rc_set_log(NULL, NULL);
 	free(json);
 	if (failures == 0) {

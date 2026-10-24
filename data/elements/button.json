@@ -1,5 +1,8 @@
 {
  "doc": "A button: when the arrow hits it (either side), it sets or toggles a flag -- usually a door's (opens: the door's name).",
+ "example": {
+  "flag": "switch"
+ },
  "label": "Button",
  "params": {
   "deferred": {

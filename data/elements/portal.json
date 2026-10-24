@@ -1,5 +1,8 @@
 {
  "doc": "A portal pair: the surface and its image, the surface moved by z -> e^{i theta} z + d (two ids). The arrow entering one leaves the other.",
+ "example": {
+  "d": [200.0, 0.0]
+ },
  "label": "Portal",
  "params": {
   "d": {

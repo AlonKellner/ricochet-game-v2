@@ -1,0 +1,161 @@
+// The level editor, natively (docs/EDITOR.md; the editor program, docs/TDD_48):
+// an rc-level/2 document (rcg/level2.hpp) edited through commands -- JSON, the
+// one path every UI action takes, so a script, a test and a click do the same
+// -- and through pointer, key and text input in screen pixels, drawn as one
+// draw list in screen space (rcg/render.hpp: the editor owns its pan and zoom,
+// a host paints at identity). The inspector panel is part of that list. A host
+// is a painter and an event forwarder: it keeps no editor state, does the file
+// I/O when a save is requested, and plays the document with an ordinary game.
+#pragma once
+
+#include "rcg/build.hpp"
+#include "rcg/render.hpp"
+
+#include <nlohmann/json.hpp>
+
+#include <cstdint>
+#include <functional>
+#include <optional>
+#include <string>
+#include <vector>
+
+namespace rcg {
+
+class Editor {
+public:
+	enum class Mode { Edit, Play };
+	enum class Tool { Select, Line, Arc, Circle, Player };
+	// pointer events and buttons (rc_api.h's RC_PTR_* / RC_BTN_* / RC_MOD_*)
+	enum : int { PtrMove = 0, PtrDown = 1, PtrUp = 2 };
+	enum : unsigned { BtnLeft = 1, BtnRight = 2, BtnMiddle = 4 };
+	enum : unsigned { ModShift = 1, ModCtrl = 2, ModAlt = 4 };
+	// keys (rc_api.h's RC_KEY_*): letters and digits as their ASCII upper case, space 32, then these
+	enum : int { KeyEscape = 256, KeyEnter = 257, KeyTab = 258, KeyBackspace = 259, KeyDelete = 260, KeyLeft = 261, KeyRight = 262,
+		KeyUp = 263, KeyDown = 264, KeyF1 = 290 }; // F1..F12: KeyF1 + 0..11
+
+	struct Error {
+		int element = -1; // the element's index; -1: the level
+		std::string name; // the element's name
+		std::string message;
+	};
+	struct Status {
+		bool dirty = false;
+		int errors = 0;
+		Mode mode = Mode::Edit;
+		Tool tool = Tool::Select;
+		bool save_requested = false;
+		uint64_t version = 0; // bumped by every change of the document
+		V2 play_from;         // where a play-test starts (the player's start)
+	};
+
+	// A new level (null) or the given document (rc-level/2; rc-level/1 is migrated).
+	explicit Editor(const nlohmann::json *document = nullptr);
+
+	// The document in the canonical spelling (rc_tool fmt), and its rc-level/1 lowering.
+	const nlohmann::json &document() const { return doc_; }
+	std::string document_text() const;
+	std::string lowered_text() const; // throws LevelError when the document does not lower
+
+	// One command ({"op": ...}, docs/EDITOR.md): {"ok": true, ...} or {"ok": false, "error": ...}.
+	nlohmann::json command(const nlohmann::json &cmd);
+
+	// Input, in screen pixels (the canvas is the window but the panel on the right).
+	void pointer(int kind, float x, float y, unsigned buttons, unsigned mods);
+	void key(int code, unsigned mods, bool down);
+	void text(const std::string &utf8);
+	void scroll(float dx, float dy, unsigned mods);
+	void resize(float width, float height);
+
+	// What the editor draws (screen space, by z), each node with its content version.
+	std::vector<render::FrameNode> draw() const;
+	Status status() const;
+	const std::vector<Error> &errors() const { return errors_; }
+
+	// The view: world -> screen.
+	V2 to_screen(const V2 &w) const;
+	V2 to_world(const V2 &s) const;
+
+	static constexpr float PANEL_WIDTH = 340.0f;
+	static constexpr float STATUS_HEIGHT = 26.0f;
+
+private:
+	struct Drawn {             // an element's surfaces as the game builds them
+		std::vector<BuiltSurface> built;      // valid ones (a portal's image included)
+		std::vector<rc::arc::SegGeom> broken; // the geometry of ones that do not build
+	};
+	struct Handle {
+		std::string element; // "" with kind "player": the player's start
+		std::string kind;    // start, end, via, mid, center, radius, body, player
+		V2 at;
+	};
+	struct Field {           // a panel row's editable value
+		std::string element; // "": the level
+		std::string key;     // an element key, or a JSON pointer into the document (level fields)
+	};
+	struct Row {
+		enum Kind { Header, Text, Value, Error, Buttons } kind = Text;
+		std::string label, value, hint;
+		std::optional<Field> field;
+		std::string choice; // a value that cycles ("enum", "bool", "kind", "tool", "place") or "" (typed)
+		int error_element = -1;
+		float y = 0;
+	};
+
+	// the document
+	void set_document(nlohmann::json doc, bool clean);
+	void change(const std::function<void(nlohmann::json &)> &edit); // one undoable edit, then refresh
+	void refresh();
+	int index_of(const std::string &name) const;
+	std::string fresh_name(const std::string &kind) const;
+	nlohmann::json kinds() const; // kind -> template (builtin and the level's)
+	std::vector<std::string> palette() const; // the kinds in the palette's order (builtin by priority, then the level's)
+	nlohmann::json op(const nlohmann::json &cmd); // throws std::runtime_error / LevelError
+
+	// input helpers
+	std::vector<Handle> handles() const;
+	std::optional<Handle> handle_at(const V2 &screen) const;
+	int element_at(const V2 &screen) const;
+	nlohmann::json snap(const V2 &screen, unsigned mods, const Handle *moving) const;
+	void place(const nlohmann::json &p, unsigned mods);
+	void drag_to(const V2 &screen, unsigned mods);
+	void commit_field();
+	std::vector<Row> rows() const;
+	void click_row(const Row &r, unsigned mods);
+	void frame_all();
+
+	// drawing helpers
+	void draw_canvas(std::vector<render::FrameNode> &out) const;
+	void draw_panel(std::vector<render::FrameNode> &out) const;
+
+	nlohmann::json doc_;
+	std::vector<nlohmann::json> undo_, redo_;
+	bool dirty_ = false, save_requested_ = false;
+	uint64_t version_ = 0;
+	Mode mode_ = Mode::Edit;
+	Tool tool_ = Tool::Select;
+	std::string kind_ = "wall"; // what the placement tools place
+	bool grid_ = true;
+	std::string selected_;      // an element's name, "" none
+	std::vector<Error> errors_;
+	std::vector<Drawn> drawn_;  // per element
+	// the view
+	float width_ = 1920, height_ = 1080;
+	V2 center_{960, 540};
+	double zoom_ = 1.0;
+	// the pointer
+	V2 mouse_;
+	unsigned buttons_ = 0;
+	std::vector<nlohmann::json> clicks_; // a placement's points so far
+	std::optional<Handle> drag_;          // the handle being dragged
+	bool drag_changed_ = false;
+	V2 drag_last_;                        // a body drag's last world point
+	bool panning_ = false;
+	bool space_ = false;
+	V2 pan_last_;
+	// the panel's text field
+	std::optional<Field> focus_;
+	std::string buffer_;
+	std::string hint_;
+};
+
+} // namespace rcg

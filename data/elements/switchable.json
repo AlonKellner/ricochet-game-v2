@@ -1,5 +1,8 @@
 {
  "doc": "A surface that switches with a flag (a categorical resolver, GAME_SPEC 9.4): its 'on' sides while the flag is true, its 'off' sides otherwise. Present either way (see door for one that disappears).",
+ "example": {
+  "flag": "switch"
+ },
  "label": {
   "$switch": "on",
   "cases": {

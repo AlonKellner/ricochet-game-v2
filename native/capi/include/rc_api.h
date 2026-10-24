@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 7
+#define RC_API_VERSION_MINOR 8
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -44,7 +44,7 @@ typedef int32_t rc_status;
 enum {
 	RC_OK = 0,
 	RC_E_ARGUMENT = 1, /* a null or malformed argument, a struct too small */
-	RC_E_LEVEL = 2,    /* a level that does not follow rc-level/1 */
+	RC_E_LEVEL = 2,    /* a level that does not follow its schema (rc-level/1 or rc-level/2) */
 	RC_E_INTERNAL = 3  /* a failure inside the game (a bug: see the log) */
 };
 
@@ -257,6 +257,75 @@ RC_API rc_status rc_digest_sha(const char *json, size_t length, char out[65]);
  * arc_point_count) points to out_xy, the count to written. */
 RC_API rc_status rc_tessellate_arc(float cx, float cy, double radius, double start_angle, double end_angle, int32_t arc_point_count,
 		float *out_xy, uint32_t capacity, uint32_t *written);
+
+/* ------------------------------------------------------------------ the level editor (1.8) */
+
+/* The level editor (docs/EDITOR.md, docs/PORTING.md "Hosting the editor"): an
+ * rc-level/2 document edited natively. The host forwards the pointer, keys
+ * and text in window pixels and paints the editor's draw list at identity
+ * (screen space: the editor owns its pan and zoom; its inspector panel is part
+ * of the list). It keeps no editor state. It writes the document when a save is
+ * requested, and plays it with an ordinary game (rc_level_parse on the
+ * document's text) while the editor is in play mode. Every UI action is also a
+ * JSON command (rc_editor_command): what scripts and tests drive. */
+typedef struct rc_editor rc_editor;
+
+/* An editor on a level's JSON text (rc-level/2; rc-level/1 is migrated), or a
+ * new level (json NULL). */
+RC_API rc_status rc_editor_create(const char *json, size_t length, rc_editor **out);
+RC_API void rc_editor_destroy(rc_editor *editor);
+
+/* One command, a JSON object {"op": ...} (docs/EDITOR.md); the result, a JSON
+ * object {"ok": true, ...} or {"ok": false, "error": ...} (a refused command is
+ * not a failure status). Borrowed (terminated). */
+RC_API rc_status rc_editor_command(rc_editor *editor, const char *json, size_t length, const char **result, size_t *result_length);
+
+/* The document in the canonical spelling (what a save writes). Borrowed (terminated). */
+RC_API rc_status rc_editor_document(rc_editor *editor, const char **text, size_t *length);
+
+/* Input, in window pixels. A press or a release names its button; a move
+ * names the buttons held. Keys: letters and digits as their ASCII upper case,
+ * space 32, RC_EDKEY_* for the rest; text: what a key types (UTF-8). */
+enum { RC_PTR_MOVE = 0, RC_PTR_DOWN = 1, RC_PTR_UP = 2 };
+enum { RC_BTN_LEFT = 1, RC_BTN_RIGHT = 2, RC_BTN_MIDDLE = 4 };
+enum { RC_MOD_SHIFT = 1, RC_MOD_CTRL = 2, RC_MOD_ALT = 4 };
+enum {
+	RC_EDKEY_SPACE = 32,
+	RC_EDKEY_ESCAPE = 256,
+	RC_EDKEY_ENTER = 257,
+	RC_EDKEY_TAB = 258,
+	RC_EDKEY_BACKSPACE = 259,
+	RC_EDKEY_DELETE = 260,
+	RC_EDKEY_LEFT = 261,
+	RC_EDKEY_RIGHT = 262,
+	RC_EDKEY_UP = 263,
+	RC_EDKEY_DOWN = 264,
+	RC_EDKEY_F1 = 290 /* F1..F12: RC_EDKEY_F1 + 0..11 */
+};
+RC_API rc_status rc_editor_pointer(rc_editor *editor, int32_t kind, float x, float y, uint32_t buttons, uint32_t mods);
+RC_API rc_status rc_editor_key(rc_editor *editor, int32_t key, uint32_t mods, int32_t down);
+RC_API rc_status rc_editor_text(rc_editor *editor, const char *utf8, size_t length);
+RC_API rc_status rc_editor_scroll(rc_editor *editor, float dx, float dy, uint32_t mods); /* dy > 0: the wheel down (zoom out) */
+RC_API rc_status rc_editor_resize(rc_editor *editor, float width, float height);
+
+/* What the editor draws, in window pixels (nodes keyed ["editor", layer,
+ * index]); as rc_game_draw_list / rc_game_draw_changes. Empty in play mode.
+ * Borrowed. */
+RC_API rc_status rc_editor_draw_list(rc_editor *editor, rc_draw_list *out);
+RC_API rc_status rc_editor_draw_changes(rc_editor *editor, rc_draw_list *out);
+
+enum { RC_EDITOR_EDIT = 0, RC_EDITOR_PLAY = 1 };
+typedef struct rc_editor_status {
+	uint32_t size;
+	int32_t dirty;          /* the document changed since it was loaded or saved */
+	int32_t errors;         /* the problems the document has (a play-test needs none) */
+	int32_t mode;           /* RC_EDITOR_EDIT or RC_EDITOR_PLAY (the host plays the document) */
+	int32_t tool;           /* 0 select, 1 line, 2 arc, 3 circle, 4 the player's start */
+	int32_t save_requested; /* write rc_editor_document, then the command {"op": "saved"} */
+	uint64_t version;       /* bumped by every change of the document */
+	float play_x, play_y;   /* where a play-test starts (the player's start) */
+} rc_editor_status;
+RC_API rc_status rc_editor_get_status(rc_editor *editor, rc_editor_status *out);
 
 #ifdef __cplusplus
 }

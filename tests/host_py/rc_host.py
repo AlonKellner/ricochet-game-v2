@@ -8,6 +8,10 @@ Unreal's or a custom engine's FFI). docs/PORTING.md walks through it.
     while game.frame().flying: game.advance(1 / 60)
     for node in game.draw_list(): ...
 
+    ed = Editor(open("data/levels/main.json").read())      # 1.8: the level editor
+    ed.command({"op": "add", "element": {"kind": "mirror", "start": [700, 300], "end": [700, 700]}})
+    ed.pointer(PTR_DOWN, 300, 300, BTN_LEFT); ed.draw_list(); ed.document()
+
 The library: $RC_CAPI_LIB, else native/build-core/libricochet_capi.{dylib,so,dll}.
 """
 import ctypes
@@ -26,6 +30,13 @@ OK, E_ARGUMENT, E_LEVEL, E_INTERNAL = 0, 1, 2, 3
  EVENT_TOGGLE_GRAVITY, EVENT_TOGGLE_VISIBILITY, EVENT_ANY_KEY) = range(1, 11)
 KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN = 1, 2, 4, 8
 RECORD_DRAW_LIST = 1
+# 1.8: the level editor's input
+PTR_MOVE, PTR_DOWN, PTR_UP = 0, 1, 2
+BTN_LEFT, BTN_RIGHT, BTN_MIDDLE = 1, 2, 4
+MOD_SHIFT, MOD_CTRL, MOD_ALT = 1, 2, 4
+EDKEY_SPACE, EDKEY_ESCAPE, EDKEY_ENTER, EDKEY_TAB, EDKEY_BACKSPACE, EDKEY_DELETE = 32, 256, 257, 258, 259, 260
+EDKEY_LEFT, EDKEY_RIGHT, EDKEY_UP, EDKEY_DOWN, EDKEY_F1 = 261, 262, 263, 264, 290
+EDITOR_EDIT, EDITOR_PLAY = 0, 1
 
 DRAW_KINDS = ["line", "arc", "polygon", "colored_polygon", "circle", "rect", "polyline", "multiline", "dashed_line",
               "text", "triangles", "polygon2d", "label"]
@@ -83,6 +94,12 @@ class DrawList(ctypes.Structure):
                 ("node_unchanged", ctypes.POINTER(ctypes.c_uint8))]
 
 
+class EditorStatus(ctypes.Structure):
+    _fields_ = [("size", ctypes.c_uint32), ("dirty", ctypes.c_int32), ("errors", ctypes.c_int32), ("mode", ctypes.c_int32),
+                ("tool", ctypes.c_int32), ("save_requested", ctypes.c_int32), ("version", ctypes.c_uint64),
+                ("play_x", ctypes.c_float), ("play_y", ctypes.c_float)]
+
+
 LOG_FN = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_int32, ctypes.c_char_p)
 
 
@@ -118,6 +135,21 @@ def _load():
         "rc_tessellate_arc": (ctypes.c_int32, [ctypes.c_float, ctypes.c_float, ctypes.c_double, ctypes.c_double,
                                                ctypes.c_double, ctypes.c_int32, P(ctypes.c_float), ctypes.c_uint32,
                                                P(ctypes.c_uint32)]),
+        # 1.8: the level editor
+        "rc_editor_create": (ctypes.c_int32, [ctypes.c_char_p, ctypes.c_size_t, P(ctypes.c_void_p)]),
+        "rc_editor_destroy": (None, [ctypes.c_void_p]),
+        "rc_editor_command": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t, P(ctypes.c_void_p),
+                                               P(ctypes.c_size_t)]),
+        "rc_editor_document": (ctypes.c_int32, [ctypes.c_void_p, P(ctypes.c_void_p), P(ctypes.c_size_t)]),
+        "rc_editor_pointer": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_int32, ctypes.c_float, ctypes.c_float,
+                                               ctypes.c_uint32, ctypes.c_uint32]),
+        "rc_editor_key": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_int32, ctypes.c_uint32, ctypes.c_int32]),
+        "rc_editor_text": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_char_p, ctypes.c_size_t]),
+        "rc_editor_scroll": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_float, ctypes.c_float, ctypes.c_uint32]),
+        "rc_editor_resize": (ctypes.c_int32, [ctypes.c_void_p, ctypes.c_float, ctypes.c_float]),
+        "rc_editor_draw_list": (ctypes.c_int32, [ctypes.c_void_p, P(DrawList)]),
+        "rc_editor_draw_changes": (ctypes.c_int32, [ctypes.c_void_p, P(DrawList)]),
+        "rc_editor_get_status": (ctypes.c_int32, [ctypes.c_void_p, P(EditorStatus)]),
     }
     for name, (res, args) in sigs.items():
         f = getattr(lib, name)
@@ -230,32 +262,94 @@ class Game:
         dl = DrawList()
         dl.size = ctypes.sizeof(DrawList)
         check((lib.rc_game_draw_changes if changes else lib.rc_game_draw_list)(self._h, ctypes.byref(dl)))
-        text = ctypes.string_at(dl.text, dl.text_length) if dl.text_length else b""
-        pts = [(dl.points[2 * i], dl.points[2 * i + 1]) for i in range(dl.point_count)]
-        cols = [tuple(dl.colors[4 * i + k] for k in range(4)) for i in range(dl.color_count)]
-        idx = [dl.indices[i] for i in range(dl.index_count)]
-        out = []
-        for i in range(dl.node_count):
-            n = dl.nodes[i]
-            cmds = []
-            for j in range(n.cmd_first, n.cmd_first + n.cmd_count):
-                c = dl.cmds[j]
-                cmds.append({
-                    "kind": DRAW_KINDS[c.kind],
-                    "points": pts[c.point_first:c.point_first + c.point_count],
-                    "colors": cols[c.color_first:c.color_first + c.color_count],
-                    "indices": idx[c.index_first:c.index_first + c.index_count],
-                    "text": text[c.text_first:c.text_first + c.text_length].decode(),
-                    "arc_point_count": c.arc_point_count, "alignment": c.alignment, "font_size": c.font_size,
-                    "radius": c.radius, "start": c.start_angle, "end": c.end_angle,
-                    "width": c.width, "dash": c.dash, "rotation": c.rotation,
-                })
-            key = json.loads(text[n.key_first:n.key_first + n.key_length])
-            if changes:
-                out.append((dl.node_ids[i], dl.node_versions[i], bool(dl.node_unchanged[i]), key, n.z, (n.x, n.y), tuple(n.modulate), cmds))
-            else:
-                out.append((key, n.z, (n.x, n.y), tuple(n.modulate), cmds))
-        return out
+        return unpack(dl, changes)
+
+
+def unpack(dl, changes):
+    """A draw list (rc_draw_list) as Python values: [(key, z, (x, y), modulate, [command dict])], with
+    changes [(id, version, unchanged, key, z, (x, y), modulate, [command dict])]."""
+    text = ctypes.string_at(dl.text, dl.text_length) if dl.text_length else b""
+    pts = [(dl.points[2 * i], dl.points[2 * i + 1]) for i in range(dl.point_count)]
+    cols = [tuple(dl.colors[4 * i + k] for k in range(4)) for i in range(dl.color_count)]
+    idx = [dl.indices[i] for i in range(dl.index_count)]
+    out = []
+    for i in range(dl.node_count):
+        n = dl.nodes[i]
+        cmds = []
+        for j in range(n.cmd_first, n.cmd_first + n.cmd_count):
+            c = dl.cmds[j]
+            cmds.append({
+                "kind": DRAW_KINDS[c.kind],
+                "points": pts[c.point_first:c.point_first + c.point_count],
+                "colors": cols[c.color_first:c.color_first + c.color_count],
+                "indices": idx[c.index_first:c.index_first + c.index_count],
+                "text": text[c.text_first:c.text_first + c.text_length].decode(),
+                "arc_point_count": c.arc_point_count, "alignment": c.alignment, "font_size": c.font_size,
+                "radius": c.radius, "start": c.start_angle, "end": c.end_angle,
+                "width": c.width, "dash": c.dash, "rotation": c.rotation,
+            })
+        key = json.loads(text[n.key_first:n.key_first + n.key_length])
+        if changes:
+            out.append((dl.node_ids[i], dl.node_versions[i], bool(dl.node_unchanged[i]), key, n.z, (n.x, n.y), tuple(n.modulate), cmds))
+        else:
+            out.append((key, n.z, (n.x, n.y), tuple(n.modulate), cmds))
+    return out
+
+
+class Editor:
+    """The level editor (rc_editor_*, docs/EDITOR.md): a document edited natively; this host forwards
+    input and paints. command() takes and returns dicts."""
+
+    def __init__(self, json_text=None):
+        data = json_text.encode() if json_text is not None else None
+        self._h = ctypes.c_void_p()
+        check(lib.rc_editor_create(data, len(data) if data else 0, ctypes.byref(self._h)))
+
+    def __del__(self):
+        if getattr(self, "_h", None):
+            lib.rc_editor_destroy(self._h)
+            self._h = None
+
+    def command(self, cmd):
+        text = json.dumps(cmd).encode()
+        out = ctypes.c_void_p()
+        n = ctypes.c_size_t()
+        check(lib.rc_editor_command(self._h, text, len(text), ctypes.byref(out), ctypes.byref(n)))
+        return json.loads(ctypes.string_at(out, n.value).decode())
+
+    def document(self):
+        out = ctypes.c_void_p()
+        n = ctypes.c_size_t()
+        check(lib.rc_editor_document(self._h, ctypes.byref(out), ctypes.byref(n)))
+        return ctypes.string_at(out, n.value).decode()
+
+    def pointer(self, kind, x, y, buttons=0, mods=0):
+        check(lib.rc_editor_pointer(self._h, kind, x, y, buttons, mods))
+
+    def key(self, code, mods=0, down=True):
+        check(lib.rc_editor_key(self._h, code, mods, 1 if down else 0))
+
+    def text(self, s):
+        data = s.encode()
+        check(lib.rc_editor_text(self._h, data, len(data)))
+
+    def scroll(self, dx, dy, mods=0):
+        check(lib.rc_editor_scroll(self._h, dx, dy, mods))
+
+    def resize(self, w, h):
+        check(lib.rc_editor_resize(self._h, w, h))
+
+    def status(self):
+        st = EditorStatus()
+        st.size = ctypes.sizeof(EditorStatus)
+        check(lib.rc_editor_get_status(self._h, ctypes.byref(st)))
+        return st
+
+    def draw_list(self, changes=False):
+        dl = DrawList()
+        dl.size = ctypes.sizeof(DrawList)
+        check((lib.rc_editor_draw_changes if changes else lib.rc_editor_draw_list)(self._h, ctypes.byref(dl)))
+        return unpack(dl, changes)
 
 
 # ---------------------------------------------------------------- the session replay (rc_tool replay's)

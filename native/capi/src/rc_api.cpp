@@ -3,6 +3,7 @@
 
 #include "rc/error.hpp"
 #include "rcg/digest.hpp"
+#include "rcg/editor.hpp"
 #include "rcg/level.hpp"
 #include "rcg/render.hpp"
 #include "rcg/present.hpp"
@@ -22,11 +23,9 @@ struct rc_level {
 	std::shared_ptr<const rcg::Level> level;
 };
 
-struct rc_game {
-	std::shared_ptr<const rcg::Level> level;
-	std::unique_ptr<rcg::Session> session;
-	std::unique_ptr<rcg::Presenter> presenter; // 1.3: animate
-	// the borrowed views (valid until the next non-const call)
+// A draw list's borrowed pools (valid until the next non-const call) and what
+// rc_*_draw_changes last sent.
+struct DrawPools {
 	std::vector<rc_draw_node> nodes;
 	std::vector<rc_draw_cmd> cmds;
 	std::vector<float> points, colors;
@@ -34,12 +33,46 @@ struct rc_game {
 	std::string text;
 	std::vector<uint64_t> node_ids, node_versions;
 	std::vector<uint8_t> node_unchanged;
-	std::map<uint64_t, uint64_t> sent;        // rc_game_draw_changes: id -> the version last sent
+	std::map<uint64_t, uint64_t> sent;        // id -> the version last sent
 	std::map<uint64_t, std::string> key_text; // id -> its key's JSON
+};
+
+struct rc_game {
+	std::shared_ptr<const rcg::Level> level;
+	std::unique_ptr<rcg::Session> session;
+	std::unique_ptr<rcg::Presenter> presenter; // 1.3: animate
+	DrawPools pools;
 	std::string hud;
 	std::string record;
 	std::string dump; // 1.5
 };
+
+struct rc_editor {
+	std::unique_ptr<rcg::Editor> editor;
+	DrawPools pools;
+	std::string result, document;
+};
+
+constexpr bool same_code(long a, long b) { return a == b; }
+static_assert(same_code(RC_PTR_DOWN, rcg::Editor::PtrDown) &&
+			  same_code(RC_PTR_UP, rcg::Editor::PtrUp) &&
+			  same_code(RC_BTN_LEFT, rcg::Editor::BtnLeft) &&
+			  same_code(RC_BTN_RIGHT, rcg::Editor::BtnRight) &&
+			  same_code(RC_BTN_MIDDLE, rcg::Editor::BtnMiddle) &&
+			  same_code(RC_MOD_SHIFT, rcg::Editor::ModShift) &&
+			  same_code(RC_MOD_CTRL, rcg::Editor::ModCtrl) &&
+			  same_code(RC_MOD_ALT, rcg::Editor::ModAlt) &&
+			  same_code(RC_EDKEY_ESCAPE, rcg::Editor::KeyEscape) &&
+			  same_code(RC_EDKEY_ENTER, rcg::Editor::KeyEnter) &&
+			  same_code(RC_EDKEY_TAB, rcg::Editor::KeyTab) &&
+			  same_code(RC_EDKEY_BACKSPACE, rcg::Editor::KeyBackspace) &&
+			  same_code(RC_EDKEY_DELETE, rcg::Editor::KeyDelete) &&
+			  same_code(RC_EDKEY_LEFT, rcg::Editor::KeyLeft) &&
+			  same_code(RC_EDKEY_RIGHT, rcg::Editor::KeyRight) &&
+			  same_code(RC_EDKEY_UP, rcg::Editor::KeyUp) &&
+			  same_code(RC_EDKEY_DOWN, rcg::Editor::KeyDown) &&
+			  same_code(RC_EDKEY_F1, rcg::Editor::KeyF1),
+	"rc_api.h's editor input codes are rcg::Editor's");
 
 static_assert(RC_DRAW_LINE == int(rcg::render::Kind::Line) && RC_DRAW_ARC == int(rcg::render::Kind::Arc) &&
 				  RC_DRAW_POLYGON == int(rcg::render::Kind::Polygon) && RC_DRAW_COLORED_POLYGON == int(rcg::render::Kind::ColoredPolygon) &&
@@ -292,67 +325,60 @@ rc_status rc_game_frame(const rc_game *game, rc_frame *out) {
 
 namespace {
 
-// The draw list into the game's pools; changes_only: unchanged nodes (since the
-// last such call) without their commands.
-rc_status draw_list(rc_game *game, rc_draw_list *out, bool changes_only) {
-	if (game == nullptr || !sized(out)) {
-		return fail(RC_E_ARGUMENT, "rc_game_draw_list: null game or unsized list");
-	}
-	std::vector<rcg::render::FrameNode> nodes = game->session->draw_frame();
-	if (game->presenter) {
-		nodes = game->presenter->frame(std::move(nodes), *game->session);
-	}
+// Frame nodes into the pools; changes_only: unchanged nodes (since the last
+// such call) without their commands.
+rc_status pack(DrawPools *pools, std::vector<rcg::render::FrameNode> nodes, rc_draw_list *out, bool changes_only) {
 	std::stable_sort(nodes.begin(), nodes.end(), [](const auto &a, const auto &b) { return a.z < b.z; });
-	game->nodes.clear();
-	game->cmds.clear();
-	game->points.clear();
-	game->colors.clear();
-	game->indices.clear();
-	game->text.clear();
-	game->node_ids.clear();
-	game->node_versions.clear();
-	game->node_unchanged.clear();
+	pools->nodes.clear();
+	pools->cmds.clear();
+	pools->points.clear();
+	pools->colors.clear();
+	pools->indices.clear();
+	pools->text.clear();
+	pools->node_ids.clear();
+	pools->node_versions.clear();
+	pools->node_unchanged.clear();
 	std::map<uint64_t, uint64_t> sent;
 	for (const rcg::render::FrameNode &n : nodes) {
 		const uint64_t id = n.key.id();
-		auto kt = game->key_text.find(id);
-		if (kt == game->key_text.end()) {
-			kt = game->key_text.emplace(id, n.key.json().dump()).first;
+		auto kt = pools->key_text.find(id);
+		if (kt == pools->key_text.end()) {
+			kt = pools->key_text.emplace(id, n.key.json().dump()).first;
 		}
 		const std::string &key = kt->second;
-		const bool unchanged = changes_only && game->sent.count(id) && game->sent[id] == n.version;
+		const bool unchanged = changes_only && pools->sent.count(id) && pools->sent[id] == n.version;
 		sent[id] = n.version;
 		rc_draw_node dn{};
-		dn.key_first = u32(game->text.size());
+		dn.key_first = u32(pools->text.size());
 		dn.key_length = u32(key.size());
-		game->text += key;
+		pools->text += key;
 		dn.z = n.z;
 		dn.x = n.position.x;
 		dn.y = n.position.y;
 		std::copy(n.modulate.begin(), n.modulate.end(), dn.modulate);
-		dn.cmd_first = u32(game->cmds.size());
+		dn.cmd_first = u32(pools->cmds.size());
 		dn.cmd_count = unchanged ? 0 : u32(n.calls->size());
 		for (size_t ci = 0; !unchanged && ci < n.calls->size(); ci++) {
 			const rcg::render::Call &c = (*n.calls)[ci];
 			rc_draw_cmd dc{};
 			dc.kind = int32_t(c.kind);
-			dc.point_first = u32(game->points.size() / 2);
+			dc.point_first = u32(pools->points.size() / 2);
 			dc.point_count = u32(c.pts.size());
 			for (const rc::V2 &p : c.pts) {
-				game->points.push_back(p.x);
-				game->points.push_back(p.y);
+				pools->points.push_back(p.x);
+				pools->points.push_back(p.y);
 			}
-			dc.color_first = u32(game->colors.size() / 4);
+			dc.color_first = u32(pools->colors.size() / 4);
 			dc.color_count = u32(c.colors.size());
 			for (const rcg::render::Color &k : c.colors) {
-				game->colors.insert(game->colors.end(), k.begin(), k.end());
+				pools->colors.insert(pools->colors.end(), k.begin(), k.end());
 			}
-			dc.index_first = u32(game->indices.size());
+			dc.index_first = u32(pools->indices.size());
 			dc.index_count = u32(c.indices.size());
-			game->indices.insert(game->indices.end(), c.indices.begin(), c.indices.end());
-			dc.text_first = u32(game->text.size());
+			pools->indices.insert(pools->indices.end(), c.indices.begin(), c.indices.end());
+			dc.text_first = u32(pools->text.size());
 			dc.text_length = u32(c.text.size());
-			game->text += c.text;
+			pools->text += c.text;
 			dc.arc_point_count = c.point_count;
 			dc.alignment = c.alignment;
 			dc.font_size = c.font_size;
@@ -362,35 +388,47 @@ rc_status draw_list(rc_game *game, rc_draw_list *out, bool changes_only) {
 			dc.width = c.width;
 			dc.dash = c.dash;
 			dc.rotation = c.rotation;
-			game->cmds.push_back(dc);
+			pools->cmds.push_back(dc);
 		}
-		game->nodes.push_back(dn);
-		game->node_ids.push_back(id);
-		game->node_versions.push_back(n.version);
-		game->node_unchanged.push_back(unchanged ? 1 : 0);
+		pools->nodes.push_back(dn);
+		pools->node_ids.push_back(id);
+		pools->node_versions.push_back(n.version);
+		pools->node_unchanged.push_back(unchanged ? 1 : 0);
 	}
 	if (changes_only) {
-		game->sent = std::move(sent);
+		pools->sent = std::move(sent);
 	}
 	rc_draw_list l{};
 	l.size = sizeof(rc_draw_list);
-	l.nodes = game->nodes.data();
-	l.node_count = u32(game->nodes.size());
-	l.cmds = game->cmds.data();
-	l.cmd_count = u32(game->cmds.size());
-	l.points = game->points.data();
-	l.point_count = u32(game->points.size() / 2);
-	l.colors = game->colors.data();
-	l.color_count = u32(game->colors.size() / 4);
-	l.indices = game->indices.data();
-	l.index_count = u32(game->indices.size());
-	l.text = game->text.data();
-	l.text_length = u32(game->text.size());
-	l.node_ids = game->node_ids.data();
-	l.node_versions = game->node_versions.data();
-	l.node_unchanged = game->node_unchanged.data();
+	l.nodes = pools->nodes.data();
+	l.node_count = u32(pools->nodes.size());
+	l.cmds = pools->cmds.data();
+	l.cmd_count = u32(pools->cmds.size());
+	l.points = pools->points.data();
+	l.point_count = u32(pools->points.size() / 2);
+	l.colors = pools->colors.data();
+	l.color_count = u32(pools->colors.size() / 4);
+	l.indices = pools->indices.data();
+	l.index_count = u32(pools->indices.size());
+	l.text = pools->text.data();
+	l.text_length = u32(pools->text.size());
+	l.node_ids = pools->node_ids.data();
+	l.node_versions = pools->node_versions.data();
+	l.node_unchanged = pools->node_unchanged.data();
 	fill(out, l);
 	return RC_OK;
+}
+
+// The game's draw list.
+rc_status draw_list(rc_game *game, rc_draw_list *out, bool changes_only) {
+	if (game == nullptr || !sized(out)) {
+		return fail(RC_E_ARGUMENT, "rc_game_draw_list: null game or unsized list");
+	}
+	std::vector<rcg::render::FrameNode> nodes = game->session->draw_frame();
+	if (game->presenter) {
+		nodes = game->presenter->frame(std::move(nodes), *game->session);
+	}
+	return pack(&game->pools, std::move(nodes), out, changes_only);
 }
 
 } // namespace
@@ -510,6 +548,159 @@ rc_status rc_tessellate_arc(float cx, float cy, double radius, double start_angl
 		if (written != nullptr) {
 			*written = n;
 		}
+		return RC_OK;
+	});
+}
+
+// ------------------------------------------------------------------ the level editor (1.8)
+
+rc_status rc_editor_create(const char *json, size_t length, rc_editor **out) {
+	return guarded([&]() -> rc_status {
+		if (out == nullptr) {
+			return fail(RC_E_ARGUMENT, "rc_editor_create: null out");
+		}
+		*out = nullptr;
+		auto e = std::make_unique<rc_editor>();
+		if (json != nullptr) {
+			nlohmann::json doc;
+			try {
+				doc = nlohmann::json::parse(std::string_view(json, length));
+			} catch (const nlohmann::json::parse_error &ex) {
+				return fail(RC_E_LEVEL, std::string("not JSON: ") + ex.what());
+			}
+			e->editor = std::make_unique<rcg::Editor>(&doc);
+		} else {
+			e->editor = std::make_unique<rcg::Editor>();
+		}
+		*out = e.release();
+		return RC_OK;
+	});
+}
+
+void rc_editor_destroy(rc_editor *editor) { delete editor; }
+
+rc_status rc_editor_command(rc_editor *editor, const char *json, size_t length, const char **result, size_t *result_length) {
+	return guarded([&]() -> rc_status {
+		if (editor == nullptr || json == nullptr || result == nullptr) {
+			return fail(RC_E_ARGUMENT, "rc_editor_command: null argument");
+		}
+		nlohmann::json cmd;
+		try {
+			cmd = nlohmann::json::parse(std::string_view(json, length));
+		} catch (const nlohmann::json::parse_error &ex) {
+			cmd = nullptr;
+			editor->result = nlohmann::json{{"ok", false}, {"error", std::string("not JSON: ") + ex.what()}}.dump();
+		}
+		if (!cmd.is_null()) {
+			editor->result = editor->editor->command(cmd).dump();
+		}
+		*result = editor->result.c_str();
+		if (result_length != nullptr) {
+			*result_length = editor->result.size();
+		}
+		return RC_OK;
+	});
+}
+
+rc_status rc_editor_document(rc_editor *editor, const char **text, size_t *length) {
+	return guarded([&]() -> rc_status {
+		if (editor == nullptr || text == nullptr) {
+			return fail(RC_E_ARGUMENT, "rc_editor_document: null argument");
+		}
+		editor->document = editor->editor->document_text();
+		*text = editor->document.c_str();
+		if (length != nullptr) {
+			*length = editor->document.size();
+		}
+		return RC_OK;
+	});
+}
+
+rc_status rc_editor_pointer(rc_editor *editor, int32_t kind, float x, float y, uint32_t buttons, uint32_t mods) {
+	return guarded([&]() -> rc_status {
+		if (editor == nullptr || kind < RC_PTR_MOVE || kind > RC_PTR_UP) {
+			return fail(RC_E_ARGUMENT, "rc_editor_pointer: null editor or unknown kind");
+		}
+		editor->editor->pointer(kind, x, y, buttons, mods);
+		return RC_OK;
+	});
+}
+
+rc_status rc_editor_key(rc_editor *editor, int32_t key, uint32_t mods, int32_t down) {
+	return guarded([&]() -> rc_status {
+		if (editor == nullptr) {
+			return fail(RC_E_ARGUMENT, "rc_editor_key: null editor");
+		}
+		editor->editor->key(key, mods, down != 0);
+		return RC_OK;
+	});
+}
+
+rc_status rc_editor_text(rc_editor *editor, const char *utf8, size_t length) {
+	return guarded([&]() -> rc_status {
+		if (editor == nullptr || (utf8 == nullptr && length > 0)) {
+			return fail(RC_E_ARGUMENT, "rc_editor_text: null argument");
+		}
+		editor->editor->text(std::string(utf8 == nullptr ? "" : utf8, length));
+		return RC_OK;
+	});
+}
+
+rc_status rc_editor_scroll(rc_editor *editor, float dx, float dy, uint32_t mods) {
+	return guarded([&]() -> rc_status {
+		if (editor == nullptr) {
+			return fail(RC_E_ARGUMENT, "rc_editor_scroll: null editor");
+		}
+		editor->editor->scroll(dx, dy, mods);
+		return RC_OK;
+	});
+}
+
+rc_status rc_editor_resize(rc_editor *editor, float width, float height) {
+	return guarded([&]() -> rc_status {
+		if (editor == nullptr || !(width > 0) || !(height > 0)) {
+			return fail(RC_E_ARGUMENT, "rc_editor_resize: null editor or an empty window");
+		}
+		editor->editor->resize(width, height);
+		return RC_OK;
+	});
+}
+
+rc_status rc_editor_draw_list(rc_editor *editor, rc_draw_list *out) {
+	return guarded([&]() -> rc_status {
+		if (editor == nullptr || !sized(out)) {
+			return fail(RC_E_ARGUMENT, "rc_editor_draw_list: null editor or unsized list");
+		}
+		return pack(&editor->pools, editor->editor->draw(), out, false);
+	});
+}
+
+rc_status rc_editor_draw_changes(rc_editor *editor, rc_draw_list *out) {
+	return guarded([&]() -> rc_status {
+		if (editor == nullptr || !sized(out)) {
+			return fail(RC_E_ARGUMENT, "rc_editor_draw_changes: null editor or unsized list");
+		}
+		return pack(&editor->pools, editor->editor->draw(), out, true);
+	});
+}
+
+rc_status rc_editor_get_status(rc_editor *editor, rc_editor_status *out) {
+	return guarded([&]() -> rc_status {
+		if (editor == nullptr || !sized(out)) {
+			return fail(RC_E_ARGUMENT, "rc_editor_get_status: null editor or unsized status");
+		}
+		const rcg::Editor::Status st = editor->editor->status();
+		rc_editor_status s{};
+		s.size = sizeof(rc_editor_status);
+		s.dirty = st.dirty ? 1 : 0;
+		s.errors = st.errors;
+		s.mode = st.mode == rcg::Editor::Mode::Play ? RC_EDITOR_PLAY : RC_EDITOR_EDIT;
+		s.tool = int32_t(st.tool);
+		s.save_requested = st.save_requested ? 1 : 0;
+		s.version = st.version;
+		s.play_x = st.play_from.x;
+		s.play_y = st.play_from.y;
+		fill(out, s);
 		return RC_OK;
 	});
 }
