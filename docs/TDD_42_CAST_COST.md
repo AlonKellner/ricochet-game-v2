@@ -203,43 +203,51 @@ time; the memo already dedups their casts); B.5 (no evidence of lost memo hits);
 
 ## Results
 
-`make regions` at 8 and at 1 thread, six players, main 1b9f4f0 (before) against the end of this stage (after); medians, ms per region. Every one of the 256 plans' region hashes is equal.
+`make regions` (`rc_tool regions --all`, six players; medians, ms per region): main 1b9f4f0 at 8 threads (its
+default) and on one thread, against the end of Stage A at 8 threads and the end of Stage B at its default, 6
+threads (the performance cores). Every one of the 256 plans' region hashes is equal at every count, so every
+number below is the same region, bit for bit.
 
-- Plans over 4 ms at 8 threads: 57 on 11 levels → 26 on 6 levels; the worst 12.7 → 9.8 ms.
-- Every plan summed: 1 thread 2809 → 1732 ms (0.62x); 8 threads 679 → 537 ms (0.79x). The 8-thread total falls less than the single-threaded one: the schedule (F29) is the next lever.
+- Plans over 4 ms: main 57 on 11 levels → Stage A 26 on 6 → Stage B 22 on 6; the worst 12.7 → 9.8 → 6.7 ms.
+- Every plan summed: one thread 2809 → 1732 → 1524 ms (0.54x); in parallel 679 (8 threads) → 537 (8) → 440 (6) ms.
 
 **The levels, by their worst side before:**
 
-| Level | Worst side (before) | 8 threads: before | after | 1 thread: before | after | every plan, 1 thread: before | after |
+| Level | Worst side (before) | main, 8 threads | Stage A, 8 | Stage B, 6 | main, 1 thread | Stage B, 1 | cells |
 |---|---|---|---|---|---|---|---|
-| playground/tangent_infinity | [8R] | 12.7 ms | 6.5 | 61.3 | 28.4 | 386 | 167 (0.43x) |
-| hit_effects | [12L] | 10.8 ms | 6.8 | 56.5 | 27.5 | 325 | 169 (0.52x) |
-| playground/portals | [9R] | 10.2 ms | 6.9 | 43.6 | 24.0 | 285 | 197 (0.69x) |
-| crossings | [17L] | 9.3 ms | 7.6 | 40.3 | 29.3 | 409 | 305 (0.75x) |
-| playground/projective | [9L] | 9.2 ms | 5.9 | 46.4 | 28.6 | 287 | 211 (0.74x) |
-| playground/pre_inverted | [3L] | 7.1 ms | 3.0 | 32.7 | 9.8 | 111 | 35 (0.31x) |
-| playground/two_sided | [7L] | 5.7 ms | 3.6 | 26.4 | 11.9 | 137 | 70 (0.51x) |
-| main | [9L] | 5.6 ms | 3.9 | 23.8 | 11.8 | 46 | 30 (0.66x) |
-| playground/inversion_grid | [3R] | 5.0 ms | 3.4 | 17.6 | 10.5 | 335 | 210 (0.63x) |
-| playground/projective_arcs | [6L] | 4.5 ms | 3.1 | 20.7 | 12.9 | 69 | 42 (0.60x) |
-| playground/projective_inversion | [6L] | 4.4 ms | 3.6 | 17.3 | 11.4 | 80 | 53 (0.67x) |
-| playground/projective_concentric | [6R] | 3.4 ms | 2.8 | 13.3 | 7.9 | 59 | 39 (0.67x) |
-| semi_circle_mirror | [5R] | 3.2 ms | 2.6 | 13.6 | 7.1 | 28 | 15 (0.52x) |
-| playground/plannable_inversion | [5L] | 3.2 ms | 2.2 | 13.0 | 6.6 | 14 | 7 (0.53x) |
+| playground/tangent_infinity | [8R] | 12.7 | 6.5 | 6.7 | 61.3 | 25.3 | 0 |
+| hit_effects | [12L] | 10.8 | 6.8 | 5.8 | 56.5 | 24.2 | 70 |
+| playground/portals | [9R] | 10.2 | 6.9 | 5.6 | 43.6 | 21.2 | 45 |
+| crossings | [17L] | 9.3 | 7.6 | 6.3 | 40.3 | 26.3 | 2 |
+| playground/projective | [9L] | 9.2 | 5.9 | 5.5 | 46.4 | 27.1 | 0 |
+| playground/pre_inverted | [3L] | 7.1 | 3.0 | 2.3 | 32.7 | 9.0 | 2 |
+| playground/two_sided | [7L] | 5.7 | 3.6 | 2.8 | 26.4 | 10.2 | 0 |
+| main | [9L] | 5.6 | 3.9 | 3.0 | 23.8 | 10.5 | 17 |
+| playground/inversion_grid | [3R] | 5.0 | 3.4 | 2.5 | 17.6 | 9.1 | 0 |
+| playground/projective_arcs | [6L] | 4.5 | 3.1 | 2.9 | 20.7 | 11.6 | 7 |
+| playground/projective_inversion | [6L] | 4.4 | 3.6 | 2.6 | 17.3 | 9.6 | 32 |
+| playground/projective_concentric | [6R] | 3.4 | 2.8 | 2.1 | 13.3 | 6.6 | 15 |
+| semi_circle_mirror | [5R] | 3.2 | 2.6 | 1.6 | 13.6 | 5.5 | 3 |
+| playground/plannable_inversion | [5L] | 3.2 | 2.2 | 1.6 | 13.0 | 5.6 | 6 |
 
-**The worst plans after, and where their time is:**
+**The worst plans after Stage B, and where their time is** (serial: the build outside the parallel batches; tail:
+the batches' wall beyond their casts' CPU shared over six threads; union+fill: after the build, in the job):
 
-| Plan | 8 threads after | casts | members | cells | serial ms | tail ms | 1 thread after |
+| Plan (Stage B, 6 threads) | median | casts | cells | serial ms | tail ms | union+fill ms | off-seg non-planned hits |
 |---|---|---|---|---|---|---|---|
-| crossings [17R] | 9.8 ms | 1665 | 507 | 0 | 1.70 | 2.51 | 28.6 |
-| crossings [17L] | 7.6 ms | 1665 | 507 | 2 | 1.67 | 0.66 | 29.3 |
-| crossings [19L] | 7.0 ms | 1643 | 512 | 24 | 1.32 | 0.98 | 22.3 |
-| hit_effects [12R] | 7.0 ms | 1278 | 385 | 0 | 1.30 | 0.62 | 25.6 |
-| playground/portals [9R] | 6.9 ms | 1392 | 362 | 45 | 1.03 | 0.88 | 24.0 |
-| crossings [20R] | 6.9 ms | 1640 | 511 | 0 | 1.45 | 0.62 | 22.4 |
-| hit_effects [12L] | 6.8 ms | 1278 | 385 | 70 | 1.16 | 0.51 | 27.5 |
-| playground/portals [9L] | 6.8 ms | 1392 | 362 | 38 | 1.16 | 0.63 | 26.1 |
+| playground/tangent_infinity [8R] | 6.7 | 1125 | 0 | 0.54 | 0.70 | 0.00 | 18% |
+| playground/portals [9L] | 6.4 | 1392 | 38 | 1.45 | 0.36 | 0.02 | 31% |
+| crossings [17L] | 6.3 | 1665 | 2 | 1.05 | 0.42 | 0.00 | 37% |
+| crossings [17R] | 6.3 | 1665 | 0 | 1.15 | 0.40 | 0.00 | 32% |
+| playground/projective [7L] | 6.1 | 426 | 0 | 0.05 | 2.21 | 0.00 | 24% |
+| playground/tangent_infinity [8L] | 6.0 | 1125 | 26 | 0.88 | 0.42 | 0.39 | 21% |
+| hit_effects [12R] | 5.8 | 1278 | 0 | 0.79 | 0.35 | 0.00 | 46% |
+| hit_effects [12L] | 5.8 | 1278 | 70 | 0.69 | 0.30 | 1.37 | 53% |
 
+The empty regions (0 cells, F28) are still the worst plans on tangent_infinity, crossings and hit_effects: a side the
+player cannot reach first costs the whole cast set. After both stages the time is the casts' CPU (five of the six
+worst sides are 1100-1700 casts at 20-25 µs), then the serial build (0.5-1.5 ms), the union and fill on levels with
+many cells (hit_effects 1.4 ms), and projective's climbs (its tail is one slow cast, 2.2 ms).
 
 ## Findings
 
