@@ -53,6 +53,7 @@ run it:
 | O | the goal: two corners (a rectangle; a circle through the panel's `goal`) |
 | D | a detector: two corners (a rectangle, mode `enter`, flag `det:<name>`) |
 | B | an object: one click (a pullable circle of radius 16; edit it in the panel's `objects`) |
+| K, Shift+K | a carrier: a line by two points, a circle by its center and a point on it (drawn faint and dashed across the canvas) |
 | Tab / Shift+Tab, 1-9, or a kind in the panel's palette | what the line, arc and circle tools place (every kind, the level's own last; clicking a kind also picks the line tool, the circle tool for a circle-only kind) |
 | Delete, Backspace | remove the selected element |
 | Ctrl+D | duplicate it (offset by 20, 20) |
@@ -79,6 +80,12 @@ With Alt held, the point stays exactly under the pointer.
 **Handles** (the selected element): its start and end, its via (or, on a line, its middle, which bends the
 line when dragged), a circle's center and radius, and the player's start. When an endpoint moves, the via
 stays where it is (GAME_SPEC 19.2).
+
+**Carriers.** A point placed near a carrier snaps onto it, a grid step along it. When both clicks of the line
+tool (or the three of the arc tool on a circle) land on one carrier, the element is placed on it (`carrier`,
+`from`, `to`), and its handles move along it. A carrier is selected by a click on its line or circle. Its handles
+are its defining points (a line's two, a circle's center and radius), and dragging them moves every element on
+it. Renaming it carries the elements, and deleting it frees them, each keeping its place as its own geometry.
 
 **The goal, detectors and objects** are selected like elements: a click inside one (an element's line above it
 wins the click). A rectangle has corner handles, a circle a center and a radius handle, a detector's segment its
@@ -139,10 +146,10 @@ Every action is a command, a JSON object, which is also how scripts and tests dr
 | `{"op": "duplicate", "name": n, "by": [dx, dy]?}` | duplicate it; `{"name": ...}` |
 | `{"op": "undo"}`, `{"op": "redo"}` | undo, redo |
 | `{"op": "select", "name": n \| null}` | select |
-| `{"op": "select" \| "remove" \| "duplicate", "item": "goal" \| "detector:<name>" \| "object:<name>"}` | an item: select it, remove it, duplicate it (`{"item": ...}`) |
+| `{"op": "select" \| "remove" \| "duplicate", "item": "goal" \| "detector:<name>" \| "object:<name>" \| "carrier:<name>"}` | an item: select it, remove it (a carrier's elements freed), duplicate it (`{"item": ...}`) |
 | `{"op": "move", "item": i, "handle": "body", "by": [dx, dy]}`, `{"op": "move", "item": i, "handle": "corner0".."corner3" \| "center" \| "radius" \| "a" \| "b", "to": v}` | move an item, or a handle of it |
-| `{"op": "rename", "item": "detector:<name>" \| "object:<name>", "to": m}` | rename it (a detector's `det:<name>` follows) |
-| `{"op": "tool", "tool": "select" \| "line" \| "arc" \| "circle" \| "player" \| "goal" \| "detector" \| "object"}`, `{"op": "kind", "kind": k}` | the tool; what it places |
+| `{"op": "rename", "item": "detector:<name>" \| "object:<name>" \| "carrier:<name>", "to": m}` | rename it (a detector's `det:<name>`, a carrier's elements follow) |
+| `{"op": "tool", "tool": "select" \| "line" \| "arc" \| "circle" \| "player" \| "goal" \| "detector" \| "object" \| "carrier_line" \| "carrier_circle"}`, `{"op": "kind", "kind": k}` | the tool; what it places |
 | `{"op": "snap", "grid": bool}`, `{"op": "view", "center": [x, y], "zoom": z}`, `{"op": "frame"}` | the grid; the view |
 | `{"op": "validate"}` | `{"errors": [{"element", "name", "message"}]}` |
 | `{"op": "save"}`, `{"op": "saved"}`, `{"op": "save_cancelled"}` | request a save; the host saved; the host could not |

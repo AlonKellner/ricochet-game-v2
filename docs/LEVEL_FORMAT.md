@@ -30,7 +30,7 @@ too).
 | `objective` | `{"goal": region, "requires": [{"key", "values"}]}`: reach the goal while every condition holds to win (GAME_SPEC 24.6); none: every target hit wins | none |
 | `detectors` | `[{"name", "region": region \| "segment": {"a", "b"}, "mode": "while" \| "enter" \| "toggle", "flag", "value", "for"}]`: flags written as the player moves (GAME_SPEC 24.5; flag default `det:<name>`, mode `while`, value `true`, for `player`) | `[]` |
 | `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "wall" \| "mirror" \| "pass", "solid", "label"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, wall, solid, label `Object` by default); their surfaces take the ids after the level's | `[]` |
-| `carriers` | reserved for the editor program's later stages (an error until then) | |
+| `carriers` | `[{"name", "line": {"a": [x, y], "b": [x, y]}} \| {"name", "circle": {"center": [x, y], "radius": r}}]`: lines and circles elements are placed on (Stage 149, below) | `[]` |
 
 A region is `{"rect": [x, y, w, h]}` or `{"circle": {"center": [x, y], "radius": r}}`. The objective and the
 detectors are not surfaces: the lowering leaves them out.
@@ -46,7 +46,14 @@ An element:
 | `straight` | `true`: the exact line through start and end (via for display only) |
 | `label` | the node prefix, overriding the kind's (`null`: not drawn) |
 | `flip` | `true`: left and right swapped (a mirror facing right) |
+| `carrier`, `from`, `to` | instead of the geometry (Stage 149): on the named carrier, from one point to another (both projected onto it); on a circle `via` picks the arc (default: the shorter one), and neither `from` nor `to` is the whole circle |
 | *parameters* | the kind's own (`back`, `flag`, `d`, ...), each with a default unless required |
+
+**Carriers** are an authoring construct: the lowering projects an element's `from`, `to` (and `via`) onto its
+carrier and writes them as its start, end and via (a line `straight`). Two elements sharing a point share the
+same projected value, so a door between two walls on one line meets them by provenance. Move a carrier's points
+and every element on it follows. The solver still sees each element's own three points: two arcs on one
+declared circle are, to it, two circles through their own points (docs/TDD_53_DECLARED_CARRIERS.md).
 
 Two kinds are the format's own: `{"kind": "edges"}` places the four edge walls where it stands, and
 `{"kind": "raw", "surface": {...}}` is an `rc-level/1` surface (without ids) taken as it is -- the escape hatch

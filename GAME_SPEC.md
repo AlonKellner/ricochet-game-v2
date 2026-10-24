@@ -42,6 +42,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done |
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
+| Carriers: lines and circles elements are placed on (`carrier`, `from`, `to`), an authoring construct the lowering projects onto (§19.1; docs/TDD_53, Stage 149) | Done |
 | The novel-element kit: per-shot flags (`shot:*`, erased at landing) and templates for breakable, toggle, frost, fire and charge elements (§10.6; docs/ELEMENTS.md, docs/TDD_52, Stage 147) | Done |
 | Objects, the pull and the grapple: circle bodies (pullable ones fall under gravity); a pull brings an object back along the arrow's path, a grapple takes the player along it, either stopped by what blocks the traveller (§10.6, §25.5-25.6; docs/TDD_51, Stage 146) | Done |
 | The goal and detectors: a level's goal region gated by flag conditions, won when the player stands in it; detectors writing flags as the player moves; a level without a goal won when every target is hit (§3.2, §24.5-24.6; docs/TDD_50, Stage 145) | Done |
@@ -1844,11 +1845,13 @@ Level (rc-level/2):
     flags:       {key: value}                # the flags the level starts with (default none)
     elements:    [Element]                   # in build order
     templates:   {kind: Template}            # the level's own kinds (docs/ELEMENTS.md)
+    carriers:    [{name, line {a, b} | circle {center, radius}}]   # Stage 149: what elements are placed on
 
 Element:
     kind:        String                      # a template's kind, "edges" (the edge walls here) or "raw"
     name:        String                      # unique; flags derive from it (door:<name>)
     start, end, via | circle {center, radius}    # the geometry, shared by the element's surfaces
+      | carrier, from, to (, via)            # ... or on a carrier: projected onto it by the lowering
     straight, label, flip                    # flip: left and right swapped
     <parameters>                             # the kind's own
 ```
@@ -2793,4 +2796,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.59.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.60.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
