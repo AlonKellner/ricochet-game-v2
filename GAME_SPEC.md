@@ -41,7 +41,8 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the levels as data (`rc-level/1`, §19.1), the session replay golden, the headless host `rc_tool` (docs/TDD_20, Stage 115) | Done |
 | Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done |
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
-| Level editor | Planned |
+| Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
+| Level editor | Planned (the editor program: docs/TDD_47 onward) |
 | Menus, HUD, save system | Planned |
 
 *Historical:* versions v0.7.0–v1.6.0 of the legacy `Tracer` (three-tier endpoint detection, boundless tracer, Hermitian carrier transform, DRY refactor) were superseded by the beam solver and deleted in Stage 84. See `docs/TDD_09_PRECISION_INTEGRATION.md`.
@@ -1811,13 +1812,41 @@ Scene state = Scene + GameState. Both trajectory and visibility use the same sce
 
 ### 19.1 Level data format
 
-A level is a JSON file, `data/levels/<dir>/<name>.json`, in the format `rc-level/1` (Stage 115; the full
-schema: `docs/LEVEL_FORMAT.md`). It is engine-neutral and the source of truth of the level: every host reads
-it through the native reader (`rcg::parse_level`), which is strict (an unknown key, a missing one or a value of
-the wrong type is an error naming its path) and correctly rounded (no engine's own decimal parser is used).
+A level is a JSON file, `data/levels/<dir>/<name>.json` (the full schema: `docs/LEVEL_FORMAT.md`). It is
+engine-neutral and the source of truth of the level: every host reads it through the native reader
+(`rcg::parse_level`), which is strict (an unknown key, a missing one or a value of the wrong type is an error
+naming its path) and correctly rounded (no engine's own decimal parser is used).
+
+Levels are written in **`rc-level/2`** (Stage 142): the level's parts, its initial flags and its **elements**.
+An element is an instance of a kind -- a wall, a mirror, a door, a button, ... -- with a name, a geometry and
+parameters. Every kind is a **template**, data that expands the element into surfaces (§9.1): the builtin kinds
+are `data/elements/<kind>.json`, and a level may add or replace kinds with its own `templates`
+(`docs/ELEMENTS.md`). New elements are designed as templates, without code, as long as they are expressible with
+surfaces' path effects, hit effects, resolvers and presence (§9.4, §9.6, §10.6); behaviour beyond that is a new
+primitive in the game.
 
 ```
-Level:
+Level (rc-level/2):
+    schema:      "rc-level/2"
+    name, bounds, gravity, room, player, camera, background, colliders, features   # as in rc-level/1
+    flags:       {key: value}                # the flags the level starts with (default none)
+    elements:    [Element]                   # in build order
+    templates:   {kind: Template}            # the level's own kinds (docs/ELEMENTS.md)
+
+Element:
+    kind:        String                      # a template's kind, "edges" (the edge walls here) or "raw"
+    name:        String                      # unique; flags derive from it (door:<name>)
+    start, end, via | circle {center, radius}    # the geometry, shared by the element's surfaces
+    straight, label, flip                    # flip: left and right swapped
+    <parameters>                             # the kind's own
+```
+
+The reader **lowers** an `rc-level/2` level to `rc-level/1`: the room's walls when the room is built, every
+element's surfaces in order, the four edge walls (where an `edges` element stands, else here), the
+pre-transform circles last, with consecutive ids in that order (a portal two). `rc-level/1` is read as it is:
+
+```
+Level (rc-level/1):
     schema:      "rc-level/1"
     name:        String                      # its path under data/levels
     bounds:      [x, y, w, h]                # the level's edge (default 0, 0, 1920, 1080)
@@ -1842,16 +1871,15 @@ Surface:
     player_solid:   bool
 ```
 
-Every point is read as float32 (the game's vectors); other numbers stay float64. Surface ids are explicit and
-consecutive in build order (the room's walls, the surfaces, the four edge walls, the pre-transform circles).
-Initial flags are not part of the format yet (every level starts with none); cycle overrides (§17) are
-not either.
+Every point is read as float32 (the game's vectors); other numbers stay float64. Surface ids are derived from
+the build order and never written in `rc-level/2`; an element's identity is its name. Cycle overrides (§17) are
+not part of the format.
 
 **Level discovery:** the levels are the files under `data/levels/`.
 
 ### 19.2 Editor requirements
 
-> **Status: PLANNED** — The level editor is not yet implemented. Levels are currently created programmatically in code.
+> **Status: PLANNED** — The level editor is the editor program's work (docs/TDD_47 onward: the format first, then a native editor behind the C API, hosted by Godot and the Python host). Levels are written by hand in `rc-level/2` meanwhile.
 
 The level editor must support:
 
@@ -1873,15 +1901,17 @@ The editor previews the compound effect's combined Mobius matrix and indicates w
 
 The editor validates constraints in real time as surfaces are edited (not just on save). Invalid surfaces (zero-length, wrong carrier type for effect) are highlighted in red. Deleting a surface referenced in a cache override shows a warning.
 
-Surface IDs are assigned by a monotonically incrementing counter persisted in the level file. Deleted IDs are never reused.
+Elements are identified by their names (§19.1); surface ids are derived from the build order, never stored.
 
 ### 19.3 Serialization
 
 Levels serialize to JSON (§19.1) in one canonical spelling: object keys sorted, one per line, indented by one
 space per level; an array of scalars on one line, any other array one element per line; every float as its
 shortest round-trip decimal (`rc_tool fmt`; ctest `rcg_levels_canonical`). The data is the authoring form:
-the three points of a surface (or its circle), its sides and resolver; the carriers and everything else are
-derived when the level is built (Principle 21). The scene defs the solver reads are derived from it too
+the elements, each with the three points of its surfaces (or their circle) and its parameters; the surfaces,
+their ids, the carriers and everything else are derived when the level is built (Principle 21). The lowering
+(`rc_tool lower` -> `bench/lowered`) is what the oracle's independent builder reads; `rc_tool migrate` turns an
+`rc-level/1` level into elements, exactly (its lowering is the original byte for byte). The scene defs the solver reads are derived from it too
 (`rc_tool dumps` -> `bench/scenes`).
 
 ---
@@ -2694,4 +2724,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.53.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.54.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
