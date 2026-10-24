@@ -1,8 +1,5 @@
 {
- "_schema": {
-  "generator": "docs/research/oracle/gen_fixtures_stage139.py",
-  "what": "Stage 139: off-segment crossings of unplanned surfaces are not events"
- },
+ "dps": 80,
  "fixtures": [
   {
    "name": "offseg_mirror_physical",

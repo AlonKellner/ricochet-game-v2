@@ -110,9 +110,7 @@ def main():
     assert not any(e["kind"] == "hit" and e["surface_id"] == 2 for e in f["expected"]), kinds(f)
     assert no_off_segment(f)
     fx.append(f)
-    out = {"_schema": {"generator": "docs/research/oracle/gen_fixtures_stage139.py",
-                       "what": "Stage 139: off-segment crossings of unplanned surfaces are not events"},
-           "fixtures": fx}
+    out = {"dps": mp.mp.dps, "fixtures": fx}
     path = os.path.join(ROOT, "bench", "fixtures", "stage139_off_segment.json")
     with open(path, "w") as fh:
         json.dump(out, fh, indent=1)

@@ -61,12 +61,13 @@ def test_the_candidates_are_rebuilt_where_the_state_changes():
 
 def test_visibility_by_significant_events():
     # an off-segment wall crossing (a candidate that fires nothing) on the physical
-    # walk alone does not part the walks: the cursor beyond it is visible
+    # walk alone does not part the walks: the cursor beyond it is visible (Stage 139:
+    # it is no event at all any more)
     off = line(1, (100, 100), (100, 200), TERM, TERM)
     m = line(2, (200, -500), (200, 500), REFL, REFL)
     with emit_infinity():
         ph = T.physical([off, m], (0.0, 0.0), (150.0, 30.0), [(2, "RIGHT")])
         pl = T.planned([off, m], (0.0, 0.0), (150.0, 30.0), [(2, "RIGHT")])
-    assert any(e.kind == "hit" and e.surface_id == 1 for e in ph.events)
-    assert not any(e.kind == "hit" and e.surface_id == 1 for e in pl.events[: [e.kind for e in pl.events].index("cursor")])
+    assert not any(e.kind == "hit" and e.surface_id == 1 for e in ph.events)
+    assert not any(e.kind == "hit" and e.surface_id == 1 for e in pl.events)
     assert V.visible([off, m], (0.0, 0.0), (150.0, 30.0), [(2, "RIGHT")]) is True

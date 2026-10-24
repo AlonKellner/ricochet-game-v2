@@ -10,7 +10,7 @@ import mpmath as mp
 
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 import trace2 as T  # noqa: E402
-from test_trace2 import PASS, PRE, emit_infinity, kinds, line  # noqa: E402
+from test_trace2 import PASS, PRE, emit_infinity, kinds, line, thin  # noqa: E402
 
 mp.mp.dps = 50
 
@@ -28,9 +28,9 @@ def test_a_firing_state_change_is_significant_a_plain_pass_is_not():
 
 
 def _off(sid, x):
-    """Stage 134: a wall crossed off its segment by a ray along y = 0 -- a candidate
-    whose crossing fires nothing."""
-    return line(sid, (x, 100), (x, 200), dict(PASS, type="terminal"), dict(PASS, type="terminal"))
+    """Stage 134: a candidate whose crossing fires nothing; Stage 139: crossed ON its
+    segment (a wall on the far side only) -- a crossing off the segment is no event."""
+    return thin(sid, x)
 
 
 def test_sixty_four_events_in_all():
