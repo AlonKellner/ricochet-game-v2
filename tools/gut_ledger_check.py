@@ -21,7 +21,8 @@ import sys
 ROOT = pathlib.Path(__file__).resolve().parents[1]
 LEDGER = ROOT / "docs" / "research" / "gut_ledger.tsv"
 # the final Godot suite: its tests need no ledger row
-FINAL = {"engines/godot/tests/test_adapter_smoke.gd", "engines/godot/tests/test_session_replay.gd"}
+FINAL = {"engines/godot/tests/test_adapter_smoke.gd", "engines/godot/tests/test_session_replay.gd",
+         "engines/godot/tests/test_editor_host.gd"}  # Stage 144: the editor's Godot host
 
 
 def test_cases():

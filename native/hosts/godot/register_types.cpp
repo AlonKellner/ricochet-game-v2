@@ -2,6 +2,7 @@
 // the Godot host's classes (ricochet_game.hpp). The game itself is behind
 // rc_api.h.
 #include "rc_api.h"
+#include "ricochet_editor.hpp"
 #include "ricochet_game.hpp"
 
 #include <godot_cpp/core/class_db.hpp>
@@ -13,6 +14,7 @@ namespace {
 void initialize(godot::ModuleInitializationLevel level) {
 	if (level == godot::MODULE_INITIALIZATION_LEVEL_SCENE) {
 		rc_godot::register_adapter();
+		rc_godot::register_editor();
 	}
 }
 
