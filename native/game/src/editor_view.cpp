@@ -882,7 +882,10 @@ void Editor::key(int code, unsigned mods, bool down) {
 			}
 			return;
 		case KeyEscape:
-			if (!clicks_.empty()) {
+			if (kind_pick_) {
+				kind_pick_ = false;
+				hint_.clear();
+			} else if (!clicks_.empty()) {
 				clicks_.clear();
 			} else {
 				selected_.clear();
@@ -990,7 +993,7 @@ std::vector<Editor::Row> Editor::rows() const {
 		for (size_t k = 0; k < pal.size(); k += 3) {
 			Row r;
 			r.kind = Row::Chips;
-			r.hint = "a kind: the line, arc and circle tools place it";
+			r.hint = kind_pick_ ? "a kind: the selected element becomes one" : "a kind: the line, arc and circle tools place it";
 			r.options.assign(pal.begin() + long(k), pal.begin() + long(std::min(k + 3, pal.size())));
 			add(r);
 		}
@@ -1005,7 +1008,8 @@ std::vector<Editor::Row> Editor::rows() const {
 		const std::string kind = e.value("kind", "");
 		add({Row::Header, "element", "", "", std::nullopt, "", -1, 0, {}});
 		add({Row::Value, "name", selected_, "unique; flags derive from it (door:<name>)", Field{selected_, "name"}, "", -1, 0, {}});
-		add({Row::Value, "kind", kind, "click: the next kind", Field{selected_, "kind"}, "kind", -1, 0, {}});
+		add({Row::Value, "kind", kind_pick_ ? kind + "  (pick one in the palette)" : kind, "click, then a kind in the palette (shift+click: the next kind)",
+				Field{selected_, "kind"}, "kind", -1, 0, {}});
 		if (kind == "raw") {
 			add({Row::Value, "surface", spell(e.value("surface", json())), "an rc-level/1 surface (JSON)", Field{selected_, "surface"}, "", -1, 0, {}});
 		} else if (kind != "edges") {
@@ -1066,6 +1070,9 @@ std::vector<Editor::Row> Editor::rows() const {
 }
 
 void Editor::click_row(const Row &r, unsigned mods) {
+	if (kind_pick_ && r.kind != Row::Chips && r.choice != "kind") {
+		kind_pick_ = false; // (any other click ends the pick)
+	}
 	auto run = [&](const json &c) {
 		const json res = command(c);
 		hint_ = res.value("ok", false) ? "" : res.value("error", std::string());
@@ -1083,6 +1090,12 @@ void Editor::click_row(const Row &r, unsigned mods) {
 	if (r.kind == Row::Chips) {
 		const float x0 = width_ - PANEL_WIDTH + 10;
 		const size_t c = size_t(std::clamp(int((mouse_.x - x0) / ((PANEL_WIDTH - 20) / 3)), 0, 2));
+		if (c < r.options.size() && kind_pick_ && !selected_.empty()) {
+			kind_pick_ = false;
+			hint_.clear();
+			run({{"op", "set"}, {"name", selected_}, {"key", "kind"}, {"value", r.options[c]}});
+			return;
+		}
 		if (c < r.options.size()) {
 			kind_ = r.options[c];
 			if (tool_ == Tool::Select || tool_ == Tool::Player || tool_ == Tool::Goal || tool_ == Tool::Detector || tool_ == Tool::Object) {
@@ -1116,8 +1129,13 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		return;
 	}
 	const Field &f = *r.field;
-	if (r.choice == "kind") {
-		run({{"op", "set"}, {"name", f.element}, {"key", "kind"}, {"value", cycle(palette(), r.value)}});
+	if (r.choice == "kind") { // the palette picks it (Shift: the next kind)
+		if (back) {
+			run({{"op", "set"}, {"name", f.element}, {"key", "kind"}, {"value", cycle(palette(), r.value)}});
+		} else {
+			kind_pick_ = !kind_pick_;
+			hint_ = kind_pick_ ? "pick the element's kind in the palette (Esc: no change)" : "";
+		}
 		return;
 	}
 	if (r.choice == "bool") {

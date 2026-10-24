@@ -102,8 +102,8 @@ selected item, Ctrl+D duplicates a detector or an object, and the arrows move it
 Click a field to edit it:
 - **An enum** (a mirror's `back`, a door's `closed`) cycles to its next value; Shift+click goes back.
 - **A switch** (`flip`, a bool parameter, the room's `built`) toggles.
-- **The kind** cycles through the palette. The element keeps its parameters, and the problems show what the new
-  kind does not accept.
+- **The kind**: click it, then a kind in the palette, and the element becomes one (Shift+click: the next kind;
+  Esc: no change). The element keeps its parameters, and the problems show what the new kind does not accept.
 - **Any other field** takes typed text: type, then Enter to apply or Esc to cancel. The text is read as JSON
   (`[700, 300]`, `true`, `{"door:gate": true}`), and a bare word is a string (`gate`). Empty text removes the
   field: a parameter returns to its default, a label to the kind's.

@@ -156,6 +156,7 @@ private:
 	double zoom_ = 1.0;
 	bool view_touched_ = false; // the user panned or zoomed: a resize keeps the view (else it frames the level again)
 	float panel_scroll_ = 0;    // the panel scrolled down by (px)
+	bool kind_pick_ = false;    // the next palette click sets the selected element's kind
 	// the pointer
 	V2 mouse_;
 	unsigned buttons_ = 0;

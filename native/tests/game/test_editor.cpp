@@ -546,3 +546,27 @@ TEST_CASE("editor: carriers -- placed, built on, dragged, renamed, deleted (Stag
 	CHECK(arc.contains("via"));
 	CHECK(ed.errors().empty());
 }
+
+TEST_CASE("editor: an element's kind picked from the palette") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"name", "w"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
+	click_row(ed, "kind");
+	// the palette's first row holds wall, arrow_block, fence: the third column is fence; it comes after the place row
+	const json panel = ok(ed, {{"op", "panel"}});
+	float y = -1;
+	bool next = false;
+	for (const json &r : panel["rows"]) {
+		if (next) {
+			y = r["y"].get<float>() + 10;
+			break;
+		}
+		next = r["label"] == "place";
+	}
+	REQUIRE(y > 0);
+	const float x = 1920 - rcg::Editor::PANEL_WIDTH + 10 + 2.5f * (rcg::Editor::PANEL_WIDTH - 20) / 3;
+	ed.pointer(rcg::Editor::PtrDown, x, y, rcg::Editor::BtnLeft, 0);
+	ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
+	CHECK(element(ed, "w")["kind"] == "fence");
+	CHECK(ok(ed, {{"op", "state"}})["kind"] == "wall"); // what the tools place did not change
+}

@@ -571,7 +571,7 @@ json Editor::op(const json &cmd) {
 	if (o == "panel") { // the panel's rows as drawn (tests, debugging): label, value, y
 		json rs = json::array();
 		for (const Row &r : rows()) {
-			static const char *const KINDS[] = {"header", "text", "value", "error", "buttons"};
+			static const char *const KINDS[] = {"header", "text", "value", "error", "buttons", "chips"};
 			rs.push_back({{"kind", KINDS[int(r.kind)]}, {"label", r.label}, {"value", r.value}, {"y", r.y},
 					{"x", width_ - PANEL_WIDTH + 20}});
 		}

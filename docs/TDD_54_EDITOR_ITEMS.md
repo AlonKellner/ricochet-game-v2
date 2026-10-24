@@ -13,6 +13,7 @@ elements have. This stage gives them all of it, and fixes what a visual review o
 | 148.2 | The visual review (the draw list rendered to images): the view framed on every resize until the user moves it (the tkinter host showed half a level); spawners no longer dashed like doors; a radius dragged once rounded (it was rounded twice); empty level fields read `(none)` | Done |
 | 148.3 | The palette: every kind as a chip in the panel (one click picks it, and the line or circle tool); the panel scrolls with the wheel | Done |
 | 148.4 | Tests, docs, `make gate` | Done |
+| 148.4b | After Stage 149: an element's kind picked from the palette (it cycled through all 27); the Godot host resets the canvas transform after a play-test (a level with a camera left the editor's view moved) | Done |
 | 148.5 | The user's interactive sign-off | Open |
 
 ## Decisions

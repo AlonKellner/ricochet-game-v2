@@ -215,8 +215,9 @@ void RicochetEditor::start_play() {
 
 void RicochetEditor::stop_play() {
 	remove_child(game_);
-	game_->queue_free(); // (its camera with it: the canvas is the editor's again)
+	game_->queue_free(); // (its camera with it)
 	game_ = nullptr;
+	get_viewport()->set_canvas_transform(Transform2D()); // a game's camera leaves the canvas moved: the editor draws at identity
 	layers_->set_visible(true);
 	sync();
 }
