@@ -163,8 +163,15 @@ struct Surf {
 	bool present(const Flags &flags) const {
 		for (const PresenceCond &c : presence) {
 			const FlagValue *v = flags.get(c.key);
-			const std::string k = v ? flag_key(*v) : std::string("DEFAULT");
-			if (std::find(c.values.begin(), c.values.end(), k) == c.values.end()) {
+			// (Stage 141: the spelling compared in place, no string built per check)
+			bool found = false;
+			for (const std::string &val : c.values) {
+				if (v ? flag_key_is(*v, val) : val == "DEFAULT") {
+					found = true;
+					break;
+				}
+			}
+			if (!found) {
 				return false;
 			}
 		}
@@ -178,9 +185,8 @@ struct Surf {
 			return nullptr;
 		}
 		if (const FlagValue *v = flags.get(state_key)) {
-			const std::string k = flag_key(*v);
 			for (const auto &row : table) {
-				if (row.first == k) {
+				if (flag_key_is(*v, row.first)) { // (Stage 141: compared in place)
 					return &row.second;
 				}
 			}

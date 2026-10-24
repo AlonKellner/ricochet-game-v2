@@ -35,6 +35,21 @@ std::string flag_key(const FlagValue &v) {
 	return std::get<std::string>(v);
 }
 
+bool flag_key_is(const FlagValue &v, const std::string &s) {
+	if (const bool *b = std::get_if<bool>(&v)) {
+		return *b ? s == "true" : s == "false";
+	}
+	if (const double *d = std::get_if<double>(&v)) {
+		if (std::isfinite(*d) && *d == std::floor(*d)) {
+			char buf[32];
+			std::snprintf(buf, sizeof buf, "%lld", static_cast<long long>(*d));
+			return s == buf;
+		}
+		return s == gd_float_str(*d);
+	}
+	return std::get<std::string>(v) == s;
+}
+
 bool flag_truth(const FlagValue &v) {
 	if (const bool *b = std::get_if<bool>(&v)) {
 		return *b;
@@ -67,6 +82,7 @@ bool truth_bool(const FlagValue &v) {
 } // namespace
 
 void Flags::set(const std::string &key, FlagValue value) {
+	key_ok_ = false;
 	const bool ghost = key == GHOST_KEY;
 	for (Entry &e : entries_) {
 		if (e.first == key) {
@@ -84,6 +100,7 @@ void Flags::set(const std::string &key, FlagValue value) {
 }
 
 void Flags::erase(const std::string &key) {
+	key_ok_ = false;
 	entries_.erase(std::remove_if(entries_.begin(), entries_.end(), [&](const Entry &e) { return e.first == key; }), entries_.end());
 	if (key == GHOST_KEY) {
 		ghost_ = false;
@@ -113,7 +130,10 @@ bool Flags::is_true(const std::string &key) const {
 	return b != nullptr && *b;
 }
 
-std::string Flags::canonical_key() const {
+const std::string &Flags::canonical_key() const {
+	if (key_ok_) {
+		return key_;
+	}
 	std::vector<const Entry *> sorted;
 	for (const Entry &e : entries_) {
 		sorted.push_back(&e);
@@ -126,7 +146,9 @@ std::string Flags::canonical_key() const {
 		}
 		out += sorted[i]->first + "=" + flag_key(sorted[i]->second);
 	}
-	return out;
+	key_ = std::move(out);
+	key_ok_ = true;
+	return key_;
 }
 
 } // namespace rc
