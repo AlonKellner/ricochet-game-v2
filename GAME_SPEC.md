@@ -42,6 +42,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done |
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
+| The goal and detectors: a level's goal region gated by flag conditions, won when the player stands in it; detectors writing flags as the player moves; a level without a goal won when every target is hit (§3.2, §24.5-24.6; docs/TDD_50, Stage 145) | Done |
 | Level editor: native (`rcg::Editor`, the C API's `rc_editor_*`), its tools, panel, validation and play-test; the Python host (tkinter) and the Godot host (`RicochetEditor`) (§19.2; docs/EDITOR.md, docs/TDD_48-49, Stages 143-144) | Done |
 | Menus, HUD, save system | Planned |
 
@@ -133,7 +134,7 @@ A **puzzle** is a level: a scene containing surfaces, a player spawn point, and 
 
 | Condition | Trigger |
 |-----------|---------|
-| **Win** | All target surfaces in the level have been hit (across one or more shots). |
+| **Win** | A level with a **goal** (§24.6, Stage 145): the player stands in the goal region while the goal's conditions hold. A level without one: all target surfaces in the level have been hit (across one or more shots). The win is latched: it holds until an undo or a reset takes the game back before it. |
 | **No failure state** | There is no intended failure. As long as the player has not won, they can continue making shot attempts without limit. A shot that misses all targets is not "failure" — it is simply an attempt. The player can always try again. |
 | **Exception** | A specific puzzle may explicitly design a failure condition (e.g., a breakable surface that cannot be restored). This must be opt-in per level, not a default engine behavior. |
 
@@ -2168,6 +2169,37 @@ A level may have multiple target surfaces. The level is complete when all target
 
 The target system is extensible to point targets (tolerance-based) or region targets. The spec defines surface targets as the default.
 
+### 24.5 Detectors
+
+> **Status: implemented (Stage 145, docs/TDD_50_OBJECTIVE.md).**
+
+A **detector** writes a flag as the player moves, so a level reacts to where the player goes: a door opens as
+the player steps on a plate. It is a region (a rectangle or a circle) or a segment, with a flag (default
+`det:<name>`), a value (default `true`) and a mode:
+
+| Mode | Writes |
+|---|---|
+| `while` | the value while the player's center is in the region; the flag is unset outside (a region only) |
+| `enter` | the value when the player enters the region, or crosses the segment |
+| `toggle` | the flag's negation (a missing flag is false) on entering, or on crossing |
+
+Detectors are checked after every physics tick, against the player's center: a region on its boundary counts
+as inside, and a segment is crossed when a tick's move goes from one side of its line onto or past it within the
+segment (a move off the line is no crossing). Their writes are ordinary flag writes (§10.6): presence (§9.6) and
+resolvers (§9.4) follow at once, so does the player's collision. The flags, and which regions the player is in,
+are part of the checkpoint (§3.3). A detector `for` objects waits for objects (a later stage).
+
+### 24.6 The goal
+
+> **Status: implemented (Stage 145).**
+
+A level may have a **goal**: a region and conditions (the presence form, §9.6: `{key, values}`, all required).
+The goal is **open** while its conditions hold. The player wins by standing in it while it is open (checked
+after every physics tick and when a shot lands). Targets are then ordinary flag writers that open doors or the
+goal; a level without a goal keeps the all-targets rule (§3.2). The goal is drawn green: dashed while locked,
+solid when open, filled when won. A level with a goal shows `Goal: locked | open | reached!` as the HUD's first
+line, and its session record holds `won`.
+
 ---
 
 ## 25. Player character
@@ -2724,4 +2756,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.56.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.57.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

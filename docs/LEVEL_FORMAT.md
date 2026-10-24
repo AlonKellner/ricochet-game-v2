@@ -27,7 +27,12 @@ too).
 | `flags` | `{key: bool \| number \| string}`: the flags the level starts with (a number reads as a float64) | `{}` |
 | `elements` | the elements, in build order (below) | required |
 | `templates` | `{kind: template}`: the level's own element kinds, added to the builtin ones or replacing one (docs/ELEMENTS.md) | `{}` |
-| `carriers`, `detectors`, `objects`, `objective` | reserved for the editor program's later stages (an error until then) | |
+| `objective` | `{"goal": region, "requires": [{"key", "values"}]}`: reach the goal while every condition holds to win (GAME_SPEC 24.6); none: every target hit wins | none |
+| `detectors` | `[{"name", "region": region \| "segment": {"a", "b"}, "mode": "while" \| "enter" \| "toggle", "flag", "value", "for"}]`: flags written as the player moves (GAME_SPEC 24.5; flag default `det:<name>`, mode `while`, value `true`, for `player`) | `[]` |
+| `carriers`, `objects` | reserved for the editor program's later stages (an error until then) | |
+
+A region is `{"rect": [x, y, w, h]}` or `{"circle": {"center": [x, y], "radius": r}}`. The objective and the
+detectors are not surfaces: the lowering leaves them out.
 
 An element:
 

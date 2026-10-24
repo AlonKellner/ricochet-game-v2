@@ -50,6 +50,7 @@ Flags are named after what writes or reads them, so levels and templates agree w
 | `target:<id>` | a target's side firing | the game (GAME_SPEC 24) |
 | `chan:<channel>` | spawners and resetters | the spawner and its spawned surface (GAME_SPEC 10.6) |
 | `ghost` | ghost gates | every side (the per-shot ghost mode) |
+| `det:<name>` | the detector `<name>` (GAME_SPEC 24.5) | a door (`"flag": "det:plate"`), the goal's `requires` |
 
 The level's `flags` sets any of them at the start. For example, `{"door:gate": true}` starts with the door open.
 

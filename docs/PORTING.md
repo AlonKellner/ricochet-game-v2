@@ -212,6 +212,12 @@ checked against its scenes with screenshots: 36 pairs, 0 differing pixels (docs/
 **Other engines.** Stroke and fill with your own primitives. Pixel identity with Godot is not required; the
 geometry is exact.
 
+## The win (1.9)
+
+`rc_frame.won` is 1 once the level is won: its goal reached while open, or, a level without a goal, every target
+hit. It stays 1 until an undo or a reset takes the game back before the win. A goal level also says where it
+stands in the HUD's first line (`Goal: locked | open | reached!`), and draws its goal.
+
 ## Hosting the editor
 
 The level editor (docs/EDITOR.md) is native too (`rc_editor_*`, API 1.8): an `rc-level/2` document, its
