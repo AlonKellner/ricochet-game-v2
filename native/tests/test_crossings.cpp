@@ -57,8 +57,11 @@ TEST_CASE("crossings: the tracer's cache tells plans apart by their pieces") {
 }
 
 namespace {
-// (a pass that writes a flag: Stage 134 computes no pure pass-through)
-SurfaceDef pass_line(int id, double sx, double sy, double ex, double ey) {
+// (a pass that writes a flag on one side: Stage 134 computes no pure pass-through;
+// Stage 139: crossed on its segment from the side that passes -- an event that
+// fires nothing, no shared-point stop (Stage 138) -- since a crossing off the
+// segment is no event)
+SurfaceDef pass_line(int id, double sx, double sy, double ex, double ey, bool states_left) {
 	SurfaceDef d;
 	d.id = id;
 	d.line = true;
@@ -69,8 +72,8 @@ SurfaceDef pass_line(int id, double sx, double sy, double ex, double ey) {
 	d.vx = (sx + ex) / 2;
 	d.vy = (sy + ey) / 2;
 	d.left = SideDef{};
-	d.left->states = {StateChangeDef{"w", false, true}};
-	d.right = d.left;
+	d.right = SideDef{};
+	(states_left ? d.left : d.right)->states = {StateChangeDef{"w", false, true}};
 	return d;
 }
 
@@ -96,8 +99,12 @@ std::vector<int> first_hits(const std::vector<SurfaceDef> &defs, const N &like) 
 } // namespace
 
 TEST_CASE("K6: surfaces on one carrier share their crossings and tie by id, at every tier") {
-	const std::vector<SurfaceDef> defs{pass_line(5, 1100, 350, 1100, 450), pass_line(3, 1100, 620, 1100, 760),
-		pass_line(9, 1100, -50, 1100, 100)};
+	// the beam from (310.37, 211.9) along (1, 0.2117) crosses x = 1100 at y = 379.06,
+	// inside all three spans; the states lie on the side it does not come from
+	const Seg<F64> probe{0, SegKind::Line, false, CN<F64>{F64{1100}, F64{350}}, CN<F64>{F64{1100}, F64{450}}, std::nullopt, std::nullopt, std::nullopt};
+	const bool from_left = geom::side_left(probe, CN<F64>{F64{1100}, F64{379.06}}, CN<F64>{F64{1}, F64{0.2117}});
+	const std::vector<SurfaceDef> defs{pass_line(5, 1100, 350, 1100, 450, !from_left), pass_line(3, 1100, 300, 1100, 760, !from_left),
+		pass_line(9, 1100, -50, 1100, 400, !from_left)};
 	const Scene<F64> sc = Scene<F64>::from_defs(defs, F64{1});
 	for (const auto &s : sc.surfaces) {
 		CHECK(s->carrier_rep == 5);

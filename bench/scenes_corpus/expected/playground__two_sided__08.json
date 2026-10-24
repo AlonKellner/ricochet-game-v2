@@ -170,28 +170,6 @@
  "physical": [
   {
    "kind": "hit",
-   "surface_id": 8,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "551.7412243923494622723689790145072597620",
-   "y": "489.3121089848957428498449831934298824046"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 8,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "461.6560716414234565384096642922625621704",
-   "y": "473.6326719275919701586064810698519180340"
-  },
-  {
-   "kind": "hit",
    "surface_id": 4,
    "side": "RIGHT",
    "applied": true,

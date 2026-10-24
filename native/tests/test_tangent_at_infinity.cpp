@@ -301,7 +301,7 @@ TEST_CASE("Stage 105: on coincidence-rich scenes every tier makes the same decis
 	}
 	MESSAGE("events compared: " << compared << ", walks exact throughout: " << whole << ", parting away from Q: " << differing << " (part " << part.k << "/"
 																				<< part.n << ")");
-	CHECK(compared * part.n > 4000);
+	CHECK(compared * part.n > 3000); // (Stage 139: the off-segment crossings are no events -- fewer to compare)
 	CHECK(whole * part.n > 200);
 	CHECK(walks == taken);
 	CHECK(differing <= 4); // ties away from Q are rare in these scenes

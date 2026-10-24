@@ -115,17 +115,6 @@
  "physical": [
   {
    "kind": "hit",
-   "surface_id": 13,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "621.5317804416268556239673557061214609506",
-   "y": "652.8526805743751031353721597541938634649"
-  },
-  {
-   "kind": "hit",
    "surface_id": 10,
    "side": "LEFT",
    "applied": true,
@@ -159,17 +148,6 @@
   },
   {
    "kind": "hit",
-   "surface_id": 6,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "960.0000000000000000000000000000000000000",
-   "y": "589.8305458194412559026151633472538983586"
-  },
-  {
-   "kind": "hit",
    "surface_id": 8,
    "side": "LEFT",
    "applied": true,
@@ -178,17 +156,6 @@
    "rehit": false,
    "x": "769.6010248231627169713539741219993630276",
    "y": "563.8315780792043833430235995833848826909"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 13,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "622.8711399365069051676309266618857833781",
-   "y": "685.0248438941700786389124236646250748876"
   },
   {
    "kind": "hit",
@@ -203,17 +170,6 @@
   },
   {
    "kind": "hit",
-   "surface_id": 11,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "1350.000000000000000000000000000000000000",
-   "y": "502.9697343950028113910465144299508815283"
-  },
-  {
-   "kind": "hit",
    "surface_id": 7,
    "side": "RIGHT",
    "applied": true,
@@ -222,17 +178,6 @@
    "rehit": false,
    "x": "1400.000000000000000000000000000000000000",
    "y": "459.8801756737768324288175174545930486264"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 11,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "1350.000000000000000000000000000000000000",
-   "y": "448.9000880361567398234528207418423938840"
   },
   {
    "kind": "infinity",

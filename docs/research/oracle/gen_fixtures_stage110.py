@@ -29,9 +29,16 @@ ROOT = os.path.abspath(os.path.join(os.path.dirname(__file__), "..", "..", "..")
 def side_toward(surfs, player, cursor, sid):
     """The side the straight shot player -> cursor crosses surface sid from."""
     # (Stage 134: the surface as a mirror -- a pass surface is no candidate, never
-    # computed; only the side is read)
+    # computed; Stage 139: a long mirror along its carrier, so the crossing is on
+    # its segment and an event; only the side is read)
     refl = {"type": "reflection", "interactive": True}
-    probe = [dict(d, left=refl, right=refl, resolver=None) if d["id"] == sid else d for d in surfs]
+
+    def long(d):
+        (sx, sy), (ex, ey) = d["start"], d["end"]
+        dx, dy = ex - sx, ey - sy
+        return dict(d, start=[sx - 1e4 * dx, sy - 1e4 * dy], end=[ex + 1e4 * dx, ey + 1e4 * dy], left=refl, right=refl, resolver=None)
+
+    probe = [long(d) if d["id"] == sid else d for d in surfs]
     w = T.trace_physical_direction(T.scene_from_json(probe), player, T.P(cursor) - T.P(player))
     return next(e.side for e in w.events if e.kind == "hit" and e.surface_id == sid)
 

@@ -221,19 +221,6 @@
     },
     {
      "kind": "hit",
-     "surface_id": 2,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "-500.0000000000000000000000000000000000000",
-     "y": "0.0",
-     "state": false,
-     "flags": {}
-    },
-    {
-     "kind": "hit",
      "surface_id": 93,
      "side": "RIGHT",
      "applied": true,
@@ -465,19 +452,6 @@
      "y": "-100.0000000000000000000000000000000000000",
      "state": false,
      "flags": null
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "-500.0000000000000000000000000000000000000",
-     "y": "0.0",
-     "state": false,
-     "flags": {}
     },
     {
      "kind": "hit",
@@ -715,19 +689,6 @@
     },
     {
      "kind": "hit",
-     "surface_id": 2,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "-500.0000000000000000000000000000000000000",
-     "y": "0.0",
-     "state": false,
-     "flags": {}
-    },
-    {
-     "kind": "hit",
      "surface_id": 93,
      "side": "RIGHT",
      "applied": true,
@@ -944,19 +905,6 @@
      "rehit": false,
      "x": "500.0000000000000000000000000000000000000",
      "y": "-142.8571428571428571428571428571428571429",
-     "state": false,
-     "flags": {}
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "-500.0000000000000000000000000000000000000",
-     "y": "0.0",
      "state": false,
      "flags": {}
     },
@@ -1179,19 +1127,6 @@
      "y": "-100.0000000000000000000000000000000000000",
      "state": false,
      "flags": null
-    },
-    {
-     "kind": "hit",
-     "surface_id": 2,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "-500.0000000000000000000000000000000000000",
-     "y": "0.0",
-     "state": false,
-     "flags": {}
     },
     {
      "kind": "hit",

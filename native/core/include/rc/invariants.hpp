@@ -1009,15 +1009,18 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 		}
 	}
 	const double delta = 64.0 * exact::U * scale / gd_maxf(img.distance_to(in.player), 1e-300);
+	// Stage 139: a crossing off its segment is an event only on a surface the plan
+	// names (the bookkeeping reads it) -- the reference has no plan, so the hits
+	// compared are the ones both walks make events of: on their segments, or applied
 	std::vector<EvInfo> a;
 	for (const EvInfo &e : *in.physical_events) {
-		if (e.kind == EventKind::Hit) {
+		if (e.kind == EventKind::Hit && (e.on_segment || e.applied)) {
 			a.push_back(e);
 		}
 	}
 	std::vector<EvInfo> b;
 	for (const EvInfo &e : ev_infos(ref.physical)) {
-		if (e.kind == EventKind::Hit) {
+		if (e.kind == EventKind::Hit && (e.on_segment || e.applied)) {
 			b.push_back(e);
 		}
 	}

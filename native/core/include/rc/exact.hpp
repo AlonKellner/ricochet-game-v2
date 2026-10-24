@@ -130,6 +130,14 @@ public:
 	// crossing exists; the tier's root of a nearly parallel pair is an artefact).
 	// False when the line has no exact coefficients.
 	bool parallel_to(double sx, double sy, double ex, double ey) const;
+	// Stage 139 (the cast-cost program's Stage C): the segment s -> e certainly
+	// lies on one side of the line -- both endpoints strictly on one side by the
+	// float64 shadow's rigorous bounds -- so the line crosses its carrier off the
+	// segment. True only when certain; never asks for the exact coefficients.
+	bool misses_segment(double sx, double sy, double ex, double ey) const;
+	// ... and the circle of centre c and radius r: the line's distance from the
+	// centre is certainly more than r (no crossing of the carrier at all).
+	bool misses_circle(double cx, double cy, double r) const;
 
 	// A.6: a derived line shares its parent (it copied it, its lazy source and any
 	// exact coefficients included; the parent's exact value is now computed once)

@@ -58,18 +58,49 @@ def test_terminal_ends_trace():
 def off(sid, x):
     """Stage 134: a wall whose carrier (x = const) a ray along y = 0 crosses off
     its segment -- a candidate whose crossing fires nothing (a pass line is no
-    candidate: never computed)."""
+    candidate: never computed). Stage 139: such a crossing is no event."""
     return line(sid, (x, 100), (x, 200), TERM, TERM)
 
 
+def thin(sid, x, y1=-500, y2=500):
+    """Stage 139: a candidate a ray along +x crosses ON its segment that fires
+    nothing: a wall on its far side only (the near side passes) -- an event
+    without effect, counted."""
+    s = line(sid, (x, y1), (x, y2), PASS, TERM)
+    probe = T.trace_physical_direction([s], (x - 10, (y1 + y2) / 2), mp.mpc(1, 0))
+    return s if not probe.events[0].applied else line(sid, (x, y2), (x, y1), PASS, TERM)
+
+
 def test_pass_surface_is_event_but_no_effect():
-    # Stage 134: a pass surface is no candidate -- no event at all; a candidate's
-    # crossing that fires nothing (off its segment) is an event without effect
+    # Stage 134: a pass surface is no candidate -- no event at all; Stage 139: a
+    # candidate's crossing off its segment is no event either (not counted); a
+    # candidate crossed on its segment that fires nothing is an event without effect
     p = line(1, (50, -500), (50, 500), PASS, PASS)
     o = off(3, 70)
+    t = thin(4, 80)
     wall = line(2, (100, -500), (100, 500), TERM, TERM)
-    w = T.trace_physical_direction([p, o, wall], (0, 0), mp.mpc(1, 0))
-    assert hits(w) == [(3, False, False), (2, True, True)]
+    w = T.trace_physical_direction([p, o, t, wall], (0, 0), mp.mpc(1, 0))
+    assert hits(w) == [(4, False, False), (2, True, True)]
+    assert w.count == 2 and w.events[0].on_segment
+
+
+def test_off_segment_crossings_do_not_count():
+    # Stage 139: seventy walls crossed off their segments and a wall at the end:
+    # no event before the wall (before, the 64th crossing cut the trace)
+    walls = [off(i + 1, 10 * (i + 1)) for i in range(70)]
+    end = line(99, (800, -500), (800, 500), TERM, TERM)
+    w = T.trace_physical_direction(walls + [end], (0, 0), mp.mpc(1, 0))
+    assert hits(w) == [(99, True, True)] and w.count == 1
+
+
+def test_planned_surface_off_segment_stays_an_event():
+    # Stage 139: a surface a remaining plan entry names is an event on or off its
+    # segment (the bookkeeping and the quiet entries read it)
+    m = line(1, (100, 10), (100, 500), REFL, REFL)
+    wall = line(2, (200, -500), (200, 500), TERM, TERM)
+    for side in ("LEFT", "RIGHT"):
+        w = T.trace_physical_direction([m, wall], (0, 0), mp.mpc(1, 0), plan=[(1, side)])
+        assert w.events[0].surface_id == 1 and not w.events[0].on_segment and not w.events[0].applied
 
 
 def test_one_sided_mirror_inert_side_passes():
@@ -86,7 +117,8 @@ def test_off_segment_passes_in_physical():
     m = line(1, (100, 10), (100, 500), REFL, REFL)     # segment does not reach y=0
     wall = line(2, (200, -500), (200, 500), TERM, TERM)
     w = T.trace_physical_direction([m, wall], (0, 0), mp.mpc(1, 0))
-    assert w.events[0].surface_id == 1 and not w.events[0].on_segment and not w.events[0].applied
+    # (Stage 139: the off-segment crossing is no event; the wall is the first)
+    assert w.events[0].surface_id == 2 and w.events[0].terminal and w.count == 1
 
 
 def test_parallel_mirrors_stop_at_the_tenth_significant_event():
@@ -189,7 +221,7 @@ def test_lone_endpoint_grazes():
 def test_partial_blockage_does_not_leak():
     # graze an endpoint on its open side, then cross a pass surface: no effect
     a = line(1, (100, 0), (100, 100), REFL, REFL)        # starts exactly on the ray
-    p = off(2, 200)                                      # (Stage 134: a candidate that passes)
+    p = thin(2, 200)                                     # (Stage 134: a candidate that passes, on its segment)
     w = T.trace_physical_direction([a, p], (0, 0), mp.mpc(1, 0))
     assert [(e.surface_id, e.applied) for e in w.events if e.kind == "hit"][:2] == [(1, False), (2, False)]
 
@@ -242,15 +274,14 @@ def test_portal_pop_via_departure_rehit():
     src, tgt = portal_pair(1, (100, -10), (100, 10), 0.0, (300, 0))
     w = T.trace_physical_direction([src, tgt], (0, 0), mp.mpc(1, 0.0625))
     ev = without_infinity(w)
-    got = [(e.surface_id, e.applied, e.on_segment, e.rehit) for e in ev[:5]]
-    # (Stage 131: the ray's origin -- the player's image through the portal, (300, 0) -- before the re-hit)
-    assert got == [(1, True, True, False), (1, False, False, False), (-1, False, False, False), (2, True, True, True), (2, False, False, False)], got
-    assert ev[2].kind == "origin" and abs(ev[2].point - mp.mpc(300, 0)) < mp.mpf(10) ** -40
+    got = [(e.surface_id, e.applied, e.on_segment, e.rehit) for e in ev[:3]]
+    # (Stage 131: the ray's origin -- the player's image through the portal, (300, 0) -- before the re-hit;
+    # Stage 139: the off-segment passes of the source and, after the pop, of the pair are no events)
+    assert got == [(1, True, True, False), (-1, False, False, False), (2, True, True, True)], got
+    assert ev[1].kind == "origin" and abs(ev[1].point - mp.mpc(300, 0)) < mp.mpf(10) ** -40
     assert abs(ev[0].point - mp.mpc(100, 6.25)) < mp.mpf(10) ** -40
-    assert abs(ev[1].point - mp.mpc(100, -12.5)) < mp.mpf(10) ** -40
-    assert abs(ev[3].point - mp.mpc(400, 6.25)) < mp.mpf(10) ** -40
-    # restored original beam, from the source hit point onwards
-    assert abs(ev[4].point - mp.mpc(400, 25)) < mp.mpf(10) ** -40
+    assert abs(ev[2].point - mp.mpc(400, 6.25)) < mp.mpf(10) ** -40
+    assert not any(e.kind == "hit" and not e.on_segment for e in ev)
 
 
 def test_portal_rotation():
@@ -434,18 +465,21 @@ def kinds(walk):
 
 
 def test_infinity_always_on():
-    p = off(1, 50)
+    p = thin(1, 50)
     w = T.trace_physical_direction([p], (0, 0), mp.mpc(1, 0))
     # Stage 131: no loop detection -- the arrow loops until the 11th passage of infinity
     # (each loop: the line, the wrap, the ray's origin -- the last two significant)
     assert kinds(w) == ["hit", "infinity", "origin"] * (T.MAX_SIGNIFICANT // 2) + ["hit", "max"]
+    # Stage 139: a wall crossed off its segment is no event at all
+    w = T.trace_physical_direction([off(1, 50)], (0, 0), mp.mpc(1, 0))
+    assert kinds(w) == ["infinity", "origin"] * (T.MAX_SIGNIFICANT // 2) + ["max"]
 
 
 def test_infinity_event_between_ahead_and_wrapped_crossings():
     # pass lines ahead (x = 50) and behind (x = -50) of the player: the beam
     # crosses the one ahead, wraps, crosses the one behind, then escapes
-    ahead = off(1, 50)
-    behind = off(2, -50)
+    ahead = thin(1, 50)
+    behind = thin(2, -50)
     with emit_infinity():
         w = T.trace_physical_direction([ahead, behind], (0, 0), mp.mpc(1, 0))
     # (Stage 131: then the next loop, and so on to the 11th passage of infinity)
@@ -471,8 +505,8 @@ def test_infinity_is_a_significant_event():
 
 
 def test_max_hits_cut_at_the_wrap_is_a_max_at_infinity():
-    # 32 pass lines ahead: the 33rd event is the wrap itself
-    lines = [off(i + 1, 10 * (i + 1)) for i in range(T.MAX_HITS)]
+    # 64 lines crossed on their segments ahead: the 65th event is the wrap itself
+    lines = [thin(i + 1, 10 * (i + 1)) for i in range(T.MAX_HITS)]
     with emit_infinity():
         w = T.trace_physical_direction(lines, (0, 0), mp.mpc(1, 0))
     assert kinds(w) == ["hit"] * T.MAX_HITS + ["max"]
@@ -947,7 +981,7 @@ def test_departing_from_q_is_precision_independent():
                             lin(4, (720, 136), (816, 176), REFL2, REFL2)])
     a = _structure(sc, (672, 592), (2, -1), 80)
     assert a == _structure(sc, (672, 592), (2, -1), 200)
-    assert a[1] == ("hit", 2, True), a
+    assert a[0] == ("hit", 2, True), a   # (Stage 139: the mirror 4's carrier, crossed off its segment, is no event)
 
 
 # ---------------------------------------------------------------- Stage 106: the departure point after a pop
@@ -1040,8 +1074,9 @@ def test_pop_at_the_cursor_on_an_arc_continues_past_it():
     w = T.planned(sc, (600, 300), (1160, 540), [])
     ids = hit_ids(w)
     # (Stage 134: before its cursor a planned walk with no plan computes nothing --
-    # the arc's off-segment crossing ahead of it is no event)
-    assert ids[:4] == [(1, True), (1, False), (1, True), (91, True)], (ids, kinds(w))
+    # the arc's off-segment crossing ahead of it is no event; Stage 139: nor is the
+    # image circle's pass of the carrier's other crossing)
+    assert ids[:3] == [(1, True), (1, True), (91, True)], (ids, kinds(w))
     assert kinds(w).index("cursor") == 0
     assert no_reapply_in_place(w)
     ph = T.physical(sc, (600, 300), (1160, 540), [])
@@ -1172,10 +1207,11 @@ def test_plan_effects_skip_an_absent_entry_and_its_writes():
 def test_surfaces_on_one_carrier_share_their_crossings():
     # three segments on the line x = 1100 (different spans, so different
     # defining points); a beam crossing it meets them at one parameter
-    # (Stage 134: walls crossed off their segments -- candidates that fire nothing)
-    a = line(5, (1100, 400), (1100, 450), TERM, TERM)
-    b = line(3, (1100, 620), (1100, 760), TERM, TERM)
-    c = line(9, (1100, -50), (1100, 100), TERM, TERM)
+    # (Stage 139: crossed on their segments, on a side that passes -- the
+    # candidates' crossings off their segments are no events)
+    a = thin(5, 1100, 300, 450)
+    b = thin(3, 1100, 350, 760)
+    c = thin(9, 1100, -50, 400)
     assert T.carrier_groups([a, b, c]) == {5: 5, 3: 5, 9: 5}
     w = T.trace_physical_direction([a, b, c], (310.37, 211.9), mp.mpc(1, 0.2117))
     hs = [e for e in w.events if e.kind == "hit"][:3]

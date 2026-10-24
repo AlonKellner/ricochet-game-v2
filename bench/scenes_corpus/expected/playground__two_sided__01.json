@@ -158,17 +158,6 @@
  "physical": [
   {
    "kind": "hit",
-   "surface_id": 7,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "753.2716995368978383276977216421327474199",
-   "y": "711.1813675173362030448974339102966550082"
-  },
-  {
-   "kind": "hit",
    "surface_id": 5,
    "side": "LEFT",
    "applied": true,
@@ -177,17 +166,6 @@
    "rehit": false,
    "x": "701.8124450814103596256606175259277897577",
    "y": "692.6997363907697262031709641244533908372"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "720.8361875465933269617290812354008219366",
-   "y": "674.7774520801825484661741761457242713252"
   },
   {
    "kind": "hit",
@@ -224,17 +202,6 @@
   },
   {
    "kind": "hit",
-   "surface_id": 7,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "720.8361875465933269617290812354008219366",
-   "y": "674.7774520801825484661741761457242713252"
-  },
-  {
-   "kind": "hit",
    "surface_id": 5,
    "side": "LEFT",
    "applied": true,
@@ -243,17 +210,6 @@
    "rehit": false,
    "x": "700.2833840029715955190426466910543977534",
    "y": "685.3602432142636584914047041170611092164"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "729.7226887069391704691478974889829590271",
-   "y": "686.3754908144717182845143111284277960704"
   },
   {
    "kind": "hit",
@@ -287,17 +243,6 @@
    "rehit": false,
    "x": "766.4815116330789182096227232292677167003",
    "y": "598.4025790349581722980013174964396392133"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "RIGHT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "729.7226887069391704691478974889829590271",
-   "y": "686.3754908144717182845143111284277960704"
   },
   {
    "kind": "hit",

@@ -458,19 +458,6 @@
    "expected": [
     {
      "kind": "hit",
-     "surface_id": 1,
-     "side": "RIGHT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "300.0000000000000000000000000000000000000",
-     "y": "-587.5000000000000000000000000000000000000",
-     "state": false,
-     "flags": {}
-    },
-    {
-     "kind": "hit",
      "surface_id": 11,
      "side": "RIGHT",
      "applied": true,
@@ -1719,21 +1706,6 @@
      "y": "-560.0000000000000000000000000000000000000",
      "state": false,
      "flags": null
-    },
-    {
-     "kind": "hit",
-     "surface_id": 1,
-     "side": "LEFT",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "300.0000000000000000000000000000000000000",
-     "y": "-550.7692307692307692307692307692307692308",
-     "state": false,
-     "flags": {
-      "open": true
-     }
     },
     {
      "kind": "hit",
