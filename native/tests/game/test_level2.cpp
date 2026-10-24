@@ -113,12 +113,12 @@ TEST_CASE("rc-level/2: every level lowers to its committed lowering, and migrate
 		CHECK(rcg::canonical(a) == rcg::canonical(b));
 		n++;
 	}
-	CHECK(n == 39);
+	CHECK(n == 41);
 }
 
 TEST_CASE("rc-level/2: every builtin template expands to surfaces that build") {
 	const auto &kinds = rcg::elements::builtin();
-	CHECK(kinds.size() == 17);
+	CHECK(kinds.size() == 18);
 	const json local = {{"start", {-20.0, 0.0}}, {"end", {20.0, 0.0}}, {"via", {0.0, 0.0}},
 			{"left", {{"effect", {{"type", "reflection"}}}, {"interactive", true}}}, {"right", nullptr}};
 	const json required = {{"portal", {{"d", {300.0, 0.0}}}}, {"switchable", {{"flag", "open"}}}, {"button", {{"flag", "open"}}},
@@ -145,7 +145,7 @@ TEST_CASE("rc-level/2: every builtin template expands to surfaces that build") {
 	}
 	const rcg::Level lv = rcg::parse_level_json(level_of(elements));
 	const std::vector<rcg::BuiltSurface> built = rcg::build_level(lv);
-	CHECK(built.size() == 4 + 17 + 1 + 4); // the room, the elements (a portal's image), the edges
+	CHECK(built.size() == 4 + 18 + 1 + 4); // the room, the elements (a portal's image), the edges
 	// docs/ELEMENTS.md lists every builtin kind
 	const std::string doc = read_text(ROOT / "docs" / "ELEMENTS.md");
 	for (const auto &[kind, tmpl] : kinds) {
@@ -249,7 +249,7 @@ TEST_CASE("rc-level/2: the schema is strict, and names the element") {
 		return std::string("no error");
 	};
 	CHECK(err(level_of({}, {{"colour", 1}})).find("unknown key 'colour'") != std::string::npos);
-	CHECK(err(level_of({}, {{"objects", nullptr}})).find("reserved for a later stage") != std::string::npos);
+	CHECK(err(level_of({}, {{"carriers", nullptr}})).find("reserved for a later stage") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "crystal"}})})).find("level.elements[0].kind: unknown element kind 'crystal'") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "mirror"}, {"shiny", true}})})).find("unknown key 'shiny' (parameters: back, solid)") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "mirror"}, {"back", "maybe"}})})).find("level.elements[0] (mirror_1).back: one of pass, block expected")

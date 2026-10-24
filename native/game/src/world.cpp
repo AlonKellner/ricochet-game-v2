@@ -4,12 +4,41 @@
 
 namespace rcg {
 
-World::World(std::vector<BuiltSurface> static_surfaces) : static_(std::move(static_surfaces)) {
+World::World(std::vector<BuiltSurface> static_surfaces, const std::vector<Object> &objects) : static_(std::move(static_surfaces)) {
 	for (const BuiltSurface &s : static_) {
 		next_id_ = std::max(next_id_, s.id + 1);
 	}
+	for (const Object &o : objects) {
+		Body b;
+		b.object = o;
+		b.id = next_id_++;
+		b.pos = o.center;
+		b.built = build_spec(object_spec(o, o.center), b.id, o.label).front();
+		bodies_.push_back(std::move(b));
+	}
 	rebuild();
 	initial_ = snapshot();
+}
+
+int World::body_of(int surface_id) const {
+	for (size_t i = 0; i < bodies_.size(); i++) {
+		if (bodies_[i].id == surface_id) {
+			return int(i);
+		}
+	}
+	return -1;
+}
+
+void World::set_body(size_t index, const V2 &pos, const V2 &vel, bool on_floor) {
+	Body &b = bodies_.at(index);
+	b.vel = vel;
+	b.on_floor = on_floor;
+	if (pos == b.pos) {
+		return;
+	}
+	b.pos = pos;
+	b.built = build_spec(object_spec(b.object, pos), b.id, b.object.label).front();
+	rebuild();
 }
 
 const BuiltSurface *World::by_id(int id) const {
@@ -44,6 +73,9 @@ const std::vector<rc::SurfaceDef> &World::defs() const {
 
 void World::rebuild() {
 	surfaces_ = static_;
+	for (const Body &b : bodies_) {
+		surfaces_.push_back(b.built);
+	}
 	for (const auto &[ch, g] : groups_) { // channels in sorted order
 		surfaces_.insert(surfaces_.end(), g.surfaces.begin(), g.surfaces.end());
 	}
@@ -100,7 +132,13 @@ World::Change World::land(const Landing &landing, std::vector<std::string> *erro
 	return diff(before);
 }
 
-World::Snapshot World::snapshot() const { return Snapshot{groups_, generations_}; }
+World::Snapshot World::snapshot() const {
+	Snapshot s{groups_, generations_, {}};
+	for (const Body &b : bodies_) {
+		s.bodies.push_back({b.pos, b.vel, b.on_floor});
+	}
+	return s;
+}
 
 World::Change World::restore(const Snapshot &snap) {
 	std::vector<int> before;
@@ -109,6 +147,15 @@ World::Change World::restore(const Snapshot &snap) {
 	}
 	groups_ = snap.groups;
 	generations_ = snap.generations;
+	for (size_t i = 0; i < bodies_.size() && i < snap.bodies.size(); i++) {
+		Body &b = bodies_[i];
+		b.vel = snap.bodies[i].vel;
+		b.on_floor = snap.bodies[i].on_floor;
+		if (b.pos != snap.bodies[i].pos) {
+			b.pos = snap.bodies[i].pos;
+			b.built = build_spec(object_spec(b.object, b.pos), b.id, b.object.label).front();
+		}
+	}
 	rebuild();
 	return diff(before);
 }

@@ -98,7 +98,7 @@ TEST_CASE("editor: every level loads and saves byte for byte") {
 		CHECK_FALSE(ed.draw().empty());
 		n++;
 	}
-	CHECK(n == 39);
+	CHECK(n == 41);
 	// an rc-level/1 document is migrated
 	const json v1 = json::parse(read_text(ROOT / "bench" / "lowered" / "test_levels__flag_switches.json"));
 	rcg::Editor ed(&v1);
@@ -412,4 +412,21 @@ TEST_CASE("editor: the goal and the detector tools (Stage 145)") {
 	ok(ed, {{"op", "set"}, {"path", "/objective/goal"}, {"value", json::parse(R"({"rect": [0, 0, 0, 5]})")}});
 	REQUIRE(ed.errors().size() == 1);
 	CHECK(ed.errors()[0].message.find("level.objective.goal.rect: a positive width and height expected") != std::string::npos);
+}
+
+TEST_CASE("editor: the object tool (Stage 146)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ed.key('B', 0, true);
+	click(ed, 1100, 540);
+	REQUIRE(ed.document()["objects"].size() == 1);
+	CHECK(ed.document()["objects"][0] == json::parse(R"({"circle": {"center": [1100.0, 540.0], "radius": 16.0}, "name": "object_1"})"));
+	CHECK(ed.errors().empty());
+	bool drawn = false;
+	for (const auto &n : ed.draw()) {
+		for (const auto &c : *n.calls) {
+			drawn = drawn || c.text == "object_1";
+		}
+	}
+	CHECK(drawn);
 }

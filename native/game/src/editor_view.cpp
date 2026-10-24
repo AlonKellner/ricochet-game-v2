@@ -54,11 +54,12 @@ const Color SELECT = rgba(1, 1, 1, 0.35);
 const Color HOVER = rgba(1, 1, 1, 0.15);
 const Color GOAL = rgba(0.3, 0.95, 0.45);
 const Color DETECTOR = rgba(1.0, 0.8, 0.25, 0.85);
+const Color OBJECT = rgba(0.95, 0.6, 0.3);
 
 // An element's layers (the draw nodes' keys: ["editor", layer, index])
 enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS, L_GOALS };
 
-const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player", "goal", "detector"};
+const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object"};
 
 Call line(const V2 &a, const V2 &b, const Color &c, double w) {
 	Call k;
@@ -615,6 +616,27 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 			command({{"op", "set"}, {"path", "/player/start"}, {"value", p}});
 			return;
 		}
+		case Tool::Object: { // one click: a pullable object there
+			json os = doc_.value("objects", json::array());
+			if (!os.is_array()) {
+				os = json::array();
+			}
+			std::string name;
+			for (int n = 1;; n++) {
+				name = "object_" + std::to_string(n);
+				bool used = false;
+				for (const json &o : os) {
+					used = used || (o.is_object() && o.value("name", "") == name);
+				}
+				if (!used) {
+					break;
+				}
+			}
+			os.push_back({{"name", name}, {"circle", {{"center", snap(mouse_, mods, nullptr)}, {"radius", 16.0}}}});
+			const json r = command({{"op", "set"}, {"path", "/objects"}, {"value", os}});
+			hint_ = r.value("ok", false) ? name + " placed (a pull brings it back)" : r.value("error", std::string());
+			return;
+		}
 		default:
 			place(snap(mouse_, mods, nullptr), mods);
 	}
@@ -675,6 +697,7 @@ void Editor::key(int code, unsigned mods, bool down) {
 		case 'P': tool_ = Tool::Player; clicks_.clear(); return;
 		case 'O': tool_ = Tool::Goal; clicks_.clear(); return;
 		case 'D': tool_ = Tool::Detector; clicks_.clear(); return;
+		case 'B': tool_ = Tool::Object; clicks_.clear(); return;
 		case 'G': grid_ = !grid_; return;
 		case 'F': frame_all(); return;
 		case KeyDelete:
@@ -774,7 +797,7 @@ std::vector<Editor::Row> Editor::rows() const {
 	};
 	add({Row::Header, "Ricochet level editor", "", "", std::nullopt, "", -1, 0});
 	add({Row::Buttons, "", "", "undo (ctrl+z), redo (ctrl+shift+z), save (ctrl+s), play (F5)", std::nullopt, "", -1, 0});
-	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector", std::nullopt,
+	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector, B an object", std::nullopt,
 			"tool", -1, 0});
 	const json ks = kinds();
 	add({Row::Value, "place", kind_, "Tab / shift+Tab / 1-9: what the line, arc and circle tools place", std::nullopt, "place", -1, 0});
@@ -834,6 +857,7 @@ std::vector<Editor::Row> Editor::rows() const {
 		field("goal", "/objective/goal", "{\"rect\": [x, y, w, h]} or {\"circle\": ...}: reach it to win (O)");
 		field("requires", "/objective/requires", "[{\"key\", \"values\"}]: the goal opens when they hold");
 		field("detectors", "/detectors", "[{name, region | segment, mode, flag?}]: they write flags (D)");
+		field("objects", "/objects", "[{name, circle, kind, face, solid}]: bodies a pull brings back (B)");
 	}
 	y += 8;
 	add({Row::Header, errors_.empty() ? "no problems" : std::to_string(errors_.size()) + " problem(s)", "", "", std::nullopt, "", -1, 0});
@@ -869,7 +893,7 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		return opts[size_t(((k + (back ? -1 : 1)) % n + n) % n)];
 	};
 	if (r.choice == "tool") {
-		const std::string t = cycle({"select", "line", "arc", "circle", "player", "goal", "detector"}, r.value);
+		const std::string t = cycle({"select", "line", "arc", "circle", "player", "goal", "detector", "object"}, r.value);
 		run({{"op", "tool"}, {"tool", t}});
 		return;
 	}
@@ -1035,6 +1059,19 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				} else {
 					region(d.value("region", json()), DETECTOR, name);
 				}
+			}
+		}
+		if (doc_.contains("objects") && doc_["objects"].is_array()) {
+			for (const json &o : doc_["objects"]) {
+				if (!o.is_object() || !o.contains("circle") || !o["circle"].is_object() || !is_point(o["circle"].value("center", json()))) {
+					continue;
+				}
+				const V2 c = to_screen(pt(o["circle"]["center"]));
+				const double r = o["circle"].value("radius", 16.0) * zoom_;
+				const bool pullable = o.value("kind", "pullable") == "pullable";
+				g.push_back(arc(c, r, 0, TAU, pullable ? OBJECT : GRAY, 2.5));
+				g.push_back(text_at(V2::of(c.x, double(c.y) - r - 4), o.value("name", ""), pullable ? OBJECT : GRAY, 12));
+				g.back().alignment = 1;
 			}
 		}
 		out.add(L_GOALS, 0, 2, std::move(g));

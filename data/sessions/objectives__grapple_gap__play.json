@@ -1,0 +1,27 @@
+{
+ "schema": "rc-session/1",
+ "level": "objectives/grapple_gap",
+ "kind": "kinematic",
+ "steps": [
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 30
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1340.0,
+    450.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 60
+  }
+ ]
+}

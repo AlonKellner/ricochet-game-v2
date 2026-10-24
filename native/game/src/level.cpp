@@ -179,7 +179,7 @@ HitSpec hit(const json &j, const std::string &path) {
 			}
 			h.spawn_template = st;
 		}
-	} else if (h.kind != "target") {
+	} else if (h.kind != "target" && h.kind != "grapple" && h.kind != "pull") {
 		fail(path + ".kind", "unknown hit effect kind '" + h.kind + "'");
 	}
 	return h;
@@ -382,6 +382,52 @@ void parse_goals(const json &j, Level &lv) {
 			lv.detectors.push_back(std::move(det));
 		}
 	}
+	if (const json *os = opt(j, "objects")) {
+		if (!os->is_array()) {
+			fail(P + ".objects", "an array of objects expected");
+		}
+		for (size_t i = 0; i < os->size(); i++) {
+			const json &o = (*os)[i];
+			const std::string op = P + ".objects[" + std::to_string(i) + "]";
+			only_keys(o, op, {"name", "circle", "kind", "solid", "face", "label"});
+			Object ob;
+			ob.name = str(req(o, "name", op), op + ".name");
+			for (const Object &other : lv.objects) {
+				if (other.name == ob.name) {
+					fail(op + ".name", "'" + ob.name + "' names another object");
+				}
+			}
+			const json &c = req(o, "circle", op);
+			only_keys(c, op + ".circle", {"center", "radius"});
+			ob.center = vec(req(c, "center", op + ".circle"), op + ".circle.center");
+			if (const json *r = opt(c, "radius")) {
+				ob.radius = num(*r, op + ".circle.radius");
+			}
+			if (!(ob.radius > 0)) {
+				fail(op + ".circle.radius", "a positive radius expected");
+			}
+			if (const json *v = opt(o, "kind")) {
+				const std::string k = str(*v, op + ".kind");
+				if (k != "pullable" && k != "static") {
+					fail(op + ".kind", "pullable or static expected");
+				}
+				ob.pullable = k == "pullable";
+			}
+			if (const json *v = opt(o, "solid")) {
+				ob.solid = boolean(*v, op + ".solid");
+			}
+			if (const json *v = opt(o, "face")) {
+				ob.face = str(*v, op + ".face");
+				if (ob.face != "wall" && ob.face != "mirror" && ob.face != "pass") {
+					fail(op + ".face", "wall, mirror or pass expected");
+				}
+			}
+			if (const json *v = opt(o, "label")) {
+				ob.label = str(*v, op + ".label");
+			}
+			lv.objects.push_back(std::move(ob));
+		}
+	}
 }
 
 Level parse_v1(const json &j) {
@@ -534,6 +580,27 @@ Level parse_level(std::string_view json_text) {
 		throw LevelError(std::string("not JSON: ") + e.what());
 	}
 	return parse_level_json(j);
+}
+
+SurfaceSpec object_spec(const Object &o, const V2 &center) {
+	SurfaceSpec s;
+	s.full_circle = true;
+	s.center = center;
+	s.radius = o.radius;
+	s.player_solid = o.solid;
+	SideSpec side;
+	side.effect.type = o.face == "mirror" ? "reflection" : o.face == "pass" ? "pass" : "terminal";
+	side.effect.raw = {{"type", side.effect.type}};
+	side.interactive = o.pullable || o.face == "mirror";
+	if (o.pullable) {
+		HitSpec h;
+		h.kind = "pull";
+		h.raw = {{"kind", "pull"}};
+		side.hits.push_back(h);
+	}
+	s.left = side;
+	s.right = side;
+	return s;
 }
 
 bool Region::contains(const V2 &p) const {

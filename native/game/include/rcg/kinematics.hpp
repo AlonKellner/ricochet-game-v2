@@ -64,6 +64,13 @@ struct Input {
 
 // One physics tick (player.gd's _physics_process: the velocity, then the move).
 void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders);
+// Stage 146: the same for a body of any radius (step() is step_body with RADIUS).
+void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, double radius);
+// Stage 146: how far (0..1) a circle of that radius moves along (dx, dy) before
+// it first touches a collider (1: freely); what it touches only while approaching.
+double sweep_fraction(double px, double py, double dx, double dy, const std::vector<Collider> &colliders, double radius);
+// Stage 146: a full circle (a body, the player, as others collide with them).
+Collider circle_collider(const V2 &center, double r);
 
 // The distance from a point to a collider and the unit normal from it toward the point.
 double distance(const Collider &c, double px, double py, double &nx, double &ny);

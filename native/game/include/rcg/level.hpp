@@ -127,6 +127,19 @@ struct Region {
 	bool contains(const V2 &p) const; // the boundary included
 };
 
+// rc-level/2 (Stage 146): an object (GAME_SPEC 25.5) -- a circle body: pullable
+// (it falls under gravity, and a pull brings it back along the arrow's path) or
+// static; its surface (a full circle) takes the next ids after the level's.
+struct Object {
+	std::string name;
+	V2 center;
+	double radius = 16.0;
+	bool pullable = true;
+	bool solid = true;          // the player collides with it
+	std::string face = "wall";  // its sides: wall (terminal) | mirror (reflection) | pass
+	std::string label = "Object";
+};
+
 // rc-level/2: the level's goal (GAME_SPEC 3.2): the player inside the region
 // while every condition holds (the presence form, GAME_SPEC 9.6) wins.
 struct Objective {
@@ -176,7 +189,11 @@ struct Level {
 	// rc-level/2: the goal (none: the level is won when every target is hit), the detectors
 	std::optional<Objective> objective;
 	std::vector<Detector> detectors;
+	std::vector<Object> objects; // Stage 146
 };
+
+// Stage 146: an object's surface (a full circle at `center`, its sides by its face, a pull on them if pullable).
+SurfaceSpec object_spec(const Object &o, const V2 &center);
 
 // The level in a JSON text (rc-level/1 or rc-level/2). Throws LevelError.
 Level parse_level(std::string_view json_text);
