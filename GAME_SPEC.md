@@ -42,7 +42,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done |
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
-| Level editor: native (`rcg::Editor`, the C API's `rc_editor_*`), its tools, panel, validation and play-test; the Python host (tkinter) (§19.2; docs/EDITOR.md, docs/TDD_48, Stage 143) | Done (the Godot host: next) |
+| Level editor: native (`rcg::Editor`, the C API's `rc_editor_*`), its tools, panel, validation and play-test; the Python host (tkinter) and the Godot host (`RicochetEditor`) (§19.2; docs/EDITOR.md, docs/TDD_48-49, Stages 143-144) | Done |
 | Menus, HUD, save system | Planned |
 
 *Historical:* versions v0.7.0–v1.6.0 of the legacy `Tracer` (three-tier endpoint detection, boundless tracer, Hermitian carrier transform, DRY refactor) were superseded by the beam solver and deleted in Stage 84. See `docs/TDD_09_PRECISION_INTEGRATION.md`.
@@ -1879,7 +1879,7 @@ not part of the format.
 
 ### 19.2 Editor requirements
 
-> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter); Godot next. Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
+> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
 
 The level editor must support:
 
@@ -2724,4 +2724,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.55.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.56.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

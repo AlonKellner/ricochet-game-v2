@@ -237,7 +237,8 @@ tools, its inspector panel and its draw list. A host keeps no editor state:
 5. `rc_editor_command(ed, json, n, &result, &length)`: every action as JSON (docs/EDITOR.md's table), for
    menus, scripts and tests.
 
-The reference host is `tests/host_py/rc_editor_tk.py` (tkinter, about 300 lines); the C one is
+The reference hosts are `tests/host_py/rc_editor_tk.py` (tkinter, about 300 lines) and Godot's `RicochetEditor`
+(`native/hosts/godot/ricochet_editor.cpp`, which paints through the game's layers); the C one is
 `native/tests/capi/smoke.c`'s editor block.
 
 ## Errors and logging

@@ -13,7 +13,19 @@ run it:
   python3 tests/host_py/rc_editor_tk.py         # a new level (the first save asks where)
   ```
 
-- **Godot** (`engines/godot/scenes/editor/editor.tscn`): the next stage.
+- **Godot** (`RicochetEditor`, `native/hosts/godot/ricochet_editor.cpp`; the scene
+  `engines/godot/scenes/editor/editor.tscn`):
+
+  ```bash
+  make native                                   # the extension and the data copy
+  godot --path engines/godot res://scenes/editor/editor.tscn -- --level=res://data/levels/test_levels/flag_switches.json
+  godot --path engines/godot res://scenes/editor/editor.tscn    # a new level
+  ```
+
+  In the Godot editor, set the node's `level_path` (and `save_path`, optional) and run the scene (F6). A level
+  under `res://data` is `make native`'s copy of the repository's `data/`, so a save writes the original
+  (`data/levels/...`), never the copy. A new level saves to `data/levels/untitled.json`. Play-testing runs a
+  `RicochetGame` child on the document.
 
 ## The window
 
