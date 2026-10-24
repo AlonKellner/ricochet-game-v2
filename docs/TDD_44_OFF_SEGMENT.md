@@ -17,7 +17,7 @@ that their debugging dots go with them.
 | 139.4 | The native walker: the pre-root filter (`exact::Line::misses_segment`, `misses_circle`), the silence, the margin carry, the roots' source; the tests | Done |
 | 139.5 | `make regen`: the fixtures and the corpus | Done |
 | 139.6 | The judge (`stage139_judge.py`), the user's approval, the re-bless | Done (approved 2026-10-24; re-blessed: sweeps 120981 slots, fixtures 54, corpus 396 fields, 44 sessions, 198 GUT rows in 15 files) |
-| 139.7 | The measurement (regions, casts' time), docs, `make gates`, sign-off | Measured; gates and sign-off pending |
+| 139.7 | The measurement (regions, casts' time), docs, `make gates`, sign-off | Done (`make gates` ok; the user's interactive sign-off 2026-10-24) |
 
 ## 139.1 The rule
 
