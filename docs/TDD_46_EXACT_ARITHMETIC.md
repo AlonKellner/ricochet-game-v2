@@ -14,7 +14,7 @@ the GUT rows and `rc_tool regions`' 256 hashes are the proof.
 | 141.2 | BigFloat without the spare copies: `exact::mul`/`add` with the result's precision passed, `sub` without `neg()`, `add` without `place`'s buffer | Done |
 | 141.3 | Fewer products: the duplicated `mx my + my mx` (three sites), `gc_through`'s shared minors | Done |
 | 141.4 | The flags' lookups compared in place, the canonical key kept with the value; the keys' interning deferred | Done |
-| 141.5 | The measurement after, docs, `make gates`, sign-off | Measured; gates and sign-off pending |
+| 141.5 | The measurement after, docs, `make gates`, sign-off | Done (`make gates` ok; the user's interactive sign-off 2026-10-24) |
 
 ## 141.0 The profile
 
