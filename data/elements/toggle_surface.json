@@ -1,0 +1,115 @@
+{
+ "doc": "A toggle surface: the hit removes it, and the arrow passing where it was brings it back (a twin pass-through stands in its place while it is gone). Flag el:<name>:off, kept across shots.",
+ "label": "Toggle",
+ "params": {
+  "face": {
+   "default": "wall",
+   "doc": "its sides' path effect",
+   "enum": ["wall", "mirror", "pass"]
+  },
+  "solid": {
+   "default": true,
+   "doc": "the player collides with it while it is there"
+  }
+ },
+ "priority": 51,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "mirror": {
+       "type": "reflection"
+      },
+      "pass": {
+       "type": "pass"
+      },
+      "wall": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": [
+     {
+      "key": "el:${name}:off",
+      "kind": "state",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": "$solid",
+   "presence": [
+    {
+     "key": "el:${name}:off",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "mirror": {
+       "type": "reflection"
+      },
+      "pass": {
+       "type": "pass"
+      },
+      "wall": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": [
+     {
+      "key": "el:${name}:off",
+      "kind": "state",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "interactive": true
+   }
+  },
+  {
+   "label": "ToggleGone",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "el:${name}:off",
+      "kind": "state",
+      "op": "set",
+      "value": false
+     }
+    ],
+    "interactive": false
+   },
+   "player_solid": false,
+   "presence": [
+    {
+     "key": "el:${name}:off",
+     "values": ["true"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "el:${name}:off",
+      "kind": "state",
+      "op": "set",
+      "value": false
+     }
+    ],
+    "interactive": false
+   }
+  }
+ ]
+}

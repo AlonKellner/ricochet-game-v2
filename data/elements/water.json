@@ -1,0 +1,44 @@
+{
+ "doc": "Water: an arrow passing it is put out (its fire flag unset to false); the player passes it too.",
+ "label": "Water",
+ "params": {
+  "fire": {
+   "default": "shot:fire",
+   "doc": "the fire's flag"
+  }
+ },
+ "priority": 55,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "$fire",
+      "kind": "state",
+      "op": "set",
+      "value": false
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "$fire",
+      "kind": "state",
+      "op": "set",
+      "value": false
+     }
+    ],
+    "interactive": true
+   }
+  }
+ ]
+}

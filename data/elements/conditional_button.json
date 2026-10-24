@@ -1,0 +1,90 @@
+{
+ "doc": "A button only a charged (or burning, frosted...) arrow presses: while `when` is true the hit sets or toggles `flag`; otherwise it is a wall.",
+ "example": {
+  "flag": "switch"
+ },
+ "label": "CondButton",
+ "params": {
+  "flag": {
+   "doc": "the flag it writes",
+   "type": "string"
+  },
+  "op": {
+   "default": "set",
+   "doc": "set or toggle",
+   "enum": ["set", "toggle"]
+  },
+  "value": {
+   "default": true,
+   "doc": "the value set",
+   "type": "any"
+  },
+  "when": {
+   "default": "shot:charge",
+   "doc": "the flag the arrow must carry"
+  }
+ },
+ "priority": 58,
+ "surfaces": [
+  {
+   "left": null,
+   "player_solid": false,
+   "resolver": {
+    "key": "$when",
+    "table": [
+     [
+      "DEFAULT",
+      {
+       "left": {
+        "effect": {
+         "type": "terminal"
+        },
+        "interactive": false
+       },
+       "right": {
+        "effect": {
+         "type": "terminal"
+        },
+        "interactive": false
+       }
+      }
+     ],
+     [
+      "true",
+      {
+       "left": {
+        "effect": {
+         "type": "terminal"
+        },
+        "hits": [
+         {
+          "key": "$flag",
+          "kind": "state",
+          "op": "$op",
+          "value": "$value"
+         }
+        ],
+        "interactive": true
+       },
+       "right": {
+        "effect": {
+         "type": "terminal"
+        },
+        "hits": [
+         {
+          "key": "$flag",
+          "kind": "state",
+          "op": "$op",
+          "value": "$value"
+         }
+        ],
+        "interactive": true
+       }
+      }
+     ]
+    ]
+   },
+   "right": null
+  }
+ ]
+}

@@ -172,6 +172,8 @@ public:
 	// provisional ones while its climb runs), how long the shown exact preview's
 	// climb took (0: computed in its frame), and the path's painter for steps
 	const std::vector<rc::TraceStep> &preview_steps() const { return shown().merged; }
+	// Stage 147 (tests, tools): the preview's physical trace -- the path a shot now takes (none: no trace)
+	const rc::TracePath *physical_trace() const { return preview_.pair ? &preview_.pair->physical : nullptr; }
 	double preview_seconds() const { return provisional_ ? 0.0 : preview_climb_seconds_; }
 	void paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<render::Call> &out, double dash_phase = 0.0,
 		const std::vector<rc::sweep::EventDot> *dots = nullptr) const;

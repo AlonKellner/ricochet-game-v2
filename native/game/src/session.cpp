@@ -681,6 +681,16 @@ void Session::land() {
 	sync_nodes();
 	rc::Flags kept = l.flags;
 	kept.erase("ghost");
+	// Stage 147: the per-shot flags (shot:*) last one shot, like ghost
+	std::vector<std::string> per_shot;
+	for (const auto &[k, v] : kept.entries()) {
+		if (k.rfind("shot:", 0) == 0) {
+			per_shot.push_back(k);
+		}
+	}
+	for (const std::string &k : per_shot) {
+		kept.erase(k);
+	}
 	set_flags(kept);
 	targets_.clear();
 	for (const auto &[k, v] : flags_.entries()) {

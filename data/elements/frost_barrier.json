@@ -1,0 +1,44 @@
+{
+ "doc": "A frost barrier: an arrow passing it is frosted for the rest of the shot (flag shot:frost, or `frost`); the barrier stays.",
+ "label": "Frost",
+ "params": {
+  "frost": {
+   "default": "shot:frost",
+   "doc": "the frost's flag"
+  }
+ },
+ "priority": 52,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "$frost",
+      "kind": "state",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "$frost",
+      "kind": "state",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "interactive": true
+   }
+  }
+ ]
+}

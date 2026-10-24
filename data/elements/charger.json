@@ -1,0 +1,44 @@
+{
+ "doc": "A charger: an arrow passing it is charged for the rest of the shot (flag shot:charge, or `charge`); an insulator (water with fire=shot:charge) discharges it.",
+ "label": "Charger",
+ "params": {
+  "charge": {
+   "default": "shot:charge",
+   "doc": "the charge's flag"
+  }
+ },
+ "priority": 57,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "$charge",
+      "kind": "state",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "hits": [
+     {
+      "key": "$charge",
+      "kind": "state",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "interactive": true
+   }
+  }
+ ]
+}
