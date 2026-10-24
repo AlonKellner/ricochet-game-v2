@@ -139,16 +139,18 @@ def main():
     assert flags_after(f, 3) == {chan: "pending"}, flags_after(f, 3)
     fx.append(f)
 
-    # N2: an absent surface blocks no junction. Two collinear mirrors share the
-    # endpoint (500, 0); the beam hits it exactly: both present -> fully
-    # blocked, reflects; the lower one absent -> an open endpoint, passes
+    # N2: an absent surface holds no point. Two collinear mirrors share the
+    # endpoint (500, 0); the beam hits it exactly: both present -> a shared point
+    # of two consequences stops the arrow, nothing fires (Stage 138); the lower
+    # one absent -> a lone endpoint, the beam grazes it
     upper = line(1, (500, -300), (500, 0), REFL, REFL)
     lower = present_when(line(2, (500, 0), (500, 300), REFL, REFL), ("b", ["true"]))
     for name, flags in (("presence_junction_both", {"b": True}), ("presence_junction_absent", {})):
         f = fixture(name, [upper, lower] + walls, (100.0, 0.0), direction=(1.0, 0.0), flags=flags)
         first = f["expected"][0]
-        assert first["kind"] == "hit" and first["applied"] == (name == "presence_junction_both"), kinds(f)
-        assert first["fired"] == (name == "presence_junction_both"), first
+        both = name == "presence_junction_both"
+        assert first["kind"] == "hit" and first["applied"] == both and first["terminal"] == both, kinds(f)
+        assert not first["fired"], first
         fx.append(f)
 
     # N2: a plan entry on an absent surface is never consumed (no effect, no

@@ -2483,7 +2483,7 @@
      "surface_id": 1,
      "side": "RIGHT",
      "applied": true,
-     "terminal": false,
+     "terminal": true,
      "on_segment": true,
      "rehit": false,
      "x": "500.0000000000000000000000000000000000000",
@@ -2492,23 +2492,7 @@
      "flags": {
       "b": true
      },
-     "fired": true
-    },
-    {
-     "kind": "hit",
-     "surface_id": 13,
-     "side": "RIGHT",
-     "applied": true,
-     "terminal": true,
-     "on_segment": true,
-     "rehit": false,
-     "x": "-1000.000000000000000000000000000000000000",
-     "y": "0.0",
-     "state": false,
-     "flags": {
-      "b": true
-     },
-     "fired": true
+     "fired": false
     }
    ],
    "targets": []

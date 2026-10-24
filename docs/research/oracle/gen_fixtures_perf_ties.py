@@ -4,7 +4,8 @@ On an exact line, adjacent crossings of two line carriers that meet the line
 at one point share one parameter and the id orders them (_concurrent_ties).
 The same holds on a circular beam whose exact circle passes the carriers'
 common point (_concurrent_ties_gc): the beam's exact generalized circle is
-carried through the maps as the exact line is.
+carried through the maps as the exact line is. (Stage 138: the two crossings at
+X are two surfaces with a consequence at one point -- the arrow stops there.)
 
 The scene: an inversion circle centred at (500, 500), radius 100. A straight
 shot along y = 450 becomes, after the inversion, the circle centred at
@@ -64,9 +65,10 @@ def main():
         assert at_x == expect_at_x, (name, at_x, [(e["kind"], e["surface_id"]) for e in f["expected"]])
         fx.append(f)
 
-    # the lower id first, both ways round
-    case("circle_beam_tie_falling_low", [inv, line(2, *FALLING, W2, W2), line(3, *RISING, W3, W3)] + walls, [2, 3])
-    case("circle_beam_tie_rising_low", [inv, line(2, *RISING, W2, W2), line(3, *FALLING, W3, W3)] + walls, [2, 3])
+    # the tie is exact both ways round -- Stage 138 (the user): two surfaces with a
+    # consequence hold X, so the arrow stops there, the event the lowest id's
+    case("circle_beam_tie_falling_low", [inv, line(2, *FALLING, W2, W2), line(3, *RISING, W3, W3)] + walls, [2])
+    case("circle_beam_tie_rising_low", [inv, line(2, *RISING, W2, W2), line(3, *FALLING, W3, W3)] + walls, [2])
     # control: the falling line moved by 1/16 px along x (no common point on the
     # beam): one hit at X, the other a little apart, in walk order
     moved = ((550.0625, 450), (650.0625, 350))

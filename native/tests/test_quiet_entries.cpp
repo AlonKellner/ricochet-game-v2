@@ -82,8 +82,9 @@ TEST_CASE("frame entries: the preview's two paths agree up to the cursor") {
 	int pairs = 0;
 	for (const ojson &fx : fxs["fixtures"]) {
 		const std::string name = fx["name"].get<std::string>();
-		if (name.rfind("different_", 0) == 0 || name.rfind("transform_", 0) == 0 || name.find("_physical") == std::string::npos) {
-			continue; // one shot per pair; the controls diverge on purpose
+		if (name.rfind("different_", 0) == 0 || name.rfind("transform_", 0) == 0 || name.rfind("two_writes_one_entry", 0) == 0 ||
+				name.find("_physical") == std::string::npos) {
+			continue; // one shot per pair; the controls diverge on purpose (Stage 138: the shared point stops the physical walk)
 		}
 		Tracer tracer;
 		tracer.set_defs(defs_from_json(fx["surfaces"]));
@@ -96,5 +97,5 @@ TEST_CASE("frame entries: the preview's two paths agree up to the cursor") {
 		CHECK_MESSAGE(pair->cursor_point_agrees, name); // (Stage 134: by significant events)
 		pairs++;
 	}
-	CHECK(pairs == 8);
+	CHECK(pairs == 7);
 }

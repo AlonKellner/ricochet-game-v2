@@ -115,14 +115,75 @@ def test_planned_reaches_cursor_via_mirror():
     assert abs(c.point - mp.mpc(0, 50)) < mp.mpf(10) ** -40
 
 
-def test_y_junction_fires_lower_id():
-    # two mirror segments meeting at (100, 0); beam aimed exactly at the vertex
+TOGGLE_A = {"type": "pass", "interactive": False, "states": [{"key": "a", "op": "toggle", "value": True}]}
+TOGGLE_B = {"type": "pass", "interactive": False, "states": [{"key": "b", "op": "toggle", "value": True}]}
+
+
+def test_corner_stops_the_arrow():
+    # Stage 138: two mirror segments meeting at (100, 0); the beam aimed exactly at
+    # the vertex -- a shared point: no mirror owns the hit, the arrow stops there
+    # (the event the lowest id's), in the physical and the planned walk alike
     a = line(1, (100, 0), (150, -100), REFL, REFL)
     b = line(2, (100, 0), (150, 100), REFL, REFL)
     w = T.trace_physical_direction([a, b], (0, 0), mp.mpc(1, 0))
     first = w.events[0]
     assert first.point == mp.mpc(100, 0)
-    assert first.surface_id == 1 and first.applied
+    assert (first.surface_id, first.applied, first.terminal) == (1, True, True)
+    assert w.done and len(w.events) == 1
+    # the planned walk computes its entries' surfaces alone: it follows its plan
+    # there (the walks diverge; a cursor beyond is outside the region)
+    p = T.trace_mode_direction([a, b], (0, 0), mp.mpc(1, 0), [(2, "RIGHT")], P((300, 0)), T.PLANNED)
+    assert (p.events[0].kind, p.events[0].surface_id, p.events[0].applied, p.events[0].terminal) == ("hit", 2, True, False)
+
+
+def test_t_junction_stops_the_arrow():
+    # a mirror's endpoint on a wall's interior: the beam through that point stops,
+    # the event the wall's (the lowest id among the surfaces that do not pass)
+    wall = line(1, (100, -500), (100, 500), TERM, TERM)
+    m = line(2, (100, 0), (300, 50), REFL, REFL)
+    w = T.trace_physical_direction([wall, m], (0, 0), mp.mpc(1, 0))
+    assert [(e.surface_id, e.applied, e.terminal) for e in w.events] == [(1, True, True)]
+    # the same with the ids swapped: the hit is the mirror's, terminal all the same
+    w2 = T.trace_physical_direction([line(2, (100, -500), (100, 500), TERM, TERM), line(1, (100, 0), (300, 50), REFL, REFL)], (0, 0), mp.mpc(1, 0))
+    assert [(e.surface_id, e.applied, e.terminal) for e in w2.events] == [(1, True, True)]
+
+
+def test_crossing_stops_the_physical_walk():
+    # a mirror and a wall crossing at (100, 0), the beam exactly through the crossing
+    m = line(1, (100, -100), (100, 100), REFL, REFL)
+    wall = line(2, (0, -50), (200, 50), TERM, TERM)
+    w = T.trace_physical_direction([m, wall], (0, 0), mp.mpc(1, 0))
+    assert [(e.surface_id, e.applied, e.terminal) for e in w.events] == [(1, True, True)]
+    p = T.trace_mode_direction([m, wall], (0, 0), mp.mpc(1, 0), [(1, "RIGHT")], P((0, 50)), T.PLANNED)
+    assert (p.events[0].surface_id, p.events[0].applied, p.events[0].terminal) == (1, True, False) and p.plan_index == 1
+    # a mirror crossing a pass-through surface: the mirror alone has a consequence, so it owns the hit and reflects
+    w3 = T.trace_physical_direction([m, line(2, (0, -50), (200, 50), PASS, PASS)], (0, 0), mp.mpc(1, 0))
+    assert [(e.surface_id, e.applied, e.terminal) for e in w3.events if e.kind == "hit"][:1] == [(1, True, False)]
+    # a mirror crossing a toggler: two consequences at one point -- the arrow stops, nothing fires
+    w4 = T.trace_physical_direction([m, line(2, (0, -50), (200, 50), TOGGLE_B, TOGGLE_B)], (0, 0), mp.mpc(1, 0))
+    assert [(e.surface_id, e.applied, e.terminal, e.state) for e in w4.events] == [(1, True, True, False)] and w4.flags == {}
+
+
+def test_shared_point_of_two_togglers_stops_the_arrow():
+    # two togglers crossing at (100, 0): two consequences at one point, no owner --
+    # the arrow stops there and neither state change fires
+    ta = line(1, (100, -100), (100, 100), TOGGLE_A, TOGGLE_A)
+    tb = line(2, (0, -50), (200, 50), TOGGLE_B, TOGGLE_B)
+    wall = line(3, (400, -500), (400, 500), TERM, TERM)
+    w = T.trace_physical_direction([ta, tb, wall], (0, 0), mp.mpc(1, 0))
+    assert [(e.surface_id, e.applied, e.terminal, e.state) for e in w.events] == [(1, True, True, False)]
+    assert w.flags == {}
+    # a toggler's endpoint on a wall: the same
+    w2 = T.trace_physical_direction([line(1, (100, -500), (100, 500), TERM, TERM), line(2, (100, 0), (300, 50), TOGGLE_A, TOGGLE_A)], (0, 0), mp.mpc(1, 0))
+    assert [(e.surface_id, e.terminal, e.state) for e in w2.events] == [(1, True, False)] and w2.flags == {}
+
+
+def test_lone_endpoint_grazes():
+    # Stage 138 keeps the graze: an endpoint no other surface holds fires nothing
+    m = line(1, (100, 0), (100, 100), REFL, REFL)
+    wall = line(2, (400, -500), (400, 500), TERM, TERM)
+    w = T.trace_physical_direction([m, wall], (0, 0), mp.mpc(1, 0))
+    assert [(e.surface_id, e.applied) for e in w.events if e.kind == "hit"] == [(1, False), (2, True)]
 
 
 def test_partial_blockage_does_not_leak():
@@ -1230,8 +1291,10 @@ def test_gc_maps_carry_points_onto_the_image():
 
 
 def test_circle_beam_concurrent_crossings_tie_by_id():
-    """A circular beam through the common point of two line carriers: both hits
-    there, in id order (as on an exact line), whichever id each line has."""
+    """A circular beam through the common point of two line carriers: the two
+    crossings tie there exactly (as on an exact line), whichever id each line
+    has -- Stage 138: two state-writing lines at one point are two consequences,
+    so the arrow stops there, the event the lowest id's, and neither writes."""
     walls = [line(10 + i, a, b, TERM, TERM) for i, (a, b) in enumerate(
         [((-1000, -1000), (2000, -1000)), ((2000, -1000), (2000, 2000)), ((2000, 2000), (-1000, 2000)), ((-1000, 2000), (-1000, -1000))])]
     falling, rising = ((550, 450), (650, 350)), ((500, 350), (700, 450))
@@ -1239,8 +1302,9 @@ def test_circle_beam_concurrent_crossings_tie_by_id():
         # (Stage 134: lines that change a state -- candidates; a pass line is never computed)
         s = [_gc_scene_circle(1, (500, 500), 100), line(2, *first, _writes("a", 1), _writes("a", 1)), line(3, *second, _writes("b", 1), _writes("b", 1))] + walls
         w = T.trace_physical_direction(s, (200.0, 450.0), mp.mpc(1, 0))
-        at_x = [e.surface_id for e in w.events if e.kind == "hit" and abs(e.point - mp.mpc(600, 400)) < mp.mpf("1e-20")]
-        assert at_x == [2, 3], at_x
+        at_x = [(e.surface_id, e.terminal, e.state) for e in w.events if e.kind == "hit" and abs(e.point - mp.mpc(600, 400)) < mp.mpf("1e-20")]
+        assert at_x == [(2, True, False)], at_x
+        assert w.flags == {}
 
 
 # ---------------------------------------------------------------- Stage 111: the realization by the first entry
