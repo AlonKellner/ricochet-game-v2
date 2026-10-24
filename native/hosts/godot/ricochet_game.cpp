@@ -6,6 +6,7 @@
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/dir_access.hpp>
 #include <godot_cpp/classes/font.hpp>
+#include <godot_cpp/classes/geometry2d.hpp>
 #include <godot_cpp/classes/input.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
@@ -46,6 +47,11 @@ void append(std::string &blob, const T &v) {
 
 Color color_at(const float *c) { return Color(c[0], c[1], c[2], c[3]); }
 
+// A polygon Godot can fill: one its triangulation accepts. A degenerate one (a
+// sliver, coincident points: the arrow's head at some frame times) fills
+// nothing and makes canvas_item_add_polygon report an error; it is skipped.
+bool fillable(const PackedVector2Array &pts) { return pts.size() >= 3 && !Geometry2D::get_singleton()->triangulate_polygon(pts).is_empty(); }
+
 } // namespace
 
 // ---------------------------------------------------------------- RicochetLayer
@@ -67,8 +73,16 @@ void RicochetLayer::_draw() {
 		switch (k.kind) {
 			case RC_DRAW_LINE: draw_line(c.points[0], c.points[1], col, width); break;
 			case RC_DRAW_ARC: draw_arc(c.points[0], float(k.radius), float(k.start_angle), float(k.end_angle), k.arc_point_count, col, width); break;
-			case RC_DRAW_POLYGON: draw_polygon(c.points, c.colors); break;
-			case RC_DRAW_COLORED_POLYGON: draw_colored_polygon(c.points, col); break;
+			case RC_DRAW_POLYGON:
+				if (fillable(c.points)) {
+					draw_polygon(c.points, c.colors);
+				}
+				break;
+			case RC_DRAW_COLORED_POLYGON:
+				if (fillable(c.points)) {
+					draw_colored_polygon(c.points, col);
+				}
+				break;
 			case RC_DRAW_CIRCLE: draw_circle(c.points[0], float(k.radius), col); break;
 			case RC_DRAW_RECT: draw_rect(Rect2(c.points[0], c.points[1]), col); break;
 			case RC_DRAW_POLYLINE: draw_polyline(c.points, col, width); break;
@@ -83,9 +97,11 @@ void RicochetLayer::_draw() {
 				break;
 			case RC_DRAW_POLYGON2D:
 				// the player's Polygon2D: its polygon rotated in the node's frame
-				draw_set_transform(Vector2(), float(k.rotation), Vector2(1, 1));
-				draw_colored_polygon(c.points, col);
-				draw_set_transform(Vector2(), 0.0f, Vector2(1, 1));
+				if (fillable(c.points)) {
+					draw_set_transform(Vector2(), float(k.rotation), Vector2(1, 1));
+					draw_colored_polygon(c.points, col);
+					draw_set_transform(Vector2(), 0.0f, Vector2(1, 1));
+				}
 				break;
 			default: break; // RC_DRAW_LABEL: the HUD's Label (RicochetGame)
 		}

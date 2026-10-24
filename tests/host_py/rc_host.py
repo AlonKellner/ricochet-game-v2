@@ -60,7 +60,8 @@ class Frame(ctypes.Structure):
                 ("bounds_w", ctypes.c_float), ("bounds_h", ctypes.c_float),
                 ("display_mode", ctypes.c_int32),
                 ("gravity_x", ctypes.c_float), ("gravity_y", ctypes.c_float),
-                ("region_pending", ctypes.c_int32), ("preview_exact", ctypes.c_int32)]  # 1.2
+                ("region_pending", ctypes.c_int32), ("preview_exact", ctypes.c_int32),  # 1.2
+                ("won", ctypes.c_int32)]  # 1.9
 
 
 class DrawCmd(ctypes.Structure):

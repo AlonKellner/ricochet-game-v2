@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 8
+#define RC_API_VERSION_MINOR 9
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -150,6 +150,7 @@ typedef struct rc_frame {
 	float gravity_x, gravity_y;
 	int32_t region_pending; /* 1.2 (async): a newer visibility region is being computed */
 	int32_t preview_exact;  /* 1.2 (async): 0 while the path shown is provisional (its exact climb runs) */
+	int32_t won;            /* 1.9: the level is won (its goal reached, or every target hit; latched until undo or reset) */
 } rc_frame;
 RC_API rc_status rc_game_frame(const rc_game *game, rc_frame *out);
 

@@ -1,0 +1,39 @@
+{
+ "schema": "rc-session/1",
+ "level": "objectives/button_door",
+ "kind": "kinematic",
+ "steps": [
+  {
+   "actions": [
+    "move_right"
+   ],
+   "op": "hold",
+   "ticks": 120
+  },
+  {
+   "at": [
+    810.0,
+    300.0
+   ],
+   "op": "cursor"
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "actions": [
+    "move_right"
+   ],
+   "op": "hold",
+   "ticks": 100
+  },
+  {
+   "action": "undo",
+   "op": "key"
+  },
+  {
+   "action": "reset",
+   "op": "key"
+  }
+ ]
+}

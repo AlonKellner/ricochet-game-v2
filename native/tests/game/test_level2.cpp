@@ -98,14 +98,22 @@ TEST_CASE("rc-level/2: every level lowers to its committed lowering, and migrate
 		CHECK(doc["schema"] == "rc-level/2");
 		const std::string lowered = read_text(ROOT / "bench" / "lowered" / (flat(rel) + ".json"));
 		CHECK(rcg::canonical(rcg::lower_level(doc).level) == lowered);
-		CHECK(rcg::canonical(rcg::migrate_level(json::parse(lowered))) == text);
+		// every level: migrating its lowering gives elements that lower to the same surfaces
+		const json migrated = rcg::migrate_level(json::parse(lowered));
+		CHECK(rcg::canonical(rcg::lower_level(migrated).level) == lowered);
+		// a level Stage 142 migrated: exactly itself (a level written in rc-level/2 has names and
+		// parameters of its author's, which surfaces do not tell; the lowering leaves out the
+		// goal, the detectors, the flags and the templates)
+		if (rel.generic_string().rfind("objectives/", 0) != 0) {
+			CHECK(rcg::canonical(migrated) == text);
+		}
 		// the level read from either form builds the same surfaces
 		const json a = rcg::describe_level(rcg::build_level(rcg::parse_level(text)));
 		const json b = rcg::describe_level(rcg::build_level(rcg::parse_level(lowered)));
 		CHECK(rcg::canonical(a) == rcg::canonical(b));
 		n++;
 	}
-	CHECK(n == 37);
+	CHECK(n == 39);
 }
 
 TEST_CASE("rc-level/2: every builtin template expands to surfaces that build") {
@@ -241,7 +249,7 @@ TEST_CASE("rc-level/2: the schema is strict, and names the element") {
 		return std::string("no error");
 	};
 	CHECK(err(level_of({}, {{"colour", 1}})).find("unknown key 'colour'") != std::string::npos);
-	CHECK(err(level_of({}, {{"objective", nullptr}})).find("reserved for a later stage") != std::string::npos);
+	CHECK(err(level_of({}, {{"objects", nullptr}})).find("reserved for a later stage") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "crystal"}})})).find("level.elements[0].kind: unknown element kind 'crystal'") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "mirror"}, {"shiny", true}})})).find("unknown key 'shiny' (parameters: back, solid)") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "mirror"}, {"back", "maybe"}})})).find("level.elements[0] (mirror_1).back: one of pass, block expected")

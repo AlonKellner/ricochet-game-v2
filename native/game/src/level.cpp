@@ -275,6 +275,115 @@ SurfaceSpec surface_spec(const json &j, const std::string &path, bool in_level) 
 	return s;
 }
 
+// rc-level/2: a region {"rect": [x, y, w, h]} | {"circle": {"center", "radius"}}
+Region region(const json &j, const std::string &path) {
+	only_keys(j, path, {"rect", "circle"});
+	Region r;
+	if (const json *c = opt(j, "circle")) {
+		only_keys(*c, path + ".circle", {"center", "radius"});
+		r.circle = true;
+		r.center = vec(req(*c, "center", path + ".circle"), path + ".circle.center");
+		r.radius = num(req(*c, "radius", path + ".circle"), path + ".circle.radius");
+		if (!(r.radius > 0)) {
+			fail(path + ".circle.radius", "a positive radius expected");
+		}
+		if (opt(j, "rect")) {
+			fail(path, "a rect or a circle, not both");
+		}
+		return r;
+	}
+	r.rect = rect(req(j, "rect", path), path + ".rect");
+	if (!(r.rect.w > 0) || !(r.rect.h > 0)) {
+		fail(path + ".rect", "a positive width and height expected");
+	}
+	return r;
+}
+
+std::vector<PresenceSpec> conditions(const json &j, const std::string &path) {
+	if (!j.is_array()) {
+		fail(path, "an array of {key, values} expected");
+	}
+	std::vector<PresenceSpec> out;
+	for (size_t i = 0; i < j.size(); i++) {
+		const std::string pp = path + "[" + std::to_string(i) + "]";
+		only_keys(j[i], pp, {"key", "values"});
+		out.push_back({str(req(j[i], "key", pp), pp + ".key"), strings(req(j[i], "values", pp), pp + ".values")});
+	}
+	return out;
+}
+
+// rc-level/2's objective and detectors (not surfaces: the lowering leaves them out)
+void parse_goals(const json &j, Level &lv) {
+	const std::string P = "level";
+	if (const json *o = opt(j, "objective")) {
+		const std::string op = P + ".objective";
+		only_keys(*o, op, {"goal", "requires"});
+		Objective ob;
+		ob.goal = region(req(*o, "goal", op), op + ".goal");
+		if (const json *r = opt(*o, "requires")) {
+			ob.conditions = conditions(*r, op + ".requires");
+		}
+		lv.objective = ob;
+	}
+	if (const json *ds = opt(j, "detectors")) {
+		if (!ds->is_array()) {
+			fail(P + ".detectors", "an array of detectors expected");
+		}
+		for (size_t i = 0; i < ds->size(); i++) {
+			const json &d = (*ds)[i];
+			const std::string dp = P + ".detectors[" + std::to_string(i) + "]";
+			only_keys(d, dp, {"name", "for", "region", "segment", "flag", "mode", "value"});
+			Detector det;
+			det.name = str(req(d, "name", dp), dp + ".name");
+			for (const Detector &other : lv.detectors) {
+				if (other.name == det.name) {
+					fail(dp + ".name", "'" + det.name + "' names another detector");
+				}
+			}
+			if (const json *v = opt(d, "for")) {
+				det.target = str(*v, dp + ".for");
+				if (det.target != "player" && det.target != "object" && det.target != "any") {
+					fail(dp + ".for", "player, object or any expected");
+				}
+			}
+			const json *seg = opt(d, "segment");
+			const json *reg = opt(d, "region");
+			if ((seg == nullptr) == (reg == nullptr)) {
+				fail(dp, "a region or a segment expected");
+			}
+			if (seg != nullptr) {
+				only_keys(*seg, dp + ".segment", {"a", "b"});
+				det.segment = true;
+				det.a = vec(req(*seg, "a", dp + ".segment"), dp + ".segment.a");
+				det.b = vec(req(*seg, "b", dp + ".segment"), dp + ".segment.b");
+			} else {
+				det.region = region(*reg, dp + ".region");
+			}
+			det.flag = "det:" + det.name;
+			if (const json *v = opt(d, "flag")) {
+				det.flag = str(*v, dp + ".flag");
+			}
+			if (const json *v = opt(d, "mode")) {
+				det.mode = str(*v, dp + ".mode");
+				if (det.mode != "while" && det.mode != "enter" && det.mode != "toggle") {
+					fail(dp + ".mode", "while, enter or toggle expected");
+				}
+			}
+			if (det.segment && det.mode == "while") {
+				fail(dp + ".mode", "a segment is crossed, never inside: enter or toggle");
+			}
+			if (const json *v = opt(d, "value")) {
+				const FlagValue fv = flag_value(*v, dp + ".value");
+				det.value = std::holds_alternative<bool>(fv)		   ? rc::FlagValue(std::get<bool>(fv))
+						: std::holds_alternative<std::int64_t>(fv) ? rc::FlagValue(double(std::get<std::int64_t>(fv)))
+						: std::holds_alternative<double>(fv)	   ? rc::FlagValue(std::get<double>(fv))
+																   : rc::FlagValue(std::get<std::string>(fv));
+			}
+			lv.detectors.push_back(std::move(det));
+		}
+	}
+}
+
 Level parse_v1(const json &j) {
 	const std::string P = "level";
 	only_keys(j, P, {"schema", "name", "bounds", "gravity", "room", "player", "camera", "background", "colliders", "features",
@@ -406,6 +515,7 @@ Level parse_level_json(const json &j) {
 		}
 		throw;
 	}
+	parse_goals(j, lv);
 	for (auto it = low.flags.begin(); it != low.flags.end(); ++it) {
 		const json &v = it.value();
 		rc::FlagValue f = v.is_boolean() ? rc::FlagValue(v.get<bool>())
@@ -424,6 +534,14 @@ Level parse_level(std::string_view json_text) {
 		throw LevelError(std::string("not JSON: ") + e.what());
 	}
 	return parse_level_json(j);
+}
+
+bool Region::contains(const V2 &p) const {
+	if (circle) {
+		const double dx = double(p.x) - center.x, dy = double(p.y) - center.y;
+		return dx * dx + dy * dy <= radius * radius;
+	}
+	return p.x >= rect.x && p.y >= rect.y && p.x <= rect.x + rect.w && p.y <= rect.y + rect.h;
 }
 
 Level load_level(const std::string &path) {

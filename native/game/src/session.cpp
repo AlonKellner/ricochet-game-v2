@@ -162,7 +162,8 @@ Session::Session(const Level &level, const SessionConfig &config)
 		flags_.set(key, value);
 	}
 	// the initial checkpoint: taken before the level built its world (GameManager._ready)
-	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt};
+	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt, false, {}};
+	hud_ = hud_text(); // (Stage 145: a goal's line; "" without a goal and a plan)
 	for (const BuiltSurface &s : world_->surfaces()) {
 		for (const BuiltSide *side : s.all_sides()) {
 			for (const HitSpec &h : side ? side->hits : std::vector<HitSpec>{}) {
@@ -618,7 +619,7 @@ void Session::click(bool right) {
 }
 
 Session::Checkpoint Session::capture() const {
-	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot()};
+	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot(), won_, inside_};
 }
 
 void Session::restore(const Checkpoint &c) {
@@ -631,6 +632,8 @@ void Session::restore(const Checkpoint &c) {
 	plan_ = c.plan;
 	plan_changed();
 	targets_ = c.targets;
+	won_ = c.won;
+	inside_ = c.inside;
 	refresh_ui();
 }
 
@@ -687,6 +690,7 @@ void Session::land() {
 		}
 	}
 	pending_flags_.reset();
+	check_won();
 	// Plan entries on surfaces no longer in the world, or absent, are dropped (the ∞ entry stays)
 	const size_t before = plan_.size();
 	plan_.erase(std::remove_if(plan_.begin(), plan_.end(),
@@ -853,6 +857,91 @@ void Session::tick(const kinematics::Input &in) {
 	player_ = body.pos;
 	velocity_ = body.vel;
 	on_floor_ = body.on_floor;
+	if (!level_.detectors.empty()) {
+		detect(tick_from_, player_);
+	}
+	if (!won_ && level_.objective) {
+		check_won();
+	}
+}
+
+namespace {
+
+// The move from -> to crosses segment a-b: from strictly on one side to the
+// other side or onto the line, within the segment (a move off the line is no crossing).
+bool crosses(const V2 &from, const V2 &to, const V2 &a, const V2 &b) {
+	auto orient = [](const V2 &p, const V2 &q, const V2 &r) {
+		return (double(q.x) - p.x) * (double(r.y) - p.y) - (double(q.y) - p.y) * (double(r.x) - p.x);
+	};
+	const double d1 = orient(a, b, from), d2 = orient(a, b, to);
+	if (!((d1 < 0 && d2 >= 0) || (d1 > 0 && d2 <= 0))) {
+		return false;
+	}
+	const double d3 = orient(from, to, a), d4 = orient(from, to, b);
+	return (d3 <= 0 && d4 >= 0) || (d3 >= 0 && d4 <= 0);
+}
+
+} // namespace
+
+// Stage 145 (GAME_SPEC 24.5): a region's detector writes on entering (enter,
+// toggle) or while the player is in it (while: the value inside, unset
+// outside); a segment's when the player crosses it.
+void Session::detect(const V2 &from, const V2 &to) {
+	if (inside_.size() != level_.detectors.size()) {
+		inside_.assign(level_.detectors.size(), false);
+	}
+	rc::Flags f = flags_;
+	for (size_t i = 0; i < level_.detectors.size(); i++) {
+		const Detector &d = level_.detectors[i];
+		if (d.target == "object") {
+			continue; // (objects: a later stage)
+		}
+		const bool in = !d.segment && d.region.contains(to);
+		const bool fire = d.segment ? crosses(from, to, d.a, d.b) : in && !inside_[i];
+		if (d.mode == "while") {
+			if (in != inside_[i]) {
+				if (in) {
+					f.set(d.flag, d.value);
+				} else {
+					f.erase(d.flag);
+				}
+			}
+		} else if (fire) {
+			f = f.applied(rc::StateChangeDef{d.flag, d.mode == "toggle", d.value});
+		}
+		inside_[i] = in;
+	}
+	const int before = flags_version_;
+	set_flags(f);
+	if (flags_version_ != before) {
+		hud_ = hud_text();
+	}
+}
+
+bool Session::goal_open() const { return level_.objective && holds(level_.objective->conditions, flags_); }
+
+void Session::check_won() {
+	if (won_) {
+		return;
+	}
+	bool w = false;
+	if (level_.objective) {
+		w = goal_open() && level_.objective->goal.contains(player_);
+	} else {
+		int targets = 0;
+		bool all = true;
+		for (const BuiltSurface &s : world_->surfaces()) {
+			if (s.is_target()) {
+				targets++;
+				all = all && flags_.is_true("target:" + std::to_string(s.id));
+			}
+		}
+		w = targets > 0 && all;
+	}
+	if (w) {
+		won_ = true;
+		hud_ = hud_text();
+	}
 }
 
 Flight Session::fire(int speedup_at, double frame_dt) {
@@ -938,10 +1027,12 @@ void Session::refresh_ui() {
 }
 
 std::string Session::hud_text() const {
+	// Stage 145: a level with a goal says where it stands
+	const std::string goal = !level_.objective ? std::string() : std::string("Goal: ") + (won_ ? "reached!" : goal_open() ? "open" : "locked");
 	if (plan_.empty()) {
-		return "";
+		return goal;
 	}
-	std::string out = "Plan:";
+	std::string out = goal.empty() ? std::string("Plan:") : goal + "\nPlan:";
 	for (size_t i = 0; i < plan_.size(); i++) {
 		const PlanEntry &e = plan_[i];
 		out += "\n  " + std::to_string(i + 1) + ". ";
@@ -1377,6 +1468,9 @@ json Session::record(const json &extra) const {
 		targets.push_back(id);
 	}
 	r["targets"] = targets;
+	if (level_.objective) {
+		r["won"] = won_; // Stage 145 (only a level with a goal: the older records are unchanged)
+	}
 	r["checkpoints"] = int(checkpoints_.size());
 	const std::optional<V2> q = self.pole(plan_.size());
 	r["pole"] = q ? digest::vec(*q) : json(nullptr);

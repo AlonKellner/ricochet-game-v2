@@ -72,6 +72,11 @@ const Color POINT_COLOR = rgba(0.75, 0.85, 1.0, 0.9);
 const Color GHOST_SPAWN_COLOR = rgba(0.6, 0.95, 1.0, 0.8);
 const Color VANISH_COLOR = rgba(1.0, 0.35, 0.3, 0.7);
 const Color FILL = rgba(1.0, 1.0, 1.0, 0.10);
+// Stage 145: the goal and the detectors
+const Color GOAL_COLOR = rgba(0.3, 0.95, 0.45);
+const Color GOAL_WON_FILL = rgba(0.3, 0.95, 0.45, 0.25);
+const Color DETECTOR_COLOR = rgba(1.0, 0.8, 0.25, 0.8);
+const Color DETECTOR_FILL = rgba(1.0, 0.8, 0.25, 0.18);
 
 V2 vs(const V2 &v, double s) { return v * float(s); } // Vector2 * float (the scalar rounded first)
 V2 rot90(const V2 &v) { return V2{-v.y, v.x}; }
@@ -1373,6 +1378,74 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		k.pts = {V2::of(bg.rect.x, bg.rect.y), V2::of(bg.rect.w, bg.rect.h)};
 		k.colors = {rgba(bg.color[0], bg.color[1], bg.color[2], bg.color[3])};
 		cached(static_draw_[0], {0, 0, 0}, NodeKind::Background, 0, V2::of(bg.rect.x, bg.rect.y), WHITE, [&](std::vector<Call> &out) { out.push_back(k); });
+	}
+	// Stage 145: the goal (dashed while locked, solid when open, filled when won) and the detectors
+	auto outline = [&](std::vector<Call> &out, const Region &r, const Color &c, double width, bool dash) {
+		if (r.circle) {
+			const int n = dash ? 24 : 1;
+			for (int i = 0; i < n; i += dash ? 2 : 1) {
+				out.push_back(arc(r.center, r.radius, 2 * PI * i / n, 2 * PI * (i + 1) / n, dash ? 8 : 64, c, width));
+			}
+			return;
+		}
+		const V2 p[4] = {V2::of(r.rect.x, r.rect.y), V2::of(r.rect.x + r.rect.w, r.rect.y), V2::of(r.rect.x + r.rect.w, r.rect.y + r.rect.h),
+			V2::of(r.rect.x, r.rect.y + r.rect.h)};
+		for (int i = 0; i < 4; i++) {
+			Call k = line(p[i], p[(i + 1) % 4], c, width);
+			if (dash) {
+				k.kind = Kind::DashedLine;
+				k.dash = DASH;
+			}
+			out.push_back(k);
+		}
+	};
+	auto fill = [&](std::vector<Call> &out, const Region &r, const Color &c) {
+		Call k;
+		if (r.circle) {
+			k.kind = Kind::Circle;
+			k.pts = {r.center};
+			k.radius = r.radius;
+		} else {
+			k.kind = Kind::Rect;
+			k.pts = {V2::of(r.rect.x, r.rect.y), V2::of(r.rect.w, r.rect.h)};
+		}
+		k.colors = {c};
+		out.push_back(k);
+	};
+	if (level_.objective) {
+		std::vector<Call> g;
+		const Region &r = level_.objective->goal;
+		if (won_) {
+			fill(g, r, GOAL_WON_FILL);
+		}
+		outline(g, r, GOAL_COLOR, 3.0, !goal_open());
+		const V2 at = r.circle ? r.center : V2::of(r.rect.x + r.rect.w / 2, r.rect.y + r.rect.h / 2);
+		Call t;
+		t.kind = Kind::Text;
+		t.pts = {at};
+		t.text = won_ ? "GOAL!" : "goal";
+		t.alignment = 1;
+		t.font_size = 16;
+		t.colors = {GOAL_COLOR};
+		g.push_back(t);
+		fresh(NodeKind::Goal, 0, V2{}, WHITE, std::move(g));
+	}
+	for (size_t i = 0; i < level_.detectors.size(); i++) {
+		const Detector &d = level_.detectors[i];
+		const bool on = i < inside_.size() && inside_[i];
+		std::vector<Call> dc;
+		if (d.segment) {
+			Call k = line(d.a, d.b, DETECTOR_COLOR, 2.0);
+			k.kind = Kind::DashedLine;
+			k.dash = DASH;
+			dc.push_back(k);
+		} else {
+			if (on) {
+				fill(dc, d.region, DETECTOR_FILL);
+			}
+			outline(dc, d.region, DETECTOR_COLOR, 2.0, true);
+		}
+		fresh(NodeKind::Detector, 0, V2{}, WHITE, std::move(dc), int(i));
 	}
 	if (level_.player_start) {
 		Call k;

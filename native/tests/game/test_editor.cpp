@@ -8,6 +8,7 @@
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <fstream>
@@ -97,7 +98,7 @@ TEST_CASE("editor: every level loads and saves byte for byte") {
 		CHECK_FALSE(ed.draw().empty());
 		n++;
 	}
-	CHECK(n == 37);
+	CHECK(n == 39);
 	// an rc-level/1 document is migrated
 	const json v1 = json::parse(read_text(ROOT / "bench" / "lowered" / "test_levels__flag_switches.json"));
 	rcg::Editor ed(&v1);
@@ -381,4 +382,34 @@ TEST_CASE("editor: the draw list") {
 	const rc::V2 w1 = ed.to_world(at);
 	CHECK(w1.x == doctest::Approx(w0.x).epsilon(1e-4));
 	CHECK(w1.y == doctest::Approx(w0.y).epsilon(1e-4));
+}
+
+TEST_CASE("editor: the goal and the detector tools (Stage 145)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ed.key('O', 0, true);
+	click(ed, 900, 400);
+	click(ed, 800, 300); // any two corners
+	CHECK(ed.document()["objective"]["goal"] == json::parse(R"({"rect": [800.0, 300.0, 100.0, 100.0]})"));
+	ed.key('D', 0, true);
+	click(ed, 600, 600);
+	click(ed, 650, 660);
+	REQUIRE(ed.document()["detectors"].size() == 1);
+	CHECK(ed.document()["detectors"][0] == json::parse(R"({"mode": "enter", "name": "detector_1", "region": {"rect": [600.0, 600.0, 50.0, 60.0]}})"));
+	// a door the detector opens, a goal that needs it
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "door"}, {"flag", "det:detector_1"}, {"start", {750.0, 240.0}}, {"end", {750.0, 840.0}}}}});
+	ok(ed, {{"op", "set"}, {"path", "/objective/requires"}, {"value", json::parse(R"([{"key": "det:detector_1", "values": ["true"]}])")}});
+	CHECK(ed.errors().empty());
+	std::vector<std::string> texts;
+	for (const auto &n : ed.draw()) {
+		for (const auto &c : *n.calls) {
+			texts.push_back(c.text);
+		}
+	}
+	CHECK(std::find(texts.begin(), texts.end(), "goal") != texts.end());
+	CHECK(std::find(texts.begin(), texts.end(), "detector_1") != texts.end());
+	// a goal level's mistakes are named
+	ok(ed, {{"op", "set"}, {"path", "/objective/goal"}, {"value", json::parse(R"({"rect": [0, 0, 0, 5]})")}});
+	REQUIRE(ed.errors().size() == 1);
+	CHECK(ed.errors()[0].message.find("level.objective.goal.rect: a positive width and height expected") != std::string::npos);
 }

@@ -131,6 +131,9 @@ public:
 	void speed_up();
 	void advance(double dt, const kinematics::Input &in);
 	bool flying() const { return flying_; }
+	// Stage 145: the level won (latched): its goal reached while its conditions
+	// hold, or, a level without a goal, every target hit
+	bool won() const { return won_; }
 	V2 player() const { return player_; }
 	// Stage 122: the player before the last physics tick, and how far the time
 	// not yet ticked is into the next (the presenter draws the player between)
@@ -227,6 +230,8 @@ private:
 		std::vector<PlanEntry> plan;
 		std::vector<std::pair<int, bool>> targets;
 		std::optional<World::Snapshot> world;
+		bool won = false;         // Stage 145
+		std::vector<bool> inside; // ... the detectors the player is in
 	};
 	// PathRenderer's state: the last pair, its display paths and merge; the last
 	// ladder result and physical hits stay when there is no trace (as the node keeps them)
@@ -288,6 +293,12 @@ private:
 	int plan_version_ = 0;
 	int flags_version_ = 0; // bumped when the flags change (their encoding: the record's)
 	void set_flags(const rc::Flags &f);
+	// Stage 145: the goal and the detectors
+	bool won_ = false;
+	std::vector<bool> inside_; // per detector: the player inside (a region's)
+	void detect(const V2 &from, const V2 &to); // the detectors after a move from -> to
+	bool goal_open() const;                    // the objective's conditions hold
+	void check_won();
 	std::vector<Checkpoint> checkpoints_;
 	Checkpoint initial_;
 	int display_mode_ = 0;

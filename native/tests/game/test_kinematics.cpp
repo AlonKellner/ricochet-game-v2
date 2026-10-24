@@ -103,7 +103,12 @@ TEST_CASE("kinematics: no penetration, no tunnelling, on random input over every
 		CAPTURE(e.path().filename().string());
 		levels++;
 		for (const V2 &g : {V2{}, V2{0, 980}}) {
-			rcg::GodotRng rng(std::uint64_t(levels) * 7919u + (g.y > 0 ? 1u : 0u));
+			// seeded by the level's own path (FNV-1a), so a level added elsewhere changes no other level's walk
+			std::uint64_t seed = 0xcbf29ce484222325ull;
+			for (const char c : std::filesystem::relative(e.path(), root).generic_string()) {
+				seed = (seed ^ std::uint64_t(static_cast<unsigned char>(c))) * 0x100000001b3ull;
+			}
+			rcg::GodotRng rng(seed + (g.y > 0 ? 1u : 0u));
 			k::Body b{*lv.player_start, V2{}, false};
 			if (clearance(cs, b.pos.x, b.pos.y) < k::RADIUS) {
 				continue; // a start inside a solid (none today)

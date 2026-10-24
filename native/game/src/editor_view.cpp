@@ -52,11 +52,13 @@ const Color ACCENT = rgba(1.0, 0.8, 0.3);
 const Color ERROR_TEXT = rgba(1.0, 0.45, 0.4);
 const Color SELECT = rgba(1, 1, 1, 0.35);
 const Color HOVER = rgba(1, 1, 1, 0.15);
+const Color GOAL = rgba(0.3, 0.95, 0.45);
+const Color DETECTOR = rgba(1.0, 0.8, 0.25, 0.85);
 
 // An element's layers (the draw nodes' keys: ["editor", layer, index])
-enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS };
+enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS, L_GOALS };
 
-const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player"};
+const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player", "goal", "detector"};
 
 Call line(const V2 &a, const V2 &b, const Color &c, double w) {
 	Call k;
@@ -401,6 +403,41 @@ void Editor::place(const json &p, unsigned) {
 	if (clicks_.size() < need) {
 		return;
 	}
+	if (tool_ == Tool::Goal || tool_ == Tool::Detector) {
+		// two corners: a rectangle
+		const double x0 = clicks_[0][0].get<double>(), y0 = clicks_[0][1].get<double>(), x1 = clicks_[1][0].get<double>(), y1 = clicks_[1][1].get<double>();
+		clicks_.clear();
+		const json r = json::array({std::min(x0, x1), std::min(y0, y1), std::abs(x1 - x0), std::abs(y1 - y0)});
+		if (r[2].get<double>() <= 0 || r[3].get<double>() <= 0) {
+			hint_ = "a rectangle needs two corners apart in x and y";
+			return;
+		}
+		json res;
+		if (tool_ == Tool::Goal) {
+			res = command({{"op", "set"}, {"path", "/objective/goal"}, {"value", {{"rect", r}}}});
+			hint_ = res.value("ok", false) ? "the goal placed" : res.value("error", std::string());
+			return;
+		}
+		json ds = doc_.value("detectors", json::array());
+		if (!ds.is_array()) {
+			ds = json::array();
+		}
+		std::string name;
+		for (int n = 1;; n++) {
+			name = "detector_" + std::to_string(n);
+			bool used = false;
+			for (const json &d : ds) {
+				used = used || (d.is_object() && d.value("name", "") == name);
+			}
+			if (!used) {
+				break;
+			}
+		}
+		ds.push_back({{"name", name}, {"region", {{"rect", r}}}, {"mode", "enter"}});
+		res = command({{"op", "set"}, {"path", "/detectors"}, {"value", ds}});
+		hint_ = res.value("ok", false) ? name + " placed: it writes det:" + name : res.value("error", std::string());
+		return;
+	}
 	json e = {{"kind", kind_}};
 	if (tmpl.contains("example")) {
 		for (auto it = tmpl["example"].begin(); it != tmpl["example"].end(); ++it) {
@@ -636,6 +673,8 @@ void Editor::key(int code, unsigned mods, bool down) {
 		case 'A': tool_ = Tool::Arc; clicks_.clear(); return;
 		case 'C': tool_ = Tool::Circle; clicks_.clear(); return;
 		case 'P': tool_ = Tool::Player; clicks_.clear(); return;
+		case 'O': tool_ = Tool::Goal; clicks_.clear(); return;
+		case 'D': tool_ = Tool::Detector; clicks_.clear(); return;
 		case 'G': grid_ = !grid_; return;
 		case 'F': frame_all(); return;
 		case KeyDelete:
@@ -735,7 +774,8 @@ std::vector<Editor::Row> Editor::rows() const {
 	};
 	add({Row::Header, "Ricochet level editor", "", "", std::nullopt, "", -1, 0});
 	add({Row::Buttons, "", "", "undo (ctrl+z), redo (ctrl+shift+z), save (ctrl+s), play (F5)", std::nullopt, "", -1, 0});
-	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start", std::nullopt, "tool", -1, 0});
+	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector", std::nullopt,
+			"tool", -1, 0});
 	const json ks = kinds();
 	add({Row::Value, "place", kind_, "Tab / shift+Tab / 1-9: what the line, arc and circle tools place", std::nullopt, "place", -1, 0});
 	if (ks.contains(kind_)) {
@@ -791,6 +831,9 @@ std::vector<Editor::Row> Editor::rows() const {
 		field("room built", "/room/built", "the room's walls are built", "bool");
 		field("player", "/player/start", "[x, y]: the player's start (P)");
 		field("flags", "/flags", "{key: value}: the flags the level starts with");
+		field("goal", "/objective/goal", "{\"rect\": [x, y, w, h]} or {\"circle\": ...}: reach it to win (O)");
+		field("requires", "/objective/requires", "[{\"key\", \"values\"}]: the goal opens when they hold");
+		field("detectors", "/detectors", "[{name, region | segment, mode, flag?}]: they write flags (D)");
 	}
 	y += 8;
 	add({Row::Header, errors_.empty() ? "no problems" : std::to_string(errors_.size()) + " problem(s)", "", "", std::nullopt, "", -1, 0});
@@ -826,7 +869,7 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		return opts[size_t(((k + (back ? -1 : 1)) % n + n) % n)];
 	};
 	if (r.choice == "tool") {
-		const std::string t = cycle({"select", "line", "arc", "circle", "player"}, r.value);
+		const std::string t = cycle({"select", "line", "arc", "circle", "player", "goal", "detector"}, r.value);
 		run({{"op", "tool"}, {"tool", t}});
 		return;
 	}
@@ -947,6 +990,55 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 		}
 		out.add(L_ROOM, 0, 2, std::move(r));
 	}
+	// the goal and the detectors
+	{
+		std::vector<Call> g;
+		auto region = [&](const json &reg, const Color &c, const std::string &label) {
+			if (!reg.is_object()) {
+				return;
+			}
+			V2 at;
+			if (reg.contains("circle") && reg["circle"].is_object() && is_point(reg["circle"].value("center", json()))
+					&& reg["circle"].value("radius", json()).is_number()) {
+				at = to_screen(pt(reg["circle"]["center"]));
+				const double r = reg["circle"]["radius"].get<double>() * zoom_;
+				for (int k = 0; k < 24; k += 2) {
+					g.push_back(arc(at, r, TAU * k / 24, TAU * (k + 1) / 24, c, 2.0));
+				}
+			} else if (reg.contains("rect") && reg["rect"].is_array() && reg["rect"].size() == 4) {
+				const json &b = reg["rect"];
+				const double x = b[0].get<double>(), y = b[1].get<double>(), w = b[2].get<double>(), h = b[3].get<double>();
+				const V2 p[4] = {to_screen(V2::of(x, y)), to_screen(V2::of(x + w, y)), to_screen(V2::of(x + w, y + h)), to_screen(V2::of(x, y + h))};
+				for (int k = 0; k < 4; k++) {
+					g.push_back(dashed(p[k], p[(k + 1) % 4], c, 2.0, 8.0));
+				}
+				at = to_screen(V2::of(x + w / 2, y + h / 2));
+			} else {
+				return;
+			}
+			g.push_back(text_at(at, label, c, 13));
+			g.back().alignment = 1;
+		};
+		if (doc_.contains("objective") && doc_["objective"].is_object()) {
+			region(doc_["objective"].value("goal", json()), GOAL, "goal");
+		}
+		if (doc_.contains("detectors") && doc_["detectors"].is_array()) {
+			for (const json &d : doc_["detectors"]) {
+				if (!d.is_object()) {
+					continue;
+				}
+				const std::string name = d.value("name", "");
+				if (d.contains("segment") && d["segment"].is_object() && is_point(d["segment"].value("a", json())) && is_point(d["segment"].value("b", json()))) {
+					const V2 a = to_screen(pt(d["segment"]["a"])), b = to_screen(pt(d["segment"]["b"]));
+					g.push_back(dashed(a, b, DETECTOR, 2.0, 8.0));
+					g.push_back(text_at(V2::of((double(a.x) + b.x) / 2 + 6, (double(a.y) + b.y) / 2 - 6), name, DETECTOR, 12));
+				} else {
+					region(d.value("region", json()), DETECTOR, name);
+				}
+			}
+		}
+		out.add(L_GOALS, 0, 2, std::move(g));
+	}
 	// the elements
 	const int sel = index_of(selected_);
 	const bool hovering = tool_ == Tool::Select && !drag_ && mouse_.x < cw && mouse_.y < ch;
@@ -1061,7 +1153,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 	// a placement under way, and where the pointer snaps
 	{
 		std::vector<Call> pv;
-		const bool placing = tool_ == Tool::Line || tool_ == Tool::Arc || tool_ == Tool::Circle || tool_ == Tool::Player;
+		const bool placing = tool_ != Tool::Select;
 		if (placing && mouse_.x < cw && mouse_.y < ch) {
 			const V2 at = to_screen(pt(snap(mouse_, 0, nullptr)));
 			pv.push_back(line(V2::of(double(at.x) - 6, at.y), V2::of(double(at.x) + 6, at.y), ACCENT, 1.0));
@@ -1083,6 +1175,11 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 					const double am = wrap_angle(std::atan2(double(at.y) - c.y, double(at.x) - c.x) - a0);
 					const double a1 = wrap_angle(std::atan2(double(pts[1].y) - c.y, double(pts[1].x) - c.x) - a0);
 					pv.push_back(arc(c, seg.get_carrier().radius(), a0, a0 + (am < a1 ? a1 : a1 - TAU), ACCENT, 1.0));
+				}
+			} else if ((tool_ == Tool::Goal || tool_ == Tool::Detector) && pts.size() == 1) {
+				const V2 c[4] = {pts[0], V2{at.x, pts[0].y}, at, V2{pts[0].x, at.y}};
+				for (int k = 0; k < 4; k++) {
+					pv.push_back(dashed(c[k], c[(k + 1) % 4], tool_ == Tool::Goal ? GOAL : DETECTOR, 1.0, 6.0));
 				}
 			} else if (!pts.empty()) {
 				pv.push_back(dashed(pts.back(), at, ACCENT, 1.0, 6.0));

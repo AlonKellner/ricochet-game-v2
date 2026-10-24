@@ -318,6 +318,7 @@ rc_status rc_game_frame(const rc_game *game, rc_frame *out) {
 		f.gravity_y = s.gravity().y;
 		f.region_pending = s.region_pending() ? 1 : 0;
 		f.preview_exact = s.preview_exact() ? 1 : 0;
+		f.won = s.won() ? 1 : 0;
 		fill(out, f);
 		return RC_OK;
 	});

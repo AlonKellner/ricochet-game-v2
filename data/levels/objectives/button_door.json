@@ -1,0 +1,47 @@
+{
+ "background": {
+  "color": [0.10000000149011612, 0.10000000149011612, 0.10000000149011612, 1.0],
+  "rect": [0.0, 0.0, 1920.0, 1080.0]
+ },
+ "bounds": [0.0, 0.0, 1920.0, 1080.0],
+ "camera": null,
+ "colliders": [],
+ "elements": [
+  {
+   "end": [960.0, 840.0],
+   "kind": "door",
+   "name": "gate",
+   "start": [960.0, 240.0]
+  },
+  {
+   "end": [860.0, 300.0],
+   "kind": "button",
+   "name": "switch",
+   "op": "set",
+   "opens": "gate",
+   "start": [760.0, 300.0]
+  }
+ ],
+ "features": {
+  "arrow": true,
+  "cursor": true,
+  "game": true,
+  "hud": true,
+  "preview": true
+ },
+ "gravity": [0.0, 0.0],
+ "name": "objectives/button_door",
+ "objective": {
+  "goal": {
+   "rect": [1160.0, 440.0, 140.0, 200.0]
+  }
+ },
+ "player": {
+  "start": [660.0, 540.0]
+ },
+ "room": {
+  "built": true,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}

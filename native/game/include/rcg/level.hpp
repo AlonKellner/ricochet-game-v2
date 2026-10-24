@@ -118,6 +118,36 @@ struct Collider {
 	V2 a, b;
 };
 
+// rc-level/2: a region of the plane (a goal, a detector): a rectangle or a circle.
+struct Region {
+	bool circle = false;
+	Rect rect;
+	V2 center;
+	double radius = 0.0;
+	bool contains(const V2 &p) const; // the boundary included
+};
+
+// rc-level/2: the level's goal (GAME_SPEC 3.2): the player inside the region
+// while every condition holds (the presence form, GAME_SPEC 9.6) wins.
+struct Objective {
+	Region goal;
+	std::vector<PresenceSpec> conditions; // (its JSON key: "requires")
+};
+
+// rc-level/2: a detector (GAME_SPEC 24.5): a region the player is in, or a
+// segment the player crosses, that writes a flag -- while inside (unset
+// outside), on entering, or toggled on entering.
+struct Detector {
+	std::string name;
+	std::string target = "player"; // "for": player | object | any (objects: a later stage)
+	bool segment = false;
+	Region region;
+	V2 a, b;          // a segment's ends
+	std::string flag; // default det:<name>
+	std::string mode = "while"; // while | enter | toggle
+	rc::FlagValue value = true;
+};
+
 struct Level {
 	std::string name;
 	Rect bounds{0, 0, 1920, 1080};
@@ -143,6 +173,9 @@ struct Level {
 	std::vector<LevelSurface> surfaces;
 	// rc-level/2: the flags the level starts with (in key order; a number as a float64)
 	std::vector<std::pair<std::string, rc::FlagValue>> flags;
+	// rc-level/2: the goal (none: the level is won when every target is hit), the detectors
+	std::optional<Objective> objective;
+	std::vector<Detector> detectors;
 };
 
 // The level in a JSON text (rc-level/1 or rc-level/2). Throws LevelError.

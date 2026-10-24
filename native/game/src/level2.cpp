@@ -18,7 +18,7 @@ using json = nlohmann::json;
 // The level keys rc-level/2 shares with rc-level/1 (copied to the lowering as they are).
 const std::vector<std::string> META = {"name", "bounds", "gravity", "room", "player", "camera", "background", "colliders", "features"};
 // Keys of the format's later stages (docs/LEVEL_FORMAT.md), refused until they exist.
-const std::vector<std::string> RESERVED = {"carriers", "detectors", "objects", "objective"};
+const std::vector<std::string> RESERVED = {"carriers", "objects"};
 
 const json DEFAULT_BOUNDS = json::array({0.0, 0.0, 1920.0, 1080.0});
 const json DEFAULT_ROOM = json::array({560.0, 240.0, 800.0, 600.0});
@@ -96,7 +96,7 @@ Lowered lower_level(const json &v2) {
 		if (std::find(RESERVED.begin(), RESERVED.end(), k) != RESERVED.end()) {
 			fail(P, "'" + k + "' is reserved for a later stage of rc-level/2");
 		}
-		const bool known = k == "schema" || k == "flags" || k == "templates" || k == "elements"
+		const bool known = k == "schema" || k == "flags" || k == "templates" || k == "elements" || k == "objective" || k == "detectors"
 				|| std::find(META.begin(), META.end(), k) != META.end();
 		if (!known) {
 			fail(P, "unknown key '" + k + "'");
