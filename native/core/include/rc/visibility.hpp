@@ -29,6 +29,10 @@
 #include "rc/exact.hpp"
 #include "rc/solver.hpp"
 #include "rc/thread_pool.hpp"
+
+#if defined(__APPLE__)
+#include <sys/sysctl.h>
+#endif
 #include "rc/tracer.hpp"
 
 #include <algorithm>
@@ -60,7 +64,17 @@ inline int vis_threads() {
 		if (const char *e = std::getenv("RC_VIS_THREADS")) {
 			return std::max(1, std::atoi(e));
 		}
-		const unsigned hw = std::thread::hardware_concurrency();
+		unsigned hw = std::thread::hardware_concurrency();
+#if defined(__APPLE__)
+		// B.4: the performance cores alone -- a cast on an efficiency core takes about
+		// twice as long and the batch waits for it: 8 threads on 6P+6E cost 35% more
+		// CPU than 6 for the same wall time
+		int perf = 0;
+		size_t len = sizeof perf;
+		if (sysctlbyname("hw.perflevel0.logicalcpu", &perf, &len, nullptr, 0) == 0 && perf > 0) {
+			hw = unsigned(perf);
+		}
+#endif
 		return int(std::clamp(hw == 0 ? 1u : hw, 1u, 8u));
 	}();
 	return n;
@@ -178,6 +192,7 @@ struct Interval {
 // What one cast says about its member.
 struct Cast {
 	bool valid = false;     // the solver traced it
+	long long usec = 0;     // B.3: what the cast took (a batch runs its members' slow casts first)
 	bool alive = false;     // the plan is met (every entry consumed, both walks in one frame)
 	bool cursor_ok = false; // the cast's own cursor: reached, both walks in one frame
 	// both walks reach the last entry's crossing in one frame, and its own
@@ -421,6 +436,7 @@ struct Result {
 	std::array<long long, 5> phase_usec{}; // Stage 123 (benches): prepare, members, their casts, cells, merge
 	long long batch_max_usec = 0;  // ... the parallel batches' slowest casts, summed (each batch waits for its slowest)
 	long long batch_sum_usec = 0;  // ... and all their casts' time
+	long long batch_wall_usec = 0; // ... and the batches' wall time (the cast-cost program: the tail a batch waits beyond its casts' time shared over the threads)
 };
 
 // Angular order of aim directions, counterclockwise from the fixed reference
@@ -607,7 +623,7 @@ struct SolveMemo {
 			std::mutex mutex;
 			std::unordered_map<Key, V, Hash> map;
 		};
-		static constexpr size_t SHARDS = 16;
+		static constexpr size_t SHARDS = 64; // (B.4: 16 shards waited on each other at six threads)
 		std::array<Shard, SHARDS> shards_;
 		Shard &of(const Key &k) {
 			const uint64_t h = Hash{}(k);
@@ -635,7 +651,7 @@ class Builder {
 public:
 	Builder(Tracer &tracer, Pt player, std::vector<PlanItem> plan, Flags flags, Rect bounds, Half half = Half::Single)
 		: tracer_(tracer), plan_(std::move(plan)), flags_(std::move(flags)),
-		  scene_(Scene<F64>::from_defs(tracer.defs(), F64{1.0})), solver_(scene_, nullptr), half_(half) {
+		  scene_(Scene<F64>::from_defs(tracer.defs(), F64{1.0})), solver_(scene_, &cache_), half_(half) {
 		flags_.erase(GHOST);
 		res_.player = player;
 		res_.domain = bounds.grown(50.0);
@@ -737,6 +753,7 @@ private:
 	std::vector<PlanItem> plan_;
 	Flags flags_;
 	Scene<F64> scene_;
+	mutable SolveCache<F64> cache_;
 	mutable Solver<F64> solver_;
 	std::vector<std::optional<Seg<F64>>> piece_spans_; // Stage 133: the plan's pieces, ends that are crossings read as the crossings
 	Result res_;
@@ -2176,7 +2193,9 @@ private:
 				const auto t0 = std::chrono::steady_clock::now();
 				out[i] = cast_on(tracer_, jobs[i].c, jobs[i].q, jobs[i].member, jobs[i].known, reads_cursor(jobs[i].kind));
 				const long long u = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
+				out[i].usec = u;
 				res_.batch_sum_usec += u;
+				res_.batch_wall_usec += u;
 				mx = std::max(mx, u);
 			}
 			res_.batch_max_usec += mx;
@@ -2189,6 +2208,7 @@ private:
 		// (Stage 120: on the persistent pool, not threads made per batch; worker k casts with tracers[k])
 		check_cancel();
 		std::vector<long long> usec(jobs.size(), 0);
+		const auto tb = std::chrono::steady_clock::now();
 		ThreadPool::shared().parallel_for(jobs.size(), nt - 1, [&](size_t worker, size_t i) {
 			if (cancel_ != nullptr && cancel_->load(std::memory_order_relaxed)) {
 				return; // (cancelled: the caller throws below, never a pool thread)
@@ -2197,11 +2217,13 @@ private:
 			out[i] = cast_on(*tracers[worker], jobs[i].c, jobs[i].q, jobs[i].member, jobs[i].known, reads_cursor(jobs[i].kind));
 			usec[i] = std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - t0).count();
 		});
+		res_.batch_wall_usec += std::chrono::duration_cast<std::chrono::microseconds>(std::chrono::steady_clock::now() - tb).count();
 		check_cancel();
 		long long mx = 0;
-		for (long long u : usec) {
-			mx = std::max(mx, u);
-			res_.batch_sum_usec += u;
+		for (size_t i = 0; i < usec.size(); i++) {
+			out[i].usec = usec[i];
+			mx = std::max(mx, usec[i]);
+			res_.batch_sum_usec += usec[i];
 		}
 		res_.batch_max_usec += mx;
 		return out;
@@ -2741,6 +2763,18 @@ private:
 				slot.emplace_back(i, 3);
 			}
 		}
+		// B.3: a batch waits for its slowest cast; the casts likely to climb -- at a
+		// tangency, at a proper crossing (an irrational point the walk comes back to,
+		// F13) -- run first, so they do not land last. The results land by slot: the
+		// order of the work changes nothing.
+		{
+			std::vector<int> cost(jobs.size(), 0);
+			for (size_t k = 0; k < jobs.size(); k++) {
+				const Member &m = ms[slot[k].first];
+				cost[k] = m.tangency || m.tangent_pole ? 3 : (m.poi && !m.exact ? 2 : (m.exact ? 1 : 0));
+			}
+			order_jobs(jobs, slot, [&](size_t k) { return double(cost[k]); });
+		}
 		std::vector<Cast> casts = cast_batch(jobs);
 		std::vector<bool> own(n, false);
 		for (size_t k = 0; k < jobs.size(); k++) {
@@ -2781,10 +2815,35 @@ private:
 				}
 			}
 		}
+		// B.1: the gaps' middle casts in the same batch (they read the crit casts alone:
+		// dead_gap; build_cells takes them from pre_mid_ where it would cast). One
+		// barrier fewer per half.
+		pre_mid_.clear();
+		std::vector<double> cost;
+		for (size_t k = 0; k < jobs.size(); k++) {
+			cost.push_back(double(ms[slot[k].first].crit.usec));
+		}
+		for (size_t i = 0; i < n; i++) {
+			const size_t r = (i + 1) % n;
+			if (skip_gap(i, r) || dead_gap(ms[i], ms[r])) {
+				continue;
+			}
+			const Param dm = mid_param(i, r);
+			if (const std::optional<Pt> c = p_cursor(dm)) {
+				jobs.push_back(CastJob{*c, dm, p_member(*c), CastKind::Mid});
+				slot.emplace_back(i, 4);
+				cost.push_back(double(std::max(ms[i].crit.usec, ms[r].crit.usec)));
+			}
+		}
+		order_jobs(jobs, slot, [&](size_t k) { return cost[k]; }); // B.3: by the crit casts' times, slowest first
 		casts = cast_batch(jobs);
 		for (size_t k = 0; k < jobs.size(); k++) {
 			Member &m = ms[slot[k].first];
-			(slot[k].second == 1 ? m.minus : m.plus) = std::move(casts[k]);
+			if (slot[k].second == 4) {
+				pre_mid_.emplace(p_bits(jobs[k].q), std::move(casts[k]));
+			} else {
+				(slot[k].second == 1 ? m.minus : m.plus) = std::move(casts[k]);
+			}
 		}
 		for (size_t i = 0; i < n; i++) {
 			if (!own[i]) {
@@ -2794,6 +2853,42 @@ private:
 			set_t0(ms[i]);
 		}
 	}
+	// B.3: the jobs (and their slots) by a cost, highest first; a stable order
+	template <typename Cost>
+	static void order_jobs(std::vector<CastJob> &jobs, std::vector<std::pair<size_t, int>> &slot, const Cost &cost) {
+		std::vector<size_t> idx(jobs.size());
+		for (size_t k = 0; k < idx.size(); k++) {
+			idx[k] = k;
+		}
+		std::stable_sort(idx.begin(), idx.end(), [&](size_t a, size_t b) { return cost(a) > cost(b); });
+		std::vector<CastJob> js;
+		std::vector<std::pair<size_t, int>> sl;
+		js.reserve(jobs.size());
+		sl.reserve(slot.size());
+		for (size_t k : idx) {
+			js.push_back(std::move(jobs[k]));
+			sl.push_back(slot[k]);
+		}
+		jobs = std::move(js);
+		slot = std::move(sl);
+	}
+	// (build_cells) no gap between one direction and itself (the axes keep every real
+	// gap below a quarter turn: a wider one is a rounding reversal); Stage 113: a gap
+	// narrower than the side casts resolve -- a sliver at the aim's tangency with the
+	// projective's carrier, where the solver's first-crossing decisions are a
+	// rounding apart -- is no cell. (A pencil that does not run round has no gap
+	// from its last member to its first.)
+	bool skip_gap(size_t i, size_t r) const {
+		const std::vector<Member> &ms = res_.members;
+		return (!p_cyclic() && r <= i) || p_same(ms[i].param(), ms[r].param()) || (ms.size() > 4 && p_gap(ms[i].param(), ms[r].param()) > p_wide())
+			|| (!aim() && p_gap(ms[i].param(), ms[r].param()) < 8.0 * p_eps_max());
+	}
+	Param mid_param(size_t i, size_t r) const {
+		const std::vector<Member> &ms = res_.members;
+		return p_step(ms[i].param(), p_gap(ms[i].param(), ms[r].param()) / 2.0);
+	}
+	std::map<std::tuple<uint64_t, uint64_t, uint64_t, uint64_t>, Cast> pre_mid_; // the gaps' middle casts (B.1: cast with the sides), by direction
+
 	// Stage 113: a projective walk's order along its member begins at its departure
 	void set_t0(Member &m) const {
 		m.t0 = !aim() && m.crit.valid && m.crit.near_kind == End::Near ? m.beam.param_of(cn_of(m.crit.near_pt)).v : 0.0;
@@ -3197,37 +3292,10 @@ private:
 		}
 		std::vector<Gap> gaps(ms.size());
 		const int MAX_REFINE = 64;
-		// the gaps' middle casts, in one parallel batch up front, keyed by the
-		// direction (the loop below takes them where it would cast; gaps a
-		// refinement creates are cast there)
-		auto skip_gap = [&](size_t i, size_t r) {
-			// (a pencil that does not run round has no gap from its last member to its first)
-			// (Stage 113: a gap narrower than the side casts resolve -- a sliver at
-			// the aim's tangency with the projective's carrier, where the solver's
-			// first-crossing decisions are a rounding apart -- is no cell)
-			return (!p_cyclic() && r <= i) || p_same(ms[i].param(), ms[r].param())
-				|| (ms.size() > 4 && p_gap(ms[i].param(), ms[r].param()) > p_wide())
-				|| (!aim() && p_gap(ms[i].param(), ms[r].param()) < 8.0 * p_eps_max());
-		};
-		auto mid_param = [&](size_t i, size_t r) { return p_step(ms[i].param(), p_gap(ms[i].param(), ms[r].param()) / 2.0); };
-		std::map<std::tuple<uint64_t, uint64_t, uint64_t, uint64_t>, Cast> pre_mid;
-		{
-			std::vector<CastJob> jobs;
-			for (size_t i = 0; i < ms.size(); i++) {
-				const size_t r = (i + 1) % ms.size();
-				if (skip_gap(i, r) || dead_gap(ms[i], ms[r])) {
-					continue;
-				}
-				const Param dm = mid_param(i, r);
-				if (const std::optional<Pt> c = p_cursor(dm)) {
-					jobs.push_back(CastJob{*c, dm, p_member(*c), CastKind::Mid});
-				}
-			}
-			std::vector<Cast> casts = cast_batch(jobs);
-			for (size_t k = 0; k < jobs.size(); k++) {
-				pre_mid.emplace(p_bits(jobs[k].q), std::move(casts[k]));
-			}
-		}
+		// the gaps' middle casts were cast with the sides (cast_members, B.1): the
+		// loop below takes them from pre_mid_ where it would cast; gaps a refinement
+		// creates are cast there
+		std::map<std::tuple<uint64_t, uint64_t, uint64_t, uint64_t>, Cast> &pre_mid = pre_mid_;
 		bool changed = true;
 		while (changed) {
 			changed = false;
@@ -4830,6 +4898,7 @@ inline Result join_halves(Result a, Result b) {
 	}
 	r.batch_sum_usec += b.batch_sum_usec;
 	r.batch_max_usec += b.batch_max_usec;
+	r.batch_wall_usec += b.batch_wall_usec;
 	for (size_t k = 0; k < r.casts_by_kind.size(); k++) {
 		r.casts_by_kind[k] += b.casts_by_kind[k];
 	}
@@ -4889,6 +4958,13 @@ inline std::vector<std::pair<int, int>> parts_of(const Result &r) {
 inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanItem> &plan, const Flags &flags, const Rect &bounds,
 		const std::atomic<bool> *cancel = nullptr) {
 	const auto t0 = std::chrono::steady_clock::now();
+	// A.10: the whole build on this thread allocates through the compute threads'
+	// block cache (collect, cells, merge, the sequential casts; the batches did)
+	const bool was_compute = set_compute_thread(true);
+	struct Restore {
+		bool was;
+		~Restore() { set_compute_thread(was); }
+	} restore{was_compute};
 	Builder b(tracer, player, plan, flags, bounds);
 	b.set_cancel(cancel);
 	Result r;

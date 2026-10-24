@@ -10,10 +10,22 @@
 // where the platform has no malloc_size.
 #pragma once
 
+#include <cstddef>
+
 namespace rc {
 
 // Marks the calling thread as a compute thread (its frees are cached) or not;
 // returns what it was.
 bool set_compute_thread(bool on);
+
+// The allocation counter (every operator new in the process while on; a flag
+// read per allocation, an atomic increment while counting): rc_tool regions
+// --allocs reports allocations per region. Returns what it was.
+bool alloc_counting(bool on);
+long long alloc_count();
+long long alloc_system_count();  // ... of which went to malloc (the thread's free list empty, or no cache)
+long long alloc_unsized_count(); // frees without a size (classed by malloc_size) on compute threads
+long long alloc_system_by_class(int k); // the system mallocs by size class (71: over the largest class, or no cache)
+std::size_t alloc_class_size(int k);     // a class's block size (0: none)
 
 } // namespace rc

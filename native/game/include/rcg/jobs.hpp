@@ -16,6 +16,8 @@
 #include <functional>
 #include <mutex>
 #include <optional>
+#include "rc/thread_alloc.hpp"
+
 #include <thread>
 #include <utility>
 
@@ -96,6 +98,7 @@ public:
 
 private:
 	void loop() {
+		rc::set_compute_thread(true); // (B.4: the job thread keeps its allocator cache for its life: a region's results freed here come back for the next)
 		for (;;) {
 			std::pair<In, long long> job;
 			{

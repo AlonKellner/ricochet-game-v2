@@ -16,6 +16,7 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <unordered_map>
 #include <vector>
 
 namespace rc {
@@ -247,8 +248,18 @@ struct Surf {
 		return *exact_circle_;
 	}
 
+	// The line carrier's exact coefficients (A.2: computed once per surface; the
+	// predicates rebuilt the line from the endpoints at every call).
+	const exact::Line3 &exact_line() const {
+		if (!exact_line_) {
+			exact_line_ = exact::line_through(sx, sy, ex, ey);
+		}
+		return *exact_line_;
+	}
+
 private:
 	mutable std::optional<ExactCircle> exact_circle_;
+	mutable std::optional<exact::Line3> exact_line_;
 };
 
 template <Num N>
@@ -258,6 +269,22 @@ struct Scene {
 	// Stage 101: the pre-transform's surfaces, in order (not hittable); their
 	// composite image of infinity is the frame the shot starts in
 	std::vector<std::shared_ptr<Surf<N>>> pre_surfaces;
+	// (A.1: Q0 of the pre-transform as exact data, computed once: Solver::pre_q_exact)
+	mutable std::optional<std::optional<exact::Point3>> pre_q_exact;
+	// The surfaces whose carrier contains a known point (Solver::incident_list), by
+	// the point's float64 bits: a pure function of the scene and the point, computed
+	// once (A.8: a walk recomputed it for every known point of every beam -- an
+	// endpoint on a reflected line, a point kept through a reflection -- 16% of a
+	// crossings region in the incidence memo's probes). Bounded.
+	struct PointKey {
+		uint64_t x = 0, y = 0;
+		bool operator==(const PointKey &) const = default;
+	};
+	struct PointKeyHash {
+		size_t operator()(const PointKey &k) const { return size_t((k.x * 0x9E3779B97F4A7C15ull) ^ (k.y * 0x100000001B3ull)); }
+	};
+	using Incident = std::shared_ptr<const std::vector<const Surf<N> *>>;
+	mutable std::unordered_map<PointKey, Incident, PointKeyHash> incidence_lists;
 	// Stage 88: a straight beam passing t = infinity emits the `infinity` event
 	// (counted toward MAX_HITS). Off reproduces the pre-Stage-88 traces; the
 	// game turns it on (B9) and so do the Stage 88 fixture tests.

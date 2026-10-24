@@ -200,6 +200,11 @@ struct LadderStats {
 	long long why_empty = 0;     // ... a walk with no events
 	long long why_beyond = 0;    // ... the first unreliable index past the events given
 	long long unconverged = 0;   // climbs that reached the last tier undecided (the 64-limb walk used as it is)
+	// the cast-cost program (Stage C's measurement): the walks' hit events, and those
+	// off their segment on a surface no remaining plan entry names (a byproduct, the
+	// user: never a requirement)
+	long long hits = 0;
+	long long hits_off_nonplan = 0;
 };
 
 // The scenes of one solve at every tier, built on demand, plus the solve caches.
@@ -222,7 +227,14 @@ public:
 		return *it->second;
 	}
 	SolveCache<Dual> &dual_cache() { return dual_cache_; }
-	SolveCache<BigFloat> &big_cache(int limbs) { return big_caches_[limbs]; }
+	SolveCache<BigFloat> &big_cache(int limbs) {
+		auto it = big_caches_.find(limbs);
+		if (it == big_caches_.end()) {
+			it = big_caches_.emplace(limbs, SolveCache<BigFloat>{}).first;
+			it->second.exact = dual_cache_.exact; // (A.1: the exact memos are the same at every tier)
+		}
+		return it->second;
+	}
 	LadderStats &stats() { return stats_; }
 
 private:
@@ -587,6 +599,19 @@ private:
 		const bool reliable = (unreliable_from < 0 || size_t(unreliable_from) >= need) && !events.empty();
 		LadderStats &st = ctx_.stats();
 		st.walks++;
+		for (const auto &ev : events) {
+			if (ev.kind != EventKind::Hit) {
+				continue;
+			}
+			st.hits++;
+			if (!ev.on_segment && plan_ != nullptr) {
+				bool planned = false;
+				for (const PlanItem &item : *plan_) {
+					planned = planned || item.surface_id == ev.surface_id;
+				}
+				st.hits_off_nonplan += planned ? 0 : 1;
+			}
+		}
 		if (verify) {
 			st.verify++;
 		} else if (!reliable) {

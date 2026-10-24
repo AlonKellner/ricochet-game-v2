@@ -90,10 +90,10 @@ std::optional<ExactPole> pole_from_line(const Line3 &L, const Point3 &C);
 std::optional<ExactPole> pole_start_direction(double px, double py, double dx, double dy, const Point3 &Q0);
 std::optional<ExactPole> pole_start_aimed(double px, double py, const Point3 &X, const Point3 &Q0);
 // Exact: the carrier passes Q.
-bool pole_on_line(const ExactPole &p, double sx, double sy, double ex, double ey);
+bool pole_on_line(const ExactPole &p, double sx, double sy, double ex, double ey, const Line3 *line = nullptr); // (line: the carrier's exact line, Surf::exact_line, A.2)
 bool pole_on_circle(const ExactPole &p, const Point3 &C, const BigFloat &rw2);
 // Exact: the carrier passes Q and is tangent there to the beam.
-bool pole_tangent_line(const ExactPole &p, double sx, double sy, double ex, double ey);
+bool pole_tangent_line(const ExactPole &p, double sx, double sy, double ex, double ey, const Line3 *line = nullptr);
 bool pole_tangent_circle(const ExactPole &p, const Point3 &C, const BigFloat &rw2);
 // The largest limb count of the record (the exact-data budget).
 int pole_limbs(const ExactPole &p);
@@ -103,7 +103,7 @@ int pole_limbs(const ExactPole &p);
 // derived line (reflected / translated) keeps its parent and mirror; a line
 // from_approx computes its exact coefficients through `source` on demand
 // (which may answer nullopt: the line then makes no exact claim).
-class Line {
+class Line : public std::enable_shared_from_this<Line> {
 public:
 	using Source = std::function<std::optional<Line3>()>;
 
@@ -115,9 +115,14 @@ public:
 
 	// The exact coefficients, or nullopt when a lazy source could not afford them.
 	std::optional<Line3> exact() const;
+	// Whether exact() has a value -- the root's source decides; the reflections and
+	// translations since are not computed (A.2: the same-carrier tie asks only this)
+	bool has_exact() const;
 	std::shared_ptr<Line> translated(double dx, double dy) const;
 	std::shared_ptr<Line> reflected(double sx, double sy, double ex, double ey) const;
-	bool concurrent(double px, double py, double qx, double qy, double rx, double ry, double sx, double sy) const;
+	// (A, B: the two lines' exact coefficients when the caller has them cached, else built here)
+	bool concurrent(double px, double py, double qx, double qy, double rx, double ry, double sx, double sy, const Line3 *A = nullptr,
+			const Line3 *B = nullptr) const;
 	bool contains(double x, double y) const;
 	bool contains_h(const Point3 &X, double x, double y, double exy) const;
 	bool tangent_to(const Point3 &C, const BigFloat &rw2, double cx, double cy, double rr, double ecc, double err) const;
@@ -126,8 +131,8 @@ public:
 	// False when the line has no exact coefficients.
 	bool parallel_to(double sx, double sy, double ex, double ey) const;
 
-	// enable_shared_from_this is not needed: derived lines capture the parent
-	// pointer handed to them by the caller through the shared_ptr factories.
+	// A.6: a derived line shares its parent (it copied it, its lazy source and any
+	// exact coefficients included; the parent's exact value is now computed once)
 	std::shared_ptr<const Line> parent;
 	std::vector<double> mirror; // 2 values: translation; 4 values: mirror line s -> e
 
@@ -135,6 +140,62 @@ private:
 	mutable std::optional<Line3> exact_;
 	Source source_;
 	mutable bool source_done_ = false;
+};
+
+// ---- the exact pole, carried lazily (the cast-cost program, A.3)
+// Every effect used to compute the pole after it eagerly (pole_after), though
+// its consumers (the tangency at Q, the pinning of crossings at Q) decide by a
+// float filter first and ask the exact pole only when it declines. A PoleRec
+// is a start record and the maps applied to it since (like BeamRec); it keeps a
+// float64 shadow with rigorous bounds -- Q homogeneous, D -- propagated through
+// the maps, so the predicates' filters run on the shadow, and the exact pole
+// is computed (and memoized in the record) only where a filter cannot decide.
+// A record whose exact pole is absent (the start had none, a map degenerated,
+// or the pole passed the budget) answers every predicate as no pole did: the
+// walk keeps the candidate and pins nothing.
+struct PoleShadow {
+	EB qx{0.0, 0.0}, qy{0.0, 0.0}, qw{0.0, 0.0}, dx{0.0, 0.0}, dy{0.0, 0.0};
+	bool ok = false; // false: a bound is not finite (every filter declines)
+};
+class PoleRec : public std::enable_shared_from_this<PoleRec> {
+public:
+	using Source = std::function<std::optional<ExactPole>()>;
+	// the image of Q under the inversion (invert_point_h(Q, C, rw2)), memoized by the caller
+	using ImageSource = std::function<std::optional<Point3>(const Point3 &)>;
+	static constexpr int EXACT_LIMBS = 320; // (Solver::EXACT_IMAGE_LIMBS: past it the record makes no exact claim)
+
+	// an aimed start in a pre-transform frame: Q0, D = conj(P - X) (X - Q0) (P - Q0) (pole_start_aimed; `exact` computes it, memoized)
+	static std::shared_ptr<const PoleRec> start_aimed(double px, double py, const Point3 &X, const Point3 &Q0, Source exact);
+	static std::shared_ptr<const PoleRec> start_direction(double px, double py, double dx, double dy, const Point3 &Q0);
+	// the pole of a straight beam with exact line data, at a circle's centre (pole_from_line)
+	static std::shared_ptr<const PoleRec> from_line(std::shared_ptr<const Line> line, const Point3 *C);
+	std::shared_ptr<const PoleRec> reflected(double sx, double sy, double ex, double ey) const;
+	std::shared_ptr<const PoleRec> translated(double dx, double dy) const;
+	// C and rw2 are the circle's exact data, owned by the scene (it outlives the walk)
+	std::shared_ptr<const PoleRec> inverted(const Point3 *C, const BigFloat *rw2, ImageSource image) const;
+
+	// The exact pole: nullopt where there is none (see above). Computed once.
+	const std::optional<ExactPole> &exact() const;
+	const PoleShadow &shadow() const { return shadow_; }
+	// The filters on the shadow: false where the carrier certainly does not pass
+	// Q (is not tangent there); nullopt where the exact predicate must decide.
+	std::optional<bool> on_line(double sx, double sy, double ex, double ey) const;
+	std::optional<bool> on_circle(const Point3 &C, const BigFloat &rw2) const;
+	std::optional<bool> tangent_line(double sx, double sy, double ex, double ey) const;
+	std::optional<bool> tangent_circle(const Point3 &C, const BigFloat &rw2) const;
+
+private:
+	enum class Kind { Source, Reflect, Translate, Invert };
+	Kind kind_ = Kind::Source;
+	PoleShadow shadow_;
+	Source source_;
+	std::shared_ptr<const PoleRec> parent_;
+	double m_[4] = {0.0, 0.0, 0.0, 0.0};
+	const Point3 *c_ = nullptr;
+	const BigFloat *rw2_ = nullptr;
+	ImageSource image_;
+	mutable bool done_ = false;
+	mutable std::optional<ExactPole> exact_;
 };
 
 // ---- the exact beam (Perf P2b)
@@ -153,7 +214,7 @@ GCircle gc_invert(const GCircle &g, const Point3 &C, const BigFloat &rw2);
 int gc_limbs(const GCircle &g);
 // Exact: the generalized circle touches the carrier (a line through s and e;
 // a circle of center C, rw2 = (r w)^2) at one point.
-bool gc_tangent_line(const GCircle &g, double sx, double sy, double ex, double ey);
+bool gc_tangent_line(const GCircle &g, double sx, double sy, double ex, double ey, const Line3 *line = nullptr);
 bool gc_tangent_circle(const GCircle &g, const Point3 &C, const BigFloat &rw2);
 // Exact: the generalized circle passes the float64 point (x, y).
 bool gc_passes(const GCircle &g, double x, double y);
@@ -163,11 +224,14 @@ bool gc_passes(const GCircle &g, double x, double y);
 // only when a decision asks (BeamRec::exact). Every beam of an epoch is the
 // image of a line under the frame's maps (see ExactPole); a beam whose record
 // is missing makes no exact claim.
-class BeamRec {
+class BeamRec : public std::enable_shared_from_this<BeamRec> {
 public:
 	static std::shared_ptr<const BeamRec> from_line(std::shared_ptr<const Line> line);
 	// a beam whose exact circle is known outright (K9: a pre-transform start)
 	static std::shared_ptr<const BeamRec> from_gc(const GCircle &g);
+	// ... computed by `source` when a decision asks (A.4: gc_through was 27% of a
+	// tangent_infinity region, and every consumer filters in float first)
+	static std::shared_ptr<const BeamRec> from_gc_lazy(std::function<GCircle()> source);
 	std::shared_ptr<const BeamRec> reflected(double sx, double sy, double ex, double ey) const;
 	std::shared_ptr<const BeamRec> translated(double dx, double dy) const;
 	std::shared_ptr<const BeamRec> inverted(const Point3 &C, const BigFloat &rw2) const;
@@ -190,6 +254,7 @@ private:
 	double m_[4] = {0.0, 0.0, 0.0, 0.0};
 	Point3 c_;
 	BigFloat rw2_;
+	std::function<GCircle()> gc_source_; // (Kind::Circle, lazy)
 	mutable bool done_ = false;
 	mutable std::optional<GCircle> exact_;
 };

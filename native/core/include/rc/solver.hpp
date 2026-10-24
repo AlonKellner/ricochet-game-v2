@@ -369,7 +369,7 @@ struct Known {
 	CN<N> p;
 	N t;
 	int skip = -1; // the departure surface for a departure point
-	std::optional<std::vector<const Surf<N> *>> incident; // surfaces whose carrier contains p (cached)
+	std::shared_ptr<const std::vector<const Surf<N> *>> incident; // surfaces whose carrier contains p (cached; Scene::incidence_lists)
 };
 
 template <Num N>
@@ -383,7 +383,7 @@ struct StackEntry {
 	int pop_id = -1;      // the surface whose hit pops this entry (sid; a portal's pair)
 	EffectType etype = EffectType::Pass; // the map pushed (a pop needs the same map)
 	std::optional<CN<N>> q; // the frame's image of infinity before the push (restored by the pop)
-	std::optional<exact::ExactPole> pole; // the exact pole record before the push (Stage 105)
+	std::shared_ptr<const exact::PoleRec> pole; // the exact pole record before the push (Stage 105; lazy since A.3)
 	int pole_serial = 0;
 	std::shared_ptr<const exact::BeamRec> rec; // the exact beam before the push (Perf P2b)
 	const Surf<N> *through_c = nullptr;        // K15: the provenance before the push (restored by the pop)
@@ -580,7 +580,7 @@ struct Walk {
 	// Stage 105: the exact pole record (Q exactly, and the beam's direction at
 	// Q), or nullopt (Q at infinity, or the frame's data not exact); its serial
 	// keys the tangency cache
-	std::optional<exact::ExactPole> pole;
+	std::shared_ptr<const exact::PoleRec> pole; // the frame's infinity point as exact data, lazily (A.3: exact::PoleRec)
 	// the current beam departs from the frame's infinity point (provenance: an
 	// effect fired at a crossing pinned at Q): no pinning, no passage of Q
 	bool depart_q = false;
@@ -594,6 +594,15 @@ struct Walk {
 	// tests only: the record beside each beam loop (record_poles)
 	bool record_poles = false;
 	std::vector<std::pair<BeamPtr<N>, std::optional<exact::ExactPole>>> pole_trace;
+	bool record_why = false;  // A.8: fill Event::why (the margins' instrument, LadderStats::why*; RC_LADDER_WHY=1)
+	// A.7: candidate(w, s) per surface for the walk's state (its mode, plan index and
+	// flags) -- a pure function of them, asked for every surface at every step
+	std::vector<uint8_t> cand_mask;
+	bool cand_valid = false;
+	Mode cand_mode = Mode::Physical;
+	int cand_index = 0;
+	Flags cand_flags;
+	size_t horizon_size = SIZE_MAX, horizon_value = 0; // A.8: read_horizon's value at horizon_size events (pure in the events)
 	std::vector<std::vector<Known<N>>> known_trace; // and the known points (Stage 106)
 	// and whether the frame is exact there: Q finite with a record, or the
 	// beam straight (Q at infinity) on an exact line
@@ -607,23 +616,12 @@ struct Walk {
 	const std::function<size_t(const std::vector<Event<N>> &)> *read_horizon = nullptr; // Stage 124: Solver::read_horizon
 };
 
-// Caches owned by the caller (one per solve / tracer): the anchored chain of
-// the last inputs and the exact aim images (capped).
-template <Num N>
-struct SolveCache {
-	struct ChainKey {
-		const void *scene = nullptr;
-		double px = 0, py = 0, cx = 0, cy = 0;
-		std::string flags;
-		std::vector<std::tuple<int, bool, bool, float, float>> plan;
-		int force = 0; // Stage 111: 0 the plan's realization, 1 forced direct, 2 forced reversed
-		bool operator==(const ChainKey &o) const {
-			return scene == o.scene && px == o.px && py == o.py && cx == o.cx && cy == o.cy && flags == o.flags && plan == o.plan && force == o.force;
-		}
-	};
-	std::optional<ChainKey> chain_key;
-	std::shared_ptr<const AnchorChain<N>> chain;
-	bool chain_null = false;
+// The exact memos (the cast-cost program, A.1): the exact aim images, the
+// pre-transform starts, the pole predicates and the carrier incidences -- pure
+// functions of exact inputs (float64 data and exact arithmetic), the same at
+// every tier -- one per LadderContext, shared by its tiers' SolveCaches (a climb
+// through the tiers computes each once).
+struct ExactCache {
 	// Stage 128: the aim image's key as exact bits (the %.17g text it was told
 	// every number apart the same way, at a printf per cast)
 	struct ImageKey {
@@ -657,6 +655,44 @@ struct SolveCache {
 	IncidenceMemo incidence; // Stage 123
 };
 
+// Caches owned by the caller (one per solve / tracer): the anchored chains of
+// the last inputs and the exact memos.
+template <Num N>
+struct SolveCache {
+	struct ChainKey {
+		const void *scene = nullptr;
+		double px = 0, py = 0, cx = 0, cy = 0;
+		std::string flags;
+		std::vector<std::tuple<int, bool, bool, float, float>> plan;
+		int force = 0; // Stage 111: 0 the plan's realization, 1 forced direct, 2 forced reversed
+		bool operator==(const ChainKey &o) const {
+			return scene == o.scene && px == o.px && py == o.py && cx == o.cx && cy == o.cy && flags == o.flags && plan == o.plan && force == o.force;
+		}
+	};
+	// the last four chains (A.1: a split region's tie cast and own cast alternate
+	// the force on one cursor; one entry evicted the other every cast)
+	struct ChainEntry {
+		ChainKey key;
+		std::shared_ptr<const AnchorChain<N>> chain;
+	};
+	std::vector<ChainEntry> chains;
+	std::shared_ptr<ExactCache> exact = std::make_shared<ExactCache>();
+	// A.5: plan_effects per (plan, flags) -- a cast computed it 6-10 times -- and
+	// piece_spans per plan's spans -- every walk and tier computed it, with the
+	// carriers' crossings at the tier's precision. Pure functions; the last few.
+	struct EffectsEntry {
+		std::vector<std::pair<int, bool>> plan;
+		Flags flags;
+		std::vector<EffectType> effs;
+	};
+	std::vector<EffectsEntry> effects;
+	struct SpansEntry {
+		std::vector<std::pair<int, std::optional<std::array<double, 6>>>> plan;
+		std::vector<std::optional<Seg<N>>> spans;
+	};
+	std::vector<SpansEntry> spans;
+};
+
 // ---------------------------------------------------------------- the solver
 
 template <Num N>
@@ -678,14 +714,14 @@ public:
 			b0 = Backend<N>::seed(b0);
 			w.seeded = true;
 		}
-		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
+		w.known = {Known<N>{player, player.re.like(0.0), -1, nullptr}};
 		if (b0->kappa.is_zero()) {
 			w.line = exact::Line::from_exact(exact::line_from_dir(player.fx(), player.fy(), dir.fx(), dir.fy()));
 			w.rec = exact::BeamRec::from_line(w.line);
 			add_line_endpoints(w, *b0);
 		}
 		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
-			set_pole(w, exact::pole_start_direction(player.fx(), player.fy(), dir.fx(), dir.fy(), *q0));
+			set_pole(w, exact::PoleRec::start_direction(player.fx(), player.fy(), dir.fx(), dir.fy(), *q0));
 		}
 		w.O = b0->p; // (Stage 131: the first ray's origin, the player)
 		walk_from(w, b0, -1, std::nullopt);
@@ -717,6 +753,28 @@ public:
 	// Forward state simulation (GAME_SPEC 13.7): the effect each plan entry
 	// resolves to, under the flags left by the entries before it.
 	std::vector<EffectType> plan_effects(const std::vector<PlanItem> &plan, const Flags &flags) const {
+		std::vector<std::pair<int, bool>> key;
+		if (cache_ != nullptr) {
+			key.reserve(plan.size());
+			for (const PlanItem &item : plan) {
+				key.emplace_back(item.surface_id, item.left);
+			}
+			for (const auto &e : cache_->effects) {
+				if (e.plan == key && e.flags == flags) {
+					return e.effs;
+				}
+			}
+		}
+		std::vector<EffectType> out = plan_effects_uncached(plan, flags);
+		if (cache_ != nullptr) {
+			if (cache_->effects.size() >= 8) {
+				cache_->effects.erase(cache_->effects.begin());
+			}
+			cache_->effects.push_back({std::move(key), flags, out});
+		}
+		return out;
+	}
+	std::vector<EffectType> plan_effects_uncached(const std::vector<PlanItem> &plan, const Flags &flags) const {
 		Flags f = flags;
 		std::vector<EffectType> out;
 		out.reserve(plan.size());
@@ -789,7 +847,7 @@ public:
 	// ascending, the pole, t <= 0 ascending; at one parameter the hit before
 	// the pole), q = the pole was passed first; nullopt when no crossing fires.
 	std::optional<bool> first_firing(const Beam<N> &b, const Surf<N> &surf, bool left, const std::optional<N> &tq,
-			const std::shared_ptr<const exact::Line> &line, const exact::ExactPole *pole, const std::optional<CN<N>> &Q) const {
+			const std::shared_ptr<const exact::Line> &line, const exact::PoleRec *pole, const std::optional<CN<N>> &Q) const {
 		if (line && !surf.line) {
 			const auto &ec = surf.exact_circle();
 			if (line->tangent_to(ec.C, ec.rw2, ec.fcx, ec.fcy, ec.frr, ecc(ec), 8.0 * exact::U * std::fabs(ec.frr))) {
@@ -801,9 +859,8 @@ public:
 		// parameter, so the hit and the passage tie exactly (the hit first)
 		bool through_q = false;
 		if (pole != nullptr && Q) {
-			if (surf.line ? exact::pole_on_line(*pole, surf.sx, surf.sy, surf.ex, surf.ey) : exact::pole_on_circle(*pole, surf.exact_circle().C, surf.exact_circle().rw2)) {
-				if (surf.line ? exact::pole_tangent_line(*pole, surf.sx, surf.sy, surf.ex, surf.ey)
-							  : exact::pole_tangent_circle(*pole, surf.exact_circle().C, surf.exact_circle().rw2)) {
+			if (pole_rec_on(*pole, surf, nullptr)) {
+				if (pole_rec_tangent(*pole, surf)) {
 					return std::nullopt;
 				}
 				through_q = true;
@@ -938,14 +995,11 @@ public:
 		const std::shared_ptr<const exact::Line> line = q0 ? nullptr : initial_line(player, cursor, plan, flags);
 		// the exact pole record of a pre-transform start (Stage 105): the circle
 		// through the player, the exact aim image and Q0
-		std::optional<exact::ExactPole> pole;
+		std::shared_ptr<const exact::PoleRec> pole;
 		if (q0) {
 			if (const std::optional<exact::Point3> q0e = pre_q_exact()) {
 				if (const std::optional<exact::Point3> X0 = exact_image_cached(cursor, plan, flags)) {
-					pole = start_pole(player.fx(), player.fy(), *X0, *q0e);
-					if (pole && exact::pole_limbs(*pole) > EXACT_IMAGE_LIMBS) {
-						pole.reset();
-					}
+					pole = start_pole_rec(player.fx(), player.fy(), *X0, *q0e);
 				}
 			}
 		}
@@ -964,15 +1018,15 @@ public:
 			}
 		}
 		const Beam<N> rev{b0.p, b0.tau.neg(), b0.kappa.neg()};
-		const std::optional<bool> qd = first_firing(b0, surf, left, tq, line, pole ? &*pole : nullptr, q0);
+		const std::optional<bool> qd = first_firing(b0, surf, left, tq, line, pole.get(), q0);
 		std::optional<N> tq_rev = tq;
 		if (tq && !tq->is_inf()) {
 			tq_rev = Backend<N>::param_of(rev, *q0);
 		}
-		const std::optional<bool> qr = first_firing(rev, surf, left, tq_rev, line, pole ? &*pole : nullptr, q0);
+		const std::optional<bool> qr = first_firing(rev, surf, left, tq_rev, line, pole.get(), q0);
 		static const bool trace = std::getenv("RC_REALIZE_TRACE") != nullptr;
 		if (trace) {
-			std::fprintf(stderr, "realize: cursor (%.9g, %.9g) pole %d tq %.6g qd %s qr %s\n", cursor.fx(), cursor.fy(), int(pole.has_value()),
+			std::fprintf(stderr, "realize: cursor (%.9g, %.9g) pole %d tq %.6g qd %s qr %s\n", cursor.fx(), cursor.fy(), int(pole && pole->exact().has_value()),
 				tq ? tq->to_float() : -1.0, qd ? (*qd ? "after" : "before") : "none", qr ? (*qr ? "after" : "before") : "none");
 		}
 		if (qd.has_value() != qr.has_value()) {
@@ -1579,7 +1633,7 @@ private:
 		if (cache_ == nullptr) {
 			return exact_image_h(cursor, plan, EXACT_IMAGE_LIMBS, flags);
 		}
-		typename SolveCache<N>::ImageKey key;
+		ExactCache::ImageKey key;
 		auto put = [&key](double v) { key.words.push_back(std::bit_cast<uint64_t>(v)); };
 		put(cursor.fx());
 		put(cursor.fy());
@@ -1595,15 +1649,15 @@ private:
 				}
 			}
 		}
-		auto it = cache_->images.find(key);
-		if (it != cache_->images.end()) {
+		auto it = cache_->exact->images.find(key);
+		if (it != cache_->exact->images.end()) {
 			return it->second;
 		}
-		if (cache_->images.size() > 256) {
-			cache_->images.clear();
+		if (cache_->exact->images.size() > 256) {
+			cache_->exact->images.clear();
 		}
 		std::optional<exact::Point3> X = exact_image_h(cursor, plan, EXACT_IMAGE_LIMBS, flags);
-		cache_->images[std::move(key)] = X;
+		cache_->exact->images[std::move(key)] = X;
 		return X;
 	}
 
@@ -1615,30 +1669,30 @@ private:
 		return same_bits(a[0], b[0]) && same_bits(a[1], b[1]) && same_bits(a[2], b[2]);
 	}
 	// An aimed shot's exact start in a pre-transform frame (SolveCache::Start)
-	typename SolveCache<N>::Start *start_entry(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
+	ExactCache::Start *start_entry(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
 		if (cache_ == nullptr) {
 			return nullptr;
 		}
 		const uint64_t bx = std::bit_cast<uint64_t>(px);
 		const uint64_t by = std::bit_cast<uint64_t>(py);
-		for (auto &e : cache_->starts) {
+		for (auto &e : cache_->exact->starts) {
 			if (e.px == bx && e.py == by && same_bits(e.X0, X0) && same_bits(e.Q0, Q0)) {
 				return &e;
 			}
 		}
-		if (cache_->starts.size() >= 8) {
-			cache_->starts.erase(cache_->starts.begin());
+		if (cache_->exact->starts.size() >= 8) {
+			cache_->exact->starts.erase(cache_->exact->starts.begin());
 		}
-		typename SolveCache<N>::Start e;
+		ExactCache::Start e;
 		e.px = bx;
 		e.py = by;
 		e.X0 = X0;
 		e.Q0 = Q0;
-		cache_->starts.push_back(std::move(e));
-		return &cache_->starts.back();
+		cache_->exact->starts.push_back(std::move(e));
+		return &cache_->exact->starts.back();
 	}
 	std::optional<exact::ExactPole> start_pole(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
-		typename SolveCache<N>::Start *e = start_entry(px, py, X0, Q0);
+		ExactCache::Start *e = start_entry(px, py, X0, Q0);
 		if (e == nullptr) {
 			return exact::pole_start_aimed(px, py, X0, Q0);
 		}
@@ -1648,9 +1702,17 @@ private:
 		}
 		return e->pole;
 	}
+	// A.3: the start's pole record (its exact pole from start_pole, memoized, when a filter asks)
+	std::shared_ptr<const exact::PoleRec> start_pole_rec(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
+		return exact::PoleRec::start_aimed(px, py, X0, Q0, [this, px, py, X0, Q0] { return start_pole(px, py, X0, Q0); });
+	}
+	// A.4: the start's exact circle as a lazy record (start_gc, memoized, when a decision asks)
+	std::shared_ptr<const exact::BeamRec> start_rec(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
+		return exact::BeamRec::from_gc_lazy([this, px, py, X0, Q0] { return start_gc(px, py, X0, Q0); });
+	}
 	exact::GCircle start_gc(double px, double py, const exact::Point3 &X0, const exact::Point3 &Q0) const {
 		auto through = [&] { return exact::gc_through(exact::Point3{exact::of(px), exact::of(py), exact::of(1.0)}, X0, Q0); };
-		typename SolveCache<N>::Start *e = start_entry(px, py, X0, Q0);
+		ExactCache::Start *e = start_entry(px, py, X0, Q0);
 		if (e == nullptr) {
 			return through();
 		}
@@ -1719,12 +1781,16 @@ private:
 			key.plan.emplace_back(p.surface_id, p.left, p.hint.has_value(), p.hint ? p.hint->x : 0.0f, p.hint ? p.hint->y : 0.0f);
 		}
 		key.force = force_reversed ? (*force_reversed ? 2 : 1) : 0;
-		if (cache_->chain_key && *cache_->chain_key == key) {
-			return cache_->chain;
+		for (const auto &e : cache_->chains) {
+			if (e.key == key) {
+				return e.chain;
+			}
 		}
-		cache_->chain = build_chain(player, cursor, plan, flags);
-		cache_->chain_key = key;
-		return cache_->chain;
+		if (cache_->chains.size() >= 4) {
+			cache_->chains.erase(cache_->chains.begin());
+		}
+		cache_->chains.push_back({std::move(key), build_chain(player, cursor, plan, flags)});
+		return cache_->chains.back().chain;
 	}
 
 	int pop_id_of(int sid) const {
@@ -2080,8 +2146,8 @@ private:
 		w.spans = piece_spans(plan);
 		w.Q = effects::scene_pre_q(scene_);
 		w.record_poles = record_poles_;
-		w.pole_memo = cache_ ? &cache_->poles : nullptr;
-		w.incidence_memo = cache_ ? &cache_->incidence : nullptr;
+		w.pole_memo = cache_ ? &cache_->exact->poles : nullptr;
+		w.incidence_memo = cache_ ? &cache_->exact->incidence : nullptr;
 		w.read_horizon = read_horizon;
 		w.events.reserve(32); // (Stage 128: one allocation, not a growth per few events)
 		w.gains.reserve(32);
@@ -2101,25 +2167,25 @@ private:
 			w.seeded = true;
 			w.anchored = false;
 		}
-		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
+		w.known = {Known<N>{player, player.re.like(0.0), -1, nullptr}};
 		w.line = initial_line(player, cursor, plan, flags);
 		w.rec = exact::BeamRec::from_line(w.line);
 		if (w.line) {
 			// every frame change fixes the cursor: the aim image is the cursor itself
 			if (!plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
-				w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, std::nullopt});
+				w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, nullptr});
 			}
 			add_line_endpoints(w, *b0);
 		} else if (w.Q && !plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
-			w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, std::nullopt});
+			w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, nullptr});
 		}
 		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
 			// an aimed shot in a pre-transform frame: the circle through P, X0, Q0
 			if (const std::optional<exact::Point3> X0 = exact_image_cached(cursor, plan, flags)) {
-				set_pole(w, start_pole(player.fx(), player.fy(), *X0, *q0));
+				set_pole(w, start_pole_rec(player.fx(), player.fy(), *X0, *q0));
 				if (!w.rec) {
-					// K9: and its exact circle
-					w.rec = exact::BeamRec::from_gc(start_gc(player.fx(), player.fy(), *X0, *q0));
+					// K9: and its exact circle (A.4: computed when a decision asks)
+					w.rec = start_rec(player.fx(), player.fy(), *X0, *q0);
 				}
 			}
 		}
@@ -2232,7 +2298,7 @@ private:
 		Walk<N> w = new_walk(plan, cursor, mode, max_events, flags);
 		const CN<N> delta = w.Q ? player.sub(*w.Q) : player.sub(player);
 		Beam<N> b = Beam<N>::through(player, aim, w.Q ? &delta : nullptr);
-		std::optional<exact::GCircle> start_circle;
+		std::shared_ptr<const exact::BeamRec> start_circle; // (A.4: the start's exact circle, lazily)
 		if (const std::optional<exact::Point3> q0 = pre_q_exact()) {
 			// the exact pole record (Stage 105): the circle through the player, the aim
 			// point and Q0; a shot straight at the cursor passes exact data
@@ -2243,8 +2309,8 @@ private:
 				X0 = exact_image_cached(cursor, plan, flags);
 			}
 			if (X0) {
-				set_pole(w, start_pole(player.fx(), player.fy(), *X0, *q0));
-				start_circle = start_gc(player.fx(), player.fy(), *X0, *q0);
+				set_pole(w, start_pole_rec(player.fx(), player.fy(), *X0, *q0));
+				start_circle = start_rec(player.fx(), player.fy(), *X0, *q0);
 			}
 		}
 		if (force_reversed ? *force_reversed : realize(player, cursor, plan, flags, b, nullptr).reversed) {
@@ -2258,15 +2324,15 @@ private:
 			b0 = Backend<N>::seed(b0);
 			w.seeded = true;
 		}
-		w.known = {Known<N>{player, player.re.like(0.0), -1, std::nullopt}};
+		w.known = {Known<N>{player, player.re.like(0.0), -1, nullptr}};
 		w.line = line;
 		w.rec = exact::BeamRec::from_line(w.line);
 		if (!w.rec && start_circle) {
-			w.rec = exact::BeamRec::from_gc(*start_circle); // K9: a pre-transform start's exact circle
+			w.rec = start_circle; // K9: a pre-transform start's exact circle
 		}
 		if (w.line) {
 			if (X && !X->sub(player).is_zero() && !plan.empty() && fixes_cursor(cursor, plan, flags) && known_index(w.known, cursor) < 0) {
-				w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, std::nullopt});
+				w.known.push_back(Known<N>{cursor, Backend<N>::param_of(*b0, cursor), -1, nullptr});
 			}
 			add_line_endpoints(w, *b0);
 		}
@@ -2292,7 +2358,7 @@ private:
 		Backend<N>::f64_point(b, t, x, y);
 		const double scale = gd_maxf(1.0, gd_maxf(std::fabs(aim_known->x), std::fabs(aim_known->y)));
 		if (d64(x, y, aim_known->x, aim_known->y) <= 1e-6 * scale) {
-			w.known.push_back(Known<N>{k, t, -1, std::nullopt});
+			w.known.push_back(Known<N>{k, t, -1, nullptr});
 		}
 	}
 
@@ -2308,7 +2374,7 @@ private:
 					continue;
 				}
 				if (known_index(w.known, *ep) < 0 && w.line->contains(ep->fx(), ep->fy())) {
-					w.known.push_back(Known<N>{*ep, Backend<N>::param_of(b, *ep), -1, std::nullopt});
+					w.known.push_back(Known<N>{*ep, Backend<N>::param_of(b, *ep), -1, nullptr});
 				}
 			}
 		}
@@ -2323,6 +2389,27 @@ private:
 		return -1;
 	}
 
+	// The surfaces whose carrier contains the known point p, from the scene's lists
+	// (computed once per point: Scene::incidence_lists).
+	static std::shared_ptr<const std::vector<const Surf<N> *>> incident_list(Walk<N> &w, const CN<N> &p) {
+		const typename Scene<N>::PointKey key{std::bit_cast<uint64_t>(p.fx()), std::bit_cast<uint64_t>(p.fy())};
+		auto &lists = w.scene->incidence_lists;
+		if (const auto it = lists.find(key); it != lists.end()) {
+			return it->second;
+		}
+		auto inc = std::make_shared<std::vector<const Surf<N> *>>();
+		for (const auto &s0 : w.scene->surfaces) {
+			if (incident(w, p, *s0)) {
+				inc->push_back(s0.get());
+			}
+		}
+		if (lists.size() > (1u << 14)) {
+			lists.clear(); // bounded: a long session's points
+		}
+		lists.emplace(key, inc);
+		return inc;
+	}
+
 	// Exact: the known point k lies on surf's carrier (cached per walk).
 	static bool incident(Walk<N> &w, const CN<N> &k, const Surf<N> &surf) {
 		if (geom::endpoint_at(surf.seg, k) != 0) {
@@ -2330,7 +2417,7 @@ private:
 		}
 		const double kx = k.fx();
 		const double ky = k.fy();
-		const IncidenceMemo::Key mk{w.scene, std::bit_cast<uint64_t>(kx), std::bit_cast<uint64_t>(ky), surf.id};
+		const IncidenceMemo::Key mk{w.incidence_memo, std::bit_cast<uint64_t>(kx), std::bit_cast<uint64_t>(ky), surf.id}; // (A.1: one memo per defs, shared by the tiers: the memo is the token)
 		if (w.incidence_memo) {
 			if (const bool *hit = w.incidence_memo->find(mk)) {
 				return *hit;
@@ -2369,8 +2456,12 @@ private:
 
 	// ---- the exact pole (Stage 105)
 
-	// Q0 of the pre-transform as exact data (nullopt: none, or infinity)
+	// Q0 of the pre-transform as exact data (nullopt: none, or infinity); a pure
+	// function of the scene, computed once per scene (A.1; it was per walk)
 	std::optional<exact::Point3> pre_q_exact() const {
+		if (scene_.pre_q_exact) {
+			return *scene_.pre_q_exact;
+		}
 		std::optional<exact::Point3> q;
 		for (const auto &sp : scene_.pre_surfaces) {
 			const auto &ec = sp->exact_circle();
@@ -2380,51 +2471,113 @@ private:
 			}
 			q = exact::invert_point_h(*q, ec.C, ec.rw2);
 			if (!q) {
-				return std::nullopt;
+				break;
 			}
 		}
+		scene_.pre_q_exact = q;
 		return q;
 	}
 
-	static void set_pole(Walk<N> &w, std::optional<exact::ExactPole> p) {
-		if (p && exact::pole_limbs(*p) > EXACT_IMAGE_LIMBS) {
-			p.reset(); // past the exact-data budget: no exact claim
-		}
+	static void set_pole(Walk<N> &w, std::shared_ptr<const exact::PoleRec> p) {
 		w.pole = std::move(p);
 		w.pole_serial = ++w.pole_serials;
 	}
 
-	// The record after surf's map (w.Q, w.line, w.pole: before it).
-	static std::optional<exact::ExactPole> pole_after(const Walk<N> &w, const Surf<N> &surf) {
+	// The record after surf's map (w.Q, w.line, w.pole: before it). A.3: the maps
+	// are recorded, not computed -- the exact pole only where a predicate's filter
+	// cannot decide (exact::PoleRec); past the budget it makes no claim (there).
+	static std::shared_ptr<const exact::PoleRec> pole_after(const Walk<N> &w, const Surf<N> &surf) {
 		if (surf.portal) {
 			if (!w.pole || surf.theta != 0.0) {
-				return std::nullopt; // a rotation is not exact data
+				return nullptr; // a rotation is not exact data
 			}
-			return exact::pole_translate(*w.pole, surf.dx, surf.dy);
+			return w.pole->translated(surf.dx, surf.dy);
 		}
 		if (surf.line) {
-			return w.pole ? exact::pole_reflect(*w.pole, surf.sx, surf.sy, surf.ex, surf.ey) : std::nullopt;
+			return w.pole ? w.pole->reflected(surf.sx, surf.sy, surf.ex, surf.ey) : nullptr;
 		}
 		const auto &ec = surf.exact_circle();
 		if (!w.Q) {
 			// a straight beam (Q at infinity) inverted: Q becomes the center
 			if (!w.line) {
-				return std::nullopt;
+				return nullptr;
 			}
-			const std::optional<exact::Line3> L = w.line->exact();
-			return L ? exact::pole_from_line(*L, ec.C) : std::nullopt;
+			return exact::PoleRec::from_line(w.line, &ec.C);
 		}
 		if (!w.pole) {
-			return std::nullopt;
+			return nullptr;
 		}
-		if (w.pole_memo) {
-			PoleMemo::Entry &e = w.pole_memo->entry(w.pole->Q, w.scene, surf.id);
-			if (!e.image) {
-				e.image = exact::invert_point_h(w.pole->Q, ec.C, ec.rw2);
+		// Q's image under the inversion, memoized by Q (PoleMemo) when the solve has one
+		PoleMemo *memo = w.pole_memo;
+		const Surf<N> *sp = &surf;
+		return w.pole->inverted(&ec.C, &ec.rw2, [memo, sp](const exact::Point3 &Q) -> std::optional<exact::Point3> {
+			const auto &c = sp->exact_circle();
+			if (memo) {
+				PoleMemo::Entry &e = memo->entry(Q, memo, sp->id);
+				if (!e.image) {
+					e.image = exact::invert_point_h(Q, c.C, c.rw2);
+				}
+				return *e.image;
 			}
-			return exact::pole_invert_from(*w.pole, *e.image, ec.C);
+			return exact::invert_point_h(Q, c.C, c.rw2);
+		});
+	}
+
+	// A.3: surf's carrier passes the record's Q -- the shadow's filter first, the
+	// exact pole only where it cannot decide (memo: the predicate memoized by Q,
+	// when the caller has one). A record without an exact pole: no.
+	static bool pole_rec_on(const exact::PoleRec &rec, const Surf<N> &surf, PoleMemo *memo) {
+		if (surf.line) {
+			if (const std::optional<bool> f = rec.on_line(surf.sx, surf.sy, surf.ex, surf.ey)) {
+				return *f;
+			}
+		} else {
+			const auto &ec = surf.exact_circle();
+			if (const std::optional<bool> f = rec.on_circle(ec.C, ec.rw2)) {
+				return *f;
+			}
 		}
-		return exact::pole_invert(*w.pole, ec.C, ec.rw2);
+		const std::optional<exact::ExactPole> &p = rec.exact();
+		if (!p) {
+			return false;
+		}
+		PoleMemo::Entry *e = memo ? &memo->entry(p->Q, memo, surf.id) : nullptr;
+		if (e && e->on) {
+			return *e->on;
+		}
+		bool r;
+		if (surf.line) {
+			r = exact::pole_on_line(*p, surf.sx, surf.sy, surf.ex, surf.ey, &surf.exact_line());
+		} else {
+			const auto &ec = surf.exact_circle();
+			r = exact::pole_on_circle(*p, ec.C, ec.rw2);
+		}
+		if (e) {
+			e->on = r;
+		}
+		return r;
+	}
+	// ... and the beam is tangent to it there (given that it passes Q)
+	static bool pole_rec_tangent(const exact::PoleRec &rec, const Surf<N> &surf) {
+		if (surf.line) {
+			if (const std::optional<bool> f = rec.tangent_line(surf.sx, surf.sy, surf.ex, surf.ey)) {
+				return *f;
+			}
+		} else {
+			const auto &ec = surf.exact_circle();
+			if (const std::optional<bool> f = rec.tangent_circle(ec.C, ec.rw2)) {
+				return *f;
+			}
+		}
+		const std::optional<exact::ExactPole> &p = rec.exact();
+		if (!p) {
+			return false;
+		}
+		if (surf.line) {
+			return exact::pole_tangent_line(*p, surf.sx, surf.sy, surf.ex, surf.ey, &surf.exact_line());
+		}
+		const auto &ec = surf.exact_circle();
+		return exact::pole_tangent_circle(*p, ec.C, ec.rw2);
 	}
 
 	static void pole_cache(Walk<N> &w) {
@@ -2442,19 +2595,7 @@ private:
 		if (it != w.pole_on.end()) {
 			return it->second;
 		}
-		PoleMemo::Entry *e = w.pole_memo ? &w.pole_memo->entry(w.pole->Q, w.scene, surf.id) : nullptr;
-		bool r;
-		if (e && e->on) {
-			r = *e->on;
-		} else if (surf.line) {
-			r = exact::pole_on_line(*w.pole, surf.sx, surf.sy, surf.ex, surf.ey);
-		} else {
-			const auto &ec = surf.exact_circle();
-			r = exact::pole_on_circle(*w.pole, ec.C, ec.rw2);
-		}
-		if (e) {
-			e->on = r;
-		}
+		const bool r = pole_rec_on(*w.pole, surf, w.pole_memo);
 		w.pole_on[surf.id] = r;
 		return r;
 	}
@@ -2470,13 +2611,7 @@ private:
 		if (it != w.pole_tangent.end()) {
 			return it->second;
 		}
-		bool r;
-		if (surf.line) {
-			r = exact::pole_tangent_line(*w.pole, surf.sx, surf.sy, surf.ex, surf.ey);
-		} else {
-			const auto &ec = surf.exact_circle();
-			r = exact::pole_tangent_circle(*w.pole, ec.C, ec.rw2);
-		}
+		const bool r = pole_rec_tangent(*w.pole, surf);
 		w.pole_tangent[surf.id] = r;
 		return r;
 	}
@@ -2571,7 +2706,7 @@ private:
 		bool r = false;
 		if (const std::optional<exact::GCircle> g = w.rec->exact()) {
 			if (surf.line) {
-				r = exact::gc_tangent_line(*g, surf.sx, surf.sy, surf.ex, surf.ey);
+				r = exact::gc_tangent_line(*g, surf.sx, surf.sy, surf.ex, surf.ey, &surf.exact_line());
 			} else {
 				const auto &ec = surf.exact_circle();
 				r = exact::gc_tangent_circle(*g, ec.C, ec.rw2);
@@ -2655,9 +2790,19 @@ private:
 		}
 		const Surf<N> *dep_surf = depart >= 0 ? w.scene->find(depart) : nullptr;
 		const int dep_rep = dep_surf != nullptr ? dep_surf->carrier_rep : -1;
-		for (const auto &sp : w.scene->surfaces) {
-			const Surf<N> &s = *sp;
-			if (!candidate(w, s)) {
+		if (!w.cand_valid || w.cand_mode != w.mode || w.cand_index != w.plan_index || !(w.cand_flags == w.flags)) {
+			w.cand_mask.resize(w.scene->surfaces.size());
+			for (size_t si = 0; si < w.scene->surfaces.size(); si++) {
+				w.cand_mask[si] = candidate(w, *w.scene->surfaces[si]) ? 1 : 0;
+			}
+			w.cand_valid = true;
+			w.cand_mode = w.mode;
+			w.cand_index = w.plan_index;
+			w.cand_flags = w.flags;
+		}
+		for (size_t si = 0; si < w.scene->surfaces.size(); si++) {
+			const Surf<N> &s = *w.scene->surfaces[si];
+			if (!w.cand_mask[si]) {
 				continue; // Stage 134: hitting it now could not matter
 			}
 			if (w.pole && pole_tangent(w, s)) {
@@ -2746,14 +2891,14 @@ private:
 			}
 			cands.push_back(Candidate<N>{tc, nullptr, false, cursor_pt, -1});
 			if (ki < 0) {
-				w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
+				w.known.push_back(Known<N>{*w.cursor, tc, -1, nullptr});
 			}
 		}
 		// K7: the cursor is a known point of every beam whose exact circle passes
 		// it, so a carrier through the cursor is crossed exactly there (the
 		// departure point after it is the cursor exactly: reached at once)
 		if (w.cursor && w.rec && known_index(w.known, *w.cursor) < 0 && cursor_on_beam(w, beam)) {
-			w.known.push_back(Known<N>{*w.cursor, Backend<N>::param_of(beam, *w.cursor), -1, std::nullopt});
+			w.known.push_back(Known<N>{*w.cursor, Backend<N>::param_of(beam, *w.cursor), -1, nullptr});
 		}
 		// Stage 113 (K11): a planned projective's hit point that is a data point
 		// of its segment is a known point of every beam whose exact circle
@@ -2762,7 +2907,7 @@ private:
 		if (w.chain && w.rec && !w.chain->exact_hits.empty()) {
 			for (const CN<N> &D : exact_hits_on_beam(w, beam)) {
 				if (known_index(w.known, D) < 0) {
-					w.known.push_back(Known<N>{D, Backend<N>::param_of(beam, D), -1, std::nullopt});
+					w.known.push_back(Known<N>{D, Backend<N>::param_of(beam, D), -1, nullptr});
 				}
 			}
 		}
@@ -2778,7 +2923,7 @@ private:
 				oc.origin = true;
 				cands.push_back(oc);
 				if (ki < 0) {
-					w.known.push_back(Known<N>{*w.O, to, -1, std::nullopt});
+					w.known.push_back(Known<N>{*w.O, to, -1, nullptr});
 				}
 			}
 		}
@@ -2869,7 +3014,14 @@ private:
 			}
 			const Surf<N> *p = x.surf;
 			const Surf<N> *q = y.surf;
-			if (!w.line->concurrent(p->sx, p->sy, p->ex, p->ey, q->sx, q->sy, q->ex, q->ey)) {
+			// A.2: two surfaces on one carrier (carrier_rep: exact collinearity) are one
+			// line, concurrent with any line that has exact coefficients -- what the
+			// predicate answers for proportional rows (hit_effects' corners: three
+			// surfaces on one line at every crossing, 36% of a region in BigFloat)
+			const bool concurrent = p->carrier_rep == q->carrier_rep
+				? w.line->has_exact()
+				: w.line->concurrent(p->sx, p->sy, p->ex, p->ey, q->sx, q->sy, q->ex, q->ey, &p->exact_line(), &q->exact_line());
+			if (!concurrent) {
 				continue;
 			}
 			const Surf<N> *lo = p->id < q->id ? p : q;
@@ -2906,8 +3058,11 @@ private:
 			}
 			const Surf<N> *p = x.surf;
 			const Surf<N> *q = y.surf;
-			const exact::Line3 L1 = exact::line_through(p->sx, p->sy, p->ex, p->ey);
-			const exact::Line3 L2 = exact::line_through(q->sx, q->sy, q->ex, q->ey);
+			if (p->carrier_rep == q->carrier_rep) {
+				continue; // (A.2) one carrier: parallel, as Xw = 0 below says
+			}
+			const exact::Line3 &L1 = p->exact_line();
+			const exact::Line3 &L2 = q->exact_line();
 			using exact::add;
 			using exact::mul;
 			using exact::sub;
@@ -2945,13 +3100,7 @@ private:
 	// its root nearest kp becomes (kt, kp).
 	static void snap(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands, Known<N> &rec) {
 		if (!rec.incident) {
-			std::vector<const Surf<N> *> inc;
-			for (const auto &s0 : w.scene->surfaces) {
-				if (incident(w, rec.p, *s0)) {
-					inc.push_back(s0.get());
-				}
-			}
-			rec.incident = inc;
+			rec.incident = incident_list(w, rec.p);
 		}
 		for (const Surf<N> *s : *rec.incident) {
 			if (s->id == rec.skip) {
@@ -3265,6 +3414,32 @@ private:
 	// surface's carrier is that crossing, by provenance (the nearest within an ulp
 	// in each coordinate), at the tier's precision.
 	std::vector<std::optional<Seg<N>>> piece_spans(const std::vector<PlanItem> &plan) const {
+		std::vector<std::pair<int, std::optional<std::array<double, 6>>>> key;
+		bool any = false;
+		if (cache_ != nullptr) {
+			key.reserve(plan.size());
+			for (const PlanItem &item : plan) {
+				key.emplace_back(item.surface_id, item.span);
+				any = any || item.span.has_value();
+			}
+			if (any) {
+				for (const auto &e : cache_->spans) {
+					if (e.plan == key) {
+						return e.spans;
+					}
+				}
+			}
+		}
+		std::vector<std::optional<Seg<N>>> out = piece_spans_uncached(plan);
+		if (cache_ != nullptr && any) {
+			if (cache_->spans.size() >= 4) {
+				cache_->spans.erase(cache_->spans.begin());
+			}
+			cache_->spans.push_back({std::move(key), out});
+		}
+		return out;
+	}
+	std::vector<std::optional<Seg<N>>> piece_spans_uncached(const std::vector<PlanItem> &plan) const {
 		std::vector<std::optional<Seg<N>>> out(plan.size());
 		for (size_t i = 0; i < plan.size(); i++) {
 			if (!plan[i].span) {
@@ -3436,7 +3611,22 @@ private:
 
 	// Forward walk. depart: id of the surface the beam departs from (-1: none).
 	// t_start nullopt: fresh (the beam's own point p is the departure, t = 0).
+	// A.8: past what the caller reads (and two events more): read_horizon is pure in
+	// the events, so its value is kept until an event is added
+	static bool past_horizon(Walk<N> &w) {
+		if (w.read_horizon == nullptr) {
+			return false;
+		}
+		if (w.horizon_size != w.events.size()) {
+			w.horizon_value = (*w.read_horizon)(w.events);
+			w.horizon_size = w.events.size();
+		}
+		return w.horizon_value + 2 <= w.events.size();
+	}
+
 	void walk_from(Walk<N> &w, BeamPtr<N> beam, int depart, std::optional<N> t_start) {
+		static const bool why = std::getenv("RC_LADDER_WHY") != nullptr;
+		w.record_why = why;
 		ScratchLease<N> lease; // (Stage 128: the step buffers, this thread's, while this walk runs)
 		struct Unlease {
 			Walk<N> &w;
@@ -3455,13 +3645,13 @@ private:
 			}
 			// Stage 124: past what the caller reads (and two events more): done (the
 			// events so far are the whole walk's: it is decided step by step)
-			if (w.read_horizon != nullptr && (*w.read_horizon)(w.events) + 2 <= w.events.size()) {
+			if (past_horizon(w)) {
 				w.done = true;
 				return;
 			}
 			if (w.record_poles) {
-				w.pole_trace.emplace_back(beam, w.pole);
-				w.exact_trace.push_back(w.Q ? w.pole.has_value() : w.line != nullptr);
+				w.pole_trace.emplace_back(beam, w.pole ? w.pole->exact() : std::optional<exact::ExactPole>{});
+				w.exact_trace.push_back(w.Q ? (w.pole && w.pole->exact().has_value()) : w.line != nullptr);
 				w.known_trace.push_back(w.known);
 			}
 			std::vector<Candidate<N>> &cands = w.scratch->cands; // (Stage 124: the walk's buffers, refilled each step)
@@ -3469,7 +3659,7 @@ private:
 			keep_cursor = false;
 			std::vector<uint8_t> &gw = w.scratch->why; // (reused across the walk's steps)
 			std::vector<double> &gp = w.scratch->gaps;
-			gaps(w, *beam, cands, gp, &gw);
+			gaps(w, *beam, cands, gp, w.record_why ? &gw : nullptr);
 			std::optional<Next> next;
 			bool restart = false;
 			// (Stage 134: resumed past the candidate processed last, by order -- the
@@ -3500,7 +3690,7 @@ private:
 							cands.push_back(c);
 						}
 					}
-					gaps(w, *beam, cands, gp, &gw);
+					gaps(w, *beam, cands, gp, w.record_why ? &gw : nullptr);
 				}
 				seen_mode = w.mode;
 				seen_index = w.plan_index;
@@ -3510,7 +3700,7 @@ private:
 				}
 				// Stage 127: past what the caller reads within a step too (a straight beam
 				// crosses many carriers in one step; the events so far are complete)
-				if (w.read_horizon != nullptr && (*w.read_horizon)(w.events) + 2 <= w.events.size()) {
+				if (past_horizon(w)) {
 					w.done = true;
 					return;
 				}
@@ -3566,7 +3756,7 @@ private:
 					// before the cursor, a divergence, like infinity's
 					w.sig++;
 					Event<N> &oe = emit(w, EventKind::Origin, beam, t_prev, t, gp[ci]);
-					oe.why = gw[ci];
+					oe.why = w.record_why ? gw[ci] : uint8_t(0);
 					oe.point = cand.pt;
 					oe.flags = w.flags;
 					t_prev = t;
@@ -3585,7 +3775,7 @@ private:
 						w.plan_index++;
 					}
 					Event<N> &ie = emit(w, EventKind::Infinity, beam, t_prev, cand.pt ? std::optional<N>(t) : std::nullopt, gp[ci]);
-					ie.why = gw[ci];
+					ie.why = w.record_why ? gw[ci] : uint8_t(0);
 					ie.surface_id = INFINITY_ID;
 					if (cand.pt) {
 						ie.point = cand.pt; // the frame's image of infinity, exact by provenance
@@ -3618,7 +3808,7 @@ private:
 				}
 				if (surf == nullptr) {
 					Event<N> &ce = emit(w, EventKind::Cursor, beam, t_prev, t, gp[ci]);
-					ce.why = gw[ci];
+					ce.why = w.record_why ? gw[ci] : uint8_t(0);
 					if (cand.pt) {
 						ce.point = cand.pt; // (a known point: exact by provenance)
 					}
@@ -3716,7 +3906,7 @@ private:
 					w.flags = w.flags.applied(changes);
 				}
 				Event<N> &e = emit(w, EventKind::Hit, beam, t_prev, t, gp[ci]);
-				e.why = gw[ci];
+				e.why = w.record_why ? gw[ci] : uint8_t(0);
 				e.surface_id = surf->id;
 				e.left = left;
 				e.state = fires_state;
@@ -3766,7 +3956,7 @@ private:
 					next = apply(w, beam, t, *surf, do_, depart, fresh, t0, rehit, pt, pt_exact);
 					// the beam departs from Q: an effect fired at Q (a pinned crossing,
 					// or the departure re-hit when the beam had departed from Q)
-					w.depart_q = w.pole.has_value() && (cand.at_q || (rehit && w.depart_q));
+					w.depart_q = (cand.at_q || (rehit && w.depart_q)) && w.pole && w.pole->exact().has_value(); // (A.3: the exact pole forced only at Q)
 					Event<N> &ev = w.events.back();
 					ev.popped = w.stack.size() < depth;
 					ev.teleport = surf->portal || (ev.popped && w.scene->find(next->depart)->portal);
@@ -3886,9 +4076,11 @@ private:
 				}
 				cands.insert(cands.begin() + long(j), Candidate<N>{tc, nullptr, false, std::nullopt, -1});
 				gp.insert(gp.begin() + long(j), INF_D);
-				gw.insert(gw.begin() + long(j), uint8_t(WHY_NONE)); // (Stage 123: the margins' classes stay aligned)
+				if (w.record_why) {
+					gw.insert(gw.begin() + long(j), uint8_t(WHY_NONE)); // (Stage 123: the margins' classes stay aligned)
+				}
 				if (known_index(w.known, *w.cursor) < 0) {
-					w.known.push_back(Known<N>{*w.cursor, tc, -1, std::nullopt});
+					w.known.push_back(Known<N>{*w.cursor, tc, -1, nullptr});
 				}
 			}
 		}
@@ -3911,7 +4103,7 @@ private:
 			}
 		}
 		if (!found && pt_exact && !portal) {
-			known.push_back(Known<N>{q, t_res, sid, std::nullopt});
+			known.push_back(Known<N>{q, t_res, sid, nullptr});
 		}
 	}
 
@@ -3996,11 +4188,11 @@ private:
 		// old beam's known points on surf's carrier (fixed by the effect)
 		w.known.clear();
 		if (pt_exact) {
-			w.known.push_back(Known<N>{pt, res.t0, surf.id, std::nullopt});
+			w.known.push_back(Known<N>{pt, res.t0, surf.id, nullptr});
 		}
 		for (const Known<N> &k : old_known) {
 			if (!geom::eq(k.p, pt) && incident(w, k.p, surf)) {
-				w.known.push_back(Known<N>{k.p, Backend<N>::param_of(*res.beam, k.p), -1, std::nullopt});
+				w.known.push_back(Known<N>{k.p, Backend<N>::param_of(*res.beam, k.p), -1, k.incident}); // (the same point: the same carriers)
 			}
 		}
 		if (w.line && surf.line) {
@@ -4101,7 +4293,7 @@ private:
 	Next project(Walk<N> &w, const BeamPtr<N> &beam, const N &t, const Surf<N> &surf, bool left, const CN<N> &pt, bool pt_exact) const {
 		w.stack.clear();
 		w.Q = std::nullopt;
-		set_pole(w, std::nullopt);
+		set_pole(w, nullptr);
 		w.epoch++;
 		const CN<N> *H = nullptr;
 		if (w.chain) {
@@ -4139,7 +4331,7 @@ private:
 			}
 			w.known.clear();
 			if (pt_exact) {
-				w.known.push_back(Known<N>{pt, *best, surf.id, std::nullopt});
+				w.known.push_back(Known<N>{pt, *best, surf.id, nullptr});
 			}
 			auto el = w.chain->exit_lines.find(w.plan_index - 1);
 			w.line = el == w.chain->exit_lines.end() ? nullptr : el->second;
@@ -4159,7 +4351,7 @@ private:
 		w.anchored = false;
 		w.known.clear();
 		if (pt_exact) {
-			w.known.push_back(Known<N>{pt, beam->kappa.like(0.0), surf.id, std::nullopt});
+			w.known.push_back(Known<N>{pt, beam->kappa.like(0.0), surf.id, nullptr});
 		}
 		w.line = nullptr;
 		w.rec = nullptr;
@@ -4225,7 +4417,7 @@ private:
 		if (pt_exact) {
 			std::optional<CN<N>> h2 = portal_image(w, surf, pt);
 			if (h2) {
-				known.push_back(Known<N>{*h2, res.t0, surf.pair, std::nullopt});
+				known.push_back(Known<N>{*h2, res.t0, surf.pair, nullptr});
 			}
 		}
 		for (const Known<N> &k : old_known) {
@@ -4234,7 +4426,7 @@ private:
 			}
 			std::optional<CN<N>> k2 = portal_image(w, surf, k.p);
 			if (k2 && known_index(known, *k2) < 0) {
-				known.push_back(Known<N>{*k2, Backend<N>::param_of(*res.beam, *k2), -1, std::nullopt});
+				known.push_back(Known<N>{*k2, Backend<N>::param_of(*res.beam, *k2), -1, nullptr});
 			}
 		}
 		w.known = known;

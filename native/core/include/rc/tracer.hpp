@@ -8,6 +8,7 @@
 #include "rc/ladder.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <array>
 #include <memory>
 #include <string>
@@ -234,6 +235,7 @@ public:
 		tie_memo_.clear();
 		realization_memo_.clear();
 		defs_ = defs;
+		supported_ = scene_supported(defs_); // (B.4: asked per decision; a function of the defs)
 		ctx_ = std::make_unique<LadderContext>(defs);
 		cache_valid_ = false;
 	}
@@ -255,7 +257,7 @@ public:
 		}
 		Flags start = flags;
 		start.erase(GHOST);
-		Solver<Dual> solver(scene, nullptr);
+		Solver<Dual> solver(scene, &ctx_->dual_cache());
 		const Flags after = solver.plan_flags(plan, start);
 		return !surf->present(after) || surf->ghosted(left, after);
 	}
@@ -277,7 +279,7 @@ private:
 		if (exact != nullptr) {
 			*exact = true;
 		}
-		if (!ctx_ || !scene_supported(defs_)) {
+		if (!ctx_ || !supported_) {
 			return std::nullopt;
 		}
 		if (player == cursor) {
@@ -347,7 +349,7 @@ public:
 	std::optional<LadderResult> solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags,
 			std::optional<bool> force_reversed = std::nullopt, int stops = -1, const std::optional<AimKnown> &known = std::nullopt,
 			bool reads_cursor = true) {
-		if (!ctx_ || !scene_supported(defs_) || (px == cx && py == cy)) {
+		if (!ctx_ || !supported_ || (px == cx && py == cy)) {
 			return std::nullopt;
 		}
 		flags.erase(GHOST);
@@ -363,15 +365,15 @@ public:
 	// the walk does not decide (Solver::tie_choice): reversed or not; nullopt
 	// where no solve is possible.
 	std::optional<bool> tie_choice(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags) {
-		if (!ctx_ || !scene_supported(defs_) || (px == cx && py == cy)) {
+		if (!ctx_ || !supported_ || (px == cx && py == cy)) {
 			return std::nullopt;
 		}
 		flags.erase(GHOST);
-		const std::string key = decision_key(px, py, cx, cy, plan, flags);
+		const DecisionKey key = decision_key(px, py, cx, cy, plan, flags);
 		if (const auto it = tie_memo_.find(key); it != tie_memo_.end()) {
 			return it->second;
 		}
-		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		Solver<Dual> solver(ctx_->dual_scene(), &ctx_->dual_cache()); // (the cast-cost program, A.1: the exact memos, pure, shared with the solves)
 		const std::optional<bool> q = solver.tie_choice(CN<Dual>{Dual{px, 0.0}, Dual{py, 0.0}}, CN<Dual>{Dual{cx, 0.0}, Dual{cy, 0.0}}, plan, flags).reversed;
 		remember(tie_memo_, key, q);
 		return q;
@@ -380,15 +382,15 @@ public:
 	// Stage 111: the plan's realization for a cursor (the solver's own choice):
 	// reversed or not; nullopt where no solve is possible.
 	std::optional<bool> realization_reversed(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags) {
-		if (!ctx_ || !scene_supported(defs_) || (px == cx && py == cy)) {
+		if (!ctx_ || !supported_ || (px == cx && py == cy)) {
 			return std::nullopt;
 		}
 		flags.erase(GHOST);
-		const std::string key = decision_key(px, py, cx, cy, plan, flags);
+		const DecisionKey key = decision_key(px, py, cx, cy, plan, flags);
 		if (const auto it = realization_memo_.find(key); it != realization_memo_.end()) {
 			return it->second;
 		}
-		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		Solver<Dual> solver(ctx_->dual_scene(), &ctx_->dual_cache()); // (the cast-cost program, A.1: the exact memos, pure, shared with the solves)
 		const std::optional<bool> q = solver.realization(CN<Dual>{Dual{px, 0.0}, Dual{py, 0.0}}, CN<Dual>{Dual{cx, 0.0}, Dual{cy, 0.0}}, plan, flags).reversed;
 		remember(realization_memo_, key, q);
 		return q;
@@ -398,20 +400,58 @@ public:
 	// plan, flags) on this tracer's defs; memoized per tracer (cleared with the
 	// defs, bounded), so a region's determinism rebuild and its per-cell
 	// prefix builders do not walk them again.
-	static std::string decision_key(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, const Flags &flags) {
-		char buf[96];
-		std::snprintf(buf, sizeof buf, "%a,%a,%a,%a|", px, py, cx, cy);
-		return buf + plan_key(plan) + "|" + flags.canonical_key();
+	// B.4: the decisions' memo key as the inputs' bits (it was a string of %a's and the
+	// plan's spelling, printed per decision: equal keys are the same equal inputs)
+	struct DecisionKey {
+		uint64_t px = 0, py = 0, cx = 0, cy = 0;
+		std::vector<uint64_t> plan; // per item: id | left << 32 | hint << 33, then the hint's bits, then the span's six
+		std::string flags;          // canonical
+		bool operator==(const DecisionKey &) const = default;
+	};
+	struct DecisionHash {
+		size_t operator()(const DecisionKey &k) const {
+			uint64_t h = 14695981039346656037ULL;
+			for (uint64_t w : {k.px, k.py, k.cx, k.cy}) {
+				h = (h ^ w) * 1099511628211ULL;
+			}
+			for (uint64_t w : k.plan) {
+				h = (h ^ w) * 1099511628211ULL;
+			}
+			return size_t(h ^ std::hash<std::string>{}(k.flags));
+		}
+	};
+	static DecisionKey decision_key(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, const Flags &flags) {
+		DecisionKey k;
+		k.px = std::bit_cast<uint64_t>(px);
+		k.py = std::bit_cast<uint64_t>(py);
+		k.cx = std::bit_cast<uint64_t>(cx);
+		k.cy = std::bit_cast<uint64_t>(cy);
+		for (const PlanItem &p : plan) {
+			k.plan.push_back(uint64_t(uint32_t(p.surface_id)) | uint64_t(p.left) << 32 | uint64_t(p.hint.has_value()) << 33 | uint64_t(p.span.has_value()) << 34);
+			if (p.hint) {
+				k.plan.push_back(std::bit_cast<uint64_t>(double(p.hint->x)));
+				k.plan.push_back(std::bit_cast<uint64_t>(double(p.hint->y)));
+			}
+			if (p.span) {
+				for (const double v : *p.span) {
+					k.plan.push_back(std::bit_cast<uint64_t>(v));
+				}
+			}
+		}
+		k.flags = flags.canonical_key();
+		return k;
 	}
-	static void remember(std::unordered_map<std::string, std::optional<bool>> &memo, const std::string &key, std::optional<bool> v) {
+	using DecisionMemo = std::unordered_map<DecisionKey, std::optional<bool>, DecisionHash>;
+	static void remember(DecisionMemo &memo, const DecisionKey &key, std::optional<bool> v) {
 		if (memo.size() >= DECISION_MEMO_MAX) {
 			memo.clear();
 		}
 		memo.emplace(key, v);
 	}
 	static constexpr size_t DECISION_MEMO_MAX = 1 << 16;
-	std::unordered_map<std::string, std::optional<bool>> tie_memo_;
-	std::unordered_map<std::string, std::optional<bool>> realization_memo_;
+	DecisionMemo tie_memo_;
+	DecisionMemo realization_memo_;
+	bool supported_ = false; // scene_supported(defs_)
 
 	// Stage 110: a cast's two paths, as trace_pair converts them (one frame-id
 	// map, the physical walk first), without the shared-trajectory shortcut.
@@ -431,7 +471,7 @@ public:
 		if (!ctx_) {
 			return std::nullopt;
 		}
-		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		Solver<Dual> solver(ctx_->dual_scene(), &ctx_->dual_cache()); // (the cast-cost program, A.1: the exact memos, pure, shared with the solves)
 		const std::optional<CN<Dual>> q = solver.plan_pole(plan, flags);
 		if (!q) {
 			return std::nullopt;
@@ -450,7 +490,7 @@ public:
 		if (!ctx_) {
 			return {};
 		}
-		Solver<Dual> solver(ctx_->dual_scene(), nullptr);
+		Solver<Dual> solver(ctx_->dual_scene(), &ctx_->dual_cache()); // (the cast-cost program, A.1: the exact memos, pure, shared with the solves)
 		auto cn = [](V2 p) { return CN<Dual>{Dual{double(p.x), 0.0}, Dual{double(p.y), 0.0}}; };
 		const auto o = solver.plan_origin(cn(player), cursor ? std::optional<CN<Dual>>(cn(*cursor)) : std::nullopt, plan, flags);
 		OriginPoint out;

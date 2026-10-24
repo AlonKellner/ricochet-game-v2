@@ -229,3 +229,17 @@ perf: core
 perf-diff:
 	@if [ -z "$(A)" ] || [ -z "$(B)" ]; then echo "usage: make perf-diff A=old.json B=new.json"; exit 2; fi
 	python3 -I tools/perf_diff.py $(A) $(B)
+
+# The cast-cost program: every plannable side's region on every level (rc_tool
+# regions) -> build/perf/regions.{json,md}: time, casts by kind, refinements,
+# phases, the batches' tail, union+fill, climbs, a hash per plan. perf-diff
+# compares two reports (the hashes equal: the same regions bit for bit).
+#   make regions [THREADS=8] [PLAYERS=6] [REGIONS_ARGS="--pairs --allocs"]
+#   make profile LEVEL=data/levels/test_levels/crossings.json [THREADS=1] [SECONDS_=8] [ONLY=plan]
+THREADS ?=
+PLAYERS ?= 6
+regions: core
+	$(BUILD_CORE)/rc_tool regions --all data/levels --players $(PLAYERS) $(if $(THREADS),--threads $(THREADS),) $(REGIONS_ARGS) \
+		--json $(PERF_DIR)/regions$(if $(THREADS),-t$(THREADS),).json --md $(PERF_DIR)/regions$(if $(THREADS),-t$(THREADS),).md
+profile: core
+	THREADS=$(if $(THREADS),$(THREADS),1) LEVEL=$(LEVEL) SECONDS_=$(SECONDS_) PLAYERS=$(PLAYERS) ONLY=$(ONLY) PATS=$(PATS) OUT=$(PERF_DIR) ./tools/profile.sh
