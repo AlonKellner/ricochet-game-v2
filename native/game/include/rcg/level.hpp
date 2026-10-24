@@ -138,6 +138,11 @@ struct Object {
 	bool solid = true;          // the player collides with it
 	std::string face = "wall";  // its sides: wall (terminal) | mirror (reflection) | pass
 	std::string label = "Object";
+	// Stage 150: bubbles -- its own gravity (a factor of the level's: negative floats up), popped by the
+	// arrow (gone for good: the flag obj:<name>:popped), carrying another object until it pops
+	double gravity = 1.0;
+	bool pops = false;
+	std::string carries;
 };
 
 // rc-level/2: the level's goal (GAME_SPEC 3.2): the player inside the region

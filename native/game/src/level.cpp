@@ -7,6 +7,7 @@
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <fstream>
 #include <initializer_list>
 #include <sstream>
@@ -389,7 +390,7 @@ void parse_goals(const json &j, Level &lv) {
 		for (size_t i = 0; i < os->size(); i++) {
 			const json &o = (*os)[i];
 			const std::string op = P + ".objects[" + std::to_string(i) + "]";
-			only_keys(o, op, {"name", "circle", "kind", "solid", "face", "label"});
+			only_keys(o, op, {"name", "circle", "kind", "solid", "face", "label", "gravity", "pops", "carries"});
 			Object ob;
 			ob.name = str(req(o, "name", op), op + ".name");
 			for (const Object &other : lv.objects) {
@@ -425,7 +426,30 @@ void parse_goals(const json &j, Level &lv) {
 			if (const json *v = opt(o, "label")) {
 				ob.label = str(*v, op + ".label");
 			}
+			if (const json *v = opt(o, "gravity")) {
+				ob.gravity = num(*v, op + ".gravity");
+			}
+			if (const json *v = opt(o, "pops")) {
+				ob.pops = boolean(*v, op + ".pops");
+			}
+			if (const json *v = opt(o, "carries")) {
+				ob.carries = str(*v, op + ".carries");
+			}
 			lv.objects.push_back(std::move(ob));
+		}
+		for (size_t i = 0; i < lv.objects.size(); i++) {
+			const Object &o = lv.objects[i];
+			if (o.carries.empty()) {
+				continue;
+			}
+			const std::string op = P + ".objects[" + std::to_string(i) + "].carries";
+			const auto it = std::find_if(lv.objects.begin(), lv.objects.end(), [&](const Object &x) { return x.name == o.carries; });
+			if (it == lv.objects.end() || it->name == o.name) {
+				fail(op, "'" + o.carries + "' is no other object");
+			}
+			if (!it->carries.empty()) {
+				fail(op, "'" + o.carries + "' carries an object itself (one level of carrying)");
+			}
 		}
 	}
 }
@@ -591,12 +615,21 @@ SurfaceSpec object_spec(const Object &o, const V2 &center) {
 	SideSpec side;
 	side.effect.type = o.face == "mirror" ? "reflection" : o.face == "pass" ? "pass" : "terminal";
 	side.effect.raw = {{"type", side.effect.type}};
-	side.interactive = o.pullable || o.face == "mirror";
+	side.interactive = o.pullable || o.face == "mirror" || o.pops;
 	if (o.pullable) {
 		HitSpec h;
 		h.kind = "pull";
 		h.raw = {{"kind", "pull"}};
 		side.hits.push_back(h);
+	}
+	if (o.pops) { // Stage 150: a hit pops it -- gone from then on (in the shot, and after)
+		HitSpec h;
+		h.kind = "state";
+		h.key = "obj:" + o.name + ":popped";
+		h.value = true;
+		h.raw = {{"kind", "state"}, {"key", h.key}, {"op", "set"}, {"value", true}};
+		side.hits.push_back(h);
+		s.presence.push_back({h.key, {"DEFAULT"}});
 	}
 	s.left = side;
 	s.right = side;

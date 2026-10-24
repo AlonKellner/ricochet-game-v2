@@ -113,7 +113,7 @@ TEST_CASE("rc-level/2: every level lowers to its committed lowering, and migrate
 		CHECK(rcg::canonical(a) == rcg::canonical(b));
 		n++;
 	}
-	CHECK(n == 41);
+	CHECK(n == 42);
 }
 
 TEST_CASE("rc-level/2: every builtin template expands to surfaces that build") {

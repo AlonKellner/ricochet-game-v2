@@ -3,6 +3,7 @@
 // arrow's path to the player, a grapple takes the player along it to the hit;
 // either stops at the first thing that blocks the traveller.
 #include "rcg/level.hpp"
+#include "rcg/model.hpp"
 #include "rcg/session.hpp"
 
 #include <doctest/doctest.h>
@@ -141,4 +142,43 @@ TEST_CASE("objects: the schema") {
 	CHECK(err(R"({"objects": [{"name": "a", "circle": {"center": [0, 0]}}, {"name": "a", "circle": {"center": [9, 0]}}]})").find("names another object")
 			!= std::string::npos);
 	CHECK(err(R"({"objects": [{"name": "a", "circle": {"center": [0, 0]}, "kind": "heavy"}]})").find("pullable or static") != std::string::npos);
+}
+
+TEST_CASE("bubbles: a bubble floats, carries a box, and the arrow pops it (Stage 150)") {
+	rcg::Session s(level_of(R"({"gravity": [0, 980], "player": {"start": [700, 827.92]}, "objects": [
+		{"name": "bubble", "circle": {"center": [900, 500], "radius": 24}, "gravity": -0.5, "pops": true, "face": "pass", "solid": false,
+		 "carries": "box"},
+		{"name": "box", "circle": {"center": [900, 540], "radius": 14}}]})"));
+	s.hold({}, 120);
+	CHECK(body(s).y == doctest::Approx(240 + 24 + 0.08).epsilon(1e-4)); // up against the ceiling
+	CHECK(body(s, 1).y == doctest::Approx(240 + 24 + 0.08 + 40).epsilon(1e-4)); // the box held under it
+	shoot(s, 880, 262); // its left side, clear of the box below it
+	CHECK(s.flags().is_true("obj:bubble:popped"));
+	CHECK_FALSE(rcg::present(s.world().bodies()[0].built, s.flags())); // gone
+	s.hold({}, 120);
+	CHECK(body(s, 1).y == doctest::Approx(840 - 14 - 0.08).epsilon(1e-4)); // the box fell
+	s.key(rcg::Action::Undo);
+	CHECK_FALSE(s.flags().is_true("obj:bubble:popped")); // the bubble back
+}
+
+TEST_CASE("bubbles: the demo level plays to its goal; the schema") {
+	const std::filesystem::path root = RC_REPO_ROOT;
+	rcg::Session s(rcg::load_level((root / "data/levels/objectives/bubble_drop.json").string()));
+	s.hold({}, 90);
+	shoot(s, 980, 262); // the bubble's left side, clear of the box
+	s.hold({}, 90); // the box falls onto the plate
+	CHECK(s.flags().is_true("det:plate"));
+	s.hold({"move_left"}, 60); // to the goal, away from the box
+	CHECK(s.won());
+	auto err = [](const char *extra) {
+		try {
+			level_of(extra);
+		} catch (const rcg::LevelError &e) {
+			return std::string(e.what());
+		}
+		return std::string("no error");
+	};
+	CHECK(err(R"({"objects": [{"name": "a", "circle": {"center": [0, 0]}, "carries": "nobody"}]})").find("no other object") != std::string::npos);
+	CHECK(err(R"({"objects": [{"name": "a", "circle": {"center": [0, 0]}, "carries": "b"}, {"name": "b", "circle": {"center": [9, 0]}, "carries": "c"},
+		{"name": "c", "circle": {"center": [19, 0]}}]})").find("one level of carrying") != std::string::npos);
 }

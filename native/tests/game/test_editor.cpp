@@ -98,7 +98,7 @@ TEST_CASE("editor: every level loads and saves byte for byte") {
 		CHECK_FALSE(ed.draw().empty());
 		n++;
 	}
-	CHECK(n == 41);
+	CHECK(n == 42);
 	// an rc-level/1 document is migrated
 	const json v1 = json::parse(read_text(ROOT / "bench" / "lowered" / "test_levels__flag_switches.json"));
 	rcg::Editor ed(&v1);

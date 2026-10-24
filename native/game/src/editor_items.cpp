@@ -351,6 +351,9 @@ std::vector<Editor::Row> Editor::item_rows() const {
 		row("center", *path + "/circle/center", "[x, y]: drag it");
 		row("radius", *path + "/circle/radius", "drag its handle", "16");
 		row("label", *path + "/label", "the node prefix", "Object");
+		row("gravity", *path + "/gravity", "its gravity, a factor of the level's (a bubble: negative, it floats up)", "1");
+		row("pops", *path + "/pops", "the arrow pops it (gone for good)", "false", "bool");
+		row("carries", *path + "/carries", "an object it holds until it pops (or is removed)", "none");
 	}
 	Row keys;
 	keys.kind = Row::Text;

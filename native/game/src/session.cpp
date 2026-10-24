@@ -971,15 +971,50 @@ std::vector<kinematics::Collider> Session::colliders_except(int body) const {
 // another, GAME_SPEC 25.5); static ones stay. A body that moved rebuilds its surface.
 void Session::step_bodies() {
 	bool moved = false;
-	for (size_t i = 0; i < world_->bodies().size(); i++) {
-		const World::Body &b = world_->bodies()[i];
-		if (!b.object.pullable || (gravity_.length_squared() == 0.0f && b.vel.length_squared() == 0.0f)) {
-			continue;
+	auto index_of = [&](const std::string &name) {
+		for (size_t k = 0; k < world_->bodies().size(); k++) {
+			if (world_->bodies()[k].object.name == name) {
+				return int(k);
+			}
 		}
-		kinematics::Body k{b.pos, b.vel, b.on_floor};
-		kinematics::step_body(k, kinematics::Input{}, gravity_, colliders_except(int(i)), b.object.radius);
-		moved = moved || k.pos != b.pos;
-		world_->set_body(i, k.pos, k.vel, k.on_floor);
+		return -1;
+	};
+	auto alive = [&](const World::Body &b) { return present(b.built, flags_); }; // (a popped bubble is gone)
+	// the free bodies, then (Stage 150) the carried ones, at their offset from a carrier that is still there
+	for (const bool carried_pass : {false, true}) {
+		for (size_t i = 0; i < world_->bodies().size(); i++) {
+			const World::Body &b = world_->bodies()[i];
+			if (!b.object.pullable || !alive(b)) {
+				continue;
+			}
+			int carrier = -1;
+			for (size_t k = 0; k < world_->bodies().size(); k++) {
+				const World::Body &c = world_->bodies()[k];
+				if (c.object.carries == b.object.name && alive(c)) {
+					carrier = int(k);
+				}
+			}
+			if ((carrier >= 0) != carried_pass) {
+				continue;
+			}
+			if (carrier >= 0) {
+				const World::Body &c = world_->bodies()[size_t(carrier)];
+				const int me = index_of(b.object.name);
+				const V2 offset = world_->bodies()[size_t(me)].object.center - c.object.center;
+				const V2 to = c.pos + offset;
+				moved = moved || to != b.pos;
+				world_->set_body(i, to, V2{}, false);
+				continue;
+			}
+			const V2 g = gravity_ * float(b.object.gravity);
+			if (g.length_squared() == 0.0f && b.vel.length_squared() == 0.0f) {
+				continue;
+			}
+			kinematics::Body k{b.pos, b.vel, b.on_floor};
+			kinematics::step_body(k, kinematics::Input{}, g, colliders_except(int(i)), b.object.radius);
+			moved = moved || k.pos != b.pos;
+			world_->set_body(i, k.pos, k.vel, k.on_floor);
+		}
 	}
 	if (moved) {
 		sync_nodes();

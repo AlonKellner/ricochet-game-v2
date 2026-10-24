@@ -42,6 +42,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done |
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
+| Bubbles: objects with their own gravity (floating up), popped by the arrow, carrying an object until they pop (§25.5; docs/TDD_55, Stage 150) | Done |
 | Carriers: lines and circles elements are placed on (`carrier`, `from`, `to`), an authoring construct the lowering projects onto (§19.1; docs/TDD_53, Stage 149) | Done |
 | The novel-element kit: per-shot flags (`shot:*`, erased at landing) and templates for breakable, toggle, frost, fire and charge elements (§10.6; docs/ELEMENTS.md, docs/TDD_52, Stage 147) | Done |
 | Objects, the pull and the grapple: circle bodies (pullable ones fall under gravity); a pull brings an object back along the arrow's path, a grapple takes the player along it, either stopped by what blocks the traveller (§10.6, §25.5-25.6; docs/TDD_51, Stage 146) | Done |
@@ -2268,6 +2269,12 @@ surfaces, so it is planned and hit like any surface, and it moves with the body.
 is fired. The bodies' positions are part of the checkpoint, and detectors `for` objects see their centers
 (§24.5, regions only).
 
+**Bubbles** (Stage 150). An object's `gravity` is a factor of the level's: a bubble's is negative, so it floats up
+and rests against what is above it. An object that `pops` is popped by the arrow's hit: the hit sets
+`obj:<name>:popped` and the object is gone from then on (its surface absent, so the arrow passes on, and its body
+still), until an undo. An object may `carry` another, which then keeps its offset from the carrier and does not
+fall, until the carrier pops; then it falls (one level of carrying).
+
 ### 25.6 The pull and the grapple
 
 A **pull** (a pullable object's sides carry it) and a **grapple** (the `grapple` element's sides) are hit
@@ -2796,4 +2803,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.60.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.61.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
