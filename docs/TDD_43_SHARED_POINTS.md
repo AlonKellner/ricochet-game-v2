@@ -18,7 +18,7 @@ the extended second variant, let's go for it."
 | 138.3 | The Stage 138 fixtures (`gen_fixtures_stage138.py`, `bench/fixtures/stage138_shared_points.json`) and the native test | Done |
 | 138.4 | The native walker: `shared_surfaces`, the stop; `full_block` gone | Done |
 | 138.5 | `make regen`: the fixtures and the corpus | Done |
-| 138.6 | The judge (`stage138_judge.py`), the user's approval, the re-bless (goldens, region digests, sessions, GUT rows) | Judged; awaiting the user's approval |
+| 138.6 | The judge (`stage138_judge.py`), the user's approval, the re-bless (goldens, region digests, sessions, GUT rows) | Done (approved 2026-10-24; re-blessed: sweeps 4030 slots, fixtures 9, regions 42, 2 sessions, 13 GUT rows) |
 | 138.7 | Docs, `make gates`, sign-off | Pending |
 
 ## 138.1 The rule
