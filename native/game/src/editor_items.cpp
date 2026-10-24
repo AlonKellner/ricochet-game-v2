@@ -324,6 +324,7 @@ std::vector<Editor::Row> Editor::item_rows() const {
 			row("center", *path + "/circle/center", "[x, y]: drag it: the elements on the circle follow");
 			row("radius", *path + "/circle/radius", "drag its handle");
 		}
+		row("exact", *path + "/exact", "its elements' points exactly on it (snapped to its exact points; Stage 154)", "false", "bool");
 		int on = 0;
 		for (const json &e : doc_["elements"]) {
 			on += e.is_object() && e.value("carrier", json()) == name;

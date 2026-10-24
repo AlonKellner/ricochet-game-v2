@@ -32,7 +32,7 @@ too).
 | `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "wall" \| "mirror" \| "pass", "solid", "label", "gravity", "pops", "carries", "tags"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, wall, solid, label `Object` by default); their surfaces take the ids after the level's. Stage 150: `gravity` a factor of the level's (default 1; negative floats up), `pops` (the arrow pops it: flag `obj:<name>:popped`), `carries` another object until it pops. Stage 152: `tags` (what spread rules flow through: `["conductive"]`) | `[]` |
 | `cycle` | `{"period": s, "resume_after": s}`: the moving elements' cycle (GAME_SPEC 9.8; 4 and 10 by default) | |
 | `spread` | `[{"flag", "tag", "persist", "sources"}]`: flags flowing through tagged elements and objects that touch (GAME_SPEC 10.6, docs/ELEMENTS.md "Tags and spreading"; `persist` false and `sources` `[]` by default) | `burnt` through `flammable` (persist), `charge` through `conductive` from `powered` |
-| `carriers` | `[{"name", "line": {"a": [x, y], "b": [x, y]}} \| {"name", "circle": {"center": [x, y], "radius": r}}]`: lines and circles elements are placed on (Stage 149, below) | `[]` |
+| `carriers` | `[{"name", "line": {"a": [x, y], "b": [x, y]}} \| {"name", "circle": {"center": [x, y], "radius": r}}, "exact"?]`: lines and circles elements are placed on (Stage 149, below; `exact`: Stage 154) | `[]` |
 
 A region is `{"rect": [x, y, w, h]}` or `{"circle": {"center": [x, y], "radius": r}}`. The objective and the
 detectors are not surfaces: the lowering leaves them out.
@@ -58,6 +58,11 @@ carrier and writes them as its start, end and via (a line `straight`). Two eleme
 same projected value, so a door between two walls on one line meets them by provenance. Move a carrier's points
 and every element on it follows. The solver still sees each element's own three points: two arcs on one
 declared circle are, to it, two circles through their own points (docs/TDD_53_DECLARED_CARRIERS.md).
+
+An **exact** carrier (`"exact": true`, Stage 154) snaps its elements' points to float32 points lying exactly on
+it, so the solver sees one exact line or circle across all of them (GAME_SPEC 19.1; docs/TDD_59_EXACT_CARRIER.md).
+A point moves to the carrier's nearest exact point: a fraction of a pixel on a line, about 1-5 px on a circle (more
+on a large one). An exact circle holds arcs, not its whole.
 
 Two kinds are the format's own: `{"kind": "edges"}` places the four edge walls where it stands, and
 `{"kind": "raw", "surface": {...}}` is an `rc-level/1` surface (without ids) taken as it is -- the escape hatch

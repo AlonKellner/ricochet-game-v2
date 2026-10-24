@@ -1,0 +1,330 @@
+{
+ "scene": "res://scenes/objectives/ring.tscn",
+ "surfaces": [
+  {
+   "circle": null,
+   "end": [1360.0, 240.0],
+   "full": false,
+   "id": 1,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [560.0, 240.0],
+   "via": [960.0, 240.0]
+  },
+  {
+   "circle": null,
+   "end": [1360.0, 840.0],
+   "full": false,
+   "id": 2,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1360.0, 240.0],
+   "via": [1360.0, 540.0]
+  },
+  {
+   "circle": null,
+   "end": [560.0, 840.0],
+   "full": false,
+   "id": 3,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1360.0, 840.0],
+   "via": [960.0, 840.0]
+  },
+  {
+   "circle": null,
+   "end": [560.0, 240.0],
+   "full": false,
+   "id": 4,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [560.0, 840.0],
+   "via": [560.0, 540.0]
+  },
+  {
+   "circle": null,
+   "end": [859.2152099609375, 571.51220703125],
+   "full": false,
+   "id": 5,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": false,
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "door:hatch",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [948.48779296875, 660.7847900390625],
+   "via": [894.3743896484375, 626.3818359375]
+  },
+  {
+   "circle": null,
+   "end": [948.48779296875, 379.2152099609375],
+   "full": false,
+   "id": 6,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": false,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [859.2152099609375, 571.51220703125],
+   "via": [863.81396484375, 457.3323974609375]
+  },
+  {
+   "circle": null,
+   "end": [1140.7847900390625, 571.51220703125],
+   "full": false,
+   "id": 7,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "line": false,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "start": [948.48779296875, 379.2152099609375],
+   "via": [1106.3818359375, 414.3743896484375]
+  },
+  {
+   "circle": null,
+   "end": [948.48779296875, 660.7847900390625],
+   "full": false,
+   "id": 8,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": false,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1140.7847900390625, 571.51220703125],
+   "via": [1062.6676025390625, 656.18603515625]
+  },
+  {
+   "circle": null,
+   "end": [1000.0, 550.0],
+   "full": false,
+   "id": 9,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "states": [
+     {
+      "key": "door:gate",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "states": [
+     {
+      "key": "door:gate",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "type": "pass"
+   },
+   "start": [1000.0, 490.0],
+   "via": [1000.0, 520.0]
+  },
+  {
+   "circle": null,
+   "end": [860.0, 300.0],
+   "full": false,
+   "id": 10,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "states": [
+     {
+      "key": "door:hatch",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "states": [
+     {
+      "key": "door:hatch",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "type": "pass"
+   },
+   "start": [760.0, 300.0],
+   "via": [810.0, 300.0]
+  },
+  {
+   "circle": null,
+   "end": [1250.0, 840.0],
+   "full": false,
+   "id": 11,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "door:gate",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1250.0, 700.0],
+   "via": [1250.0, 770.0]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 0.0],
+   "full": false,
+   "id": 12,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [0.0, 0.0],
+   "via": [960.0, 0.0]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 1080.0],
+   "full": false,
+   "id": 13,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1920.0, 0.0],
+   "via": [1920.0, 540.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 1080.0],
+   "full": false,
+   "id": 14,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1920.0, 1080.0],
+   "via": [960.0, 1080.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 0.0],
+   "full": false,
+   "id": 15,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [0.0, 1080.0],
+   "via": [0.0, 540.0]
+  }
+ ]
+}

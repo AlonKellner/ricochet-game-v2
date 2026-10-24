@@ -1,4 +1,5 @@
 // rc-level/2: lowering to rc-level/1, and the migration back (rcg/level2.hpp).
+#include "rcg/lattice.hpp"
 #include "rcg/level2.hpp"
 
 #include "rcg/canon.hpp"
@@ -76,7 +77,7 @@ std::map<std::string, json> carriers_of(const json &v2) {
 			fail(cp, "{\"name\", \"line\": {\"a\", \"b\"}} or {\"name\", \"circle\": {\"center\", \"radius\"}} expected");
 		}
 		for (auto it = c.begin(); it != c.end(); ++it) {
-			if (it.key() != "name" && it.key() != "line" && it.key() != "circle") {
+			if (it.key() != "name" && it.key() != "line" && it.key() != "circle" && it.key() != "exact") {
 				fail(cp, "unknown key '" + it.key() + "'");
 			}
 		}
@@ -95,6 +96,9 @@ std::map<std::string, json> carriers_of(const json &v2) {
 				fail(cp + ".circle", "{\"center\": [x, y], \"radius\": r > 0} expected");
 			}
 		}
+		if (c.contains("exact") && !c["exact"].is_boolean()) {
+			fail(cp + ".exact", "true or false expected");
+		}
 		if (!out.emplace(c["name"].get<std::string>(), c).second) {
 			fail(cp + ".name", "'" + c["name"].get<std::string>() + "' names another carrier");
 		}
@@ -102,9 +106,27 @@ std::map<std::string, json> carriers_of(const json &v2) {
 	return out;
 }
 
-// A point onto a carrier (float64): the line's nearest point, the circle's point in its direction.
+bool exact(const json &carrier) { return carrier.value("exact", false); }
+
+// Stage 154: an exact carrier's lattice (rcg/lattice.hpp)
+lattice::Line line_lattice(const json &c) {
+	return lattice::line_of(c["line"]["a"][0].get<double>(), c["line"]["a"][1].get<double>(), c["line"]["b"][0].get<double>(), c["line"]["b"][1].get<double>());
+}
+const lattice::Circle &circle_lattice(const json &c) {
+	return lattice::circle_of(c["circle"]["center"][0].get<double>(), c["circle"]["center"][1].get<double>(), c["circle"]["radius"].get<double>());
+}
+
+// A point onto a carrier (float64): the line's nearest point, the circle's point in its direction (an exact
+// carrier: its nearest lattice point).
 std::array<double, 2> project(const json &carrier, const json &p) {
 	const double px = p[0].get<double>(), py = p[1].get<double>();
+	if (exact(carrier)) {
+		if (carrier.contains("line")) {
+			return lattice::nearest(line_lattice(carrier), px, py);
+		}
+		const lattice::Circle &c = circle_lattice(carrier);
+		return c.point(lattice::nearest(c, px, py));
+	}
 	if (carrier.contains("line")) {
 		const double ax = carrier["line"]["a"][0].get<double>(), ay = carrier["line"]["a"][1].get<double>();
 		const double dx = carrier["line"]["b"][0].get<double>() - ax, dy = carrier["line"]["b"][1].get<double>() - ay;
@@ -141,6 +163,9 @@ json on_carrier(const json &e, const std::map<std::string, json> &carriers, cons
 		if (!c.contains("circle")) {
 			fail(path, "from and to expected (a line carrier has no whole)");
 		}
+		if (exact(c)) {
+			fail(path, "from and to expected (an exact circle carrier holds arcs: its whole is no float circle)");
+		}
 		out["circle"] = c["circle"];
 		return out;
 	}
@@ -163,6 +188,9 @@ json on_carrier(const json &e, const std::map<std::string, json> &carriers, cons
 			fail(path + ".via", "[x, y] expected");
 		}
 		const auto v = project(c, e["via"]);
+		if (exact(c) && (v == s || v == en)) {
+			fail(path + ".via", "the via lands on an end (an exact carrier's points are its lattice's)");
+		}
 		out["via"] = json::array({v[0], v[1]});
 		return out;
 	}
@@ -178,6 +206,16 @@ json on_carrier(const json &e, const std::map<std::string, json> &carriers, cons
 	}
 	if (span == -PI) {
 		span = PI;
+	}
+	if (exact(c)) { // the lattice point nearest the middle, strictly between the ends
+		const lattice::Circle &lc = circle_lattice(c);
+		const size_t i = lattice::nearest_angle(lc, std::atan2(std::sin(a0 + span / 2), std::cos(a0 + span / 2)));
+		const auto v = lc.point(i);
+		if (v == s || v == en) {
+			fail(path, "from and to are neighbours on the exact carrier: no point between them for the arc");
+		}
+		out["via"] = json::array({v[0], v[1]});
+		return out;
 	}
 	out["via"] = json::array({cx + r * std::cos(a0 + span / 2), cy + r * std::sin(a0 + span / 2)});
 	return out;

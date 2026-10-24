@@ -43,6 +43,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
 | Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| Exact carriers: a carrier's elements on float32 points exactly on its line or circle (`exact: true`; lattice points; no solver change) (§19.1; docs/TDD_59, Stage 154) | Done |
 | Light and shadow: dark and light regions bounded by elements (sides of lines, insides or outsides of circles, under flags); the arrow stops entering the shadow, surfaces wholly in it are passes (§9.9; docs/ELEMENTS.md, docs/TDD_58, Stage 153) | Done |
 | Spreading: tags on elements and objects, the level's spread rules (fire kept for good; charge recomputed from powered sources through what touches and is present); conductor, battery and charged door templates (§10.6; docs/ELEMENTS.md, docs/TDD_57, Stage 152) | Done |
 | Bubbles: objects with their own gravity (floating up), popped by the arrow, carrying an object until they pop (§25.5; docs/TDD_55, Stage 150) | Done |
@@ -1907,7 +1908,7 @@ Level (rc-level/2):
     flags:       {key: value}                # the flags the level starts with (default none)
     elements:    [Element]                   # in build order
     templates:   {kind: Template}            # the level's own kinds (docs/ELEMENTS.md)
-    carriers:    [{name, line {a, b} | circle {center, radius}}]   # Stage 149: what elements are placed on
+    carriers:    [{name, line {a, b} | circle {center, radius}, exact?}]   # Stage 149: what elements are placed on (154: exact)
 
 Element:
     kind:        String                      # a template's kind, "edges" (the edge walls here) or "raw"
@@ -1951,6 +1952,18 @@ Surface:
 Every point is read as float32 (the game's vectors); other numbers stay float64. Surface ids are derived from
 the build order and never written in `rc-level/2`; an element's identity is its name. Cycle overrides (§17) are
 not part of the format.
+
+**Exact carriers (Stage 154).** A carrier is an authoring construct: the lowering projects each element's points
+onto it and rounds them to float32, so two elements on one carrier lie, to the exact predicates, on two slightly
+different lines or circles. A carrier with `exact: true` places its elements' points on float32 points lying
+exactly on it instead (docs/TDD_59_EXACT_CARRIER.md): a line through a grid point in a primitive direction
+`(q, p)`, `|q|, |p| <= 1024`, its points `A + k h (q, p)`; a circle about a grid point with `radius^2 = N h^2`, `N` an
+integer with many representations as `X^2 + Y^2` within half a pixel of the declared radius, its points
+`C + h (X, Y)` (`h`: the finest grid float32 holds at the level's magnitudes). Every element on an exact carrier is
+then exactly on one line or circle (the solver's carrier identity holds), and a point two of them share is one
+value. The cost is a snap: a point moves to the nearest exact point (a line's are a fraction of a pixel apart, a
+circle's about 1 px apart at radius 40, up to 3 px at 150, 5 px at 400 and 12 px at 900). An exact circle holds
+arcs only: its whole has no float32 form. Crossings of two exact carriers are not exact points (v1).
 
 **Level discovery:** the levels are the files under `data/levels/`.
 
@@ -2864,4 +2877,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.64.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.65.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
