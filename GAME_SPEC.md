@@ -43,6 +43,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
 | Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| Journeys in three layers: the raw path, a guide waiting for the traveller, the traveller following with physics; portals crossed with a clipped copy (§25.6; docs/TDD_70, Stage 166) | Done |
 | New levels in the editor: an empty level or a copy of a listed one, named in a prompt, unsaved until saved (§19.2; docs/TDD_69, Stage 165) | Done |
 | Every element visible and editable: colliders (the X tool) and the camera as editor items, the background outlined, every level key a field; colliders drawn in play (§19.2; docs/TDD_68, Stage 164) | Done |
 | A planned terminal stops the planned walk: a path that hits a planned stopping surface on its segment is aligned, one that misses it diverges (§14.1; docs/TDD_66, Stage 162) | Done |
@@ -2434,6 +2435,19 @@ arrow-pass barrier) stops it; an arrow-block barrier is not solid and does not. 
 did not end (a portal) is crossed by a jump, and a step through infinity ends the path. The game is paused during
 a journey as during a flight (`flying`), and the journey is part of the shot.
 
+
+**The journey in three layers (Stage 166, the user).** (1) The raw path: the solver's, up to the pull's or grapple's
+hit. (2) The guide: a point moving along it -- for a pull from the hit back toward the player, for a grapple from
+the player to the hit -- at the journey speed, but only while the traveller holds it (the guide inside the
+traveller's circle); otherwise it waits. (3) The traveller (the object, the player): each tick it moves straight
+toward the guide, a little faster than the guide moves, swept against what blocks it, and slides along a contact at
+its full step (the slide normalized to the pull's speed, up to the point nearest the guide); no gravity during the
+journey. It stops when it reaches the guide at the path's end, or cannot get closer to a waiting guide. So an object
+resting on the floor comes along whether the arrow hit its top half or its bottom half. **At a portal** the guide
+waits at the entry until the traveller holds it; the traveller then moves through the entry while its copy comes out
+of the exit by the portal's motion (both drawn clipped at the portal lines, the `["journey"]` node), and once it is
+wholly through the copy goes on. The preview runs the same per-tick motion (§14.12).
+
 ### 25.4 Visual
 
 Simple shape (triangle pointing toward cursor, or circle). Wireframe aesthetic.
@@ -2948,4 +2962,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.73.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.74.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

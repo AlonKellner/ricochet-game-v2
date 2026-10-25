@@ -65,7 +65,8 @@ struct Node {
 // Shadow (Stage 153): the level's shadow and its shades ["shadow"]
 // Glow (Stage 157): things on fire, charged or frosted, and the preview's consequences ["glow"]
 // Colliders (Stage 164): the level's player-only segments ["colliders"]
-enum class NodeKind : uint8_t { Background, Player, Cursor, Path, Arrow, Hud, Surface, Edge, Visibility, Spawn, Editor, Goal, Detector, Shadow, Glow, Colliders };
+// Journey (Stage 166): a traveller crossing a portal, and its copy at the exit, clipped ["journey"]
+enum class NodeKind : uint8_t { Background, Player, Cursor, Path, Arrow, Hud, Surface, Edge, Visibility, Spawn, Editor, Goal, Detector, Shadow, Glow, Colliders, Journey };
 struct NodeKey {
 	NodeKind kind = NodeKind::Background;
 	int a = 0, b = 0; // a surface's id and piece

@@ -1692,12 +1692,20 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 						// the journey: its trail and where it ends (orange: stopped by a barrier on the way)
 						if (pv.trip && pv.trip->trail.size() >= 2) {
 							const Preview::Trip &t = *pv.trip;
-							Call k;
-							k.kind = Kind::Polyline;
-							k.pts = t.trail;
-							k.colors = {rgba(0.6, 1.0, 0.7, 0.6)};
-							k.width = 2.0;
-							out.push_back(k);
+							size_t from = 0;
+							std::vector<size_t> cuts = t.breaks;
+							cuts.push_back(t.trail.size());
+							for (const size_t to : cuts) { // (a leg per side of each portal crossed)
+								if (to >= from + 2) {
+									Call k;
+									k.kind = Kind::Polyline;
+									k.pts.assign(t.trail.begin() + long(from), t.trail.begin() + long(to));
+									k.colors = {rgba(0.6, 1.0, 0.7, 0.6)};
+									k.width = 2.0;
+									out.push_back(k);
+								}
+								from = to;
+							}
 							const double r = t.body < 0 ? kinematics::RADIUS : world_->bodies()[size_t(t.body)].object.radius;
 							const Color c = t.blocked ? rgba(1.0, 0.6, 0.2, 0.95) : rgba(0.6, 1.0, 0.7, 0.95);
 							out.push_back(arc(t.trail.back(), r, 0.0, rcg::TAU, 32, c, 2.0));
@@ -1729,13 +1737,82 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 			}
 		});
 	}
-	if (level_.player_start) {
+	const bool player_crossing = journey_ && journey_->crossing && journey_->body < 0;
+	if (level_.player_start && !player_crossing) {
 		Call k;
 		k.kind = Kind::Polygon2D;
 		k.pts = {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}};
 		k.colors = {WHITE};
 		k.rotation = double(facing_);
 		fresh(NodeKind::Player, 0, player_, WHITE, {k});
+	}
+	// Stage 166: a traveller crossing a portal -- the part still before the entry, and its copy's part beyond the
+	// exit (the portal's motion of the part already through)
+	if (journey_ && journey_->crossing) {
+		const Journey &j = *journey_;
+		const V2 at = j.body < 0 ? player_ : world_->bodies()[size_t(j.body)].pos;
+		auto before = [&](const V2 &p) { return (double(p.x) - j.entry_a.x) * j.entry_n.x + (double(p.y) - j.entry_a.y) * j.entry_n.y <= 0.0; };
+		std::vector<Call> calls;
+		if (j.body >= 0) {
+			const double r = world_->bodies()[size_t(j.body)].object.radius;
+			const int n = 64;
+			std::vector<V2> near_pts, far_pts;
+			auto flush = [&](std::vector<V2> &pts) {
+				if (pts.size() >= 2) {
+					calls.push_back(stroke(Kind::Polyline, pts, rgba(0.95, 0.6, 0.3), 2.5));
+				}
+				pts.clear();
+			};
+			for (int i = 0; i <= n; i++) {
+				const double a = TAU * i / n;
+				const V2 p = V2::of(double(at.x) + r * std::cos(a), double(at.y) + r * std::sin(a));
+				if (before(p)) {
+					near_pts.push_back(p);
+					flush(far_pts);
+				} else {
+					far_pts.push_back(j.map(p));
+					flush(near_pts);
+				}
+			}
+			flush(near_pts);
+			flush(far_pts);
+		} else {
+			// the player's triangle, cut by the entry's line: the near part here, the far part at the exit
+			const double c = std::cos(double(facing_)), sn = std::sin(double(facing_));
+			std::vector<V2> tri;
+			for (const V2 &q : {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}}) {
+				tri.push_back(V2::of(double(at.x) + c * q.x - sn * q.y, double(at.y) + sn * q.x + c * q.y));
+			}
+			for (const bool near_side : {true, false}) {
+				std::vector<V2> poly;
+				for (size_t i = 0; i < tri.size(); i++) {
+					const V2 &p = tri[i], &q = tri[(i + 1) % tri.size()];
+					const double fp = (double(p.x) - j.entry_a.x) * j.entry_n.x + (double(p.y) - j.entry_a.y) * j.entry_n.y;
+					const double fq = (double(q.x) - j.entry_a.x) * j.entry_n.x + (double(q.y) - j.entry_a.y) * j.entry_n.y;
+					const bool pin = near_side ? fp <= 0 : fp > 0, qin = near_side ? fq <= 0 : fq > 0;
+					if (pin) {
+						poly.push_back(p);
+					}
+					if (pin != qin) {
+						const double t = fp / (fp - fq);
+						poly.push_back(V2::of(double(p.x) + (double(q.x) - p.x) * t, double(p.y) + (double(q.y) - p.y) * t));
+					}
+				}
+				if (poly.size() >= 3) {
+					if (!near_side) {
+						for (V2 &p : poly) {
+							p = j.map(p);
+						}
+					}
+					Call k;
+					k.kind = Kind::Polygon;
+					k.pts = poly;
+					k.colors.assign(poly.size(), WHITE); // (one per point)
+					calls.push_back(k);
+				}
+			}
+		}
+		fresh(NodeKind::Journey, 25, V2{}, WHITE, std::move(calls));
 	}
 	if (level_.features.cursor) {
 		cached(static_draw_[1], {0, 0, 0}, NodeKind::Cursor, 0, cursor_, WHITE, [&](std::vector<Call> &out) {
@@ -1769,7 +1846,11 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		fresh(NodeKind::Hud, 0, V2{}, WHITE, {k});
 	}
 	// the surfaces, one node per piece
+	const int crossing_id = journey_ && journey_->crossing && journey_->body >= 0 ? world_->bodies()[size_t(journey_->body)].id : -1;
 	for (const Node &n : nodes_) {
+		if (n.surface == crossing_id) {
+			continue; // (Stage 166: a body crossing a portal is drawn clipped, with its copy: the journey node)
+		}
 		const BuiltSurface *s = level_.shades.empty() ? world_->by_id(n.surface) : world_->undarkened(n.surface); // (Stage 153: drawn as it is, under the shadow)
 		if (s == nullptr) {
 			continue;

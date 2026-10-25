@@ -1130,12 +1130,15 @@ std::optional<Session::Journey> Session::journey_of(const rc::TracePath &path, i
 		if (j.body >= 0) {
 			std::reverse(j.path.begin(), j.path.end());
 			std::reverse(leg.begin(), leg.end());
-			j.offset = world_->bodies()[size_t(j.body)].pos - h.point;
 		}
 		j.jump.assign(j.path.size(), false);
 		for (size_t m = 1; m < j.path.size(); m++) {
 			j.jump[m] = leg[m] != leg[m - 1] && (j.path[m] - j.path[m - 1]).length() > 1e-3f;
 		}
+		// Stage 166: the guide starts where the path does (a pull: the hit; a grapple: the player), close enough
+		// when it is inside the traveller
+		j.guide = j.path.front();
+		j.lead = j.body >= 0 ? world_->bodies()[size_t(j.body)].object.radius : kinematics::RADIUS;
 		if (j.path.size() < 2) {
 			return std::nullopt;
 		}
@@ -1153,33 +1156,133 @@ void Session::start_journey() {
 	}
 }
 
-// Stage 159: one tick of a journey's motion (the live game's and the preview's): the traveller at `pos` moves
-// along the path at JOURNEY_SPEED, swept against `cs`; true when it is done (blocked, or at the path's end)
-bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, double radius, double dt) {
-	double left = JOURNEY_SPEED * dt;
-	while (left > 0 && j.next < j.path.size()) {
-		const V2 target = j.path[j.next] + j.offset;
-		if (j.jump[j.next]) {
-			pos = target;
+// Stage 166 (the user): one tick of a journey (the live game's and the preview's). The guide moves along the raw
+// path while the traveller holds it (inside its radius), and waits otherwise; the traveller moves straight toward
+// the guide, sliding along what it touches. It is done when it reaches the guide at the path's end, or cannot get
+// closer to a waiting guide. At a portal the guide waits at the entry until the traveller holds it; the traveller
+// then crosses in and comes out of the exit (the portal's motion), and goes on.
+bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, double radius, double dt) const {
+	const double follow = JOURNEY_SPEED * 1.25 * dt; // (a little faster than the guide: it catches up)
+	auto dist = [](const V2 &a, const V2 &b) { return std::hypot(double(a.x) - double(b.x), double(a.y) - double(b.y)); };
+	if (j.crossing) {
+		const double step = std::min(follow, j.cross_left);
+		pos = V2::of(double(pos.x) + double(j.cross_dir.x) * step, double(pos.y) + double(j.cross_dir.y) * step);
+		j.cross_left -= step;
+		if (j.cross_left <= 0.0) { // through: the copy goes on from the exit
+			pos = j.map(pos);
+			j.crossing = false;
+			j.guide = j.path[j.next];
 			j.next++;
-			continue;
 		}
-		const V2 d = target - pos;
-		const double len = d.length();
-		const double frac = len <= left ? 1.0 : left / len;
-		const double t = kinematics::sweep_fraction(pos.x, pos.y, double(d.x) * frac, double(d.y) * frac, cs, radius);
-		pos = V2::of(double(pos.x) + double(d.x) * frac * t, double(pos.y) + double(d.y) * frac * t);
-		if (t < 1.0) {
-			return true; // blocked
-		}
-		if (frac < 1.0) {
-			break; // (Stage 163: this tick's distance is used up -- subtracting it left a rounding residue down to the
-			       // smallest subnormal, whose quotient underflows to no move: the loop spun for ever)
-		}
-		left -= len;
-		j.next++;
+		return false;
 	}
-	return j.next >= j.path.size();
+	bool guide_moved = false;
+	if (dist(pos, j.guide) <= j.lead) {
+		double left = JOURNEY_SPEED * dt;
+		while (left > 0.0 && j.next < j.path.size()) {
+			if (j.jump[j.next]) { // a portal's entry: the traveller holds it -- it crosses
+				const V2 e = j.guide, x = j.path[j.next];
+				const V2 back = j.next >= 2 ? j.path[j.next - 2] : pos;
+				double bx = double(e.x) - back.x, by = double(e.y) - back.y, bl = std::hypot(bx, by);
+				if (!(bl > 0.0)) {
+					bx = double(e.x) - pos.x, by = double(e.y) - pos.y, bl = std::hypot(bx, by);
+				}
+				bx /= bl > 0.0 ? bl : 1.0;
+				by /= bl > 0.0 ? bl : 1.0;
+				double ax = bx, ay = by; // the way out (the path after the exit)
+				if (j.next + 1 < j.path.size()) {
+					ax = double(j.path[j.next + 1].x) - x.x, ay = double(j.path[j.next + 1].y) - x.y;
+					const double al = std::hypot(ax, ay);
+					ax = al > 0.0 ? ax / al : bx;
+					ay = al > 0.0 ? ay / al : by;
+				}
+				const double th = std::atan2(ay, ax) - std::atan2(by, bx);
+				j.rc = std::cos(th);
+				j.rs = std::sin(th);
+				j.rt = V2::of(double(x.x) - (j.rc * double(e.x) - j.rs * double(e.y)), double(x.y) - (j.rs * double(e.x) + j.rc * double(e.y)));
+				// the entry's line: the portal surface through it (else across the way in)
+				j.entry_a = V2::of(double(e.x) - by * 40, double(e.y) + bx * 40);
+				j.entry_b = V2::of(double(e.x) + by * 40, double(e.y) - bx * 40);
+				for (const BuiltSurface &s : world_->surfaces()) {
+					if (s.seg.is_line() && s.portal_pair != 0 && s.seg.distance_to(e) < 0.5) {
+						j.entry_a = s.seg.s;
+						j.entry_b = s.seg.e;
+						break;
+					}
+				}
+				double nx = -(double(j.entry_b.y) - j.entry_a.y), ny = double(j.entry_b.x) - j.entry_a.x, nl = std::hypot(nx, ny);
+				nx /= nl > 0.0 ? nl : 1.0;
+				ny /= nl > 0.0 ? nl : 1.0;
+				if (nx * bx + ny * by < 0.0) {
+					nx = -nx, ny = -ny;
+				}
+				j.entry_n = V2::of(nx, ny);
+				j.cross_dir = V2::of(bx, by);
+				const double along = std::max(0.05, bx * nx + by * ny);
+				const double ahead = (double(pos.x) - e.x) * nx + (double(pos.y) - e.y) * ny; // (negative: still before it)
+				j.cross_left = std::max(0.0, (radius - ahead) / along);
+				j.crossing = true;
+				return false;
+			}
+			const V2 target = j.path[j.next];
+			const double len = dist(j.guide, target);
+			if (len <= left) {
+				j.guide = target;
+				j.next++;
+				left -= len;
+			} else {
+				j.guide = V2::of(double(j.guide.x) + (double(target.x) - j.guide.x) * left / len, double(j.guide.y) + (double(target.y) - j.guide.y) * left / len);
+				left = 0.0;
+			}
+			guide_moved = true;
+		}
+	}
+	// the traveller: straight toward the guide, sliding along what it touches
+	const double before = dist(pos, j.guide);
+	if (before > 0.0) {
+		const double f = std::min(1.0, follow / before);
+		double dx = (double(j.guide.x) - pos.x) * f, dy = (double(j.guide.y) - pos.y) * f;
+		for (int k = 0; k < 4 && (dx != 0.0 || dy != 0.0); k++) {
+			const double t = kinematics::sweep_fraction(pos.x, pos.y, dx, dy, cs, radius);
+			pos = V2::of(double(pos.x) + dx * t, double(pos.y) + dy * t);
+			if (t >= 1.0) {
+				break;
+			}
+			// the rest along the contact: the nearest collider's normal
+			double best = INFINITY, nx = 0.0, ny = 0.0;
+			for (const kinematics::Collider &c : cs) {
+				double cx = 0.0, cy = 0.0;
+				const double d = kinematics::distance(c, pos.x, pos.y, cx, cy);
+				if (d < best) {
+					best = d, nx = cx, ny = cy;
+				}
+			}
+			const double rx = dx * (1.0 - t), ry = dy * (1.0 - t), into = rx * nx + ry * ny;
+			if (into >= 0.0) {
+				break;
+			}
+			// (the user: the slide keeps the pull's speed -- the rest's full length along the contact, not its
+			// projection, which shrinks to a crawl that never converges)
+			const double sx = rx - into * nx, sy = ry - into * ny, sl = std::hypot(sx, sy), rl = std::hypot(rx, ry);
+			if (!(sl > 1e-9)) {
+				break; // (straight into the contact: no way along it)
+			}
+			// ... up to the point nearest the guide on its way (a slide past it, round a curved contact, would come
+			// back and oscillate)
+			const double ux = sx / sl, uy = sy / sl;
+			const double reach = std::min(rl, (double(j.guide.x) - pos.x) * ux + (double(j.guide.y) - pos.y) * uy);
+			if (!(reach > 1e-9)) {
+				break; // (along the contact leads away from the guide)
+			}
+			dx = ux * reach;
+			dy = uy * reach;
+		}
+	}
+	const double after = dist(pos, j.guide);
+	if (j.next >= j.path.size() && after <= 1e-3) {
+		return true; // at the guide, at the path's end
+	}
+	return !guide_moved && !(after < before - 1e-6); // no closer to a waiting guide
 }
 
 // The traveller moves along the path at JOURNEY_SPEED, swept against what it
@@ -1769,10 +1872,18 @@ void Session::arrow_states(Preview &p) const {
 			const std::vector<kinematics::Collider> cs = colliders_except(j->body, landed);
 			trip.trail.push_back(pos);
 			for (int tick = 0; tick < 20000; tick++) {
+				const bool was_crossing = j->crossing;
 				const bool done = journey_move(*j, pos, cs, radius, 1.0 / 60.0);
+				if (was_crossing && !j->crossing) {
+					trip.breaks.push_back(trip.trail.size()); // (through a portal: the trail goes on from the exit)
+				}
 				trip.trail.push_back(pos);
 				if (done) {
-					trip.blocked = j->next < j->path.size();
+					// (blocked: stopped short of where it arrives -- a pulled object against the player at the path's
+					// end, the player at the grapple -- by a barrier on the way)
+					const V2 last = j->path.back();
+					const double arrive = j->lead + (j->body >= 0 ? kinematics::RADIUS : 0.0) + 1.0;
+					trip.blocked = std::hypot(double(pos.x) - last.x, double(pos.y) - last.y) > arrive;
 					break;
 				}
 			}

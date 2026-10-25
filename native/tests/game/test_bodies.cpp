@@ -276,3 +276,58 @@ TEST_CASE("colliders are drawn in play (Stage 164)") {
 	}
 	CHECK(drawn);
 }
+
+TEST_CASE("pull: the box follows a guide along the arrow's path -- hit high or low on the floor, it comes to the player; the preview agrees (Stage 166)") {
+	for (const double aim_y : {812.0, 832.0}) { // the box's top half, its bottom half
+		CAPTURE(aim_y);
+		rcg::Session s(level_of(R"({"gravity": [0, 980], "player": {"start": [700, 827.92]},
+			"objects": [{"name": "box", "circle": {"center": [1000, 820], "radius": 16}}]})"));
+		s.hold({}, 60); // the box rests on the floor
+		const rc::V2 rest = body(s);
+		CHECK(rest.y > 820);
+		s.set_cursor(rc::V2::of(1000, aim_y));
+		s.settle();
+		const std::optional<rc::V2> end = s.preview_trip_end();
+		REQUIRE(end.has_value());
+		shoot(s, 1000, aim_y);
+		CHECK(body(s).x == end->x);
+		CHECK(body(s).y == end->y);
+		CHECK(dist(body(s), s.player()) < 16 + 12 + 1); // at the player, not caught on the floor
+	}
+}
+
+TEST_CASE("pull and grapple through a portal: the traveller crosses, its copy comes out of the other end; the preview agrees (Stage 166)") {
+	const char *portal = R"({"elements": [{"kind": "portal", "start": [800, 440], "end": [800, 640], "d": [300, 0]}],
+		"objects": [{"name": "box", "circle": {"center": [1250, 540], "radius": 16}}]})";
+	auto plan_portal = [](rcg::Session &s) { // (planned: the walks stay aligned through it -- a journey shows only so)
+		s.set_cursor(rc::V2::of(799, 540));
+		s.settle();
+		s.click(false);
+		REQUIRE(s.plan().size() == 1);
+	};
+	{
+		rcg::Session s(level_of(portal));
+		plan_portal(s);
+		s.set_cursor(rc::V2::of(1250, 540));
+		s.settle();
+		const std::optional<rc::V2> end = s.preview_trip_end();
+		REQUIRE(end.has_value());
+		shoot(s, 1250, 540);
+		CHECK(body(s).x == end->x);
+		CHECK(body(s).x < 800); // back through the portal, on the player's side
+		CHECK(dist(body(s), s.player()) < 16 + 12 + 1);
+	}
+	{
+		rcg::Session s(level_of(R"({"elements": [{"kind": "portal", "start": [800, 440], "end": [800, 640], "d": [300, 0]},
+			{"kind": "grapple", "start": [1250, 440], "end": [1250, 640]}]})"));
+		plan_portal(s);
+		s.set_cursor(rc::V2::of(1250, 540));
+		s.settle();
+		const std::optional<rc::V2> end = s.preview_trip_end();
+		REQUIRE(end.has_value());
+		shoot(s, 1250, 540);
+		CHECK(s.player().x == end->x);
+		CHECK(s.player().x > 1100); // through the portal, at the grapple
+		CHECK(s.player().x == doctest::Approx(1250 - 12).epsilon(1e-3));
+	}
+}
