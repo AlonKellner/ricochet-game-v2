@@ -43,6 +43,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
 | Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| The arrow's states in the preview: consequences drawn only before the walks diverge; fire, charge and frost marks moving with the path's dashes; the glow node for things on fire, charged or frosted (§14.11; docs/TDD_62, Stage 157) | Done |
 | Fire, charge and frost: the arrow's states and the tags `flammable`, `conductive`, `frosted`, `burning`, `charged`; conditional state changes and the frost rule in the solver and the oracle; touching rules opt-in (§10.6; docs/TDD_61, Stage 156) | Done |
 | Exact carriers: a carrier's elements on float32 points exactly on its line or circle (`exact: true`; lattice points; no solver change) (§19.1; docs/TDD_59, Stage 154) | Done |
 | Light and shadow: dark and light regions bounded by elements (sides of lines, insides or outsides of circles, under flags); the arrow stops entering the shadow, surfaces wholly in it are passes (§9.9; docs/ELEMENTS.md, docs/TDD_58, Stage 153) | Done |
@@ -1577,6 +1578,21 @@ With an empty plan the plan is complete from the start, so the cursor is a candi
 - If the physical arrow reaches the cursor without an applied effect, the two traces coincide and every step is **ALIGNED** (before the cursor) or **ALIGNED_POST_PLANNED** (after it).
 - If the physical arrow applies an effect (or is blocked) before the cursor, its frame id or event list departs from the planned one there. The merge marks that index as the divergence: the red solid planned line continues straight to the cursor (UX11, "empty plan = fire straight").
 
+### 14.11 The arrow's states in the preview (Stage 157)
+
+> **Status: implemented (Stage 157, docs/TDD_62_ARROW_PREVIEW.md).** The user's rules (2026-10-25).
+
+- **Consequences only before the divergence.** The preview shows what the shot does to things (a surface catching
+  fire, a conductor charged or discharged) only when the change happens before the walks diverge (§14.2). The glow
+  node (`["glow"]`, over the surfaces) draws the change dashed: orange for fire, white for charge, grey for a
+  discharge. What things are now (on fire, charged, frosted) it draws solid.
+- **The arrow's states on its path.** When the arrow catches fire, is charged or frosted before the divergence, every
+  later step of the arrow on which the state still holds is marked, the marks moving with the dashes: red crosses
+  for fire, white chevrons (pointing the way it flies) for charge, pale blue stars for frost. A state that begins
+  after the divergence is not marked.
+- An unplanned state change is a divergence (§14.2, Stage 134), so a preview shows a consequence when every surface
+  that changes the arrow's state on the way is planned. A pass surface carrying a tag's writes is plannable.
+
 ### 14.10 Post-cursor computation
 
 There is no separate post-cursor computation. Both traces run the full path from origin to escape/block in a single pass. The cursor is a virtual hitpoint (§12.1) that creates a step boundary. `cursor_index` is the step index at the cursor position. Steps before `cursor_index` are pre-cursor; steps at or after are post-cursor. The step type (ALIGNED vs ALIGNED_POST_PLANNED, or DIVERGED_PLANNED vs DIVERGED_POST_PLANNED) is determined by comparing against `cursor_index`.
@@ -2900,4 +2916,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.66.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.67.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

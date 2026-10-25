@@ -178,11 +178,14 @@ public:
 	// provisional ones while its climb runs), how long the shown exact preview's
 	// climb took (0: computed in its frame), and the path's painter for steps
 	const std::vector<rc::TraceStep> &preview_steps() const { return shown().merged; }
+	// Stage 157: the preview's arrow-state marks per merged step, and its consequences (tests, hosts)
+	const std::vector<uint8_t> &preview_marks() const { return shown().marks; }
+	const std::vector<std::pair<std::string, int>> &preview_becomes() const { return shown().becomes; }
 	// Stage 147 (tests, tools): the preview's physical trace -- the path a shot now takes (none: no trace)
 	const rc::TracePath *physical_trace() const { return preview_.pair ? &preview_.pair->physical : nullptr; }
 	double preview_seconds() const { return provisional_ ? 0.0 : preview_climb_seconds_; }
 	void paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<render::Call> &out, double dash_phase = 0.0,
-		const std::vector<rc::sweep::EventDot> *dots = nullptr) const;
+		const std::vector<rc::sweep::EventDot> *dots = nullptr, const std::vector<uint8_t> *marks = nullptr) const;
 	// Stage 130: the path node's calls, its dashes moved dash_phase px along the way
 	// the arrow flies (the presenter's clock; 0: the session's own node)
 	void paint_path(std::vector<render::Call> &out, double dash_phase) const;
@@ -255,7 +258,13 @@ private:
 		std::vector<rc::sweep::EventDot> dots; // Stage 134: the non-significant events of both walks
 		std::optional<rc::LadderResult> last_result;
 		std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> hits;
+		// Stage 157: per merged step, the arrow's states to mark on it (1 fire, 2 charge, 4 frost: each only when it
+		// began before the walks diverge); the things whose state changes before they diverge (name -> 1 catches
+		// fire, 2 is charged, 4 is discharged)
+		std::vector<uint8_t> marks;
+		std::vector<std::pair<std::string, int>> becomes;
 	};
+	void arrow_states(Preview &p) const; // Stage 157
 
 	std::vector<rc::PlanItem> items(size_t n) const;
 	std::vector<rc::PlanItem> items() const { return items(plan_.size()); }
@@ -526,7 +535,7 @@ private:
 		uint64_t version = 0;
 	};
 	mutable std::map<int, SurfaceDraw> surface_draw_; // by node serial
-	mutable CachedDraw path_draw_, vis_draw_, spawn_draw_, static_draw_[3], shade_draw_;
+	mutable CachedDraw path_draw_, vis_draw_, spawn_draw_, static_draw_[3], shade_draw_, glow_draw_;
 	void clear_hover();
 	// (last: destroyed first, before the state their results go to)
 	std::unique_ptr<LatestJob<VisJobIn, VisJobOut>> vis_job_;

@@ -227,7 +227,7 @@
    "id": 6,
    "is_target": false,
    "left": {
-    "interactive": false,
+    "interactive": true,
     "states": [
      {
       "key": "shot:charge",
@@ -295,7 +295,7 @@
    "line": true,
    "player_solid": true,
    "right": {
-    "interactive": false,
+    "interactive": true,
     "states": [
      {
       "key": "shot:charge",
@@ -370,7 +370,7 @@
    "id": 7,
    "is_target": false,
    "left": {
-    "interactive": false,
+    "interactive": true,
     "states": [
      {
       "key": "shot:charge",
@@ -438,7 +438,7 @@
    "line": true,
    "player_solid": true,
    "right": {
-    "interactive": false,
+    "interactive": true,
     "states": [
      {
       "key": "shot:charge",

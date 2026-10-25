@@ -130,3 +130,62 @@ TEST_CASE("arrow states: the tags' errors") {
 	CHECK(err(R"({"elements": [{"kind": "raw", "surface": {"start": [800, 300], "end": [800, 700], "via": [800, 500], "left": {"effect": {"type": "pass"},
 		"hits": [{"kind": "target", "when": [{"key": "a", "values": ["true"]}]}]}}}]})").find("only a state write") != std::string::npos);
 }
+
+namespace {
+
+// the preview's marks on the arrow's steps (aligned or the physical walk's own), and its consequences
+std::pair<std::vector<uint8_t>, std::vector<std::pair<std::string, int>>> preview_marks(rcg::Session &s, double x, double y) {
+	s.set_cursor(rc::V2::of(x, y));
+	s.settle();
+	return {s.preview_marks(), s.preview_becomes()};
+}
+
+} // namespace
+
+TEST_CASE("arrow states: the preview marks the arrow's fire and shows what catches fire -- only when it began before the walks diverge (Stage 157)") {
+	{
+		rcg::Session s(level_of(R"({"elements": [
+			{"kind": "torch", "start": [800, 300], "end": [800, 780]},
+			{"kind": "wall", "name": "w", "tags": ["flammable"], "start": [1000, 300], "end": [1000, 780]}]})"));
+		// unplanned, the torch's change diverges the walks (GAME_SPEC 14.2): the wall's fire is after it
+		CHECK(preview_marks(s, 1000, 540).second.empty());
+		s.set_cursor(rc::V2::of(800, 540)); // planned: the walks stay aligned to the wall
+		s.settle();
+		s.click(false);
+		const auto [marks, becomes] = preview_marks(s, 1000, 540);
+		CHECK(std::count_if(marks.begin(), marks.end(), [](uint8_t m) { return (m & 1) != 0; }) >= 1);
+		REQUIRE(becomes.size() == 1);
+		CHECK(becomes[0] == std::pair<std::string, int>{"w", 1});
+		bool glow = false;
+		for (const auto &n : s.draw_frame()) {
+			glow = glow || n.key.kind == rcg::render::NodeKind::Glow;
+		}
+		CHECK(glow);
+	}
+	{
+		// an unplanned mirror turns the arrow down through a torch onto a flammable floor: the walks diverge at the
+		// mirror, so the fire begins after the divergence -- no marks, no consequence
+		rcg::Session s(level_of(R"({"elements": [
+			{"kind": "two_sided_mirror", "start": [760, 500], "end": [840, 580]},
+			{"kind": "torch", "start": [700, 700], "end": [900, 700]},
+			{"kind": "wall", "name": "floor", "tags": ["flammable"], "start": [700, 800], "end": [900, 800]}]})"));
+		const auto [marks, becomes] = preview_marks(s, 1000, 540);
+		CHECK(std::none_of(marks.begin(), marks.end(), [](uint8_t m) { return m != 0; }));
+		CHECK(becomes.empty());
+		shoot(s, 1000, 540); // (yet the shot does burn it)
+		CHECK(s.flags().is_true("el:floor:fire"));
+	}
+	{
+		// charge and frost marks
+		rcg::Session s(level_of(R"({"elements": [
+			{"kind": "charger", "start": [750, 300], "end": [750, 780]},
+			{"kind": "frost_barrier", "start": [850, 300], "end": [850, 780]}]})"));
+		for (const double x : {750.0, 850.0}) { // (both planned: the walks stay aligned through them)
+			s.set_cursor(rc::V2::of(x, 540));
+			s.settle();
+			s.click(false);
+		}
+		const auto [marks, becomes] = preview_marks(s, 1000, 540);
+		CHECK(std::count_if(marks.begin(), marks.end(), [](uint8_t m) { return m == (2 | 4); }) >= 1);
+	}
+}

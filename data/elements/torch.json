@@ -8,14 +8,14 @@
     "effect": {
      "type": "pass"
     },
-    "interactive": false
+    "interactive": true
    },
    "player_solid": false,
    "right": {
     "effect": {
      "type": "pass"
     },
-    "interactive": false
+    "interactive": true
    }
   }
  ],

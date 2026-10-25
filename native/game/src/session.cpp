@@ -1618,6 +1618,105 @@ void Session::make_preview(Preview &p, std::optional<rc::TracePair> pair) const 
 	p.merged = std::move(merged.steps);
 	p.dots = std::move(merged.dots);
 	p.hits = rc::physical_hits(p.physical.steps);
+	arrow_states(p);
+}
+
+// Stage 157 (GAME_SPEC 14, the user): the arrow's states along the preview. The
+// physical walk's hits change the flags; each change is placed at the merged
+// step it ends (walk order, by point). A state (fire, charge, frost) is marked
+// on the arrow's steps while it holds, if it began before the walks diverge;
+// the things whose fire or charge changes before they diverge are the preview's
+// consequences.
+void Session::arrow_states(Preview &p) const {
+	p.marks.assign(p.merged.size(), 0);
+	p.becomes.clear();
+	if (!p.pair) {
+		return;
+	}
+	const rc::TracePath &raw = p.pair->physical;
+	struct Change {
+		V2 at;
+		rc::Flags after;
+	};
+	std::vector<Change> changes;
+	for (size_t i = 0; i < raw.hits.size(); i++) {
+		const rc::HitRecord &h = raw.hits[i];
+		rc::Flags after;
+		if (i + 1 < raw.hits.size()) {
+			after = raw.hits[i + 1].flags_before;
+		} else {
+			after = h.flags_before;
+			const BuiltSurface *s = world_->by_id(h.surface_id);
+			const BuiltSide *side = s && h.fired ? active_side(*s, h.side == rc::Side::Left ? Side::Left : Side::Right, h.flags_before) : nullptr;
+			if (side != nullptr) {
+				after = after.applied(writes(*side, s->id, false));
+				if (h.flags_before.is_true(rc::FROST) && side->effect.type == "terminal" && !side->rigid) {
+					after.set(rc::FROST, false);
+				}
+			}
+		}
+		changes.push_back({h.point, std::move(after)});
+	}
+	static const char *const KEYS[3] = {"shot:fire", "shot:charge", "shot:frost"};
+	rc::Flags cur = flags_, at_divergence = flags_;
+	bool diverged = false, ok[3] = {false, false, false};
+	size_t c = 0;
+	for (size_t m = 0; m < p.merged.size(); m++) {
+		const rc::TraceStep &st = p.merged[m];
+		const bool aligned = st.type == rc::StepType::Aligned || st.type == rc::StepType::AlignedPostPlanned;
+		if (!aligned && st.type != rc::StepType::DivergedPhysical) {
+			continue; // (the planned walk's own steps)
+		}
+		if (!aligned && !diverged) {
+			diverged = true;
+			at_divergence = cur;
+		}
+		uint8_t mk = 0;
+		for (int k = 0; k < 3; k++) {
+			if (ok[k] && cur.is_true(KEYS[k])) {
+				mk = uint8_t(mk | (1 << k));
+			}
+		}
+		p.marks[m] = mk;
+		while (c < changes.size() && changes[c].at.distance_to(st.end) < 0.01f) {
+			for (int k = 0; k < 3; k++) {
+				const bool was = cur.is_true(KEYS[k]), now = changes[c].after.is_true(KEYS[k]);
+				if (!was && now) {
+					ok[k] = aligned; // (begun before the divergence, or not)
+				} else if (was && !now) {
+					ok[k] = false;
+				}
+			}
+			cur = changes[c].after;
+			c++;
+		}
+	}
+	if (!diverged) {
+		at_divergence = cur;
+	}
+	auto consider = [&](const std::string &name) {
+		int b = 0;
+		const std::string fire = "el:" + name + ":fire", charge = "el:" + name + ":charge";
+		if (!flags_.is_true(fire) && at_divergence.is_true(fire)) {
+			b |= 1;
+		}
+		if (!flags_.is_true(charge) && at_divergence.is_true(charge)) {
+			b |= 2;
+		} else if (flags_.is_true(charge) && !at_divergence.is_true(charge)) {
+			b |= 4;
+		}
+		if (b != 0) {
+			p.becomes.push_back({name, b});
+		}
+	};
+	for (const Tagged &t : level_.tagged) {
+		consider(t.name);
+	}
+	for (const World::Body &b : world_->bodies()) {
+		if (!b.object.tags.empty()) {
+			consider(b.object.name);
+		}
+	}
 }
 
 void Session::update_hover() {

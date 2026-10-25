@@ -791,6 +791,7 @@ SurfaceSpec object_spec(const Object &o, const V2 &center) {
 		for (size_t i = 0; i < extra.size(); i++) {
 			side.hits.push_back(hit(extra[i], "object " + o.name + " (its tags)"));
 		}
+		side.interactive = side.interactive || !extra.empty(); // (Stage 157: plannable, the preview kept aligned through it)
 	}
 	if (o.pops) { // Stage 150: a hit pops it -- gone from then on (in the shot, and after)
 		HitSpec h;
