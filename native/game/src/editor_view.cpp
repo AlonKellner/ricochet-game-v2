@@ -1285,7 +1285,8 @@ std::vector<Editor::Row> Editor::rows() const {
 			add({Row::Value, label, v.is_null() ? std::string("(none)") : spell(v), hint, Field{"", path}, choice, -1, 0, {}});
 		};
 		field("name", "/name", "the level's path under data/levels");
-		field("bounds", "/bounds", "[x, y, w, h]: the arrow wraps there");
+		field("bounds", "/bounds", "[x, y, w, h]: the level's edges (by default the arrow wraps there)");
+		field("edges", "/edges", "the edges' kind -- wall, mirror, two_sided_mirror, arrow_block, target, ... -- or {\"kind\", params}, \"wrap\" (opposite edges a portal pair), or {top, right, bottom, left} of those (none: they pass)");
 		field("gravity", "/gravity", "[gx, gy] px/s^2 (the player's)");
 		field("room", "/room/rect", "[x, y, w, h]: the room's walls");
 		field("room built", "/room/built", "the room's walls are built", "bool");
@@ -1539,6 +1540,22 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			}
 		};
 		box(doc_.value("bounds", json::array({0.0, 0.0, 1920.0, 1080.0})), BOUNDS, true);
+		for (const BuiltSurface &b : edges_drawn_.built) { // Stage 169: a configured edge in its face's colour, a tick inward
+			if (!b.seg.is_line() || b.label == std::nullopt) {
+				continue; // (a pass is not drawn)
+			}
+			const Color c = side_color(shown_side(b, true));
+			const V2 a = to_screen(b.seg.s), e = to_screen(b.seg.e);
+			r.push_back(line(a, e, c, 3.0));
+			const double dx = double(b.seg.e.x) - b.seg.s.x, dy = double(b.seg.e.y) - b.seg.s.y, len = std::hypot(dx, dy);
+			const V2 m = V2::of((double(b.seg.s.x) + b.seg.e.x) / 2, (double(b.seg.s.y) + b.seg.e.y) / 2);
+			V2 n = len > 0 ? V2::of(dy / len, -dx / len) : V2{0, 1};
+			if (b.seg.determine_side(V2::of(double(m.x) + n.x, double(m.y) + n.y)) != rc::Side::Left) {
+				n = V2{-n.x, -n.y};
+			}
+			const V2 sm = to_screen(m);
+			r.push_back(line(sm, V2::of(double(sm.x) + n.x * 9, double(sm.y) + n.y * 9), c, 2.0));
+		}
 		const json room = doc_.value("room", json::object());
 		if (!room.is_object() || room.value("built", true)) {
 			box(room.is_object() ? room.value("rect", json::array({560.0, 240.0, 800.0, 600.0})) : json(), RED, false);

@@ -257,7 +257,7 @@ The player builds a plan by clicking on **surface sides** in order. The plan is 
 - **Highlighting**: when the cursor hovers over a surface, the approachable side highlights to indicate it is clickable.
 - **Plan display**: planned surface sides are visually marked (e.g., numbered overlay, distinct color on the planned side).
 - **Preview**: the trajectory preview updates in real time as the plan and cursor change.
-- **Infinity entry** (Stages 88, 101): the entry **∞** (`INFINITY_ID = -3`, no side) means "the beam passes the frame's infinity here"; it is matched by the walker at that passage, and selects the plan's second realization only where the first entry leaves both open (§13.1, Stage 111). *Where* infinity is depends on the frame the plan has reached (§13.1: `Q = F(∞)`, the image of infinity under the plan's effects on the provenance stack, starting from the level's pre-transform, §9.5). When `Q` is the real infinity or lies off screen, clicking within the click tolerance **inside the level bounds' edge**, where no interactive surface wins, appends the entry; hovering the edge band highlights it and planned ∞ entries are marked on the edge where they were clicked. When `Q` is a point on screen (after an inversion, or in a level with a pre-transform), it is drawn as a **circled cross** and is plannable like any surface: the nearest within tolerance wins, planned entries are numbered at it (each at the point of its own frame). Hover and plan overlays of infinity use the surfaces' language (§4.3): a gradient band fading away from it and incoming / outgoing chevrons, one pair per side of the level bounds inside the edge, four radial pairs around the point. The player faces the preview's first step, so it faces the way the arrow will leave (toward or away from the cursor, along the frame's circles). While the plan's simulated state is ghosted the entry is still allowed: a ghost arrow wraps.
+- **Infinity entry** (Stages 88, 101): the entry **∞** (`INFINITY_ID = -3`, no side) means "the beam passes the frame's infinity here"; it is matched by the walker at that passage, and selects the plan's second realization only where the first entry leaves both open (§13.1, Stage 111). *Where* infinity is depends on the frame the plan has reached (§13.1: `Q = F(∞)`, the image of infinity under the plan's effects on the provenance stack, starting from the level's pre-transform, §9.5). When `Q` is the real infinity or lies off screen, clicking within the click tolerance **inside the level bounds' edge**, where no interactive surface wins, appends the entry; the band lies only along the edges the arrow passes (§9.10: an edge of another kind is no way to infinity); hovering the edge band highlights it and planned ∞ entries are marked on the edge where they were clicked. When `Q` is a point on screen (after an inversion, or in a level with a pre-transform), it is drawn as a **circled cross** and is plannable like any surface: the nearest within tolerance wins, planned entries are numbered at it (each at the point of its own frame). Hover and plan overlays of infinity use the surfaces' language (§4.3): a gradient band fading away from it and incoming / outgoing chevrons, one pair per side of the level bounds inside the edge, four radial pairs around the point. The player faces the preview's first step, so it faces the way the arrow will leave (toward or away from the cursor, along the frame's circles). While the plan's simulated state is ghosted the entry is still allowed: a ghost arrow wraps.
 - **Origin entry** (Stage 132, the user): the entry **O** (`ORIGIN_ID = -4`, no side) means "the beam passes the ray's origin here" (§12.6): the player's image in the plan's frame, a circle normal projection's centre, or a line normal / directional projection's departure. It is **plannable only when the plan so far leaves the walk behind the ray's origin** -- heading toward the origin rather than toward the frame's infinity. Along the beam the origin and the infinity point split the ray's line (or circle) in two halves, and a walk starts **in front** (it leaves the player). A planned ∞ entry turns it **behind**, a planned origin entry **in front** again; a map (a reflection, an inversion, a portal) keeps the order of the beam's points and so the half; a projection starts a new ray: in front, except a circle normal projection whose ray heads **toward the centre** (behind: an inner projection -- through from outside, or back from inside). The rule is the plan's, not the cursor's: it is decided by the plan's entries alone, and the walk then shows whether the entry is met (an unmet entry diverges, §13.5). Where the origin is plannable it is drawn as a **circled cross** at its point and is plannable like any surface: the nearest within the click tolerance wins; planned origin entries are numbered at their points; hover and plan overlays as ∞'s on-screen point (four radial pairs of chevrons). Right-clicking it removes the latest origin entry.
 - **Right-click removal**: right-clicking over a planned surface removes the **latest instance** of that surface from the plan (right-clicking the edge band removes the latest ∞ entry). Right-clicking over an unplanned surface or empty space **clears the entire plan**.
 - **Clear plan**: dedicated input (C) clears the plan without resetting level state or player position.
@@ -768,6 +768,30 @@ when it lies in an active dark region and in no active light one (a point on a r
   player standing in the dark sees their surroundings and can shoot only within their light, or out where it reaches
   the light. It moves with the player (the boundary's ids: one block reserved at the start for the pieces with the
   light), and a shot sees the light where it was fired.
+
+### 9.10 The level's edges
+
+> **Status: implemented (Stage 169, docs/TDD_73_EDGES.md).**
+
+The level's **edges** are the four walls along its bounds (not the room's walls, which the room key builds inside
+them). By default each is a pass on both sides, not plannable and not drawn: the arrow leaves there and wraps
+through infinity (§6.3), and the ∞ entry is clicked in a band inside them (§4.2). The level key `edges` makes them
+anything else:
+
+- **A kind** (`"wall"`, `"mirror"`, `"two_sided_mirror"`, `"arrow_block"`, `"target"`, a level's own template...)
+  or `{"kind", ...params}`: every edge an element of that kind, placed on the edge with its left side (a face)
+  toward the level. It is drawn, plannable, and hit like that element anywhere else (a mirror edge reflects the
+  arrow back in, a wall stops it), tags and all.
+- **`"wrap"`**: the opposite edges a portal pair. The right edge carries the arrow to the left one, the bottom to
+  the top, at the same height (or the same x), moving on in the same direction.
+- **Per edge**: `{"top", "right", "bottom", "left"}`, each one of the above or `"pass"` (the default for an edge
+  left out). Wrap joins opposite edges: both wrap or neither.
+
+The edges keep their place in the build order (after the elements, or where an `edges` element stands) and their
+ids (a wrap's portal pair two). An edge's name is `edge_<top|right|bottom|left>` (a wrap's `edge_wrap_x`,
+`edge_wrap_y`). **Infinity**: the ∞ band lies only along the edges that pass. An edge that stops, turns or carries
+the arrow is no way to infinity there (in a frame where infinity is a point on screen, the circled cross is planned
+as before).
 
 ## 10. Effect system
 
@@ -1988,6 +2012,7 @@ Level (rc-level/2):
     elements:    [Element]                   # in build order
     templates:   {kind: Template}            # the level's own kinds (docs/ELEMENTS.md)
     carriers:    [{name, line {a, b} | circle {center, radius}, exact?}]   # Stage 149: what elements are placed on (154: exact)
+    edges:       Kind | {kind, ...} | "wrap" | {top, right, bottom, left}      # Stage 169: the edge walls' kind (§9.10)
 
 Element:
     kind:        String                      # a template's kind, "edges" (the edge walls here) or "raw"
@@ -2969,4 +2994,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.75.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.76.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

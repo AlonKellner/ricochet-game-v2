@@ -54,6 +54,32 @@ double edge_distance(const V2 &p, const rc::Rect2f &b) {
 		std::min(double(p.y) - double(b.position.y), double(end.y) - double(p.y)));
 }
 
+// Stage 169 (GAME_SPEC 4.2): the edges the ∞ band lies along -- those the arrow passes to wrap (the default
+// walls: passes on both sides, not plannable). An edge of another kind (`edges`: a wall, a mirror, a wrap's
+// portal) stops, turns or carries the arrow there: no way to infinity. Top, right, bottom, left.
+std::array<bool, 4> open_edges(const std::vector<BuiltSurface> &surfaces, const Rect &b) {
+	const float x0 = float(b.x), y0 = float(b.y), x1 = float(b.x + b.w), y1 = float(b.y + b.h);
+	auto passes = [](const std::optional<BuiltSide> &s) { return !s || (s->effect.type == "pass" && !s->interactive && s->hits.empty()); };
+	std::array<bool, 4> open{true, true, true, true};
+	for (const BuiltSurface &s : surfaces) {
+		if (!s.seg.is_line() || s.pre_transform || (passes(s.left) && passes(s.right) && s.resolver.empty())) {
+			continue;
+		}
+		const V2 p = s.seg.s, q = s.seg.e;
+		const bool on[4] = {p.y == y0 && q.y == y0, p.x == x1 && q.x == x1, p.y == y1 && q.y == y1, p.x == x0 && q.x == x0};
+		for (int k = 0; k < 4; k++) {
+			open[size_t(k)] = open[size_t(k)] && !on[k];
+		}
+	}
+	return open;
+}
+
+int nearest_edge(const V2 &p, const rc::Rect2f &b) {
+	const V2 end = b.end();
+	const double d[4] = {double(p.y) - double(b.position.y), double(end.x) - double(p.x), double(end.y) - double(p.y), double(p.x) - double(b.position.x)};
+	return int(std::min_element(d, d + 4) - d);
+}
+
 // ArrowAdvance.start_direction
 V2 start_direction(const rc::TraceStep &s) {
 	const rc::arc::StepGeom g = rc::sweep::step_geom(s);
@@ -150,6 +176,7 @@ std::optional<Action> action_of(const std::string &name) {
 Session::Session(const Level &level, const SessionConfig &config)
 	: level_(level), visibility_override_(config.visibility), async_(config.async), budget_(config.budget) {
 	world_ = std::make_unique<World>(build_level(level_), level_.objects);
+	edge_open_ = open_edges(world_->surfaces(), level_.bounds);
 	if (!level_.motions.empty()) { // Stage 151: the moving surfaces, from their base specs
 		std::vector<World::Moving> moving;
 		for (size_t m = 0; m < level_.motions.size(); m++) {
@@ -554,7 +581,7 @@ Session::Hit Session::detect_click() {
 			}
 		} else if (!best.has_surface && !best.origin && has_area(b)) {
 			const double d = edge_distance(cursor_, b);
-			if (d >= 0.0 && d <= CLICK_TOLERANCE) {
+			if (d >= 0.0 && d <= CLICK_TOLERANCE && edge_open_[size_t(nearest_edge(cursor_, b))]) {
 				Hit h;
 				h.infinity = true;
 				h.distance = d;

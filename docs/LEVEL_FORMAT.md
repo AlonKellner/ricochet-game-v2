@@ -32,6 +32,7 @@ too).
 | `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "wall" \| "mirror" \| "pass", "solid", "label", "gravity", "pops", "carries", "tags"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, wall, solid, label `Object` by default); their surfaces take the ids after the level's. Stage 150: `gravity` a factor of the level's (default 1; negative floats up), `pops` (the arrow pops it: flag `obj:<name>:popped`), `carries` another object until it pops. Stage 152: `tags` (what spread rules flow through: `["conductive"]`) | `[]` |
 | `cycle` | `{"period": s, "resume_after": s}`: the moving elements' cycle (GAME_SPEC 9.8; 4 and 10 by default) | |
 | `spread` | `[{"flag", "tag", "persist", "sources"}]`: flags flowing through tagged elements and objects that touch (GAME_SPEC 10.6, docs/ELEMENTS.md "Fire, charge and frost: tags"; `persist` false and `sources` `[]` by default) | none (Stage 156) |
+| `edges` | the level's edges -- the four walls along `bounds`: a kind (`"wall"`, `"mirror"`, ...) or `{"kind", ...params}` for all four, their faces (left sides) toward the level; `"wrap"` (the right edge a portal to the left, the bottom to the top); or `{"top", "right", "bottom", "left"}` of those and `"pass"` (GAME_SPEC 9.10, Stage 169) | passes (the arrow wraps there) |
 | `carriers` | `[{"name", "line": {"a": [x, y], "b": [x, y]}} \| {"name", "circle": {"center": [x, y], "radius": r}}, "exact"?]`: lines and circles elements are placed on (Stage 149, below; `exact`: Stage 154) | `[]` |
 
 A region is `{"rect": [x, y, w, h]}` or `{"circle": {"center": [x, y], "radius": r}}`. The objective and the
@@ -71,13 +72,13 @@ for what no template expresses.
 **The lowering** lists the surfaces in this order, and gives them consecutive ids in it (a portal two):
 1. the room's four walls (top, right, bottom, left; terminal, player-solid, label `Surface`) when `room.built`;
 2. every element's surfaces, in order (an element may have several, sharing its geometry);
-3. the four edge walls of the bounds (pass, not plannable, not drawn) -- where an `edges` element stands, else here;
+3. the four edge walls of the bounds (top, right, bottom, left: pass, not plannable, not drawn; or as the `edges` key makes them, each an element named `edge_<edge>`, a wrap one portal pair per axis at the right and bottom edges) -- where an `edges` element stands, else here;
 4. the pre-transform circles (`pre_inversion` elements), last.
 
 `rc_tool lower <levels> <out>` writes the lowerings (`bench/lowered/<dir>__<name>.json`, `make lowered`: the
 oracle's independent builder reads them; the lowered gate fails while they are stale). `rc_tool migrate
 [--check] <files>` rewrites `rc-level/1` levels as `rc-level/2`: the room and edge walls implicit where they are
-the generated ones, every run of surfaces the first template (by priority) that expands to exactly it, else a
+the generated ones (configured edges read back as the `edges` key), every run of surfaces the first template (by priority) that expands to exactly it, else a
 `raw` element; a migration is written only when its lowering is the original byte for byte.
 
 ## The lowered level (`rc-level/1`)

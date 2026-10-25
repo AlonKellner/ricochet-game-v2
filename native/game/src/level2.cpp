@@ -305,7 +305,7 @@ Lowered lower_level(const json &v2) {
 			fail(P, "'" + k + "' is reserved for a later stage of rc-level/2");
 		}
 		const bool known = k == "schema" || k == "flags" || k == "templates" || k == "elements" || k == "objective" || k == "detectors"
-				|| k == "objects" || k == "carriers" || k == "cycle" || k == "spread" || std::find(META.begin(), META.end(), k) != META.end();
+				|| k == "objects" || k == "carriers" || k == "cycle" || k == "spread" || k == "edges" || std::find(META.begin(), META.end(), k) != META.end();
 		if (!known) {
 			fail(P, "unknown key '" + k + "'");
 		}
@@ -392,6 +392,153 @@ Lowered lower_level(const json &v2) {
 	if (!room.is_null()) {
 		push(room_walls(room), P + ".room (its walls)");
 	}
+	// an element of a template kind: its surfaces, tags and region (`at`: where it stands, its origins' prefix)
+	auto place = [&](const json &e, const std::string &kind, const std::string &name, size_t index, const std::string &at, const std::string &origin) {
+		auto it = kinds.find(kind);
+		if (it == kinds.end()) {
+			fail(at + ".kind", "unknown element kind '" + kind + "'");
+		}
+		const json g = e.contains("carrier") ? on_carrier(e, carriers, origin) : e; // Stage 149: on a carrier
+		std::vector<json> expanded = elements::expand(it->second, g, name, origin);
+		// Stage 152: its tags
+		std::vector<std::string> tags;
+		for (const json *src : {static_cast<const json *>(&it->second), &e}) {
+			if (src->contains("tags")) {
+				if (!(*src)["tags"].is_array()) {
+					fail(origin + ".tags", "an array of strings expected");
+				}
+				for (const json &tg : (*src)["tags"]) {
+					if (!tg.is_string()) {
+						fail(origin + ".tags", "an array of strings expected");
+					}
+					if (std::find(tags.begin(), tags.end(), tg.get<std::string>()) == tags.end()) {
+						tags.push_back(tg.get<std::string>());
+					}
+				}
+			}
+		}
+		if (!tags.empty()) {
+			out.tagged.push_back({index, name, tags, at});
+		}
+		// Stage 156: what the tags give every side (a missing side: a pass that carries them), the flags they start
+		const json extra = tag_hits(name, tags);
+		if (!extra.empty()) {
+			const bool frost = std::find(tags.begin(), tags.end(), "frosted") != tags.end();
+			auto give = [&](json &sides) {
+				for (const char *k : {"left", "right"}) {
+					json &sd = sides[k];
+					if (sd.is_null()) {
+						sd = {{"effect", {{"type", "pass"}}}, {"interactive", false}};
+					}
+					const std::string t = sd.contains("effect") ? sd["effect"].value("type", "pass") : "pass";
+					if (frost && !frost_bearing(t)) {
+						fail(origin + ".tags", "frosted: its sides must pass, reflect or invert (a " + t + " side cannot bear frost)");
+					}
+					if (!sd.contains("hits")) {
+						sd["hits"] = json::array();
+					}
+					for (const json &h : extra) {
+						sd["hits"].push_back(h);
+					}
+				}
+			};
+			for (json &s : expanded) {
+				if (s.value("pre_transform", false)) {
+					continue;
+				}
+				give(s);
+				if (s.contains("resolver") && s["resolver"].is_object() && s["resolver"].value("table", json()).is_array()) {
+					for (json &row : s["resolver"]["table"]) {
+						if (row.is_array() && row.size() == 2 && row[1].is_object()) {
+							give(row[1]);
+						}
+					}
+				}
+			}
+		}
+		for (const std::string &k : tag_initial_flags(name, tags)) {
+			if (!out.flags.contains(k)) {
+				out.flags[k] = true;
+			}
+		}
+		push(std::move(expanded), origin);
+		// Stage 153: the region it bounds
+		const json shade = elements::evaluate(it->second, g, name, "shade", origin);
+		if (!shade.is_null()) {
+			out.shaded.push_back({index, name, shade, at});
+		}
+	};
+	// Stage 169: the edge walls -- passes (not plannable, not drawn) unless `edges` makes them elements of a
+	// kind, their faces (left sides) inward, or "wrap": the opposite edges a portal pair (docs/LEVEL_FORMAT.md)
+	auto place_edges = [&](size_t index, const std::string &origin) {
+		if (!v2.contains("edges") || v2["edges"].is_null()) {
+			push(edge_walls(v2), origin);
+			return;
+		}
+		const std::string EP = P + ".edges";
+		static const char *NAMES[4] = {"top", "right", "bottom", "left"};
+		json per[4];
+		const json &cfg = v2["edges"];
+		if (cfg.is_string() || (cfg.is_object() && cfg.contains("kind"))) {
+			for (json &e : per) {
+				e = cfg;
+			}
+		} else if (cfg.is_object()) {
+			for (auto it = cfg.begin(); it != cfg.end(); ++it) {
+				const auto at = std::find_if(std::begin(NAMES), std::end(NAMES), [&](const char *n) { return it.key() == n; });
+				if (at == std::end(NAMES)) {
+					fail(EP, "unknown key '" + it.key() + "' (top, right, bottom, left; or a kind for all four)");
+				}
+				per[at - std::begin(NAMES)] = it.value();
+			}
+		} else {
+			fail(EP, "a kind, {\"kind\", ...params}, \"wrap\", or {top, right, bottom, left} of those expected");
+		}
+		auto wraps = [&](int k) { return per[k] == "wrap"; };
+		for (int k = 0; k < 4; k++) {
+			if (wraps(k) != wraps((k + 2) % 4)) {
+				fail(EP + "." + NAMES[k], "wrap joins opposite edges: both wrap or neither");
+			}
+		}
+		const std::vector<json> pass = edge_walls(v2);
+		const json b = bounds_of(v2);
+		const double w = b[2].get<double>(), h = b[3].get<double>();
+		for (int k = 0; k < 4; k++) {
+			const std::string ek = EP + "." + NAMES[k];
+			const json &c = per[k];
+			const json &wall = pass[size_t(k)];
+			if (c.is_null() || c == "pass") {
+				push({wall}, ek);
+				continue;
+			}
+			if (c == "wrap") {
+				if (k == 1 || k == 2) { // the right and bottom edges, their images the left and top
+					json e = {{"kind", "portal"}, {"start", wall["start"]}, {"end", wall["end"]}, {"via", wall["via"]},
+							{"d", k == 1 ? json::array({-w, 0.0}) : json::array({0.0, -h})}};
+					const std::string name = std::string("edge_wrap_") + (k == 1 ? "x" : "y");
+					place(e, "portal", name, index, ek, ek + " (" + name + ")");
+				}
+				continue;
+			}
+			json e = c.is_string() ? json{{"kind", c}} : c;
+			if (!e.is_object() || !e.contains("kind") || !e["kind"].is_string()) {
+				fail(ek, "a kind, {\"kind\", ...params}, \"pass\" or \"wrap\" expected");
+			}
+			for (const char *g : {"start", "end", "via", "circle", "carrier", "from", "to", "name", "motion"}) {
+				if (e.contains(g)) {
+					fail(ek + "." + g, "an edge's geometry and name follow the bounds");
+				}
+			}
+			e["start"] = wall["end"]; // (reversed: the left side, a face, inward)
+			e["end"] = wall["start"];
+			e["via"] = wall["via"];
+			const std::string name = std::string("edge_") + NAMES[k];
+			if (taken.count(name)) {
+				fail(ek, "'" + name + "' names an element (the edge's name)");
+			}
+			place(e, e["kind"].get<std::string>(), name, index, ek, ek + " (" + name + ")");
+		}
+	};
 	bool edges = false;
 	for (size_t i = 0; i < es.size(); i++) {
 		const json &e = es[i];
@@ -409,7 +556,7 @@ Lowered lower_level(const json &v2) {
 				fail(origin, "the edge walls are placed once");
 			}
 			edges = true;
-			push(edge_walls(v2), origin);
+			place_edges(i, origin);
 		} else if (kind == "raw") {
 			for (auto it = e.begin(); it != e.end(); ++it) {
 				if (it.key() != "kind" && it.key() != "name" && it.key() != "surface") {
@@ -424,83 +571,11 @@ Lowered lower_level(const json &v2) {
 			}
 			push({e["surface"]}, origin + ".surface");
 		} else {
-			auto it = kinds.find(kind);
-			if (it == kinds.end()) {
-				fail(ep + ".kind", "unknown element kind '" + kind + "'");
-			}
-			const json g = e.contains("carrier") ? on_carrier(e, carriers, origin) : e; // Stage 149: on a carrier
-			std::vector<json> expanded = elements::expand(it->second, g, name, origin);
-			// Stage 152: its tags
-			std::vector<std::string> tags;
-			for (const json *src : {static_cast<const json *>(&it->second), &e}) {
-				if (src->contains("tags")) {
-					if (!(*src)["tags"].is_array()) {
-						fail(origin + ".tags", "an array of strings expected");
-					}
-					for (const json &tg : (*src)["tags"]) {
-						if (!tg.is_string()) {
-							fail(origin + ".tags", "an array of strings expected");
-						}
-						if (std::find(tags.begin(), tags.end(), tg.get<std::string>()) == tags.end()) {
-							tags.push_back(tg.get<std::string>());
-						}
-					}
-				}
-			}
-			if (!tags.empty()) {
-				out.tagged.push_back({i, name, tags});
-			}
-			// Stage 156: what the tags give every side (a missing side: a pass that carries them), the flags they start
-			const json extra = tag_hits(name, tags);
-			if (!extra.empty()) {
-				const bool frost = std::find(tags.begin(), tags.end(), "frosted") != tags.end();
-				auto give = [&](json &sides) {
-					for (const char *k : {"left", "right"}) {
-						json &sd = sides[k];
-						if (sd.is_null()) {
-							sd = {{"effect", {{"type", "pass"}}}, {"interactive", false}};
-						}
-						const std::string t = sd.contains("effect") ? sd["effect"].value("type", "pass") : "pass";
-						if (frost && !frost_bearing(t)) {
-							fail(origin + ".tags", "frosted: its sides must pass, reflect or invert (a " + t + " side cannot bear frost)");
-						}
-						if (!sd.contains("hits")) {
-							sd["hits"] = json::array();
-						}
-						for (const json &h : extra) {
-							sd["hits"].push_back(h);
-						}
-					}
-				};
-				for (json &s : expanded) {
-					if (s.value("pre_transform", false)) {
-						continue;
-					}
-					give(s);
-					if (s.contains("resolver") && s["resolver"].is_object() && s["resolver"].value("table", json()).is_array()) {
-						for (json &row : s["resolver"]["table"]) {
-							if (row.is_array() && row.size() == 2 && row[1].is_object()) {
-								give(row[1]);
-							}
-						}
-					}
-				}
-			}
-			for (const std::string &k : tag_initial_flags(name, tags)) {
-				if (!out.flags.contains(k)) {
-					out.flags[k] = true;
-				}
-			}
-			push(std::move(expanded), origin);
-			// Stage 153: the region it bounds
-			const json shade = elements::evaluate(it->second, g, name, "shade", origin);
-			if (!shade.is_null()) {
-				out.shaded.push_back({i, name, shade});
-			}
+			place(e, kind, name, i, ep, origin);
 		}
 	}
 	if (!edges) {
-		push(edge_walls(v2), P + ".bounds (the edge walls)");
+		place_edges(es.size(), P + ".bounds (the edge walls)");
 	}
 	// the pre-transform circles last, in order
 	std::vector<size_t> order(surfaces.size());
@@ -574,13 +649,6 @@ json migrate_level(const json &v1) {
 			edges_at = i;
 		}
 	}
-	if (!edges_at) {
-		throw LevelError("migrate: the four edge walls of the bounds are not there");
-	}
-	bool edges_implicit = true;
-	for (size_t i = *edges_at + 4; i < rest.size(); i++) {
-		edges_implicit = edges_implicit && rest[i].value("pre_transform", false);
-	}
 	std::vector<std::pair<std::string, const json *>> kinds;
 	for (const auto &[kind, tmpl] : elements::builtin()) {
 		kinds.emplace_back(kind, &tmpl);
@@ -588,6 +656,89 @@ json migrate_level(const json &v1) {
 	std::stable_sort(kinds.begin(), kinds.end(), [](const auto &a, const auto &b) {
 		return a.second->value("priority", 100.0) < b.second->value("priority", 100.0);
 	});
+	// Stage 169: configured edges -- per edge (top, right, bottom, left) its pass wall, an element of a kind on
+	// the reversed wall (its face inward), or a wrap's portal (the right and bottom edges; their images the left
+	// and top): the `edges` value and how many surfaces it takes
+	size_t edges_take = 4;
+	auto configured = [&](size_t at) -> std::optional<std::pair<json, size_t>> {
+		const json b = bounds_of(v1);
+		const double w = b[2].get<double>(), h = b[3].get<double>();
+		json per[4];
+		size_t j = at;
+		for (int k = 0; k < 4; k++) {
+			const json &wall = edges[size_t(k)];
+			if (j < rest.size() && text(rest[j]) == text(wall)) {
+				per[k] = "pass";
+				j++;
+				continue;
+			}
+			if (k == 1 || k == 2) {
+				const json portal = {{"kind", "portal"}, {"start", wall["start"]}, {"end", wall["end"]}, {"via", wall["via"]},
+						{"d", k == 1 ? json::array({-w, 0.0}) : json::array({0.0, -h})}};
+				const std::vector<json> want = elements::expand(elements::builtin().at("portal"), portal, "edge", "migrate");
+				if (j < rest.size() && want.size() == 1 && text(rest[j]) == text(want[0])) {
+					per[k] = "wrap";
+					j++;
+					continue;
+				}
+			}
+			for (const auto &[kind, tmpl] : kinds) {
+				std::set<std::string> scratch;
+				const auto e = j < rest.size() ? elements::match(kind, *tmpl, rest, j, "edge", scratch) : std::nullopt;
+				if (!e || (*e).value("start", json()) != wall["end"] || (*e).value("end", json()) != wall["start"]) {
+					continue;
+				}
+				json spec = *e;
+				for (const char *g : {"start", "end", "via", "name"}) {
+					spec.erase(g);
+				}
+				per[k] = spec.size() == 1 ? spec["kind"] : spec;
+				j += (*tmpl)["surfaces"].size();
+				break;
+			}
+			if (per[k].is_null() && (k == 0 || (k == 3 && per[1] == "wrap"))) {
+				per[k] = "wrap"; // (an image edge: nothing of its own; checked against its opposite below)
+			}
+			if (per[k].is_null()) {
+				return std::nullopt;
+			}
+		}
+		for (int k = 0; k < 4; k++) {
+			if ((per[k] == "wrap") != (per[(k + 2) % 4] == "wrap")) {
+				return std::nullopt;
+			}
+		}
+		json cfg;
+		if (per[0] == per[1] && per[1] == per[2] && per[2] == per[3]) {
+			cfg = per[0];
+		} else {
+			static const char *NAMES[4] = {"top", "right", "bottom", "left"};
+			cfg = json::object();
+			for (int k = 0; k < 4; k++) {
+				if (per[k] != "pass") {
+					cfg[NAMES[k]] = per[k];
+				}
+			}
+		}
+		return std::make_pair(cfg, j - at);
+	};
+	if (!edges_at) {
+		for (size_t i = rest.size(); i-- > 0;) { // (the last place they fit)
+			if (auto c = configured(i)) {
+				out["edges"] = c->first;
+				edges_take = c->second;
+				edges_at = i;
+				break;
+			}
+		}
+	}
+	if (!edges_at) {
+		throw LevelError("migrate: the four edge walls of the bounds are not there");
+	}
+	bool edges_implicit = true;
+	for (size_t i = *edges_at + edges_take; i < rest.size(); i++) {
+		edges_implicit = edges_implicit && rest[i].value("pre_transform", false);
+	}
 	std::set<std::string> taken;
 	std::map<std::string, int> counters;
 	auto fallback = [&](const std::string &kind) {
@@ -608,7 +759,7 @@ json migrate_level(const json &v1) {
 			if (!edges_implicit) {
 				elems.push_back({{"kind", "edges"}});
 			}
-			i += 4;
+			i += edges_take;
 			continue;
 		}
 		bool matched = false;

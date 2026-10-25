@@ -25,6 +25,7 @@ struct Lowered {
 		size_t element = 0;
 		std::string name;
 		std::vector<std::string> tags;
+		std::string at; // its surfaces' origin prefix (Stage 169: an edge's too)
 	};
 	std::vector<Tagged> tagged;
 	// Stage 153: per element whose kind bounds a region: its index, name and its kind's `shade` evaluated
@@ -32,6 +33,7 @@ struct Lowered {
 		size_t element = 0;
 		std::string name;
 		nlohmann::json shade;
+		std::string at;
 	};
 	std::vector<Shaded> shaded;
 };

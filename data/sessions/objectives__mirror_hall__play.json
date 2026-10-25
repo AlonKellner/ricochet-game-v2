@@ -1,0 +1,41 @@
+{
+ "kind": "kinematic",
+ "level": "objectives/mirror_hall",
+ "schema": "rc-session/1",
+ "steps": [
+  {
+   "actions": [],
+   "op": "hold",
+   "ticks": 30
+  },
+  {
+   "at": [1400.0, 350.0],
+   "op": "cursor"
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "actions": [],
+   "op": "hold",
+   "ticks": 60
+  },
+  {
+   "at": [851.0, 514.0],
+   "op": "cursor"
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "actions": [],
+   "op": "hold",
+   "ticks": 90
+  },
+  {
+   "actions": ["move_right"],
+   "op": "hold",
+   "ticks": 360
+  }
+ ]
+}
