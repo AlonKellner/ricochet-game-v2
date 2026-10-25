@@ -491,7 +491,10 @@ Session::Hit Session::detect_click() {
 			}
 			const Side side = p.segment.determine_side(cursor_) == rc::Side::Left ? Side::Left : Side::Right;
 			const BuiltSide *cfg = active_side(s, side, flags_);
-			if (cfg == nullptr || !cfg->interactive) {
+			// Stage 158: a stopping side is plannable while the plan's frost is active (frost turns it)
+			const bool frost = cfg != nullptr && !cfg->interactive && cfg->effect.type == "terminal" && !cfg->rigid
+				&& gm_tracer_.plan_frost_turns(plan, s.id, side == Side::Left, flags_);
+			if (cfg == nullptr || (!cfg->interactive && !frost)) {
 				continue;
 			}
 			if (gm_tracer_.plan_refuses(plan, s.id, side == Side::Left, flags_)) {
@@ -506,6 +509,7 @@ Session::Hit Session::detect_click() {
 				best.piece = &p;
 				best.piece_index = p.index;
 				best.distance = dist;
+				best.frost = frost;
 			}
 		}
 	}
@@ -759,7 +763,8 @@ void Session::land() {
 }
 
 std::vector<std::pair<int, Overlay>> plan_overlays(const std::vector<PlanEntry> &plan,
-		const std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> &hits, const World &world, const rc::Flags &flags) {
+		const std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> &hits, const World &world, const rc::Flags &flags,
+		const std::vector<bool> &frosted) {
 	std::vector<std::pair<int, Overlay>> overlays;
 	auto hits_of = [&](int id) -> const std::vector<rc::PhysicalHit> * {
 		for (const auto &e : hits) {
@@ -769,12 +774,13 @@ std::vector<std::pair<int, Overlay>> plan_overlays(const std::vector<PlanEntry> 
 		}
 		return nullptr;
 	};
-	for (const PlanEntry &e : plan) {
+	for (size_t ei = 0; ei < plan.size(); ei++) {
+		const PlanEntry &e = plan[ei];
 		const BuiltSurface *s = world.by_id(e.surface_id);
 		if (s == nullptr) {
 			continue;
 		}
-		const std::optional<OverlayLink> link = overlay_link(*s, e.side, flags);
+		const std::optional<OverlayLink> link = overlay_link(*s, e.side, flags, ei < frosted.size() && frosted[ei]);
 		if (!link) {
 			continue;
 		}
@@ -1745,7 +1751,7 @@ void Session::update_hover() {
 	const BuiltSurface &surf = *world_->by_id(r.surface);
 	// ChevronOverlayBuilder.build_hover_overlays
 	std::vector<std::pair<int, Overlay>> overlays;
-	if (const std::optional<OverlayLink> link = overlay_link(surf, r.side, flags_)) {
+	if (const std::optional<OverlayLink> link = overlay_link(surf, r.side, flags_, r.frost)) {
 		const int side = int(r.side);
 		if (!link->outgoing) {
 			overlays.push_back({surf.id, Overlay{side, true, false, -1, HOVER_COLOR, HOVER_COLOR, HOVER_COLOR, -1}});
@@ -1780,7 +1786,8 @@ void Session::update_overlays(bool force) {
 		return;
 	}
 	overlay_inputs_ = inputs;
-	const std::vector<std::pair<int, Overlay>> overlays = plan_overlays(plan_, preview_.hits, *world_, flags_);
+	use_defs(gm_tracer_, gm_defs_);
+	const std::vector<std::pair<int, Overlay>> overlays = plan_overlays(plan_, preview_.hits, *world_, flags_, gm_tracer_.plan_frosted(items(), flags_));
 	auto for_piece = [](int of, int node) { return of < 0 || node < 0 || of == node; };
 	for (Node &n : nodes_) {
 		std::vector<int> indices;

@@ -48,3 +48,20 @@ TEST_CASE("arrow states: a side's conditional changes read the flags it fired un
 	g.erase(FROST);
 	CHECK_FALSE(g.is_true(FROST));
 }
+
+TEST_CASE("arrow states: the Stage 158 fixtures (planning with frost; shared points stop a frosted arrow) match the oracle") {
+	const ojson fxs = load_json("bench/fixtures/stage158_frost_planning.json");
+	int fixtures = 0;
+	for (const ojson &fx : fxs["fixtures"]) {
+		const std::string name = fx["name"].get<std::string>();
+		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1});
+		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0});
+		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
+		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4));
+		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
+		fixtures++;
+	}
+	CHECK(fixtures == 4);
+}

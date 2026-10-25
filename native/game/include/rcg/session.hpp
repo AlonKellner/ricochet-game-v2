@@ -66,7 +66,8 @@ struct Overlay {
 // preview hits the planned side on the segment (and on the entry's piece),
 // outgoing valid when such a hit continues; hits: the physical hits by surface.
 std::vector<std::pair<int, Overlay>> plan_overlays(const std::vector<PlanEntry> &plan,
-		const std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> &hits, const World &world, const rc::Flags &flags);
+		const std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> &hits, const World &world, const rc::Flags &flags,
+		const std::vector<bool> &frosted = {}); // (Stage 158: per entry, frost turned it)
 
 enum class Action { Undo, Reset, ClearPlan, CycleDisplay, ToggleGravity, ToggleVisibility, Any, Fire };
 // the session scripts' names (undo, reset, clear_plan, cycle_display, toggle_gravity, toggle_visibility, any)
@@ -234,6 +235,7 @@ private:
 		const Piece *piece = nullptr;
 		double distance = 0;
 		std::optional<V2> point;
+		bool frost = false; // Stage 158: a stopping side frost turns (planned while frosted)
 	};
 	struct Checkpoint {
 		V2 player;

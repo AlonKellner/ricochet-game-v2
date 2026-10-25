@@ -170,7 +170,9 @@ conductive circle is touched twice by an arrow crossing it, entering and leaving
 
 Frost needs no tag on the walls: a frosted arrow that a side would stop (a terminal) is reflected by a line or
 inverted by a circle instead, and the frost is used up. A mirror or a pass keeps the frost. The shadow's edge is
-rigid: frost does not turn it.
+rigid: frost does not turn it. While a planned frost is active (a frost source planned, its frost not yet used up),
+every wall and other stopping side is plannable as that reflection. A shot exactly at a corner (a shared point) stops
+the arrow, frost or not.
 
 **Touching rules (opt-in).** A level's `spread` rules flow a flag through tagged things that touch (within half a
 pixel), with no arrow: an element by its segment or arc, an object by its circle.

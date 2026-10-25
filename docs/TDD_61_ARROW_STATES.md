@@ -35,8 +35,8 @@ it, which instead reflects (a line) or inverts (a circle) it and uses the frost 
 - **A pass-through conductive circle swaps twice.** An arrow crossing it touches it entering and leaving. That is
   the rule as written; a conductor the arrow should leave charged is a line or stops the arrow.
 - **The shadow's edge is rigid.** "Shadows stop arrows": frost does not turn the edge of a shadow.
-- **A frosted reflection is plannable only on an interactive side (v1).** Walls are not, so a frosted bounce off a
-  wall is a physical-only event: the planned path diverges there.
+- **A frosted reflection is plannable only on an interactive side (v1).** Superseded by Stage 158 (TDD_63): while
+  the plan's frost is active every stopping side is plannable.
 
 ## Tests
 

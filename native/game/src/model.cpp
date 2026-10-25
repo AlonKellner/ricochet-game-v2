@@ -120,12 +120,15 @@ bool writes_key(const BuiltSide &side, const std::string &key, int host_id) {
 	return false;
 }
 
-std::optional<OverlayLink> overlay_link(const BuiltSurface &s, Side side, const rc::Flags &flags) {
+std::optional<OverlayLink> overlay_link(const BuiltSurface &s, Side side, const rc::Flags &flags, bool frost) {
 	const BuiltSide *cfg = active_side(s, side, flags);
+	const SideRef from{s.id, side};
+	if (frost && cfg != nullptr && kind_of(cfg->effect) == EffectKind::Terminal) {
+		return OverlayLink{from, from}; // (Stage 158: a reflection or an inversion -- self-inverse)
+	}
 	if (cfg == nullptr || !cfg->interactive) {
 		return std::nullopt;
 	}
-	const SideRef from{s.id, side};
 	// the explicit links: a portal pair's sides link across (source LEFT <-> image RIGHT)
 	if (s.portal_pair != 0) {
 		return OverlayLink{from, SideRef{s.portal_pair, opposite(side)}};

@@ -57,6 +57,7 @@ struct OverlayLink {
 	SideRef from;
 	std::optional<SideRef> outgoing;
 };
-std::optional<OverlayLink> overlay_link(const BuiltSurface &s, Side side, const rc::Flags &flags);
+// Stage 158: `frost` -- frost turns the side (a stopping side, planned while frosted): it links as a reflection.
+std::optional<OverlayLink> overlay_link(const BuiltSurface &s, Side side, const rc::Flags &flags, bool frost = false);
 
 } // namespace rcg

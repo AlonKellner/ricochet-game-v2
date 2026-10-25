@@ -189,3 +189,58 @@ TEST_CASE("arrow states: the preview marks the arrow's fire and shows what catch
 		CHECK(std::count_if(marks.begin(), marks.end(), [](uint8_t m) { return m == (2 | 4); }) >= 1);
 	}
 }
+
+namespace {
+
+// a click on the side at (x, y): whether it planned something
+bool plan_click(rcg::Session &s, double x, double y) {
+	const size_t before = s.plan().size();
+	s.set_cursor(rc::V2::of(x, y));
+	s.settle();
+	s.click(false);
+	return s.plan().size() == before + 1;
+}
+
+} // namespace
+
+TEST_CASE("arrow states: a stopping side is plannable while the plan's frost is active; a shadow's edge never (Stage 158)") {
+	const char *LEVEL = R"({"elements": [
+		{"kind": "frost_barrier", "name": "f", "start": [800, 300], "end": [800, 780]},
+		{"kind": "wall", "name": "w", "start": [1000, 300], "end": [1000, 780]},
+		{"kind": "wall", "name": "w2", "start": [900, 250], "end": [1100, 250]}]})";
+	{
+		rcg::Session s(level_of(LEVEL));
+		CHECK_FALSE(plan_click(s, 999, 540)); // no frost planned: a wall is not plannable
+		CHECK(plan_click(s, 799, 540));       // the frost barrier (the side the arrow comes from)
+		CHECK(plan_click(s, 999, 540));       // now the wall plans as a reflection
+		CHECK_FALSE(plan_click(s, 1000, 251)); // the frost is used up: the next wall is not
+		// the preview: both walks reflect off the wall (aligned through it)
+		s.set_cursor(rc::V2::of(700, 400));
+		s.settle();
+		const auto &steps = s.preview_steps();
+		REQUIRE(steps.size() >= 3);
+		CHECK(steps[1].type == rc::StepType::Aligned);
+		CHECK(steps[1].end.x == doctest::Approx(1000));
+		CHECK(steps[2].type != rc::StepType::DivergedPlanned);
+	}
+	{
+		// a shadow's edge is rigid: never plannable, frost or not
+		rcg::Session s(level_of(R"({"elements": [
+			{"kind": "frost_barrier", "name": "f", "start": [800, 300], "end": [800, 780]},
+			{"kind": "dark", "name": "night", "circle": {"center": [1150, 540], "radius": 120}}]})"));
+		CHECK(plan_click(s, 799, 540));
+		CHECK_FALSE(plan_click(s, 1029, 540));
+	}
+	{
+		// a corner of two walls hit exactly stops a frosted arrow (a shared point), frost or not
+		rcg::Session s(level_of(R"({"flags": {"shot:frost": true}, "elements": [
+			{"kind": "wall", "start": [1000, 540], "end": [1100, 440]},
+			{"kind": "wall", "start": [1000, 540], "end": [1100, 640]}]})"));
+		s.set_cursor(rc::V2::of(1050, 540));
+		s.settle();
+		const rc::TracePath *t = s.physical_trace();
+		REQUIRE(t != nullptr);
+		CHECK(t->steps.back().end == rc::V2::of(1000, 540)); // stopped at the corner
+		CHECK(std::none_of(t->hits.begin(), t->hits.end(), [](const rc::HitRecord &h) { return h.fired; })); // nothing fired: the frost kept
+	}
+}

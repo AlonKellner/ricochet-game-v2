@@ -262,6 +262,43 @@ public:
 		return !surf->present(after) || surf->ghosted(left, after);
 	}
 
+	// Stage 158 (GAME_SPEC 10.6, the user): frost planned and active -- whether frost turns the side after the
+	// plan's entries (simulated from `flags`): a stopping side then plans as a reflection (a line) or inversion (a
+	// circle); and per entry, whether frost turned it as planned.
+	bool plan_frost_turns(const std::vector<PlanItem> &plan, int surface_id, bool left, const Flags &flags) {
+		if (!ctx_) {
+			return false;
+		}
+		const Scene<Dual> &scene = ctx_->dual_scene();
+		const Surf<Dual> *surf = scene.find(surface_id);
+		if (surf == nullptr) {
+			return false;
+		}
+		Flags start = flags;
+		start.erase(GHOST);
+		Solver<Dual> solver(scene, &ctx_->dual_cache());
+		const Flags after = solver.plan_flags(plan, start);
+		return surf->present(after) && !surf->ghosted(left, after) && surf->frosted(left, after);
+	}
+	std::vector<bool> plan_frosted(const std::vector<PlanItem> &plan, const Flags &flags) {
+		std::vector<bool> out(plan.size(), false);
+		if (!ctx_) {
+			return out;
+		}
+		const Scene<Dual> &scene = ctx_->dual_scene();
+		Flags f = flags;
+		f.erase(GHOST);
+		for (size_t i = 0; i < plan.size(); i++) {
+			const Surf<Dual> *surf = scene.find(plan[i].surface_id);
+			if (surf == nullptr || !surf->present(f)) {
+				continue;
+			}
+			out[i] = !surf->ghosted(plan[i].left, f) && surf->frosted(plan[i].left, f);
+			f = f.applied(surf->state_changes(plan[i].left, f));
+		}
+		return out;
+	}
+
 	// Planned + physical traces, or nullopt if the scene is not supported or the
 	// input is degenerate (player = cursor, a pole / image at infinity).
 	std::optional<TracePair> trace_pair(V2 player, V2 cursor, const std::vector<PlanItem> &plan, Flags flags) {

@@ -43,6 +43,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
 | Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| Planning with frost: while the plan's frost is active, stopping sides (not the shadow's edge) are plannable as reflections or inversions; a shared point stops a frosted arrow (§10.6; docs/TDD_63, Stage 158) | Done |
 | The arrow's states in the preview: consequences drawn only before the walks diverge; fire, charge and frost marks moving with the path's dashes; the glow node for things on fire, charged or frosted (§14.11; docs/TDD_62, Stage 157) | Done |
 | Fire, charge and frost: the arrow's states and the tags `flammable`, `conductive`, `frosted`, `burning`, `charged`; conditional state changes and the frost rule in the solver and the oracle; touching rules opt-in (§10.6; docs/TDD_61, Stage 156) | Done |
 | Exact carriers: a carrier's elements on float32 points exactly on its line or circle (`exact: true`; lattice points; no solver change) (§19.1; docs/TDD_59, Stage 154) | Done |
@@ -957,7 +958,12 @@ The rules are played out by the solver within the shot. Fire and charge are **co
 each applies only while its conditions hold under the flags its side fired under, before any of the side's changes).
 Frost is a rule of side resolution, like ghost mode: while `shot:frost` is true a terminal, non-rigid side resolves to
 a reflection (line) or an inversion (circle) and appends the write `shot:frost = false`. Ghost mode takes precedence.
-A frosted reflection is not plannable unless the side is interactive (v1). The oracle (`trace2.py`) has both rules;
+**Planning with frost (Stage 158, the user).** While the plan's simulated state holds the frost (§13.7: a frost source
+planned before, its frost not yet used up by an earlier planned stopping side), every stopping side that frost would
+turn is plannable, as a reflection or an inversion: walls, doors, closed objects, room walls. The shadow's edge is not
+(rigid). Hover and plan chevrons show it as a reflection. **A shared point always stops the arrow** (§11.1, Stage 138):
+a frosted arrow aimed exactly at a corner or a T-junction stops there, nothing firing and the frost kept. The oracle
+(`trace2.py`) has both rules;
 fixtures `bench/fixtures/stage156_arrow_states.json`.
 
 #### Spreading (Stage 152)
@@ -2916,4 +2922,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.67.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.68.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
