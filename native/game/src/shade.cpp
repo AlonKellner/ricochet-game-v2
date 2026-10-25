@@ -367,6 +367,7 @@ std::vector<BuiltSurface> boundary(const std::vector<Piece> &pieces, const std::
 		SideSpec wall, pass;
 		wall.effect.raw = {{"type", "terminal"}};
 		wall.effect.type = "terminal";
+		wall.rigid = true; // (Stage 156: frost does not turn a shadow's edge)
 		s.left = shadow[0] ? pass : wall; // the lit side stops the arrow
 		s.right = shadow[0] ? wall : pass;
 		out.push_back(build_spec(s, first_id + int(i), std::nullopt).front());

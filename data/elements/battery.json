@@ -1,5 +1,5 @@
 {
- "doc": "A battery: a powered conductor -- the source of the charge in everything conductive it touches, through others.",
+ "doc": "A battery: a conductor that starts charged (tags conductive, charged, powered). An uncharged arrow touching it takes its charge; a charged one gives it back. Powered: the source of a level's touching charge rule, if it has one.",
  "label": "Battery",
  "params": {
   "solid": {
@@ -25,5 +25,5 @@
    }
   }
  ],
- "tags": ["conductive", "powered"]
+ "tags": ["conductive", "powered", "charged"]
 }

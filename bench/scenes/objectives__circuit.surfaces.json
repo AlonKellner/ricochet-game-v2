@@ -85,12 +85,136 @@
    "is_target": false,
    "left": {
     "interactive": false,
+    "states": [
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:cell:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:cell:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "type": "terminal"
    },
    "line": true,
    "player_solid": true,
    "right": {
     "interactive": false,
+    "states": [
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:cell:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:cell:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "type": "terminal"
    },
    "start": [620.0, 300.0],
@@ -104,12 +228,136 @@
    "is_target": false,
    "left": {
     "interactive": false,
+    "states": [
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire1:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire1:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "type": "pass"
    },
    "line": true,
    "player_solid": true,
    "right": {
     "interactive": false,
+    "states": [
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire1:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire1:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "type": "pass"
    },
    "start": [620.0, 380.0],
@@ -123,12 +371,136 @@
    "is_target": false,
    "left": {
     "interactive": false,
+    "states": [
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire2:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire2:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "type": "pass"
    },
    "line": true,
    "player_solid": true,
    "right": {
     "interactive": false,
+    "states": [
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire2:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire2:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "type": "pass"
    },
    "start": [940.0, 380.0],
@@ -142,6 +514,68 @@
    "is_target": false,
    "left": {
     "interactive": false,
+    "states": [
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:gate:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:gate:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "type": "terminal"
    },
    "line": true,
@@ -154,6 +588,68 @@
    ],
    "right": {
     "interactive": false,
+    "states": [
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:gate:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:gate:charge",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "type": "terminal"
    },
    "start": [1150.0, 240.0],

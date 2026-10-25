@@ -31,6 +31,7 @@ struct BuiltSide {
 	BuiltEffect effect;
 	bool interactive = false;
 	std::vector<HitSpec> hits;
+	bool rigid = false; // Stage 156
 };
 
 struct BuiltRow {

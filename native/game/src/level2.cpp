@@ -241,6 +241,47 @@ std::string first_difference(const json &a, const json &b) {
 
 json off_carrier(const json &element, const json &doc) { return on_carrier(element, carriers_of(doc), "element"); }
 
+namespace {
+bool has_tag(const std::vector<std::string> &tags, const char *t) { return std::find(tags.begin(), tags.end(), t) != tags.end(); }
+json cond(const std::string &key, bool on) { return {{"key", key}, {"values", on ? json::array({"true"}) : json::array({"DEFAULT", "false"})}}; }
+json write(const std::string &key, bool value, json when) { return {{"kind", "state"}, {"key", key}, {"op", "set"}, {"value", value}, {"when", std::move(when)}}; }
+} // namespace
+
+json tag_hits(const std::string &name, const std::vector<std::string> &tags) {
+	json out = json::array();
+	if (has_tag(tags, "flammable") || has_tag(tags, "burning")) {
+		const std::string mine = "el:" + name + ":fire";
+		out.push_back(write(mine, true, json::array({cond("shot:fire", true)})));  // a burning arrow lights it
+		out.push_back(write("shot:fire", true, json::array({cond(mine, true)}))); // it lights the arrow
+	}
+	if (has_tag(tags, "conductive") || has_tag(tags, "charged")) {
+		const std::string mine = "el:" + name + ":charge";
+		const json give = json::array({cond("shot:charge", true), cond(mine, false)});
+		const json take = json::array({cond("shot:charge", false), cond(mine, true)});
+		out.push_back(write("shot:charge", false, give)); // the arrow's charge to it
+		out.push_back(write(mine, true, give));
+		out.push_back(write("shot:charge", true, take)); // its charge to the arrow
+		out.push_back(write(mine, false, take));
+	}
+	if (has_tag(tags, "frosted")) {
+		out.push_back({{"kind", "state"}, {"key", "shot:frost"}, {"op", "set"}, {"value", true}});
+	}
+	return out;
+}
+
+std::vector<std::string> tag_initial_flags(const std::string &name, const std::vector<std::string> &tags) {
+	std::vector<std::string> out;
+	if (has_tag(tags, "burning")) {
+		out.push_back("el:" + name + ":fire");
+	}
+	if (has_tag(tags, "charged")) {
+		out.push_back("el:" + name + ":charge");
+	}
+	return out;
+}
+
+bool frost_bearing(const std::string &t) { return t == "pass" || t == "reflection" || t == "inversion"; }
+
 std::vector<json> rect_walls(const json &rect, const json &side, const json &label, bool solid) {
 	const double x = rect[0].get<double>(), y = rect[1].get<double>(), w = rect[2].get<double>(), h = rect[3].get<double>();
 	const double pts[4][3][2] = {{{x, y}, {x + w, y}, {x + w / 2, y}}, {{x + w, y}, {x + w, y + h}, {x + w, y + h / 2}},
@@ -388,7 +429,7 @@ Lowered lower_level(const json &v2) {
 				fail(ep + ".kind", "unknown element kind '" + kind + "'");
 			}
 			const json g = e.contains("carrier") ? on_carrier(e, carriers, origin) : e; // Stage 149: on a carrier
-			push(elements::expand(it->second, g, name, origin), origin);
+			std::vector<json> expanded = elements::expand(it->second, g, name, origin);
 			// Stage 152: its tags
 			std::vector<std::string> tags;
 			for (const json *src : {static_cast<const json *>(&it->second), &e}) {
@@ -409,6 +450,48 @@ Lowered lower_level(const json &v2) {
 			if (!tags.empty()) {
 				out.tagged.push_back({i, name, tags});
 			}
+			// Stage 156: what the tags give every side (a missing side: a pass that carries them), the flags they start
+			const json extra = tag_hits(name, tags);
+			if (!extra.empty()) {
+				const bool frost = std::find(tags.begin(), tags.end(), "frosted") != tags.end();
+				auto give = [&](json &sides) {
+					for (const char *k : {"left", "right"}) {
+						json &sd = sides[k];
+						if (sd.is_null()) {
+							sd = {{"effect", {{"type", "pass"}}}, {"interactive", false}};
+						}
+						const std::string t = sd.contains("effect") ? sd["effect"].value("type", "pass") : "pass";
+						if (frost && !frost_bearing(t)) {
+							fail(origin + ".tags", "frosted: its sides must pass, reflect or invert (a " + t + " side cannot bear frost)");
+						}
+						if (!sd.contains("hits")) {
+							sd["hits"] = json::array();
+						}
+						for (const json &h : extra) {
+							sd["hits"].push_back(h);
+						}
+					}
+				};
+				for (json &s : expanded) {
+					if (s.value("pre_transform", false)) {
+						continue;
+					}
+					give(s);
+					if (s.contains("resolver") && s["resolver"].is_object() && s["resolver"].value("table", json()).is_array()) {
+						for (json &row : s["resolver"]["table"]) {
+							if (row.is_array() && row.size() == 2 && row[1].is_object()) {
+								give(row[1]);
+							}
+						}
+					}
+				}
+			}
+			for (const std::string &k : tag_initial_flags(name, tags)) {
+				if (!out.flags.contains(k)) {
+					out.flags[k] = true;
+				}
+			}
+			push(std::move(expanded), origin);
 			// Stage 153: the region it bounds
 			const json shade = elements::evaluate(it->second, g, name, "shade", origin);
 			if (!shade.is_null()) {

@@ -24,11 +24,22 @@ ojson side(const std::optional<rc::SideDef> &s) {
 	o["pair"] = s->pair >= 0 ? ojson(s->pair) : ojson(nullptr);
 	ojson states = ojson::array();
 	for (const rc::StateChangeDef &c : s->states) {
-		states.push_back({{"key", c.key}, {"op", c.toggle ? "toggle" : "set"}, {"value", flag_value(c.value)}});
+		ojson st = {{"key", c.key}, {"op", c.toggle ? "toggle" : "set"}, {"value", flag_value(c.value)}};
+		if (!c.when.empty()) { // (Stage 156; absent when unconditional)
+			ojson w = ojson::array();
+			for (const rc::FlagCond &k : c.when) {
+				w.push_back({{"key", k.key}, {"values", k.values}});
+			}
+			st["when"] = w;
+		}
+		states.push_back(st);
 	}
 	o["states"] = states;
 	if (s->landing) {
 		o["landing"] = true; // (Stage 134; absent when false: older defs read back as written)
+	}
+	if (s->rigid) {
+		o["rigid"] = true; // (Stage 156; absent when false)
 	}
 	return o;
 }

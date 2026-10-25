@@ -81,6 +81,9 @@ std::vector<rc::StateChangeDef> hit_writes(const HitSpec &h, int host_id) {
 		if (h.kind == "state") {
 			const bool toggle = h.op == "toggle";
 			out.push_back({h.key, toggle, flag_value(h.value)});
+			for (const PresenceSpec &c : h.when) { // Stage 156
+				out.back().when.push_back(rc::FlagCond{c.key, c.values});
+			}
 		} else if (h.kind == "target") {
 			out.push_back({"target:" + std::to_string(host_id), false, true});
 		} else if (h.kind == "reset") {

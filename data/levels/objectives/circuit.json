@@ -76,5 +76,13 @@
   "built": true,
   "rect": [560.0, 240.0, 800.0, 600.0]
  },
- "schema": "rc-level/2"
+ "schema": "rc-level/2",
+ "spread": [
+  {
+   "flag": "charge",
+   "persist": false,
+   "sources": ["powered"],
+   "tag": "conductive"
+  }
+ ]
 }

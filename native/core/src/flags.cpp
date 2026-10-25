@@ -83,12 +83,15 @@ bool truth_bool(const FlagValue &v) {
 
 void Flags::set(const std::string &key, FlagValue value) {
 	key_ok_ = false;
-	const bool ghost = key == GHOST_KEY;
+	const bool ghost = key == GHOST_KEY, frost = key == FROST;
 	for (Entry &e : entries_) {
 		if (e.first == key) {
 			e.second = std::move(value);
 			if (ghost) {
 				ghost_ = truth_bool(e.second);
+			}
+			if (frost) {
+				frost_ = truth_bool(e.second);
 			}
 			return;
 		}
@@ -97,6 +100,26 @@ void Flags::set(const std::string &key, FlagValue value) {
 	if (ghost) {
 		ghost_ = truth_bool(entries_.back().second);
 	}
+	if (frost) {
+		frost_ = truth_bool(entries_.back().second);
+	}
+}
+
+bool Flags::holds(const std::vector<FlagCond> &conds) const {
+	for (const FlagCond &c : conds) {
+		const FlagValue *v = get(c.key);
+		bool found = false;
+		for (const std::string &val : c.values) {
+			if (v ? flag_key_is(*v, val) : val == "DEFAULT") {
+				found = true;
+				break;
+			}
+		}
+		if (!found) {
+			return false;
+		}
+	}
+	return true;
 }
 
 void Flags::erase(const std::string &key) {
@@ -104,6 +127,9 @@ void Flags::erase(const std::string &key) {
 	entries_.erase(std::remove_if(entries_.begin(), entries_.end(), [&](const Entry &e) { return e.first == key; }), entries_.end());
 	if (key == GHOST_KEY) {
 		ghost_ = false;
+	}
+	if (key == FROST) {
+		frost_ = false;
 	}
 }
 
@@ -121,6 +147,9 @@ Flags Flags::applied(const StateChangeDef &change) const {
 bool Flags::is_true(const std::string &key) const {
 	if (key.size() == 5 && key == GHOST_KEY) {
 		return ghost_;
+	}
+	if (key.size() == 10 && key == FROST) {
+		return frost_;
 	}
 	const FlagValue *v = get(key);
 	if (v == nullptr) {

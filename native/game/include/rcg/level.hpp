@@ -54,6 +54,12 @@ struct SpawnTemplateSpec {
 	bool trim = true;
 };
 
+// A condition on a flag: flag_key(flags[key]) is one of values ("DEFAULT": missing).
+struct PresenceSpec {
+	std::string key;
+	std::vector<std::string> values;
+};
+
 // A hit effect (HitEffectSpec): state, target, reset or spawn.
 struct HitSpec {
 	nlohmann::json raw; // the dictionary as authored
@@ -65,18 +71,16 @@ struct HitSpec {
 	std::vector<std::string> channels;  // reset
 	std::string channel;                // spawn
 	std::shared_ptr<SpawnTemplateSpec> spawn_template;
+	std::vector<PresenceSpec> when; // Stage 156: a state write only while these hold (the side's flags when it fired)
 };
 
 struct SideSpec {
 	EffectSpec effect;
 	bool interactive = false;
 	std::vector<HitSpec> hits;
+	bool rigid = false; // Stage 156: frost never turns it (a shadow's edge)
 };
 
-struct PresenceSpec {
-	std::string key;
-	std::vector<std::string> values;
-};
 
 // One row of a categorical resolver: a flag value and the sides under it.
 struct ResolverRow {

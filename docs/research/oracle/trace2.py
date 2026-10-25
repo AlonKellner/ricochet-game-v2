@@ -211,6 +211,7 @@ ORIGIN_ID = -4          # event id of the ray's origin (Stage 131: the player's 
 # ---------------------------------------------------------------- scene
 
 GHOST = "ghost"
+FROST = "shot:frost"   # Stage 156: the reserved per-shot flag of frost
 
 
 def side_states(cfg):
@@ -261,10 +262,18 @@ def apply_state(flags, change):
     return out
 
 
+def holds(when, flags):
+    """Stage 156: every condition {key, values} of a state change holds (the presence form)."""
+    return present(when, flags)
+
+
 def apply_states(flags, changes):
-    """flags after a side's state changes, in order."""
+    """flags after a side's state changes, in order; Stage 156: each one's conditions
+    ("when") read under the flags the side fired under (before any of its changes)."""
+    before = flags
     for ch in changes:
-        flags = apply_state(flags, ch)
+        if holds(ch.get("when"), before):
+            flags = apply_state(flags, ch)
     return flags
 
 
@@ -284,11 +293,24 @@ class Surface:
 
     def cfg(self, side, flags=None):
         """The side config under the flags (ghost: everything but a ghost
-        toggler is a pass)."""
+        toggler is a pass; Stage 156, frost: a terminal side that is not rigid
+        reflects (a line) or inverts (a circle), and the frost is used up)."""
         c = self._base_cfg(side, flags)
         if (flags or {}).get(GHOST) is True and not is_ghost_toggler(c):
             return None
+        if self.frosted(side, flags):
+            c = dict(c)
+            c["type"] = "reflection" if self.seg.kind == "line" else "inversion"
+            c["states"] = side_states(c) + [{"key": FROST, "op": "set", "value": False}]
+            c.pop("state", None)
         return c
+
+    def frosted(self, side, flags=None):
+        """Stage 156: frost turns the side (a terminal, not rigid, while the frost flag is true)."""
+        if (flags or {}).get(FROST) is not True:
+            return False
+        c = self._base_cfg(side, flags)
+        return c is not None and c.get("type") == "terminal" and not c.get("rigid", False)
 
     def _base_cfg(self, side, flags=None):
         if self.resolver is None:

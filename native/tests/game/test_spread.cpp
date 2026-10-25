@@ -42,27 +42,28 @@ const char *CIRCUIT = R"([
 } // namespace
 
 TEST_CASE("spread: fire burns through the flammable elements that touch, for good") {
-	rcg::Session s(level_of(R"({"elements": [
+	// (Stage 156: touching rules are the level's choice; this one lets fire pass between touching flammables)
+	rcg::Session s(level_of(R"({"spread": [{"flag": "fire", "tag": "flammable", "persist": true}], "elements": [
 		{"kind": "torch", "start": [800, 300], "end": [800, 780]},
 		{"kind": "burnable", "name": "a", "start": [1000, 300], "end": [1000, 700]},
 		{"kind": "burnable", "name": "b", "start": [1000, 700], "end": [1200, 700]},
 		{"kind": "burnable", "name": "c", "start": [1300, 300], "end": [1300, 400]}]})"));
 	shoot(s, 1000, 540); // a fire arrow burns a, and the fire spreads to b, which touches it
-	CHECK(s.flags().is_true("el:a:burnt"));
-	CHECK(s.flags().is_true("el:b:burnt"));
-	CHECK_FALSE(s.flags().has("el:c:burnt"));
+	CHECK(s.flags().is_true("el:a:fire"));
+	CHECK(s.flags().is_true("el:b:fire"));
+	CHECK_FALSE(s.flags().has("el:c:fire"));
 }
 
 TEST_CASE("spread: charge flows from a battery through conductors; a gap, a breaker, an object") {
 	{
-		rcg::Session s(level_of(std::string(R"({"elements": )") + CIRCUIT + "}"));
+		rcg::Session s(level_of(std::string(R"({"spread": [{"flag": "charge", "tag": "conductive", "persist": false, "sources": ["powered"]}], "elements": )") + CIRCUIT + "}"));
 		CHECK(s.flags().is_true("el:w1:charge")); // through the closed breaker
 		CHECK_FALSE(s.flags().has("el:w2:charge")); // the gap
 		CHECK(rcg::present(*s.world().by_id(9), s.flags())); // the charged door: closed
 	}
 	{
 		// a conductive object in the gap closes the circuit: the door opens; the breaker opened breaks it again
-		rcg::Session s(level_of(std::string(R"({"objects": [{"name": "box", "kind": "static", "circle": {"center": [820, 400], "radius": 21},
+		rcg::Session s(level_of(std::string(R"({"spread": [{"flag": "charge", "tag": "conductive", "persist": false, "sources": ["powered"]}], "objects": [{"name": "box", "kind": "static", "circle": {"center": [820, 400], "radius": 21},
 			"tags": ["conductive"]}], "elements": )") +
 				CIRCUIT + "}"));
 		CHECK(s.flags().is_true("el:box:charge"));

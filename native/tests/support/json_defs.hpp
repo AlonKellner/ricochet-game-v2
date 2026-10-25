@@ -26,7 +26,11 @@ inline std::optional<SideDef> side_from_json(const ojson &j) {
 	if (j.contains("d")) { s.dx = j["d"][0].get<double>(); s.dy = j["d"][1].get<double>(); }
 	if (j.contains("pair") && !j["pair"].is_null()) s.pair = j["pair"].get<int>();
 	auto change = [](const ojson &st) {
-		return StateChangeDef{st["key"].get<std::string>(), st.value("op", std::string("set")) == "toggle", flag_from_json(st["value"])};
+		StateChangeDef c{st["key"].get<std::string>(), st.value("op", std::string("set")) == "toggle", flag_from_json(st["value"])};
+		if (st.contains("when") && st["when"].is_array()) {
+			for (const ojson &k : st["when"]) c.when.push_back(FlagCond{k["key"].get<std::string>(), k["values"].get<std::vector<std::string>>()});
+		}
+		return c;
 	};
 	if (j.contains("states") && !j["states"].is_null()) {
 		for (const ojson &st : j["states"]) s.states.push_back(change(st));
@@ -34,6 +38,7 @@ inline std::optional<SideDef> side_from_json(const ojson &j) {
 		s.states.push_back(change(j["state"]));
 	}
 	s.landing = j.value("landing", false);
+	s.rigid = j.value("rigid", false);
 	return s;
 }
 inline std::vector<SurfaceDef> defs_from_json(const ojson &arr) {

@@ -112,6 +112,72 @@
     "effect": {
      "type": "terminal"
     },
+    "hits": [
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:cell:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:cell:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "interactive": false
    },
    "player_solid": true,
@@ -119,6 +185,72 @@
     "effect": {
      "type": "terminal"
     },
+    "hits": [
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:cell:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:cell:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:cell:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "interactive": false
    },
    "start": [620.0, 300.0],
@@ -132,6 +264,72 @@
     "effect": {
      "type": "pass"
     },
+    "hits": [
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire1:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire1:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "interactive": false
    },
    "player_solid": true,
@@ -139,6 +337,72 @@
     "effect": {
      "type": "pass"
     },
+    "hits": [
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire1:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire1:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire1:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "interactive": false
    },
    "start": [620.0, 380.0],
@@ -152,6 +416,72 @@
     "effect": {
      "type": "pass"
     },
+    "hits": [
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire2:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire2:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "interactive": false
    },
    "player_solid": true,
@@ -159,6 +489,72 @@
     "effect": {
      "type": "pass"
     },
+    "hits": [
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire2:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:wire2:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:wire2:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "interactive": false
    },
    "start": [940.0, 380.0],
@@ -172,6 +568,72 @@
     "effect": {
      "type": "terminal"
     },
+    "hits": [
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:gate:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:gate:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "interactive": false
    },
    "player_solid": true,
@@ -185,6 +647,72 @@
     "effect": {
      "type": "terminal"
     },
+    "hits": [
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "el:gate:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["true"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["DEFAULT", "false"]
+       }
+      ]
+     },
+     {
+      "key": "shot:charge",
+      "kind": "state",
+      "op": "set",
+      "value": true,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["true"]
+       }
+      ]
+     },
+     {
+      "key": "el:gate:charge",
+      "kind": "state",
+      "op": "set",
+      "value": false,
+      "when": [
+       {
+        "key": "shot:charge",
+        "values": ["DEFAULT", "false"]
+       },
+       {
+        "key": "el:gate:charge",
+        "values": ["true"]
+       }
+      ]
+     }
+    ],
     "interactive": false
    },
    "start": [1150.0, 240.0],

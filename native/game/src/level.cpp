@@ -139,7 +139,7 @@ EffectSpec effect(const json &j, const std::string &path) {
 SurfaceSpec surface_spec(const json &j, const std::string &path, bool in_level);
 
 HitSpec hit(const json &j, const std::string &path) {
-	only_keys(j, path, {"kind", "deferred", "key", "op", "value", "channels", "channel", "template"});
+	only_keys(j, path, {"kind", "deferred", "key", "op", "value", "channels", "channel", "template", "when"});
 	HitSpec h;
 	h.raw = j;
 	h.kind = str(req(j, "kind", path), path + ".kind");
@@ -154,6 +154,18 @@ HitSpec hit(const json &j, const std::string &path) {
 		if (const json *v = opt(j, "value")) {
 			h.value = flag_value(*v, path + ".value");
 		}
+		if (const json *w = opt(j, "when")) { // Stage 156: conditions, the presence form
+			if (!w->is_array()) {
+				fail(path + ".when", "an array of {\"key\", \"values\"} expected");
+			}
+			for (size_t i = 0; i < w->size(); i++) {
+				const std::string wp = path + ".when[" + std::to_string(i) + "]";
+				only_keys((*w)[i], wp, {"key", "values"});
+				h.when.push_back({str(req((*w)[i], "key", wp), wp + ".key"), strings(req((*w)[i], "values", wp), wp + ".values")});
+			}
+		}
+	} else if (opt(j, "when")) {
+		fail(path + ".when", "only a state write takes conditions");
 	} else if (h.kind == "reset") {
 		if (const json *v = opt(j, "channels")) {
 			h.channels = strings(*v, path + ".channels");
@@ -191,8 +203,11 @@ std::optional<SideSpec> side(const json &j, const std::string &path) {
 	if (j.is_null()) {
 		return std::nullopt;
 	}
-	only_keys(j, path, {"effect", "interactive", "hits"});
+	only_keys(j, path, {"effect", "interactive", "hits", "rigid"});
 	SideSpec s;
+	if (const json *v = opt(j, "rigid")) {
+		s.rigid = boolean(*v, path + ".rigid");
+	}
 	if (const json *v = opt(j, "effect")) {
 		s.effect = effect(*v, path + ".effect");
 	}
@@ -438,6 +453,9 @@ void parse_goals(const json &j, Level &lv) {
 			}
 			if (const json *v = opt(o, "tags")) {
 				ob.tags = strings(*v, op + ".tags");
+				if (std::find(ob.tags.begin(), ob.tags.end(), "frosted") != ob.tags.end() && !frost_bearing(ob.face == "mirror" ? "reflection" : ob.face)) {
+					fail(op + ".tags", "frosted: its face must pass or reflect (a wall cannot bear frost)");
+				}
 			}
 			lv.objects.push_back(std::move(ob));
 		}
@@ -617,7 +635,7 @@ Level parse_level_json(const json &j) {
 		}
 		lv.tagged.push_back(std::move(tg));
 	}
-	lv.spread = {{"burnt", "flammable", true, {}}, {"charge", "conductive", false, {"powered"}}};
+	lv.spread = {}; // (Stage 156: none by default -- fire and charge pass by the arrow; a level may add touching rules)
 	if (const json *sp = opt(j, "spread")) {
 		if (!sp->is_array()) {
 			fail("level.spread", "an array of rules expected");
@@ -732,6 +750,13 @@ Level parse_level_json(const json &j) {
 										 : rc::FlagValue(v.get<std::string>());
 		lv.flags.emplace_back(it.key(), std::move(f));
 	}
+	for (const Object &o : lv.objects) { // Stage 156: an object's tags' starting flags (unless the level sets them)
+		for (const std::string &k : tag_initial_flags(o.name, o.tags)) {
+			if (std::none_of(lv.flags.begin(), lv.flags.end(), [&](const auto &e) { return e.first == k; })) {
+				lv.flags.emplace_back(k, true);
+			}
+		}
+	}
 	return lv;
 }
 
@@ -760,6 +785,12 @@ SurfaceSpec object_spec(const Object &o, const V2 &center) {
 		h.kind = "pull";
 		h.raw = {{"kind", "pull"}};
 		side.hits.push_back(h);
+	}
+	if (!o.tags.empty()) { // Stage 156: fire, charge and frost by its tags
+		const json extra = tag_hits(o.name, o.tags);
+		for (size_t i = 0; i < extra.size(); i++) {
+			side.hits.push_back(hit(extra[i], "object " + o.name + " (its tags)"));
+		}
 	}
 	if (o.pops) { // Stage 150: a hit pops it -- gone from then on (in the shot, and after)
 		HitSpec h;

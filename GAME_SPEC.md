@@ -43,6 +43,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
 | Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| Fire, charge and frost: the arrow's states and the tags `flammable`, `conductive`, `frosted`, `burning`, `charged`; conditional state changes and the frost rule in the solver and the oracle; touching rules opt-in (§10.6; docs/TDD_61, Stage 156) | Done |
 | Exact carriers: a carrier's elements on float32 points exactly on its line or circle (`exact: true`; lattice points; no solver change) (§19.1; docs/TDD_59, Stage 154) | Done |
 | Light and shadow: dark and light regions bounded by elements (sides of lines, insides or outsides of circles, under flags); the arrow stops entering the shadow, surfaces wholly in it are passes (§9.9; docs/ELEMENTS.md, docs/TDD_58, Stage 153) | Done |
 | Spreading: tags on elements and objects, the level's spread rules (fire kept for good; charge recomputed from powered sources through what touches and is present); conductor, battery and charged door templates (§10.6; docs/ELEMENTS.md, docs/TDD_57, Stage 152) | Done |
@@ -936,11 +937,33 @@ the flags promoted when the arrow lands, so every shot starts without it. Elemen
 arrow carries (fire, frost, charge) and for what a shot does to the world only while it lasts (a breakable surface
 gone for the rest of the shot). docs/ELEMENTS.md ("The kit") lists the patterns.
 
+#### Fire, charge and frost (Stage 156)
+
+The arrow, every surface and every object is **on fire** or not and **charged** or not; the arrow is also
+**frosted** or not (the user's rules, 2026-10-25). The arrow's states are per-shot flags (`shot:fire`,
+`shot:charge`, `shot:frost`); a thing's are kept (`el:<name>:fire`, `el:<name>:charge`). What a thing does is given
+by its tags (docs/ELEMENTS.md):
+
+- **Fire.** An arrow on fire touching a `flammable` thing sets it on fire. An arrow not on fire touching a thing on
+  fire catches fire. An arrow passing an extinguishing barrier (`water`) is put out.
+- **Charge.** An arrow touching a `conductive` thing swaps charge with it: a charged arrow charges an uncharged thing
+  and is discharged; an uncharged arrow takes a charged thing's charge. Both charged or both not: nothing.
+- **Frost.** An arrow touching a `frosted` thing (its sides pass, reflect or invert) becomes frosted. A frosted arrow
+  that is not stopped keeps the frost. A frosted arrow that a side would stop (a terminal) is reflected by a line or
+  inverted by a circle instead, and the frost is used up. A `rigid` side (the shadow's edge, §9.9) is never turned.
+
+The rules are played out by the solver within the shot. Fire and charge are **conditional state changes** (`when`:
+each applies only while its conditions hold under the flags its side fired under, before any of the side's changes).
+Frost is a rule of side resolution, like ghost mode: while `shot:frost` is true a terminal, non-rigid side resolves to
+a reflection (line) or an inversion (circle) and appends the write `shot:frost = false`. Ghost mode takes precedence.
+A frosted reflection is not plannable unless the side is interactive (v1). The oracle (`trace2.py`) has both rules;
+fixtures `bench/fixtures/stage156_arrow_states.json`.
+
 #### Spreading (Stage 152)
 
 Some states flow from thing to thing without an arrow: fire through what burns, charge through what conducts.
-Elements and objects carry **tags**; a level's **spread rules** (default: `burnt` through `flammable`, kept for
-good; `charge` through `conductive`, sourced by `powered`) write `el:<name>:<flag>` = true on every tagged thing
+Elements and objects carry **tags**; a level's **spread rules** (none by default since Stage 156; for example `fire`
+through `flammable`, kept for good; `charge` through `conductive`, sourced by `powered`) write `el:<name>:<flag>` = true on every tagged thing
 connected to a lit one by touching (a segment, arc or object circle within 0.5 px of another).
 
 - **Persistent** rules (fire): a lit thing stays lit; the flow passes through every tagged thing, present or not
@@ -2877,4 +2900,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.65.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.66.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

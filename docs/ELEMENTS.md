@@ -32,16 +32,16 @@ surface already does (GAME_SPEC 9-10).
 | `resetter` | A resetter: when hit it re-arms spawn channels (their spawned surfaces go, their spawners come back). | `channels` (required), `deferred`=false, `face`="pass" | `Resetter` |
 | `breakable` | A breakable surface: hit, it does what its face does (a wall stops the arrow, a mirror reflects it), then it is gone for the rest of the shot; it is back when the arrow lands. Flag `shot:<name>:broken`. | `face`="wall" (or "mirror", "pass"), `solid`=true | `Breakable` |
 | `toggle_surface` | A toggle surface: the hit removes it, and the arrow passing where it was brings it back (a twin pass-through stands in its place while it is gone). Flag `el:<name>:off`, kept across shots. | `face`="wall", `solid`=true | `Toggle` |
-| `frost_barrier` | A frost barrier: an arrow passing it is frosted for the rest of the shot (flag `shot:frost`, or `frost`); the barrier stays. | `frost`="shot:frost" | `Frost` |
-| `freezable` | A freezable wall: a solid barrier that a frosted arrow freezes into a mirror for that one hit, which uses the frost up. | `frost`="shot:frost", `solid`=true | `Freezable` |
-| `torch` | A fire source: an arrow passing it is on fire for the rest of the shot (flag `shot:fire`, or `fire`). | `fire`="shot:fire" | `Torch` |
-| `water` | Water: an arrow passing it is put out (its fire flag set to false); the player passes it too. | `fire`="shot:fire" | `Water` |
-| `burnable` | A burnable barrier: solid, but an arrow on fire burns it away for good (flag `el:<name>:burnt`) and goes on. | `fire`="shot:fire", `solid`=true | `Burnable` |
-| `charger` | A charger: an arrow passing it is charged for the rest of the shot (flag `shot:charge`, or `charge`). | `charge`="shot:charge" | `Charger` |
+| `frost_barrier` | A frost barrier (tag `frosted`): an arrow passing it is frosted (`shot:frost`); the barrier stays. A frosted arrow that would be stopped is reflected (a line) or inverted (a circle) instead, once. | none | `Frost` |
+| `freezable` | A wall a frosted arrow reflects off once, using the frost up. Since Stage 156 every wall does this; the kind stays for older levels. | `frost`="shot:frost", `solid`=true | `Freezable` |
+| `torch` | A torch: a pass-through surface on fire (tag `burning`). An arrow passing it catches fire (`shot:fire`). | none | `Torch` |
+| `water` | Water: an extinguishing barrier. An arrow passing it is put out (`shot:fire` = false); the player passes it too. | `fire`="shot:fire" | `Water` |
+| `burnable` | A burnable barrier (tag `flammable`): solid, but an arrow on fire burns through it. It catches fire (`el:<name>:fire`) and is gone from then on. | `solid`=true | `Burnable` |
+| `charger` | A charger: an endless source. An arrow passing it is charged (`shot:charge`); the charger stays charged. | `charge`="shot:charge" | `Charger` |
 | `conditional_button` | A button only a charged (or burning, frosted...) arrow presses: while `when` is true the hit sets or toggles `flag`; otherwise it is a wall. | `when`="shot:charge", `flag` (required), `op`="set", `value`=true | `CondButton` |
-| `conductor` | A conductor (a wire, a plate): tagged `conductive`, it passes charge to every conductive element and object it touches (GAME_SPEC 10.6). | `face`="pass", `solid`=true | `Conductor` |
-| `battery` | A battery: tagged `conductive` and `powered`, the source of the charge (flag `el:<name>:charge`) in what conducts from it. | `solid`=true | `Battery` |
-| `charged_door` | A charged door: a conductive wall that is gone while charge reaches it (`el:<name>:charge`) and back when the circuit breaks. | `solid`=true | `ChargedDoor` |
+| `conductor` | A conductor (tag `conductive`): touching it, the arrow and it swap their charge (`shot:charge`, `el:<name>:charge`). | `face`="pass", `solid`=true | `Conductor` |
+| `battery` | A battery (tags `conductive`, `charged`, `powered`): a conductor that starts charged. An uncharged arrow touching it takes the charge. | `solid`=true | `Battery` |
+| `charged_door` | A charged door (tag `conductive`): a wall that is gone while charged (`el:<name>:charge`). A charged arrow gives it the charge and opens it. | `solid`=true | `ChargedDoor` |
 | `dark` | A dark barrier: one side of its line (or the inside or outside of its circle) is a dark region (GAME_SPEC 9.9). Its surface is never present: the shadow's boundary is the game's. | `side`="auto" (left, inside), `when`="" (always) | none (drawn by the shadow) |
 | `light` | A light region: one side of its line, the inside of its circle (a light source's reach) or its outside. Light undoes the shadow wherever it reaches. | `side`="auto", `when`="" | none |
 
@@ -68,7 +68,7 @@ Flags are named after what writes or reads them, so levels and templates agree w
 | `det:<name>` | the detector `<name>` (GAME_SPEC 24.5) | a door (`"flag": "det:plate"`), the goal's `requires` |
 | `shot:*` | anything in a shot: `shot:fire`, `shot:frost`, `shot:charge`, `shot:<name>:broken` | erased when the arrow lands (GAME_SPEC 10.6): a state of the arrow, not of the world |
 | `el:<name>:*` | an element's own state: `el:<name>:off`, `el:<name>:burnt` | the element (kept across shots) |
-| `el:<name>:<flag>` | a spread rule (`burnt`, `charge`): the element or object `<name>` lit | the element: `burnable`, `charged_door` |
+| `el:<name>:fire`, `el:<name>:charge` | the arrow and the element's or object's tags (Stage 156), or a spread rule | the element: `burnable`, `charged_door` |
 
 The level's `flags` sets any of them at the start. For example, `{"door:gate": true}` starts with the door open.
 
@@ -84,6 +84,7 @@ A template is an object:
 | `geometry` | `"any"` (default), `"segment"` or `"circle"`: what the element needs (the editor's tools) |
 | `params` | `{name: {"default": v, "enum": [...], "type": t, "doc": "..."}}`; without a default a parameter is required; `type` is one of string, number, bool, point, array, object, any (by default the default's) |
 | `example` | parameter values a new element starts with (the editor's palette: a portal placed with `d` already set) |
+| `tags` | the kind's tags (`flammable`, `conductive`, `frosted`, `burning`, `charged`, or any name a spread rule uses) |
 | `shade` | `{"type": "dark" \| "light", "side", "when"}` (expressions): the element bounds a region of that kind (GAME_SPEC 9.9) |
 | `surfaces` | the surfaces, as `rc-level/1` surfaces without geometry, ids or (optionally) label; expressions anywhere |
 
@@ -148,14 +149,34 @@ What the kit cannot say needs a primitive. Moving surfaces have one: the level's
 (GAME_SPEC 9.8, docs/TDD_56_MOTION.md). Spreading has one: tags and the level's `spread` rules (below). Light and
 shadow have one: a template's `shade` (below).
 
-## Tags and spreading
+## Fire, charge and frost: tags
 
-An element or an object carries `tags` (a template's `tags`, plus the element's own). A spread rule
-(GAME_SPEC 10.6) flows a flag through every tagged thing that touches another (within half a pixel): an element
-by its segment or arc, an object by its circle.
+An element or an object carries `tags` (a template's `tags`, plus the element's own). Five tags give it a part in the
+arrow's states (GAME_SPEC 10.6, Stage 156). The arrow, a surface and an object are each on fire or not, charged or
+not; the arrow is frosted or not. The arrow's states last one shot (`shot:fire`, `shot:charge`, `shot:frost`); a
+thing's last (`el:<name>:fire`, `el:<name>:charge`).
+
+| Tag | What every side of it does when the arrow touches it |
+|---|---|
+| `flammable` | an arrow on fire sets it on fire; an arrow not on fire touching it while it burns catches fire |
+| `conductive` | the arrow and it swap their charge (both charged, or neither: nothing) |
+| `frosted` | the arrow is frosted (its sides must pass, reflect or invert) |
+| `burning` | `flammable`, on fire from the start |
+| `charged` | `conductive`, charged from the start |
+
+The tags become conditional state writes on the element's sides (`"when"`, see the template language), so the solver
+plays them out within the shot: a burning arrow lights a wall, the next arrow catches fire from it. A pass-through
+conductive circle is touched twice by an arrow crossing it, entering and leaving, so a charge given is taken back.
+
+Frost needs no tag on the walls: a frosted arrow that a side would stop (a terminal) is reflected by a line or
+inverted by a circle instead, and the frost is used up. A mirror or a pass keeps the frost. The shadow's edge is
+rigid: frost does not turn it.
+
+**Touching rules (opt-in).** A level's `spread` rules flow a flag through tagged things that touch (within half a
+pixel), with no arrow: an element by its segment or arc, an object by its circle.
 
 ```json
-"spread": [{"flag": "burnt", "tag": "flammable", "persist": true},
+"spread": [{"flag": "fire", "tag": "flammable", "persist": true},
            {"flag": "charge", "tag": "conductive", "persist": false, "sources": ["powered"]}]
 ```
 
@@ -166,10 +187,9 @@ by its segment or arc, an object by its circle.
 | `persist` | `true`: once lit, lit for good, and it flows through every tagged thing, present or not (fire). `false`: recomputed whenever the world changes; it flows only through present things, and an absent thing it reaches is lit but passes nothing on (charge: an open door is charged, so it stays open, yet breaks the circuit) |
 | `sources` | tags lit by themselves (a battery is `powered`); without sources only things already lit spread |
 
-Without `spread`, a level has the two rules above. With it, the level's rules replace them. The builtin
-`burnable` is `flammable`; `conductor`, `battery` and `charged_door` are `conductive`, and the battery is
-`powered`. An object becomes conductive by its own `"tags": ["conductive"]`: a box dropped across a gap
-closes the circuit.
+A level has no touching rules unless it names them (since Stage 156). A recomputed rule overrides what the arrow did
+to the things it covers. The demo `objectives/circuit` uses the charge rule: a box dropped across a gap closes the
+circuit.
 
 ## Light and shadow
 

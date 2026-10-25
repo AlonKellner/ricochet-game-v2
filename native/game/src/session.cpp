@@ -1234,6 +1234,9 @@ void Session::shadow() {
 // objects. Touching: two surfaces crossing, or an end within half a pixel of the
 // other; an object's circle within half a pixel of a surface or another object.
 void Session::spread() {
+	if (level_.spread.empty()) {
+		return; // (Stage 156: no touching rules by default)
+	}
 	struct Node {
 		std::string name;
 		std::vector<std::string> tags;

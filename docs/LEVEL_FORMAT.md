@@ -31,7 +31,7 @@ too).
 | `detectors` | `[{"name", "region": region \| "segment": {"a", "b"}, "mode": "while" \| "enter" \| "toggle", "flag", "value", "for"}]`: flags written as the player moves (GAME_SPEC 24.5; flag default `det:<name>`, mode `while`, value `true`, for `player`) | `[]` |
 | `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "wall" \| "mirror" \| "pass", "solid", "label", "gravity", "pops", "carries", "tags"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, wall, solid, label `Object` by default); their surfaces take the ids after the level's. Stage 150: `gravity` a factor of the level's (default 1; negative floats up), `pops` (the arrow pops it: flag `obj:<name>:popped`), `carries` another object until it pops. Stage 152: `tags` (what spread rules flow through: `["conductive"]`) | `[]` |
 | `cycle` | `{"period": s, "resume_after": s}`: the moving elements' cycle (GAME_SPEC 9.8; 4 and 10 by default) | |
-| `spread` | `[{"flag", "tag", "persist", "sources"}]`: flags flowing through tagged elements and objects that touch (GAME_SPEC 10.6, docs/ELEMENTS.md "Tags and spreading"; `persist` false and `sources` `[]` by default) | `burnt` through `flammable` (persist), `charge` through `conductive` from `powered` |
+| `spread` | `[{"flag", "tag", "persist", "sources"}]`: flags flowing through tagged elements and objects that touch (GAME_SPEC 10.6, docs/ELEMENTS.md "Fire, charge and frost: tags"; `persist` false and `sources` `[]` by default) | none (Stage 156) |
 | `carriers` | `[{"name", "line": {"a": [x, y], "b": [x, y]}} \| {"name", "circle": {"center": [x, y], "radius": r}}, "exact"?]`: lines and circles elements are placed on (Stage 149, below; `exact`: Stage 154) | `[]` |
 
 A region is `{"rect": [x, y, w, h]}` or `{"circle": {"center": [x, y], "radius": r}}`. The objective and the
@@ -125,7 +125,11 @@ and `d` for a portal (the motion `z -> e^{i theta} z + d`; both sides the same).
 A hit effect (GAME_SPEC 10.6): `{"kind": "state", "key": flag, "op": "set" | "toggle", "value": v}`,
 `{"kind": "target"}`, `{"kind": "grapple"}`, `{"kind": "pull"}` (Stage 146: journeys at landing, GAME_SPEC 25.6), `{"kind": "reset", "channels": [...]}` or `{"kind": "spawn", "channel": name,
 "template": {"surface": surface (no ids, no label), "orientation": "CARRIER_TANGENT" | ..., "mirror_with_side":
-bool, "offset": [x, y], "trim": bool}}`; any of them `"deferred": true` (applied when the shot lands).
+bool, "offset": [x, y], "trim": bool}}`; any of them `"deferred": true` (applied when the shot lands). Stage 156: a
+state write may take `"when": [{"key", "values"}]` -- it applies only while every condition holds under the flags the
+side fired under (before any of the side's writes), so a side's writes see one state.
+
+A side may be `"rigid": true` (Stage 156): frost never turns it (GAME_SPEC 10.6; the shadow's edge is).
 
 ## Checks
 

@@ -99,13 +99,13 @@ TEST_CASE("kit: fire burns a burnable barrier for good; water puts it out first"
 	rcg::Session s(level_of(R"([{"kind": "torch", "start": [800, 300], "end": [800, 780]},
 		{"kind": "burnable", "name": "crate", "start": [1000, 300], "end": [1000, 780]}])"));
 	shoot(s, 1000, 540);
-	CHECK(is_true(s, "el:crate:burnt"));
+	CHECK(is_true(s, "el:crate:fire")); // (Stage 156: on fire, burnt away)
 	CHECK_FALSE(present_at(s, 1000)); // gone for good
 	rcg::Session t(level_of(R"([{"kind": "torch", "start": [800, 300], "end": [800, 780]},
 		{"kind": "water", "start": [900, 300], "end": [900, 780]},
 		{"kind": "burnable", "name": "crate", "start": [1000, 300], "end": [1000, 780]}])"));
 	shoot(t, 1000, 540);
-	CHECK_FALSE(has(t, "el:crate:burnt"));
+	CHECK_FALSE(has(t, "el:crate:fire"));
 	CHECK(present_at(t, 1000));
 }
 
