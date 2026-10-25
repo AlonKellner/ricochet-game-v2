@@ -183,7 +183,8 @@ Session::Session(const Level &level, const SessionConfig &config)
 			shade_regions_.push_back(shade::region_of(segment_of(level_.surfaces[sh.surface].spec), sh.side, sh.dark));
 		}
 		shade_pieces_ = shade::arrange(shade_regions_, level_.bounds);
-		shade_first_id_ = world_->reserve_ids(int(shade_pieces_.size()));
+		shade_capacity_ = int(shade::capacity(shade_regions_, shade_pieces_.size()));
+		shade_first_id_ = world_->reserve_ids(shade_capacity_);
 		shadow();
 	}
 	// the initial checkpoint: taken before the level built its world (GameManager._ready)
@@ -432,6 +433,7 @@ void Session::teleport(const V2 &p) {
 	player_ = p;
 	tick_from_ = p;
 	velocity_ = V2{};
+	shadow(); // (Stage 168: the player's light)
 }
 
 std::optional<V2> Session::pole(size_t n) {
@@ -1303,6 +1305,7 @@ void Session::advance_journey(double dt) {
 		if (!level_.detectors.empty()) {
 			detect(from, pos);
 		}
+		shadow(); // (Stage 168: the player's light follows)
 	} else {
 		world_->set_body(size_t(j.body), pos, V2{}, false);
 		sync_nodes();
@@ -1328,23 +1331,45 @@ void Session::shadow() {
 	for (const Shade &sh : level_.shades) {
 		active.push_back(sh.when.empty() || flags_.is_true(sh.when));
 	}
-	if (active == shade_active_ && shade_world_ == world_->version()) {
+	const bool flagged = active != shade_active_;
+	if (flagged) {
+		shade_area_ = shade::area(shade_regions_, active, level_.bounds);
+	}
+	// Stage 168: the player's light, a light region round them where it meets the shadow
+	const std::optional<shade::Region> lamp = level_.player_start ? shade::light(shade_area_, player_.x, player_.y) : std::nullopt;
+	const std::optional<V2> light = lamp ? std::optional<V2>(player_) : std::nullopt;
+	if (!flagged && light == shade_light_ && shade_world_ == world_->version()) {
 		return;
 	}
-	if (active != shade_active_) {
-		shade_area_ = shade::area(shade_regions_, active, level_.bounds);
-		shade_fill_ = shade::fill_of(shade_area_);
-		shade_serial_++;
+	std::vector<shade::Region> regions = shade_regions_;
+	std::vector<bool> on = active;
+	std::vector<shade::Piece> lit;
+	if (lamp) {
+		regions.push_back(*lamp);
+		on.push_back(true);
+		lit = shade::arrange(regions, level_.bounds);
 	}
-	std::vector<BuiltSurface> edge = shade::boundary(shade_pieces_, shade_regions_, active, shade_first_id_);
-	const int last = shade_first_id_ + int(shade_pieces_.size());
+	const std::vector<shade::Piece> &pieces = lamp ? lit : shade_pieces_;
+	std::vector<BuiltSurface> edge = shade::boundary(pieces, regions, on, shade_first_id_);
+	if (flagged || light != shade_light_) {
+		shade_fill_ = lamp ? shade::fill(regions, on, level_.bounds) : shade::fill_of(shade_area_);
+		shade_serial_++;
+		light_edges_.clear();
+		for (const BuiltSurface &b : edge) {
+			const shade::Piece &p = pieces[size_t(b.id - shade_first_id_)];
+			if (lamp && std::any_of(p.own.begin(), p.own.end(), [&](const auto &o) { return o.first + 1 == regions.size(); })) {
+				light_edges_.push_back(p.spec);
+			}
+		}
+	}
+	const int last = shade_first_id_ + shade_capacity_;
 	std::vector<int> dark;
 	for (const BuiltSurface &s : world_->surfaces()) {
 		if ((s.id >= shade_first_id_ && s.id < last) || s.pre_transform || s.portal_pair != 0) {
 			continue; // (the boundary itself; a portal pair stays whole)
 		}
 		const V2 p = shade::point_of(s.seg);
-		if (!shade::shadowed(shade_regions_, active, p.x, p.y)) {
+		if (!shade::shadowed(regions, on, p.x, p.y)) {
 			continue;
 		}
 		const bool crossed = std::any_of(edge.begin(), edge.end(), [&](const BuiltSurface &b) { return !crossings_of(b.seg, s.seg).empty(); });
@@ -1354,6 +1379,7 @@ void Session::shadow() {
 	}
 	std::sort(dark.begin(), dark.end());
 	shade_active_ = std::move(active);
+	shade_light_ = light;
 	if (world_->set_shade(std::move(edge), std::move(dark))) {
 		sync_nodes();
 	}

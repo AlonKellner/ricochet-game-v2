@@ -12,6 +12,7 @@
 #include "rcg/build.hpp"
 #include "rcg/level.hpp"
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -63,10 +64,13 @@ Area area(const std::vector<Region> &regions, const std::vector<bool> &active, c
 rc::vis::Fill fill_of(const Area &a);
 rc::vis::Fill fill(const std::vector<Region> &regions, const std::vector<bool> &active, const Rect &bounds);
 
-// Stage 168: how far a point is from the area (0 inside), and the area around a light at (cx, cy) in bands:
-// within radii[0], then each between radii[i-1] and radii[i], and last the rest beyond the outermost.
-double distance(const Area &a, double x, double y);
-std::vector<rc::vis::Fill> around(const Area &a, double cx, double cy, const std::vector<double> &radii);
+// Stage 168 (the user): the player's light -- a light disk round the player, a light region like any other:
+// its edge stops the arrow leaving it into the shadow. In effect where it meets the shadow (none elsewhere).
+constexpr double LIGHT_RADIUS = 64.0;
+double distance(const Area &a, double x, double y); // how far a point is from the area (0 inside)
+std::optional<Region> light(const Area &shadow, double x, double y);
+// the most pieces an arrangement of `regions` plus one more circle has (its pieces: ids reserved once)
+size_t capacity(const std::vector<Region> &regions, size_t pieces);
 
 // A point of a surface (a line's middle, an arc's via, a point of a circle).
 V2 point_of(const rc::arc::SegGeom &g);

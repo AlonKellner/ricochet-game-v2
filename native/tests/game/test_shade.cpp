@@ -101,30 +101,39 @@ TEST_CASE("shade: light undoes the shadow; a light switched on by a flag; undo")
 	}
 }
 
-TEST_CASE("shade: an arrow in the shadow passes its surfaces and leaves it") {
-	// the player in the shadow (left of x = 800); a button in the light
-	rcg::Session s(level_of(R"({"elements": [
-		{"kind": "dark", "name": "night", "start": [800, 300], "end": [800, 700]},
-		{"kind": "wall", "name": "w", "start": [700, 400], "end": [700, 700]},
-		{"kind": "button", "name": "b", "opens": "d", "start": [1000, 500], "end": [1000, 600]},
-		{"kind": "door", "name": "d", "start": [1300, 700], "end": [1300, 800]}]})"));
-	const rcg::shade::Region r = rcg::shade::region_of(rcg::segment_of(s.level().surfaces[4].spec), "auto", true);
-	const char *side = r.contains(660, 540) ? "auto" : "right";
-	if (std::string(side) == "right") { // (the player's side, whichever the convention calls it)
-		rcg::Session t(level_of(R"({"elements": [
-			{"kind": "dark", "name": "night", "side": "right", "start": [800, 300], "end": [800, 700]},
-			{"kind": "wall", "name": "w", "start": [700, 400], "end": [700, 700]},
+TEST_CASE("shade: the player's light -- its edge stops the arrow leaving it into the shadow (Stage 168)") {
+	// the shadow left of x = 800 (the player's side, whichever the convention calls it); a button in the light
+	auto level = [](const std::string &side) {
+		return level_of(R"({"elements": [
+			{"kind": "dark", "name": "night", "side": ")" + side + R"(", "start": [800, 300], "end": [800, 700]},
+			{"kind": "wall", "name": "far", "start": [580, 400], "end": [580, 700]},
+			{"kind": "wall", "name": "near", "start": [640, 500], "end": [680, 500]},
 			{"kind": "button", "name": "b", "opens": "d", "start": [1000, 500], "end": [1000, 600]},
-			{"kind": "door", "name": "d", "start": [1300, 700], "end": [1300, 800]}]})"));
-		CHECK_FALSE(t.world().by_id(6)->left.has_value());
-		shoot(t, 1000, 550);
-		CHECK(t.flags().is_true("door:d"));
-		return;
+			{"kind": "door", "name": "d", "start": [1300, 700], "end": [1300, 800]}]})");
+	};
+	const rcg::Level probe = level("auto");
+	const bool left = rcg::shade::region_of(rcg::segment_of(probe.surfaces[4].spec), "auto", true).contains(660, 540);
+	{
+		rcg::Session s(level(left ? "auto" : "right"));
+		// the player in the shadow, their light round them: a wall in it is lit, one beyond it darkened
+		CHECK_FALSE(s.world().by_id(6)->left.has_value());
+		CHECK(s.world().by_id(7)->left.has_value());
+		shoot(s, 1000, 550); // stopped where it would leave the light into the shadow
+		CHECK_FALSE(s.flags().has("door:d"));
+		bool edge = false;
+		for (const auto &n : s.draw_frame()) {
+			if (n.key.kind == rcg::render::NodeKind::Shadow) {
+				edge = std::any_of(n.calls->begin(), n.calls->end(), [](const rcg::render::Call &c) { return c.kind == rcg::render::Kind::DashedLine || c.kind == rcg::render::Kind::Arc; });
+			}
+		}
+		CHECK(edge); // the light's edge is drawn where it stops the arrow
 	}
-	MESSAGE("a vertical line's left (downward) is the player's side");
-	CHECK_FALSE(s.world().by_id(6)->left.has_value()); // the wall in the shadow
-	shoot(s, 1000, 550); // through the darkened wall, out of the shadow, onto the button
-	CHECK(s.flags().is_true("door:d"));
+	{
+		rcg::Session s(level(left ? "auto" : "right"));
+		s.teleport(rc::V2::of(760, 540)); // the light reaches past the shadow's edge: out through the light
+		shoot(s, 1000, 550);
+		CHECK(s.flags().is_true("door:d"));
+	}
 }
 
 TEST_CASE("shade: the level's errors") {
@@ -170,53 +179,31 @@ TEST_CASE("shade: the fill is the dark minus the light, within the bounds") {
 	CHECK(rcg::shade::boundary(pieces, regions, {false, true}, 100).empty());
 }
 
-TEST_CASE("shade: the player's light -- the distance to the shadow and its bands around a point (Stage 168)") {
+TEST_CASE("shade: the player's light -- in effect only where it meets the shadow (Stage 168)") {
 	const rc::arc::SegGeom big = rc::arc::SegGeom::full_from_carrier(rc::arc::from_circle(rc::V2::of(500, 500), 200));
 	const rc::arc::SegGeom small = rc::arc::SegGeom::full_from_carrier(rc::arc::from_circle(rc::V2::of(500, 500), 100));
 	const std::vector<rcg::shade::Region> regions{rcg::shade::region_of(big, "auto", true), rcg::shade::region_of(small, "auto", false)};
-	const rcg::shade::Area a = rcg::shade::area(regions, {true, true}, rcg::Rect{0, 0, 1920, 1080});
+	const rcg::Rect bounds{0, 0, 1920, 1080};
+	const rcg::shade::Area a = rcg::shade::area(regions, {true, true}, bounds);
 	CHECK(rcg::shade::distance(a, 650, 500) == 0.0);
 	CHECK(rcg::shade::distance(a, 500, 500) == doctest::Approx(100).epsilon(0.01)); // in the light inside
 	CHECK(rcg::shade::distance(a, 1000, 500) == doctest::Approx(300).epsilon(0.01));
-	auto area = [](const rc::vis::Fill &f) {
-		double s = 0;
-		for (size_t i = 0; i + 2 < f.indices.size(); i += 3) {
-			const rc::vis::Pt &p = f.points[f.indices[i]], &q = f.points[f.indices[i + 1]], &r = f.points[f.indices[i + 2]];
-			s += std::abs((q.x - p.x) * (r.y - p.y) - (q.y - p.y) * (r.x - p.x)) / 2;
-		}
-		return s;
-	};
-	const double pi = 3.14159265358979, annulus = pi * (200.0 * 200 - 100.0 * 100);
-	const std::vector<rc::vis::Fill> bands = rcg::shade::around(a, 650, 500, {20, 40});
-	REQUIRE(bands.size() == 3);
-	CHECK(area(bands[0]) == doctest::Approx(pi * 20 * 20).epsilon(0.02));
-	CHECK(area(bands[1]) == doctest::Approx(pi * (40.0 * 40 - 20 * 20)).epsilon(0.02));
-	CHECK(area(bands[2]) == doctest::Approx(annulus - pi * 40 * 40).epsilon(0.01));
-	// far from the shadow: no bands, the rest is the whole fill
-	const std::vector<rc::vis::Fill> far = rcg::shade::around(a, 1500, 500, {20, 40});
-	CHECK(far[0].indices.empty());
-	CHECK(far[1].indices.empty());
-	CHECK(area(far[2]) == doctest::Approx(annulus).epsilon(0.01));
-}
-
-TEST_CASE("shade: the player's light -- drawn round them near the shadow, the arrow's rules unchanged (Stage 168)") {
-	rcg::Session s(level_of(disk_level("")));
-	auto shadow_calls = [&] {
-		for (const auto &n : s.draw_frame()) {
-			if (n.key.kind == rcg::render::NodeKind::Shadow) {
-				return int(std::count_if(n.calls->begin(), n.calls->end(), [](const rcg::render::Call &c) { return c.kind == rcg::render::Kind::Triangles; }));
-			}
-		}
-		return -1;
-	};
-	CHECK(shadow_calls() == 1); // far from the dark disk: the plain shadow
-	s.teleport(rc::V2::of(1150, 620));
-	s.settle();
-	CHECK(shadow_calls() == 5); // inside it: the veil, three bands, the rest
-	// still dark for the arrow: the button stays darkened, a shot from the light stops at the shadow's edge
-	const rcg::BuiltSurface *b = s.world().by_id(6);
-	REQUIRE(b != nullptr);
-	CHECK_FALSE(b->left.has_value());
+	CHECK_FALSE(rcg::shade::light(a, 500, 500).has_value()); // 100 px from the shadow: lit already
+	CHECK_FALSE(rcg::shade::light(a, 1000, 500).has_value());
+	const std::optional<rcg::shade::Region> l = rcg::shade::light(a, 650, 500);
+	REQUIRE(l.has_value());
+	CHECK_FALSE(l->dark);
+	CHECK(l->r == rcg::shade::LIGHT_RADIUS);
+	// with it, the shadow's boundary: the light's circle within the annulus is an edge (lit inside)
+	std::vector<rcg::shade::Region> with = regions;
+	with.push_back(*l);
+	const std::vector<rcg::shade::Piece> pieces = rcg::shade::arrange(with, bounds);
+	CHECK(pieces.size() <= rcg::shade::capacity(regions, rcg::shade::arrange(regions, bounds).size()));
+	const std::vector<rcg::BuiltSurface> edge = rcg::shade::boundary(pieces, with, {true, true, true}, 100);
+	// (the light reaches over both circles: each keeps its piece outside it, and the light's two arcs in the annulus)
+	CHECK(edge.size() == 4);
+	CHECK(rcg::shade::shadowed(with, {true, true, true}, 650, 580)); // beyond the light
+	CHECK_FALSE(rcg::shade::shadowed(with, {true, true, true}, 650, 540));
 }
 
 TEST_CASE("shade: the demo level -- the button is in the dark until the lamp is switched on") {

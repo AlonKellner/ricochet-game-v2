@@ -1,35 +1,43 @@
 # TDD 72: The player's light (Stage 168)
 
-Your request (2026-10-25): "Around the player there should be a small circle of light at all times, such that they
-can walk into darkness and see their character and immediate surroundings."
+Your requests (2026-10-25): "Around the player there should be a small circle of light at all times, such that they
+can walk into darkness and see their character and immediate surroundings." Then: "The light circle should actually
+be a light circle barrier, meaning that crossing it into shadows (dark are with no light), it should be blocked."
 
 ## Phase table
 
 | Phase | Topic | Status |
 |---|---|---|
-| 168.1 | The shadow's area kept (`shade::area`, `fill_of`; `fill` unchanged byte for byte); `shade::distance` (0 inside); `shade::around` (the area in bands round a point, then the rest) | Done |
-| 168.2 | The draw: within 80 px of the shadow, the `["shadow"]` node draws the bands round the player (a veil to 44 px at alpha 0.15, then 56, 68, 80 px at 0.32, 0.5, 0.68, the full 0.82 beyond), cached by the player's position; elsewhere the plain fill, as before | Done |
-| 168.3 | Tests; docs (GAME_SPEC 9.9, 2.75.0); `make gate` | Done |
-| 168.4 | The user's interactive sign-off | Open |
+| 168.1 | `shade::area` / `fill_of` (the fill byte for byte as before), `shade::distance`, `shade::light` (a light disk of `LIGHT_RADIUS` 64 round a point, none where it does not meet the shadow), `shade::capacity` (the pieces an arrangement with one more circle can have) | Done |
+| 168.2 | The session: the boundary's ids reserved for `capacity`; `shadow()` adds the light round the player where it meets the shadow, arranges the regions with it, and builds the boundary, the darkened surfaces and the fill from them; it runs after every tick, a teleport and every step of the player's journey | Done |
+| 168.3 | The draw: the fill without the light; the light's edge pieces that stop the arrow dashed in the light's colour | Done |
+| 168.4 | Tests; docs (GAME_SPEC 9.9, 2.75.0); `make gate` | Done |
+| 168.5 | The user's interactive sign-off | Open |
 
 ## Decisions
 
-- **Display only.** A light that counted for the arrow would add a moving edge round the player. That edge stops
-  the arrow from the lit side, so a shot fired from inside the circle could never leave it into the dark. Shades
-  are also static by design (their boundary's ids are fixed when the level starts). The light shows; the shadow
-  still decides.
-- **A veil, not a hole.** Inside the circle the shadow is thinned, not removed. The player and the floor show, and
-  what lies in the shadow stays visibly dim: it is still a pass for the arrow.
-- **Only near the dark.** Far from the shadow the node is the plain fill under the same key as before. Records
-  change only in frames where the player is within 80 px of the shadow.
+- **A light region like any other.** The light is a disk region (light, inside) appended to the shades' regions. The
+  boundary, the darkening and the fill follow from the existing rules: its edge blocks where the outside is in the
+  shadow, a surface in it is lit, and a surface it crosses is not darkened.
+- **In effect only where it meets the shadow.** When the disk lies wholly in the light, nothing changes. The
+  session keeps the static arrangement and its ids, so levels without nearby shadow (and every frame far from it)
+  are unchanged.
+- **Ids.** The arrangement with the light differs at every position. Its pieces take ids from one block reserved
+  at the start: the static pieces, plus two more on each carrier the circle crosses, plus the circle's own pieces.
+  The light's pieces are not plannable, and their ids carry no meaning across frames.
+- **Consequence.** A player standing in the dark can shoot only within the light, or out where it reaches the
+  light. An arrow travels in the shadow only through a portal or a wrap.
 
 ## Tests
 
 `rcg_tests`:
-- "shade: the player's light -- the distance to the shadow and its bands around a point": the distance inside the
-  shadow, in a light hole, and outside; the band areas; no bands far away.
-- "shade: the player's light -- drawn round them near the shadow ...": one triangle call far away, five inside the
-  dark disk; the darkened button is unchanged.
+- "shade: the player's light -- in effect only where it meets the shadow": distance, `light` (none 100 px away or
+  far off), the boundary with the light over an annulus (four edges), shadowed just beyond it and not within.
+- "shade: the player's light -- its edge stops the arrow leaving it into the shadow": a player in the shadow, a wall
+  in their light lit, one beyond it darkened, the shot to a lit button stopped and the edge drawn. From a spot where
+  the light reaches past the shadow's edge, the shot gets out and presses the button. This replaces "an arrow in
+  the shadow passes its surfaces and leaves it": its player stood in the shadow, so their arrow now starts in their
+  light.
 
-The session golden: `objectives__lantern__play` changes its `draw` hash in one frame of twelve (the player beside
-the shadow); every other field and frame is identical.
+The session golden: `objectives__lantern__play` frame 11 (the player beside the shadow) gains the light's two edge
+pieces in its world, with the visibility, preview and draw that follow; every other frame and session is identical.

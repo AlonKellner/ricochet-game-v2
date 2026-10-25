@@ -377,7 +377,10 @@ private:
 	std::vector<bool> shade_active_;
 	int shade_world_ = -1;
 	int shade_serial_ = 0; // bumped when the shadow's fill changes
-	shade::Area shade_area_; // (Stage 168: the player's light cuts the fill near it)
+	int shade_capacity_ = 0; // the ids reserved for the boundary's pieces (Stage 168: with the light's)
+	shade::Area shade_area_;  // the shades' shadow under the flags (Stage 168: whether the light meets it)
+	std::optional<V2> shade_light_;          // Stage 168: the player's light, where it meets the shadow
+	std::vector<SurfaceSpec> light_edges_;   // ... the pieces of its edge that stop the arrow (drawn)
 	rc::vis::Fill shade_fill_;
 	int touch_version_ = -1;                       // the world version the touches are of
 	std::vector<std::vector<bool>> touches_;       // per pair of tagged nodes (elements, then objects)

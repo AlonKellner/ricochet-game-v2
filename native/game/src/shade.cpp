@@ -509,25 +509,23 @@ double distance(const Area &a, double x, double y) {
 	return winding != 0 ? 0.0 : best;
 }
 
-std::vector<rc::vis::Fill> around(const Area &a, double cx, double cy, const std::vector<double> &radii) {
-	auto disk = [&](double r) {
-		const int n = std::clamp(int(std::ceil(2 * PI * r / 6.0)), 24, 256);
-		Clipper2Lib::PathD out;
-		for (int i = 0; i < n; i++) {
-			out.push_back({cx + r * std::cos(2 * PI * i / n), cy + r * std::sin(2 * PI * i / n)});
-		}
-		return out;
-	};
-	const Paths shadow = to_paths(a.clipped);
-	std::vector<rc::vis::Fill> out;
-	Paths inner;
-	for (double r : radii) {
-		const Paths band = inner.empty() ? Paths{disk(r)} : run(Clipper2Lib::ClipType::Difference, {disk(r)}, inner);
-		out.push_back(triangulate(shadow, band, Clipper2Lib::ClipType::Intersection));
-		inner = {disk(r)};
+std::optional<Region> light(const Area &shadow, double x, double y) {
+	if (!(distance(shadow, x, y) < LIGHT_RADIUS)) {
+		return std::nullopt; // (the disk is lit already)
 	}
-	out.push_back(inner.empty() ? fill_of(a) : triangulate(shadow, inner, Clipper2Lib::ClipType::Difference));
-	return out;
+	Region r;
+	r.dark = false;
+	r.line = false;
+	r.cx = x;
+	r.cy = y;
+	r.r = LIGHT_RADIUS;
+	r.inside = true;
+	return r;
+}
+
+size_t capacity(const std::vector<Region> &regions, size_t pieces) {
+	// the circle crosses each carrier at most twice: two more pieces on it, and two pieces of its own
+	return pieces + 4 * regions.size() + 1;
 }
 
 V2 point_of(const rc::arc::SegGeom &g) {
