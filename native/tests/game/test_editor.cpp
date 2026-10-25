@@ -694,3 +694,59 @@ TEST_CASE("editor: every tool is a chip in the panel; a click uses it (Stage 161
 	click(rows[3], 0);
 	CHECK(ok(ed, {{"op", "state"}})["tool"] == "carrier_circle");
 }
+
+TEST_CASE("editor: colliders and the camera are items -- placed, selected, dragged, duplicated, removed (Stage 164)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	auto doc = [&] { return ok(ed, {{"op", "document"}})["document"]; };
+	// X, two clicks: a collider
+	ok(ed, {{"op", "tool"}, {"tool", "select"}});
+	ed.key('X', 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["tool"] == "collider");
+	ok(ed, {{"op", "set"}, {"path", "/colliders"}, {"value", json::parse(R"([{"a": [600, 700], "b": [900, 700]}])")}});
+	REQUIRE(doc()["colliders"].size() == 1);
+	// the item: selected, its end moved, duplicated, removed
+	ok(ed, {{"op", "select"}, {"item", "collider:0"}});
+	CHECK(ok(ed, {{"op", "state"}})["item"] == "collider:0");
+	ok(ed, {{"op", "move"}, {"item", "collider:0"}, {"handle", "b"}, {"to", {1000, 720}}});
+	CHECK(doc()["colliders"][0]["b"] == json::array({1000, 720}));
+	ok(ed, {{"op", "move"}, {"item", "collider:0"}, {"handle", "body"}, {"by", {0, -100}}});
+	CHECK(doc()["colliders"][0]["a"] == json::array({600.0, 600.0}));
+	CHECK(ok(ed, {{"op", "duplicate"}, {"item", "collider:0"}})["item"] == "collider:1");
+	CHECK(doc()["colliders"].size() == 2);
+	ok(ed, {{"op", "remove"}, {"item", "collider:1"}});
+	CHECK(doc()["colliders"].size() == 1);
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	// the camera: its start drags
+	ok(ed, {{"op", "set"}, {"path", "/camera"}, {"value", json::parse(R"({"start": [960, 540]})")}});
+	ok(ed, {{"op", "move"}, {"item", "camera"}, {"handle", "start"}, {"to", {1000, 500}}});
+	CHECK(doc()["camera"]["start"] == json::array({1000, 500}));
+	CHECK(ed.command({{"op", "duplicate"}, {"item", "camera"}})["ok"] == false);
+	ok(ed, {{"op", "remove"}, {"item", "camera"}});
+	CHECK_FALSE(doc().contains("camera"));
+	CHECK(ed.errors().empty());
+}
+
+TEST_CASE("editor: the collider tool places a collider with two clicks; the level's every key is a field (Stage 164)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ed.key('X', 0, true);
+	// two clicks on the canvas
+	for (const auto &[x, y] : {std::pair{300.0f, 500.0f}, std::pair{600.0f, 500.0f}}) {
+		ed.pointer(rcg::Editor::PtrMove, x, y, 0, 0);
+		ed.pointer(rcg::Editor::PtrDown, x, y, rcg::Editor::BtnLeft, 0);
+		ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
+	}
+	const json d = ok(ed, {{"op", "document"}})["document"];
+	REQUIRE(d.contains("colliders"));
+	CHECK(d["colliders"].size() == 1);
+	// with nothing selected, the panel lists every level key
+	const json panel = ok(ed, {{"op", "panel"}});
+	std::set<std::string> labels;
+	for (const json &r : panel["rows"]) {
+		labels.insert(r["label"].get<std::string>());
+	}
+	for (const char *k : {"colliders", "camera", "background", "features", "templates", "carriers", "spread", "cycle", "objects", "detectors"}) {
+		CHECK_MESSAGE(labels.count(k) == 1, k);
+	}
+}

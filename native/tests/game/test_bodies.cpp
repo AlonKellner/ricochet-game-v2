@@ -266,3 +266,13 @@ TEST_CASE("a journey's motion ends its tick at a partial move: no endless loop o
 	CHECK(s.player().x == end->x); // the live journey ends where the preview said
 	CHECK(s.player().y == end->y);
 }
+
+TEST_CASE("colliders are drawn in play (Stage 164)") {
+	const std::filesystem::path root = RC_REPO_ROOT;
+	rcg::Session s(rcg::load_level((root / "data/levels/objectives/grapple_gap.json").string()));
+	bool drawn = false;
+	for (const auto &n : s.draw_frame()) {
+		drawn = drawn || (n.key.kind == rcg::render::NodeKind::Colliders && n.calls->size() == 2);
+	}
+	CHECK(drawn);
+}

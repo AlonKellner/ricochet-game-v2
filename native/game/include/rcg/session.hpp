@@ -551,7 +551,7 @@ private:
 		uint64_t version = 0;
 	};
 	mutable std::map<int, SurfaceDraw> surface_draw_; // by node serial
-	mutable CachedDraw path_draw_, vis_draw_, spawn_draw_, static_draw_[3], shade_draw_, glow_draw_;
+	mutable CachedDraw path_draw_, vis_draw_, spawn_draw_, static_draw_[3], shade_draw_, glow_draw_, collider_draw_;
 	void clear_hover();
 	// (last: destroyed first, before the state their results go to)
 	std::unique_ptr<LatestJob<VisJobIn, VisJobOut>> vis_job_;

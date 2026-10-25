@@ -1481,6 +1481,14 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		k.colors = {rgba(bg.color[0], bg.color[1], bg.color[2], bg.color[3])};
 		cached(static_draw_[0], {0, 0, 0}, NodeKind::Background, 0, V2::of(bg.rect.x, bg.rect.y), WHITE, [&](std::vector<Call> &out) { out.push_back(k); });
 	}
+	// Stage 164 (the user: every element visible): the player-only colliders -- floors and ledges -- drawn in play
+	if (!level_.colliders.empty()) {
+		cached(collider_draw_, {0, 0, 0}, NodeKind::Colliders, 0, V2{}, WHITE, [&](std::vector<Call> &out) {
+			for (const Collider &k : level_.colliders) {
+				out.push_back(line(k.a, k.b, rgba(0.55, 0.62, 0.72, 0.9), 3.0));
+			}
+		});
+	}
 	// Stage 145: the goal (dashed while locked, solid when open, filled when won) and the detectors
 	auto outline = [&](std::vector<Call> &out, const Region &r, const Color &c, double width, bool dash) {
 		if (r.circle) {

@@ -23,7 +23,7 @@ json new_level() {
 		"room": {"built": true, "rect": [560.0, 240.0, 800.0, 600.0]}, "schema": "rc-level/2"})");
 }
 
-const char *const TOOLS[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle"};
+const char *const TOOLS[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle", "collider"};
 
 // The object an element's geometry lives in: the element, a raw element's surface.
 json *geometry_of(json &e) {
@@ -544,14 +544,14 @@ json Editor::op(const json &cmd) {
 	}
 	if (o == "tool") {
 		const std::string t = cmd.at("tool").get<std::string>();
-		for (int k = 0; k < 10; k++) {
+		for (int k = 0; k < int(std::size(TOOLS)); k++) {
 			if (t == TOOLS[k]) {
 				tool_ = Tool(k);
 				clicks_.clear();
 				return {};
 			}
 		}
-		refuse("tool: select, line, arc, circle, player, goal, detector, object, carrier_line or carrier_circle expected");
+		refuse("tool: select, line, arc, circle, player, goal, detector, object, carrier_line, carrier_circle or collider expected");
 	}
 	if (o == "kind") {
 		const std::string k = cmd.at("kind").get<std::string>();

@@ -43,6 +43,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
 | Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| Every element visible and editable: colliders (the X tool) and the camera as editor items, the background outlined, every level key a field; colliders drawn in play (§19.2; docs/TDD_68, Stage 164) | Done |
 | A planned terminal stops the planned walk: a path that hits a planned stopping surface on its segment is aligned, one that misses it diverges (§14.1; docs/TDD_66, Stage 162) | Done |
 | Path effects per walk: each walk's fire, charge and frost marked over its own steps, after the divergence too; world effects only before it (§14.11; docs/TDD_65, Stage 160) | Done |
 | Every change plannable and previewed: sides with hit effects always plannable; the preview shows every lasting change to the divergence (surfaces, targets, the goal, lights, released objects) and a grapple's or pull's end, a fence stopping it (§14.12; docs/TDD_64, Stage 159) | Done |
@@ -2038,7 +2039,7 @@ arcs only: its whole has no float32 form. Crossings of two exact carriers are no
 
 ### 19.2 Editor requirements
 
-> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Since Stage 155 the panel lists the levels (the host's `data/levels`): a click, Ctrl+O, or the previous/next buttons open another level in place, asking again before discarding unsaved changes. Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
+> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Since Stage 164 every level element is visible and editable in the editor (colliders and the camera as items, the background outlined, every level key a panel field), and colliders are drawn in play too (`["colliders"]`). Since Stage 155 the panel lists the levels (the host's `data/levels`): a click, Ctrl+O, or the previous/next buttons open another level in place, asking again before discarding unsaved changes. Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
 
 The level editor must support:
 
@@ -2946,4 +2947,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.71.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.72.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

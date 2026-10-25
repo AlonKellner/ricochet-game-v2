@@ -54,6 +54,7 @@ run it:
 | D | a detector: two corners (a rectangle, mode `enter`, flag `det:<name>`) |
 | B | an object: one click (a pullable circle of radius 16; edit it in the panel's `objects`) |
 | K, Shift+K | a carrier: a line by two points, a circle by its center and a point on it (drawn faint and dashed across the canvas) |
+| X | a collider: two clicks, a player-only segment -- a floor or a ledge the player stands on, which arrows pass (Stage 164) |
 | Tab / Shift+Tab, 1-9, or a kind in the panel's palette | what the line, arc and circle tools place (every kind, the level's own last; clicking a kind also picks the line tool, the circle tool for a circle-only kind) |
 | Delete, Backspace | remove the selected element |
 | Ctrl+D | duplicate it (offset by 20, 20) |
@@ -93,6 +94,12 @@ tool (or the three of the arc tool on a circle) land on one carrier, the element
 are its defining points (a line's two, a circle's center and radius), and dragging them moves every element on
 it. Renaming it carries the elements, and deleting it frees them, each keeping its place as its own geometry. Its `exact` row
 (Stage 154) snaps its elements onto points exactly on it (GAME_SPEC 19.1).
+
+**Every level element is on the canvas** (Stage 164). Colliders are drawn as hatched floors; a click selects one,
+its ends drag, Ctrl+D duplicates it and Delete removes it. The camera's start is a small frame labelled `camera`
+(drag it; its smoothing is in its rows). The background's rectangle is outlined faintly. With nothing selected the
+panel lists every level key as a field: name, bounds, gravity, room, player, flags, the goal, detectors, objects,
+cycle, spread, colliders, camera, background, features, templates and carriers.
 
 **The goal, detectors and objects** are selected like elements: a click inside one (an element's line above it
 wins the click). A rectangle has corner handles, a circle a center and a radius handle, a detector's segment its

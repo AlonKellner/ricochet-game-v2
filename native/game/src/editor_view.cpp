@@ -56,14 +56,16 @@ const Color GOAL = rgba(0.3, 0.95, 0.45);
 const Color DETECTOR = rgba(1.0, 0.8, 0.25, 0.85);
 const Color OBJECT = rgba(0.95, 0.6, 0.3);
 const Color CARRIER = rgba(0.45, 0.7, 1.0, 0.45);
+const Color COLLIDER = rgba(0.6, 0.72, 0.85); // Stage 164: a player-only collider
+const Color CAMERA = rgba(0.85, 0.6, 1.0);
 
 // An element's layers (the draw nodes' keys: ["editor", layer, index])
 enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS, L_GOALS, L_CARRIERS, L_SHADOW };
 
-const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle"};
+const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle", "collider"};
 // Stage 161: the tool palette's labels (with their keys)
 const char *const TOOL_LABELS[] = {"select  V", "line  L", "arc  A", "circle  C", "player  P", "goal  O", "detector  D", "object  B",
-	"line carrier  K", "circle carrier  shift K"};
+	"line carrier  K", "circle carrier  shift K", "collider  X"};
 
 Call line(const V2 &a, const V2 &b, const Color &c, double w) {
 	Call k;
@@ -534,6 +536,23 @@ void Editor::place(const json &p, unsigned) {
 		hint_ = res.value("ok", false) ? name + " placed: line and arc clicks on it place elements on it" : res.value("error", std::string());
 		return;
 	}
+	if (tool_ == Tool::Collider) { // Stage 164: two clicks, a player-only segment
+		json cs = doc_.value("colliders", json::array());
+		if (!cs.is_array()) {
+			cs = json::array();
+		}
+		if (canonical(clicks_[0]) == canonical(clicks_[1])) {
+			clicks_.clear();
+			hint_ = "a collider needs two points apart";
+			return;
+		}
+		cs.push_back({{"a", clicks_[0]}, {"b", clicks_[1]}});
+		clicks_.clear();
+		click_carriers_.clear();
+		const json res = command({{"op", "set"}, {"path", "/colliders"}, {"value", cs}});
+		hint_ = res.value("ok", false) ? "a collider placed: the player stands on it, the arrow passes" : res.value("error", std::string());
+		return;
+	}
 	if (tool_ == Tool::Goal || tool_ == Tool::Detector) {
 		// two corners: a rectangle
 		const double x0 = clicks_[0][0].get<double>(), y0 = clicks_[0][1].get<double>(), x1 = clicks_[1][0].get<double>(), y1 = clicks_[1][1].get<double>();
@@ -878,6 +897,7 @@ void Editor::key(int code, unsigned mods, bool down) {
 		case 'D': tool_ = Tool::Detector; clicks_.clear(); return;
 		case 'B': tool_ = Tool::Object; clicks_.clear(); return;
 		case 'K': tool_ = (mods & ModShift) ? Tool::CarrierCircle : Tool::CarrierLine; clicks_.clear(); click_carriers_.clear(); return;
+		case 'X': tool_ = Tool::Collider; clicks_.clear(); return; // Stage 164
 		case 'G': grid_ = !grid_; return;
 		case 'F': frame_all(); view_touched_ = false; return;
 		case KeyDelete:
@@ -1008,7 +1028,7 @@ std::vector<Editor::Row> Editor::rows() const {
 		}
 		return out;
 	}
-	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector, B an object, K a line carrier, shift+K a circle carrier", std::nullopt,
+	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector, B an object, K a line carrier, shift+K a circle carrier, X a collider", std::nullopt,
 			"tool", -1, 0, {}});
 	// Stage 161: the tool palette -- every tool, three to a row (a click: use it)
 	for (size_t k = 0; k < std::size(TOOL_NAMES); k += 3) {
@@ -1102,7 +1122,14 @@ std::vector<Editor::Row> Editor::rows() const {
 		field("detectors", "/detectors", "[{name, region | segment, mode, flag?}]: they write flags (D)");
 		field("objects", "/objects", "[{name, circle, kind, face, solid}]: bodies a pull brings back (B)");
 		field("cycle", "/cycle", "{\"period\": s, \"resume_after\": s}: the moving elements' cycle");
-		field("spread", "/spread", "[{flag, tag, persist?, sources?}]: flags flowing through tagged things that touch (default: fire and charge)");
+		field("spread", "/spread", "[{flag, tag, persist?, sources?}]: flags flowing through tagged things that touch (none by default)");
+		// Stage 164: every level key is a field
+		field("colliders", "/colliders", "[{\"a\", \"b\"}]: player-only segments -- floors, ledges (X places one; click one to edit)");
+		field("camera", "/camera", "{\"start\": [x, y], \"smoothing\", \"smoothing_speed\"}: the camera (its start drags)");
+		field("background", "/background", "{\"rect\": [x, y, w, h], \"color\": [r, g, b, a]}: what is painted behind");
+		field("features", "/features", "{game, preview, arrow, hud, cursor}: what the level shows");
+		field("templates", "/templates", "{kind: template}: the level's own element kinds (docs/ELEMENTS.md)");
+		field("carriers", "/carriers", "[{name, line | circle, exact?}]: what elements sit on (K, shift+K)");
 	}
 	y += 8;
 	add({Row::Header, errors_.empty() ? "no problems" : std::to_string(errors_.size()) + " problem(s)", "", "", std::nullopt, "", -1, 0, {}});
@@ -1185,7 +1212,7 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		return opts[size_t(((k + (back ? -1 : 1)) % n + n) % n)];
 	};
 	if (r.choice == "tool") {
-		const std::string t = cycle({"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle"}, r.value);
+		const std::string t = cycle({"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle", "collider"}, r.value);
 		run({{"op", "tool"}, {"tool", t}});
 		return;
 	}
@@ -1429,6 +1456,50 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 					region(d.value("region", json()), DETECTOR, name, picked);
 				}
 			}
+		}
+		// Stage 164: the background (its rect, faint), the colliders, the camera's start
+		if (doc_.contains("background") && doc_["background"].is_object() && doc_["background"].contains("rect")) {
+			const json &b = doc_["background"]["rect"];
+			if (b.is_array() && b.size() == 4) {
+				const double x = b[0].get<double>(), y = b[1].get<double>(), w = b[2].get<double>(), h = b[3].get<double>();
+				const V2 p[4] = {to_screen(V2::of(x, y)), to_screen(V2::of(x + w, y)), to_screen(V2::of(x + w, y + h)), to_screen(V2::of(x, y + h))};
+				for (int k = 0; k < 4; k++) {
+					g.push_back(dashed(p[k], p[(k + 1) % 4], rgba(0.5, 0.5, 0.55, 0.35), 1.0, 3.0));
+				}
+				g.push_back(text_at(V2::of(double(p[0].x) + 4, double(p[0].y) + 12), "background", rgba(0.5, 0.5, 0.55, 0.6), 11));
+			}
+		}
+		if (doc_.contains("colliders") && doc_["colliders"].is_array()) {
+			for (size_t i = 0; i < doc_["colliders"].size(); i++) {
+				const json &k = doc_["colliders"][i];
+				if (!k.is_object() || !is_point(k.value("a", json())) || !is_point(k.value("b", json()))) {
+					continue;
+				}
+				const V2 a = to_screen(pt(k["a"])), b = to_screen(pt(k["b"]));
+				if (item_ == "collider:" + std::to_string(i)) {
+					g.push_back(line(a, b, SELECT, 9.0));
+				}
+				g.push_back(line(a, b, COLLIDER, 3.0));
+				// (hatching under it: a floor the player stands on)
+				const double dx = double(b.x) - a.x, dy = double(b.y) - a.y, len = std::hypot(dx, dy);
+				for (double t = 6.0; len > 0 && t < len; t += 10.0) {
+					const V2 q = V2::of(a.x + dx * t / len, a.y + dy * t / len);
+					g.push_back(line(q, V2::of(double(q.x) - 5, double(q.y) + 5), rgba(0.6, 0.72, 0.85, 0.5), 1.0));
+				}
+			}
+		}
+		if (doc_.contains("camera") && doc_["camera"].is_object() && is_point(doc_["camera"].value("start", json()))) {
+			const V2 c = to_screen(pt(doc_["camera"]["start"]));
+			if (item_ == "camera") {
+				g.push_back(arc(c, 14.0, 0, TAU, SELECT, 9.0));
+			}
+			const V2 p[4] = {V2::of(double(c.x) - 10, double(c.y) - 7), V2::of(double(c.x) + 10, double(c.y) - 7), V2::of(double(c.x) + 10, double(c.y) + 7),
+				V2::of(double(c.x) - 10, double(c.y) + 7)};
+			for (int k = 0; k < 4; k++) {
+				g.push_back(line(p[k], p[(k + 1) % 4], CAMERA, 2.0));
+			}
+			g.push_back(text_at(V2::of(c.x, double(c.y) - 12), "camera", CAMERA, 11));
+			g.back().alignment = 1;
 		}
 		if (doc_.contains("objects") && doc_["objects"].is_array()) {
 			for (const json &o : doc_["objects"]) {

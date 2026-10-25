@@ -25,7 +25,7 @@ namespace rcg {
 class Editor {
 public:
 	enum class Mode { Edit, Play };
-	enum class Tool { Select, Line, Arc, Circle, Player, Goal, Detector, Object, CarrierLine, CarrierCircle };
+	enum class Tool { Select, Line, Arc, Circle, Player, Goal, Detector, Object, CarrierLine, CarrierCircle, Collider }; // (Collider: Stage 164)
 	// pointer events and buttons (rc_api.h's RC_PTR_* / RC_BTN_* / RC_MOD_*)
 	enum : int { PtrMove = 0, PtrDown = 1, PtrUp = 2 };
 	enum : unsigned { BtnLeft = 1, BtnRight = 2, BtnMiddle = 4 };
