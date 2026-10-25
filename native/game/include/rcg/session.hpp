@@ -182,6 +182,8 @@ public:
 	// Stage 157: the preview's arrow-state marks per merged step, and its consequences (tests, hosts)
 	const std::vector<uint8_t> &preview_marks() const { return shown().marks; }
 	const std::vector<std::pair<std::string, int>> &preview_becomes() const { return shown().becomes; }
+	const std::optional<rc::Flags> &preview_predicted() const { return shown().predicted; } // Stage 159
+	std::optional<V2> preview_trip_end() const { return shown().trip ? std::optional<V2>(shown().trip->trail.back()) : std::nullopt; }
 	// Stage 147 (tests, tools): the preview's physical trace -- the path a shot now takes (none: no trace)
 	const rc::TracePath *physical_trace() const { return preview_.pair ? &preview_.pair->physical : nullptr; }
 	double preview_seconds() const { return provisional_ ? 0.0 : preview_climb_seconds_; }
@@ -265,6 +267,15 @@ private:
 		// fire, 2 is charged, 4 is discharged)
 		std::vector<uint8_t> marks;
 		std::vector<std::pair<std::string, int>> becomes;
+		// Stage 159 (the user: every change the shot makes shows in the preview): the flags the shot leaves when its
+		// walk is followed to the divergence (its per-shot flags gone), and the journey a grapple or pull there makes
+		std::optional<rc::Flags> predicted;
+		struct Trip {
+			int body = -1; // -1: the player
+			std::vector<V2> trail;
+			bool blocked = false;
+		};
+		std::optional<Trip> trip;
 	};
 	void arrow_states(Preview &p) const; // Stage 157
 
@@ -331,6 +342,8 @@ private:
 		size_t next = 1;
 	};
 	std::optional<Journey> journey_;
+	std::optional<Journey> journey_of(const rc::TracePath &path, int *hit_index = nullptr) const; // Stage 159
+	static bool journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, double radius, double dt);
 	// Stage 151: the cycle
 	double phase_ = 0.0;
 	bool cycle_auto_ = true;
@@ -356,6 +369,7 @@ private:
 	void start_journey();             // at landing: the first fired grapple or pull of the shot
 	void advance_journey(double dt);
 	std::vector<kinematics::Collider> colliders_except(int body) const; // what a body or the player meets
+	std::vector<kinematics::Collider> colliders_except(int body, const rc::Flags &flags) const; // ... under these flags
 	std::vector<Checkpoint> checkpoints_;
 	Checkpoint initial_;
 	int display_mode_ = 0;

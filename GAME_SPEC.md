@@ -43,6 +43,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
 | Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| Every change plannable and previewed: sides with hit effects always plannable; the preview shows every lasting change to the divergence (surfaces, targets, the goal, lights, released objects) and a grapple's or pull's end, a fence stopping it (§14.12; docs/TDD_64, Stage 159) | Done |
 | Planning with frost: while the plan's frost is active, stopping sides (not the shadow's edge) are plannable as reflections or inversions; a shared point stops a frosted arrow (§10.6; docs/TDD_63, Stage 158) | Done |
 | The arrow's states in the preview: consequences drawn only before the walks diverge; fire, charge and frost marks moving with the path's dashes; the glow node for things on fire, charged or frosted (§14.11; docs/TDD_62, Stage 157) | Done |
 | Fire, charge and frost: the arrow's states and the tags `flammable`, `conductive`, `frosted`, `burning`, `charged`; conditional state changes and the frost rule in the solver and the oracle; touching rules opt-in (§10.6; docs/TDD_61, Stage 156) | Done |
@@ -1599,6 +1600,26 @@ With an empty plan the plan is complete from the start, so the cursor is a candi
 - An unplanned state change is a divergence (§14.2, Stage 134), so a preview shows a consequence when every surface
   that changes the arrow's state on the way is planned. A pass surface carrying a tag's writes is plannable.
 
+### 14.12 Every change plannable, every change previewed (Stage 159)
+
+> **Status: implemented (Stage 159, docs/TDD_64_PLANNABLE_CONSEQUENCES.md).** The user's rules (2026-10-25): "All game
+> state changing features must be plannable, that's the point of the game", and "all game state changes must always
+> be somehow reflected in the preview".
+
+- **Plannable.** A side with any hit effect (a state write, a target, a reset, a spawn, a grapple, a pull, a tag's
+  writes) is plannable, whatever its level says (the builder makes it interactive). A side frost would turn is
+  plannable while the plan's frost is active (§10.6).
+- **Previewed.** The preview shows the shot's lasting changes up to the divergence (§14.11): from the flags there
+  (its per-shot flags gone), surfaces that would vanish (red, dashed), appear (green), or change their sides
+  (yellow), targets it would register (cyan), the goal it would open (green), lights or darks it would switch, and
+  objects a popped bubble would release (yellow). Things catching fire or changing charge glow (§14.11).
+- **Journeys.** A grapple or pull hit before the divergence previews its journey: the traveller's trail and a ring
+  where it ends, simulated tick by tick exactly as the journey runs after the landing (the same motion, swept against
+  what blocks the traveller under the shot's landed flags). A player- or object-blocking barrier that the arrow
+  passes (a fence) stops it on the way: the ring is then orange.
+- Not yet previewed: touching (spread) rules and shadows recomputed after the landing, a released object's fall, and
+  detector writes during a journey.
+
 ### 14.10 Post-cursor computation
 
 There is no separate post-cursor computation. Both traces run the full path from origin to escape/block in a single pass. The cursor is a virtual hitpoint (§12.1) that creates a step boundary. `cursor_index` is the step index at the cursor position. Steps before `cursor_index` are pre-cursor; steps at or after are post-cursor. The step type (ALIGNED vs ALIGNED_POST_PLANNED, or DIVERGED_PLANNED vs DIVERGED_POST_PLANNED) is determined by comparing against `cursor_index`.
@@ -2922,4 +2943,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.68.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.69.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

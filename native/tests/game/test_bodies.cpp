@@ -182,3 +182,42 @@ TEST_CASE("bubbles: the demo level plays to its goal; the schema") {
 	CHECK(err(R"({"objects": [{"name": "a", "circle": {"center": [0, 0]}, "carries": "b"}, {"name": "b", "circle": {"center": [9, 0]}, "carries": "c"},
 		{"name": "c", "circle": {"center": [19, 0]}}]})").find("one level of carrying") != std::string::npos);
 }
+
+TEST_CASE("pull and grapple: the preview shows where the traveller ends -- the same place as the shot, a fence stopping it on the way (Stage 159)") {
+	auto previewed_then_shot = [](const char *level, double x, double y, bool player) {
+		rcg::Session s(level_of(level));
+		s.set_cursor(rc::V2::of(x, y));
+		s.settle();
+		const std::optional<rc::V2> end = s.preview_trip_end();
+		REQUIRE(end.has_value());
+		shoot(s, x, y);
+		const rc::V2 got = player ? s.player() : body(s);
+		CHECK(end->x == got.x);
+		CHECK(end->y == got.y);
+		return *end;
+	};
+	// a grapple, free and with a fence on the way (the arrow passes it, the player does not)
+	CHECK(previewed_then_shot(R"({"elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 800]}]})", 1200, 540, true).x
+			== doctest::Approx(1200 - 12 - 0.08).epsilon(1e-4));
+	CHECK(previewed_then_shot(R"({"elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 800]},
+		{"kind": "fence", "start": [900, 300], "end": [900, 800]}]})", 1200, 540, true).x == doctest::Approx(900 - 12 - 0.08).epsilon(1e-4));
+	// a pull, stopped by a fence
+	CHECK(previewed_then_shot(R"({"elements": [{"kind": "fence", "start": [900, 300], "end": [900, 800]}],
+		"objects": [{"name": "box", "circle": {"center": [1100, 540], "radius": 16}}]})", 1100, 540, false).x
+			== doctest::Approx(900 + 16 + 0.08).epsilon(1e-4));
+}
+
+TEST_CASE("preview: the shot's lasting changes to the divergence -- a door a button opens (Stage 159)") {
+	rcg::Session s(level_of(R"({"elements": [{"kind": "button", "name": "b", "opens": "gate", "op": "set", "start": [1000, 400], "end": [1000, 700]},
+		{"kind": "door", "name": "gate", "start": [1200, 300], "end": [1200, 800]}]})"));
+	s.set_cursor(rc::V2::of(1000, 540));
+	s.settle();
+	REQUIRE(s.preview_predicted().has_value());
+	CHECK(s.preview_predicted()->is_true("door:gate"));
+	CHECK_FALSE(s.flags().has("door:gate"));
+	bool drawn = false;
+	for (const auto &n : s.draw_frame()) {
+		drawn = drawn || n.key.kind == rcg::render::NodeKind::Glow;
+	}
+	CHECK(drawn);
+}

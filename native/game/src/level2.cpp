@@ -467,9 +467,6 @@ Lowered lower_level(const json &v2) {
 						if (!sd.contains("hits")) {
 							sd["hits"] = json::array();
 						}
-						if (t == "pass") {
-							sd["interactive"] = true; // (Stage 157: plannable, so a preview through it stays aligned)
-						}
 						for (const json &h : extra) {
 							sd["hits"].push_back(h);
 						}

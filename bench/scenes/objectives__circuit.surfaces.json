@@ -84,7 +84,7 @@
    "id": 5,
    "is_target": false,
    "left": {
-    "interactive": false,
+    "interactive": true,
     "states": [
      {
       "key": "shot:charge",
@@ -152,7 +152,7 @@
    "line": true,
    "player_solid": true,
    "right": {
-    "interactive": false,
+    "interactive": true,
     "states": [
      {
       "key": "shot:charge",
@@ -513,7 +513,7 @@
    "id": 8,
    "is_target": false,
    "left": {
-    "interactive": false,
+    "interactive": true,
     "states": [
      {
       "key": "shot:charge",
@@ -587,7 +587,7 @@
     }
    ],
    "right": {
-    "interactive": false,
+    "interactive": true,
     "states": [
      {
       "key": "shot:charge",

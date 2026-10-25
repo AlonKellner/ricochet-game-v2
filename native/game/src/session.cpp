@@ -1008,11 +1008,13 @@ constexpr double JOURNEY_SPEED = 900.0; // px/s along the path
 constexpr double JOURNEY_SAMPLE = 4.0;  // px between the path's points
 } // namespace
 
-std::vector<kinematics::Collider> Session::colliders_except(int body) const {
+std::vector<kinematics::Collider> Session::colliders_except(int body) const { return colliders_except(body, flags_); }
+
+std::vector<kinematics::Collider> Session::colliders_except(int body, const rc::Flags &flags) const {
 	std::vector<kinematics::Collider> out;
 	const int skip = body >= 0 ? world_->bodies()[size_t(body)].id : -1;
 	for (const BuiltSurface &s : world_->surfaces()) {
-		if (s.id != skip && s.player_solid && !s.pre_transform && present(s, flags_)) {
+		if (s.id != skip && s.player_solid && !s.pre_transform && present(s, flags)) {
 			out.push_back(kinematics::collider_of(s.seg));
 		}
 	}
@@ -1080,8 +1082,10 @@ void Session::step_bodies() {
 	bodies_moving_ = moved;
 }
 
-void Session::start_journey() {
-	for (const rc::HitRecord &h : pending_path_.hits) {
+// Stage 159: the journey a path's first fired grapple or pull makes (and that hit's index), if any
+std::optional<Session::Journey> Session::journey_of(const rc::TracePath &path, int *hit_index) const {
+	for (size_t hi = 0; hi < path.hits.size(); hi++) {
+		const rc::HitRecord &h = path.hits[hi];
 		if (!h.fired) {
 			continue;
 		}
@@ -1104,8 +1108,8 @@ void Session::start_journey() {
 		Journey j;
 		j.body = grapple ? -1 : body;
 		std::vector<int> leg;
-		for (int k = 0; k <= h.step_index && k < int(pending_path_.steps.size()); k++) {
-			const rc::TraceStep &st = pending_path_.steps[size_t(k)];
+		for (int k = 0; k <= h.step_index && k < int(path.steps.size()); k++) {
+			const rc::TraceStep &st = path.steps[size_t(k)];
 			if (st.start.is_inf() || st.end.is_inf()) {
 				break;
 			}
@@ -1132,25 +1136,27 @@ void Session::start_journey() {
 		for (size_t m = 1; m < j.path.size(); m++) {
 			j.jump[m] = leg[m] != leg[m - 1] && (j.path[m] - j.path[m - 1]).length() > 1e-3f;
 		}
-		if (j.path.size() >= 2) {
-			journey_ = std::move(j);
+		if (j.path.size() < 2) {
+			return std::nullopt;
 		}
-		return; // the first fired grapple or pull of the shot
+		if (hit_index != nullptr) {
+			*hit_index = int(hi);
+		}
+		return j;
+	}
+	return std::nullopt;
+}
+
+void Session::start_journey() {
+	if (std::optional<Journey> j = journey_of(pending_path_)) {
+		journey_ = std::move(j);
 	}
 }
 
-// The traveller moves along the path at JOURNEY_SPEED, swept against what it
-// meets: it stops at the first contact (a fence stops it, an arrow-only barrier
-// does not), or at the path's end.
-void Session::advance_journey(double dt) {
-	Journey &j = *journey_;
-	const bool player = j.body < 0;
-	const double radius = player ? kinematics::RADIUS : world_->bodies()[size_t(j.body)].object.radius;
-	V2 pos = player ? player_ : world_->bodies()[size_t(j.body)].pos;
-	const V2 from = pos;
-	const std::vector<kinematics::Collider> cs = colliders_except(j.body);
+// Stage 159: one tick of a journey's motion (the live game's and the preview's): the traveller at `pos` moves
+// along the path at JOURNEY_SPEED, swept against `cs`; true when it is done (blocked, or at the path's end)
+bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, double radius, double dt) {
 	double left = JOURNEY_SPEED * dt;
-	bool done = false;
 	while (left > 0 && j.next < j.path.size()) {
 		const V2 target = j.path[j.next] + j.offset;
 		if (j.jump[j.next]) {
@@ -1164,15 +1170,27 @@ void Session::advance_journey(double dt) {
 		const double t = kinematics::sweep_fraction(pos.x, pos.y, double(d.x) * frac, double(d.y) * frac, cs, radius);
 		pos = V2::of(double(pos.x) + double(d.x) * frac * t, double(pos.y) + double(d.y) * frac * t);
 		if (t < 1.0) {
-			done = true; // blocked
-			break;
+			return true; // blocked
 		}
 		left -= len * frac;
 		if (frac == 1.0) {
 			j.next++;
 		}
 	}
-	done = done || j.next >= j.path.size();
+	return j.next >= j.path.size();
+}
+
+// The traveller moves along the path at JOURNEY_SPEED, swept against what it
+// meets: it stops at the first contact (a fence stops it, an arrow-only barrier
+// does not), or at the path's end.
+void Session::advance_journey(double dt) {
+	Journey &j = *journey_;
+	const bool player = j.body < 0;
+	const double radius = player ? kinematics::RADIUS : world_->bodies()[size_t(j.body)].object.radius;
+	V2 pos = player ? player_ : world_->bodies()[size_t(j.body)].pos;
+	const V2 from = pos;
+	const std::vector<kinematics::Collider> cs = colliders_except(j.body);
+	const bool done = journey_move(j, pos, cs, radius, dt);
 	if (player) {
 		player_ = pos;
 		tick_from_ = pos;
@@ -1636,6 +1654,8 @@ void Session::make_preview(Preview &p, std::optional<rc::TracePair> pair) const 
 void Session::arrow_states(Preview &p) const {
 	p.marks.assign(p.merged.size(), 0);
 	p.becomes.clear();
+	p.predicted.reset();
+	p.trip.reset();
 	if (!p.pair) {
 		return;
 	}
@@ -1666,6 +1686,7 @@ void Session::arrow_states(Preview &p) const {
 	static const char *const KEYS[3] = {"shot:fire", "shot:charge", "shot:frost"};
 	rc::Flags cur = flags_, at_divergence = flags_;
 	bool diverged = false, ok[3] = {false, false, false};
+	std::vector<bool> hit_aligned(changes.size(), false);
 	size_t c = 0;
 	for (size_t m = 0; m < p.merged.size(); m++) {
 		const rc::TraceStep &st = p.merged[m];
@@ -1694,11 +1715,46 @@ void Session::arrow_states(Preview &p) const {
 				}
 			}
 			cur = changes[c].after;
+			hit_aligned[c] = aligned;
 			c++;
 		}
 	}
 	if (!diverged) {
 		at_divergence = cur;
+	}
+	// Stage 159: the shot's lasting changes to the divergence, and the journey it starts there
+	{
+		rc::Flags landed = at_divergence;
+		std::vector<std::string> per_shot;
+		for (const auto &[k, v] : landed.entries()) {
+			if (k.rfind("shot:", 0) == 0) {
+				per_shot.push_back(k);
+			}
+		}
+		for (const std::string &k : per_shot) {
+			landed.erase(k);
+		}
+		landed.erase("ghost");
+		int hit = -1;
+		if (std::optional<Journey> j = journey_of(raw, &hit); j && hit >= 0 && size_t(hit) < hit_aligned.size() && hit_aligned[size_t(hit)]) {
+			Preview::Trip trip;
+			trip.body = j->body;
+			const bool player = j->body < 0;
+			V2 pos = player ? player_ : world_->bodies()[size_t(j->body)].pos;
+			const double radius = player ? kinematics::RADIUS : world_->bodies()[size_t(j->body)].object.radius;
+			const std::vector<kinematics::Collider> cs = colliders_except(j->body, landed);
+			trip.trail.push_back(pos);
+			for (int tick = 0; tick < 20000; tick++) {
+				const bool done = journey_move(*j, pos, cs, radius, 1.0 / 60.0);
+				trip.trail.push_back(pos);
+				if (done) {
+					trip.blocked = j->next < j->path.size();
+					break;
+				}
+			}
+			p.trip = std::move(trip);
+		}
+		p.predicted = std::move(landed);
 	}
 	auto consider = [&](const std::string &name) {
 		int b = 0;

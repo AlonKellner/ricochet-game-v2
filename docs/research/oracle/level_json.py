@@ -137,7 +137,8 @@ def _side_def(side, host_id, **portal):
     if side is None:
         return None
     d = _effect_def(side.get("effect", {"type": "pass"}), **portal)
-    d["interactive"] = bool(side.get("interactive", False))
+    # (Stage 159: every side that changes the game is plannable -- a side with hit effects is interactive)
+    d["interactive"] = bool(side.get("interactive", False)) or bool(side.get("hits"))
     w = _writes(side.get("hits", []), host_id)
     if w:
         d["states"] = w

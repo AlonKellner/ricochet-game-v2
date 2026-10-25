@@ -163,7 +163,8 @@ std::optional<BuiltSide> side_of(const std::optional<SideSpec> &s) {
 	if (!s) {
 		return std::nullopt;
 	}
-	return BuiltSide{effect_of(s->effect), s->interactive, s->hits, s->rigid};
+	// (Stage 159, the user: every side that changes the game is plannable -- a side with hit effects is interactive)
+	return BuiltSide{effect_of(s->effect), s->interactive || !s->hits.empty(), s->hits, s->rigid};
 }
 
 // SurfaceSpec.spawn_channels: the channels its sides spawn into, first seen first.

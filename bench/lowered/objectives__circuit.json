@@ -330,7 +330,7 @@
       ]
      }
     ],
-    "interactive": true
+    "interactive": false
    },
    "player_solid": true,
    "right": {
@@ -403,7 +403,7 @@
       ]
      }
     ],
-    "interactive": true
+    "interactive": false
    },
    "start": [620.0, 380.0],
    "via": [760.0, 380.0]
@@ -482,7 +482,7 @@
       ]
      }
     ],
-    "interactive": true
+    "interactive": false
    },
    "player_solid": true,
    "right": {
@@ -555,7 +555,7 @@
       ]
      }
     ],
-    "interactive": true
+    "interactive": false
    },
    "start": [940.0, 380.0],
    "via": [1045.0, 380.0]
