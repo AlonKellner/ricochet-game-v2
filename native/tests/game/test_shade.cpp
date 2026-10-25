@@ -129,6 +129,24 @@ TEST_CASE("shade: the player's light -- its edge stops the arrow leaving it into
 		CHECK(edge); // the light's edge is drawn where it stops the arrow
 	}
 	{
+		// the light follows the player: moved with the same pieces (one full circle), the world's circle moves too
+		// (the user's F12 dump: the light's edge stayed where the player had been)
+		rcg::Session s(level(left ? "auto" : "right"));
+		auto centre = [&]() -> std::optional<double> {
+			for (const rcg::BuiltSurface &b : s.world().surfaces()) {
+				if (b.seg.full && b.label == std::nullopt && b.seg.get_carrier().radius() == rcg::shade::LIGHT_RADIUS) {
+					return b.seg.get_carrier().center_x();
+				}
+			}
+			return std::nullopt;
+		};
+		CHECK(centre() == std::optional<double>(660.0));
+		s.teleport(rc::V2::of(650, 540));
+		CHECK(centre() == std::optional<double>(650.0));
+		shoot(s, 1000, 550);
+		CHECK_FALSE(s.flags().has("door:d"));
+	}
+	{
 		rcg::Session s(level(left ? "auto" : "right"));
 		s.teleport(rc::V2::of(760, 540)); // the light reaches past the shadow's edge: out through the light
 		shoot(s, 1000, 550);

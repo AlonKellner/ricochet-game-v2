@@ -12,7 +12,8 @@ be a light circle barrier, meaning that crossing it into shadows (dark are with 
 | 168.2 | The session: the boundary's ids reserved for `capacity`; `shadow()` adds the light round the player where it meets the shadow, arranges the regions with it, and builds the boundary, the darkened surfaces and the fill from them; it runs after every tick, a teleport and every step of the player's journey | Done |
 | 168.3 | The draw: the fill without the light; the light's edge pieces that stop the arrow dashed in the light's colour | Done |
 | 168.4 | Tests; docs (GAME_SPEC 9.9, 2.75.0); `make gate` | Done |
-| 168.5 | The user's interactive sign-off | Open |
+| 168.5 | The user's F12 dump: the light lagged behind the player (its edge 43 px back). `World::set_shade` took a boundary with the same ids and sides as unchanged (true while shades were static); it now compares each piece's geometry too | Done |
+| 168.6 | The user's interactive sign-off | Open |
 
 ## Decisions
 
@@ -33,7 +34,8 @@ be a light circle barrier, meaning that crossing it into shadows (dark are with 
 `rcg_tests`:
 - "shade: the player's light -- in effect only where it meets the shadow": distance, `light` (none 100 px away or
   far off), the boundary with the light over an annulus (four edges), shadowed just beyond it and not within.
-- "shade: the player's light -- its edge stops the arrow leaving it into the shadow": a player in the shadow, a wall
+- "shade: the player's light -- its edge stops the arrow leaving it into the shadow": the world's light circle follows
+  the player when its pieces keep their ids (the lag); a player in the shadow, a wall
   in their light lit, one beyond it darkened, the shot to a lit button stopped and the edge drawn. From a spot where
   the light reaches past the shadow's edge, the shot gets out and presses the button. This replaces "an arrow in
   the shadow passes its surfaces and leaves it": its player stood in the shadow, so their arrow now starts in their
