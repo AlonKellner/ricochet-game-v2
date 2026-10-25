@@ -13,7 +13,7 @@ be a light circle barrier, meaning that crossing it into shadows (dark are with 
 | 168.3 | The draw: the fill without the light; the light's edge pieces that stop the arrow dashed in the light's colour | Done |
 | 168.4 | Tests; docs (GAME_SPEC 9.9, 2.75.0); `make gate` | Done |
 | 168.5 | The user's F12 dump: the light lagged behind the player (its edge 43 px back). `World::set_shade` took a boundary with the same ids and sides as unchanged (true while shades were static); it now compares each piece's geometry too | Done |
-| 168.6 | The user's interactive sign-off | Open |
+| 168.6 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

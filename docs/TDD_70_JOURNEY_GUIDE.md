@@ -16,7 +16,7 @@ object is through. The same for the grapple. GAME_SPEC 25.6.
 | 166.2 | The traveller: straight toward the guide at 1.25 times the guide's speed, swept, sliding along a contact at its full step up to its nearest approach to the guide; stops at the guide at the path's end or when no closer to a waiting guide | Done |
 | 166.3 | Portals: the guide waits at the entry; the traveller crosses (no collision while in it) toward the far side until wholly through, its copy mapped by the portal's motion; drawn clipped at both portal lines (`["journey"]`), the body's own surface and the player's node hidden meanwhile | Done |
 | 166.4 | The preview: the same tick (trail legs per side of a portal, the end ring orange only when stopped short of arriving); tests; docs; the session golden re-recorded | Done |
-| 166.5 | The user's interactive sign-off | Open |
+| 166.5 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

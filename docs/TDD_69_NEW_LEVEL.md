@@ -10,7 +10,7 @@ level; Copy of an existing level." The guide is docs/EDITOR.md; the host side do
 | 165.1 | The editor: the level menu's `+ new empty level` and `+ copy of a level` (then pick the level), Ctrl+N, a name prompt (a free default; Enter creates, Esc cancels), the command `new_level` (names checked, unsaved changes asked twice) | Done |
 | 165.2 | A copy through the host: `open_request` returns `as`, the host loads the copied level with that name and `unsaved`; both hosts save under the editor's level name (its folder made) | Done |
 | 165.3 | Tests; docs; `make gate` | Done |
-| 165.4 | The user's interactive sign-off | Open |
+| 165.4 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

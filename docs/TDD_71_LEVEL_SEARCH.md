@@ -11,7 +11,7 @@ characters highlighted."
 | 167.1 | The soft match: the query's characters in order, case-insensitive; a run scores most, then a word's start (after `/`, `_`, `-`), then an earlier start; the best start wins; matches first by score, the rest after in their order | Done |
 | 167.2 | The list: a search field focused when it opens; the matched characters lit (the name laid out a character per cell, the matches tinted); Up/Down pick, Enter opens (copy mode: names the copy), Esc clears then closes; a click elsewhere leaves the search, opening nothing | Done |
 | 167.3 | Tests; docs; `make gate` | Done |
-| 167.4 | The user's interactive sign-off | Open |
+| 167.4 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 
