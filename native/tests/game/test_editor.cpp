@@ -798,3 +798,37 @@ TEST_CASE("editor: a new level -- empty or a copy, named in a prompt, unsaved un
 	CHECK(ok(ed, {{"op", "state"}})["new_prompt"] == false);
 	CHECK(ok(ed, {{"op", "state"}})["level"] == "a/two_copy");
 }
+
+TEST_CASE("editor: the level list is searchable -- soft matches first, their characters marked; up/down and Enter (Stage 167)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "levels"}, {"list", {"main", "objectives/grapple_gap", "objectives/lantern", "playground/portals", "test_levels/ghost_room"}}});
+	// the ranking: "gg" -> grapple_gap first (a word start, then a word start); the rest after it, in their order
+	const json r = ok(ed, {{"op", "level_search"}, {"query", "gg"}})["levels"];
+	REQUIRE(r.size() == 5);
+	CHECK(r[0]["name"] == "objectives/grapple_gap");
+	CHECK(r[0]["marks"] == json::array({11, 19}));
+	CHECK(r[1]["name"] == "main");
+	CHECK(r[1]["marks"].empty());
+	const json g = ok(ed, {{"op", "level_search"}, {"query", "gr"}})["levels"]; // three matches (grapple, ghost_room, playground) above the rest
+	CHECK(g[0]["name"] == "objectives/grapple_gap"); // (a run at a word's start first)
+	CHECK(g[2]["marks"].size() == 2);
+	CHECK(g[3]["marks"].empty());
+	const json p = ok(ed, {{"op", "level_search"}, {"query", "PORT"}})["levels"]; // (case-insensitive, a run)
+	CHECK(p[0]["name"] == "playground/portals");
+	CHECK(p[0]["marks"] == json::array({11, 12, 13, 14}));
+	// typed into the open list: the search has the focus; Down picks the next, Enter opens it
+	ok(ed, {{"op", "level_menu"}, {"show", true}});
+	CHECK(ok(ed, {{"op", "state"}})["focus"] == "#level_search");
+	ed.text("o");
+	ed.key(rcg::Editor::KeyDown, 0, true);
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	const json first = ok(ed, {{"op", "level_search"}, {"query", "o"}})["levels"];
+	CHECK(ok(ed, {{"op", "open_request"}})["name"] == first[1]["name"]);
+	// Esc clears the search, a second Esc closes the list
+	ed.text("zz");
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["level_menu"] == true);
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["level_menu"] == false);
+}

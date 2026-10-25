@@ -103,6 +103,7 @@ private:
 		int error_element = -1;
 		float y = 0;
 		std::vector<std::string> options; // "options": the values it cycles through (strings)
+		std::vector<int> marks = {};      // Stage 167: a level row's characters the search matched
 	};
 
 	// the document
@@ -151,6 +152,15 @@ private:
 	std::string open_as_, new_from_;
 	bool new_prompt_ = false, copy_pick_ = false;
 	void start_new_prompt(const std::string &from);
+	// Stage 167: the level list's search -- the levels ranked by a soft match of the query (matches first, their
+	// matched characters), and the one picked (Up/Down, Enter)
+	struct Ranked {
+		std::string name;
+		std::vector<int> marks; // empty: no match (or no query)
+	};
+	std::vector<Ranked> ranked_levels() const;
+	size_t level_pick_ = 0;
+	std::string level_query() const; // the search's text (while it has the focus)
 	uint64_t version_ = 0;
 	Mode mode_ = Mode::Edit;
 	Tool tool_ = Tool::Select;

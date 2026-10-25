@@ -378,6 +378,10 @@ json Editor::op(const json &cmd) {
 			dirty_ = true;
 		}
 		new_prompt_ = copy_pick_ = false;
+		if (focus_ && focus_->key == "#level_search") {
+			focus_.reset(); // (Stage 167: the search is done)
+		}
+		level_pick_ = 0;
 		open_request_.clear();
 		confirm_open_.clear();
 		level_menu_ = false;
@@ -397,7 +401,27 @@ json Editor::op(const json &cmd) {
 	if (o == "level_menu") {
 		level_menu_ = cmd.contains("show") ? cmd["show"].get<bool>() : !level_menu_;
 		panel_scroll_ = 0;
+		level_pick_ = 0;
+		if (level_menu_) { // Stage 167: the search has the focus, empty
+			focus_ = Field{"", "#level_search"};
+			buffer_.clear();
+		} else if (focus_ && focus_->key == "#level_search") {
+			focus_.reset();
+		}
 		return {{"show", level_menu_}};
+	}
+	if (o == "level_search") { // Stage 167: the levels ranked by a query (tests, scripts)
+		json out = json::array();
+		const std::optional<Field> keep = focus_;
+		const std::string kept = buffer_;
+		focus_ = Field{"", "#level_search"};
+		buffer_ = cmd.at("query").get<std::string>();
+		for (const Ranked &r : ranked_levels()) {
+			out.push_back({{"name", r.name}, {"marks", r.marks}});
+		}
+		focus_ = keep;
+		buffer_ = kept;
+		return {{"levels", out}};
 	}
 	if (o == "open" || o == "next_level") {
 		std::string name;

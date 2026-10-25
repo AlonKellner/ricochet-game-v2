@@ -756,7 +756,9 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 		}
 		return;
 	}
-	if (focus_) {
+	if (focus_ && focus_->key == "#level_search") {
+		focus_.reset(); // (Stage 167: a click elsewhere leaves the search, opening nothing)
+	} else if (focus_) {
 		commit_field();
 	}
 	if (buttons & BtnRight) {
@@ -849,9 +851,32 @@ void Editor::key(int code, unsigned mods, bool down) {
 		return;
 	}
 	if (focus_) {
+		const bool search = focus_->key == "#level_search"; // Stage 167: the level list's search
+		if (search && (code == KeyUp || code == KeyDown)) {
+			const size_t n = ranked_levels().size();
+			if (code == KeyUp && level_pick_ > 0) {
+				level_pick_--;
+			} else if (code == KeyDown && level_pick_ + 1 < n) {
+				level_pick_++;
+			}
+			return;
+		}
+		if (search && (mods & ModCtrl) && code == 'O') {
+			command({{"op", "level_menu"}, {"show", false}});
+			return;
+		}
 		if (code == KeyEnter) {
 			commit_field();
 		} else if (code == KeyEscape) {
+			if (search && !buffer_.empty()) {
+				buffer_.clear(); // (the first Esc clears the search, the next closes the list)
+				level_pick_ = 0;
+				return;
+			}
+			if (search) {
+				level_menu_ = false;
+				copy_pick_ = false;
+			}
 			if (focus_->key == "#new_level") {
 				new_prompt_ = false; // Stage 165: no new level
 			}
@@ -862,6 +887,7 @@ void Editor::key(int code, unsigned mods, bool down) {
 				n--; // a whole UTF-8 character
 			}
 			buffer_.erase(n);
+			level_pick_ = 0;
 		}
 		return;
 	}
@@ -971,6 +997,7 @@ void Editor::text(const std::string &utf8) {
 			buffer_ += c;
 		}
 	}
+	level_pick_ = 0; // (Stage 167: a new query picks its best match)
 }
 
 // Stage 165: the new level's name prompt (from: the level copied; empty: an empty level), in the level menu
@@ -989,6 +1016,20 @@ void Editor::start_new_prompt(const std::string &from) {
 }
 
 void Editor::commit_field() {
+	if (focus_->key == "#level_search") { // Stage 167: Enter opens the picked level (copy mode: names its copy)
+		const std::vector<Ranked> rk = ranked_levels();
+		if (rk.empty()) {
+			return;
+		}
+		const std::string name = rk[std::min(level_pick_, rk.size() - 1)].name;
+		if (copy_pick_) {
+			start_new_prompt(name);
+			return;
+		}
+		const json r = command({{"op", "open"}, {"name", name}});
+		hint_ = r.value("ok", false) ? "" : r.value("error", std::string());
+		return; // (the search keeps the focus until the level loads)
+	}
 	const Field f = *focus_;
 	focus_.reset();
 	if (f.key == "#new_level") { // Stage 165: create it (unsaved changes: the first Enter warns, the second goes on)
@@ -1029,6 +1070,74 @@ void Editor::commit_field() {
 }
 
 // ---------------------------------------------------------------- the panel
+
+// Stage 167: the search's soft match -- the query's characters in order, case-insensitive; a run of them counts
+// most, then a word's start (the name's, after / _ -), and an earlier start a little. The best start wins.
+namespace {
+bool soft_match(const std::string &name, const std::string &q, double &score, std::vector<int> &marks) {
+	auto low = [](char c) { return char(std::tolower(static_cast<unsigned char>(c))); };
+	auto boundary = [&](size_t i) { return i == 0 || name[i - 1] == '/' || name[i - 1] == '_' || name[i - 1] == '-'; };
+	bool found = false;
+	for (size_t s = 0; s < name.size(); s++) {
+		if (low(name[s]) != low(q[0])) {
+			continue;
+		}
+		std::vector<int> m{int(s)};
+		double sc = 1.0 + (boundary(s) ? 10.0 : 0.0) - 0.1 * double(s);
+		size_t at = s;
+		bool ok = true;
+		for (size_t k = 1; k < q.size() && ok; k++) {
+			size_t i = at + 1;
+			while (i < name.size() && low(name[i]) != low(q[k])) {
+				i++;
+			}
+			if (i >= name.size()) {
+				ok = false;
+				break;
+			}
+			sc += 1.0 + (i == at + 1 ? 12.0 : 0.0) + (boundary(i) ? 10.0 : 0.0) - 0.05 * double(i - at - 1); // (a run counts most: a word typed from its start)
+			m.push_back(int(i));
+			at = i;
+		}
+		if (ok && (!found || sc > score)) {
+			found = true;
+			score = sc;
+			marks = m;
+		}
+	}
+	return found;
+}
+} // namespace
+
+std::string Editor::level_query() const { return focus_ && focus_->key == "#level_search" ? buffer_ : std::string(); }
+
+std::vector<Editor::Ranked> Editor::ranked_levels() const {
+	const std::string q = level_query();
+	std::vector<Ranked> out;
+	if (q.empty()) {
+		for (const std::string &n : levels_) {
+			out.push_back({n, {}});
+		}
+		return out;
+	}
+	std::vector<std::pair<double, Ranked>> hits;
+	std::vector<Ranked> rest;
+	for (const std::string &n : levels_) {
+		double score = 0.0;
+		std::vector<int> marks;
+		if (soft_match(n, q, score, marks)) {
+			hits.push_back({score, {n, marks}});
+		} else {
+			rest.push_back({n, {}});
+		}
+	}
+	std::stable_sort(hits.begin(), hits.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+	for (auto &h : hits) {
+		out.push_back(std::move(h.second));
+	}
+	out.insert(out.end(), rest.begin(), rest.end());
+	return out;
+}
 
 std::vector<Editor::Row> Editor::rows() const {
 	std::vector<Row> out;
@@ -1081,11 +1190,14 @@ std::vector<Editor::Row> Editor::rows() const {
 		if (levels_.empty()) {
 			text_rows("no levels listed by the host", Row::Text, -1);
 		}
-		for (const std::string &n : levels_) {
+		// Stage 167: the search (it has the focus while the list is open), then the levels ranked by it
+		add({Row::Value, "search", level_query(), "type to find a level: up/down picks, Enter opens, Esc clears", Field{"", "#level_search"}, "", -1, 0, {}});
+		for (const Ranked &k : ranked_levels()) {
 			Row r;
 			r.kind = Row::Level;
-			r.label = n;
-			r.hint = confirm_open_ == n ? "unsaved changes: click again to discard them" : "open this level";
+			r.label = k.name;
+			r.marks = k.marks;
+			r.hint = confirm_open_ == k.name ? "unsaved changes: click again to discard them" : copy_pick_ ? "copy this level" : "open this level";
 			add(r);
 		}
 		return out;
@@ -1209,7 +1321,7 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		const json res = command(c);
 		hint_ = res.value("ok", false) ? "" : res.value("error", std::string());
 	};
-	if (focus_) {
+	if (focus_ && focus_->key != "#level_search") {
 		commit_field();
 	}
 	if (r.kind == Row::Buttons) {
@@ -1892,10 +2004,36 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 			}
 			case Row::Level: {
 				const bool cur = r.label == level_name_;
-				if (cur || over) {
-					p.push_back(rect(V2{x0 + 4, r.y + 1}, V2{PANEL_WIDTH - 8, ROW - 2}, cur ? rgba(1.0, 0.8, 0.3, 0.22) : rgba(1, 1, 1, 0.08)));
+				const std::string q = level_query();
+				// (Stage 167: the picked row -- up/down -- among the search's ranking)
+				size_t index = 0;
+				for (const Row &o : rs) {
+					if (&o == &r) {
+						break;
+					}
+					index += o.kind == Row::Level && o.value.empty() ? 1 : 0;
 				}
-				p.push_back(text_at(V2{x0 + 14, base}, r.label, confirm_open_ == r.label ? ERROR_TEXT : cur ? ACCENT : TEXT, FONT - 1));
+				const bool picked = !q.empty() && r.value.empty() && index == level_pick_;
+				if (cur || over || picked) {
+					p.push_back(rect(V2{x0 + 4, r.y + 1}, V2{PANEL_WIDTH - 8, ROW - 2},
+							picked ? rgba(1, 1, 1, 0.16) : cur ? rgba(1.0, 0.8, 0.3, 0.22) : rgba(1, 1, 1, 0.08)));
+				}
+				const Color base_c = confirm_open_ == r.label ? ERROR_TEXT : cur ? ACCENT : (!q.empty() && r.marks.empty() && r.value.empty()) ? DIM : TEXT;
+				if (r.marks.empty()) {
+					p.push_back(text_at(V2{x0 + 14, base}, r.label, base_c, FONT - 1));
+					break;
+				}
+				// the matched characters lit: the name laid out a character per cell
+				constexpr float CELL = 7.4f;
+				for (size_t i = 0; i < r.label.size(); i++) {
+					const bool hit = std::find(r.marks.begin(), r.marks.end(), int(i)) != r.marks.end();
+					const float cx = x0 + 14 + float(i) * CELL;
+					if (hit) {
+						p.push_back(rect(V2{cx - 0.5f, r.y + 3}, V2{CELL + 1, ROW - 6}, rgba(1.0, 0.8, 0.3, 0.28)));
+					}
+					p.push_back(text_at(V2{cx + CELL / 2, base}, std::string(1, r.label[i]), hit ? ACCENT : base_c, FONT - 1));
+					p.back().alignment = 1;
+				}
 				break;
 			}
 			case Row::Buttons: {
