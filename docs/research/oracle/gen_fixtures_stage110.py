@@ -89,8 +89,18 @@ def main():
 
     # a planned pass side (an open door)
     quiet("pass_entry", line(1, (300, -400), (300, 400), PASS, PASS))
-    # a planned terminal crossed off its segment (the beam passes beside it)
-    quiet("terminal_entry_off_segment", line(1, (300, 200), (300, 400), TERM, TERM))
+    # a planned terminal crossed off its segment (the beam passes beside it): Stage 162 (the user) -- the planned
+    # walk stops at its planned hit, the physical one passes and reaches the cursor (the walks diverge)
+    surfs = [line(1, (300, 200), (300, 400), TERM, TERM)] + walls
+    pl, ph = pair("terminal_entry_off_segment", surfs, player, cursor, [(1, side_toward(surfs, player, cursor, 1))])
+    assert not reaches(pl) and reaches(ph), ([e["kind"] for e in pl["expected"]], [e["kind"] for e in ph["expected"]])
+    assert pl["expected"][0]["terminal"] and not pl["expected"][0]["on_segment"], pl["expected"][0]
+    fx.extend([pl, ph])
+    # ... and met on its segment: both walks stop there (the cursor beyond it)
+    surfs = [line(1, (300, -400), (300, 400), TERM, TERM)] + walls
+    pl, ph = pair("terminal_entry_on_segment", surfs, player, cursor, [(1, side_toward(surfs, player, cursor, 1))])
+    assert decisions(pl) == decisions(ph) and not reaches(pl) and not reaches(ph), (decisions(pl), decisions(ph))
+    fx.extend([pl, ph])
     # a planned write of the value the flag already has
     same = writes(set_("k", 1))
     quiet("noop_write_entry", line(1, (300, -400), (300, 400), same, same), flags={"k": 1})

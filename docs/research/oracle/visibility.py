@@ -122,7 +122,14 @@ def visible(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
     ph = T.physical(surfaces, player, cursor, plan, flags, hints, spans)
     ci = next((i for i, e in enumerate(pl.events) if e.kind == "cursor"), None)
     if ci is None:
-        return False                                    # V1
+        # Stage 162: a planned walk that ends at the cursor's point -- a planned terminal there -- reaches it
+        last = len(pl.events) - 1
+        c = P(cursor)
+        if last >= 0 and pl.events[last].kind == "hit" and pl.events[last].terminal \
+                and _drawn(pl.events[last]) == (_f32(c.real), _f32(c.imag)):
+            ci = last
+        else:
+            return False                                # V1
     cj = next((i for i, e in enumerate(ph.events) if e.kind == "cursor"), None)
     if cj is None:
         # (a physical walk that ends at the cursor's point -- a terminal there --

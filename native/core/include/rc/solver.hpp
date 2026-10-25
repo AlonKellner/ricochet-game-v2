@@ -3971,7 +3971,9 @@ private:
 				if (w.mode != Mode::Physical && plan_hit && !in_piece) {
 					on_seg = false;
 				}
-				const EffectType plan_do = (plan_match && (is_transformative(eff) || is_projective(eff))) ? eff : EffectType::Pass;
+				// (Stage 162, the user: a planned stopping side stops the planned walk at its planned hit, as a planned
+				// mirror reflects it there -- met on its segment the walks agree, crossed off it they diverge)
+				const EffectType plan_do = (plan_match && (is_transformative(eff) || is_projective(eff) || eff == EffectType::Terminal)) ? eff : EffectType::Pass;
 				const EffectType phys_do = fb ? eff : EffectType::Pass;
 				const bool plan_state = plan_match && has_change;
 				const bool phys_state = fb && has_change;
@@ -3996,7 +3998,7 @@ private:
 					} else if (!(phys_after == w.flags)) {
 						// B5: a flag change keeps the beam -- matched by the point's frame
 						plan_bookkeeping(w, surf->id, pt, true);
-					} else if (do_ == EffectType::Pass && plan_match && plan_do == EffectType::Pass && plan_after == w.flags) {
+					} else if (do_ == EffectType::Pass && plan_match && !is_transformative(plan_do) && !is_projective(plan_do) && plan_after == w.flags) {
 						// the planned walk consumes this entry without a frame change (a pass
 						// side, a terminal crossed off its segment, a write of the current
 						// value): so does the physical one, at the same event

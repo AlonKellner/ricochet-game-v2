@@ -221,3 +221,30 @@ TEST_CASE("preview: the shot's lasting changes to the divergence -- a door a but
 	}
 	CHECK(drawn);
 }
+
+TEST_CASE("a planned stopping surface: a path that hits it is aligned, one that misses it diverges (Stage 162, the user's grapple_gap dumps)") {
+	const std::filesystem::path root = RC_REPO_ROOT;
+	rcg::Session s(rcg::load_level((root / "data/levels/objectives/grapple_gap.json").string()));
+	s.teleport(rc::V2::of(891.676758, 987.919983));
+	s.set_cursor(rc::V2::of(1329.523681640625, 478.09521484375)); // the grapple (surface 5), its right side
+	s.settle();
+	s.click(false);
+	REQUIRE(s.plan().size() == 1);
+	CHECK(s.plan()[0].surface_id == 5);
+	auto types = [&](double x, double y) {
+		s.set_cursor(rc::V2::of(x, y));
+		s.settle();
+		std::vector<rc::StepType> out;
+		for (const auto &st : s.preview_steps()) {
+			out.push_back(st.type);
+		}
+		return out;
+	};
+	auto diverged = [](const std::vector<rc::StepType> &t) {
+		return std::any_of(t.begin(), t.end(), [](rc::StepType k) {
+			return k == rc::StepType::DivergedPhysical || k == rc::StepType::DivergedPlanned || k == rc::StepType::DivergedPostPlanned;
+		});
+	};
+	CHECK(diverged(types(1348, 260)));       // past the grapple's end: the path misses it
+	CHECK_FALSE(diverged(types(1318, 452))); // toward the grapple: the path hits it
+}

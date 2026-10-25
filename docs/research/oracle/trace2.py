@@ -1234,7 +1234,9 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 on_seg = on_seg and in_planned_span(walk, walk.plan_index, pt)
                 walk.plan_index += 1
                 eff = surf.effect(side, walk.flags)
-                do = eff if (eff in TRANSFORMATIVE or eff in PROJECTIVE) else None
+                # Stage 162 (the user): a planned stopping side stops the planned walk at its planned hit, as a
+                # planned mirror reflects it there (met on its segment the walks agree; crossed off it they diverge)
+                do = eff if (eff in TRANSFORMATIVE or eff in PROJECTIVE or eff == "terminal") else None
                 fires_state = bool(changes)
                 fired = not ghosted
             if do is not None or fires_state:

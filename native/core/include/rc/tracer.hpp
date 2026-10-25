@@ -205,9 +205,16 @@ inline size_t significant_before(const std::vector<int> &sig, int i) {
 // Stage 134 (GAME_SPEC 15.1, visibility.py visible): both walks reach the
 // cursor (V1) with the same significant events before it (V2), and leave its
 // point in one frame (V3)
-inline bool walks_agree_at_cursor(const std::vector<CastEvent> &pl, const std::vector<CastEvent> &ph, const std::string &flags0) {
-	const int cpl = cursor_event(pl);
+inline bool walks_agree_at_cursor(const std::vector<CastEvent> &pl, const std::vector<CastEvent> &ph, const std::string &flags0,
+		const std::optional<Pt> &cursor = std::nullopt) {
+	int cpl = cursor_event(pl);
 	int cph = cursor_event(ph);
+	// Stage 162: a planned walk that ends at the cursor's point -- a planned terminal there -- reaches it (as the
+	// physical walk below): the arrow stops at the cursor
+	if (cpl < 0 && cursor && !pl.empty() && pl.back().kind == EventKind::Hit && pl.back().terminal && pl.back().has_pt
+			&& float(pl.back().pt.x) == float(cursor->x) && float(pl.back().pt.y) == float(cursor->y)) {
+		cpl = int(pl.size()) - 1;
+	}
 	if (cpl >= 0 && cph < 0 && !ph.empty() && ph.back().kind == EventKind::Hit && ph.back().terminal && same_drawn(ph.back(), pl[size_t(cpl)])) {
 		cph = int(ph.size()) - 1; // (a physical walk that ends at the cursor's point -- a terminal there -- reaches it)
 	}
@@ -366,7 +373,8 @@ private:
 		pair.shared = shared;
 		// Stage 134: the walks compared by their significant events (V1-V3)
 		const std::string flags0 = flags.canonical_key();
-		pair.cursor_point_agrees = shared || vis::walks_agree_at_cursor(vis::cast_events(res.planned, flags0), vis::cast_events(res.physical, flags0), flags0);
+		pair.cursor_point_agrees = shared || vis::walks_agree_at_cursor(vis::cast_events(res.planned, flags0), vis::cast_events(res.physical, flags0), flags0,
+			vis::Pt{double(cursor.x), double(cursor.y)});
 		pair.result = std::move(res);
 		if (pair_cache_ && exact == nullptr) {
 			cache_key_ = key;
