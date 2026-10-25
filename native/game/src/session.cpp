@@ -1664,28 +1664,44 @@ void Session::arrow_states(Preview &p) const {
 		V2 at;
 		rc::Flags after;
 	};
-	std::vector<Change> changes;
-	for (size_t i = 0; i < raw.hits.size(); i++) {
-		const rc::HitRecord &h = raw.hits[i];
-		rc::Flags after;
-		if (i + 1 < raw.hits.size()) {
-			after = raw.hits[i + 1].flags_before;
-		} else {
-			after = h.flags_before;
-			const BuiltSurface *s = world_->by_id(h.surface_id);
-			const BuiltSide *side = s && h.fired ? active_side(*s, h.side == rc::Side::Left ? Side::Left : Side::Right, h.flags_before) : nullptr;
-			if (side != nullptr) {
-				after = after.applied(writes(*side, s->id, false));
-				if (h.flags_before.is_true(rc::FROST) && side->effect.type == "terminal" && !side->rigid) {
-					after.set(rc::FROST, false);
+	// a walk's hits as flag changes: after each one, the next one's flags before (the last: its side's writes)
+	auto changes_of = [&](const rc::TracePath &path) {
+		std::vector<Change> out;
+		for (size_t i = 0; i < path.hits.size(); i++) {
+			const rc::HitRecord &h = path.hits[i];
+			rc::Flags after;
+			if (i + 1 < path.hits.size()) {
+				after = path.hits[i + 1].flags_before;
+			} else {
+				after = h.flags_before;
+				const BuiltSurface *s = world_->by_id(h.surface_id);
+				const BuiltSide *side = s && h.fired ? active_side(*s, h.side == rc::Side::Left ? Side::Left : Side::Right, h.flags_before) : nullptr;
+				if (side != nullptr) {
+					after = after.applied(writes(*side, s->id, false));
+					if (h.flags_before.is_true(rc::FROST) && side->effect.type == "terminal" && !side->rigid) {
+						after.set(rc::FROST, false);
+					}
 				}
 			}
+			out.push_back({h.point, std::move(after)});
 		}
-		changes.push_back({h.point, std::move(after)});
-	}
+		return out;
+	};
+	const std::vector<Change> changes = changes_of(raw);
 	static const char *const KEYS[3] = {"shot:fire", "shot:charge", "shot:frost"};
+	auto mark_of = [&](const rc::Flags &f) {
+		uint8_t mk = 0;
+		for (int k = 0; k < 3; k++) {
+			if (f.is_true(KEYS[k])) {
+				mk = uint8_t(mk | (1 << k));
+			}
+		}
+		return mk;
+	};
+	// Stage 160 (the user): the arrow's states are path effects -- each walk's own, marked over its own steps
+	// (the common ones and its diverged ones), before the divergence and after it. The physical walk:
 	rc::Flags cur = flags_, at_divergence = flags_;
-	bool diverged = false, ok[3] = {false, false, false};
+	bool diverged = false;
 	std::vector<bool> hit_aligned(changes.size(), false);
 	size_t c = 0;
 	for (size_t m = 0; m < p.merged.size(); m++) {
@@ -1698,25 +1714,31 @@ void Session::arrow_states(Preview &p) const {
 			diverged = true;
 			at_divergence = cur;
 		}
-		uint8_t mk = 0;
-		for (int k = 0; k < 3; k++) {
-			if (ok[k] && cur.is_true(KEYS[k])) {
-				mk = uint8_t(mk | (1 << k));
-			}
-		}
-		p.marks[m] = mk;
+		p.marks[m] = mark_of(cur);
 		while (c < changes.size() && changes[c].at.distance_to(st.end) < 0.01f) {
-			for (int k = 0; k < 3; k++) {
-				const bool was = cur.is_true(KEYS[k]), now = changes[c].after.is_true(KEYS[k]);
-				if (!was && now) {
-					ok[k] = aligned; // (begun before the divergence, or not)
-				} else if (was && !now) {
-					ok[k] = false;
-				}
-			}
 			cur = changes[c].after;
 			hit_aligned[c] = aligned;
 			c++;
+		}
+	}
+	// ... the planned walk's, over its diverged steps (its common steps are the physical walk's)
+	if (diverged) {
+		const std::vector<Change> planned = p.pair->shared ? changes : changes_of(p.pair->planned);
+		rc::Flags pc = flags_;
+		size_t q = 0;
+		for (size_t m = 0; m < p.merged.size(); m++) {
+			const rc::TraceStep &st = p.merged[m];
+			const bool aligned = st.type == rc::StepType::Aligned || st.type == rc::StepType::AlignedPostPlanned;
+			if (!aligned && st.type != rc::StepType::DivergedPlanned && st.type != rc::StepType::DivergedPostPlanned) {
+				continue;
+			}
+			if (!aligned) {
+				p.marks[m] = mark_of(pc);
+			}
+			while (q < planned.size() && planned[q].at.distance_to(st.end) < 0.01f) {
+				pc = planned[q].after;
+				q++;
+			}
 		}
 	}
 	if (!diverged) {

@@ -142,7 +142,7 @@ std::pair<std::vector<uint8_t>, std::vector<std::pair<std::string, int>>> previe
 
 } // namespace
 
-TEST_CASE("arrow states: the preview marks the arrow's fire and shows what catches fire -- only when it began before the walks diverge (Stage 157)") {
+TEST_CASE("arrow states: the preview marks each walk's fire over its own steps (Stage 160); what catches fire only before the walks diverge (Stage 157)") {
 	{
 		rcg::Session s(level_of(R"({"elements": [
 			{"kind": "torch", "start": [800, 300], "end": [800, 780]},
@@ -170,8 +170,16 @@ TEST_CASE("arrow states: the preview marks the arrow's fire and shows what catch
 			{"kind": "torch", "start": [700, 700], "end": [900, 700]},
 			{"kind": "wall", "name": "floor", "tags": ["flammable"], "start": [700, 800], "end": [900, 800]}]})"));
 		const auto [marks, becomes] = preview_marks(s, 1000, 540);
-		CHECK(std::none_of(marks.begin(), marks.end(), [](uint8_t m) { return m != 0; }));
-		CHECK(becomes.empty());
+		CHECK(becomes.empty()); // a world effect after the divergence: not shown
+		// a path effect: each walk's own, over its own steps -- the physical walk burns after the torch, the planned one never
+		const auto &steps = s.preview_steps();
+		bool physical_fire = false, planned_fire = false;
+		for (size_t i = 0; i < steps.size(); i++) {
+			physical_fire = physical_fire || (steps[i].type == rc::StepType::DivergedPhysical && (marks[i] & 1));
+			planned_fire = planned_fire || ((steps[i].type == rc::StepType::DivergedPlanned || steps[i].type == rc::StepType::DivergedPostPlanned) && (marks[i] & 1));
+		}
+		CHECK(physical_fire);
+		CHECK_FALSE(planned_fire);
 		shoot(s, 1000, 540); // (yet the shot does burn it)
 		CHECK(s.flags().is_true("el:floor:fire"));
 	}

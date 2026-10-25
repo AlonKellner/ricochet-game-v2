@@ -43,6 +43,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
 | Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| Path effects per walk: each walk's fire, charge and frost marked over its own steps, after the divergence too; world effects only before it (§14.11; docs/TDD_65, Stage 160) | Done |
 | Every change plannable and previewed: sides with hit effects always plannable; the preview shows every lasting change to the divergence (surfaces, targets, the goal, lights, released objects) and a grapple's or pull's end, a fence stopping it (§14.12; docs/TDD_64, Stage 159) | Done |
 | Planning with frost: while the plan's frost is active, stopping sides (not the shadow's edge) are plannable as reflections or inversions; a shared point stops a frosted arrow (§10.6; docs/TDD_63, Stage 158) | Done |
 | The arrow's states in the preview: consequences drawn only before the walks diverge; fire, charge and frost marks moving with the path's dashes; the glow node for things on fire, charged or frosted (§14.11; docs/TDD_62, Stage 157) | Done |
@@ -1593,10 +1594,11 @@ With an empty plan the plan is complete from the start, so the cursor is a candi
   fire, a conductor charged or discharged) only when the change happens before the walks diverge (§14.2). The glow
   node (`["glow"]`, over the surfaces) draws the change dashed: orange for fire, white for charge, grey for a
   discharge. What things are now (on fire, charged, frosted) it draws solid.
-- **The arrow's states on its path.** When the arrow catches fire, is charged or frosted before the divergence, every
-  later step of the arrow on which the state still holds is marked, the marks moving with the dashes: red crosses
-  for fire, white chevrons (pointing the way it flies) for charge, pale blue stars for frost. A state that begins
-  after the divergence is not marked.
+- **The arrow's states on its path (path effects; Stage 160, the user).** Each walk's own states are marked over its
+  own steps -- the common ones, and after the divergence each walk's diverged ones, the planned walk's from its own
+  hits -- always, wherever the state began. The marks move with the dashes: red crosses for fire, white chevrons
+  (pointing the way it flies) for charge, pale blue stars for frost. World effects (things catching fire, surfaces,
+  targets, the goal, journeys: §14.12) show only before the divergence, so the two walks' worlds never conflict.
 - An unplanned state change is a divergence (§14.2, Stage 134), so a preview shows a consequence when every surface
   that changes the arrow's state on the way is planned. A pass surface carrying a tag's writes is plannable.
 
@@ -2943,4 +2945,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.69.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.70.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
