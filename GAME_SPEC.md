@@ -761,6 +761,11 @@ when it lies in an active dark region and in no active light one (a point on a r
 - **Display.** The shadow (the dark regions' union minus the light ones', within the bounds) is drawn over the
   surfaces it hides, below the path and the arrow (the node `["shadow"]`, z 15); each shade's edge is dashed in its
   colour, faint while inactive. The editor shows the shadow under the starting flags.
+- **The player's light (Stage 168, docs/TDD_72_PLAYER_LIGHT.md).** Around the player the shadow is drawn in bands,
+  so a player walking into the dark sees their character and what is near: within 44 px a veil (alpha 0.15),
+  then bands to 56, 68 and 80 px (0.32, 0.5, 0.68), the full shadow (0.82) beyond. It is drawn only while the
+  player is within 80 px of the shadow. It is display only: the shadow, its edge and the darkened surfaces are
+  unchanged for the arrow; what lies in the shadow is still under the veil, dim.
 
 ## 10. Effect system
 
@@ -2962,4 +2967,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.74.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.75.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

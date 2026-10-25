@@ -1332,7 +1332,8 @@ void Session::shadow() {
 		return;
 	}
 	if (active != shade_active_) {
-		shade_fill_ = shade::fill(shade_regions_, active, level_.bounds);
+		shade_area_ = shade::area(shade_regions_, active, level_.bounds);
+		shade_fill_ = shade::fill_of(shade_area_);
 		shade_serial_++;
 	}
 	std::vector<BuiltSurface> edge = shade::boundary(shade_pieces_, shade_regions_, active, shade_first_id_);

@@ -52,8 +52,21 @@ std::vector<Piece> arrange(const std::vector<Region> &regions, const Rect &bound
 std::vector<BuiltSurface> boundary(const std::vector<Piece> &pieces, const std::vector<Region> &regions, const std::vector<bool> &active,
 		int first_id);
 
-// The shadow within the bounds, triangulated (the display's fill).
+// The shadow's area: its polygons (non-zero), as computed and clipped to the bounds.
+struct Area {
+	std::vector<std::vector<rc::vis::Pt>> shadow, clipped;
+	std::vector<rc::vis::Pt> bounds;
+};
+Area area(const std::vector<Region> &regions, const std::vector<bool> &active, const Rect &bounds);
+
+// The area within the bounds, triangulated (the display's fill); fill = fill_of(area).
+rc::vis::Fill fill_of(const Area &a);
 rc::vis::Fill fill(const std::vector<Region> &regions, const std::vector<bool> &active, const Rect &bounds);
+
+// Stage 168: how far a point is from the area (0 inside), and the area around a light at (cx, cy) in bands:
+// within radii[0], then each between radii[i-1] and radii[i], and last the rest beyond the outermost.
+double distance(const Area &a, double x, double y);
+std::vector<rc::vis::Fill> around(const Area &a, double cx, double cy, const std::vector<double> &radii);
 
 // A point of a surface (a line's middle, an arc's via, a point of a circle).
 V2 point_of(const rc::arc::SegGeom &g);

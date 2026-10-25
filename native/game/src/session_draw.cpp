@@ -13,6 +13,7 @@
 #include "rcg/render.hpp"
 
 #include <algorithm>
+#include <bit>
 #include <cmath>
 #include <functional>
 #include <map>
@@ -63,6 +64,10 @@ const Color PRE_TRANSFORM_COLOR = rgba(0.55, 0.45, 0.85, 0.35);
 const Color ABSENT_COLOR = rgba(0.6, 0.6, 0.6, 0.35);
 // Stage 153: the shadow, a dark shade's edge, a light one's
 const Color SHADOW_FILL = rgba(0.02, 0.02, 0.05, 0.82);
+// Stage 168: the player's light -- the shadow's bands around them, from a veil (what lies in the shadow stays
+// dim: still dark for the arrow) out to the full shadow
+const std::vector<double> LIGHT_RADII = {44.0, 56.0, 68.0, 80.0};
+const std::vector<float> LIGHT_ALPHA = {0.15f, 0.32f, 0.5f, 0.68f};
 const Color SHADE_DARK = rgba(0.55, 0.45, 0.95);
 const Color SHADE_LIGHT = rgba(1.0, 0.85, 0.35);
 const Color CROSSING_COLOR = rgba(1.0, 1.0, 1.0, 0.6);
@@ -1715,18 +1720,38 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 	}
 	// Stage 153: the shadow (over the surfaces it hides) and the shades' edges, dashed (faint while inactive)
 	if (!level_.shades.empty()) {
-		cached(shade_draw_, {shade_serial_, 0, 0}, NodeKind::Shadow, 15, V2{}, WHITE, [&](std::vector<Call> &out) {
-			if (!shade_fill_.indices.empty()) {
+		// Stage 168: near the shadow, the player's light (keyed by where they stand)
+		const bool lit = level_.player_start && !shade_fill_.indices.empty() &&
+				shade::distance(shade_area_, player_.x, player_.y) < LIGHT_RADII.back();
+		const std::array<int, 3> key = lit ? std::array<int, 3>{2 * shade_serial_ + 1, std::bit_cast<int>(player_.x), std::bit_cast<int>(player_.y)}
+										   : std::array<int, 3>{2 * shade_serial_, 0, 0};
+		cached(shade_draw_, key, NodeKind::Shadow, 15, V2{}, WHITE, [&](std::vector<Call> &out) {
+			auto paint = [&](const rc::vis::Fill &f, const Color &c) {
+				if (f.indices.empty()) {
+					return;
+				}
 				Call k;
 				k.kind = Kind::Triangles;
-				for (const rc::vis::Pt &p : shade_fill_.points) {
+				for (const rc::vis::Pt &p : f.points) {
 					k.pts.push_back(V2::of(p.x, p.y));
 				}
-				for (uint32_t i : shade_fill_.indices) {
+				for (uint32_t i : f.indices) {
 					k.indices.push_back(int(i));
 				}
-				k.colors = {SHADOW_FILL};
+				k.colors = {c};
 				out.push_back(k);
+			};
+			if (lit) {
+				const std::vector<rc::vis::Fill> bands = shade::around(shade_area_, player_.x, player_.y, LIGHT_RADII);
+				for (size_t i = 0; i < bands.size(); i++) {
+					Color c = SHADOW_FILL;
+					if (i < LIGHT_ALPHA.size()) {
+						c[3] = LIGHT_ALPHA[i];
+					}
+					paint(bands[i], c);
+				}
+			} else {
+				paint(shade_fill_, SHADOW_FILL);
 			}
 			for (size_t i = 0; i < level_.shades.size(); i++) {
 				const Shade &sh = level_.shades[i];

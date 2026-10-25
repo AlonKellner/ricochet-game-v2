@@ -377,6 +377,7 @@ private:
 	std::vector<bool> shade_active_;
 	int shade_world_ = -1;
 	int shade_serial_ = 0; // bumped when the shadow's fill changes
+	shade::Area shade_area_; // (Stage 168: the player's light cuts the fill near it)
 	rc::vis::Fill shade_fill_;
 	int touch_version_ = -1;                       // the world version the touches are of
 	std::vector<std::vector<bool>> touches_;       // per pair of tagged nodes (elements, then objects)
