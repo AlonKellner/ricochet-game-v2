@@ -11,7 +11,7 @@ rule is in GAME_SPEC 10.6 ("Planning with frost").
 | 158.1 | The oracle: a planned frost barrier and a planned wall (the planned walk reflects off it like the physical walk); a frosted arrow at a corner and at a T-junction stops (fixtures `stage158_frost_planning.json`, matched natively at three tiers) | Done |
 | 158.2 | The tracer: whether frost turns a side after the plan's entries, and per entry; the game: a stopping side (terminal, not rigid) is clickable while the plan's frost is active; hover and plan chevrons as a reflection | Done |
 | 158.3 | Tests, docs, `make gate` | Done |
-| 158.4 | The user's interactive sign-off | Open |
+| 158.4 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

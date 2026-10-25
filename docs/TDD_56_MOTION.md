@@ -17,7 +17,7 @@ in GAME_SPEC 9.8.
 | 151.3 | The session's cycle: per tick on its own; the scroll pauses and sets it; a shot, or `resume_after` idle seconds without a scroll or a plan change, runs it again; frozen in flight; in the checkpoint; HUD and record (a cycle's level only) | Done |
 | 151.4 | The C API 1.10 (`rc_game_scroll`, `rc_frame.phase`, `cycle_auto`); the wheel in Godot and tkinter; the session op `scroll` in every replay | Done |
 | 151.5 | The editor (the motion field, its keys drawn faint, the cycle field); the demo level `objectives/timing_gate`; tests; docs; `make gate` | Done |
-| 151.6 | The user's interactive sign-off | Open |
+| 151.6 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

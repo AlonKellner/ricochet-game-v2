@@ -15,7 +15,7 @@ must always be somehow reflected in the preview." GAME_SPEC 14.12.
 | 159.2 | Journeys: `journey_of` (a path's first fired grapple or pull) and `journey_move` (one tick of its motion) shared by the live game and the preview; colliders under given flags | Done |
 | 159.3 | The preview: the landed flags at the divergence, the journey simulated from there (a hit before the divergence), the consequences drawn (surfaces, targets, goal, lights, released objects, the trail and the end ring) | Done |
 | 159.4 | Tests, docs, the session golden re-recorded (draw lists only), `make gate` | Done |
-| 159.5 | The user's interactive sign-off | Open |
+| 159.5 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

@@ -11,7 +11,7 @@ GAME_SPEC 25.5.
 | 150.1 | Objects gain `gravity` (a factor of the level's), `pops` (a hit sets `obj:<name>:popped`; presence while unset) and `carries` (one level) | Done |
 | 150.2 | The bodies' step: a body's own gravity; a popped body is gone (no step, no collision); carried bodies follow their carrier at their offset | Done |
 | 150.3 | Editor rows; the demo level `objectives/bubble_drop`; tests; docs; `make gate` | Done |
-| 150.4 | The user's interactive sign-off | Open |
+| 150.4 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

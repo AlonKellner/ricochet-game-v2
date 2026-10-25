@@ -15,7 +15,7 @@ it, which instead reflects (a line) or inverts (a circle) it and uses the frost 
 | 156.2 | The core: `FlagCond`, `StateChangeDef::when`, `Flags::holds`, the frost cache; `Surf::frosted`, frosted effects and changes, `SideDef::rigid`; the fixtures at f64, Dual and 4 limbs | Done |
 | 156.3 | The game: `when` on state hits and `rigid` on sides (parsed, built, described, in the scene defs and the oracle's level builder); the tags' writes on every side of an element (resolver rows included) and an object; `burning` and `charged` starting flags; frost-bearing checks; the shadow's edge rigid; touching rules opt-in | Done |
 | 156.4 | Templates on the tags (`torch`, `burnable`, `frost_barrier`, `battery`); tests; docs; `make gate` | Done |
-| 156.5 | The user's interactive sign-off | Open |
+| 156.5 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

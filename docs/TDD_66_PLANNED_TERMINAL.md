@@ -20,7 +20,7 @@ segment). So:
 |---|---|---|
 | 162.1 | The oracle and the solver: a planned terminal entry stops the planned walk at its planned hit (on or off its segment); the physical walk still consumes it quietly off its segment; a planned walk ending at a terminal at the cursor's point reaches it (the visibility rule, both sides) | Done |
 | 162.2 | The fixtures: `stage110_quiet_entries.json` (the off-segment terminal now diverges; an on-segment one added), every other fixture regenerated unchanged; tests; docs; `make gate` | Done |
-| 162.3 | The user's interactive sign-off | Open |
+| 162.3 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

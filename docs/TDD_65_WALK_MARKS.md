@@ -11,7 +11,7 @@ always be visible, over the appropriate path sections." GAME_SPEC 14.11.
 |---|---|---|
 | 160.1 | The marks: the physical walk's states over the common and its diverged steps, the planned walk's (from its own hits) over its diverged steps; no "began before the divergence" condition | Done |
 | 160.2 | Tests, docs, `make gate` | Done |
-| 160.3 | The user's interactive sign-off | Open |
+| 160.3 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

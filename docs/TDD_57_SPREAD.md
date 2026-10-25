@@ -12,7 +12,7 @@ spreading").
 | 152.2 | The session's spread: the touch graph of tagged things (segments, arcs, object circles within 0.5 px), cached per world version; persistent rules flood through every member, recomputed ones through present members (an absent one lit, passing nothing on); run at the start, after a landing, per tick, at a journey's end | Done |
 | 152.3 | Templates: `conductor` (pass or wall), `battery` (powered), `charged_door` (gone while charged); `burnable` tagged `flammable` | Done |
 | 152.4 | The editor (an element's and an object's `tags` row, the level's `spread` row); the demo level `objectives/circuit`; tests; docs; `make gate` | Done |
-| 152.5 | The user's interactive sign-off | Open |
+| 152.5 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

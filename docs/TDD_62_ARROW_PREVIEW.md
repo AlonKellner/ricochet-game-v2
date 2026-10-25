@@ -12,7 +12,7 @@ moving with the dashes along the path or something?)". The same for charge (whit
 | 157.1 | The preview's arrow states: the physical walk's hits as flag changes, each placed at the merged step it ends (walk order, by point); per step the states to mark (begun before the divergence); the flags at the divergence and the things they change | Done |
 | 157.2 | The drawing: the marks along a step (lines and arcs) moving with the dashes, red crosses, white chevrons, pale blue stars (frost: not asked, added alike); the glow node for things on fire, charged or frosted, the preview's consequences dashed | Done |
 | 157.3 | Pass sides carrying a tag's writes plannable (and objects with tags); the torch and frost barrier plannable again; tests; docs; `make gate` | Done |
-| 157.4 | The user's interactive sign-off | Open |
+| 157.4 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

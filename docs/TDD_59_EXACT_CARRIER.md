@@ -14,7 +14,7 @@ circle. The rule is in GAME_SPEC 19.1 ("Exact carriers").
 | 154.1 | `rcg/lattice.hpp`: a line's lattice (a grid point, a primitive direction with components up to 1024), a circle's (a grid center, N = r^2 / h^2 with the most representations as X^2 + Y^2 within half a pixel, every (X, Y) by angle; cached per circle, about 10-20 ms) | Done |
 | 154.2 | The lowering: `exact` on a carrier; projections, an arc's default via and an explicit via onto the lattice; an exact circle holds arcs only | Done |
 | 154.3 | The editor's `exact` row; the demo level `objectives/ring`; tests; docs; `make gate` | Done |
-| 154.4 | The user's interactive sign-off | Open |
+| 154.4 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

@@ -24,7 +24,7 @@ position, so the rare case was found by moving the cursor around.
 |---|---|---|
 | 163.1 | A partial move ends the tick (its distance is used up) -- no subtraction, no residue; a whole segment subtracts its length and goes on | Done |
 | 163.2 | The path marks' loop bounded (a step far off the drawn bounds draws none); tests; `make gate` | Done |
-| 163.3 | The user's interactive sign-off | Open |
+| 163.3 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 The live journey uses the same function, so it is fixed too. Every session record replays unchanged: the live
 journeys end where they did. A sweep of about 220,000 cursor positions over the scene (36,000 of them previewing a

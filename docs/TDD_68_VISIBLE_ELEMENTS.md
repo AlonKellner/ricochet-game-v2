@@ -21,7 +21,7 @@ during playing, but most will also be visible during play time." GAME_SPEC 19.2.
 | 164.1 | The editor: `collider:<index>` and `camera` items (paths, handles, picking, dragging, rows, move, duplicate, remove), the collider tool (X, two clicks), drawing (hatched floors, a camera frame, the background's outline), every level key a field | Done |
 | 164.2 | Play: the `["colliders"]` node | Done |
 | 164.3 | Tests; docs; the session golden re-recorded (draw lists only); `make gate` | Done |
-| 164.4 | The user's interactive sign-off | Open |
+| 164.4 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

@@ -15,7 +15,7 @@ GAME_SPEC 9.9; the authoring guide in docs/ELEMENTS.md ("Light and shadow").
 | 153.2 | `rcg/shade.hpp`: regions (half-planes, disks and their outsides), the arrangement of their boundaries split at crossings (lines clipped to the bounds, collinear lines and equal circles sharing a carrier), the boundary under the active regions, the fill (Clipper2, earcut), darkening | Done |
 | 153.3 | The world: ids reserved for the arrangement's pieces, the boundary after every other surface, darkened surfaces in the rebuild; the session's `shadow()` at the start, a landing, a tick, a journey's end and an undo; the `["shadow"]` node | Done |
 | 153.4 | Templates `dark`, `light`; the editor draws shades in their colours over the shadow under the starting flags; the demo level `objectives/lantern`; tests; docs; `make gate` | Done |
-| 153.5 | The user's interactive sign-off | Open |
+| 153.5 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 

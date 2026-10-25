@@ -12,7 +12,7 @@ opening and closing the editor every single time." The guide is docs/EDITOR.md (
 | 155.2 | C API 1.11: `rc_editor_status.open_requested`; the commands `levels`, `open`, `next_level`, `level_menu`, `open_request`, `load` with a `name` | Done |
 | 155.3 | The hosts: tkinter and Godot list `data/levels` (Godot: the repository's folder when it is there, else `res://data`), take a request, load the file, and save back to it | Done |
 | 155.4 | Tests, docs, `make gate` | Done |
-| 155.5 | The user's interactive sign-off | Open |
+| 155.5 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 
