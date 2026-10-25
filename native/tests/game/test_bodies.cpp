@@ -248,3 +248,21 @@ TEST_CASE("a planned stopping surface: a path that hits it is aligned, one that 
 	CHECK(diverged(types(1348, 260)));       // past the grapple's end: the path misses it
 	CHECK_FALSE(diverged(types(1318, 452))); // toward the grapple: the path hits it
 }
+
+TEST_CASE("a journey's motion ends its tick at a partial move: no endless loop on a rounding residue (Stage 163, the user's freeze)") {
+	// grapple_gap, the grapple planned: at this cursor the previewed grapple's tick left a remainder of 2^-1074,
+	// whose quotient underflowed to no move -- the preview spun for ever and the game froze
+	const std::filesystem::path root = RC_REPO_ROOT;
+	rcg::Session s(rcg::load_level((root / "data/levels/objectives/grapple_gap.json").string()));
+	s.teleport(rc::V2::of(891.676758, 987.919983));
+	s.set_cursor(rc::V2::of(1329.523681640625, 478.09521484375));
+	s.settle();
+	s.click(false);
+	s.set_cursor(rc::V2::of(1393.7, 222.1));
+	s.settle(); // (returns)
+	const std::optional<rc::V2> end = s.preview_trip_end();
+	REQUIRE(end.has_value());
+	shoot(s, 1393.7, 222.1);
+	CHECK(s.player().x == end->x); // the live journey ends where the preview said
+	CHECK(s.player().y == end->y);
+}

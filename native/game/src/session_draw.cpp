@@ -1277,8 +1277,8 @@ void arrow_marks(std::vector<Call> &out, const rc::TraceStep &st, uint8_t mask, 
 	} else {
 		len = double(st.start.distance_to(st.end));
 	}
-	if (!(len > 0.0)) {
-		return;
+	if (!(len > 0.0) || len > 1e6) {
+		return; // (a step far off the drawn bounds: no marks -- the loop below stays bounded)
 	}
 	auto at = [&](double t, V2 &p, V2 &dir) {
 		if (arcs) {

@@ -1172,10 +1172,12 @@ bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Co
 		if (t < 1.0) {
 			return true; // blocked
 		}
-		left -= len * frac;
-		if (frac == 1.0) {
-			j.next++;
+		if (frac < 1.0) {
+			break; // (Stage 163: this tick's distance is used up -- subtracting it left a rounding residue down to the
+			       // smallest subnormal, whose quotient underflows to no move: the loop spun for ever)
 		}
+		left -= len;
+		j.next++;
 	}
 	return j.next >= j.path.size();
 }
