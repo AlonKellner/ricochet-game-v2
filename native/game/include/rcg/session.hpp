@@ -400,6 +400,7 @@ private:
 	int next_serial_ = 1;
 	int hovered_serial_ = 0, partner_serial_ = 0;
 	bool edge_hovered_ = false;
+	std::array<bool, 4> edge_open_{true, true, true, true}; // Stage 169: top, right, bottom, left -- the ∞ band's edges
 	std::optional<V2> edge_point_;
 	// an infinity entry's mark on the edge (EdgeOverlayNode's marks)
 	struct EdgeMark {

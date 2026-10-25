@@ -211,6 +211,26 @@ void Editor::refresh() {
 			single[k] = doc_[k];
 		}
 	}
+	// Stage 169: the configured edges, as the game builds them
+	edges_drawn_ = Drawn{};
+	if (doc_.contains("edges") && !doc_["edges"].is_null()) {
+		json edged = single;
+		edged["edges"] = doc_["edges"];
+		edged["elements"] = json::array();
+		try {
+			const Lowered low = lower_level(edged);
+			const Level lv = parse_level_json(low.level);
+			for (size_t k = 0; k < lv.surfaces.size(); k++) {
+				if (low.origins[k].rfind("level.edges", 0) == 0 && validate_spec(lv.surfaces[k].spec).empty()) {
+					for (BuiltSurface &b : build_spec(lv.surfaces[k].spec, 1, lv.surfaces[k].label)) {
+						edges_drawn_.built.push_back(std::move(b));
+					}
+				}
+			}
+		} catch (const std::exception &ex) {
+			errors_.push_back({-1, "edges", ex.what()});
+		}
+	}
 	for (size_t i = 0; i < es.size(); i++) {
 		const json &e = es[i];
 		const std::string name = e.is_object() ? e.value("name", "") : "";

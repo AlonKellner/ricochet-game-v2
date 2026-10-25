@@ -627,7 +627,7 @@ Level parse_level_json(const json &j) {
 	// Stage 152: the tagged elements' surfaces, the spreading rules
 	for (const Lowered::Tagged &t : low.tagged) {
 		Tagged tg{t.name, t.tags, {}};
-		const std::string prefix = "level.elements[" + std::to_string(t.element) + "]";
+		const std::string &prefix = t.at;
 		for (size_t k = 0; k < low.origins.size(); k++) {
 			if (low.origins[k].rfind(prefix, 0) == 0) {
 				tg.surfaces.push_back(k);
@@ -699,7 +699,7 @@ Level parse_level_json(const json &j) {
 	}
 	// Stage 153: the shades (their regions' sides checked against their geometry; they do not move)
 	for (const Lowered::Shaded &sd : low.shaded) {
-		const std::string sp = "level.elements[" + std::to_string(sd.element) + "] (" + sd.name + ")";
+		const std::string sp = sd.at + " (" + sd.name + ")";
 		Shade sh;
 		sh.name = sd.name;
 		const json &d = sd.shade;
@@ -722,7 +722,7 @@ Level parse_level_json(const json &j) {
 			}
 			sh.when = d["when"].get<std::string>();
 		}
-		const std::string prefix = "level.elements[" + std::to_string(sd.element) + "]";
+		const std::string &prefix = sd.at;
 		bool found = false;
 		for (size_t k = 0; k < low.origins.size() && !found; k++) {
 			if (low.origins[k].rfind(prefix, 0) == 0) {

@@ -101,7 +101,8 @@ it. Renaming it carries the elements, and deleting it frees them, each keeping i
 its ends drag, Ctrl+D duplicates it and Delete removes it. The camera's start is a small frame labelled `camera`
 (drag it; its smoothing is in its rows). The background's rectangle is outlined faintly. With nothing selected the
 panel lists every level key as a field: name, bounds, gravity, room, player, flags, the goal, detectors, objects,
-cycle, spread, colliders, camera, background, features, templates and carriers.
+cycle, spread, colliders, camera, background, features, templates, carriers and the edges (Stage 169: their kind, e.g.
+`"mirror"`, or `"wrap"`; a configured edge is drawn on the bounds in its face's colour, a tick toward the level).
 
 **The goal, detectors and objects** are selected like elements: a click inside one (an element's line above it
 wins the click). A rectangle has corner handles, a circle a center and a radius handle, a detector's segment its

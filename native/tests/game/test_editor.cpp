@@ -98,7 +98,7 @@ TEST_CASE("editor: every level loads and saves byte for byte") {
 		CHECK_FALSE(ed.draw().empty());
 		n++;
 	}
-	CHECK(n == 46);
+	CHECK(n == 47);
 	// an rc-level/1 document is migrated
 	const json v1 = json::parse(read_text(ROOT / "bench" / "lowered" / "test_levels__flag_switches.json"));
 	rcg::Editor ed(&v1);
@@ -831,4 +831,33 @@ TEST_CASE("editor: the level list is searchable -- soft matches first, their cha
 	CHECK(ok(ed, {{"op", "state"}})["level_menu"] == true);
 	ed.key(rcg::Editor::KeyEscape, 0, true);
 	CHECK(ok(ed, {{"op", "state"}})["level_menu"] == false);
+}
+
+TEST_CASE("editor: the level's edges -- a panel field, drawn as their kind, their mistakes named (Stage 169)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	auto faces = [&] { // the configured edges' strokes (an element's are 3 px too; this level has none)
+		int n = 0;
+		for (const auto &node : ed.draw()) {
+			for (const auto &c : *node.calls) {
+				n += c.kind == rcg::render::Kind::Line && c.width == 3.0 ? 1 : 0;
+			}
+		}
+		return n;
+	};
+	CHECK(faces() == 0); // (passes: the dashed bounds alone)
+	ok(ed, {{"op", "set"}, {"path", "/edges"}, {"value", "mirror"}});
+	CHECK(ed.errors().empty());
+	CHECK(faces() == 4);
+	ok(ed, {{"op", "set"}, {"path", "/edges"}, {"value", {{"right", "wall"}}}});
+	CHECK(faces() == 1);
+	ok(ed, {{"op", "set"}, {"path", "/edges"}, {"value", "wrap"}});
+	CHECK(faces() == 4); // (two portals and their images)
+	ok(ed, {{"op", "set"}, {"path", "/edges"}, {"value", "lava"}});
+	REQUIRE(ed.errors().size() == 1);
+	CHECK(ed.errors()[0].name == "edges");
+	CHECK(ed.errors()[0].message.find("unknown element kind 'lava'") != std::string::npos);
+	ok(ed, {{"op", "set"}, {"path", "/edges"}, {"value", nullptr}});
+	CHECK(faces() == 0);
+	CHECK_FALSE(ed.document().contains("edges"));
 }
