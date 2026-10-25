@@ -273,6 +273,7 @@ private:
 		struct Trip {
 			int body = -1; // -1: the player
 			std::vector<V2> trail;
+			std::vector<size_t> breaks; // Stage 166: where the trail jumps (a portal crossed)
 			bool blocked = false;
 		};
 		std::optional<Trip> trip;
@@ -334,16 +335,31 @@ private:
 	void check_won();
 	// Stage 146: the bodies and the journeys (a grapple takes the player, a pull an
 	// object, along the shot's path: forward to the hit, back from it)
+	// Stage 166 (the user): a journey in three layers -- the raw path (the solver's), the guide (a point moving
+	// along it, waiting for the traveller), the traveller (the object or the player, following the guide with
+	// physics). A portal: the guide waits at its entry until the traveller holds it; the traveller then crosses
+	// (drawn with its copy at the exit, both clipped), and the copy goes on.
 	struct Journey {
 		int body = -1;            // the pulled body's index; -1: the player (a grapple)
-		V2 offset;                // a pulled body's center from the path (its center minus the hit)
-		std::vector<V2> path;     // the points travelled, every few pixels
+		std::vector<V2> path;     // the raw path: the points travelled, every few pixels
 		std::vector<bool> jump;   // jump[i]: path[i] is reached by a jump (a portal), not a move
-		size_t next = 1;
+		size_t next = 1;          // the guide's next path point
+		V2 guide;                 // the guide
+		double lead = 0.0;        // close enough: the guide inside the traveller (its radius)
+		bool crossing = false;    // through a portal
+		V2 cross_dir;             // ... the way it moves in
+		double cross_left = 0.0;  // ... the distance still to go (until the whole traveller is through)
+		double rc = 1.0, rs = 0.0; // ... the portal's motion: p -> R p + t
+		V2 rt;
+		V2 entry_a, entry_b;      // ... the entry's line (the traveller is drawn on its near side, the copy beyond the exit)
+		V2 entry_n;               // ... its unit normal, the way through
+		V2 map(const V2 &p) const {
+			return V2::of(rc * double(p.x) - rs * double(p.y) + double(rt.x), rs * double(p.x) + rc * double(p.y) + double(rt.y));
+		}
 	};
 	std::optional<Journey> journey_;
 	std::optional<Journey> journey_of(const rc::TracePath &path, int *hit_index = nullptr) const; // Stage 159
-	static bool journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, double radius, double dt);
+	bool journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, double radius, double dt) const;
 	// Stage 151: the cycle
 	double phase_ = 0.0;
 	bool cycle_auto_ = true;
@@ -361,6 +377,10 @@ private:
 	std::vector<bool> shade_active_;
 	int shade_world_ = -1;
 	int shade_serial_ = 0; // bumped when the shadow's fill changes
+	int shade_capacity_ = 0; // the ids reserved for the boundary's pieces (Stage 168: with the light's)
+	shade::Area shade_area_;  // the shades' shadow under the flags (Stage 168: whether the light meets it)
+	std::optional<V2> shade_light_;          // Stage 168: the player's light, where it meets the shadow
+	std::vector<SurfaceSpec> light_edges_;   // ... the pieces of its edge that stop the arrow (drawn)
 	rc::vis::Fill shade_fill_;
 	int touch_version_ = -1;                       // the world version the touches are of
 	std::vector<std::vector<bool>> touches_;       // per pair of tagged nodes (elements, then objects)

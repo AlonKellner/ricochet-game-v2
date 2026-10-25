@@ -43,6 +43,8 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
 | Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| Journeys in three layers: the raw path, a guide waiting for the traveller, the traveller following with physics; portals crossed with a clipped copy (§25.6; docs/TDD_70, Stage 166) | Done |
+| New levels in the editor: an empty level or a copy of a listed one, named in a prompt, unsaved until saved (§19.2; docs/TDD_69, Stage 165) | Done |
 | Every element visible and editable: colliders (the X tool) and the camera as editor items, the background outlined, every level key a field; colliders drawn in play (§19.2; docs/TDD_68, Stage 164) | Done |
 | A planned terminal stops the planned walk: a path that hits a planned stopping surface on its segment is aligned, one that misses it diverges (§14.1; docs/TDD_66, Stage 162) | Done |
 | Path effects per walk: each walk's fire, charge and frost marked over its own steps, after the divergence too; world effects only before it (§14.11; docs/TDD_65, Stage 160) | Done |
@@ -759,6 +761,13 @@ when it lies in an active dark region and in no active light one (a point on a r
 - **Display.** The shadow (the dark regions' union minus the light ones', within the bounds) is drawn over the
   surfaces it hides, below the path and the arrow (the node `["shadow"]`, z 15); each shade's edge is dashed in its
   colour, faint while inactive. The editor shows the shadow under the starting flags.
+- **The player's light (Stage 168, docs/TDD_72_PLAYER_LIGHT.md; the user).** A light disk of radius 64 round the
+  player, a light region like any other, wherever the player is (a journey's traveller included). Where it meets the
+  shadow it is part of the boundary: the arrow leaving it into the shadow stops at its edge (its lit side terminal),
+  surfaces in it are lit, and the shadow is drawn without it, its blocking edge dashed in the light's colour. So a
+  player standing in the dark sees their surroundings and can shoot only within their light, or out where it reaches
+  the light. It moves with the player (the boundary's ids: one block reserved at the start for the pieces with the
+  light), and a shot sees the light where it was fired.
 
 ## 10. Effect system
 
@@ -2039,7 +2048,7 @@ arcs only: its whole has no float32 form. Crossings of two exact carriers are no
 
 ### 19.2 Editor requirements
 
-> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Since Stage 164 every level element is visible and editable in the editor (colliders and the camera as items, the background outlined, every level key a panel field), and colliders are drawn in play too (`["colliders"]`). Since Stage 155 the panel lists the levels (the host's `data/levels`): a click, Ctrl+O, or the previous/next buttons open another level in place, asking again before discarding unsaved changes. Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
+> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Since Stage 167 the level list is searchable (a soft match ranks the levels, the matched characters lit). Since Stage 165 the level menu creates a new level, empty or a copy of a listed one, named in the panel and written on its first save. Since Stage 164 every level element is visible and editable in the editor (colliders and the camera as items, the background outlined, every level key a panel field), and colliders are drawn in play too (`["colliders"]`). Since Stage 155 the panel lists the levels (the host's `data/levels`): a click, Ctrl+O, or the previous/next buttons open another level in place, asking again before discarding unsaved changes. Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
 
 The level editor must support:
 
@@ -2432,6 +2441,19 @@ colliders, and for an object the player. It stops at the first contact or at the
 arrow-pass barrier) stops it; an arrow-block barrier is not solid and does not. A step that starts where the last
 did not end (a portal) is crossed by a jump, and a step through infinity ends the path. The game is paused during
 a journey as during a flight (`flying`), and the journey is part of the shot.
+
+
+**The journey in three layers (Stage 166, the user).** (1) The raw path: the solver's, up to the pull's or grapple's
+hit. (2) The guide: a point moving along it -- for a pull from the hit back toward the player, for a grapple from
+the player to the hit -- at the journey speed, but only while the traveller holds it (the guide inside the
+traveller's circle); otherwise it waits. (3) The traveller (the object, the player): each tick it moves straight
+toward the guide, a little faster than the guide moves, swept against what blocks it, and slides along a contact at
+its full step (the slide normalized to the pull's speed, up to the point nearest the guide); no gravity during the
+journey. It stops when it reaches the guide at the path's end, or cannot get closer to a waiting guide. So an object
+resting on the floor comes along whether the arrow hit its top half or its bottom half. **At a portal** the guide
+waits at the entry until the traveller holds it; the traveller then moves through the entry while its copy comes out
+of the exit by the portal's motion (both drawn clipped at the portal lines, the `["journey"]` node), and once it is
+wholly through the copy goes on. The preview runs the same per-tick motion (§14.12).
 
 ### 25.4 Visual
 
@@ -2947,4 +2969,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.72.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.75.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

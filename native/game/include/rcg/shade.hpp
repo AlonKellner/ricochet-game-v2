@@ -12,6 +12,7 @@
 #include "rcg/build.hpp"
 #include "rcg/level.hpp"
 
+#include <optional>
 #include <string>
 #include <utility>
 #include <vector>
@@ -52,8 +53,24 @@ std::vector<Piece> arrange(const std::vector<Region> &regions, const Rect &bound
 std::vector<BuiltSurface> boundary(const std::vector<Piece> &pieces, const std::vector<Region> &regions, const std::vector<bool> &active,
 		int first_id);
 
-// The shadow within the bounds, triangulated (the display's fill).
+// The shadow's area: its polygons (non-zero), as computed and clipped to the bounds.
+struct Area {
+	std::vector<std::vector<rc::vis::Pt>> shadow, clipped;
+	std::vector<rc::vis::Pt> bounds;
+};
+Area area(const std::vector<Region> &regions, const std::vector<bool> &active, const Rect &bounds);
+
+// The area within the bounds, triangulated (the display's fill); fill = fill_of(area).
+rc::vis::Fill fill_of(const Area &a);
 rc::vis::Fill fill(const std::vector<Region> &regions, const std::vector<bool> &active, const Rect &bounds);
+
+// Stage 168 (the user): the player's light -- a light disk round the player, a light region like any other:
+// its edge stops the arrow leaving it into the shadow. In effect where it meets the shadow (none elsewhere).
+constexpr double LIGHT_RADIUS = 64.0;
+double distance(const Area &a, double x, double y); // how far a point is from the area (0 inside)
+std::optional<Region> light(const Area &shadow, double x, double y);
+// the most pieces an arrangement of `regions` plus one more circle has (its pieces: ids reserved once)
+size_t capacity(const std::vector<Region> &regions, size_t pieces);
 
 // A point of a surface (a line's middle, an arc's via, a point of a circle).
 V2 point_of(const rc::arc::SegGeom &g);

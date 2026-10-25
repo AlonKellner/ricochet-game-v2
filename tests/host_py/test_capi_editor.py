@@ -144,3 +144,24 @@ def test_the_level_menu_handshake():
     assert ed.command({"op": "state"})["level"] == "objectives/lantern"
     assert ed.status().open_requested == 0
     assert ed.command({"op": "next_level", "by": 1})["name"] == names[(names.index(name) + 1) % len(names)]
+
+
+def test_a_new_level_and_a_copy():
+    """Stage 165: a new empty level is the editor's alone; a copy is read by the host and loaded under its new name."""
+    ed = rc_host.Editor()
+    ed.resize(1600, 900)
+    root = pathlib.Path(__file__).resolve().parents[2] / "data" / "levels"
+    names = sorted(str(p.relative_to(root).with_suffix("")) for p in root.rglob("*.json"))
+    ed.command({"op": "levels", "list": names})
+    assert ed.command({"op": "new_level", "name": "scratch/empty"})["ok"]
+    assert ed.command({"op": "state"})["level"] == "scratch/empty" and ed.status().dirty == 1
+    ed.command({"op": "saved"})
+    assert ed.command({"op": "new_level", "name": "scratch/copy", "copy_of": "objectives/lantern"})["ok"]
+    assert ed.status().open_requested == 1
+    req = ed.command({"op": "open_request"})
+    assert req["name"] == "objectives/lantern" and req["as"] == "scratch/copy"
+    text = (root / (req["name"] + ".json")).read_text()
+    assert ed.command({"op": "load", "text": text, "name": req["as"], "unsaved": True})["ok"]
+    doc = json.loads(ed.document())
+    assert doc["name"] == "scratch/copy" and len(doc["elements"]) == len(json.loads(text)["elements"])
+    assert ed.status().dirty == 1

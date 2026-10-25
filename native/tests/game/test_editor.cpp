@@ -750,3 +750,85 @@ TEST_CASE("editor: the collider tool places a collider with two clicks; the leve
 		CHECK_MESSAGE(labels.count(k) == 1, k);
 	}
 }
+
+TEST_CASE("editor: a new level -- empty or a copy, named in a prompt, unsaved until saved (Stage 165)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "levels"}, {"list", {"a/one", "a/two"}}, {"current", "a/one"}});
+	// the menu's "+ new empty level": a prompt with a free name; Enter creates it
+	ok(ed, {{"op", "level_menu"}, {"show", true}});
+	click_row(ed, "+ new empty level");
+	CHECK(ok(ed, {{"op", "state"}})["new_prompt"] == true);
+	CHECK(ok(ed, {{"op", "state"}})["focus"] == "#new_level");
+	ed.text("_x"); // (the default "untitled" -> "untitled_x")
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	json st = ok(ed, {{"op", "state"}});
+	CHECK(st["level"] == "untitled_x");
+	CHECK(st["dirty"] == true);
+	CHECK(ok(ed, {{"op", "document"}})["document"]["name"] == "untitled_x");
+	CHECK(ok(ed, {{"op", "document"}})["document"]["elements"].empty());
+	// a name in use is refused; unsaved changes are asked about twice
+	CHECK(ed.command({{"op", "new_level"}, {"name", "a/two"}})["ok"] == false);
+	CHECK(ed.command({{"op", "new_level"}, {"name", "b/three"}})["ok"] == false); // (untitled_x is unsaved)
+	CHECK(ok(ed, {{"op", "new_level"}, {"name", "b/three"}})["name"] == "b/three");
+	ok(ed, {{"op", "saved"}});
+	// "+ copy of a level": pick it, a prompt "<it>_copy"; the host loads it under the new name, unsaved
+	ok(ed, {{"op", "level_menu"}, {"show", true}});
+	click_row(ed, "+ copy of a level");
+	CHECK(ok(ed, {{"op", "state"}})["copy_pick"] == true);
+	click_row(ed, "a/two");
+	CHECK(ok(ed, {{"op", "state"}})["new_prompt"] == true);
+	ed.key(rcg::Editor::KeyEnter, 0, true); // (the default name: a/two_copy)
+	CHECK(ed.status().open_requested);
+	const json req = ok(ed, {{"op", "open_request"}});
+	CHECK(req["name"] == "a/two");
+	CHECK(req["as"] == "a/two_copy");
+	ok(ed, {{"op", "load"}, {"text", R"({"schema": "rc-level/2", "name": "a/two", "elements": [{"kind": "wall", "start": [700, 300], "end": [700, 500]}]})"},
+			   {"name", "a/two_copy"}, {"unsaved", true}});
+	st = ok(ed, {{"op", "state"}});
+	CHECK(st["level"] == "a/two_copy");
+	CHECK(st["dirty"] == true);
+	CHECK(ok(ed, {{"op", "document"}})["document"]["name"] == "a/two_copy");
+	CHECK(ok(ed, {{"op", "document"}})["document"]["elements"].size() == 1);
+	// ctrl+N opens the prompt; Esc cancels it
+	ok(ed, {{"op", "saved"}});
+	ed.key('N', rcg::Editor::ModCtrl, true);
+	CHECK(ok(ed, {{"op", "state"}})["new_prompt"] == true);
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["new_prompt"] == false);
+	CHECK(ok(ed, {{"op", "state"}})["level"] == "a/two_copy");
+}
+
+TEST_CASE("editor: the level list is searchable -- soft matches first, their characters marked; up/down and Enter (Stage 167)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "levels"}, {"list", {"main", "objectives/grapple_gap", "objectives/lantern", "playground/portals", "test_levels/ghost_room"}}});
+	// the ranking: "gg" -> grapple_gap first (a word start, then a word start); the rest after it, in their order
+	const json r = ok(ed, {{"op", "level_search"}, {"query", "gg"}})["levels"];
+	REQUIRE(r.size() == 5);
+	CHECK(r[0]["name"] == "objectives/grapple_gap");
+	CHECK(r[0]["marks"] == json::array({11, 19}));
+	CHECK(r[1]["name"] == "main");
+	CHECK(r[1]["marks"].empty());
+	const json g = ok(ed, {{"op", "level_search"}, {"query", "gr"}})["levels"]; // three matches (grapple, ghost_room, playground) above the rest
+	CHECK(g[0]["name"] == "objectives/grapple_gap"); // (a run at a word's start first)
+	CHECK(g[2]["marks"].size() == 2);
+	CHECK(g[3]["marks"].empty());
+	const json p = ok(ed, {{"op", "level_search"}, {"query", "PORT"}})["levels"]; // (case-insensitive, a run)
+	CHECK(p[0]["name"] == "playground/portals");
+	CHECK(p[0]["marks"] == json::array({11, 12, 13, 14}));
+	// typed into the open list: the search has the focus; Down picks the next, Enter opens it
+	ok(ed, {{"op", "level_menu"}, {"show", true}});
+	CHECK(ok(ed, {{"op", "state"}})["focus"] == "#level_search");
+	ed.text("o");
+	ed.key(rcg::Editor::KeyDown, 0, true);
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	const json first = ok(ed, {{"op", "level_search"}, {"query", "o"}})["levels"];
+	CHECK(ok(ed, {{"op", "open_request"}})["name"] == first[1]["name"]);
+	// Esc clears the search, a second Esc closes the list
+	ed.text("zz");
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["level_menu"] == true);
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["level_menu"] == false);
+}

@@ -3,6 +3,7 @@
 #include "rcg/shade.hpp"
 
 #include <algorithm>
+#include <tuple>
 
 namespace rcg {
 
@@ -121,7 +122,13 @@ void World::rebuild() {
 
 bool World::set_shade(std::vector<BuiltSurface> boundary, std::vector<int> darkened) {
 	auto left = [](const BuiltSurface &s) { return s.left ? s.left->effect.type : std::string("pass"); };
-	auto same = [&](const BuiltSurface &a, const BuiltSurface &b) { return a.id == b.id && left(a) == left(b); };
+	// (Stage 168: the player's light moves its pieces under the same ids -- their geometry counts too)
+	auto shape = [](const rc::arc::SegGeom &g) {
+		const bool full = g.full;
+		return std::tuple{g.s.x, g.s.y, g.e.x, g.e.y, g.v.x, g.v.y, full, full ? g.get_carrier().center_x() : 0.0,
+				full ? g.get_carrier().center_y() : 0.0, full ? g.get_carrier().radius() : 0.0};
+	};
+	auto same = [&](const BuiltSurface &a, const BuiltSurface &b) { return a.id == b.id && left(a) == left(b) && shape(a.seg) == shape(b.seg); };
 	if (darkened == darkened_ && boundary.size() == shade_.size() && std::equal(boundary.begin(), boundary.end(), shade_.begin(), same)) {
 		return false;
 	}

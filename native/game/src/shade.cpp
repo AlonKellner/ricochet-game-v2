@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <cmath>
 #include <functional>
+#include <limits>
 
 namespace rcg::shade {
 
@@ -56,6 +57,60 @@ Paths run(Clipper2Lib::ClipType type, const Paths &subjects, const Paths &clips)
 	Paths out;
 	c.Execute(type, Clipper2Lib::FillRule::NonZero, out);
 	return out;
+}
+
+std::vector<std::vector<rc::vis::Pt>> to_pts(const Paths &ps) {
+	std::vector<std::vector<rc::vis::Pt>> out;
+	for (const Clipper2Lib::PathD &p : ps) {
+		std::vector<rc::vis::Pt> ring;
+		for (const Clipper2Lib::PointD &q : p) {
+			ring.push_back(rc::vis::Pt{q.x, q.y});
+		}
+		out.push_back(std::move(ring));
+	}
+	return out;
+}
+
+Paths to_paths(const std::vector<std::vector<rc::vis::Pt>> &rings) {
+	Paths out;
+	for (const std::vector<rc::vis::Pt> &ring : rings) {
+		Clipper2Lib::PathD p;
+		for (const rc::vis::Pt &q : ring) {
+			p.push_back({q.x, q.y});
+		}
+		out.push_back(std::move(p));
+	}
+	return out;
+}
+
+// The subjects clipped by the clips, triangulated (its rings oriented and nested for fill_of).
+rc::vis::Fill triangulate(const Paths &subjects, const Paths &clips, Clipper2Lib::ClipType type) {
+	Clipper2Lib::ClipperD c(4);
+	c.AddSubject(subjects);
+	c.AddClip(clips);
+	Clipper2Lib::PolyTreeD tree;
+	c.Execute(type, Clipper2Lib::FillRule::NonZero, tree);
+	rc::vis::Outline o;
+	std::function<void(const Clipper2Lib::PolyPathD &, int)> walk = [&](const Clipper2Lib::PolyPathD &node, int outer) {
+		for (const auto &child : node) {
+			std::vector<rc::vis::Pt> ring;
+			for (const Clipper2Lib::PointD &q : child->Polygon()) {
+				ring.push_back(rc::vis::Pt{q.x, q.y});
+			}
+			const bool hole = child->IsHole();
+			if (ring.size() >= 3) {
+				const double a = ring_area(ring);
+				if ((hole && a > 0.0) || (!hole && a < 0.0)) {
+					std::reverse(ring.begin(), ring.end());
+				}
+				o.rings.push_back(std::move(ring));
+				o.parent.push_back(hole ? outer : -1);
+			}
+			walk(*child, hole ? outer : int(o.rings.size()) - 1);
+		}
+	};
+	walk(tree, -1);
+	return rc::vis::fill_of(o);
 }
 
 } // namespace
@@ -375,7 +430,7 @@ std::vector<BuiltSurface> boundary(const std::vector<Piece> &pieces, const std::
 	return out;
 }
 
-rc::vis::Fill fill(const std::vector<Region> &regions, const std::vector<bool> &active, const Rect &bounds) {
+Area area(const std::vector<Region> &regions, const std::vector<bool> &active, const Rect &bounds) {
 	const double x0 = bounds.x, y0 = bounds.y, x1 = bounds.x + bounds.w, y1 = bounds.y + bounds.h;
 	const Clipper2Lib::PathD rect{{x0, y0}, {x1, y0}, {x1, y1}, {x0, y1}};
 	Paths dark, light;
@@ -412,38 +467,65 @@ rc::vis::Fill fill(const std::vector<Region> &regions, const std::vector<bool> &
 		Paths &into = r.dark ? dark : light;
 		into.insert(into.end(), shape.begin(), shape.end());
 	}
-	rc::vis::Fill out;
+	Area out;
+	out.bounds = to_pts(Paths{rect}).front();
 	if (dark.empty()) {
 		return out;
 	}
 	const Paths d = run(Clipper2Lib::ClipType::Union, dark, {});
-	const Paths s = light.empty() ? d : run(Clipper2Lib::ClipType::Difference, d, run(Clipper2Lib::ClipType::Union, light, {}));
-	Clipper2Lib::ClipperD c(4);
-	c.AddSubject(s);
-	c.AddClip({rect});
-	Clipper2Lib::PolyTreeD tree;
-	c.Execute(Clipper2Lib::ClipType::Intersection, Clipper2Lib::FillRule::NonZero, tree);
-	rc::vis::Outline o;
-	std::function<void(const Clipper2Lib::PolyPathD &, int)> walk = [&](const Clipper2Lib::PolyPathD &node, int outer) {
-		for (const auto &child : node) {
-			std::vector<rc::vis::Pt> ring;
-			for (const Clipper2Lib::PointD &q : child->Polygon()) {
-				ring.push_back(rc::vis::Pt{q.x, q.y});
+	out.shadow = to_pts(light.empty() ? d : run(Clipper2Lib::ClipType::Difference, d, run(Clipper2Lib::ClipType::Union, light, {})));
+	out.clipped = to_pts(run(Clipper2Lib::ClipType::Intersection, to_paths(out.shadow), {rect}));
+	return out;
+}
+
+rc::vis::Fill fill_of(const Area &a) {
+	if (a.shadow.empty()) {
+		return {};
+	}
+	return triangulate(to_paths(a.shadow), to_paths({a.bounds}), Clipper2Lib::ClipType::Intersection);
+}
+
+rc::vis::Fill fill(const std::vector<Region> &regions, const std::vector<bool> &active, const Rect &bounds) {
+	return fill_of(area(regions, active, bounds));
+}
+
+double distance(const Area &a, double x, double y) {
+	int winding = 0;
+	double best = std::numeric_limits<double>::infinity();
+	for (const std::vector<rc::vis::Pt> &ring : a.clipped) {
+		for (size_t i = 0; i < ring.size(); i++) {
+			const rc::vis::Pt &p = ring[i], &q = ring[(i + 1) % ring.size()];
+			const double side = (q.x - p.x) * (y - p.y) - (x - p.x) * (q.y - p.y); // the point left of p -> q
+			if (p.y <= y && q.y > y && side > 0.0) {
+				winding++;
+			} else if (p.y > y && q.y <= y && side < 0.0) {
+				winding--;
 			}
-			const bool hole = child->IsHole();
-			if (ring.size() >= 3) {
-				const double a = ring_area(ring);
-				if ((hole && a > 0.0) || (!hole && a < 0.0)) {
-					std::reverse(ring.begin(), ring.end());
-				}
-				o.rings.push_back(std::move(ring));
-				o.parent.push_back(hole ? outer : -1);
-			}
-			walk(*child, hole ? outer : int(o.rings.size()) - 1);
+			const double dx = q.x - p.x, dy = q.y - p.y, l2 = dx * dx + dy * dy;
+			const double t = l2 > 0.0 ? std::clamp(((x - p.x) * dx + (y - p.y) * dy) / l2, 0.0, 1.0) : 0.0;
+			best = std::min(best, std::hypot(p.x + t * dx - x, p.y + t * dy - y));
 		}
-	};
-	walk(tree, -1);
-	return rc::vis::fill_of(o);
+	}
+	return winding != 0 ? 0.0 : best;
+}
+
+std::optional<Region> light(const Area &shadow, double x, double y) {
+	if (!(distance(shadow, x, y) < LIGHT_RADIUS)) {
+		return std::nullopt; // (the disk is lit already)
+	}
+	Region r;
+	r.dark = false;
+	r.line = false;
+	r.cx = x;
+	r.cy = y;
+	r.r = LIGHT_RADIUS;
+	r.inside = true;
+	return r;
+}
+
+size_t capacity(const std::vector<Region> &regions, size_t pieces) {
+	// the circle crosses each carrier at most twice: two more pieces on it, and two pieces of its own
+	return pieces + 4 * regions.size() + 1;
 }
 
 V2 point_of(const rc::arc::SegGeom &g) {
