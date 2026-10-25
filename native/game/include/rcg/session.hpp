@@ -16,6 +16,7 @@
 #include "rc/tracer.hpp"
 #include "rc/region_union.hpp"
 #include "rc/visibility.hpp"
+#include "rcg/shade.hpp"
 #include "rcg/jobs.hpp"
 #include "rcg/kinematics.hpp"
 #include "rcg/landing.hpp"
@@ -65,7 +66,8 @@ struct Overlay {
 // preview hits the planned side on the segment (and on the entry's piece),
 // outgoing valid when such a hit continues; hits: the physical hits by surface.
 std::vector<std::pair<int, Overlay>> plan_overlays(const std::vector<PlanEntry> &plan,
-		const std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> &hits, const World &world, const rc::Flags &flags);
+		const std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> &hits, const World &world, const rc::Flags &flags,
+		const std::vector<bool> &frosted = {}); // (Stage 158: per entry, frost turned it)
 
 enum class Action { Undo, Reset, ClearPlan, CycleDisplay, ToggleGravity, ToggleVisibility, Any, Fire };
 // the session scripts' names (undo, reset, clear_plan, cycle_display, toggle_gravity, toggle_visibility, any)
@@ -135,6 +137,11 @@ public:
 	// Stage 145: the level won (latched): its goal reached while its conditions
 	// hold, or, a level without a goal, every target hit
 	bool won() const { return won_; }
+	// Stage 151: the level's cycle -- its phase in [0, 1), and whether it runs on its own; a scroll moves it
+	// by delta notches (pausing it: it runs again after a shot, or after the level's resume_after idle seconds)
+	double phase() const { return phase_; }
+	bool cycle_auto() const { return cycle_auto_; }
+	void scroll(double delta);
 	V2 player() const { return player_; }
 	// Stage 122: the player before the last physics tick, and how far the time
 	// not yet ticked is into the next (the presenter draws the player between)
@@ -172,11 +179,16 @@ public:
 	// provisional ones while its climb runs), how long the shown exact preview's
 	// climb took (0: computed in its frame), and the path's painter for steps
 	const std::vector<rc::TraceStep> &preview_steps() const { return shown().merged; }
+	// Stage 157: the preview's arrow-state marks per merged step, and its consequences (tests, hosts)
+	const std::vector<uint8_t> &preview_marks() const { return shown().marks; }
+	const std::vector<std::pair<std::string, int>> &preview_becomes() const { return shown().becomes; }
+	const std::optional<rc::Flags> &preview_predicted() const { return shown().predicted; } // Stage 159
+	std::optional<V2> preview_trip_end() const { return shown().trip ? std::optional<V2>(shown().trip->trail.back()) : std::nullopt; }
 	// Stage 147 (tests, tools): the preview's physical trace -- the path a shot now takes (none: no trace)
 	const rc::TracePath *physical_trace() const { return preview_.pair ? &preview_.pair->physical : nullptr; }
 	double preview_seconds() const { return provisional_ ? 0.0 : preview_climb_seconds_; }
 	void paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<render::Call> &out, double dash_phase = 0.0,
-		const std::vector<rc::sweep::EventDot> *dots = nullptr) const;
+		const std::vector<rc::sweep::EventDot> *dots = nullptr, const std::vector<uint8_t> *marks = nullptr) const;
 	// Stage 130: the path node's calls, its dashes moved dash_phase px along the way
 	// the arrow flies (the presenter's clock; 0: the session's own node)
 	void paint_path(std::vector<render::Call> &out, double dash_phase) const;
@@ -225,6 +237,7 @@ private:
 		const Piece *piece = nullptr;
 		double distance = 0;
 		std::optional<V2> point;
+		bool frost = false; // Stage 158: a stopping side frost turns (planned while frosted)
 	};
 	struct Checkpoint {
 		V2 player;
@@ -235,6 +248,8 @@ private:
 		std::optional<World::Snapshot> world;
 		bool won = false;         // Stage 145
 		std::vector<bool> inside; // ... the detectors the player is in
+		double phase = 0.0;       // Stage 151
+		bool cycle_auto = true;
 	};
 	// PathRenderer's state: the last pair, its display paths and merge; the last
 	// ladder result and physical hits stay when there is no trace (as the node keeps them)
@@ -247,7 +262,22 @@ private:
 		std::vector<rc::sweep::EventDot> dots; // Stage 134: the non-significant events of both walks
 		std::optional<rc::LadderResult> last_result;
 		std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> hits;
+		// Stage 157: per merged step, the arrow's states to mark on it (1 fire, 2 charge, 4 frost: each only when it
+		// began before the walks diverge); the things whose state changes before they diverge (name -> 1 catches
+		// fire, 2 is charged, 4 is discharged)
+		std::vector<uint8_t> marks;
+		std::vector<std::pair<std::string, int>> becomes;
+		// Stage 159 (the user: every change the shot makes shows in the preview): the flags the shot leaves when its
+		// walk is followed to the divergence (its per-shot flags gone), and the journey a grapple or pull there makes
+		std::optional<rc::Flags> predicted;
+		struct Trip {
+			int body = -1; // -1: the player
+			std::vector<V2> trail;
+			bool blocked = false;
+		};
+		std::optional<Trip> trip;
 	};
+	void arrow_states(Preview &p) const; // Stage 157
 
 	std::vector<rc::PlanItem> items(size_t n) const;
 	std::vector<rc::PlanItem> items() const { return items(plan_.size()); }
@@ -312,11 +342,34 @@ private:
 		size_t next = 1;
 	};
 	std::optional<Journey> journey_;
+	std::optional<Journey> journey_of(const rc::TracePath &path, int *hit_index = nullptr) const; // Stage 159
+	static bool journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, double radius, double dt);
+	// Stage 151: the cycle
+	double phase_ = 0.0;
+	bool cycle_auto_ = true;
+	double idle_ = 0.0;                  // seconds without a scroll or a plan change while paused
+	std::vector<size_t> moving_motion_;  // per World::Moving: its motion's index
+	std::vector<V2> moving_pivot_;       // ... and pivot
+	void apply_phase();                  // the moving surfaces placed for phase_
+	// Stage 152: spreading -- the tagged elements' and objects' flags along what touches
+	void spread();
+	// Stage 153: light and shadow -- the boundary and the darkened surfaces under the flags (when they or the world changed)
+	void shadow();
+	std::vector<shade::Region> shade_regions_;
+	std::vector<shade::Piece> shade_pieces_;
+	int shade_first_id_ = 0;
+	std::vector<bool> shade_active_;
+	int shade_world_ = -1;
+	int shade_serial_ = 0; // bumped when the shadow's fill changes
+	rc::vis::Fill shade_fill_;
+	int touch_version_ = -1;                       // the world version the touches are of
+	std::vector<std::vector<bool>> touches_;       // per pair of tagged nodes (elements, then objects)
 	bool bodies_moving_ = false;
 	void step_bodies();
 	void start_journey();             // at landing: the first fired grapple or pull of the shot
 	void advance_journey(double dt);
 	std::vector<kinematics::Collider> colliders_except(int body) const; // what a body or the player meets
+	std::vector<kinematics::Collider> colliders_except(int body, const rc::Flags &flags) const; // ... under these flags
 	std::vector<Checkpoint> checkpoints_;
 	Checkpoint initial_;
 	int display_mode_ = 0;
@@ -498,7 +551,7 @@ private:
 		uint64_t version = 0;
 	};
 	mutable std::map<int, SurfaceDraw> surface_draw_; // by node serial
-	mutable CachedDraw path_draw_, vis_draw_, spawn_draw_, static_draw_[3];
+	mutable CachedDraw path_draw_, vis_draw_, spawn_draw_, static_draw_[3], shade_draw_, glow_draw_, collider_draw_;
 	void clear_hover();
 	// (last: destroyed first, before the state their results go to)
 	std::unique_ptr<LatestJob<VisJobIn, VisJobOut>> vis_job_;

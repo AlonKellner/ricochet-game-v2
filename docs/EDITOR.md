@@ -35,8 +35,8 @@ run it:
   middle of a surface points at its left side, a second one at its right side when that side does something.
   A door, present only while its flag is unset, is dashed. An element with a problem has a red dashed overlay.
   The player's start is the green circle. Each element's name is written beside it.
-- **The panel**, right: the buttons (undo, redo, save, play), the tool, what the tools place (with its
-  description), then the selected element's fields or, with nothing selected, the level's fields. Last come the
+- **The panel**, right: the buttons (undo, redo, save, play), the level menu, the tool and every tool as a chip
+  with its key (a click uses it; Stage 161), what the tools place (every kind as a chip, with its description), then the selected element's fields or, with nothing selected, the level's fields. Last come the
   problems.
 - **The status bar**, bottom: the tool, the kind placed, the grid, the problems, unsaved changes, and the hint
   of whatever is under the pointer (a field's meaning, a refused action).
@@ -54,12 +54,15 @@ run it:
 | D | a detector: two corners (a rectangle, mode `enter`, flag `det:<name>`) |
 | B | an object: one click (a pullable circle of radius 16; edit it in the panel's `objects`) |
 | K, Shift+K | a carrier: a line by two points, a circle by its center and a point on it (drawn faint and dashed across the canvas) |
+| X | a collider: two clicks, a player-only segment -- a floor or a ledge the player stands on, which arrows pass (Stage 164) |
 | Tab / Shift+Tab, 1-9, or a kind in the panel's palette | what the line, arc and circle tools place (every kind, the level's own last; clicking a kind also picks the line tool, the circle tool for a circle-only kind) |
 | Delete, Backspace | remove the selected element |
 | Ctrl+D | duplicate it (offset by 20, 20) |
 | arrows (Shift: x10) | move it by a grid step |
 | Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y | undo, redo (a drag is one step) |
 | Ctrl+S | save |
+| Ctrl+O, the panel's level name | the level list: a click opens a level (unsaved changes: the first click warns, the second discards them); Esc closes it |
+| Ctrl+Left / Ctrl+Right, the panel's `<` / `>` | the previous / next level in the list |
 | F5 | play the level (refused while it has problems); Esc returns |
 | G | the grid on or off (off: whole units) |
 | F | frame the level's bounds (the view frames them on every resize until you pan or zoom) |
@@ -81,11 +84,22 @@ With Alt held, the point stays exactly under the pointer.
 line when dragged), a circle's center and radius, and the player's start. When an endpoint moves, the via
 stays where it is (GAME_SPEC 19.2).
 
+**Motion.** An element's `motion` field takes its keys (`{"keys": [[phase, dx, dy, angle], ...]}`). The element is
+drawn faint and dashed where each key puts it, and the level's `cycle` field sets the period. Play-test (F5) to
+see it move; the wheel sets the cycle there.
+
 **Carriers.** A point placed near a carrier snaps onto it, a grid step along it. When both clicks of the line
 tool (or the three of the arc tool on a circle) land on one carrier, the element is placed on it (`carrier`,
 `from`, `to`), and its handles move along it. A carrier is selected by a click on its line or circle. Its handles
 are its defining points (a line's two, a circle's center and radius), and dragging them moves every element on
-it. Renaming it carries the elements, and deleting it frees them, each keeping its place as its own geometry.
+it. Renaming it carries the elements, and deleting it frees them, each keeping its place as its own geometry. Its `exact` row
+(Stage 154) snaps its elements onto points exactly on it (GAME_SPEC 19.1).
+
+**Every level element is on the canvas** (Stage 164). Colliders are drawn as hatched floors; a click selects one,
+its ends drag, Ctrl+D duplicates it and Delete removes it. The camera's start is a small frame labelled `camera`
+(drag it; its smoothing is in its rows). The background's rectangle is outlined faintly. With nothing selected the
+panel lists every level key as a field: name, bounds, gravity, room, player, flags, the goal, detectors, objects,
+cycle, spread, colliders, camera, background, features, templates and carriers.
 
 **The goal, detectors and objects** are selected like elements: a click inside one (an element's line above it
 wins the click). A rectangle has corner handles, a circle a center and a radius handle, a detector's segment its

@@ -42,6 +42,18 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | Engine-agnostic port: the game model and session natively (`rcg::Session`, byte-identical to the GDScript game on every recorded session), the sweep manifests without Godot (docs/TDD_21, Stage 116) | Done |
 | Engine-agnostic port: the native player controller (§25.1; docs/TDD_22, Stage 117) replacing Godot's physics; every session, walking included, replays natively | Done (the drawing and the C API follow) |
 | Level format `rc-level/2`: levels as elements (data templates, `data/elements`), initial flags, the lowering to `rc-level/1`, `rc_tool migrate/lower` (§19.1; docs/TDD_47, Stage 142) | Done |
+| Moving surfaces: elements keyed over the level's cycle (offset and rotation), the cycle running on its own, set by the wheel, run again by a shot or idle seconds (§9.8; docs/TDD_56, Stage 151) | Done |
+| Every element visible and editable: colliders (the X tool) and the camera as editor items, the background outlined, every level key a field; colliders drawn in play (§19.2; docs/TDD_68, Stage 164) | Done |
+| A planned terminal stops the planned walk: a path that hits a planned stopping surface on its segment is aligned, one that misses it diverges (§14.1; docs/TDD_66, Stage 162) | Done |
+| Path effects per walk: each walk's fire, charge and frost marked over its own steps, after the divergence too; world effects only before it (§14.11; docs/TDD_65, Stage 160) | Done |
+| Every change plannable and previewed: sides with hit effects always plannable; the preview shows every lasting change to the divergence (surfaces, targets, the goal, lights, released objects) and a grapple's or pull's end, a fence stopping it (§14.12; docs/TDD_64, Stage 159) | Done |
+| Planning with frost: while the plan's frost is active, stopping sides (not the shadow's edge) are plannable as reflections or inversions; a shared point stops a frosted arrow (§10.6; docs/TDD_63, Stage 158) | Done |
+| The arrow's states in the preview: consequences drawn only before the walks diverge; fire, charge and frost marks moving with the path's dashes; the glow node for things on fire, charged or frosted (§14.11; docs/TDD_62, Stage 157) | Done |
+| Fire, charge and frost: the arrow's states and the tags `flammable`, `conductive`, `frosted`, `burning`, `charged`; conditional state changes and the frost rule in the solver and the oracle; touching rules opt-in (§10.6; docs/TDD_61, Stage 156) | Done |
+| Exact carriers: a carrier's elements on float32 points exactly on its line or circle (`exact: true`; lattice points; no solver change) (§19.1; docs/TDD_59, Stage 154) | Done |
+| Light and shadow: dark and light regions bounded by elements (sides of lines, insides or outsides of circles, under flags); the arrow stops entering the shadow, surfaces wholly in it are passes (§9.9; docs/ELEMENTS.md, docs/TDD_58, Stage 153) | Done |
+| Spreading: tags on elements and objects, the level's spread rules (fire kept for good; charge recomputed from powered sources through what touches and is present); conductor, battery and charged door templates (§10.6; docs/ELEMENTS.md, docs/TDD_57, Stage 152) | Done |
+| Bubbles: objects with their own gravity (floating up), popped by the arrow, carrying an object until they pop (§25.5; docs/TDD_55, Stage 150) | Done |
 | Carriers: lines and circles elements are placed on (`carrier`, `from`, `to`), an authoring construct the lowering projects onto (§19.1; docs/TDD_53, Stage 149) | Done |
 | The novel-element kit: per-shot flags (`shot:*`, erased at landing) and templates for breakable, toggle, frost, fire and charge elements (§10.6; docs/ELEMENTS.md, docs/TDD_52, Stage 147) | Done |
 | Objects, the pull and the grapple: circle bodies (pullable ones fall under gravity); a pull brings an object back along the arrow's path, a grapple takes the player along it, either stopped by what blocks the traveller (§10.6, §25.5-25.6; docs/TDD_51, Stage 146) | Done |
@@ -675,6 +687,22 @@ Presence is evaluated under the walk's **current** flags, so a surface can vanis
 
 Presence is orthogonal to the resolver. The resolver chooses *how* a present surface behaves, presence chooses *whether* it is there, and both may read flags. Unlike categorical sides, presence works with every path effect, portals and projectives included (a portal pair shares one presence).
 
+### 9.8 Moving surfaces
+
+> **Status: implemented (Stage 151, docs/TDD_56_MOTION.md).**
+
+An element may move over the level's **cycle**: its `motion` keys an offset and a rotation (about a pivot,
+default its first surface's middle) at phases in [0, 1), interpolated linearly and looping. All its surfaces
+move together; a portal's image moves with it. The cycle:
+- runs on its own, a period per cycle (default 4 s), advanced per physics tick (so every host's frames agree);
+- the **mouse wheel** sets it: each notch moves it a fiftieth of a cycle and **pauses** it;
+- a paused cycle runs again after a **shot** lands, or after `resume_after` seconds (default 10) with no scroll and
+  no plan change;
+- it is frozen while the arrow flies (the game is paused), and the checkpoint holds it (an undo restores it).
+
+The surfaces are where the cycle puts them when a shot is fired; the shot's world is that one. A level with a
+cycle shows `Cycle: running` or `Cycle: paused` in its HUD and records `phase` and `cycle_auto`.
+
 ### 9.7 Design surfaces and pieces (crossings)
 
 > **Status: implemented (Stage 108, `docs/TDD_12_CROSSINGS.md`).**
@@ -707,6 +735,30 @@ So the solver traces whole design surfaces, and pieces live where they matter.
 **Everything else is the design surface's:** hit effects (one target, `target:<id>`), presence, the resolver, consumption of a spawn host. **Splitting ignores presence**, so the pieces never change within a shot.
 
 **Not split (v1).** Portal pairs and pre-transform circles. A design surface crossing a portal is reported by level validation.
+
+### 9.9 Light and shadow
+
+> **Status: implemented (Stage 153, docs/TDD_58_SHADOW.md).**
+
+An element whose kind has a `shade` bounds a **region**: dark or light, one side of its line (a half-plane,
+clipped to the level bounds) or the inside or outside of its circle (an arc: its carrier circle), active while its
+flag `when` holds (always without one). The element's own surface is never present. A point is in the **shadow**
+when it lies in an active dark region and in no active light one (a point on a region's boundary is in neither).
+
+- **The shadow's edge stops the arrow from the light.** The regions' boundaries, split where they cross, are the
+  candidate pieces (their ids fixed when the level starts, after the bodies). Under the current flags a piece with
+  the shadow on one side and the light on the other is present: its lit side terminal, its shadowed side a pass,
+  neither plannable, not drawn. An arrow in the shadow passes out.
+- **A surface wholly in the shadow is darkened:** a point of it (a line's middle, an arc's via, a point of a circle)
+  is in the shadow and no present edge piece crosses it. A darkened surface is a pass on both sides, without hits or
+  a resolver, for the arrow. Its presence and player solidity are kept, and it is drawn as it is, under the shadow.
+  Portal pairs and pre-transform circles are never darkened.
+- **When.** The shadow follows the flags and the world: at the start, when a shot lands, every physics tick (a
+  detector, a moving surface, an object), after a journey and an undo. A shot sees the shadow of the moment it was
+  fired. Shades do not move (v1).
+- **Display.** The shadow (the dark regions' union minus the light ones', within the bounds) is drawn over the
+  surfaces it hides, below the path and the arrow (the node `["shadow"]`, z 15); each shade's edge is dashed in its
+  colour, faint while inactive. The editor shows the shadow under the starting flags.
 
 ## 10. Effect system
 
@@ -890,6 +942,51 @@ A flag whose key starts with `shot:` is a state of the arrow, not of the world: 
 the flags promoted when the arrow lands, so every shot starts without it. Elements use per-shot flags for what the
 arrow carries (fire, frost, charge) and for what a shot does to the world only while it lasts (a breakable surface
 gone for the rest of the shot). docs/ELEMENTS.md ("The kit") lists the patterns.
+
+#### Fire, charge and frost (Stage 156)
+
+The arrow, every surface and every object is **on fire** or not and **charged** or not; the arrow is also
+**frosted** or not (the user's rules, 2026-10-25). The arrow's states are per-shot flags (`shot:fire`,
+`shot:charge`, `shot:frost`); a thing's are kept (`el:<name>:fire`, `el:<name>:charge`). What a thing does is given
+by its tags (docs/ELEMENTS.md):
+
+- **Fire.** An arrow on fire touching a `flammable` thing sets it on fire. An arrow not on fire touching a thing on
+  fire catches fire. An arrow passing an extinguishing barrier (`water`) is put out.
+- **Charge.** An arrow touching a `conductive` thing swaps charge with it: a charged arrow charges an uncharged thing
+  and is discharged; an uncharged arrow takes a charged thing's charge. Both charged or both not: nothing.
+- **Frost.** An arrow touching a `frosted` thing (its sides pass, reflect or invert) becomes frosted. A frosted arrow
+  that is not stopped keeps the frost. A frosted arrow that a side would stop (a terminal) is reflected by a line or
+  inverted by a circle instead, and the frost is used up. A `rigid` side (the shadow's edge, §9.9) is never turned.
+
+The rules are played out by the solver within the shot. Fire and charge are **conditional state changes** (`when`:
+each applies only while its conditions hold under the flags its side fired under, before any of the side's changes).
+Frost is a rule of side resolution, like ghost mode: while `shot:frost` is true a terminal, non-rigid side resolves to
+a reflection (line) or an inversion (circle) and appends the write `shot:frost = false`. Ghost mode takes precedence.
+**Planning with frost (Stage 158, the user).** While the plan's simulated state holds the frost (§13.7: a frost source
+planned before, its frost not yet used up by an earlier planned stopping side), every stopping side that frost would
+turn is plannable, as a reflection or an inversion: walls, doors, closed objects, room walls. The shadow's edge is not
+(rigid). Hover and plan chevrons show it as a reflection. **A shared point always stops the arrow** (§11.1, Stage 138):
+a frosted arrow aimed exactly at a corner or a T-junction stops there, nothing firing and the frost kept. The oracle
+(`trace2.py`) has both rules;
+fixtures `bench/fixtures/stage156_arrow_states.json`.
+
+#### Spreading (Stage 152)
+
+Some states flow from thing to thing without an arrow: fire through what burns, charge through what conducts.
+Elements and objects carry **tags**; a level's **spread rules** (none by default since Stage 156; for example `fire`
+through `flammable`, kept for good; `charge` through `conductive`, sourced by `powered`) write `el:<name>:<flag>` = true on every tagged thing
+connected to a lit one by touching (a segment, arc or object circle within 0.5 px of another).
+
+- **Persistent** rules (fire): a lit thing stays lit; the flow passes through every tagged thing, present or not
+  (a burnt barrier is gone, yet what touched it burns).
+- **Recomputed** rules (charge): the flags are recomputed from the sources whenever the world changes (a shot
+  lands, a detector or a journey changes flags, an object or a moving surface moves). The flow passes only
+  through present things. An absent thing it reaches is lit but passes nothing on, so a charged door stays open
+  without closing the circuit through itself.
+
+Spreading runs when the level starts, when a shot lands (after the landing's writes), every physics tick, and when
+a journey ends; the result rides the checkpoint like any flag. It is a game-layer rule: the solver sees only
+the flags (docs/ELEMENTS.md, "Tags and spreading"; docs/TDD_57_SPREAD.md).
 
 #### Ghost mode (Stage 86)
 
@@ -1348,7 +1445,7 @@ Hit-point computation uses a **unified hitpoint model**: both modes intersect th
 | Mode | Effect application rule | When it runs |
 |------|------------------------|-------------|
 | **PHYSICAL** | An effect fires ONLY on a **solid** hit (§11.1): an on-segment interior point, or a shared point (a lone endpoint grazes). A hit at a shared point where two or more surfaces have a consequence is terminal, nothing firing (Stage 138). A terminal ends the trace. Everything else is a pass-through (no effect, no stack change). Plan bookkeeping is by surface ID: an event that changes the frame (an applied transformative or projective effect, or a state change that changes the flags) advances the plan if it is the next entry's surface, and otherwise marks the plan unmatched. An event at which the planned walk consumes the next entry without changing the frame (a pass side, a terminal crossed off its segment, a write of the value a flag already has) is consumed here too (B1, Stage 110). At a point where several surfaces are crossed together (one carrier, K6), an out-of-plan event that only changes the flags is matched by the frame: if the walk leaves the point in the flags the planned walk leaves it in, the planned entries there count as consumed, whatever the order of the surfaces (B5, Stage 110). Since Stage 138 a point held by two surfaces with a consequence stops the arrow (§11.1), so the matching by frame remains where one surface fires at the point and the planned shadow holds the others (an absent surface, §9.6). | Origin to terminal/escape/limit. |
-| **PLANNED** | The next plan entry fires when surface ID **and** side match, even off-segment (at a shared point too, §11.1: the physical walk stops there, so the walks diverge). Only transformative entries change the beam. Projective entries are applied too (Stage 87). Terminal entries are consumed without effect. Everything else passes, terminals included. After the cursor, the trace continues with PHYSICAL rules. | Origin to terminal/escape/limit. |
+| **PLANNED** | The next plan entry fires when surface ID **and** side match, even off-segment (at a shared point too, §11.1: the physical walk stops there, so the walks diverge). Only transformative entries change the beam. Projective entries are applied too (Stage 87). **Terminal entries stop the planned walk at their planned hit** (Stage 162, the user: like a planned mirror reflecting there; on the segment both walks stop together, off it the physical walk passes and the walks diverge). Everything else passes, unplanned terminals included. After the cursor, the trace continues with PHYSICAL rules. | Origin to terminal/escape/limit. |
 
 Neither mode stops at the cursor. The cursor is a **virtual hitpoint** (§12.1) that competes with carrier intersections in projective order. It is a candidate only once the plan is complete and matched. `cursor_index` is the step index where the cursor falls.
 
@@ -1491,6 +1588,42 @@ With an empty plan the plan is complete from the start, so the cursor is a candi
 - If the physical arrow reaches the cursor without an applied effect, the two traces coincide and every step is **ALIGNED** (before the cursor) or **ALIGNED_POST_PLANNED** (after it).
 - If the physical arrow applies an effect (or is blocked) before the cursor, its frame id or event list departs from the planned one there. The merge marks that index as the divergence: the red solid planned line continues straight to the cursor (UX11, "empty plan = fire straight").
 
+### 14.11 The arrow's states in the preview (Stage 157)
+
+> **Status: implemented (Stage 157, docs/TDD_62_ARROW_PREVIEW.md).** The user's rules (2026-10-25).
+
+- **Consequences only before the divergence.** The preview shows what the shot does to things (a surface catching
+  fire, a conductor charged or discharged) only when the change happens before the walks diverge (§14.2). The glow
+  node (`["glow"]`, over the surfaces) draws the change dashed: orange for fire, white for charge, grey for a
+  discharge. What things are now (on fire, charged, frosted) it draws solid.
+- **The arrow's states on its path (path effects; Stage 160, the user).** Each walk's own states are marked over its
+  own steps -- the common ones, and after the divergence each walk's diverged ones, the planned walk's from its own
+  hits -- always, wherever the state began. The marks move with the dashes: red crosses for fire, white chevrons
+  (pointing the way it flies) for charge, pale blue stars for frost. World effects (things catching fire, surfaces,
+  targets, the goal, journeys: §14.12) show only before the divergence, so the two walks' worlds never conflict.
+- An unplanned state change is a divergence (§14.2, Stage 134), so a preview shows a consequence when every surface
+  that changes the arrow's state on the way is planned. A pass surface carrying a tag's writes is plannable.
+
+### 14.12 Every change plannable, every change previewed (Stage 159)
+
+> **Status: implemented (Stage 159, docs/TDD_64_PLANNABLE_CONSEQUENCES.md).** The user's rules (2026-10-25): "All game
+> state changing features must be plannable, that's the point of the game", and "all game state changes must always
+> be somehow reflected in the preview".
+
+- **Plannable.** A side with any hit effect (a state write, a target, a reset, a spawn, a grapple, a pull, a tag's
+  writes) is plannable, whatever its level says (the builder makes it interactive). A side frost would turn is
+  plannable while the plan's frost is active (§10.6).
+- **Previewed.** The preview shows the shot's lasting changes up to the divergence (§14.11): from the flags there
+  (its per-shot flags gone), surfaces that would vanish (red, dashed), appear (green), or change their sides
+  (yellow), targets it would register (cyan), the goal it would open (green), lights or darks it would switch, and
+  objects a popped bubble would release (yellow). Things catching fire or changing charge glow (§14.11).
+- **Journeys.** A grapple or pull hit before the divergence previews its journey: the traveller's trail and a ring
+  where it ends, simulated tick by tick exactly as the journey runs after the landing (the same motion, swept against
+  what blocks the traveller under the shot's landed flags). A player- or object-blocking barrier that the arrow
+  passes (a fence) stops it on the way: the ring is then orange.
+- Not yet previewed: touching (spread) rules and shadows recomputed after the landing, a released object's fall, and
+  detector writes during a journey.
+
 ### 14.10 Post-cursor computation
 
 There is no separate post-cursor computation. Both traces run the full path from origin to escape/block in a single pass. The cursor is a virtual hitpoint (§12.1) that creates a step boundary. `cursor_index` is the step index at the cursor position. Steps before `cursor_index` are pre-cursor; steps at or after are post-cursor. The step type (ALIGNED vs ALIGNED_POST_PLANNED, or DIVERGED_PLANNED vs DIVERGED_POST_PLANNED) is determined by comparing against `cursor_index`.
@@ -1509,7 +1642,7 @@ The visibility region highlights the **set of cursor positions that will not cau
 - A cursor that the trace never reaches (cut by the event limit, §12.6) is **outside**.
 - A cursor on the player (no aim), on the player's image `P_K` or on the frame's infinity `Q_K` is **not classified**: the aim degenerates there (§11.4). After a projective the poles are the pencil's (§15.2): the image of a circle normal's centre (every exit line passes it) and the frame's infinity.
 - A cursor exactly where the last entry is crossed off its segment is **outside**: the planned walk applies the entry there and the physical one passes, so they leave the point in different frames (V3). Before B4 these departure points formed thin lines along the planned carrier.
-- The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4); on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor). (Stage 129's third kind, along a member whose walk met a planned piece exactly at an end where another surface cuts it, is gone with Stage 138: that end is a shared point, where the physical walk stops and the walks diverge.) A whisker's end at exact data (a segment endpoint) belongs to the region exactly when the preview reaches a cursor there: at a planned terminal's lone endpoint the hit does not fire physically, so the walks diverge and the endpoint is outside (K7).
+- The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4); on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor; since Stage 162 both walks end there, and a walk that ends at a terminal at the cursor's own point reaches it). (Stage 129's third kind, along a member whose walk met a planned piece exactly at an end where another surface cuts it, is gone with Stage 138: that end is a shared point, where the physical walk stops and the walks diverge.) A whisker's end at exact data (a segment endpoint) belongs to the region exactly when the preview reaches a cursor there: at a planned terminal's lone endpoint the hit does not fire physically, so the walks diverge and the endpoint is outside (K7).
 
 ### 15.2 Members
 
@@ -1845,7 +1978,7 @@ Level (rc-level/2):
     flags:       {key: value}                # the flags the level starts with (default none)
     elements:    [Element]                   # in build order
     templates:   {kind: Template}            # the level's own kinds (docs/ELEMENTS.md)
-    carriers:    [{name, line {a, b} | circle {center, radius}}]   # Stage 149: what elements are placed on
+    carriers:    [{name, line {a, b} | circle {center, radius}, exact?}]   # Stage 149: what elements are placed on (154: exact)
 
 Element:
     kind:        String                      # a template's kind, "edges" (the edge walls here) or "raw"
@@ -1890,11 +2023,23 @@ Every point is read as float32 (the game's vectors); other numbers stay float64.
 the build order and never written in `rc-level/2`; an element's identity is its name. Cycle overrides (§17) are
 not part of the format.
 
+**Exact carriers (Stage 154).** A carrier is an authoring construct: the lowering projects each element's points
+onto it and rounds them to float32, so two elements on one carrier lie, to the exact predicates, on two slightly
+different lines or circles. A carrier with `exact: true` places its elements' points on float32 points lying
+exactly on it instead (docs/TDD_59_EXACT_CARRIER.md): a line through a grid point in a primitive direction
+`(q, p)`, `|q|, |p| <= 1024`, its points `A + k h (q, p)`; a circle about a grid point with `radius^2 = N h^2`, `N` an
+integer with many representations as `X^2 + Y^2` within half a pixel of the declared radius, its points
+`C + h (X, Y)` (`h`: the finest grid float32 holds at the level's magnitudes). Every element on an exact carrier is
+then exactly on one line or circle (the solver's carrier identity holds), and a point two of them share is one
+value. The cost is a snap: a point moves to the nearest exact point (a line's are a fraction of a pixel apart, a
+circle's about 1 px apart at radius 40, up to 3 px at 150, 5 px at 400 and 12 px at 900). An exact circle holds
+arcs only: its whole has no float32 form. Crossings of two exact carriers are not exact points (v1).
+
 **Level discovery:** the levels are the files under `data/levels/`.
 
 ### 19.2 Editor requirements
 
-> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
+> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Since Stage 164 every level element is visible and editable in the editor (colliders and the camera as items, the background outlined, every level key a panel field), and colliders are drawn in play too (`["colliders"]`). Since Stage 155 the panel lists the levels (the host's `data/levels`): a click, Ctrl+O, or the previous/next buttons open another level in place, asking again before discarding unsaved changes. Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
 
 The level editor must support:
 
@@ -2267,6 +2412,12 @@ but not other objects (v1). A **static** object stays. Its surface takes the nex
 surfaces, so it is planned and hit like any surface, and it moves with the body. While an object moves, nothing
 is fired. The bodies' positions are part of the checkpoint, and detectors `for` objects see their centers
 (§24.5, regions only).
+
+**Bubbles** (Stage 150). An object's `gravity` is a factor of the level's: a bubble's is negative, so it floats up
+and rests against what is above it. An object that `pops` is popped by the arrow's hit: the hit sets
+`obj:<name>:popped` and the object is gone from then on (its surface absent, so the arrow passes on, and its body
+still), until an undo. An object may `carry` another, which then keeps its offset from the carrier and does not
+fall, until the carrier pops; then it falls (one level of carrying).
 
 ### 25.6 The pull and the grapple
 
@@ -2796,4 +2947,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.60.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.72.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

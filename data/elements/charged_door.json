@@ -1,0 +1,35 @@
+{
+ "doc": "A charged door: a door (a wall) that is gone while charge reaches it (flag el:<name>:charge), and back when the circuit breaks.",
+ "label": "ChargedDoor",
+ "params": {
+  "solid": {
+   "default": true,
+   "doc": "the player collides with the closed door"
+  }
+ },
+ "priority": 62,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": "$solid",
+   "presence": [
+    {
+     "key": "el:${name}:charge",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   }
+  }
+ ],
+ "tags": ["conductive"]
+}

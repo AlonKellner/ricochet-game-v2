@@ -20,7 +20,31 @@ struct Lowered {
 	nlohmann::json level;             // the rc-level/1 document (no flags: the surfaces' view)
 	std::vector<std::string> origins; // per surface: where it came from ("level.elements[3] (m1)", "level.room", ...)
 	nlohmann::json flags = nlohmann::json::object(); // the initial flags
+	// Stage 152: per element with tags: its index, name and tags (its own and its kind's)
+	struct Tagged {
+		size_t element = 0;
+		std::string name;
+		std::vector<std::string> tags;
+	};
+	std::vector<Tagged> tagged;
+	// Stage 153: per element whose kind bounds a region: its index, name and its kind's `shade` evaluated
+	struct Shaded {
+		size_t element = 0;
+		std::string name;
+		nlohmann::json shade;
+	};
+	std::vector<Shaded> shaded;
 };
+
+// Stage 156 (GAME_SPEC 10.6): the hit effects an element's or an object's tags give each of its sides --
+// flammable (fire passes between the arrow and it), conductive (the arrow and it swap charge), frosted
+// (the arrow takes frost); burning and charged start it on fire or charged (and imply flammable,
+// conductive). The flags: el:<name>:fire, el:<name>:charge, shot:fire, shot:charge, shot:frost.
+nlohmann::json tag_hits(const std::string &name, const std::vector<std::string> &tags);
+// ... the flags they start with ({el:<name>:fire: true} for burning, ...)
+std::vector<std::string> tag_initial_flags(const std::string &name, const std::vector<std::string> &tags);
+// ... whether a side's effect type may carry frost (pass, reflection, inversion)
+bool frost_bearing(const std::string &effect_type);
 
 // The lowering of an rc-level/2 document. Throws LevelError naming the element.
 Lowered lower_level(const nlohmann::json &v2);

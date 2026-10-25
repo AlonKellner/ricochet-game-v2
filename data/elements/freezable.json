@@ -1,5 +1,5 @@
 {
- "doc": "A freezable wall: a solid barrier that a frosted arrow (frost_barrier) freezes into a mirror for that one hit, which uses the frost up.",
+ "doc": "A freezable barrier: a wall a frosted arrow reflects off once, using the frost up. Since Stage 156 every wall does this (GAME_SPEC 10.6); the kind stays for older levels.",
  "label": "Freezable",
  "params": {
   "frost": {

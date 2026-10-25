@@ -48,6 +48,9 @@ reaches the solver's inputs, the oracle, the pieces (`rcg/geom`), the player's c
 dumps. It is worth doing only if a puzzle needs one exact circle across several arcs. Say so, and it becomes its
 own stage with the oracle first.
 
+Stage 154 (docs/TDD_59_EXACT_CARRIER.md) made carriers exact without the solver: an exact carrier's points are
+float32 points lying exactly on it, so its elements share one exact line or circle by the ordinary predicates.
+
 ## Tests
 
 - `rcg_tests` "rc-level/2: carriers -- elements on a line or a circle, projected onto it (Stage 149)": the

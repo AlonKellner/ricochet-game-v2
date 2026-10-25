@@ -96,6 +96,8 @@ std::vector<std::string> replay(const json &script, const std::string &level_tex
 		if (op == "teleport") {
 			const auto [x, y] = at(step["at"]);
 			check(rc_game_teleport(g, x, y), "rc_game_teleport");
+		} else if (op == "scroll") { // Stage 151: the cycle
+			check(rc_game_scroll(g, step["by"].get<float>()), "rc_game_scroll");
 		} else if (op == "cursor") {
 			const auto [x, y] = at(step["at"]);
 			check(rc_game_set_cursor(g, x, y), "rc_game_set_cursor");

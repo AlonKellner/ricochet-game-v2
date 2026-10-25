@@ -1,0 +1,44 @@
+{
+ "doc": "A dark barrier: one side of its line (or the inside or outside of its circle) is a dark region. Anything in a dark region and in no light region is in the shadow: the arrow stops where it would enter the shadow, and surfaces wholly in it are gone for the arrow (GAME_SPEC 9.9).",
+ "label": null,
+ "params": {
+  "side": {
+   "default": "auto",
+   "doc": "the region: a side of the line, the inside or outside of the circle (auto: left, inside)",
+   "enum": ["auto", "left", "right", "inside", "outside"]
+  },
+  "when": {
+   "default": "",
+   "doc": "the flag under which it is active (empty: always), e.g. el:wire:charge, det:plate, door:gate",
+   "type": "string"
+  }
+ },
+ "priority": 70,
+ "shade": {
+  "side": "$side",
+  "type": "dark",
+  "when": "$when"
+ },
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "presence": [
+    {
+     "key": "el:${name}:barrier",
+     "values": ["true"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   }
+  }
+ ]
+}

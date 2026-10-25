@@ -50,7 +50,10 @@ def check_level(level, steps):
         # the draw order: by z, the scene's tree order within a z
         assert [n[1] for n in drawn] == sorted(n[1] for n in drawn)
         zero = [n[0][0] for n in drawn if n[1] == 0]
-        assert zero[:3] == ["background", "player", "cursor"] and zero[-1] == "surface"
+        # (Stage 164: a level's colliders come right after the background, under the player)
+        lead = [k for k in zero[:4] if k != "colliders"]
+        assert lead[:3] == ["background", "player", "cursor"] and zero[-1] == "surface"
+        assert "colliders" not in zero or zero.index("colliders") == 1
         # the record's order: by z, then the key's encoding
         got = sorted(drawn, key=lambda n: (n[1], json.dumps(n[0], separators=(",", ":"))))
         assert len(got) == len(want)

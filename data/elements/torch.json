@@ -1,12 +1,6 @@
 {
- "doc": "A fire source: an arrow passing it is on fire for the rest of the shot (flag shot:fire, or `fire`).",
+ "doc": "A torch: a surface on fire (tag burning). An arrow passing it catches fire (shot:fire), and a burning arrow lights what is flammable (GAME_SPEC 10.6).",
  "label": "Torch",
- "params": {
-  "fire": {
-   "default": "shot:fire",
-   "doc": "the fire's flag"
-  }
- },
  "priority": 54,
  "surfaces": [
   {
@@ -14,14 +8,6 @@
     "effect": {
      "type": "pass"
     },
-    "hits": [
-     {
-      "key": "$fire",
-      "kind": "state",
-      "op": "set",
-      "value": true
-     }
-    ],
     "interactive": true
    },
    "player_solid": false,
@@ -29,16 +15,9 @@
     "effect": {
      "type": "pass"
     },
-    "hits": [
-     {
-      "key": "$fire",
-      "kind": "state",
-      "op": "set",
-      "value": true
-     }
-    ],
     "interactive": true
    }
   }
- ]
+ ],
+ "tags": ["burning"]
 }

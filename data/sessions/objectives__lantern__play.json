@@ -1,0 +1,64 @@
+{
+ "schema": "rc-session/1",
+ "level": "objectives/lantern",
+ "kind": "kinematic",
+ "steps": [
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 30
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1250.0,
+    500.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 30
+  },
+  {
+   "op": "cursor",
+   "at": [
+    850.0,
+    300.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 30
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1250.0,
+    500.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 30
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_right"
+   ],
+   "ticks": 180
+  }
+ ]
+}

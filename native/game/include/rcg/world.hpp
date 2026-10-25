@@ -53,6 +53,27 @@ public:
 	int body_of(int surface_id) const; // the body whose surface it is, -1: none
 	// a body moved: its surface rebuilt where it is (a structural change when it moved)
 	void set_body(size_t index, const V2 &pos, const V2 &vel, bool on_floor);
+	// Stage 151: static surfaces that move -- each rebuilt from its base spec through a rigid transform
+	struct Moving {
+		std::vector<int> ids;
+		SurfaceSpec base;
+		std::optional<std::string> label;
+	};
+	void set_moving(std::vector<Moving> moving);
+	// the moving surfaces placed by their transforms (one per Moving); a structural change when any moved
+	bool place_moving(const std::vector<rc::Xf2> &xfs);
+
+	// Stage 153: the shadow -- ids for its boundary's pieces (taken once, before any spawn), then the
+	// boundary under the current flags (after every other surface) and the surfaces darkened in it
+	int reserve_ids(int n) {
+		const int first = next_id_;
+		next_id_ += n;
+		return first;
+	}
+	// a structural change when the boundary or the darkened surfaces changed
+	bool set_shade(std::vector<BuiltSurface> boundary, std::vector<int> darkened);
+	// the surfaces as they are without the shadow (none: no surface of that id)
+	const BuiltSurface *undarkened(int id) const;
 
 	// the static surfaces, then the groups by channel name
 	const std::vector<BuiltSurface> &surfaces() const { return surfaces_; }
@@ -80,9 +101,13 @@ private:
 
 	std::vector<BuiltSurface> static_;
 	std::vector<Body> bodies_;
+	std::vector<Moving> moving_;
+	std::vector<rc::Xf2> moving_at_;
 	std::map<std::string, Group> groups_;
 	std::map<std::string, int> generations_;
 	std::vector<BuiltSurface> surfaces_;
+	std::vector<BuiltSurface> shade_; // Stage 153
+	std::vector<int> darkened_;       // ... sorted
 	Snapshot initial_;
 	int next_id_ = 1;
 	int version_ = 0;

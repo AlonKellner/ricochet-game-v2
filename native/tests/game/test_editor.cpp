@@ -98,7 +98,7 @@ TEST_CASE("editor: every level loads and saves byte for byte") {
 		CHECK_FALSE(ed.draw().empty());
 		n++;
 	}
-	CHECK(n == 41);
+	CHECK(n == 46);
 	// an rc-level/1 document is migrated
 	const json v1 = json::parse(read_text(ROOT / "bench" / "lowered" / "test_levels__flag_switches.json"));
 	rcg::Editor ed(&v1);
@@ -569,4 +569,184 @@ TEST_CASE("editor: an element's kind picked from the palette") {
 	ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
 	CHECK(element(ed, "w")["kind"] == "fence");
 	CHECK(ok(ed, {{"op", "state"}})["kind"] == "wall"); // what the tools place did not change
+}
+
+TEST_CASE("editor: a moving element shows its keys faint; its motion is a panel field (Stage 151)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "wall", "name": "w", "start": [700, 400], "end": [700, 600]})")}});
+	size_t before = 0;
+	for (const auto &n : ed.draw()) {
+		if (n.key.a == 3) {
+			before = n.calls->size();
+		}
+	}
+	click_row(ed, "motion");
+	ed.text(R"({"keys": [[0, 0, 0, 0], [0.5, 100, 0, 0]]})");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(element(ed, "w")["motion"]["keys"][1][1] == 100);
+	CHECK(ed.errors().empty());
+	size_t after = 0;
+	for (const auto &n : ed.draw()) {
+		if (n.key.a == 3) {
+			after = n.calls->size();
+		}
+	}
+	CHECK(after > before); // the key's faint copy
+}
+
+TEST_CASE("editor: an element's tags and the level's spread rules are panel fields (Stage 152)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "wall", "name": "w", "start": [700, 400], "end": [700, 600]})")}});
+	click_row(ed, "tags");
+	ed.text(R"(["conductive", "powered"])");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(element(ed, "w")["tags"] == json::array({"conductive", "powered"}));
+	CHECK(ed.errors().empty());
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	click_row(ed, "spread");
+	ed.text(R"([{"flag": "glow", "tag": "conductive"}])");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(ok(ed, {{"op", "document"}})["document"]["spread"][0]["flag"] == "glow");
+	CHECK(ed.errors().empty());
+	click_row(ed, "spread");
+	ed.text(R"([{"flag": "glow"}])"); // no tag: the level's problem, shown
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK_FALSE(ed.errors().empty());
+}
+
+TEST_CASE("editor: shades are drawn in their colours over a faint shadow (Stage 153)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	auto shadow = [&] {
+		for (const auto &n : ed.draw()) {
+			if (n.key.a == 11 && !n.calls->empty() && n.calls->front().kind == rcg::render::Kind::Triangles) {
+				return true;
+			}
+		}
+		return false;
+	};
+	CHECK_FALSE(shadow());
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "dark", "name": "night", "start": [1000, 240], "end": [1000, 840]})")}});
+	CHECK(ed.errors().empty());
+	CHECK(shadow());
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "light", "name": "sun", "start": [1000, 240], "end": [1000, 840]})")}});
+	CHECK_FALSE(shadow()); // the same line and side: the light covers the dark
+	ok(ed, {{"op", "undo"}});
+	CHECK(shadow());
+}
+
+TEST_CASE("editor: the level menu -- listed by the host, opened by name, previous and next, unsaved changes asked again (Stage 155)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	CHECK_FALSE(ed.status().open_requested);
+	ok(ed, {{"op", "levels"}, {"list", {"a/one", "a/two", "b/three"}}, {"current", "a/two"}});
+	CHECK(ok(ed, {{"op", "state"}})["level"] == "a/two");
+	// the list: the nav row's middle opens it, a level row asks for that level
+	click_row(ed, "a/two"); // (the nav row shows the open level)
+	CHECK(ok(ed, {{"op", "state"}})["level_menu"] == true);
+	click_row(ed, "b/three");
+	CHECK(ed.status().open_requested);
+	CHECK(ok(ed, {{"op", "open_request"}})["name"] == "b/three");
+	CHECK_FALSE(ed.status().open_requested);
+	ok(ed, {{"op", "load"}, {"text", R"({"schema": "rc-level/2", "elements": []})"}, {"name", "b/three"}});
+	CHECK(ok(ed, {{"op", "state"}})["level"] == "b/three");
+	CHECK(ok(ed, {{"op", "state"}})["level_menu"] == false);
+	// next wraps around; ctrl+left goes back
+	CHECK(ok(ed, {{"op", "next_level"}, {"by", 1}})["name"] == "a/one");
+	ok(ed, {{"op", "open_request"}});
+	ed.key(rcg::Editor::KeyLeft, rcg::Editor::ModCtrl, true);
+	CHECK(ok(ed, {{"op", "open_request"}})["name"] == "a/two");
+	// unsaved changes: the first ask is refused, the second opens
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "wall", "start": [700, 400], "end": [700, 600]})")}});
+	CHECK(ed.status().dirty);
+	const json first = ed.command({{"op", "open"}, {"name", "a/one"}});
+	CHECK(first["ok"] == false);
+	CHECK(first["error"].get<std::string>().find("unsaved") != std::string::npos);
+	CHECK_FALSE(ed.status().open_requested);
+	CHECK(ok(ed, {{"op", "open"}, {"name", "a/one"}})["name"] == "a/one");
+	CHECK(ed.status().open_requested);
+}
+
+TEST_CASE("editor: every tool is a chip in the panel; a click uses it (Stage 161)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	const json panel = ok(ed, {{"op", "panel"}});
+	std::vector<json> rows;
+	for (const json &r : panel["rows"]) {
+		if (r["kind"] == "tools") {
+			rows.push_back(r);
+		}
+	}
+	REQUIRE(rows.size() == 4); // ten tools, three to a row
+	const float x = rows[0]["x"].get<float>(), pw = 1920.0f + 20.0f - x, x0 = 1920.0f - pw + 10.0f, cw = (pw - 20.0f) / 3.0f;
+	auto click = [&](const json &row, int column) {
+		const float px = x0 + cw * (float(column) + 0.5f), py = row["y"].get<float>() + 10.0f;
+		ed.pointer(rcg::Editor::PtrMove, px, py, 0, 0);
+		ed.pointer(rcg::Editor::PtrDown, px, py, rcg::Editor::BtnLeft, 0);
+		ed.pointer(rcg::Editor::PtrUp, px, py, rcg::Editor::BtnLeft, 0);
+	};
+	click(rows[0], 2);
+	CHECK(ok(ed, {{"op", "state"}})["tool"] == "arc");
+	click(rows[2], 0);
+	CHECK(ok(ed, {{"op", "state"}})["tool"] == "detector");
+	click(rows[3], 0);
+	CHECK(ok(ed, {{"op", "state"}})["tool"] == "carrier_circle");
+}
+
+TEST_CASE("editor: colliders and the camera are items -- placed, selected, dragged, duplicated, removed (Stage 164)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	auto doc = [&] { return ok(ed, {{"op", "document"}})["document"]; };
+	// X, two clicks: a collider
+	ok(ed, {{"op", "tool"}, {"tool", "select"}});
+	ed.key('X', 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["tool"] == "collider");
+	ok(ed, {{"op", "set"}, {"path", "/colliders"}, {"value", json::parse(R"([{"a": [600, 700], "b": [900, 700]}])")}});
+	REQUIRE(doc()["colliders"].size() == 1);
+	// the item: selected, its end moved, duplicated, removed
+	ok(ed, {{"op", "select"}, {"item", "collider:0"}});
+	CHECK(ok(ed, {{"op", "state"}})["item"] == "collider:0");
+	ok(ed, {{"op", "move"}, {"item", "collider:0"}, {"handle", "b"}, {"to", {1000, 720}}});
+	CHECK(doc()["colliders"][0]["b"] == json::array({1000, 720}));
+	ok(ed, {{"op", "move"}, {"item", "collider:0"}, {"handle", "body"}, {"by", {0, -100}}});
+	CHECK(doc()["colliders"][0]["a"] == json::array({600.0, 600.0}));
+	CHECK(ok(ed, {{"op", "duplicate"}, {"item", "collider:0"}})["item"] == "collider:1");
+	CHECK(doc()["colliders"].size() == 2);
+	ok(ed, {{"op", "remove"}, {"item", "collider:1"}});
+	CHECK(doc()["colliders"].size() == 1);
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	// the camera: its start drags
+	ok(ed, {{"op", "set"}, {"path", "/camera"}, {"value", json::parse(R"({"start": [960, 540]})")}});
+	ok(ed, {{"op", "move"}, {"item", "camera"}, {"handle", "start"}, {"to", {1000, 500}}});
+	CHECK(doc()["camera"]["start"] == json::array({1000, 500}));
+	CHECK(ed.command({{"op", "duplicate"}, {"item", "camera"}})["ok"] == false);
+	ok(ed, {{"op", "remove"}, {"item", "camera"}});
+	CHECK_FALSE(doc().contains("camera"));
+	CHECK(ed.errors().empty());
+}
+
+TEST_CASE("editor: the collider tool places a collider with two clicks; the level's every key is a field (Stage 164)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ed.key('X', 0, true);
+	// two clicks on the canvas
+	for (const auto &[x, y] : {std::pair{300.0f, 500.0f}, std::pair{600.0f, 500.0f}}) {
+		ed.pointer(rcg::Editor::PtrMove, x, y, 0, 0);
+		ed.pointer(rcg::Editor::PtrDown, x, y, rcg::Editor::BtnLeft, 0);
+		ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
+	}
+	const json d = ok(ed, {{"op", "document"}})["document"];
+	REQUIRE(d.contains("colliders"));
+	CHECK(d["colliders"].size() == 1);
+	// with nothing selected, the panel lists every level key
+	const json panel = ok(ed, {{"op", "panel"}});
+	std::set<std::string> labels;
+	for (const json &r : panel["rows"]) {
+		labels.insert(r["label"].get<std::string>());
+	}
+	for (const char *k : {"colliders", "camera", "background", "features", "templates", "carriers", "spread", "cycle", "objects", "detectors"}) {
+		CHECK_MESSAGE(labels.count(k) == 1, k);
+	}
 }

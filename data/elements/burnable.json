@@ -1,11 +1,7 @@
 {
- "doc": "A burnable barrier: solid, but an arrow on fire burns it away (for good: flag el:<name>:burnt) and goes on.",
+ "doc": "A burnable barrier (tag flammable): solid, but an arrow on fire burns through it -- it catches fire (el:<name>:fire) and is gone from then on. A burnt barrier no longer stops anything.",
  "label": "Burnable",
  "params": {
-  "fire": {
-   "default": "shot:fire",
-   "doc": "the fire's flag"
-  },
   "solid": {
    "default": true,
    "doc": "the player collides with it until it burns"
@@ -18,12 +14,12 @@
    "player_solid": "$solid",
    "presence": [
     {
-     "key": "el:${name}:burnt",
-     "values": ["DEFAULT"]
+     "key": "el:${name}:fire",
+     "values": ["DEFAULT", "false"]
     }
    ],
    "resolver": {
-    "key": "$fire",
+    "key": "shot:fire",
     "table": [
      [
       "DEFAULT",
@@ -49,29 +45,13 @@
         "effect": {
          "type": "pass"
         },
-        "hits": [
-         {
-          "key": "el:${name}:burnt",
-          "kind": "state",
-          "op": "set",
-          "value": true
-         }
-        ],
-        "interactive": true
+        "interactive": false
        },
        "right": {
         "effect": {
          "type": "pass"
         },
-        "hits": [
-         {
-          "key": "el:${name}:burnt",
-          "kind": "state",
-          "op": "set",
-          "value": true
-         }
-        ],
-        "interactive": true
+        "interactive": false
        }
       }
      ]
@@ -79,5 +59,6 @@
    },
    "right": null
   }
- ]
+ ],
+ "tags": ["flammable"]
 }

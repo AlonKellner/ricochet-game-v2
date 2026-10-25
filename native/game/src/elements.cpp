@@ -23,7 +23,7 @@ namespace {
 
 [[noreturn]] void fail(const std::string &path, const std::string &what) { throw LevelError(path + ": " + what); }
 
-const std::set<std::string> COMMON = {"kind", "name", "start", "end", "via", "circle", "straight", "label", "flip", "carrier", "from", "to"};
+const std::set<std::string> COMMON = {"kind", "name", "start", "end", "via", "circle", "straight", "label", "flip", "carrier", "from", "to", "motion", "tags"};
 const std::set<std::string> GEOMETRY = {"start", "end", "via", "circle", "straight"};
 const std::set<std::string> TYPES = {"string", "number", "bool", "point", "array", "object", "any"};
 
@@ -420,7 +420,7 @@ void check_template(const json &t, const std::string &path) {
 		fail(path, "a template object expected");
 	}
 	for (auto it = t.begin(); it != t.end(); ++it) {
-		static const std::set<std::string> keys = {"doc", "label", "priority", "geometry", "params", "surfaces", "example"};
+		static const std::set<std::string> keys = {"doc", "label", "priority", "geometry", "params", "surfaces", "example", "tags", "shade"};
 		if (!keys.count(it.key())) {
 			fail(path, "unknown key '" + it.key() + "'");
 		}
@@ -467,6 +467,26 @@ void check_template(const json &t, const std::string &path) {
 			}
 		}
 	}
+	if (t.contains("tags")) { // Stage 152: the kind's own tags (flammable, conductive, powered, ...)
+		if (!t["tags"].is_array() || !std::all_of(t["tags"].begin(), t["tags"].end(), [](const json &v) { return v.is_string(); })) {
+			fail(path + ".tags", "an array of strings expected");
+		}
+	}
+	if (t.contains("shade")) { // Stage 153: the element bounds a dark or a light region (GAME_SPEC 9.9)
+		const json &sh = t["shade"];
+		if (!sh.is_object()) {
+			fail(path + ".shade", "an object expected: {\"type\": dark | light, \"side\", \"when\"}");
+		}
+		for (auto it = sh.begin(); it != sh.end(); ++it) {
+			if (it.key() != "type" && it.key() != "side" && it.key() != "when") {
+				fail(path + ".shade", "unknown key '" + it.key() + "'");
+			}
+		}
+		if (!sh.contains("type")) {
+			fail(path + ".shade.type", "dark or light expected");
+		}
+		check_switches(sh, path + ".shade");
+	}
 	if (t.contains("example")) { // the parameters a new element starts with (the editor's palette)
 		if (!t["example"].is_object()) {
 			fail(path + ".example", "an object of parameter values expected");
@@ -502,6 +522,9 @@ void check_template(const json &t, const std::string &path) {
 	}
 	std::set<std::string> used;
 	refs(ss, used);
+	if (t.contains("shade")) {
+		refs(t["shade"], used);
+	}
 	if (t.contains("label")) {
 		check_switches(t["label"], path + ".label");
 		refs(t["label"], used);
@@ -638,6 +661,13 @@ std::vector<json> expand(const json &tmpl, const json &element, const std::strin
 		out.push_back(std::move(s));
 	}
 	return out;
+}
+
+json evaluate(const json &tmpl, const json &element, const std::string &name, const std::string &key, const std::string &path) {
+	if (!tmpl.contains(key)) {
+		return json();
+	}
+	return eval(tmpl[key], params_of(tmpl, element, name, path), path);
 }
 
 std::optional<json> match(const std::string &kind, const json &tmpl, const std::vector<json> &surfaces, size_t at,

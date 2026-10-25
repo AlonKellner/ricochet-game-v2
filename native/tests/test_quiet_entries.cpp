@@ -28,7 +28,7 @@ TEST_CASE("quiet entries: the Stage 110 fixtures match the oracle at f64, Dual, 
 		CHECK_MESSAGE(diff_against_oracle(r64l, fx["expected"]) == "", (name + " big64: " + diff_against_oracle(r64l, fx["expected"])));
 		fixtures++;
 	}
-	CHECK(fixtures == 10);
+	CHECK(fixtures == 12);
 }
 
 TEST_CASE("quiet entries: the preview's two paths agree up to the cursor") {
@@ -36,8 +36,8 @@ TEST_CASE("quiet entries: the preview's two paths agree up to the cursor") {
 	int pairs = 0;
 	for (const ojson &fx : fxs["fixtures"]) {
 		const std::string name = fx["name"].get<std::string>();
-		if (name.rfind("toggle_", 0) == 0 || name.find("_physical") == std::string::npos) {
-			continue; // one shot per planned / physical pair; the toggler diverges on purpose
+		if (name.rfind("toggle_", 0) == 0 || name.rfind("terminal_", 0) == 0 || name.find("_physical") == std::string::npos) {
+			continue; // one shot per planned / physical pair; the toggler diverges on purpose; a planned terminal: below
 		}
 		Tracer tracer;
 		tracer.set_defs(defs_from_json(fx["surfaces"]));
@@ -52,7 +52,36 @@ TEST_CASE("quiet entries: the preview's two paths agree up to the cursor") {
 		CHECK_MESSAGE(pair->cursor_point_agrees, name);
 		pairs++;
 	}
-	CHECK(pairs == 4);
+	CHECK(pairs == 3);
+}
+
+TEST_CASE("quiet entries: a planned terminal stops the planned walk -- met on its segment the paths agree, crossed off it they diverge (Stage 162)") {
+	const ojson fxs = load_json("bench/fixtures/stage110_quiet_entries.json");
+	int seen = 0;
+	for (const ojson &fx : fxs["fixtures"]) {
+		const std::string name = fx["name"].get<std::string>();
+		if (name.rfind("terminal_", 0) != 0 || name.find("_physical") == std::string::npos) {
+			continue;
+		}
+		Tracer tracer;
+		tracer.set_defs(defs_from_json(fx["surfaces"]));
+		const V2 player{float(fx["player"][0].get<double>()), float(fx["player"][1].get<double>())};
+		const V2 cursor{float(fx["cursor"][0].get<double>()), float(fx["cursor"][1].get<double>())};
+		const std::optional<TracePair> pair = tracer.trace_pair(player, cursor, plan_from_json(fx["plan"]), Flags());
+		REQUIRE_MESSAGE(pair.has_value(), name);
+		const rc::TracePath &pl = pair->planned, &ph = pair->physical;
+		REQUIRE(!pl.steps.empty());
+		REQUIRE(!ph.steps.empty());
+		if (name.find("on_segment") != std::string::npos) {
+			CHECK(pl.steps.back().end == ph.steps.back().end); // both stop at the terminal
+			CHECK(pl.steps.size() == ph.steps.size());
+		} else {
+			CHECK(pl.cursor_index < 0);  // the planned walk stops beside the segment
+			CHECK(ph.cursor_index >= 0); // the physical one passes and reaches the cursor
+		}
+		seen++;
+	}
+	CHECK(seen == 2);
 }
 
 // Stage 110, B5: surfaces on one carrier are crossed at one point (K6); an entry

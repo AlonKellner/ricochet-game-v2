@@ -1,0 +1,64 @@
+{
+ "schema": "rc-session/1",
+ "level": "objectives/ring",
+ "kind": "kinematic",
+ "steps": [
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 30
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1000.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 30
+  },
+  {
+   "op": "cursor",
+   "at": [
+    810.0,
+    300.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 30
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1000.0,
+    520.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 30
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_right"
+   ],
+   "ticks": 180
+  }
+ ]
+}

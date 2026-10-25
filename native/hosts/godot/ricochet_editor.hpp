@@ -55,6 +55,11 @@ private:
 	void sync();
 	void start_play();
 	void stop_play();
+	// Stage 155: the level menu -- the levels' folder (the repository's data when there, else res://data),
+	// the levels listed for the editor, a requested one opened
+	godot::String levels_dir() const;
+	void list_levels();
+	void open_requested();
 
 	godot::String level_path_, save_path_;
 	rc_editor *editor_ = nullptr;

@@ -218,6 +218,12 @@ geometry is exact.
 hit. It stays 1 until an undo or a reset takes the game back before the win. A goal level also says where it
 stands in the HUD's first line (`Goal: locked | open | reached!`), and draws its goal.
 
+## The cycle (1.10)
+
+A level with moving surfaces has a cycle (`rc_frame.phase`, in [0, 1); `rc_frame.cycle_auto`: it runs on its
+own). Forward the mouse wheel as `rc_game_scroll(game, ±1)` per notch (up: +1): it sets the cycle and pauses it.
+A shot, or the level's idle seconds, runs it again. The session scripts' op `{"op": "scroll", "by": n}` replays it.
+
 ## Hosting the editor
 
 The level editor (docs/EDITOR.md) is native too (`rc_editor_*`, API 1.8): an `rc-level/2` document, its
@@ -236,6 +242,10 @@ tools, its inspector panel and its draw list. A host keeps no editor state:
 4. **After input**, read `rc_editor_get_status`:
    - `save_requested`: write `rc_editor_document`'s text to the level's file, then send the command
      `{"op": "saved"}`, or `{"op": "save_cancelled"}` when the write did not happen (a dialog cancelled).
+   - `open_requested` (C API 1.11, Stage 155): take the level's name with the command `{"op": "open_request"}`,
+     read `data/levels/<name>.json`, and load it with `{"op": "load", "text": ..., "name": <name>}`; it is now the level
+     a save writes. At start, list the levels for the panel's menu with `{"op": "levels", "list": [names], "current": name}`
+     (names: paths under `data/levels` without `.json`).
    - `mode == RC_EDITOR_PLAY`: play the document. Parse `rc_editor_document`'s text with `rc_level_parse`,
      create a game, and run the ordinary game loop (above) instead of the editor's. When the player presses
      Esc, send the editor `RC_EDKEY_ESCAPE` (or `{"op": "stop"}`), destroy the game, and paint the editor

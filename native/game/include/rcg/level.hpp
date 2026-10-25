@@ -54,6 +54,12 @@ struct SpawnTemplateSpec {
 	bool trim = true;
 };
 
+// A condition on a flag: flag_key(flags[key]) is one of values ("DEFAULT": missing).
+struct PresenceSpec {
+	std::string key;
+	std::vector<std::string> values;
+};
+
 // A hit effect (HitEffectSpec): state, target, reset or spawn.
 struct HitSpec {
 	nlohmann::json raw; // the dictionary as authored
@@ -65,18 +71,16 @@ struct HitSpec {
 	std::vector<std::string> channels;  // reset
 	std::string channel;                // spawn
 	std::shared_ptr<SpawnTemplateSpec> spawn_template;
+	std::vector<PresenceSpec> when; // Stage 156: a state write only while these hold (the side's flags when it fired)
 };
 
 struct SideSpec {
 	EffectSpec effect;
 	bool interactive = false;
 	std::vector<HitSpec> hits;
+	bool rigid = false; // Stage 156: frost never turns it (a shadow's edge)
 };
 
-struct PresenceSpec {
-	std::string key;
-	std::vector<std::string> values;
-};
 
 // One row of a categorical resolver: a flag value and the sides under it.
 struct ResolverRow {
@@ -138,6 +142,58 @@ struct Object {
 	bool solid = true;          // the player collides with it
 	std::string face = "wall";  // its sides: wall (terminal) | mirror (reflection) | pass
 	std::string label = "Object";
+	// Stage 150: bubbles -- its own gravity (a factor of the level's: negative floats up), popped by the
+	// arrow (gone for good: the flag obj:<name>:popped), carrying another object until it pops
+	double gravity = 1.0;
+	bool pops = false;
+	std::string carries;
+	std::vector<std::string> tags; // Stage 152 (an object conducts, burns, ...)
+};
+
+// Stage 152: an element with tags, and its surfaces (indices into Level::surfaces).
+struct Tagged {
+	std::string name;
+	std::vector<std::string> tags;
+	std::vector<size_t> surfaces;
+};
+
+// Stage 153 (GAME_SPEC 9.9): an element bounding a dark or a light region -- a
+// side of its line (left, right) or of its circle (inside, outside; an arc: its
+// circle's), active while the flag `when` is true (always when empty). Its
+// surface (an index into Level::surfaces) is never present: the shadow's
+// boundary is the game's (rcg/shade.hpp).
+struct Shade {
+	std::string name;
+	size_t surface = 0;
+	bool dark = true;
+	std::string side = "auto"; // auto (left for a line, inside for a circle) | left | right | inside | outside
+	std::string when;
+};
+
+// Stage 152 (GAME_SPEC 10.6): a spreading rule -- the flag el:<name>:<flag> of
+// every element (and object) tagged `tag` that touches, through others so
+// tagged, one that has it. Persisting (fire): set ones stay set, through absent
+// ones too. Not persisting (charge): recomputed from the present elements with a
+// source tag; an absent one touching a lit one is lit (it does not pass it on).
+struct SpreadRule {
+	std::string flag;
+	std::string tag;
+	bool persist = true;
+	std::vector<std::string> sources;
+};
+
+// rc-level/2 (Stage 151): an element's motion over the level's cycle -- keys
+// (phase in [0, 1), an offset dx, dy, an angle in radians about the pivot),
+// interpolated linearly and looping; its surfaces (indices into
+// Level::surfaces) move together.
+struct Motion {
+	std::vector<size_t> surfaces;
+	std::vector<std::array<double, 4>> keys;
+	std::optional<V2> pivot; // default: the first surface's middle (a circle: its center)
+};
+struct Cycle {
+	double period = 4.0;       // seconds per cycle while it runs on its own
+	double resume_after = 10.0; // seconds of no scroll and no plan change before a paused cycle runs again
 };
 
 // rc-level/2: the level's goal (GAME_SPEC 3.2): the player inside the region
@@ -190,6 +246,11 @@ struct Level {
 	std::optional<Objective> objective;
 	std::vector<Detector> detectors;
 	std::vector<Object> objects; // Stage 146
+	std::vector<Motion> motions; // Stage 151
+	Cycle cycle;
+	std::vector<Tagged> tagged;     // Stage 152
+	std::vector<SpreadRule> spread; // ... (default: burnt through flammable; charge through conductive from powered)
+	std::vector<Shade> shades;      // Stage 153
 };
 
 // Stage 146: an object's surface (a full circle at `center`, its sides by its face, a pull on them if pullable).

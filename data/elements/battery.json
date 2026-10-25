@@ -1,0 +1,29 @@
+{
+ "doc": "A battery: a conductor that starts charged (tags conductive, charged, powered). An uncharged arrow touching it takes its charge; a charged one gives it back. Powered: the source of a level's touching charge rule, if it has one.",
+ "label": "Battery",
+ "params": {
+  "solid": {
+   "default": true,
+   "doc": "the player and objects collide with it"
+  }
+ },
+ "priority": 61,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": "$solid",
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   }
+  }
+ ],
+ "tags": ["conductive", "powered", "charged"]
+}

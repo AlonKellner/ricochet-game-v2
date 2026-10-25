@@ -1,0 +1,38 @@
+{
+ "schema": "rc-session/1",
+ "level": "objectives/timing_gate",
+ "kind": "kinematic",
+ "steps": [
+  {
+   "op": "cursor",
+   "at": [
+    1250.0,
+    540.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "scroll",
+   "by": 25
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_right"
+   ],
+   "ticks": 180
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_down"
+   ],
+   "ticks": 90
+  }
+ ]
+}

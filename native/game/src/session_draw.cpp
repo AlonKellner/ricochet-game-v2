@@ -61,6 +61,10 @@ const Color GHOST_TOGGLER_COLOR = rgba(0.75, 0.95, 1.0);
 const Color FLAG_TOGGLER_COLOR = rgba(1.0, 0.85, 0.2);
 const Color PRE_TRANSFORM_COLOR = rgba(0.55, 0.45, 0.85, 0.35);
 const Color ABSENT_COLOR = rgba(0.6, 0.6, 0.6, 0.35);
+// Stage 153: the shadow, a dark shade's edge, a light one's
+const Color SHADOW_FILL = rgba(0.02, 0.02, 0.05, 0.82);
+const Color SHADE_DARK = rgba(0.55, 0.45, 0.95);
+const Color SHADE_LIGHT = rgba(1.0, 0.85, 0.35);
 const Color CROSSING_COLOR = rgba(1.0, 1.0, 1.0, 0.6);
 const Color TARGET_COLOR = rgba(1.0, 0.85, 0.3);
 const Color SPAWN_COLOR = rgba(0.6, 0.95, 1.0);
@@ -191,6 +195,33 @@ void dashed(std::vector<Call> &out, const SegGeom &seg, const Color &color, doub
 		const double t1 = a0 + span * (i + 1) / n;
 		out.push_back(arc(c, r, t0, t1, 4, color, width));
 	}
+}
+
+// Stage 157: a surface's outline, solid or dashed (a glow under or over it)
+void outline_seg(std::vector<Call> &out, const SegGeom &seg, const Color &color, double width, bool dash) {
+	if (dash) {
+		dashed(out, seg, color, width);
+		return;
+	}
+	if (seg.is_line()) {
+		out.push_back(line(seg.s, seg.e, color, width));
+		return;
+	}
+	const rc::arc::GeneralizedCircle &g = seg.get_carrier();
+	const V2 c = rc::arc::center_of(g);
+	const double r = g.radius();
+	if (r > rc::arc::MAX_ARC_RADIUS && !seg.full) {
+		out.push_back(line(seg.s, seg.e, color, width));
+		return;
+	}
+	double a0 = 0.0, span = rcg::TAU;
+	if (!seg.full) {
+		a0 = double((seg.s - c).angle());
+		const double am = wrapf(double((seg.v - c).angle()) - a0, 0.0, rcg::TAU);
+		const double a1 = wrapf(double((seg.e - c).angle()) - a0, 0.0, rcg::TAU);
+		span = am < a1 ? a1 : a1 - rcg::TAU;
+	}
+	out.push_back(arc(c, r, a0, a0 + span, std::clamp(int(std::abs(span) * r / 6.0), 8, 128), color, width));
 }
 
 // SurfaceNode.config_color
@@ -1225,6 +1256,74 @@ double drawn_length(const rc::TraceStep &st, const Shift &sh) {
 // Stage 136 (the user): each step's distance from the player along its walk, as
 // drawn -- the common part's steps in turn, each branch past the divergence on
 // from the common part's length (the merge lists the common part first)
+// Stage 157: the arrow's states along a step, moving with its dashes (every MARK_PERIOD px of the walk): fire a
+// red cross, charge a white chevron pointing the way it flies, frost a pale blue star
+constexpr double MARK_PERIOD = 45.0;
+const Color MARK_FIRE = rgba(1.0, 0.3, 0.15);
+const Color MARK_CHARGE = rgba(1.0, 1.0, 1.0);
+const Color MARK_FROST = rgba(0.6, 0.85, 1.0);
+void arrow_marks(std::vector<Call> &out, const rc::TraceStep &st, uint8_t mask, double phase, const Shift &sh, const rc::Rect2f &draw) {
+	const bool arcs = st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end);
+	double len = 0.0;
+	rc::arc::ArcParams ap;
+	V2 center;
+	double r = 0.0, span = 0.0;
+	if (arcs) {
+		ap = rc::arc::arc_params(st.start, st.via, st.end);
+		center = V2::of(double(ap.center.x), double(ap.center.y));
+		r = ap.radius + sh.dr;
+		span = ap.end_angle - ap.start_angle;
+		len = std::abs(span) * r;
+	} else {
+		len = double(st.start.distance_to(st.end));
+	}
+	if (!(len > 0.0) || len > 1e6) {
+		return; // (a step far off the drawn bounds: no marks -- the loop below stays bounded)
+	}
+	auto at = [&](double t, V2 &p, V2 &dir) {
+		if (arcs) {
+			const double a = ap.start_angle + span * (t / len);
+			p = V2::of(double(center.x) + r * std::cos(a), double(center.y) + r * std::sin(a));
+			const double sgn = span >= 0 ? 1.0 : -1.0;
+			dir = V2::of(-std::sin(a) * sgn, std::cos(a) * sgn);
+		} else {
+			const double f = t / len;
+			p = V2::of(double(st.start.x) + (double(st.end.x) - st.start.x) * f + sh.by.x, double(st.start.y) + (double(st.end.y) - st.start.y) * f + sh.by.y);
+			dir = V2::of((double(st.end.x) - st.start.x) / len, (double(st.end.y) - st.start.y) / len);
+		}
+	};
+	for (int k = 0; k < 3; k++) {
+		if ((mask & (1 << k)) == 0) {
+			continue;
+		}
+		const double offset = MARK_PERIOD * k / 3.0;
+		for (double t = std::fmod(std::fmod(phase + offset, MARK_PERIOD) + MARK_PERIOD, MARK_PERIOD); t < len; t += MARK_PERIOD) {
+			V2 p, d;
+			at(t, p, d);
+			if (p.x < draw.position.x || p.y < draw.position.y || p.x > draw.position.x + draw.size.x || p.y > draw.position.y + draw.size.y) {
+				continue;
+			}
+			const double s = 5.0;
+			const V2 n = V2::of(-double(d.y), double(d.x));
+			auto seg = [&](double ax, double ay, double bx, double by, const Color &c) {
+				out.push_back(line(V2::of(double(p.x) + ax, double(p.y) + ay), V2::of(double(p.x) + bx, double(p.y) + by), c, 2.0));
+			};
+			if (k == 0) {
+				seg(-s, -s, s, s, MARK_FIRE);
+				seg(-s, s, s, -s, MARK_FIRE);
+			} else if (k == 1) {
+				seg(-d.x * s + n.x * s, -d.y * s + n.y * s, 0, 0, MARK_CHARGE);
+				seg(-d.x * s - n.x * s, -d.y * s - n.y * s, 0, 0, MARK_CHARGE);
+			} else {
+				for (int q = 0; q < 3; q++) {
+					const double a = 3.14159265358979 * q / 3.0;
+					seg(-std::cos(a) * s, -std::sin(a) * s, std::cos(a) * s, std::sin(a) * s, MARK_FROST);
+				}
+			}
+		}
+	}
+}
+
 std::vector<double> walk_lengths(const std::vector<rc::TraceStep> &steps, const std::vector<Shift> &shifts) {
 	std::vector<double> out;
 	double common = 0.0;
@@ -1258,7 +1357,7 @@ std::vector<double> lane_offsets(const std::vector<rc::TraceStep> &steps) {
 // (dash_phase, px: the presenter's clock; 0 in a replay); steps drawn on one
 // another are set side by side.
 void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<Call> &out, double dash_phase,
-		const std::vector<rc::sweep::EventDot> *dots) const {
+		const std::vector<rc::sweep::EventDot> *dots, const std::vector<uint8_t> *marks) const {
 	PathPainter pp{bounds().grow(50.0f), out};
 	pp.portal_shape = [&](int sid, const V2 &at, bool pair) -> std::optional<PathPainter::PortalShape> {
 		const BuiltSurface *s = world_->by_id(sid);
@@ -1304,6 +1403,9 @@ void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<C
 		} else {
 			pp.step(ms, tint(step_color(ms.type)), true, phase, shifts[i]);
 		}
+		if (marks != nullptr && marks->size() == steps.size() && (*marks)[i] != 0) {
+			arrow_marks(out, ms, (*marks)[i], phase, shifts[i], bounds().grow(50.0f)); // Stage 157
+		}
 	}
 	pp.event_marks(steps, shifts, bounds(), dots);
 }
@@ -1315,7 +1417,7 @@ void Session::paint_path(std::vector<Call> &out, double dash_phase) const {
 	if (pv.has_paths || !pv.merged.empty()) {
 		if (display_mode_ == 0) {
 			if (!pv.merged.empty()) {
-				paint_steps(pv.merged, out, dash_phase, &pv.dots);
+				paint_steps(pv.merged, out, dash_phase, &pv.dots, &pv.marks);
 				for (const auto &[pt, col] : truncation_markers(pv)) {
 					pp.stop_marker(pt, col);
 				}
@@ -1378,6 +1480,14 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		k.pts = {V2::of(bg.rect.x, bg.rect.y), V2::of(bg.rect.w, bg.rect.h)};
 		k.colors = {rgba(bg.color[0], bg.color[1], bg.color[2], bg.color[3])};
 		cached(static_draw_[0], {0, 0, 0}, NodeKind::Background, 0, V2::of(bg.rect.x, bg.rect.y), WHITE, [&](std::vector<Call> &out) { out.push_back(k); });
+	}
+	// Stage 164 (the user: every element visible): the player-only colliders -- floors and ledges -- drawn in play
+	if (!level_.colliders.empty()) {
+		cached(collider_draw_, {0, 0, 0}, NodeKind::Colliders, 0, V2{}, WHITE, [&](std::vector<Call> &out) {
+			for (const Collider &k : level_.colliders) {
+				out.push_back(line(k.a, k.b, rgba(0.55, 0.62, 0.72, 0.9), 3.0));
+			}
+		});
 	}
 	// Stage 145: the goal (dashed while locked, solid when open, filled when won) and the detectors
 	auto outline = [&](std::vector<Call> &out, const Region &r, const Color &c, double width, bool dash) {
@@ -1447,6 +1557,178 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		}
 		fresh(NodeKind::Detector, 0, V2{}, WHITE, std::move(dc), int(i));
 	}
+	// Stage 157: the things on fire, charged or frosted (a glow over them), and what the preview's walk does to them
+	// before it diverges (dashed): catches fire, is charged, is discharged. Stage 159 (the user: every change the
+	// shot makes shows in the preview): surfaces that vanish, appear or change, targets it registers, the goal it
+	// opens, lights it switches, objects it releases, and where a grapple or pull leaves the player or an object.
+	{
+		std::vector<std::pair<std::string, std::vector<const SegGeom *>>> things;
+		for (const Tagged &t : level_.tagged) {
+			std::vector<const SegGeom *> segs;
+			for (const size_t k : t.surfaces) {
+				for (const int id : level_.surfaces[k].ids) {
+					if (const BuiltSurface *bs = world_->undarkened(id); bs != nullptr && present(*bs, flags_)) {
+						segs.push_back(&bs->seg);
+					}
+				}
+			}
+			things.push_back({t.name, segs});
+		}
+		for (const World::Body &body : world_->bodies()) {
+			if (!body.object.tags.empty()) {
+				things.push_back({body.object.name, present(body.built, flags_) ? std::vector<const SegGeom *>{&body.built.seg} : std::vector<const SegGeom *>{}});
+			}
+		}
+		const Preview &pv = shown();
+		// (only a preview that changes something lasting, or starts a journey, adds the node)
+		const bool preview = !flying_ && display_mode_ == 0 && level_.features.preview && pv.predicted.has_value()
+			&& (pv.trip.has_value() || pv.predicted->canonical_key() != flags_.canonical_key());
+		if (!things.empty() || preview) {
+			cached(glow_draw_, {flags_version_, preview ? trace_version_ : -1, world_->version()}, NodeKind::Glow, 1, V2{}, WHITE,
+					[&](std::vector<Call> &out) {
+						auto tagged = [&](const std::string &name, const char *tag) {
+							for (const Tagged &t : level_.tagged) {
+								if (t.name == name) {
+									return std::find(t.tags.begin(), t.tags.end(), tag) != t.tags.end();
+								}
+							}
+							for (const World::Body &body : world_->bodies()) {
+								if (body.object.name == name) {
+									return std::find(body.object.tags.begin(), body.object.tags.end(), tag) != body.object.tags.end();
+								}
+							}
+							return false;
+						};
+						for (const auto &[name, segs] : things) {
+							const bool fire = flags_.is_true("el:" + name + ":fire"), charge = flags_.is_true("el:" + name + ":charge");
+							int becomes = 0;
+							if (preview) {
+								for (const auto &[n, bits] : pv.becomes) {
+									becomes = n == name ? bits : becomes;
+								}
+							}
+							for (const SegGeom *g : segs) {
+								if (tagged(name, "frosted")) {
+									outline_seg(out, *g, rgba(0.6, 0.85, 1.0, 0.35), 6.0, false);
+								}
+								if (fire) {
+									outline_seg(out, *g, rgba(1.0, 0.45, 0.1, 0.55), 8.0, false);
+								}
+								if (charge) {
+									outline_seg(out, *g, rgba(0.85, 0.95, 1.0, 0.5), 5.0, false);
+								}
+								if (becomes & 1) {
+									outline_seg(out, *g, rgba(1.0, 0.45, 0.1, 0.9), 4.0, true);
+								}
+								if (becomes & 2) {
+									outline_seg(out, *g, rgba(0.85, 0.95, 1.0, 0.9), 3.0, true);
+								}
+								if (becomes & 4) {
+									outline_seg(out, *g, rgba(0.5, 0.5, 0.55, 0.9), 3.0, true);
+								}
+							}
+						}
+						if (!preview) {
+							return;
+						}
+						const rc::Flags &pred = *pv.predicted;
+						// surfaces: vanish (red), appear (green), change their sides (yellow); targets registered (cyan)
+						auto kinds = [&](const BuiltSurface &bs, const rc::Flags &f) {
+							const BuiltSide *l = active_side(bs, Side::Left, f), *r = active_side(bs, Side::Right, f);
+							return std::make_pair(l ? l->effect.type : std::string("pass"), r ? r->effect.type : std::string("pass"));
+						};
+						for (const BuiltSurface &cur : world_->surfaces()) {
+							if (!cur.label || cur.pre_transform) {
+								continue;
+							}
+							const BuiltSurface &bs = *world_->undarkened(cur.id);
+							const bool now = present(bs, flags_), then = present(bs, pred);
+							if (now && !then) {
+								outline_seg(out, bs.seg, rgba(1.0, 0.35, 0.35, 0.95), 3.0, true);
+							} else if (!now && then) {
+								outline_seg(out, bs.seg, rgba(0.4, 1.0, 0.5, 0.95), 3.0, true);
+							} else if (now && kinds(bs, flags_) != kinds(bs, pred)) {
+								outline_seg(out, bs.seg, rgba(1.0, 0.85, 0.3, 0.95), 3.0, true);
+							}
+							const std::string target = "target:" + std::to_string(bs.id);
+							if (bs.is_target() && !flags_.is_true(target) && pred.is_true(target)) {
+								outline_seg(out, bs.seg, rgba(0.3, 0.9, 1.0, 0.95), 3.0, true);
+							}
+						}
+						// the goal opening
+						if (level_.objective) {
+							auto open = [&](const rc::Flags &f) {
+								std::vector<rc::FlagCond> conds;
+								for (const PresenceSpec &c : level_.objective->conditions) {
+									conds.push_back({c.key, c.values});
+								}
+								return f.holds(conds);
+							};
+							if (!open(flags_) && open(pred)) {
+								outline(out, level_.objective->goal, rgba(0.4, 1.0, 0.5, 0.95), 3.0, true);
+							}
+						}
+						// lights and darks switching
+						for (size_t k = 0; k < level_.shades.size(); k++) {
+							const Shade &sh = level_.shades[k];
+							if (sh.when.empty() || flags_.is_true(sh.when) == pred.is_true(sh.when)) {
+								continue;
+							}
+							const Color on = sh.dark ? rgba(0.65, 0.55, 1.0, 0.95) : rgba(1.0, 0.9, 0.4, 0.95);
+							outline_seg(out, segment_of(level_.surfaces[sh.surface].spec), pred.is_true(sh.when) ? on : rgba(0.5, 0.5, 0.55, 0.95), 3.0, true);
+						}
+						// objects a popped bubble releases (they fall)
+						for (const World::Body &body : world_->bodies()) {
+							const std::string popped = "obj:" + body.object.name + ":popped";
+							if (body.object.carries.empty() || flags_.is_true(popped) || !pred.is_true(popped)) {
+								continue;
+							}
+							for (const World::Body &held : world_->bodies()) {
+								if (held.object.name == body.object.carries) {
+									outline_seg(out, held.built.seg, rgba(1.0, 0.85, 0.3, 0.95), 3.0, true);
+								}
+							}
+						}
+						// the journey: its trail and where it ends (orange: stopped by a barrier on the way)
+						if (pv.trip && pv.trip->trail.size() >= 2) {
+							const Preview::Trip &t = *pv.trip;
+							Call k;
+							k.kind = Kind::Polyline;
+							k.pts = t.trail;
+							k.colors = {rgba(0.6, 1.0, 0.7, 0.6)};
+							k.width = 2.0;
+							out.push_back(k);
+							const double r = t.body < 0 ? kinematics::RADIUS : world_->bodies()[size_t(t.body)].object.radius;
+							const Color c = t.blocked ? rgba(1.0, 0.6, 0.2, 0.95) : rgba(0.6, 1.0, 0.7, 0.95);
+							out.push_back(arc(t.trail.back(), r, 0.0, rcg::TAU, 32, c, 2.0));
+						}
+					});
+		}
+	}
+	// Stage 153: the shadow (over the surfaces it hides) and the shades' edges, dashed (faint while inactive)
+	if (!level_.shades.empty()) {
+		cached(shade_draw_, {shade_serial_, 0, 0}, NodeKind::Shadow, 15, V2{}, WHITE, [&](std::vector<Call> &out) {
+			if (!shade_fill_.indices.empty()) {
+				Call k;
+				k.kind = Kind::Triangles;
+				for (const rc::vis::Pt &p : shade_fill_.points) {
+					k.pts.push_back(V2::of(p.x, p.y));
+				}
+				for (uint32_t i : shade_fill_.indices) {
+					k.indices.push_back(int(i));
+				}
+				k.colors = {SHADOW_FILL};
+				out.push_back(k);
+			}
+			for (size_t i = 0; i < level_.shades.size(); i++) {
+				const Shade &sh = level_.shades[i];
+				const bool on = i < shade_active_.size() && shade_active_[i];
+				Color c = sh.dark ? SHADE_DARK : SHADE_LIGHT;
+				c[3] = on ? 1.0f : 0.35f;
+				dashed(out, segment_of(level_.surfaces[sh.surface].spec), c, 2.0);
+			}
+		});
+	}
 	if (level_.player_start) {
 		Call k;
 		k.kind = Kind::Polygon2D;
@@ -1488,7 +1770,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 	}
 	// the surfaces, one node per piece
 	for (const Node &n : nodes_) {
-		const BuiltSurface *s = world_->by_id(n.surface);
+		const BuiltSurface *s = level_.shades.empty() ? world_->by_id(n.surface) : world_->undarkened(n.surface); // (Stage 153: drawn as it is, under the shadow)
 		if (s == nullptr) {
 			continue;
 		}

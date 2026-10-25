@@ -2556,7 +2556,7 @@ private:
 					&& size_t(eK) + 1 < pl.size() && size_t(dK) + 1 < ph.size()));
 		// the cast's own cursor: reached by both walks with the same significant
 		// events before it, and left in one frame (V1-V3)
-		r.cursor_ok = walks_agree_at_cursor(pl, ph, init_flags_);
+		r.cursor_ok = walks_agree_at_cursor(pl, ph, init_flags_, c);
 		// the near end
 		if (K == 0) {
 			r.near_kind = End::PoleP;

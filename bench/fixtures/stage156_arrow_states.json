@@ -1,0 +1,2714 @@
+{
+ "dps": 80,
+ "fixtures": [
+  {
+   "name": "frost_wall_reflects_once",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      100,
+      -200
+     ],
+     "end": [
+      100,
+      200
+     ],
+     "via": [
+      100.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "shot:frost",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "shot:frost",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      300,
+      -100
+     ],
+     "end": [
+      250,
+      100
+     ],
+     "via": [
+      275.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -400,
+      -500
+     ],
+     "end": [
+      900,
+      -500
+     ],
+     "via": [
+      250.0,
+      -500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      900,
+      -500
+     ],
+     "end": [
+      900,
+      500
+     ],
+     "via": [
+      900.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      900,
+      500
+     ],
+     "end": [
+      -400,
+      500
+     ],
+     "via": [
+      250.0,
+      500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -400,
+      500
+     ],
+     "end": [
+      -400,
+      -500
+     ],
+     "via": [
+      -400.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    0.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "100.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "275.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {
+      "shot:frost": false
+     }
+    },
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "LEFT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "100.0000000000000000000000000000000000000",
+     "y": "-93.33333333333333333333333333333333333333",
+     "state": true,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "hit",
+     "surface_id": 93,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-400.0000000000000000000000000000000000000",
+     "y": "-360.0000000000000000000000000000000000000",
+     "state": true,
+     "flags": {
+      "shot:frost": false
+     }
+    },
+    {
+     "kind": "hit",
+     "surface_id": 90,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-137.5000000000000000000000000000000000000",
+     "y": "-500.0000000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "shot:frost": false
+     }
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "frost_wall_planned",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      100,
+      -200
+     ],
+     "end": [
+      100,
+      200
+     ],
+     "via": [
+      100.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "shot:frost",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "shot:frost",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      300,
+      -100
+     ],
+     "end": [
+      250,
+      100
+     ],
+     "via": [
+      275.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -400,
+      -500
+     ],
+     "end": [
+      900,
+      -500
+     ],
+     "via": [
+      250.0,
+      -500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      900,
+      -500
+     ],
+     "end": [
+      900,
+      500
+     ],
+     "via": [
+      900.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      900,
+      500
+     ],
+     "end": [
+      -400,
+      500
+     ],
+     "via": [
+      250.0,
+      500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -400,
+      500
+     ],
+     "end": [
+      -400,
+      -500
+     ],
+     "via": [
+      -400.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    0.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0
+   ],
+   "cursor": null,
+   "plan": [
+    {
+     "surface_id": 1,
+     "side": "RIGHT"
+    }
+   ],
+   "mode": "planned",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "100.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "infinity",
+     "surface_id": -3,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "state": false,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "origin",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "0.0",
+     "y": "0.0",
+     "state": false,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "infinity",
+     "surface_id": -3,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "state": false,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "origin",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "0.0",
+     "y": "0.0",
+     "state": false,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "infinity",
+     "surface_id": -3,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "state": false,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "origin",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "0.0",
+     "y": "0.0",
+     "state": false,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "infinity",
+     "surface_id": -3,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "state": false,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "origin",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "0.0",
+     "y": "0.0",
+     "state": false,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "infinity",
+     "surface_id": -3,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "state": false,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "max",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "0.0",
+     "y": "0.0",
+     "state": false,
+     "flags": null
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "frost_circle_inverts",
+   "surfaces": [
+    {
+     "id": 3,
+     "line": false,
+     "start": [
+      380,
+      0
+     ],
+     "end": [
+      260.0,
+      -60.0
+     ],
+     "via": [
+      260.0,
+      60.0
+     ],
+     "full": true,
+     "circle": {
+      "center": [
+       300,
+       0
+      ],
+      "radius": 80
+     },
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     }
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -400,
+      -500
+     ],
+     "end": [
+      900,
+      -500
+     ],
+     "via": [
+      250.0,
+      -500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      900,
+      -500
+     ],
+     "end": [
+      900,
+      500
+     ],
+     "via": [
+      900.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      900,
+      500
+     ],
+     "end": [
+      -400,
+      500
+     ],
+     "via": [
+      250.0,
+      500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -400,
+      500
+     ],
+     "end": [
+      -400,
+      -500
+     ],
+     "via": [
+      -400.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    0.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "shot:frost": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 3,
+     "side": "LEFT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "220.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {
+      "shot:frost": false
+     }
+    },
+    {
+     "kind": "hit",
+     "surface_id": 93,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-400.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {
+      "shot:frost": false
+     }
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "frost_kept_by_mirror",
+   "surfaces": [
+    {
+     "id": 4,
+     "line": true,
+     "start": [
+      200,
+      -100
+     ],
+     "end": [
+      200,
+      100
+     ],
+     "via": [
+      200.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -400,
+      -500
+     ],
+     "end": [
+      900,
+      -500
+     ],
+     "via": [
+      250.0,
+      -500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      900,
+      -500
+     ],
+     "end": [
+      900,
+      500
+     ],
+     "via": [
+      900.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      900,
+      500
+     ],
+     "end": [
+      -400,
+      500
+     ],
+     "via": [
+      250.0,
+      500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -400,
+      500
+     ],
+     "end": [
+      -400,
+      -500
+     ],
+     "via": [
+      -400.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    0.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "shot:frost": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 4,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "200.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {
+      "shot:frost": true
+     }
+    },
+    {
+     "kind": "hit",
+     "surface_id": 93,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-400.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {
+      "shot:frost": false
+     }
+    },
+    {
+     "kind": "hit",
+     "surface_id": 4,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "200.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {
+      "shot:frost": false
+     }
+    },
+    {
+     "kind": "hit",
+     "surface_id": 93,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-400.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {
+      "shot:frost": false
+     }
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "frost_rigid_stops",
+   "surfaces": [
+    {
+     "id": 5,
+     "line": true,
+     "start": [
+      200,
+      -100
+     ],
+     "end": [
+      200,
+      100
+     ],
+     "via": [
+      200.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false,
+      "rigid": true
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false,
+      "rigid": true
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -400,
+      -500
+     ],
+     "end": [
+      900,
+      -500
+     ],
+     "via": [
+      250.0,
+      -500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      900,
+      -500
+     ],
+     "end": [
+      900,
+      500
+     ],
+     "via": [
+      900.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      900,
+      500
+     ],
+     "end": [
+      -400,
+      500
+     ],
+     "via": [
+      250.0,
+      500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -400,
+      500
+     ],
+     "end": [
+      -400,
+      -500
+     ],
+     "via": [
+      -400.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    0.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "shot:frost": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 5,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "200.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {
+      "shot:frost": true
+     }
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "fire_torch_to_wood",
+   "surfaces": [
+    {
+     "id": 6,
+     "line": true,
+     "start": [
+      100,
+      -200
+     ],
+     "end": [
+      100,
+      200
+     ],
+     "via": [
+      100.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "el:torch:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "el:torch:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "el:torch:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "el:torch:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 7,
+     "line": true,
+     "start": [
+      300,
+      -200
+     ],
+     "end": [
+      300,
+      200
+     ],
+     "via": [
+      300.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false,
+      "states": [
+       {
+        "key": "el:wood:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "el:wood:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false,
+      "states": [
+       {
+        "key": "el:wood:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "el:wood:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -400,
+      -500
+     ],
+     "end": [
+      900,
+      -500
+     ],
+     "via": [
+      250.0,
+      -500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      900,
+      -500
+     ],
+     "end": [
+      900,
+      500
+     ],
+     "via": [
+      900.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      900,
+      500
+     ],
+     "end": [
+      -400,
+      500
+     ],
+     "via": [
+      250.0,
+      500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -400,
+      500
+     ],
+     "end": [
+      -400,
+      -500
+     ],
+     "via": [
+      -400.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    0.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "el:torch:fire": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 6,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "100.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {
+      "el:torch:fire": true,
+      "shot:fire": true
+     }
+    },
+    {
+     "kind": "hit",
+     "surface_id": 7,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {
+      "el:torch:fire": true,
+      "shot:fire": true,
+      "el:wood:fire": true
+     }
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "fire_unlit",
+   "surfaces": [
+    {
+     "id": 6,
+     "line": true,
+     "start": [
+      100,
+      -200
+     ],
+     "end": [
+      100,
+      200
+     ],
+     "via": [
+      100.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "el:torch:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "el:torch:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "el:torch:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "el:torch:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 7,
+     "line": true,
+     "start": [
+      300,
+      -200
+     ],
+     "end": [
+      300,
+      200
+     ],
+     "via": [
+      300.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false,
+      "states": [
+       {
+        "key": "el:wood:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "el:wood:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false,
+      "states": [
+       {
+        "key": "el:wood:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:fire",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "el:wood:fire",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -400,
+      -500
+     ],
+     "end": [
+      900,
+      -500
+     ],
+     "via": [
+      250.0,
+      -500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      900,
+      -500
+     ],
+     "end": [
+      900,
+      500
+     ],
+     "via": [
+      900.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      900,
+      500
+     ],
+     "end": [
+      -400,
+      500
+     ],
+     "via": [
+      250.0,
+      500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -400,
+      500
+     ],
+     "end": [
+      -400,
+      -500
+     ],
+     "via": [
+      -400.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    0.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 6,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "100.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {}
+    },
+    {
+     "kind": "hit",
+     "surface_id": 7,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {}
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "charge_swaps",
+   "surfaces": [
+    {
+     "id": 8,
+     "line": true,
+     "start": [
+      100,
+      -200
+     ],
+     "end": [
+      100,
+      200
+     ],
+     "via": [
+      100.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c1:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c1:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c1:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c1:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 9,
+     "line": true,
+     "start": [
+      300,
+      -200
+     ],
+     "end": [
+      300,
+      200
+     ],
+     "via": [
+      300.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false,
+      "states": [
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c2:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c2:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c2:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c2:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c2:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c2:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false,
+      "states": [
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c2:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c2:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c2:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c2:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c2:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c2:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -400,
+      -500
+     ],
+     "end": [
+      900,
+      -500
+     ],
+     "via": [
+      250.0,
+      -500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      900,
+      -500
+     ],
+     "end": [
+      900,
+      500
+     ],
+     "via": [
+      900.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      900,
+      500
+     ],
+     "end": [
+      -400,
+      500
+     ],
+     "via": [
+      250.0,
+      500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -400,
+      500
+     ],
+     "end": [
+      -400,
+      -500
+     ],
+     "via": [
+      -400.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    0.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "shot:charge": true,
+    "el:c2:charge": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 8,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "100.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {
+      "shot:charge": false,
+      "el:c2:charge": true,
+      "el:c1:charge": true
+     }
+    },
+    {
+     "kind": "hit",
+     "surface_id": 9,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {
+      "shot:charge": true,
+      "el:c2:charge": false,
+      "el:c1:charge": true
+     }
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "charge_both",
+   "surfaces": [
+    {
+     "id": 8,
+     "line": true,
+     "start": [
+      100,
+      -200
+     ],
+     "end": [
+      100,
+      200
+     ],
+     "via": [
+      100.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c1:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c1:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": false,
+      "states": [
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c1:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "true"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "shot:charge",
+        "op": "set",
+        "value": true,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       },
+       {
+        "key": "el:c1:charge",
+        "op": "set",
+        "value": false,
+        "when": [
+         {
+          "key": "shot:charge",
+          "values": [
+           "DEFAULT",
+           "false"
+          ]
+         },
+         {
+          "key": "el:c1:charge",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 90,
+     "line": true,
+     "start": [
+      -400,
+      -500
+     ],
+     "end": [
+      900,
+      -500
+     ],
+     "via": [
+      250.0,
+      -500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 91,
+     "line": true,
+     "start": [
+      900,
+      -500
+     ],
+     "end": [
+      900,
+      500
+     ],
+     "via": [
+      900.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 92,
+     "line": true,
+     "start": [
+      900,
+      500
+     ],
+     "end": [
+      -400,
+      500
+     ],
+     "via": [
+      250.0,
+      500.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 93,
+     "line": true,
+     "start": [
+      -400,
+      500
+     ],
+     "end": [
+      -400,
+      -500
+     ],
+     "via": [
+      -400.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    0.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "shot:charge": true,
+    "el:c1:charge": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 8,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "100.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": true,
+     "flags": {
+      "shot:charge": true,
+      "el:c1:charge": true
+     }
+    },
+    {
+     "kind": "hit",
+     "surface_id": 91,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "900.0000000000000000000000000000000000000",
+     "y": "0.0",
+     "state": false,
+     "flags": {
+      "shot:charge": true,
+      "el:c1:charge": true
+     }
+    }
+   ],
+   "targets": []
+  }
+ ]
+}

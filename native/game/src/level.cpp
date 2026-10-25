@@ -4,9 +4,11 @@
 #include "rcg/level.hpp"
 
 #include "rcg/level2.hpp"
+#include "rcg/build.hpp"
 
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <fstream>
 #include <initializer_list>
 #include <sstream>
@@ -137,7 +139,7 @@ EffectSpec effect(const json &j, const std::string &path) {
 SurfaceSpec surface_spec(const json &j, const std::string &path, bool in_level);
 
 HitSpec hit(const json &j, const std::string &path) {
-	only_keys(j, path, {"kind", "deferred", "key", "op", "value", "channels", "channel", "template"});
+	only_keys(j, path, {"kind", "deferred", "key", "op", "value", "channels", "channel", "template", "when"});
 	HitSpec h;
 	h.raw = j;
 	h.kind = str(req(j, "kind", path), path + ".kind");
@@ -152,6 +154,18 @@ HitSpec hit(const json &j, const std::string &path) {
 		if (const json *v = opt(j, "value")) {
 			h.value = flag_value(*v, path + ".value");
 		}
+		if (const json *w = opt(j, "when")) { // Stage 156: conditions, the presence form
+			if (!w->is_array()) {
+				fail(path + ".when", "an array of {\"key\", \"values\"} expected");
+			}
+			for (size_t i = 0; i < w->size(); i++) {
+				const std::string wp = path + ".when[" + std::to_string(i) + "]";
+				only_keys((*w)[i], wp, {"key", "values"});
+				h.when.push_back({str(req((*w)[i], "key", wp), wp + ".key"), strings(req((*w)[i], "values", wp), wp + ".values")});
+			}
+		}
+	} else if (opt(j, "when")) {
+		fail(path + ".when", "only a state write takes conditions");
 	} else if (h.kind == "reset") {
 		if (const json *v = opt(j, "channels")) {
 			h.channels = strings(*v, path + ".channels");
@@ -189,8 +203,11 @@ std::optional<SideSpec> side(const json &j, const std::string &path) {
 	if (j.is_null()) {
 		return std::nullopt;
 	}
-	only_keys(j, path, {"effect", "interactive", "hits"});
+	only_keys(j, path, {"effect", "interactive", "hits", "rigid"});
 	SideSpec s;
+	if (const json *v = opt(j, "rigid")) {
+		s.rigid = boolean(*v, path + ".rigid");
+	}
 	if (const json *v = opt(j, "effect")) {
 		s.effect = effect(*v, path + ".effect");
 	}
@@ -389,7 +406,7 @@ void parse_goals(const json &j, Level &lv) {
 		for (size_t i = 0; i < os->size(); i++) {
 			const json &o = (*os)[i];
 			const std::string op = P + ".objects[" + std::to_string(i) + "]";
-			only_keys(o, op, {"name", "circle", "kind", "solid", "face", "label"});
+			only_keys(o, op, {"name", "circle", "kind", "solid", "face", "label", "gravity", "pops", "carries", "tags"});
 			Object ob;
 			ob.name = str(req(o, "name", op), op + ".name");
 			for (const Object &other : lv.objects) {
@@ -425,7 +442,36 @@ void parse_goals(const json &j, Level &lv) {
 			if (const json *v = opt(o, "label")) {
 				ob.label = str(*v, op + ".label");
 			}
+			if (const json *v = opt(o, "gravity")) {
+				ob.gravity = num(*v, op + ".gravity");
+			}
+			if (const json *v = opt(o, "pops")) {
+				ob.pops = boolean(*v, op + ".pops");
+			}
+			if (const json *v = opt(o, "carries")) {
+				ob.carries = str(*v, op + ".carries");
+			}
+			if (const json *v = opt(o, "tags")) {
+				ob.tags = strings(*v, op + ".tags");
+				if (std::find(ob.tags.begin(), ob.tags.end(), "frosted") != ob.tags.end() && !frost_bearing(ob.face == "mirror" ? "reflection" : ob.face)) {
+					fail(op + ".tags", "frosted: its face must pass or reflect (a wall cannot bear frost)");
+				}
+			}
 			lv.objects.push_back(std::move(ob));
+		}
+		for (size_t i = 0; i < lv.objects.size(); i++) {
+			const Object &o = lv.objects[i];
+			if (o.carries.empty()) {
+				continue;
+			}
+			const std::string op = P + ".objects[" + std::to_string(i) + "].carries";
+			const auto it = std::find_if(lv.objects.begin(), lv.objects.end(), [&](const Object &x) { return x.name == o.carries; });
+			if (it == lv.objects.end() || it->name == o.name) {
+				fail(op, "'" + o.carries + "' is no other object");
+			}
+			if (!it->carries.empty()) {
+				fail(op, "'" + o.carries + "' carries an object itself (one level of carrying)");
+			}
 		}
 	}
 }
@@ -562,12 +608,154 @@ Level parse_level_json(const json &j) {
 		throw;
 	}
 	parse_goals(j, lv);
+	// Stage 151: the cycle and the elements' motions (their surfaces: the lowering's from that element)
+	if (const json *c = opt(j, "cycle")) {
+		only_keys(*c, "level.cycle", {"period", "resume_after"});
+		if (const json *v = opt(*c, "period")) {
+			lv.cycle.period = num(*v, "level.cycle.period");
+			if (!(lv.cycle.period > 0)) {
+				fail("level.cycle.period", "a positive number of seconds expected");
+			}
+		}
+		if (const json *v = opt(*c, "resume_after")) {
+			lv.cycle.resume_after = num(*v, "level.cycle.resume_after");
+			if (lv.cycle.resume_after < 0) {
+				fail("level.cycle.resume_after", "a number of seconds >= 0 expected");
+			}
+		}
+	}
+	// Stage 152: the tagged elements' surfaces, the spreading rules
+	for (const Lowered::Tagged &t : low.tagged) {
+		Tagged tg{t.name, t.tags, {}};
+		const std::string prefix = "level.elements[" + std::to_string(t.element) + "]";
+		for (size_t k = 0; k < low.origins.size(); k++) {
+			if (low.origins[k].rfind(prefix, 0) == 0) {
+				tg.surfaces.push_back(k);
+			}
+		}
+		lv.tagged.push_back(std::move(tg));
+	}
+	lv.spread = {}; // (Stage 156: none by default -- fire and charge pass by the arrow; a level may add touching rules)
+	if (const json *sp = opt(j, "spread")) {
+		if (!sp->is_array()) {
+			fail("level.spread", "an array of rules expected");
+		}
+		lv.spread.clear(); // (the level's rules replace the defaults)
+		for (size_t i = 0; i < sp->size(); i++) {
+			const std::string rp = "level.spread[" + std::to_string(i) + "]";
+			only_keys((*sp)[i], rp, {"flag", "tag", "persist", "sources"});
+			SpreadRule r;
+			r.flag = str(req((*sp)[i], "flag", rp), rp + ".flag");
+			r.tag = str(req((*sp)[i], "tag", rp), rp + ".tag");
+			if (const json *v = opt((*sp)[i], "persist")) {
+				r.persist = boolean(*v, rp + ".persist");
+			}
+			if (const json *v = opt((*sp)[i], "sources")) {
+				r.sources = strings(*v, rp + ".sources");
+			}
+			lv.spread.push_back(std::move(r));
+		}
+	}
+	const json &es = j["elements"];
+	for (size_t i = 0; i < es.size(); i++) {
+		if (!es[i].is_object() || !es[i].contains("motion")) {
+			continue;
+		}
+		const std::string mp = "level.elements[" + std::to_string(i) + "].motion";
+		const json &m = es[i]["motion"];
+		only_keys(m, mp, {"keys", "pivot"});
+		Motion mo;
+		const json &keys = req(m, "keys", mp);
+		if (!keys.is_array() || keys.empty()) {
+			fail(mp + ".keys", "an array of [phase, dx, dy, angle] expected");
+		}
+		for (size_t k = 0; k < keys.size(); k++) {
+			const std::string kp = mp + ".keys[" + std::to_string(k) + "]";
+			if (!keys[k].is_array() || keys[k].size() != 4) {
+				fail(kp, "[phase, dx, dy, angle] expected");
+			}
+			std::array<double, 4> key{};
+			for (size_t q = 0; q < 4; q++) {
+				key[q] = num(keys[k][q], kp);
+			}
+			if (key[0] < 0 || key[0] >= 1 || (!mo.keys.empty() && key[0] <= mo.keys.back()[0])) {
+				fail(kp, "phases in [0, 1), increasing");
+			}
+			mo.keys.push_back(key);
+		}
+		if (const json *p = opt(m, "pivot")) {
+			mo.pivot = vec(*p, mp + ".pivot");
+		}
+		const std::string prefix = "level.elements[" + std::to_string(i) + "]";
+		for (size_t k = 0; k < low.origins.size(); k++) {
+			if (low.origins[k].rfind(prefix, 0) == 0 && (low.origins[k].size() == prefix.size() || low.origins[k][prefix.size()] != '[')) {
+				mo.surfaces.push_back(k);
+			}
+		}
+		if (mo.surfaces.empty()) {
+			fail(mp, "the element has no surfaces to move");
+		}
+		lv.motions.push_back(std::move(mo));
+	}
+	// Stage 153: the shades (their regions' sides checked against their geometry; they do not move)
+	for (const Lowered::Shaded &sd : low.shaded) {
+		const std::string sp = "level.elements[" + std::to_string(sd.element) + "] (" + sd.name + ")";
+		Shade sh;
+		sh.name = sd.name;
+		const json &d = sd.shade;
+		if (!d.is_object() || !d.contains("type") || !(d["type"] == "dark" || d["type"] == "light")) {
+			fail(sp + ".shade.type", "dark or light expected");
+		}
+		sh.dark = d["type"] == "dark";
+		if (d.contains("side") && !d["side"].is_null()) {
+			if (!d["side"].is_string()) {
+				fail(sp + ".side", "auto, left, right, inside or outside expected");
+			}
+			sh.side = d["side"].get<std::string>();
+		}
+		if (sh.side != "auto" && sh.side != "left" && sh.side != "right" && sh.side != "inside" && sh.side != "outside") {
+			fail(sp + ".side", "auto, left, right, inside or outside expected");
+		}
+		if (d.contains("when") && !d["when"].is_null()) {
+			if (!d["when"].is_string()) {
+				fail(sp + ".when", "a flag key expected (empty: always)");
+			}
+			sh.when = d["when"].get<std::string>();
+		}
+		const std::string prefix = "level.elements[" + std::to_string(sd.element) + "]";
+		bool found = false;
+		for (size_t k = 0; k < low.origins.size() && !found; k++) {
+			if (low.origins[k].rfind(prefix, 0) == 0) {
+				sh.surface = k;
+				found = true;
+			}
+		}
+		if (!found) {
+			fail(sp, "a shade needs its element's surface (its geometry)");
+		}
+		if (segment_of(lv.surfaces[sh.surface].spec).is_line() && (sh.side == "inside" || sh.side == "outside")) {
+			fail(sp + ".side", "a line has a left and a right side, not an inside");
+		}
+		for (const Motion &mo : lv.motions) {
+			if (std::find(mo.surfaces.begin(), mo.surfaces.end(), sh.surface) != mo.surfaces.end()) {
+				fail(sp + ".motion", "a shade does not move (Stage 153)");
+			}
+		}
+		lv.shades.push_back(std::move(sh));
+	}
 	for (auto it = low.flags.begin(); it != low.flags.end(); ++it) {
 		const json &v = it.value();
 		rc::FlagValue f = v.is_boolean() ? rc::FlagValue(v.get<bool>())
 				: v.is_number()			 ? rc::FlagValue(v.get<double>())
 										 : rc::FlagValue(v.get<std::string>());
 		lv.flags.emplace_back(it.key(), std::move(f));
+	}
+	for (const Object &o : lv.objects) { // Stage 156: an object's tags' starting flags (unless the level sets them)
+		for (const std::string &k : tag_initial_flags(o.name, o.tags)) {
+			if (std::none_of(lv.flags.begin(), lv.flags.end(), [&](const auto &e) { return e.first == k; })) {
+				lv.flags.emplace_back(k, true);
+			}
+		}
 	}
 	return lv;
 }
@@ -591,12 +779,27 @@ SurfaceSpec object_spec(const Object &o, const V2 &center) {
 	SideSpec side;
 	side.effect.type = o.face == "mirror" ? "reflection" : o.face == "pass" ? "pass" : "terminal";
 	side.effect.raw = {{"type", side.effect.type}};
-	side.interactive = o.pullable || o.face == "mirror";
+	side.interactive = o.pullable || o.face == "mirror" || o.pops;
 	if (o.pullable) {
 		HitSpec h;
 		h.kind = "pull";
 		h.raw = {{"kind", "pull"}};
 		side.hits.push_back(h);
+	}
+	if (!o.tags.empty()) { // Stage 156: fire, charge and frost by its tags
+		const json extra = tag_hits(o.name, o.tags);
+		for (size_t i = 0; i < extra.size(); i++) {
+			side.hits.push_back(hit(extra[i], "object " + o.name + " (its tags)"));
+		}
+	}
+	if (o.pops) { // Stage 150: a hit pops it -- gone from then on (in the shot, and after)
+		HitSpec h;
+		h.kind = "state";
+		h.key = "obj:" + o.name + ":popped";
+		h.value = true;
+		h.raw = {{"kind", "state"}, {"key", h.key}, {"op", "set"}, {"value", true}};
+		side.hits.push_back(h);
+		s.presence.push_back({h.key, {"DEFAULT"}});
 	}
 	s.left = side;
 	s.right = side;

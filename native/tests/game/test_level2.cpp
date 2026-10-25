@@ -113,12 +113,12 @@ TEST_CASE("rc-level/2: every level lowers to its committed lowering, and migrate
 		CHECK(rcg::canonical(a) == rcg::canonical(b));
 		n++;
 	}
-	CHECK(n == 41);
+	CHECK(n == 46);
 }
 
 TEST_CASE("rc-level/2: every builtin template expands to surfaces that build") {
 	const auto &kinds = rcg::elements::builtin();
-	CHECK(kinds.size() == 27);
+	CHECK(kinds.size() == 32);
 	const json local = {{"start", {-20.0, 0.0}}, {"end", {20.0, 0.0}}, {"via", {0.0, 0.0}},
 			{"left", {{"effect", {{"type", "reflection"}}}, {"interactive", true}}}, {"right", nullptr}};
 	const json required = {{"portal", {{"d", {300.0, 0.0}}}}, {"switchable", {{"flag", "open"}}}, {"button", {{"flag", "open"}}},
@@ -146,7 +146,7 @@ TEST_CASE("rc-level/2: every builtin template expands to surfaces that build") {
 	}
 	const rcg::Level lv = rcg::parse_level_json(level_of(elements));
 	const std::vector<rcg::BuiltSurface> built = rcg::build_level(lv);
-	CHECK(built.size() == 4 + 27 + 1 + 1 + 4); // (a toggle surface stands two surfaces) // the room, the elements (a portal's image), the edges
+	CHECK(built.size() == 4 + 32 + 1 + 1 + 4); // (a toggle surface stands two surfaces) // the room, the elements (a portal's image), the edges
 	// docs/ELEMENTS.md lists every builtin kind
 	const std::string doc = read_text(ROOT / "docs" / "ELEMENTS.md");
 	for (const auto &[kind, tmpl] : kinds) {

@@ -8,6 +8,7 @@
 // I/O when a save is requested, and plays the document with an ordinary game.
 #pragma once
 
+#include "rc/visibility.hpp"
 #include "rcg/build.hpp"
 #include "rcg/render.hpp"
 
@@ -24,7 +25,7 @@ namespace rcg {
 class Editor {
 public:
 	enum class Mode { Edit, Play };
-	enum class Tool { Select, Line, Arc, Circle, Player, Goal, Detector, Object, CarrierLine, CarrierCircle };
+	enum class Tool { Select, Line, Arc, Circle, Player, Goal, Detector, Object, CarrierLine, CarrierCircle, Collider }; // (Collider: Stage 164)
 	// pointer events and buttons (rc_api.h's RC_PTR_* / RC_BTN_* / RC_MOD_*)
 	enum : int { PtrMove = 0, PtrDown = 1, PtrUp = 2 };
 	enum : unsigned { BtnLeft = 1, BtnRight = 2, BtnMiddle = 4 };
@@ -46,6 +47,7 @@ public:
 		bool save_requested = false;
 		uint64_t version = 0; // bumped by every change of the document
 		V2 play_from;         // where a play-test starts (the player's start)
+		bool open_requested = false; // Stage 155: open the level {"op": "open_request"} names
 	};
 
 	// A new level (null) or the given document (rc-level/2; rc-level/1 is migrated).
@@ -94,7 +96,7 @@ private:
 		std::string key;     // an element key, or a JSON pointer into the document (level fields)
 	};
 	struct Row {
-		enum Kind { Header, Text, Value, Error, Buttons, Chips } kind = Text; // Chips: the palette's kinds (options), one row of them
+		enum Kind { Header, Text, Value, Error, Buttons, Chips, Nav, Level, Tools } kind = Text; // Tools (Stage 161): the tools, one row of them // Chips: the palette's kinds (options), one row of them
 		std::string label, value, hint;
 		std::optional<Field> field;
 		std::string choice; // a value that cycles ("enum", "bool", "kind", "tool", "place", "options", "shape") or "" (typed)
@@ -141,6 +143,10 @@ private:
 	nlohmann::json doc_;
 	std::vector<nlohmann::json> undo_, redo_;
 	bool dirty_ = false, save_requested_ = false;
+	// Stage 155: the levels the host offers (names under data/levels, no .json), the open one, the menu
+	std::vector<std::string> levels_;
+	std::string level_name_, open_request_, confirm_open_;
+	bool level_menu_ = false;
 	uint64_t version_ = 0;
 	Mode mode_ = Mode::Edit;
 	Tool tool_ = Tool::Select;
@@ -150,6 +156,8 @@ private:
 	std::string item_;          // Stage 148: the selected item: "goal", "detector:<name>", "object:<name>"; "" none
 	std::vector<Error> errors_;
 	std::vector<Drawn> drawn_;  // per element
+	std::vector<int> shade_of_;  // Stage 153: per element, 1 a dark shade, 2 a light one
+	rc::vis::Fill shade_fill_;    // ... the shadow under the starting flags (world units)
 	// the view
 	float width_ = 1920, height_ = 1080;
 	V2 center_{960, 540};

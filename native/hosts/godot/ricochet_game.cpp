@@ -372,6 +372,13 @@ void RicochetGame::_input(const Ref<InputEvent> &ev) {
 		}
 	}
 	if (mouse.is_valid() && mouse->is_pressed()) {
+		if (mouse->get_button_index() == MOUSE_BUTTON_WHEEL_UP || mouse->get_button_index() == MOUSE_BUTTON_WHEEL_DOWN) {
+			// 1.10: the wheel moves the level's cycle (moving surfaces)
+			rc_game_scroll(game_, mouse->get_button_index() == MOUSE_BUTTON_WHEEL_UP ? 1.0f : -1.0f);
+			rc_game_advance(game_, 0.0, 0, 0);
+			sync();
+			return;
+		}
 		if (mouse->get_button_index() == MOUSE_BUTTON_LEFT) {
 			event(RC_EVENT_PLAN_ADD);
 		} else if (mouse->get_button_index() == MOUSE_BUTTON_RIGHT) {

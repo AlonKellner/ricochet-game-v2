@@ -55,6 +55,7 @@ struct SideDef {
 	int pair = -1;                          // portal: the paired surface id (-1: none)
 	std::vector<StateChangeDef> states;     // Stage 107: the side's state changes, in order
 	bool landing = false;                   // Stage 134: its hit changes the game at the landing (deferred effects)
+	bool rigid = false;                     // Stage 156: frost never turns it (a shadow's edge)
 	bool operator==(const SideDef &) const = default;
 };
 
@@ -126,6 +127,11 @@ struct Surf {
 	std::vector<StateChangeDef> right_states;
 	bool left_landing = false; // Stage 134: the side's hit changes the game at the landing
 	bool right_landing = false;
+	// Stage 156: a side frost never turns, and each side's changes when frost turns it (its own, then the frost used up)
+	bool left_rigid = false;
+	bool right_rigid = false;
+	std::vector<StateChangeDef> left_frost_states;
+	std::vector<StateChangeDef> right_frost_states;
 	std::string state_key;
 	struct TableEntry {
 		EffectType left_type;
@@ -134,6 +140,10 @@ struct Surf {
 		std::vector<StateChangeDef> right_states;
 		bool left_landing = false;
 		bool right_landing = false;
+		bool left_rigid = false;
+		bool right_rigid = false;
+		std::vector<StateChangeDef> left_frost_states = {};
+		std::vector<StateChangeDef> right_frost_states = {};
 	};
 	// Stage 107: presence conditions (all required; empty: always present)
 	std::vector<PresenceCond> presence;
@@ -203,10 +213,26 @@ struct Surf {
 		if (ghosted(left, flags)) {
 			return EffectType::Pass;
 		}
+		if (frosted(left, flags)) {
+			return line ? EffectType::Reflection : EffectType::Inversion;
+		}
 		if (const TableEntry *e = entry(flags)) {
 			return left ? e->left_type : e->right_type;
 		}
 		return left ? left_type : right_type;
+	}
+
+	// Frost (Stage 156, GAME_SPEC 10.6): while the frost flag is true a side that
+	// would stop the arrow (a terminal, not rigid) reflects it on a line and
+	// inverts it on a circle, and uses the frost up.
+	bool frosted(bool left, const Flags &flags) const {
+		if (!flags.is_true(FROST)) {
+			return false;
+		}
+		if (const TableEntry *e = entry(flags)) {
+			return (left ? e->left_type : e->right_type) == EffectType::Terminal && !(left ? e->left_rigid : e->right_rigid);
+		}
+		return (left ? left_type : right_type) == EffectType::Terminal && !(left ? left_rigid : right_rigid);
 	}
 
 	// Stage 134: whether the side's hit changes the game at the landing (its deferred effects)
@@ -229,6 +255,12 @@ struct Surf {
 		static const std::vector<StateChangeDef> none;
 		if (ghosted(left, flags)) {
 			return none;
+		}
+		if (frosted(left, flags)) {
+			if (const TableEntry *e = entry(flags)) {
+				return left ? e->left_frost_states : e->right_frost_states;
+			}
+			return left ? left_frost_states : right_frost_states;
 		}
 		return base_states(left, flags);
 	}
@@ -383,6 +415,15 @@ Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like)
 		s->right_states = d.right ? d.right->states : std::vector<StateChangeDef>();
 		s->left_landing = d.left && d.left->landing;
 		s->right_landing = d.right && d.right->landing;
+		// Stage 156: frost -- the rigid sides, and each side's changes when frost turns it
+		auto frost_states = [](std::vector<StateChangeDef> v) {
+			v.push_back(StateChangeDef{FROST, false, false});
+			return v;
+		};
+		s->left_rigid = d.left && d.left->rigid;
+		s->right_rigid = d.right && d.right->rigid;
+		s->left_frost_states = frost_states(s->left_states);
+		s->right_frost_states = frost_states(s->right_states);
 		s->presence = d.presence;
 		RC_ASSERT(d.presence.empty() || !d.pre_transform, "a pre-transform surface is always present");
 		if (d.resolver) {
@@ -392,9 +433,12 @@ Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like)
 				const auto &r = row.second.second;
 				RC_ASSERT(is_categorical_type(l ? l->type : EffectType::Pass) && is_categorical_type(r ? r->type : EffectType::Pass),
 					"categorical sides: pass / terminal / reflection / inversion");
-				s->table.emplace_back(row.first, typename Surf<N>::TableEntry{l ? l->type : EffectType::Pass,
-					r ? r->type : EffectType::Pass, l ? l->states : std::vector<StateChangeDef>(),
-					r ? r->states : std::vector<StateChangeDef>(), l && l->landing, r && r->landing});
+				typename Surf<N>::TableEntry te{l ? l->type : EffectType::Pass, r ? r->type : EffectType::Pass,
+					l ? l->states : std::vector<StateChangeDef>(), r ? r->states : std::vector<StateChangeDef>(), l && l->landing,
+					r && r->landing, l && l->rigid, r && r->rigid};
+				te.left_frost_states = frost_states(te.left_states);
+				te.right_frost_states = frost_states(te.right_states);
+				s->table.emplace_back(row.first, std::move(te));
 			}
 		}
 		for (int side = 0; side < 2; side++) {

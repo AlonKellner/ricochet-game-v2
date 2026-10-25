@@ -1,5 +1,6 @@
 // The level editor: the document and its commands (rcg/editor.hpp,
 // docs/EDITOR.md). Input and drawing: editor_view.cpp.
+#include "rcg/shade.hpp"
 #include "rcg/editor.hpp"
 
 #include "rcg/canon.hpp"
@@ -22,7 +23,7 @@ json new_level() {
 		"room": {"built": true, "rect": [560.0, 240.0, 800.0, 600.0]}, "schema": "rc-level/2"})");
 }
 
-const char *const TOOLS[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle"};
+const char *const TOOLS[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle", "collider"};
 
 // The object an element's geometry lives in: the element, a raw element's surface.
 json *geometry_of(json &e) {
@@ -262,9 +263,31 @@ void Editor::refresh() {
 		}
 	}
 	// what only the whole level shows (names, the level's own keys, ...)
+	shade_fill_ = {};
+	shade_of_.assign(es.size(), 0);
 	if (errors_.empty()) {
 		try {
-			build_level(parse_level_json(doc_));
+			const Level lv = parse_level_json(doc_);
+			build_level(lv);
+			// Stage 153: the shadow under the level's starting flags, and which elements are shades
+			if (!lv.shades.empty()) {
+				std::vector<shade::Region> regions;
+				std::vector<bool> active;
+				for (const Shade &sh : lv.shades) {
+					regions.push_back(shade::region_of(segment_of(lv.surfaces[sh.surface].spec), sh.side, sh.dark));
+					bool on = sh.when.empty();
+					for (const auto &[k, v] : lv.flags) {
+						on = on || (k == sh.when && std::holds_alternative<bool>(v) && std::get<bool>(v));
+					}
+					active.push_back(on);
+					for (size_t i = 0; i < es.size(); i++) {
+						if (es[i].is_object() && es[i].value("name", "") == sh.name) {
+							shade_of_[i] = sh.dark ? 1 : 2;
+						}
+					}
+				}
+				shade_fill_ = shade::fill(regions, active, lv.bounds);
+			}
 		} catch (const std::exception &ex) {
 			errors_.push_back({-1, "", ex.what()});
 		}
@@ -285,6 +308,7 @@ Editor::Status Editor::status() const {
 	s.tool = tool_;
 	s.save_requested = save_requested_;
 	s.version = version_;
+	s.open_requested = !open_request_.empty();
 	const json p = doc_.contains("player") && doc_["player"].is_object() ? doc_["player"].value("start", json()) : json();
 	if (is_point(p)) {
 		s.play_from = V2::of(p[0].get<double>(), p[1].get<double>());
@@ -340,7 +364,56 @@ json Editor::op(const json &cmd) {
 		}
 		lower_level(doc); // refused unless it is a level
 		set_document(std::move(doc), true);
+		if (cmd.contains("name") && cmd["name"].is_string()) { // Stage 155: the level it is
+			level_name_ = cmd["name"].get<std::string>();
+		}
+		open_request_.clear();
+		confirm_open_.clear();
+		level_menu_ = false;
 		return {};
+	}
+	// Stage 155: the level menu -- the host lists the levels and opens the one asked for
+	if (o == "levels") {
+		levels_.clear();
+		for (const json &n : cmd.at("list")) {
+			levels_.push_back(n.get<std::string>());
+		}
+		if (cmd.contains("current") && cmd["current"].is_string()) {
+			level_name_ = cmd["current"].get<std::string>();
+		}
+		return {{"count", levels_.size()}};
+	}
+	if (o == "level_menu") {
+		level_menu_ = cmd.contains("show") ? cmd["show"].get<bool>() : !level_menu_;
+		panel_scroll_ = 0;
+		return {{"show", level_menu_}};
+	}
+	if (o == "open" || o == "next_level") {
+		std::string name;
+		if (o == "open") {
+			name = cmd.at("name").get<std::string>();
+		} else {
+			if (levels_.empty()) {
+				refuse("no levels listed (the host lists them: {\"op\": \"levels\"})");
+			}
+			const long n = long(levels_.size());
+			const auto at = std::find(levels_.begin(), levels_.end(), level_name_);
+			const long by = cmd.value("by", 1);
+			const long k = at == levels_.end() ? (by > 0 ? -1 : 0) : long(at - levels_.begin());
+			name = levels_[size_t(((k + by) % n + n) % n)];
+		}
+		if (dirty_ && confirm_open_ != name) {
+			confirm_open_ = name;
+			refuse("unsaved changes: ask for '" + name + "' again to discard them, or save first");
+		}
+		open_request_ = name;
+		confirm_open_.clear();
+		return {{"name", name}};
+	}
+	if (o == "open_request") { // the host takes the request (then loads the level with its name)
+		const std::string name = open_request_;
+		open_request_.clear();
+		return {{"name", name}};
 	}
 	if (o == "add") {
 		editing();
@@ -471,14 +544,14 @@ json Editor::op(const json &cmd) {
 	}
 	if (o == "tool") {
 		const std::string t = cmd.at("tool").get<std::string>();
-		for (int k = 0; k < 10; k++) {
+		for (int k = 0; k < int(std::size(TOOLS)); k++) {
 			if (t == TOOLS[k]) {
 				tool_ = Tool(k);
 				clicks_.clear();
 				return {};
 			}
 		}
-		refuse("tool: select, line, arc, circle, player, goal, detector, object, carrier_line or carrier_circle expected");
+		refuse("tool: select, line, arc, circle, player, goal, detector, object, carrier_line, carrier_circle or collider expected");
 	}
 	if (o == "kind") {
 		const std::string k = cmd.at("kind").get<std::string>();
@@ -566,12 +639,13 @@ json Editor::op(const json &cmd) {
 				{"mode", mode_ == Mode::Play ? "play" : "edit"}, {"dirty", dirty_}, {"errors", s.errors}, {"grid", grid_},
 				{"placing", clicks_.size()}, {"undo", undo_.size()}, {"redo", redo_.size()},
 				{"view", {{"center", point(center_.x, center_.y)}, {"zoom", zoom_}}}, {"focus", focus_ ? json(focus_->key) : json()},
-				{"save_requested", save_requested_}, {"hint", hint_}};
+				{"save_requested", save_requested_}, {"hint", hint_}, {"level", level_name_}, {"levels", levels_.size()},
+				{"level_menu", level_menu_}, {"open_requested", !open_request_.empty()}};
 	}
 	if (o == "panel") { // the panel's rows as drawn (tests, debugging): label, value, y
 		json rs = json::array();
 		for (const Row &r : rows()) {
-			static const char *const KINDS[] = {"header", "text", "value", "error", "buttons", "chips"};
+			static const char *const KINDS[] = {"header", "text", "value", "error", "buttons", "chips", "nav", "level", "tools"};
 			rs.push_back({{"kind", KINDS[int(r.kind)]}, {"label", r.label}, {"value", r.value}, {"y", r.y},
 					{"x", width_ - PANEL_WIDTH + 20}});
 		}

@@ -163,7 +163,8 @@ std::optional<BuiltSide> side_of(const std::optional<SideSpec> &s) {
 	if (!s) {
 		return std::nullopt;
 	}
-	return BuiltSide{effect_of(s->effect), s->interactive, s->hits};
+	// (Stage 159, the user: every side that changes the game is plannable -- a side with hit effects is interactive)
+	return BuiltSide{effect_of(s->effect), s->interactive || !s->hits.empty(), s->hits, s->rigid};
 }
 
 // SurfaceSpec.spawn_channels: the channels its sides spawn into, first seen first.
@@ -228,6 +229,9 @@ json describe_config(const std::optional<BuiltSide> &cfg, int host_id) {
 	}
 	json d = effect_json(cfg->effect);
 	d["interactive"] = cfg->interactive;
+	if (cfg->rigid) {
+		d["rigid"] = true; // (Stage 156; absent when false)
+	}
 	json writes = in_shot_writes(*cfg, host_id);
 	if (!writes.empty()) {
 		d["states"] = writes;
@@ -267,12 +271,18 @@ std::optional<rc::SideDef> side_def(const std::optional<BuiltSide> &cfg, int hos
 		d.dy = e.d.y;
 		d.pair = pair != 0 ? pair : -1;
 	}
+	d.rigid = cfg->rigid;
 	for (const json &w : in_shot_writes(*cfg, host_id)) {
 		rc::StateChangeDef c;
 		c.key = w["key"].get<std::string>();
 		c.toggle = w["op"] == "toggle";
 		const json &v = w["value"];
 		c.value = v.is_boolean() ? rc::FlagValue(v.get<bool>()) : v.is_number() ? rc::FlagValue(v.get<double>()) : rc::FlagValue(v.get<std::string>());
+		if (w.contains("when")) {
+			for (const json &k : w["when"]) {
+				c.when.push_back(rc::FlagCond{k["key"].get<std::string>(), k["values"].get<std::vector<std::string>>()});
+			}
+		}
 		d.states.push_back(std::move(c));
 	}
 	for (const HitSpec &h : cfg->hits) {
@@ -377,6 +387,13 @@ json in_shot_writes(const BuiltSide &side, int host_id) {
 		if (h.kind == "state") {
 			const bool toggle = h.op == "toggle";
 			write(h.key, toggle ? "toggle" : "set", toggle ? json(true) : flag_json(h.value));
+			if (!h.when.empty()) { // Stage 156
+				json w = json::array();
+				for (const PresenceSpec &c : h.when) {
+					w.push_back({{"key", c.key}, {"values", c.values}});
+				}
+				out.back()["when"] = w;
+			}
 		} else if (h.kind == "target") {
 			write("target:" + std::to_string(host_id), "set", true);
 		} else if (h.kind == "reset") {

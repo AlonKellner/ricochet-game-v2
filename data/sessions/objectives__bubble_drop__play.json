@@ -1,0 +1,34 @@
+{
+ "schema": "rc-session/1",
+ "level": "objectives/bubble_drop",
+ "kind": "kinematic",
+ "steps": [
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 90
+  },
+  {
+   "op": "cursor",
+   "at": [
+    980.0,
+    262.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 90
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_left"
+   ],
+   "ticks": 60
+  }
+ ]
+}

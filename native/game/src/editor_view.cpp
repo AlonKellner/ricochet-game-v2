@@ -56,11 +56,16 @@ const Color GOAL = rgba(0.3, 0.95, 0.45);
 const Color DETECTOR = rgba(1.0, 0.8, 0.25, 0.85);
 const Color OBJECT = rgba(0.95, 0.6, 0.3);
 const Color CARRIER = rgba(0.45, 0.7, 1.0, 0.45);
+const Color COLLIDER = rgba(0.6, 0.72, 0.85); // Stage 164: a player-only collider
+const Color CAMERA = rgba(0.85, 0.6, 1.0);
 
 // An element's layers (the draw nodes' keys: ["editor", layer, index])
-enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS, L_GOALS, L_CARRIERS };
+enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS, L_GOALS, L_CARRIERS, L_SHADOW };
 
-const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle"};
+const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle", "collider"};
+// Stage 161: the tool palette's labels (with their keys)
+const char *const TOOL_LABELS[] = {"select  V", "line  L", "arc  A", "circle  C", "player  P", "goal  O", "detector  D", "object  B",
+	"line carrier  K", "circle carrier  shift K", "collider  X"};
 
 Call line(const V2 &a, const V2 &b, const Color &c, double w) {
 	Call k;
@@ -531,6 +536,23 @@ void Editor::place(const json &p, unsigned) {
 		hint_ = res.value("ok", false) ? name + " placed: line and arc clicks on it place elements on it" : res.value("error", std::string());
 		return;
 	}
+	if (tool_ == Tool::Collider) { // Stage 164: two clicks, a player-only segment
+		json cs = doc_.value("colliders", json::array());
+		if (!cs.is_array()) {
+			cs = json::array();
+		}
+		if (canonical(clicks_[0]) == canonical(clicks_[1])) {
+			clicks_.clear();
+			hint_ = "a collider needs two points apart";
+			return;
+		}
+		cs.push_back({{"a", clicks_[0]}, {"b", clicks_[1]}});
+		clicks_.clear();
+		click_carriers_.clear();
+		const json res = command({{"op", "set"}, {"path", "/colliders"}, {"value", cs}});
+		hint_ = res.value("ok", false) ? "a collider placed: the player stands on it, the arrow passes" : res.value("error", std::string());
+		return;
+	}
 	if (tool_ == Tool::Goal || tool_ == Tool::Detector) {
 		// two corners: a rectangle
 		const double x0 = clicks_[0][0].get<double>(), y0 = clicks_[0][1].get<double>(), x1 = clicks_[1][0].get<double>(), y1 = clicks_[1][1].get<double>();
@@ -851,6 +873,10 @@ void Editor::key(int code, unsigned mods, bool down) {
 			run({{"op", "redo"}});
 		} else if (code == 'S') {
 			run({{"op", "save"}});
+		} else if (code == 'O') {
+			run({{"op", "level_menu"}}); // Stage 155
+		} else if (code == KeyLeft || code == KeyRight) {
+			run({{"op", "next_level"}, {"by", code == KeyLeft ? -1 : 1}});
 		} else if (code == 'D' && !selected_.empty()) {
 			run({{"op", "duplicate"}, {"name", selected_}});
 		} else if (code == 'D' && !item_.empty()) {
@@ -871,6 +897,7 @@ void Editor::key(int code, unsigned mods, bool down) {
 		case 'D': tool_ = Tool::Detector; clicks_.clear(); return;
 		case 'B': tool_ = Tool::Object; clicks_.clear(); return;
 		case 'K': tool_ = (mods & ModShift) ? Tool::CarrierCircle : Tool::CarrierLine; clicks_.clear(); click_carriers_.clear(); return;
+		case 'X': tool_ = Tool::Collider; clicks_.clear(); return; // Stage 164
 		case 'G': grid_ = !grid_; return;
 		case 'F': frame_all(); view_touched_ = false; return;
 		case KeyDelete:
@@ -882,7 +909,9 @@ void Editor::key(int code, unsigned mods, bool down) {
 			}
 			return;
 		case KeyEscape:
-			if (kind_pick_) {
+			if (level_menu_) {
+				level_menu_ = false; // Stage 155
+			} else if (kind_pick_) {
 				kind_pick_ = false;
 				hint_.clear();
 			} else if (!clicks_.empty()) {
@@ -983,8 +1012,34 @@ std::vector<Editor::Row> Editor::rows() const {
 	};
 	add({Row::Header, "Ricochet level editor", "", "", std::nullopt, "", -1, 0, {}});
 	add({Row::Buttons, "", "", "undo (ctrl+z), redo (ctrl+shift+z), save (ctrl+s), play (F5)", std::nullopt, "", -1, 0, {}});
-	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector, B an object, K a line carrier, shift+K a circle carrier", std::nullopt,
+	// Stage 155: the level menu (the previous level, the list, the next level)
+	add({Row::Nav, level_name_.empty() ? std::string("(untitled)") : level_name_, "",
+			"the levels: ctrl+O the list, ctrl+left / ctrl+right the previous / next level", std::nullopt, "", -1, 0, {}});
+	if (level_menu_) {
+		if (levels_.empty()) {
+			text_rows("no levels listed by the host", Row::Text, -1);
+		}
+		for (const std::string &n : levels_) {
+			Row r;
+			r.kind = Row::Level;
+			r.label = n;
+			r.hint = confirm_open_ == n ? "unsaved changes: click again to discard them" : "open this level";
+			add(r);
+		}
+		return out;
+	}
+	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector, B an object, K a line carrier, shift+K a circle carrier, X a collider", std::nullopt,
 			"tool", -1, 0, {}});
+	// Stage 161: the tool palette -- every tool, three to a row (a click: use it)
+	for (size_t k = 0; k < std::size(TOOL_NAMES); k += 3) {
+		Row r;
+		r.kind = Row::Tools;
+		r.hint = "a tool: click to use it (or its key)";
+		for (size_t q = k; q < std::min(k + 3, std::size(TOOL_NAMES)); q++) {
+			r.options.push_back(TOOL_NAMES[q]);
+		}
+		add(r);
+	}
 	const json ks = kinds();
 	add({Row::Value, "place", kind_, "Tab / shift+Tab / 1-9, or a kind below: what the line, arc and circle tools place", std::nullopt, "place", -1, 0, {}});
 	{
@@ -1024,6 +1079,12 @@ std::vector<Editor::Row> Editor::rows() const {
 			if (e.contains("circle")) {
 				add({Row::Value, "circle", spell(e["circle"]), "{\"center\": [x, y], \"radius\": r}", Field{selected_, "circle"}, "", -1, 0, {}});
 			}
+			add({Row::Value, "motion", e.contains("motion") ? spell(e["motion"]) : "(none)",
+					"{\"keys\": [[phase, dx, dy, angle], ...], \"pivot\": [x, y]?}: it moves over the level's cycle (its keys drawn faint)",
+					Field{selected_, "motion"}, "", -1, 0, {}});
+			add({Row::Value, "tags", e.contains("tags") ? spell(e["tags"]) : "(the kind's)",
+					"[tag, ...]: added to the kind's tags; the level's spread rules flow through them (flammable, conductive, powered)",
+					Field{selected_, "tags"}, "", -1, 0, {}});
 			const json params = ks.contains(kind) ? ks[kind].value("params", json::object()) : json::object();
 			for (auto it = params.begin(); it != params.end(); ++it) {
 				const json &spec = it.value();
@@ -1060,6 +1121,15 @@ std::vector<Editor::Row> Editor::rows() const {
 		field("requires", "/objective/requires", "[{\"key\", \"values\"}]: the goal opens when they hold");
 		field("detectors", "/detectors", "[{name, region | segment, mode, flag?}]: they write flags (D)");
 		field("objects", "/objects", "[{name, circle, kind, face, solid}]: bodies a pull brings back (B)");
+		field("cycle", "/cycle", "{\"period\": s, \"resume_after\": s}: the moving elements' cycle");
+		field("spread", "/spread", "[{flag, tag, persist?, sources?}]: flags flowing through tagged things that touch (none by default)");
+		// Stage 164: every level key is a field
+		field("colliders", "/colliders", "[{\"a\", \"b\"}]: player-only segments -- floors, ledges (X places one; click one to edit)");
+		field("camera", "/camera", "{\"start\": [x, y], \"smoothing\", \"smoothing_speed\"}: the camera (its start drags)");
+		field("background", "/background", "{\"rect\": [x, y, w, h], \"color\": [r, g, b, a]}: what is painted behind");
+		field("features", "/features", "{game, preview, arrow, hud, cursor}: what the level shows");
+		field("templates", "/templates", "{kind: template}: the level's own element kinds (docs/ELEMENTS.md)");
+		field("carriers", "/carriers", "[{name, line | circle, exact?}]: what elements sit on (K, shift+K)");
 	}
 	y += 8;
 	add({Row::Header, errors_.empty() ? "no problems" : std::to_string(errors_.size()) + " problem(s)", "", "", std::nullopt, "", -1, 0, {}});
@@ -1085,6 +1155,31 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		const int b = std::clamp(int((mouse_.x - x0) / ((PANEL_WIDTH - 20) / 4)), 0, 3);
 		static const char *const OPS[] = {"undo", "redo", "save", "play"};
 		run({{"op", OPS[b]}});
+		return;
+	}
+	if (r.kind == Row::Tools) { // Stage 161
+		const float x0 = width_ - PANEL_WIDTH + 10;
+		const size_t c = size_t(std::clamp(int((mouse_.x - x0) / ((PANEL_WIDTH - 20) / 3)), 0, 2));
+		if (c < r.options.size()) {
+			run({{"op", "tool"}, {"tool", r.options[c]}});
+			click_carriers_.clear();
+		}
+		return;
+	}
+	if (r.kind == Row::Nav) {
+		const float x0 = width_ - PANEL_WIDTH + 10, w = PANEL_WIDTH - 20;
+		const float at = mouse_.x - x0;
+		if (at < w * 0.18f) {
+			run({{"op", "next_level"}, {"by", -1}});
+		} else if (at > w * 0.82f) {
+			run({{"op", "next_level"}, {"by", 1}});
+		} else {
+			run({{"op", "level_menu"}});
+		}
+		return;
+	}
+	if (r.kind == Row::Level) {
+		run({{"op", "open"}, {"name", r.label}});
 		return;
 	}
 	if (r.kind == Row::Chips) {
@@ -1117,7 +1212,7 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		return opts[size_t(((k + (back ? -1 : 1)) % n + n) % n)];
 	};
 	if (r.choice == "tool") {
-		const std::string t = cycle({"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle"}, r.value);
+		const std::string t = cycle({"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle", "collider"}, r.value);
 		run({{"op", "tool"}, {"tool", t}});
 		return;
 	}
@@ -1362,6 +1457,50 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				}
 			}
 		}
+		// Stage 164: the background (its rect, faint), the colliders, the camera's start
+		if (doc_.contains("background") && doc_["background"].is_object() && doc_["background"].contains("rect")) {
+			const json &b = doc_["background"]["rect"];
+			if (b.is_array() && b.size() == 4) {
+				const double x = b[0].get<double>(), y = b[1].get<double>(), w = b[2].get<double>(), h = b[3].get<double>();
+				const V2 p[4] = {to_screen(V2::of(x, y)), to_screen(V2::of(x + w, y)), to_screen(V2::of(x + w, y + h)), to_screen(V2::of(x, y + h))};
+				for (int k = 0; k < 4; k++) {
+					g.push_back(dashed(p[k], p[(k + 1) % 4], rgba(0.5, 0.5, 0.55, 0.35), 1.0, 3.0));
+				}
+				g.push_back(text_at(V2::of(double(p[0].x) + 4, double(p[0].y) + 12), "background", rgba(0.5, 0.5, 0.55, 0.6), 11));
+			}
+		}
+		if (doc_.contains("colliders") && doc_["colliders"].is_array()) {
+			for (size_t i = 0; i < doc_["colliders"].size(); i++) {
+				const json &k = doc_["colliders"][i];
+				if (!k.is_object() || !is_point(k.value("a", json())) || !is_point(k.value("b", json()))) {
+					continue;
+				}
+				const V2 a = to_screen(pt(k["a"])), b = to_screen(pt(k["b"]));
+				if (item_ == "collider:" + std::to_string(i)) {
+					g.push_back(line(a, b, SELECT, 9.0));
+				}
+				g.push_back(line(a, b, COLLIDER, 3.0));
+				// (hatching under it: a floor the player stands on)
+				const double dx = double(b.x) - a.x, dy = double(b.y) - a.y, len = std::hypot(dx, dy);
+				for (double t = 6.0; len > 0 && t < len; t += 10.0) {
+					const V2 q = V2::of(a.x + dx * t / len, a.y + dy * t / len);
+					g.push_back(line(q, V2::of(double(q.x) - 5, double(q.y) + 5), rgba(0.6, 0.72, 0.85, 0.5), 1.0));
+				}
+			}
+		}
+		if (doc_.contains("camera") && doc_["camera"].is_object() && is_point(doc_["camera"].value("start", json()))) {
+			const V2 c = to_screen(pt(doc_["camera"]["start"]));
+			if (item_ == "camera") {
+				g.push_back(arc(c, 14.0, 0, TAU, SELECT, 9.0));
+			}
+			const V2 p[4] = {V2::of(double(c.x) - 10, double(c.y) - 7), V2::of(double(c.x) + 10, double(c.y) - 7), V2::of(double(c.x) + 10, double(c.y) + 7),
+				V2::of(double(c.x) - 10, double(c.y) + 7)};
+			for (int k = 0; k < 4; k++) {
+				g.push_back(line(p[k], p[(k + 1) % 4], CAMERA, 2.0));
+			}
+			g.push_back(text_at(V2::of(c.x, double(c.y) - 12), "camera", CAMERA, 11));
+			g.back().alignment = 1;
+		}
 		if (doc_.contains("objects") && doc_["objects"].is_array()) {
 			for (const json &o : doc_["objects"]) {
 				if (!o.is_object() || !o.contains("circle") || !o["circle"].is_object() || !is_point(o["circle"].value("center", json()))) {
@@ -1379,6 +1518,19 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			}
 		}
 		out.add(L_GOALS, 0, 2, std::move(g));
+	}
+	// Stage 153: the shadow under the starting flags, faint
+	if (!shade_fill_.indices.empty()) {
+		Call k;
+		k.kind = Kind::Triangles;
+		for (const rc::vis::Pt &p : shade_fill_.points) {
+			k.pts.push_back(to_screen(V2::of(p.x, p.y)));
+		}
+		for (uint32_t i : shade_fill_.indices) {
+			k.indices.push_back(int(i));
+		}
+		k.colors = {rgba(0.0, 0.0, 0.05, 0.45)};
+		out.add(L_SHADOW, 0, 1, {k});
 	}
 	// the elements
 	const int sel = index_of(selected_);
@@ -1448,6 +1600,10 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			}
 		}
 		for (const BuiltSurface &b : drawn_[i].built) {
+			if (i < shade_of_.size() && shade_of_[i] != 0) { // Stage 153: a shade, in its colour
+				stroke(b.seg, shade_of_[i] == 1 ? rgba(0.55, 0.45, 0.95) : rgba(1.0, 0.85, 0.35), 2.0, true);
+				continue;
+			}
 			if (b.pre_transform) {
 				stroke(b.seg, PRE_TRANSFORM, 1.5, true);
 				continue;
@@ -1472,6 +1628,43 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 		if (bad[i]) {
 			for (const BuiltSurface &b : drawn_[i].built) {
 				stroke(b.seg, ERROR_TEXT, 1.5, true);
+			}
+		}
+		// Stage 151: a moving element, faint where its keys put it
+		const json &me = doc_["elements"][i];
+		if (me.is_object() && me.contains("motion") && me["motion"].is_object() && me["motion"].value("keys", json()).is_array() && !drawn_[i].built.empty()) {
+			const rc::arc::SegGeom &f0 = drawn_[i].built.front().seg;
+			V2 pivot = f0.full ? rc::arc::center_of(f0.get_carrier()) : V2::of((double(f0.s.x) + f0.e.x) / 2, (double(f0.s.y) + f0.e.y) / 2);
+			if (is_point(me["motion"].value("pivot", json()))) {
+				pivot = pt(me["motion"]["pivot"]);
+			}
+			for (const json &k : me["motion"]["keys"]) {
+				if (!k.is_array() || k.size() != 4 || !k[1].is_number() || !k[2].is_number() || !k[3].is_number()) {
+					continue;
+				}
+				const double dx = k[1].get<double>(), dy = k[2].get<double>(), a = k[3].get<double>();
+				if (dx == 0 && dy == 0 && a == 0) {
+					continue;
+				}
+				const double c = std::cos(a), sn = std::sin(a);
+				auto T = [&](const V2 &p) {
+					const double x = double(p.x) - pivot.x, y = double(p.y) - pivot.y;
+					return V2::of(pivot.x + c * x - sn * y + dx, pivot.y + sn * x + c * y + dy);
+				};
+				for (const BuiltSurface &b : drawn_[i].built) {
+					rc::arc::SegGeom g;
+					if (b.seg.full) {
+						const rc::arc::GeneralizedCircle &gc = b.seg.get_carrier();
+						g = rc::arc::SegGeom::full_from_carrier(rc::arc::from_circle(T(rc::arc::center_of(gc)), gc.radius()));
+					} else if (b.seg.is_line()) {
+						const V2 s0 = T(b.seg.s), e0 = T(b.seg.e);
+						g = rc::arc::SegGeom::make(s0, e0, V2::of((double(s0.x) + e0.x) / 2, (double(s0.y) + e0.y) / 2));
+						g.carrier = rc::arc::straight_carrier(s0, e0);
+					} else {
+						g = rc::arc::SegGeom::make(T(b.seg.s), T(b.seg.e), T(b.seg.v));
+					}
+					stroke(g, rgba(0.75, 0.75, 0.85, 0.35), 1.0, true);
+				}
 			}
 		}
 		// the name, by the element's first surface
@@ -1588,6 +1781,50 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
 					p.back().alignment = 1;
 				}
+				break;
+			}
+			case Row::Tools: { // Stage 161: like the palette's chips, the current tool lit
+				const float cw = (PANEL_WIDTH - 20) / 3;
+				for (size_t c = 0; c < r.options.size(); c++) {
+					const float cx = x0 + 10 + float(c) * cw;
+					const bool cur = r.options[c] == TOOL_NAMES[int(tool_)];
+					const bool hot = over && mouse_.x >= cx && mouse_.x < cx + cw;
+					p.push_back(rect(V2{cx + 2, r.y + 2}, V2{cw - 4, ROW - 4}, cur ? rgba(1.0, 0.8, 0.3, 0.30) : hot ? rgba(1, 1, 1, 0.16) : rgba(1, 1, 1, 0.05)));
+					std::string label = r.options[c];
+					for (size_t t = 0; t < std::size(TOOL_NAMES); t++) {
+						if (label == TOOL_NAMES[t]) {
+							label = TOOL_LABELS[t];
+							break;
+						}
+					}
+					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
+					p.back().alignment = 1;
+				}
+				break;
+			}
+			case Row::Nav: {
+				const float w = PANEL_WIDTH - 20;
+				const float cells[4] = {x0 + 10, x0 + 10 + w * 0.18f, x0 + 10 + w * 0.82f, x0 + 10 + w};
+				for (int b = 0; b < 3; b++) {
+					const bool hot = over && mouse_.x >= cells[b] && mouse_.x < cells[b + 1];
+					const bool on = b == 1 && level_menu_;
+					p.push_back(rect(V2{cells[b] + 2, r.y + 1}, V2{cells[b + 1] - cells[b] - 4, ROW - 2},
+							on ? rgba(1.0, 0.8, 0.3, 0.30) : hot ? rgba(1, 1, 1, 0.18) : rgba(1, 1, 1, 0.07)));
+					std::string label = b == 0 ? "<" : b == 2 ? ">" : r.label;
+					if (label.size() > 30) {
+						label = "..." + label.substr(label.size() - 27);
+					}
+					p.push_back(text_at(V2{(cells[b] + cells[b + 1]) / 2, base}, label, on ? ACCENT : TEXT, FONT - 1));
+					p.back().alignment = 1;
+				}
+				break;
+			}
+			case Row::Level: {
+				const bool cur = r.label == level_name_;
+				if (cur || over) {
+					p.push_back(rect(V2{x0 + 4, r.y + 1}, V2{PANEL_WIDTH - 8, ROW - 2}, cur ? rgba(1.0, 0.8, 0.3, 0.22) : rgba(1, 1, 1, 0.08)));
+				}
+				p.push_back(text_at(V2{x0 + 14, base}, r.label, confirm_open_ == r.label ? ERROR_TEXT : cur ? ACCENT : TEXT, FONT - 1));
 				break;
 			}
 			case Row::Buttons: {

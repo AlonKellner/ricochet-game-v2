@@ -23,12 +23,28 @@ bool flag_truth(const FlagValue &v);
 // presence conditions and the categorical tables ask this per effect lookup.
 bool flag_key_is(const FlagValue &v, const std::string &s);
 
+// Stage 156: a condition on a flag {key, values}: flag_key(flags[key]) is one of
+// `values` ("DEFAULT" = the key is missing) -- the presence form.
+struct FlagCond {
+	std::string key;
+	std::vector<std::string> values;
+	bool operator==(const FlagCond &) const = default;
+};
+
 struct StateChangeDef {
 	std::string key;
 	bool toggle = false; // op: "toggle" | "set"
 	FlagValue value = true;
+	// Stage 156: applied only when every condition holds under the flags the side
+	// fired under (before any of its changes: a side's changes see one state)
+	std::vector<FlagCond> when = {};
 	bool operator==(const StateChangeDef &) const = default;
 };
+
+// The reserved per-shot flag of frost (Stage 156, GAME_SPEC 10.6): while it is
+// true a side that would stop the arrow reflects it (a line) or inverts it (a
+// circle), and the frost is used up.
+inline const std::string FROST = "shot:frost";
 
 class Flags {
 public:
@@ -48,14 +64,19 @@ public:
 	// The flags after a state change (a new object; toggle stores the negation
 	// of the current truth value, a missing key being false).
 	Flags applied(const StateChangeDef &change) const;
-	// Stage 107: a side's state changes, in order (last writer wins)
+	// Stage 107: a side's state changes, in order (last writer wins); Stage 156:
+	// each one's conditions read under these flags (the side's state when it fired)
 	Flags applied(const std::vector<StateChangeDef> &changes) const {
 		Flags f = *this;
 		for (const StateChangeDef &c : changes) {
-			f = f.applied(c);
+			if (holds(c.when)) {
+				f = f.applied(c);
+			}
 		}
 		return f;
 	}
+	// Stage 156: every condition holds
+	bool holds(const std::vector<FlagCond> &conds) const;
 	// flags.get(key) == true: the value is the bool true.
 	bool is_true(const std::string &key) const;
 	// Canonical form: sorted keys, "k=v" joined by ",", JSON spelling (BeamTracer._flags_key).
@@ -67,6 +88,7 @@ public:
 private:
 	std::vector<Entry> entries_;
 	bool ghost_ = false; // (A.7: is_true("ghost"), asked per effect lookup, kept current by set and erase)
+	bool frost_ = false; // (Stage 156: is_true(FROST), the same way)
 	mutable bool key_ok_ = false;
 	mutable std::string key_;
 };

@@ -81,6 +81,9 @@ std::vector<rc::StateChangeDef> hit_writes(const HitSpec &h, int host_id) {
 		if (h.kind == "state") {
 			const bool toggle = h.op == "toggle";
 			out.push_back({h.key, toggle, flag_value(h.value)});
+			for (const PresenceSpec &c : h.when) { // Stage 156
+				out.back().when.push_back(rc::FlagCond{c.key, c.values});
+			}
 		} else if (h.kind == "target") {
 			out.push_back({"target:" + std::to_string(host_id), false, true});
 		} else if (h.kind == "reset") {
@@ -117,12 +120,15 @@ bool writes_key(const BuiltSide &side, const std::string &key, int host_id) {
 	return false;
 }
 
-std::optional<OverlayLink> overlay_link(const BuiltSurface &s, Side side, const rc::Flags &flags) {
+std::optional<OverlayLink> overlay_link(const BuiltSurface &s, Side side, const rc::Flags &flags, bool frost) {
 	const BuiltSide *cfg = active_side(s, side, flags);
+	const SideRef from{s.id, side};
+	if (frost && cfg != nullptr && kind_of(cfg->effect) == EffectKind::Terminal) {
+		return OverlayLink{from, from}; // (Stage 158: a reflection or an inversion -- self-inverse)
+	}
 	if (cfg == nullptr || !cfg->interactive) {
 		return std::nullopt;
 	}
-	const SideRef from{s.id, side};
 	// the explicit links: a portal pair's sides link across (source LEFT <-> image RIGHT)
 	if (s.portal_pair != 0) {
 		return OverlayLink{from, SideRef{s.portal_pair, opposite(side)}};

@@ -6,7 +6,8 @@ the document with an ordinary game (rc_game_*), the view fitted to the level's b
     python3 tests/host_py/rc_editor_tk.py [level.json] [--size 1600x900]
 
 The keys are the editor's (docs/EDITOR.md): V select, L line, A arc, C circle, P the player's start,
-Tab the next kind, ctrl/cmd+Z undo, ctrl/cmd+S save, F5 play (Esc back). In play: the mouse aims, the
+Tab the next kind, ctrl/cmd+Z undo, ctrl/cmd+S save, F5 play (Esc back), ctrl/cmd+O the level list,
+ctrl/cmd+left/right the previous/next level. In play: the mouse aims, the
 left button plans, the right button unplans, Space fires, WASD moves, Z undo, R reset, C clear the plan.
 """
 import math
@@ -141,6 +142,20 @@ def main(argv):
             path = pathlib.Path(a)
     editor = rc_host.Editor(path.read_text() if path and path.exists() else None)
     editor.resize(w, h)
+    # Stage 155: the level menu -- the levels under data/levels, by name (their path without .json)
+    levels_root = pathlib.Path(__file__).resolve().parents[2] / "data" / "levels"
+
+    def name_of(p):
+        try:
+            return str(p.resolve().relative_to(levels_root).with_suffix(""))
+        except ValueError:
+            return None
+
+    names = sorted(str(p.relative_to(levels_root).with_suffix("")) for p in levels_root.rglob("*.json"))
+    listing = {"op": "levels", "list": names}
+    if path is not None and name_of(path):
+        listing["current"] = name_of(path)
+    editor.command(listing)
     root = tk.Tk()
     root.title("Ricochet level editor" + (" - " + str(path) if path else ""))
     canvas = tk.Canvas(root, width=w, height=h, background=hex_color((*BACKGROUND, 1)), highlightthickness=0)
@@ -173,7 +188,16 @@ def main(argv):
         after_input()
 
     def after_input():
+        nonlocal path
         st = editor.status()
+        if st.open_requested:  # Stage 155: a level from the menu
+            name = editor.command({"op": "open_request"}).get("name", "")
+            target = levels_root / (name + ".json")
+            if name and target.exists():
+                editor.command({"op": "load", "text": target.read_text(), "name": name})
+                path = target
+                root.title("Ricochet level editor - " + str(target))
+                schedule()
         if st.save_requested:
             target = path
             if target is None:
@@ -234,6 +258,11 @@ def main(argv):
             schedule()
 
     def on_wheel(e):
+        if state["game"] is not None:  # playing: the wheel moves the level's cycle
+            delta = e.delta if e.num not in (4, 5) else (1 if e.num == 4 else -1)
+            state["game"].scroll(1.0 if delta > 0 else -1.0)
+            schedule()
+            return
         if state["game"] is None:
             delta = e.delta if e.num not in (4, 5) else (1 if e.num == 4 else -1)
             editor.scroll(0.0, -1.0 if delta > 0 else 1.0, mods_of(e.state))

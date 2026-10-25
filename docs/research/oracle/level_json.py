@@ -122,6 +122,8 @@ def _writes(hits, host_id):
         if k == "state":
             tog = h.get("op", "set") == "toggle"
             out.append({"key": h["key"], "op": "toggle" if tog else "set", "value": True if tog else h.get("value", True)})
+            if h.get("when"):   # Stage 156: conditions
+                out[-1]["when"] = [{"key": c["key"], "values": list(c["values"])} for c in h["when"]]
         elif k == "target":
             out.append({"key": "target:%d" % host_id, "op": "set", "value": True})
         elif k == "reset":
@@ -135,12 +137,15 @@ def _side_def(side, host_id, **portal):
     if side is None:
         return None
     d = _effect_def(side.get("effect", {"type": "pass"}), **portal)
-    d["interactive"] = bool(side.get("interactive", False))
+    # (Stage 159: every side that changes the game is plannable -- a side with hit effects is interactive)
+    d["interactive"] = bool(side.get("interactive", False)) or bool(side.get("hits"))
     w = _writes(side.get("hits", []), host_id)
     if w:
         d["states"] = w
     if any(h.get("deferred", False) or h.get("kind") in ("grapple", "pull") for h in side.get("hits", [])):
         d["landing"] = True      # (Stage 134: its hit changes the game at the landing; Stage 146: a journey)
+    if side.get("rigid", False):
+        d["rigid"] = True        # (Stage 156: frost never turns it)
     return d
 
 

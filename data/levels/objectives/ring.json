@@ -1,0 +1,93 @@
+{
+ "background": {
+  "color": [0.10000000149011612, 0.10000000149011612, 0.10000000149011612, 1.0],
+  "rect": [0.0, 0.0, 1920.0, 1080.0]
+ },
+ "bounds": [0.0, 0.0, 1920.0, 1080.0],
+ "camera": null,
+ "carriers": [
+  {
+   "circle": {
+    "center": [1000.0, 520.0],
+    "radius": 150.0
+   },
+   "exact": true,
+   "name": "ring"
+  }
+ ],
+ "colliders": [],
+ "elements": [
+  {
+   "carrier": "ring",
+   "from": [948.7, 661.0],
+   "kind": "door",
+   "name": "hatch",
+   "to": [859.0, 571.3]
+  },
+  {
+   "carrier": "ring",
+   "from": [859.0, 571.3],
+   "kind": "wall",
+   "name": "west",
+   "to": [948.7, 379.0]
+  },
+  {
+   "carrier": "ring",
+   "from": [948.7, 379.0],
+   "kind": "two_sided_mirror",
+   "name": "crown",
+   "to": [1141.0, 571.3]
+  },
+  {
+   "carrier": "ring",
+   "from": [1141.0, 571.3],
+   "kind": "wall",
+   "name": "east",
+   "to": [948.7, 661.0]
+  },
+  {
+   "end": [1000.0, 550.0],
+   "kind": "button",
+   "name": "b",
+   "op": "set",
+   "opens": "gate",
+   "start": [1000.0, 490.0]
+  },
+  {
+   "end": [860.0, 300.0],
+   "kind": "button",
+   "name": "switch",
+   "op": "set",
+   "opens": "hatch",
+   "start": [760.0, 300.0]
+  },
+  {
+   "end": [1250.0, 840.0],
+   "kind": "door",
+   "name": "gate",
+   "start": [1250.0, 700.0]
+  }
+ ],
+ "features": {
+  "arrow": true,
+  "cursor": true,
+  "game": true,
+  "hud": true,
+  "preview": true
+ },
+ "gravity": [0.0, 980.0],
+ "name": "objectives/ring",
+ "objective": {
+  "goal": {
+   "rect": [1280.0, 760.0, 70.0, 80.0]
+  }
+ },
+ "player": {
+  "start": [700.0, 827.92]
+ },
+ "room": {
+  "built": true,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}

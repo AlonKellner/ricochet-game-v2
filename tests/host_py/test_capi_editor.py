@@ -127,3 +127,20 @@ def test_the_tk_painter_draws_every_command_kind():
 def test_tk_key_names():
     assert key_code("l") == ord("L") and key_code("Escape") == rc_host.EDKEY_ESCAPE
     assert key_code("F5") == rc_host.EDKEY_F1 + 4 and key_code("Shift_L") is None
+
+
+def test_the_level_menu_handshake():
+    """Stage 155: the host lists the levels; a request is taken and answered with the level's text."""
+    ed = rc_host.Editor()
+    ed.resize(1600, 900)
+    root = pathlib.Path(__file__).resolve().parents[2] / "data" / "levels"
+    names = sorted(str(p.relative_to(root).with_suffix("")) for p in root.rglob("*.json"))
+    assert ed.command({"op": "levels", "list": names})["count"] == len(names)
+    assert ed.status().open_requested == 0
+    assert ed.command({"op": "open", "name": "objectives/lantern"})["ok"]
+    assert ed.status().open_requested == 1
+    name = ed.command({"op": "open_request"})["name"]
+    assert ed.command({"op": "load", "text": (root / (name + ".json")).read_text(), "name": name})["ok"]
+    assert ed.command({"op": "state"})["level"] == "objectives/lantern"
+    assert ed.status().open_requested == 0
+    assert ed.command({"op": "next_level", "by": 1})["name"] == names[(names.index(name) + 1) % len(names)]

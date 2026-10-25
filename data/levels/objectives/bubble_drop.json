@@ -1,0 +1,70 @@
+{
+ "background": {
+  "color": [0.10000000149011612, 0.10000000149011612, 0.10000000149011612, 1.0],
+  "rect": [0.0, 0.0, 1920.0, 1080.0]
+ },
+ "bounds": [0.0, 0.0, 1920.0, 1080.0],
+ "camera": null,
+ "colliders": [],
+ "detectors": [
+  {
+   "for": "object",
+   "mode": "enter",
+   "name": "plate",
+   "region": {
+    "rect": [960.0, 800.0, 80.0, 40.0]
+   }
+  }
+ ],
+ "elements": [],
+ "features": {
+  "arrow": true,
+  "cursor": true,
+  "game": true,
+  "hud": true,
+  "preview": true
+ },
+ "gravity": [0.0, 980.0],
+ "name": "objectives/bubble_drop",
+ "objective": {
+  "goal": {
+   "rect": [570.0, 760.0, 120.0, 80.0]
+  },
+  "requires": [
+   {
+    "key": "det:plate",
+    "values": ["true"]
+   }
+  ]
+ },
+ "objects": [
+  {
+   "carries": "box",
+   "circle": {
+    "center": [1000.0, 500.0],
+    "radius": 24.0
+   },
+   "face": "pass",
+   "gravity": -0.5,
+   "label": "Bubble",
+   "name": "bubble",
+   "pops": true,
+   "solid": false
+  },
+  {
+   "circle": {
+    "center": [1000.0, 540.0],
+    "radius": 14.0
+   },
+   "name": "box"
+  }
+ ],
+ "player": {
+  "start": [800.0, 827.92]
+ },
+ "room": {
+  "built": true,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}

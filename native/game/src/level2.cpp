@@ -1,4 +1,5 @@
 // rc-level/2: lowering to rc-level/1, and the migration back (rcg/level2.hpp).
+#include "rcg/lattice.hpp"
 #include "rcg/level2.hpp"
 
 #include "rcg/canon.hpp"
@@ -76,7 +77,7 @@ std::map<std::string, json> carriers_of(const json &v2) {
 			fail(cp, "{\"name\", \"line\": {\"a\", \"b\"}} or {\"name\", \"circle\": {\"center\", \"radius\"}} expected");
 		}
 		for (auto it = c.begin(); it != c.end(); ++it) {
-			if (it.key() != "name" && it.key() != "line" && it.key() != "circle") {
+			if (it.key() != "name" && it.key() != "line" && it.key() != "circle" && it.key() != "exact") {
 				fail(cp, "unknown key '" + it.key() + "'");
 			}
 		}
@@ -95,6 +96,9 @@ std::map<std::string, json> carriers_of(const json &v2) {
 				fail(cp + ".circle", "{\"center\": [x, y], \"radius\": r > 0} expected");
 			}
 		}
+		if (c.contains("exact") && !c["exact"].is_boolean()) {
+			fail(cp + ".exact", "true or false expected");
+		}
 		if (!out.emplace(c["name"].get<std::string>(), c).second) {
 			fail(cp + ".name", "'" + c["name"].get<std::string>() + "' names another carrier");
 		}
@@ -102,9 +106,27 @@ std::map<std::string, json> carriers_of(const json &v2) {
 	return out;
 }
 
-// A point onto a carrier (float64): the line's nearest point, the circle's point in its direction.
+bool exact(const json &carrier) { return carrier.value("exact", false); }
+
+// Stage 154: an exact carrier's lattice (rcg/lattice.hpp)
+lattice::Line line_lattice(const json &c) {
+	return lattice::line_of(c["line"]["a"][0].get<double>(), c["line"]["a"][1].get<double>(), c["line"]["b"][0].get<double>(), c["line"]["b"][1].get<double>());
+}
+const lattice::Circle &circle_lattice(const json &c) {
+	return lattice::circle_of(c["circle"]["center"][0].get<double>(), c["circle"]["center"][1].get<double>(), c["circle"]["radius"].get<double>());
+}
+
+// A point onto a carrier (float64): the line's nearest point, the circle's point in its direction (an exact
+// carrier: its nearest lattice point).
 std::array<double, 2> project(const json &carrier, const json &p) {
 	const double px = p[0].get<double>(), py = p[1].get<double>();
+	if (exact(carrier)) {
+		if (carrier.contains("line")) {
+			return lattice::nearest(line_lattice(carrier), px, py);
+		}
+		const lattice::Circle &c = circle_lattice(carrier);
+		return c.point(lattice::nearest(c, px, py));
+	}
 	if (carrier.contains("line")) {
 		const double ax = carrier["line"]["a"][0].get<double>(), ay = carrier["line"]["a"][1].get<double>();
 		const double dx = carrier["line"]["b"][0].get<double>() - ax, dy = carrier["line"]["b"][1].get<double>() - ay;
@@ -141,6 +163,9 @@ json on_carrier(const json &e, const std::map<std::string, json> &carriers, cons
 		if (!c.contains("circle")) {
 			fail(path, "from and to expected (a line carrier has no whole)");
 		}
+		if (exact(c)) {
+			fail(path, "from and to expected (an exact circle carrier holds arcs: its whole is no float circle)");
+		}
 		out["circle"] = c["circle"];
 		return out;
 	}
@@ -163,6 +188,9 @@ json on_carrier(const json &e, const std::map<std::string, json> &carriers, cons
 			fail(path + ".via", "[x, y] expected");
 		}
 		const auto v = project(c, e["via"]);
+		if (exact(c) && (v == s || v == en)) {
+			fail(path + ".via", "the via lands on an end (an exact carrier's points are its lattice's)");
+		}
 		out["via"] = json::array({v[0], v[1]});
 		return out;
 	}
@@ -178,6 +206,16 @@ json on_carrier(const json &e, const std::map<std::string, json> &carriers, cons
 	}
 	if (span == -PI) {
 		span = PI;
+	}
+	if (exact(c)) { // the lattice point nearest the middle, strictly between the ends
+		const lattice::Circle &lc = circle_lattice(c);
+		const size_t i = lattice::nearest_angle(lc, std::atan2(std::sin(a0 + span / 2), std::cos(a0 + span / 2)));
+		const auto v = lc.point(i);
+		if (v == s || v == en) {
+			fail(path, "from and to are neighbours on the exact carrier: no point between them for the arc");
+		}
+		out["via"] = json::array({v[0], v[1]});
+		return out;
 	}
 	out["via"] = json::array({cx + r * std::cos(a0 + span / 2), cy + r * std::sin(a0 + span / 2)});
 	return out;
@@ -203,6 +241,47 @@ std::string first_difference(const json &a, const json &b) {
 
 json off_carrier(const json &element, const json &doc) { return on_carrier(element, carriers_of(doc), "element"); }
 
+namespace {
+bool has_tag(const std::vector<std::string> &tags, const char *t) { return std::find(tags.begin(), tags.end(), t) != tags.end(); }
+json cond(const std::string &key, bool on) { return {{"key", key}, {"values", on ? json::array({"true"}) : json::array({"DEFAULT", "false"})}}; }
+json write(const std::string &key, bool value, json when) { return {{"kind", "state"}, {"key", key}, {"op", "set"}, {"value", value}, {"when", std::move(when)}}; }
+} // namespace
+
+json tag_hits(const std::string &name, const std::vector<std::string> &tags) {
+	json out = json::array();
+	if (has_tag(tags, "flammable") || has_tag(tags, "burning")) {
+		const std::string mine = "el:" + name + ":fire";
+		out.push_back(write(mine, true, json::array({cond("shot:fire", true)})));  // a burning arrow lights it
+		out.push_back(write("shot:fire", true, json::array({cond(mine, true)}))); // it lights the arrow
+	}
+	if (has_tag(tags, "conductive") || has_tag(tags, "charged")) {
+		const std::string mine = "el:" + name + ":charge";
+		const json give = json::array({cond("shot:charge", true), cond(mine, false)});
+		const json take = json::array({cond("shot:charge", false), cond(mine, true)});
+		out.push_back(write("shot:charge", false, give)); // the arrow's charge to it
+		out.push_back(write(mine, true, give));
+		out.push_back(write("shot:charge", true, take)); // its charge to the arrow
+		out.push_back(write(mine, false, take));
+	}
+	if (has_tag(tags, "frosted")) {
+		out.push_back({{"kind", "state"}, {"key", "shot:frost"}, {"op", "set"}, {"value", true}});
+	}
+	return out;
+}
+
+std::vector<std::string> tag_initial_flags(const std::string &name, const std::vector<std::string> &tags) {
+	std::vector<std::string> out;
+	if (has_tag(tags, "burning")) {
+		out.push_back("el:" + name + ":fire");
+	}
+	if (has_tag(tags, "charged")) {
+		out.push_back("el:" + name + ":charge");
+	}
+	return out;
+}
+
+bool frost_bearing(const std::string &t) { return t == "pass" || t == "reflection" || t == "inversion"; }
+
 std::vector<json> rect_walls(const json &rect, const json &side, const json &label, bool solid) {
 	const double x = rect[0].get<double>(), y = rect[1].get<double>(), w = rect[2].get<double>(), h = rect[3].get<double>();
 	const double pts[4][3][2] = {{{x, y}, {x + w, y}, {x + w / 2, y}}, {{x + w, y}, {x + w, y + h}, {x + w, y + h / 2}},
@@ -226,7 +305,7 @@ Lowered lower_level(const json &v2) {
 			fail(P, "'" + k + "' is reserved for a later stage of rc-level/2");
 		}
 		const bool known = k == "schema" || k == "flags" || k == "templates" || k == "elements" || k == "objective" || k == "detectors"
-				|| k == "objects" || k == "carriers" || std::find(META.begin(), META.end(), k) != META.end();
+				|| k == "objects" || k == "carriers" || k == "cycle" || k == "spread" || std::find(META.begin(), META.end(), k) != META.end();
 		if (!known) {
 			fail(P, "unknown key '" + k + "'");
 		}
@@ -350,7 +429,74 @@ Lowered lower_level(const json &v2) {
 				fail(ep + ".kind", "unknown element kind '" + kind + "'");
 			}
 			const json g = e.contains("carrier") ? on_carrier(e, carriers, origin) : e; // Stage 149: on a carrier
-			push(elements::expand(it->second, g, name, origin), origin);
+			std::vector<json> expanded = elements::expand(it->second, g, name, origin);
+			// Stage 152: its tags
+			std::vector<std::string> tags;
+			for (const json *src : {static_cast<const json *>(&it->second), &e}) {
+				if (src->contains("tags")) {
+					if (!(*src)["tags"].is_array()) {
+						fail(origin + ".tags", "an array of strings expected");
+					}
+					for (const json &tg : (*src)["tags"]) {
+						if (!tg.is_string()) {
+							fail(origin + ".tags", "an array of strings expected");
+						}
+						if (std::find(tags.begin(), tags.end(), tg.get<std::string>()) == tags.end()) {
+							tags.push_back(tg.get<std::string>());
+						}
+					}
+				}
+			}
+			if (!tags.empty()) {
+				out.tagged.push_back({i, name, tags});
+			}
+			// Stage 156: what the tags give every side (a missing side: a pass that carries them), the flags they start
+			const json extra = tag_hits(name, tags);
+			if (!extra.empty()) {
+				const bool frost = std::find(tags.begin(), tags.end(), "frosted") != tags.end();
+				auto give = [&](json &sides) {
+					for (const char *k : {"left", "right"}) {
+						json &sd = sides[k];
+						if (sd.is_null()) {
+							sd = {{"effect", {{"type", "pass"}}}, {"interactive", false}};
+						}
+						const std::string t = sd.contains("effect") ? sd["effect"].value("type", "pass") : "pass";
+						if (frost && !frost_bearing(t)) {
+							fail(origin + ".tags", "frosted: its sides must pass, reflect or invert (a " + t + " side cannot bear frost)");
+						}
+						if (!sd.contains("hits")) {
+							sd["hits"] = json::array();
+						}
+						for (const json &h : extra) {
+							sd["hits"].push_back(h);
+						}
+					}
+				};
+				for (json &s : expanded) {
+					if (s.value("pre_transform", false)) {
+						continue;
+					}
+					give(s);
+					if (s.contains("resolver") && s["resolver"].is_object() && s["resolver"].value("table", json()).is_array()) {
+						for (json &row : s["resolver"]["table"]) {
+							if (row.is_array() && row.size() == 2 && row[1].is_object()) {
+								give(row[1]);
+							}
+						}
+					}
+				}
+			}
+			for (const std::string &k : tag_initial_flags(name, tags)) {
+				if (!out.flags.contains(k)) {
+					out.flags[k] = true;
+				}
+			}
+			push(std::move(expanded), origin);
+			// Stage 153: the region it bounds
+			const json shade = elements::evaluate(it->second, g, name, "shade", origin);
+			if (!shade.is_null()) {
+				out.shaded.push_back({i, name, shade});
+			}
 		}
 	}
 	if (!edges) {

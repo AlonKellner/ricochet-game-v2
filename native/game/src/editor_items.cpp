@@ -70,6 +70,12 @@ void translate_item(json &j, double dx, double dy) {
 			}
 		}
 	}
+	for (const char *k : {"a", "b", "start"}) { // Stage 164: a collider's ends, the camera's start
+		if (is_point(j.value(k, json()))) {
+			const json p = j[k];
+			j[k] = jpoint(p[0].get<double>() + dx, p[1].get<double>() + dy);
+		}
+	}
 }
 
 std::string fresh(const json &doc, const char *list, const std::string &base) {
@@ -90,6 +96,19 @@ std::optional<std::string> Editor::item_path(const std::string &item) const {
 			return std::string("/objective/goal");
 		}
 		return std::nullopt;
+	}
+	if (kind == "camera") { // Stage 164: the camera's start
+		if (doc_.contains("camera") && doc_["camera"].is_object()) {
+			return std::string("/camera");
+		}
+		return std::nullopt;
+	}
+	if (kind == "collider") { // Stage 164: a player-only collider, by its index
+		if (name.empty() || name.find_first_not_of("0123456789") != std::string::npos || !doc_.contains("colliders") || !doc_["colliders"].is_array()
+				|| std::stoul(name) >= doc_["colliders"].size()) {
+			return std::nullopt;
+		}
+		return "/colliders/" + name;
 	}
 	const char *list = kind == "detector" ? "detectors" : kind == "object" ? "objects" : kind == "carrier" ? "carriers" : nullptr;
 	if (list == nullptr) {
@@ -126,6 +145,12 @@ std::vector<Editor::Handle> Editor::item_handles() const {
 	};
 	if (split(item_).first == "goal") {
 		region(j, *path);
+	} else if (split(item_).first == "collider" || split(item_).first == "camera") { // Stage 164: its own points
+		for (const char *k : {"a", "b", "start"}) {
+			if (is_point(j.value(k, json()))) {
+				out.push_back({*path, k, pt(j[k]), item_});
+			}
+		}
 	} else if (j.contains("line") && j["line"].is_object()) { // a line carrier: its two defining points
 		for (const char *k : {"a", "b"}) {
 			if (is_point(j["line"].value(k, json()))) {
@@ -161,10 +186,31 @@ std::string Editor::item_at(const V2 &screen) const {
 		}
 		return false;
 	};
+	auto near_segment = [&](const V2 &wa, const V2 &wb) {
+		const V2 a = to_screen(wa), b = to_screen(wb);
+		const double ex = double(b.x) - a.x, ey = double(b.y) - a.y, l2 = ex * ex + ey * ey;
+		const double u = l2 > 0 ? std::clamp(((double(screen.x) - a.x) * ex + (double(screen.y) - a.y) * ey) / l2, 0.0, 1.0) : 0.0;
+		return std::hypot(double(a.x) + ex * u - screen.x, double(a.y) + ey * u - screen.y) <= 8.0;
+	};
+	// Stage 164: the camera's start (its marker), a collider (thin, like an element)
+	if (doc_.contains("camera") && doc_["camera"].is_object() && is_point(doc_["camera"].value("start", json()))) {
+		const V2 c = to_screen(pt(doc_["camera"]["start"]));
+		if (std::hypot(double(c.x) - screen.x, double(c.y) - screen.y) <= 12.0) {
+			return "camera";
+		}
+	}
 	{
 		const std::string c = carrier_near(screen); // a carrier's line or circle (thin, like an element)
 		if (!c.empty()) {
 			return "carrier:" + c;
+		}
+	}
+	if (doc_.contains("colliders") && doc_["colliders"].is_array()) {
+		for (size_t i = doc_["colliders"].size(); i-- > 0;) {
+			const json &k = doc_["colliders"][i];
+			if (k.is_object() && is_point(k.value("a", json())) && is_point(k.value("b", json())) && near_segment(pt(k["a"]), pt(k["b"]))) {
+				return "collider:" + std::to_string(i);
+			}
 		}
 	}
 	if (doc_.contains("objects") && doc_["objects"].is_array()) {
@@ -240,6 +286,8 @@ void Editor::drag_item(const V2 &screen, unsigned mods) {
 		}
 	} else if ((k == "a" || k == "b") && j.contains("segment") && j["segment"].is_object()) {
 		j["segment"][k] = snap(screen, mods, &*drag_);
+	} else if ((k == "a" || k == "b" || k == "start") && is_point(j.value(k, json()))) { // Stage 164: a collider's end, the camera
+		j[k] = snap(screen, mods, &*drag_);
 	} else if ((k == "a" || k == "b") && j.contains("line") && j["line"].is_object()) {
 		const json p = snap(screen, mods, &*drag_);
 		const std::string other = k == "a" ? "b" : "a";
@@ -294,7 +342,7 @@ std::vector<Editor::Row> Editor::item_rows() const {
 	};
 	Row head;
 	head.kind = Row::Header;
-	head.label = kind == "goal" ? "goal" : kind + " " + name;
+	head.label = kind == "goal" || kind == "camera" ? kind : kind + " " + name;
 	if (kind == "carrier") {
 		head.label += j.contains("line") ? " (a line)" : " (a circle)";
 	}
@@ -315,6 +363,17 @@ std::vector<Editor::Row> Editor::item_rows() const {
 	if (kind == "goal") {
 		shape(*path);
 		row("requires", "/objective/requires", "[{\"key\", \"values\"}]: the goal opens while they hold", "none: always open");
+	} else if (kind == "collider") { // Stage 164
+		row("a", *path + "/a", "[x, y]: one end (drag it)");
+		row("b", *path + "/b", "[x, y]: the other");
+		Row r;
+		r.kind = Row::Text;
+		r.label = "player-only: it holds the player; arrows pass";
+		out.push_back(r);
+	} else if (kind == "camera") { // Stage 164
+		row("start", *path + "/start", "[x, y]: where the camera starts (drag it)");
+		row("smoothing", *path + "/smoothing", "the camera eases after the player", "false", "bool");
+		row("speed", *path + "/smoothing_speed", "its easing speed", "5");
 	} else if (kind == "carrier") {
 		row("name", *path + "/name", "renaming carries the elements on it");
 		if (j.contains("line")) {
@@ -324,6 +383,7 @@ std::vector<Editor::Row> Editor::item_rows() const {
 			row("center", *path + "/circle/center", "[x, y]: drag it: the elements on the circle follow");
 			row("radius", *path + "/circle/radius", "drag its handle");
 		}
+		row("exact", *path + "/exact", "its elements' points exactly on it (snapped to its exact points; Stage 154)", "false", "bool");
 		int on = 0;
 		for (const json &e : doc_["elements"]) {
 			on += e.is_object() && e.value("carrier", json()) == name;
@@ -351,10 +411,14 @@ std::vector<Editor::Row> Editor::item_rows() const {
 		row("center", *path + "/circle/center", "[x, y]: drag it");
 		row("radius", *path + "/circle/radius", "drag its handle", "16");
 		row("label", *path + "/label", "the node prefix", "Object");
+		row("gravity", *path + "/gravity", "its gravity, a factor of the level's (a bubble: negative, it floats up)", "1");
+		row("pops", *path + "/pops", "the arrow pops it (gone for good)", "false", "bool");
+		row("carries", *path + "/carries", "an object it holds until it pops (or is removed)", "none");
+		row("tags", *path + "/tags", "[tag, ...]: what spread rules flow through (conductive: it carries charge)", "none");
 	}
 	Row keys;
 	keys.kind = Row::Text;
-	keys.label = kind == "goal" ? "Delete: remove the goal; arrows: move it" : "Delete: remove; ctrl+D: duplicate; arrows: move";
+	keys.label = kind == "goal" || kind == "camera" ? "Delete: remove the " + kind + "; arrows: move it" : "Delete: remove; ctrl+D: duplicate; arrows: move";
 	out.push_back(keys);
 	return out;
 }
@@ -387,6 +451,8 @@ json Editor::item_op(const std::string &o, const json &cmd) {
 		change([&](json &d) {
 			if (kind == "goal") {
 				d.erase("objective");
+			} else if (kind == "camera") {
+				d.erase("camera");
 			} else {
 				d[ptr.parent_pointer()].erase(std::stoul(ptr.back()));
 			}
@@ -422,14 +488,28 @@ json Editor::item_op(const std::string &o, const json &cmd) {
 				reg["circle"]["radius"] = to;
 			} else if ((h == "a" || h == "b") && j.contains("segment")) {
 				j["segment"][h] = to;
+			} else if ((h == "a" || h == "b" || h == "start") && is_point(j.value(h, json()))) { // Stage 164: a collider, the camera
+				j[h] = to;
 			} else {
 				refuse("handle: body, corner0-3, center, radius, a or b expected");
 			}
 		});
 		return {};
 	}
-	if (kind == "goal") {
-		refuse("the goal is one: it is not " + std::string(o == "duplicate" ? "duplicated" : "renamed"));
+	if (kind == "goal" || kind == "camera") {
+		refuse("the " + kind + " is one: it is not " + std::string(o == "duplicate" ? "duplicated" : "renamed"));
+	}
+	if (kind == "collider") { // Stage 164: colliders have no names
+		if (o != "duplicate") {
+			refuse("a collider has no name to change");
+		}
+		json copy = doc_[ptr];
+		const json by = cmd.value("by", jpoint(20.0, 20.0));
+		translate_item(copy, by[0].get<double>(), by[1].get<double>());
+		const size_t at = std::stoul(ptr.back()) + 1;
+		change([&](json &d) { d["colliders"].insert(d["colliders"].begin() + long(at), copy); });
+		item_ = "collider:" + std::to_string(at);
+		return {{"item", item_}};
 	}
 	const char *list = kind == "detector" ? "detectors" : kind == "carrier" ? "carriers" : "objects";
 	if (o == "duplicate") {

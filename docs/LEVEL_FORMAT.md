@@ -29,8 +29,10 @@ too).
 | `templates` | `{kind: template}`: the level's own element kinds, added to the builtin ones or replacing one (docs/ELEMENTS.md) | `{}` |
 | `objective` | `{"goal": region, "requires": [{"key", "values"}]}`: reach the goal while every condition holds to win (GAME_SPEC 24.6); none: every target hit wins | none |
 | `detectors` | `[{"name", "region": region \| "segment": {"a", "b"}, "mode": "while" \| "enter" \| "toggle", "flag", "value", "for"}]`: flags written as the player moves (GAME_SPEC 24.5; flag default `det:<name>`, mode `while`, value `true`, for `player`) | `[]` |
-| `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "wall" \| "mirror" \| "pass", "solid", "label"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, wall, solid, label `Object` by default); their surfaces take the ids after the level's | `[]` |
-| `carriers` | `[{"name", "line": {"a": [x, y], "b": [x, y]}} \| {"name", "circle": {"center": [x, y], "radius": r}}]`: lines and circles elements are placed on (Stage 149, below) | `[]` |
+| `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "wall" \| "mirror" \| "pass", "solid", "label", "gravity", "pops", "carries", "tags"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, wall, solid, label `Object` by default); their surfaces take the ids after the level's. Stage 150: `gravity` a factor of the level's (default 1; negative floats up), `pops` (the arrow pops it: flag `obj:<name>:popped`), `carries` another object until it pops. Stage 152: `tags` (what spread rules flow through: `["conductive"]`) | `[]` |
+| `cycle` | `{"period": s, "resume_after": s}`: the moving elements' cycle (GAME_SPEC 9.8; 4 and 10 by default) | |
+| `spread` | `[{"flag", "tag", "persist", "sources"}]`: flags flowing through tagged elements and objects that touch (GAME_SPEC 10.6, docs/ELEMENTS.md "Fire, charge and frost: tags"; `persist` false and `sources` `[]` by default) | none (Stage 156) |
+| `carriers` | `[{"name", "line": {"a": [x, y], "b": [x, y]}} \| {"name", "circle": {"center": [x, y], "radius": r}}, "exact"?]`: lines and circles elements are placed on (Stage 149, below; `exact`: Stage 154) | `[]` |
 
 A region is `{"rect": [x, y, w, h]}` or `{"circle": {"center": [x, y], "radius": r}}`. The objective and the
 detectors are not surfaces: the lowering leaves them out.
@@ -46,6 +48,8 @@ An element:
 | `straight` | `true`: the exact line through start and end (via for display only) |
 | `label` | the node prefix, overriding the kind's (`null`: not drawn) |
 | `flip` | `true`: left and right swapped (a mirror facing right) |
+| `motion` | `{"keys": [[phase, dx, dy, angle], ...], "pivot": [x, y]}` (Stage 151): the element moves over the level's cycle -- phases in [0, 1), increasing; offsets and angles (radians, about the pivot: default its middle) interpolated, looping |
+| `tags` | `[tag, ...]` (Stage 152): added to the kind's own tags; the level's spread rules flow through them |
 | `carrier`, `from`, `to` | instead of the geometry (Stage 149): on the named carrier, from one point to another (both projected onto it); on a circle `via` picks the arc (default: the shorter one), and neither `from` nor `to` is the whole circle |
 | *parameters* | the kind's own (`back`, `flag`, `d`, ...), each with a default unless required |
 
@@ -54,6 +58,11 @@ carrier and writes them as its start, end and via (a line `straight`). Two eleme
 same projected value, so a door between two walls on one line meets them by provenance. Move a carrier's points
 and every element on it follows. The solver still sees each element's own three points: two arcs on one
 declared circle are, to it, two circles through their own points (docs/TDD_53_DECLARED_CARRIERS.md).
+
+An **exact** carrier (`"exact": true`, Stage 154) snaps its elements' points to float32 points lying exactly on
+it, so the solver sees one exact line or circle across all of them (GAME_SPEC 19.1; docs/TDD_59_EXACT_CARRIER.md).
+A point moves to the carrier's nearest exact point: a fraction of a pixel on a line, about 1-5 px on a circle (more
+on a large one). An exact circle holds arcs, not its whole.
 
 Two kinds are the format's own: `{"kind": "edges"}` places the four edge walls where it stands, and
 `{"kind": "raw", "surface": {...}}` is an `rc-level/1` surface (without ids) taken as it is -- the escape hatch
@@ -116,7 +125,11 @@ and `d` for a portal (the motion `z -> e^{i theta} z + d`; both sides the same).
 A hit effect (GAME_SPEC 10.6): `{"kind": "state", "key": flag, "op": "set" | "toggle", "value": v}`,
 `{"kind": "target"}`, `{"kind": "grapple"}`, `{"kind": "pull"}` (Stage 146: journeys at landing, GAME_SPEC 25.6), `{"kind": "reset", "channels": [...]}` or `{"kind": "spawn", "channel": name,
 "template": {"surface": surface (no ids, no label), "orientation": "CARRIER_TANGENT" | ..., "mirror_with_side":
-bool, "offset": [x, y], "trim": bool}}`; any of them `"deferred": true` (applied when the shot lands).
+bool, "offset": [x, y], "trim": bool}}`; any of them `"deferred": true` (applied when the shot lands). Stage 156: a
+state write may take `"when": [{"key", "values"}]` -- it applies only while every condition holds under the flags the
+side fired under (before any of the side's writes), so a side's writes see one state.
+
+A side may be `"rigid": true` (Stage 156): frost never turns it (GAME_SPEC 10.6; the shadow's edge is).
 
 ## Checks
 
