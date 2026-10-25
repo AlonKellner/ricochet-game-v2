@@ -246,6 +246,9 @@ tools, its inspector panel and its draw list. A host keeps no editor state:
      read `data/levels/<name>.json`, and load it with `{"op": "load", "text": ..., "name": <name>}`; it is now the level
      a save writes. At start, list the levels for the panel's menu with `{"op": "levels", "list": [names], "current": name}`
      (names: paths under `data/levels` without `.json`).
+     Stage 165: a result with `"as"` asks for a copy -- read `<name>.json`, load it with `"name": <as>, "unsaved": true`.
+     Save to `data/levels/<level>.json`, where `level` is the editor's level name (`{"op": "state"}`), creating its folder:
+     a new level or a copy then lands under its own name.
    - `mode == RC_EDITOR_PLAY`: play the document. Parse `rc_editor_document`'s text with `rc_level_parse`,
      create a game, and run the ordinary game loop (above) instead of the editor's. When the player presses
      Esc, send the editor `RC_EDKEY_ESCAPE` (or `{"op": "stop"}`), destroy the game, and paint the editor

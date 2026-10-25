@@ -147,6 +147,10 @@ private:
 	std::vector<std::string> levels_;
 	std::string level_name_, open_request_, confirm_open_;
 	bool level_menu_ = false;
+	// Stage 165: a new level -- the copy being asked for (its new name), the name prompt, picking what to copy
+	std::string open_as_, new_from_;
+	bool new_prompt_ = false, copy_pick_ = false;
+	void start_new_prompt(const std::string &from);
 	uint64_t version_ = 0;
 	Mode mode_ = Mode::Edit;
 	Tool tool_ = Tool::Select;

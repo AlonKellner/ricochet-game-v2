@@ -363,10 +363,21 @@ json Editor::op(const json &cmd) {
 			doc = migrate_level(doc);
 		}
 		lower_level(doc); // refused unless it is a level
+		const bool unsaved = cmd.value("unsaved", false); // Stage 165: a copy under a new name, not yet saved
+		if (unsaved && cmd.contains("name") && cmd["name"].is_string()) {
+			doc["name"] = cmd["name"];
+		}
 		set_document(std::move(doc), true);
 		if (cmd.contains("name") && cmd["name"].is_string()) { // Stage 155: the level it is
 			level_name_ = cmd["name"].get<std::string>();
+			if (std::find(levels_.begin(), levels_.end(), level_name_) == levels_.end()) {
+				levels_.insert(std::upper_bound(levels_.begin(), levels_.end(), level_name_), level_name_);
+			}
 		}
+		if (unsaved) {
+			dirty_ = true;
+		}
+		new_prompt_ = copy_pick_ = false;
 		open_request_.clear();
 		confirm_open_.clear();
 		level_menu_ = false;
@@ -411,8 +422,48 @@ json Editor::op(const json &cmd) {
 		return {{"name", name}};
 	}
 	if (o == "open_request") { // the host takes the request (then loads the level with its name)
-		const std::string name = open_request_;
+		const std::string name = open_request_, as = open_as_;
 		open_request_.clear();
+		open_as_.clear();
+		json r = {{"name", name}};
+		if (!as.empty()) {
+			r["as"] = as; // Stage 165: a copy -- load it with this name, unsaved
+		}
+		return r;
+	}
+	// Stage 165: a new level -- empty, or a copy of a listed one -- under a new name (unsaved until saved)
+	if (o == "new_level") {
+		const std::string name = cmd.at("name").get<std::string>();
+		const std::string from = cmd.value("copy_of", std::string());
+		const bool ok_chars = !name.empty() && name.front() != '/' && name.back() != '/' && name.find("..") == std::string::npos
+			&& name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-/") == std::string::npos;
+		if (!ok_chars) {
+			refuse("a level's name: letters, digits, _ and -, folders with / (a path under data/levels, no .json)");
+		}
+		if (std::find(levels_.begin(), levels_.end(), name) != levels_.end()) {
+			refuse("'" + name + "' is a level already: pick another name");
+		}
+		if (!from.empty() && std::find(levels_.begin(), levels_.end(), from) == levels_.end()) {
+			refuse("no level '" + from + "' to copy");
+		}
+		if (dirty_ && confirm_open_ != "new:" + name) {
+			confirm_open_ = "new:" + name;
+			refuse("unsaved changes: ask for '" + name + "' again to discard them, or save first");
+		}
+		confirm_open_.clear();
+		level_menu_ = false;
+		new_prompt_ = copy_pick_ = false;
+		if (!from.empty()) { // the host reads the copied level and loads it under the new name
+			open_request_ = from;
+			open_as_ = name;
+			return {{"name", name}, {"copy_of", from}};
+		}
+		json doc = new_level();
+		doc["name"] = name;
+		set_document(std::move(doc), true);
+		dirty_ = true;
+		level_name_ = name;
+		levels_.insert(std::upper_bound(levels_.begin(), levels_.end(), name), name);
 		return {{"name", name}};
 	}
 	if (o == "add") {
@@ -640,7 +691,8 @@ json Editor::op(const json &cmd) {
 				{"placing", clicks_.size()}, {"undo", undo_.size()}, {"redo", redo_.size()},
 				{"view", {{"center", point(center_.x, center_.y)}, {"zoom", zoom_}}}, {"focus", focus_ ? json(focus_->key) : json()},
 				{"save_requested", save_requested_}, {"hint", hint_}, {"level", level_name_}, {"levels", levels_.size()},
-				{"level_menu", level_menu_}, {"open_requested", !open_request_.empty()}};
+				{"level_menu", level_menu_}, {"open_requested", !open_request_.empty()},
+				{"new_prompt", new_prompt_}, {"copy_pick", copy_pick_}};
 	}
 	if (o == "panel") { // the panel's rows as drawn (tests, debugging): label, value, y
 		json rs = json::array();

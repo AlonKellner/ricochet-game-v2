@@ -89,3 +89,14 @@ func test_the_level_menu_lists_and_opens_levels() -> void:
 	assert_true(_command({"op": "open", "name": "objectives/lantern"})["ok"])
 	assert_eq(_command({"op": "state"})["level"], "objectives/lantern", "the host loaded it")
 	assert_true(_editor.document().contains("objectives/lantern"))
+
+func test_a_new_level_and_a_copy_save_under_their_names() -> void:
+	assert_true(_command({"op": "new_level", "name": "scratch/gut_new"})["ok"])
+	_editor.save_path = ""
+	assert_true(_editor.save_target().ends_with("data/levels/scratch/gut_new.json"), _editor.save_target())
+	_command({"op": "saved"})
+	assert_true(_command({"op": "new_level", "name": "scratch/gut_copy", "copy_of": "objectives/lantern"})["ok"])
+	assert_eq(_command({"op": "state"})["level"], "scratch/gut_copy", "the host loaded the copy under its name")
+	assert_true(_editor.document().contains("scratch/gut_copy"))
+	assert_true(_editor.save_target().ends_with("data/levels/scratch/gut_copy.json"))
+	assert_false(FileAccess.file_exists(_editor.save_target()), "nothing written until a save")

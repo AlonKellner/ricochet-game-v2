@@ -7,7 +7,8 @@ the document with an ordinary game (rc_game_*), the view fitted to the level's b
 
 The keys are the editor's (docs/EDITOR.md): V select, L line, A arc, C circle, P the player's start,
 Tab the next kind, ctrl/cmd+Z undo, ctrl/cmd+S save, F5 play (Esc back), ctrl/cmd+O the level list,
-ctrl/cmd+left/right the previous/next level. In play: the mouse aims, the
+ctrl/cmd+left/right the previous/next level,
+ctrl/cmd+N a new level (or a copy, from the level list). In play: the mouse aims, the
 left button plans, the right button unplans, Space fires, WASD moves, Z undo, R reset, C clear the plan.
 """
 import math
@@ -190,21 +191,30 @@ def main(argv):
     def after_input():
         nonlocal path
         st = editor.status()
-        if st.open_requested:  # Stage 155: a level from the menu
-            name = editor.command({"op": "open_request"}).get("name", "")
-            target = levels_root / (name + ".json")
-            if name and target.exists():
-                editor.command({"op": "load", "text": target.read_text(), "name": name})
-                path = target
-                root.title("Ricochet level editor - " + str(target))
+        if st.open_requested:  # Stage 155: a level from the menu (Stage 165: or one copied under a new name)
+            req = editor.command({"op": "open_request"})
+            name, as_name = req.get("name", ""), req.get("as")
+            source = levels_root / (name + ".json")
+            if name and source.exists():
+                cmd = {"op": "load", "text": source.read_text(), "name": as_name or name}
+                if as_name:
+                    cmd["unsaved"] = True
+                editor.command(cmd)
+                path = levels_root / ((as_name or name) + ".json")
+                root.title("Ricochet level editor - " + str(path))
                 schedule()
         if st.save_requested:
-            target = path
+            # Stage 165: the level's own name places it under data/levels (a new level, a copy)
+            level = editor.command({"op": "state"}).get("level", "")
+            target = levels_root / (level + ".json") if level else path
+            if target is not None:
+                target.parent.mkdir(parents=True, exist_ok=True)
             if target is None:
                 chosen = filedialog.asksaveasfilename(defaultextension=".json", filetypes=[("rc-level/2", "*.json")])
                 target = pathlib.Path(chosen) if chosen else None
             if target is not None:
                 target.write_text(editor.document())
+                path = target
                 editor.command({"op": "saved"})
                 root.title("Ricochet level editor - " + str(target))
             else:

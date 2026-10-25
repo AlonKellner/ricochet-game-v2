@@ -63,6 +63,8 @@ run it:
 | Ctrl+S | save |
 | Ctrl+O, the panel's level name | the level list: a click opens a level (unsaved changes: the first click warns, the second discards them); Esc closes it |
 | Ctrl+Left / Ctrl+Right, the panel's `<` / `>` | the previous / next level in the list |
+| Ctrl+N, the list's `+ new empty level` | a new empty level: type its name (a path under `data/levels`), Enter creates it, Esc cancels; it is written on the first save (Stage 165) |
+| the list's `+ copy of a level` | pick a level, then name the copy (default `<level>_copy`): the copy opens under the new name, unsaved |
 | F5 | play the level (refused while it has problems); Esc returns |
 | G | the grid on or off (off: whole units) |
 | F | frame the level's bounds (the view frames them on every resize until you pan or zoom) |

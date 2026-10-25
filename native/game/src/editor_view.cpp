@@ -852,6 +852,9 @@ void Editor::key(int code, unsigned mods, bool down) {
 		if (code == KeyEnter) {
 			commit_field();
 		} else if (code == KeyEscape) {
+			if (focus_->key == "#new_level") {
+				new_prompt_ = false; // Stage 165: no new level
+			}
 			focus_.reset();
 		} else if (code == KeyBackspace && !buffer_.empty()) {
 			size_t n = buffer_.size() - 1;
@@ -875,6 +878,8 @@ void Editor::key(int code, unsigned mods, bool down) {
 			run({{"op", "save"}});
 		} else if (code == 'O') {
 			run({{"op", "level_menu"}}); // Stage 155
+		} else if (code == 'N') {
+			start_new_prompt(""); // Stage 165
 		} else if (code == KeyLeft || code == KeyRight) {
 			run({{"op", "next_level"}, {"by", code == KeyLeft ? -1 : 1}});
 		} else if (code == 'D' && !selected_.empty()) {
@@ -909,7 +914,9 @@ void Editor::key(int code, unsigned mods, bool down) {
 			}
 			return;
 		case KeyEscape:
-			if (level_menu_) {
+			if (copy_pick_ || new_prompt_) {
+				copy_pick_ = new_prompt_ = false; // Stage 165
+			} else if (level_menu_) {
 				level_menu_ = false; // Stage 155
 			} else if (kind_pick_) {
 				kind_pick_ = false;
@@ -966,9 +973,39 @@ void Editor::text(const std::string &utf8) {
 	}
 }
 
+// Stage 165: the new level's name prompt (from: the level copied; empty: an empty level), in the level menu
+void Editor::start_new_prompt(const std::string &from) {
+	level_menu_ = true;
+	copy_pick_ = false;
+	new_prompt_ = true;
+	new_from_ = from;
+	panel_scroll_ = 0;
+	std::string base = from.empty() ? "untitled" : from + "_copy", name = base;
+	for (int n = 2; std::find(levels_.begin(), levels_.end(), name) != levels_.end(); n++) {
+		name = base + "_" + std::to_string(n);
+	}
+	focus_ = Field{"", "#new_level"};
+	buffer_ = name;
+}
+
 void Editor::commit_field() {
 	const Field f = *focus_;
 	focus_.reset();
+	if (f.key == "#new_level") { // Stage 165: create it (unsaved changes: the first Enter warns, the second goes on)
+		json c = {{"op", "new_level"}, {"name", buffer_}};
+		if (!new_from_.empty()) {
+			c["copy_of"] = new_from_;
+		}
+		const json r = command(c);
+		if (r.value("ok", false)) {
+			hint_ = new_from_.empty() ? "a new level: " + buffer_ + " (save to write it)" : "a copy of " + new_from_ + " as " + buffer_ + " (save to write it)";
+			new_prompt_ = false;
+		} else {
+			hint_ = r.value("error", std::string());
+			focus_ = f; // (still asking)
+		}
+		return;
+	}
 	json value;
 	if (!buffer_.empty()) {
 		try {
@@ -1016,6 +1053,31 @@ std::vector<Editor::Row> Editor::rows() const {
 	add({Row::Nav, level_name_.empty() ? std::string("(untitled)") : level_name_, "",
 			"the levels: ctrl+O the list, ctrl+left / ctrl+right the previous / next level", std::nullopt, "", -1, 0, {}});
 	if (level_menu_) {
+		// Stage 165: a new level -- empty, or a copy (then pick the level); its name typed in a prompt
+		if (new_prompt_) {
+			add({Row::Value, new_from_.empty() ? "new level" : "copy as", buffer_, "its name: a path under data/levels (Enter: create, Esc: cancel)",
+					Field{"", "#new_level"}, "", -1, 0, {}});
+			if (!new_from_.empty()) {
+				text_rows("a copy of " + new_from_, Row::Text, -1);
+			}
+			return out;
+		}
+		if (copy_pick_) {
+			text_rows("pick the level to copy (Esc: cancel)", Row::Header, -1);
+		} else {
+			Row ne;
+			ne.kind = Row::Level;
+			ne.label = "+ new empty level";
+			ne.value = "#new";
+			ne.hint = "an empty level (ctrl+N)";
+			add(ne);
+			Row cp;
+			cp.kind = Row::Level;
+			cp.label = "+ copy of a level";
+			cp.value = "#copy";
+			cp.hint = "then pick the level to copy";
+			add(cp);
+		}
 		if (levels_.empty()) {
 			text_rows("no levels listed by the host", Row::Text, -1);
 		}
@@ -1179,7 +1241,16 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		return;
 	}
 	if (r.kind == Row::Level) {
-		run({{"op", "open"}, {"name", r.label}});
+		if (r.value == "#new") { // Stage 165
+			start_new_prompt("");
+		} else if (r.value == "#copy") {
+			copy_pick_ = true;
+			panel_scroll_ = 0;
+		} else if (copy_pick_) {
+			start_new_prompt(r.label);
+		} else {
+			run({{"op", "open"}, {"name", r.label}});
+		}
 		return;
 	}
 	if (r.kind == Row::Chips) {
