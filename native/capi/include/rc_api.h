@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 10
+#define RC_API_VERSION_MINOR 11
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -331,6 +331,10 @@ typedef struct rc_editor_status {
 	int32_t save_requested; /* write rc_editor_document, then the command {"op": "saved"} */
 	uint64_t version;       /* bumped by every change of the document */
 	float play_x, play_y;   /* where a play-test starts (the player's start) */
+	/* 1.11 (Stage 155): the level menu asked for a level -- take its name with the command
+	 * {"op": "open_request"}, read data/levels/<name>.json, load it with {"op": "load", "text", "name"};
+	 * list the levels at start with {"op": "levels", "list": [names], "current": name} */
+	int32_t open_requested;
 } rc_editor_status;
 RC_API rc_status rc_editor_get_status(rc_editor *editor, rc_editor_status *out);
 

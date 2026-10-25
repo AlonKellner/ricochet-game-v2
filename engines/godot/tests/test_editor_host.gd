@@ -81,3 +81,11 @@ func test_f5_plays_the_level_and_esc_returns() -> void:
 	await wait_process_frames(2)
 	assert_false(_editor.is_playing())
 	assert_true(_editor.get_node("Layers").visible)
+
+func test_the_level_menu_lists_and_opens_levels() -> void:
+	var st := _command({"op": "state"})
+	assert_gt(int(st["levels"]), 40, "the host listed the levels")
+	assert_eq(st["level"], "test_levels/flag_switches", "the open level by name")
+	assert_true(_command({"op": "open", "name": "objectives/lantern"})["ok"])
+	assert_eq(_command({"op": "state"})["level"], "objectives/lantern", "the host loaded it")
+	assert_true(_editor.document().contains("objectives/lantern"))

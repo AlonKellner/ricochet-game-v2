@@ -4,6 +4,7 @@
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
+#include <godot_cpp/classes/json.hpp>
 #include <godot_cpp/classes/input_event_mouse_button.hpp>
 #include <godot_cpp/classes/input_event_mouse_motion.hpp>
 #include <godot_cpp/classes/os.hpp>
@@ -13,6 +14,7 @@
 #include <godot_cpp/variant/utility_functions.hpp>
 
 #include <cstring>
+#include <functional>
 
 using namespace godot;
 
@@ -115,7 +117,76 @@ void RicochetEditor::_ready() {
 	size_ = get_viewport_rect().size;
 	rc_editor_resize(editor_, size_.x, size_.y);
 	run("{\"op\": \"frame\"}");
+	list_levels();
 	sync();
+}
+
+String RicochetEditor::levels_dir() const {
+	const String repo = ProjectSettings::get_singleton()->globalize_path("res://").path_join("../../data/levels").simplify_path();
+	return DirAccess::dir_exists_absolute(repo) ? repo : String("res://data/levels");
+}
+
+void RicochetEditor::list_levels() {
+	const String root = levels_dir();
+	Array names;
+	std::function<void(const String &)> walk = [&](const String &rel) {
+		const Ref<DirAccess> d = DirAccess::open(rel.is_empty() ? root : root.path_join(rel));
+		if (d.is_null()) {
+			return;
+		}
+		for (const String &f : d->get_files()) {
+			if (f.ends_with(".json")) {
+				names.push_back(rel.is_empty() ? f.get_basename() : rel.path_join(f.get_basename()));
+			}
+		}
+		for (const String &sub : d->get_directories()) {
+			walk(rel.is_empty() ? sub : rel.path_join(sub));
+		}
+	};
+	walk("");
+	names.sort();
+	Dictionary cmd;
+	cmd["op"] = "levels";
+	cmd["list"] = names;
+	for (const String &prefix : {String("res://data/levels/"), root + String("/")}) {
+		if (level_path_.begins_with(prefix) && level_path_.ends_with(".json")) {
+			cmd["current"] = level_path_.substr(prefix.length()).get_basename();
+		}
+	}
+	const CharString text = JSON::stringify(cmd).utf8();
+	const char *out = nullptr;
+	if (rc_editor_command(editor_, text.get_data(), size_t(text.length()), &out, nullptr) != RC_OK) {
+		report("rc_editor_command (levels)");
+	}
+}
+
+void RicochetEditor::open_requested() {
+	const char *out = nullptr;
+	size_t n = 0;
+	const char *take = "{\"op\": \"open_request\"}";
+	if (rc_editor_command(editor_, take, std::strlen(take), &out, &n) != RC_OK) {
+		report("rc_editor_command (open_request)");
+		return;
+	}
+	const Dictionary res = JSON::parse_string(String::utf8(out, int64_t(n)));
+	const String name = res.get("name", String());
+	const String path = levels_dir().path_join(name + String(".json"));
+	if (name.is_empty() || !FileAccess::file_exists(path)) {
+		UtilityFunctions::push_error("RicochetEditor: no level " + path);
+		return;
+	}
+	Dictionary cmd;
+	cmd["op"] = "load";
+	cmd["text"] = FileAccess::get_file_as_string(path);
+	cmd["name"] = name;
+	const CharString text = JSON::stringify(cmd).utf8();
+	if (rc_editor_command(editor_, text.get_data(), size_t(text.length()), &out, &n) != RC_OK) {
+		report("rc_editor_command (load)");
+		return;
+	}
+	level_path_ = path; // (saves go back to it)
+	save_path_ = String();
+	UtilityFunctions::print("RicochetEditor: opened ", path);
 }
 
 void RicochetEditor::_process(double) {
@@ -184,6 +255,9 @@ void RicochetEditor::after_input() {
 	if (rc_editor_get_status(editor_, &st) != RC_OK) {
 		report("rc_editor_get_status");
 		return;
+	}
+	if (st.open_requested) {
+		open_requested(); // Stage 155: a level from the menu
 	}
 	if (st.save_requested) {
 		const String target = save_target();

@@ -99,7 +99,7 @@ class DrawList(ctypes.Structure):
 class EditorStatus(ctypes.Structure):
     _fields_ = [("size", ctypes.c_uint32), ("dirty", ctypes.c_int32), ("errors", ctypes.c_int32), ("mode", ctypes.c_int32),
                 ("tool", ctypes.c_int32), ("save_requested", ctypes.c_int32), ("version", ctypes.c_uint64),
-                ("play_x", ctypes.c_float), ("play_y", ctypes.c_float)]
+                ("play_x", ctypes.c_float), ("play_y", ctypes.c_float), ("open_requested", ctypes.c_int32)]
 
 
 LOG_FN = ctypes.CFUNCTYPE(None, ctypes.c_void_p, ctypes.c_int32, ctypes.c_char_p)

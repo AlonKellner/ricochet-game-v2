@@ -851,6 +851,10 @@ void Editor::key(int code, unsigned mods, bool down) {
 			run({{"op", "redo"}});
 		} else if (code == 'S') {
 			run({{"op", "save"}});
+		} else if (code == 'O') {
+			run({{"op", "level_menu"}}); // Stage 155
+		} else if (code == KeyLeft || code == KeyRight) {
+			run({{"op", "next_level"}, {"by", code == KeyLeft ? -1 : 1}});
 		} else if (code == 'D' && !selected_.empty()) {
 			run({{"op", "duplicate"}, {"name", selected_}});
 		} else if (code == 'D' && !item_.empty()) {
@@ -882,7 +886,9 @@ void Editor::key(int code, unsigned mods, bool down) {
 			}
 			return;
 		case KeyEscape:
-			if (kind_pick_) {
+			if (level_menu_) {
+				level_menu_ = false; // Stage 155
+			} else if (kind_pick_) {
 				kind_pick_ = false;
 				hint_.clear();
 			} else if (!clicks_.empty()) {
@@ -983,6 +989,22 @@ std::vector<Editor::Row> Editor::rows() const {
 	};
 	add({Row::Header, "Ricochet level editor", "", "", std::nullopt, "", -1, 0, {}});
 	add({Row::Buttons, "", "", "undo (ctrl+z), redo (ctrl+shift+z), save (ctrl+s), play (F5)", std::nullopt, "", -1, 0, {}});
+	// Stage 155: the level menu (the previous level, the list, the next level)
+	add({Row::Nav, level_name_.empty() ? std::string("(untitled)") : level_name_, "",
+			"the levels: ctrl+O the list, ctrl+left / ctrl+right the previous / next level", std::nullopt, "", -1, 0, {}});
+	if (level_menu_) {
+		if (levels_.empty()) {
+			text_rows("no levels listed by the host", Row::Text, -1);
+		}
+		for (const std::string &n : levels_) {
+			Row r;
+			r.kind = Row::Level;
+			r.label = n;
+			r.hint = confirm_open_ == n ? "unsaved changes: click again to discard them" : "open this level";
+			add(r);
+		}
+		return out;
+	}
 	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector, B an object, K a line carrier, shift+K a circle carrier", std::nullopt,
 			"tool", -1, 0, {}});
 	const json ks = kinds();
@@ -1093,6 +1115,22 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		const int b = std::clamp(int((mouse_.x - x0) / ((PANEL_WIDTH - 20) / 4)), 0, 3);
 		static const char *const OPS[] = {"undo", "redo", "save", "play"};
 		run({{"op", OPS[b]}});
+		return;
+	}
+	if (r.kind == Row::Nav) {
+		const float x0 = width_ - PANEL_WIDTH + 10, w = PANEL_WIDTH - 20;
+		const float at = mouse_.x - x0;
+		if (at < w * 0.18f) {
+			run({{"op", "next_level"}, {"by", -1}});
+		} else if (at > w * 0.82f) {
+			run({{"op", "next_level"}, {"by", 1}});
+		} else {
+			run({{"op", "level_menu"}});
+		}
+		return;
+	}
+	if (r.kind == Row::Level) {
+		run({{"op", "open"}, {"name", r.label}});
 		return;
 	}
 	if (r.kind == Row::Chips) {
@@ -1650,6 +1688,31 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
 					p.back().alignment = 1;
 				}
+				break;
+			}
+			case Row::Nav: {
+				const float w = PANEL_WIDTH - 20;
+				const float cells[4] = {x0 + 10, x0 + 10 + w * 0.18f, x0 + 10 + w * 0.82f, x0 + 10 + w};
+				for (int b = 0; b < 3; b++) {
+					const bool hot = over && mouse_.x >= cells[b] && mouse_.x < cells[b + 1];
+					const bool on = b == 1 && level_menu_;
+					p.push_back(rect(V2{cells[b] + 2, r.y + 1}, V2{cells[b + 1] - cells[b] - 4, ROW - 2},
+							on ? rgba(1.0, 0.8, 0.3, 0.30) : hot ? rgba(1, 1, 1, 0.18) : rgba(1, 1, 1, 0.07)));
+					std::string label = b == 0 ? "<" : b == 2 ? ">" : r.label;
+					if (label.size() > 30) {
+						label = "..." + label.substr(label.size() - 27);
+					}
+					p.push_back(text_at(V2{(cells[b] + cells[b + 1]) / 2, base}, label, on ? ACCENT : TEXT, FONT - 1));
+					p.back().alignment = 1;
+				}
+				break;
+			}
+			case Row::Level: {
+				const bool cur = r.label == level_name_;
+				if (cur || over) {
+					p.push_back(rect(V2{x0 + 4, r.y + 1}, V2{PANEL_WIDTH - 8, ROW - 2}, cur ? rgba(1.0, 0.8, 0.3, 0.22) : rgba(1, 1, 1, 0.08)));
+				}
+				p.push_back(text_at(V2{x0 + 14, base}, r.label, confirm_open_ == r.label ? ERROR_TEXT : cur ? ACCENT : TEXT, FONT - 1));
 				break;
 			}
 			case Row::Buttons: {

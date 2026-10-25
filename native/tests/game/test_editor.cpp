@@ -636,3 +636,35 @@ TEST_CASE("editor: shades are drawn in their colours over a faint shadow (Stage 
 	ok(ed, {{"op", "undo"}});
 	CHECK(shadow());
 }
+
+TEST_CASE("editor: the level menu -- listed by the host, opened by name, previous and next, unsaved changes asked again (Stage 155)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	CHECK_FALSE(ed.status().open_requested);
+	ok(ed, {{"op", "levels"}, {"list", {"a/one", "a/two", "b/three"}}, {"current", "a/two"}});
+	CHECK(ok(ed, {{"op", "state"}})["level"] == "a/two");
+	// the list: the nav row's middle opens it, a level row asks for that level
+	click_row(ed, "a/two"); // (the nav row shows the open level)
+	CHECK(ok(ed, {{"op", "state"}})["level_menu"] == true);
+	click_row(ed, "b/three");
+	CHECK(ed.status().open_requested);
+	CHECK(ok(ed, {{"op", "open_request"}})["name"] == "b/three");
+	CHECK_FALSE(ed.status().open_requested);
+	ok(ed, {{"op", "load"}, {"text", R"({"schema": "rc-level/2", "elements": []})"}, {"name", "b/three"}});
+	CHECK(ok(ed, {{"op", "state"}})["level"] == "b/three");
+	CHECK(ok(ed, {{"op", "state"}})["level_menu"] == false);
+	// next wraps around; ctrl+left goes back
+	CHECK(ok(ed, {{"op", "next_level"}, {"by", 1}})["name"] == "a/one");
+	ok(ed, {{"op", "open_request"}});
+	ed.key(rcg::Editor::KeyLeft, rcg::Editor::ModCtrl, true);
+	CHECK(ok(ed, {{"op", "open_request"}})["name"] == "a/two");
+	// unsaved changes: the first ask is refused, the second opens
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "wall", "start": [700, 400], "end": [700, 600]})")}});
+	CHECK(ed.status().dirty);
+	const json first = ed.command({{"op", "open"}, {"name", "a/one"}});
+	CHECK(first["ok"] == false);
+	CHECK(first["error"].get<std::string>().find("unsaved") != std::string::npos);
+	CHECK_FALSE(ed.status().open_requested);
+	CHECK(ok(ed, {{"op", "open"}, {"name", "a/one"}})["name"] == "a/one");
+	CHECK(ed.status().open_requested);
+}

@@ -1969,7 +1969,7 @@ arcs only: its whole has no float32 form. Crossings of two exact carriers are no
 
 ### 19.2 Editor requirements
 
-> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
+> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Since Stage 155 the panel lists the levels (the host's `data/levels`): a click, Ctrl+O, or the previous/next buttons open another level in place, asking again before discarding unsaved changes. Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
 
 The level editor must support:
 
@@ -2877,4 +2877,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.65.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.65.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

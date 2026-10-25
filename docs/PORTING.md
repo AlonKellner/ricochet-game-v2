@@ -242,6 +242,10 @@ tools, its inspector panel and its draw list. A host keeps no editor state:
 4. **After input**, read `rc_editor_get_status`:
    - `save_requested`: write `rc_editor_document`'s text to the level's file, then send the command
      `{"op": "saved"}`, or `{"op": "save_cancelled"}` when the write did not happen (a dialog cancelled).
+   - `open_requested` (C API 1.11, Stage 155): take the level's name with the command `{"op": "open_request"}`,
+     read `data/levels/<name>.json`, and load it with `{"op": "load", "text": ..., "name": <name>}`; it is now the level
+     a save writes. At start, list the levels for the panel's menu with `{"op": "levels", "list": [names], "current": name}`
+     (names: paths under `data/levels` without `.json`).
    - `mode == RC_EDITOR_PLAY`: play the document. Parse `rc_editor_document`'s text with `rc_level_parse`,
      create a game, and run the ordinary game loop (above) instead of the editor's. When the player presses
      Esc, send the editor `RC_EDKEY_ESCAPE` (or `{"op": "stop"}`), destroy the game, and paint the editor

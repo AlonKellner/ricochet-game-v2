@@ -713,6 +713,7 @@ rc_status rc_editor_get_status(rc_editor *editor, rc_editor_status *out) {
 		s.version = st.version;
 		s.play_x = st.play_from.x;
 		s.play_y = st.play_from.y;
+		s.open_requested = st.open_requested ? 1 : 0;
 		fill(out, s);
 		return RC_OK;
 	});

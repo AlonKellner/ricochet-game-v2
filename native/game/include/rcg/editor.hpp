@@ -47,6 +47,7 @@ public:
 		bool save_requested = false;
 		uint64_t version = 0; // bumped by every change of the document
 		V2 play_from;         // where a play-test starts (the player's start)
+		bool open_requested = false; // Stage 155: open the level {"op": "open_request"} names
 	};
 
 	// A new level (null) or the given document (rc-level/2; rc-level/1 is migrated).
@@ -95,7 +96,7 @@ private:
 		std::string key;     // an element key, or a JSON pointer into the document (level fields)
 	};
 	struct Row {
-		enum Kind { Header, Text, Value, Error, Buttons, Chips } kind = Text; // Chips: the palette's kinds (options), one row of them
+		enum Kind { Header, Text, Value, Error, Buttons, Chips, Nav, Level } kind = Text; // Chips: the palette's kinds (options), one row of them
 		std::string label, value, hint;
 		std::optional<Field> field;
 		std::string choice; // a value that cycles ("enum", "bool", "kind", "tool", "place", "options", "shape") or "" (typed)
@@ -142,6 +143,10 @@ private:
 	nlohmann::json doc_;
 	std::vector<nlohmann::json> undo_, redo_;
 	bool dirty_ = false, save_requested_ = false;
+	// Stage 155: the levels the host offers (names under data/levels, no .json), the open one, the menu
+	std::vector<std::string> levels_;
+	std::string level_name_, open_request_, confirm_open_;
+	bool level_menu_ = false;
 	uint64_t version_ = 0;
 	Mode mode_ = Mode::Edit;
 	Tool tool_ = Tool::Select;
