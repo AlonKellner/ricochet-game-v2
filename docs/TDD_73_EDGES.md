@@ -15,7 +15,7 @@ borders, but the actual level borders."
 | 169.5 | The editor: the `edges` field; configured edges drawn on the bounds in their face's colour with a tick inward; their mistakes named `edges` | Done |
 | 169.6 | The demo level `objectives/mirror_hall` (a mirror top edge, arrow-block sides and bottom: the button behind the screen is reached by a bounce off the top edge) and its session | Done |
 | 169.7 | Tests; docs (GAME_SPEC 9.10 and 4.2, 2.76.0; LEVEL_FORMAT, EDITOR, CHANGELOG); `make gate` | Done |
-| 169.8 | The user's interactive sign-off | Open |
+| 169.8 | The user's interactive sign-off | Done (the user's sign-off 2026-10-25) |
 
 ## Decisions
 
