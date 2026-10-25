@@ -96,7 +96,7 @@ private:
 		std::string key;     // an element key, or a JSON pointer into the document (level fields)
 	};
 	struct Row {
-		enum Kind { Header, Text, Value, Error, Buttons, Chips, Nav, Level } kind = Text; // Chips: the palette's kinds (options), one row of them
+		enum Kind { Header, Text, Value, Error, Buttons, Chips, Nav, Level, Tools } kind = Text; // Tools (Stage 161): the tools, one row of them // Chips: the palette's kinds (options), one row of them
 		std::string label, value, hint;
 		std::optional<Field> field;
 		std::string choice; // a value that cycles ("enum", "bool", "kind", "tool", "place", "options", "shape") or "" (typed)

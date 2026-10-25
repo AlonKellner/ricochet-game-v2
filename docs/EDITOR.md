@@ -35,8 +35,8 @@ run it:
   middle of a surface points at its left side, a second one at its right side when that side does something.
   A door, present only while its flag is unset, is dashed. An element with a problem has a red dashed overlay.
   The player's start is the green circle. Each element's name is written beside it.
-- **The panel**, right: the buttons (undo, redo, save, play), the tool, what the tools place (with its
-  description), then the selected element's fields or, with nothing selected, the level's fields. Last come the
+- **The panel**, right: the buttons (undo, redo, save, play), the level menu, the tool and every tool as a chip
+  with its key (a click uses it; Stage 161), what the tools place (every kind as a chip, with its description), then the selected element's fields or, with nothing selected, the level's fields. Last come the
   problems.
 - **The status bar**, bottom: the tool, the kind placed, the grid, the problems, unsaved changes, and the hint
   of whatever is under the pointer (a field's meaning, a refused action).

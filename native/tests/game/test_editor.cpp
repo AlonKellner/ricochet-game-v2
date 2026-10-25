@@ -668,3 +668,29 @@ TEST_CASE("editor: the level menu -- listed by the host, opened by name, previou
 	CHECK(ok(ed, {{"op", "open"}, {"name", "a/one"}})["name"] == "a/one");
 	CHECK(ed.status().open_requested);
 }
+
+TEST_CASE("editor: every tool is a chip in the panel; a click uses it (Stage 161)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	const json panel = ok(ed, {{"op", "panel"}});
+	std::vector<json> rows;
+	for (const json &r : panel["rows"]) {
+		if (r["kind"] == "tools") {
+			rows.push_back(r);
+		}
+	}
+	REQUIRE(rows.size() == 4); // ten tools, three to a row
+	const float x = rows[0]["x"].get<float>(), pw = 1920.0f + 20.0f - x, x0 = 1920.0f - pw + 10.0f, cw = (pw - 20.0f) / 3.0f;
+	auto click = [&](const json &row, int column) {
+		const float px = x0 + cw * (float(column) + 0.5f), py = row["y"].get<float>() + 10.0f;
+		ed.pointer(rcg::Editor::PtrMove, px, py, 0, 0);
+		ed.pointer(rcg::Editor::PtrDown, px, py, rcg::Editor::BtnLeft, 0);
+		ed.pointer(rcg::Editor::PtrUp, px, py, rcg::Editor::BtnLeft, 0);
+	};
+	click(rows[0], 2);
+	CHECK(ok(ed, {{"op", "state"}})["tool"] == "arc");
+	click(rows[2], 0);
+	CHECK(ok(ed, {{"op", "state"}})["tool"] == "detector");
+	click(rows[3], 0);
+	CHECK(ok(ed, {{"op", "state"}})["tool"] == "carrier_circle");
+}

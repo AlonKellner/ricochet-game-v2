@@ -61,6 +61,9 @@ const Color CARRIER = rgba(0.45, 0.7, 1.0, 0.45);
 enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS, L_GOALS, L_CARRIERS, L_SHADOW };
 
 const char *const TOOL_NAMES[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle"};
+// Stage 161: the tool palette's labels (with their keys)
+const char *const TOOL_LABELS[] = {"select  V", "line  L", "arc  A", "circle  C", "player  P", "goal  O", "detector  D", "object  B",
+	"line carrier  K", "circle carrier  shift K"};
 
 Call line(const V2 &a, const V2 &b, const Color &c, double w) {
 	Call k;
@@ -1007,6 +1010,16 @@ std::vector<Editor::Row> Editor::rows() const {
 	}
 	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector, B an object, K a line carrier, shift+K a circle carrier", std::nullopt,
 			"tool", -1, 0, {}});
+	// Stage 161: the tool palette -- every tool, three to a row (a click: use it)
+	for (size_t k = 0; k < std::size(TOOL_NAMES); k += 3) {
+		Row r;
+		r.kind = Row::Tools;
+		r.hint = "a tool: click to use it (or its key)";
+		for (size_t q = k; q < std::min(k + 3, std::size(TOOL_NAMES)); q++) {
+			r.options.push_back(TOOL_NAMES[q]);
+		}
+		add(r);
+	}
 	const json ks = kinds();
 	add({Row::Value, "place", kind_, "Tab / shift+Tab / 1-9, or a kind below: what the line, arc and circle tools place", std::nullopt, "place", -1, 0, {}});
 	{
@@ -1115,6 +1128,15 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		const int b = std::clamp(int((mouse_.x - x0) / ((PANEL_WIDTH - 20) / 4)), 0, 3);
 		static const char *const OPS[] = {"undo", "redo", "save", "play"};
 		run({{"op", OPS[b]}});
+		return;
+	}
+	if (r.kind == Row::Tools) { // Stage 161
+		const float x0 = width_ - PANEL_WIDTH + 10;
+		const size_t c = size_t(std::clamp(int((mouse_.x - x0) / ((PANEL_WIDTH - 20) / 3)), 0, 2));
+		if (c < r.options.size()) {
+			run({{"op", "tool"}, {"tool", r.options[c]}});
+			click_carriers_.clear();
+		}
 		return;
 	}
 	if (r.kind == Row::Nav) {
@@ -1684,6 +1706,25 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					std::string label = r.options[c];
 					if (label.size() > 15) {
 						label = label.substr(0, 14) + ".";
+					}
+					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
+					p.back().alignment = 1;
+				}
+				break;
+			}
+			case Row::Tools: { // Stage 161: like the palette's chips, the current tool lit
+				const float cw = (PANEL_WIDTH - 20) / 3;
+				for (size_t c = 0; c < r.options.size(); c++) {
+					const float cx = x0 + 10 + float(c) * cw;
+					const bool cur = r.options[c] == TOOL_NAMES[int(tool_)];
+					const bool hot = over && mouse_.x >= cx && mouse_.x < cx + cw;
+					p.push_back(rect(V2{cx + 2, r.y + 2}, V2{cw - 4, ROW - 4}, cur ? rgba(1.0, 0.8, 0.3, 0.30) : hot ? rgba(1, 1, 1, 0.16) : rgba(1, 1, 1, 0.05)));
+					std::string label = r.options[c];
+					for (size_t t = 0; t < std::size(TOOL_NAMES); t++) {
+						if (label == TOOL_NAMES[t]) {
+							label = TOOL_LABELS[t];
+							break;
+						}
 					}
 					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
 					p.back().alignment = 1;
