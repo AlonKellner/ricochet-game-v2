@@ -1,0 +1,47 @@
+{
+ "detectors": [
+  {
+   "flag": "open",
+   "for": "any",
+   "mode": "while",
+   "name": "detector_1",
+   "region": {
+    "rect": [800.0, 1050.0, 150.0, 30.0]
+   }
+  }
+ ],
+ "edges": "wall",
+ "elements": [
+  {
+   "end": [1100.0, 900.0],
+   "flag": "open",
+   "kind": "door",
+   "name": "door_1",
+   "start": [1100.0, 1080.0]
+  }
+ ],
+ "gravity": [0.0, 980.0],
+ "name": "pulling_1",
+ "objective": {
+  "goal": {
+   "rect": [1250.0, 950.0, 100.0, 130.0]
+  }
+ },
+ "objects": [
+  {
+   "circle": {
+    "center": [700.0, 1050.0],
+    "radius": 16.0
+   },
+   "name": "object_1"
+  }
+ ],
+ "player": {
+  "start": [550.0, 1050.0]
+ },
+ "room": {
+  "built": false,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}
