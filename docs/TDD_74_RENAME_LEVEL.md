@@ -10,7 +10,7 @@ docs/PORTING.md.
 | 170.1 | The editor: the command `rename_level` (names checked as a new level's, a name in use refused, the undo stack keeps the new name), F2, the level menu's `~ rename this level`, the level's `name` field; a prompt with the level's name (Enter renames, Esc cancels); `state`'s `renamed_from`, `saved` with `name` | Done |
 | 170.2 | The hosts: after the save under the new name, Godot and the Python host remove the old file (only when the save went to the levels' folder under the level's name); an unnamed level saved there is named by its file | Done |
 | 170.3 | Tests; docs; `make gate` | Done |
-| 170.4 | The user's interactive sign-off | Pending |
+| 170.4 | The user's interactive sign-off | Done (the user's sign-off 2026-10-26) |
 
 ## Decisions
 

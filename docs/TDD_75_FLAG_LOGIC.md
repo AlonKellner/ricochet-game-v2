@@ -13,7 +13,7 @@ elements docs/ELEMENTS.md.
 | 171.2 | The core: `rc::FlagExpr` (compiled once to postfix, evaluated on a bit stack, no allocation), `FlagCond` compiling its key (`PresenceCond` the same type), the resolver's compiled key; `rc_tests` "flag logic: ..." (the fixtures at f64, Dual and 4 limbs; precedence, truths, errors) | Done |
 | 171.3 | The game: presence, resolvers, the goal and shades read expressions (`rc::key_holds`, `rc::key_true`); the reader checks every read key parses and refuses an expression where a flag is written; the demo level `objectives/logic_doors` and its session | Done |
 | 171.4 | Docs; `make gate` | Done |
-| 171.5 | The user's interactive sign-off | Pending |
+| 171.5 | The user's interactive sign-off | Done (the user's sign-off 2026-10-26) |
 
 ## Decisions
 
