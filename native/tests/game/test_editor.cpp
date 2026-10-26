@@ -11,6 +11,7 @@
 #include <algorithm>
 #include <cmath>
 #include <filesystem>
+#include <iterator>
 #include <fstream>
 #include <set>
 #include <sstream>
@@ -98,7 +99,8 @@ TEST_CASE("editor: every level loads and saves byte for byte") {
 		CHECK_FALSE(ed.draw().empty());
 		n++;
 	}
-	CHECK(n == 48);
+	CHECK(n == std::distance(fs::directory_iterator(ROOT / "bench" / "lowered"), fs::directory_iterator())); // a level per committed lowering (make lowered)
+	CHECK(n > 40);
 	// an rc-level/1 document is migrated
 	const json v1 = json::parse(read_text(ROOT / "bench" / "lowered" / "test_levels__flag_switches.json"));
 	rcg::Editor ed(&v1);

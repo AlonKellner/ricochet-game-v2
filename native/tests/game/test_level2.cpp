@@ -14,6 +14,8 @@
 #include <nlohmann/json.hpp>
 
 #include <filesystem>
+#include <iterator>
+#include <set>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -86,6 +88,21 @@ std::vector<json> element_surfaces(const json &lv) {
 	return out;
 }
 
+// the levels Stage 142 migrated from rc-level/1 (the rest are written in rc-level/2: the editor's, objectives/)
+const std::set<std::string> MIGRATED = {
+	"gravity_test", "main", "open_room_playable", "playground/directional_arcs", "playground/directional_lines",
+	"playground/inversion_grid", "playground/plannable_inversion", "playground/portals", "playground/pre_inverted",
+	"playground/projective", "playground/projective_arcs", "playground/projective_concentric",
+	"playground/projective_inversion", "playground/projective_lines", "playground/tangent_infinity",
+	"playground/two_sided", "test_levels/circle_no_walls", "test_levels/combo_base", "test_levels/crossings",
+	"test_levels/divergence_room", "test_levels/empty_room", "test_levels/flag_switches",
+	"test_levels/full_circle_mirror", "test_levels/ghost_room", "test_levels/hit_effects",
+	"test_levels/mirror_and_wall", "test_levels/open_room", "test_levels/parallel_mirrors", "test_levels/portals",
+	"test_levels/room_boundaries", "test_levels/room_with_inversion", "test_levels/room_with_mirror",
+	"test_levels/room_with_passthroughs", "test_levels/semi_circle_mirror", "test_levels/three_mirrors",
+	"test_levels/two_mirrors", "test_levels/two_sided_mirror"
+};
+
 } // namespace
 
 TEST_CASE("rc-level/2: every level lowers to its committed lowering, and migrates back from it") {
@@ -104,7 +121,7 @@ TEST_CASE("rc-level/2: every level lowers to its committed lowering, and migrate
 		// a level Stage 142 migrated: exactly itself (a level written in rc-level/2 has names and
 		// parameters of its author's, which surfaces do not tell; the lowering leaves out the
 		// goal, the detectors, the flags and the templates)
-		if (rel.generic_string().rfind("objectives/", 0) != 0) {
+		if (MIGRATED.count(rel.generic_string()) != 0) {
 			CHECK(rcg::canonical(migrated) == text);
 		}
 		// the level read from either form builds the same surfaces
@@ -113,7 +130,8 @@ TEST_CASE("rc-level/2: every level lowers to its committed lowering, and migrate
 		CHECK(rcg::canonical(a) == rcg::canonical(b));
 		n++;
 	}
-	CHECK(n == 48);
+	CHECK(n == std::distance(fs::directory_iterator(ROOT / "bench" / "lowered"), fs::directory_iterator())); // a level per committed lowering (make lowered)
+	CHECK(n > 40);
 }
 
 TEST_CASE("rc-level/2: every builtin template expands to surfaces that build") {

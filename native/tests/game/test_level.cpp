@@ -15,6 +15,7 @@
 #include <bit>
 #include <cstdint>
 #include <filesystem>
+#include <iterator>
 #include <fstream>
 #include <sstream>
 #include <string>
@@ -104,7 +105,8 @@ TEST_CASE("level data: every level built natively equals the game's level dump")
 		CHECK_MESSAGE(diff.empty(), diff);
 		n++;
 	}
-	CHECK(n == 48);
+	CHECK(n == std::distance(fs::directory_iterator(ROOT / "bench" / "lowered"), fs::directory_iterator())); // a level per committed lowering (make lowered)
+	CHECK(n > 40);
 }
 
 TEST_CASE("level data: the schema is strict") {
