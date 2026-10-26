@@ -1,0 +1,2376 @@
+{
+ "dps": 80,
+ "fixtures": [
+  {
+   "name": "expr_presence_appears",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      300,
+      -400
+     ],
+     "end": [
+      300,
+      400
+     ],
+     "via": [
+      300.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "a",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "a",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      500,
+      -400
+     ],
+     "end": [
+      500,
+      400
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "is_target": false,
+     "presence": [
+      {
+       "key": "a && !b",
+       "values": [
+        "true"
+       ]
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 11,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 12,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 13,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0625
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "12.50000000000000000000000000000000000000",
+     "state": true,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "500.0000000000000000000000000000000000000",
+     "y": "25.00000000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "LEFT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "37.50000000000000000000000000000000000000",
+     "state": true,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 13,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-1000.000000000000000000000000000000000000",
+     "y": "118.7500000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "expr_presence_held_back",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      300,
+      -400
+     ],
+     "end": [
+      300,
+      400
+     ],
+     "via": [
+      300.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "a",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "a",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      500,
+      -400
+     ],
+     "end": [
+      500,
+      400
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "is_target": false,
+     "presence": [
+      {
+       "key": "a && !b",
+       "values": [
+        "true"
+       ]
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 11,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 12,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 13,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0625
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "b": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "12.50000000000000000000000000000000000000",
+     "state": true,
+     "flags": {
+      "b": true,
+      "a": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 11,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "1000.000000000000000000000000000000000000",
+     "y": "56.25000000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "b": true,
+      "a": true
+     },
+     "fired": true
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "expr_presence_false_reads_default",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      300,
+      -400
+     ],
+     "end": [
+      300,
+      400
+     ],
+     "via": [
+      300.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "b",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "b",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      500,
+      -400
+     ],
+     "end": [
+      500,
+      400
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false,
+     "presence": [
+      {
+       "key": "a ^ b",
+       "values": [
+        "DEFAULT",
+        "false"
+       ]
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 11,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 12,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 13,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0625
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "a": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "12.50000000000000000000000000000000000000",
+     "state": true,
+     "flags": {
+      "a": true,
+      "b": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "500.0000000000000000000000000000000000000",
+     "y": "25.00000000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "a": true,
+      "b": true
+     },
+     "fired": true
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "expr_presence_true_absent",
+   "surfaces": [
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      500,
+      -400
+     ],
+     "end": [
+      500,
+      400
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false,
+     "presence": [
+      {
+       "key": "a ^ b",
+       "values": [
+        "DEFAULT",
+        "false"
+       ]
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 11,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 12,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 13,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0625
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "a": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 11,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "1000.000000000000000000000000000000000000",
+     "y": "56.25000000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "expr_resolver_switches",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      300,
+      -400
+     ],
+     "end": [
+      300,
+      400
+     ],
+     "via": [
+      300.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "c",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "c",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      500,
+      -400
+     ],
+     "end": [
+      500,
+      400
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": null,
+     "right": null,
+     "is_target": false,
+     "resolver": {
+      "key": "(a && b) || c",
+      "table": {
+       "true": {
+        "left": {
+         "type": "reflection",
+         "interactive": true
+        },
+        "right": {
+         "type": "reflection",
+         "interactive": true
+        }
+       },
+       "DEFAULT": {
+        "left": null,
+        "right": null
+       }
+      }
+     }
+    },
+    {
+     "id": 10,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 11,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 12,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 13,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0625
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "a": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "12.50000000000000000000000000000000000000",
+     "state": true,
+     "flags": {
+      "a": true,
+      "c": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "500.0000000000000000000000000000000000000",
+     "y": "25.00000000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "a": true,
+      "c": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "LEFT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "37.50000000000000000000000000000000000000",
+     "state": true,
+     "flags": {
+      "a": true,
+      "c": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 13,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-1000.000000000000000000000000000000000000",
+     "y": "118.7500000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "a": true,
+      "c": true
+     },
+     "fired": true
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "expr_resolver_false_row",
+   "surfaces": [
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      500,
+      -400
+     ],
+     "end": [
+      500,
+      400
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": null,
+     "right": null,
+     "is_target": false,
+     "resolver": {
+      "key": "!x",
+      "table": {
+       "true": {
+        "left": {
+         "type": "terminal",
+         "interactive": false
+        },
+        "right": {
+         "type": "terminal",
+         "interactive": false
+        }
+       },
+       "false": {
+        "left": {
+         "type": "reflection",
+         "interactive": true
+        },
+        "right": {
+         "type": "reflection",
+         "interactive": true
+        }
+       }
+      }
+     }
+    },
+    {
+     "id": 10,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 11,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 12,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 13,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0625
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "x": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "500.0000000000000000000000000000000000000",
+     "y": "25.00000000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "x": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 13,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-1000.000000000000000000000000000000000000",
+     "y": "118.7500000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "x": true
+     },
+     "fired": true
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "expr_when_skipped",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      300,
+      -400
+     ],
+     "end": [
+      300,
+      400
+     ],
+     "via": [
+      300.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "k",
+        "op": "set",
+        "value": 1,
+        "when": [
+         {
+          "key": "!a || b",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "k",
+        "op": "set",
+        "value": 1,
+        "when": [
+         {
+          "key": "!a || b",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 10,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 11,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 12,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 13,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0625
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "a": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "12.50000000000000000000000000000000000000",
+     "state": true,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 11,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "1000.000000000000000000000000000000000000",
+     "y": "56.25000000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "expr_when_applied",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      300,
+      -400
+     ],
+     "end": [
+      300,
+      400
+     ],
+     "via": [
+      300.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "k",
+        "op": "set",
+        "value": 1,
+        "when": [
+         {
+          "key": "!a || b",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "k",
+        "op": "set",
+        "value": 1,
+        "when": [
+         {
+          "key": "!a || b",
+          "values": [
+           "true"
+          ]
+         }
+        ]
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 10,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 11,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 12,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 13,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    0.0
+   ],
+   "direction": [
+    1.0,
+    0.0625
+   ],
+   "cursor": null,
+   "plan": [],
+   "mode": "physical",
+   "flags": {
+    "a": true,
+    "b": true
+   },
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "12.50000000000000000000000000000000000000",
+     "state": true,
+     "flags": {
+      "a": true,
+      "b": true,
+      "k": 1
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 11,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "1000.000000000000000000000000000000000000",
+     "y": "56.25000000000000000000000000000000000000",
+     "state": false,
+     "flags": {
+      "a": true,
+      "b": true,
+      "k": 1
+     },
+     "fired": true
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "expr_planned_planned",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      300,
+      -400
+     ],
+     "end": [
+      300,
+      400
+     ],
+     "via": [
+      300.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "a",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "a",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      500,
+      -400
+     ],
+     "end": [
+      500,
+      400
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "is_target": false,
+     "presence": [
+      {
+       "key": "a && !b",
+       "values": [
+        "true"
+       ]
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 11,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 12,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 13,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    0.0
+   ],
+   "direction": null,
+   "cursor": [
+    200.0,
+    150.0
+   ],
+   "plan": [
+    {
+     "surface_id": 1,
+     "side": "RIGHT"
+    },
+    {
+     "surface_id": 2,
+     "side": "RIGHT"
+    }
+   ],
+   "mode": "planned",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "42.85714285714285714285714285714285714286",
+     "state": true,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "500.0000000000000000000000000000000000000",
+     "y": "85.71428571428571428571428571428571428571",
+     "state": false,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "cursor",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "200.0000000000000000000000000000000000000",
+     "y": "150.0000000000000000000000000000000000000",
+     "state": false,
+     "flags": null,
+     "fired": false
+    },
+    {
+     "kind": "hit",
+     "surface_id": 13,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-1000.000000000000000000000000000000000000",
+     "y": "407.1428571428571428571428571428571428571",
+     "state": false,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    }
+   ],
+   "targets": []
+  },
+  {
+   "name": "expr_planned_physical",
+   "surfaces": [
+    {
+     "id": 1,
+     "line": true,
+     "start": [
+      300,
+      -400
+     ],
+     "end": [
+      300,
+      400
+     ],
+     "via": [
+      300.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "a",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "right": {
+      "type": "pass",
+      "interactive": true,
+      "states": [
+       {
+        "key": "a",
+        "op": "set",
+        "value": true
+       }
+      ]
+     },
+     "is_target": false
+    },
+    {
+     "id": 2,
+     "line": true,
+     "start": [
+      500,
+      -400
+     ],
+     "end": [
+      500,
+      400
+     ],
+     "via": [
+      500.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "right": {
+      "type": "reflection",
+      "interactive": true
+     },
+     "is_target": false,
+     "presence": [
+      {
+       "key": "a && !b",
+       "values": [
+        "true"
+       ]
+      }
+     ]
+    },
+    {
+     "id": 10,
+     "line": true,
+     "start": [
+      -1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      -1000
+     ],
+     "via": [
+      0.0,
+      -1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 11,
+     "line": true,
+     "start": [
+      1000,
+      -1000
+     ],
+     "end": [
+      1000,
+      1000
+     ],
+     "via": [
+      1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 12,
+     "line": true,
+     "start": [
+      1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      1000
+     ],
+     "via": [
+      0.0,
+      1000.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    },
+    {
+     "id": 13,
+     "line": true,
+     "start": [
+      -1000,
+      1000
+     ],
+     "end": [
+      -1000,
+      -1000
+     ],
+     "via": [
+      -1000.0,
+      0.0
+     ],
+     "full": false,
+     "left": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "right": {
+      "type": "terminal",
+      "interactive": false
+     },
+     "is_target": false
+    }
+   ],
+   "player": [
+    100.0,
+    0.0
+   ],
+   "direction": null,
+   "cursor": [
+    200.0,
+    150.0
+   ],
+   "plan": [
+    {
+     "surface_id": 1,
+     "side": "RIGHT"
+    },
+    {
+     "surface_id": 2,
+     "side": "RIGHT"
+    }
+   ],
+   "mode": "physical",
+   "flags": {},
+   "expected": [
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "RIGHT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "42.85714285714285714285714285714285714286",
+     "state": true,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 2,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "500.0000000000000000000000000000000000000",
+     "y": "85.71428571428571428571428571428571428571",
+     "state": false,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "hit",
+     "surface_id": 1,
+     "side": "LEFT",
+     "applied": false,
+     "terminal": false,
+     "on_segment": true,
+     "rehit": false,
+     "x": "300.0000000000000000000000000000000000000",
+     "y": "128.5714285714285714285714285714285714286",
+     "state": true,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    },
+    {
+     "kind": "cursor",
+     "surface_id": -1,
+     "side": "",
+     "applied": false,
+     "terminal": false,
+     "on_segment": false,
+     "rehit": false,
+     "x": "200.0000000000000000000000000000000000000",
+     "y": "150.0000000000000000000000000000000000000",
+     "state": false,
+     "flags": null,
+     "fired": false
+    },
+    {
+     "kind": "hit",
+     "surface_id": 13,
+     "side": "RIGHT",
+     "applied": true,
+     "terminal": true,
+     "on_segment": true,
+     "rehit": false,
+     "x": "-1000.000000000000000000000000000000000000",
+     "y": "407.1428571428571428571428571428571428571",
+     "state": false,
+     "flags": {
+      "a": true
+     },
+     "fired": true
+    }
+   ],
+   "targets": []
+  }
+ ]
+}

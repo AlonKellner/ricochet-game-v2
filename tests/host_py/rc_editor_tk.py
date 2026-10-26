@@ -8,7 +8,7 @@ the document with an ordinary game (rc_game_*), the view fitted to the level's b
 The keys are the editor's (docs/EDITOR.md): V select, L line, A arc, C circle, P the player's start,
 Tab the next kind, ctrl/cmd+Z undo, ctrl/cmd+S save, F5 play (Esc back), ctrl/cmd+O the level list,
 ctrl/cmd+left/right the previous/next level,
-ctrl/cmd+N a new level (or a copy, from the level list). In play: the mouse aims, the
+ctrl/cmd+N a new level (or a copy, from the level list), F2 rename the level. In play: the mouse aims, the
 left button plans, the right button unplans, Space fires, WASD moves, Z undo, R reset, C clear the plan.
 """
 import math
@@ -214,8 +214,16 @@ def main(argv):
                 target = pathlib.Path(chosen) if chosen else None
             if target is not None:
                 target.write_text(editor.document())
+                # Stage 170: a renamed level -- saved under its new name, its old file removed
+                renamed_from = editor.command({"op": "state"}).get("renamed_from")
+                old = levels_root / (renamed_from + ".json") if renamed_from else None
+                if old is not None and level and target == levels_root / (level + ".json") and old != target and old.exists():
+                    old.unlink()
                 path = target
-                editor.command({"op": "saved"})
+                saved = {"op": "saved"}
+                if not level and name_of(target):
+                    saved["name"] = name_of(target)  # (an unnamed level saved in the levels' folder: named by its file)
+                editor.command(saved)
                 root.title("Ricochet level editor - " + str(target))
             else:
                 editor.command({"op": "save_cancelled"})  # still unsaved; no dialog again until the next request

@@ -12,6 +12,7 @@
 #include <fstream>
 #include <initializer_list>
 #include <sstream>
+#include <stdexcept>
 
 namespace rcg {
 namespace {
@@ -67,6 +68,26 @@ std::string str(const json &j, const std::string &path) {
 		fail(path, "a string expected");
 	}
 	return j.get<std::string>();
+}
+
+// Stage 171 (GAME_SPEC 9.11): a flag read -- a flag, or an expression over flags (it must parse)
+std::string read_key(const json &j, const std::string &path) {
+	std::string k = str(j, path);
+	try {
+		rc::FlagExpr::compile(k);
+	} catch (const std::invalid_argument &e) {
+		fail(path, e.what());
+	}
+	return k;
+}
+
+// Stage 171: a flag written -- a flag's name, never an expression
+std::string write_key(const json &j, const std::string &path) {
+	std::string k = str(j, path);
+	if (rc::FlagExpr::is_expression(k)) {
+		fail(path, "a flag written is a name, not an expression ('" + k + "')");
+	}
+	return k;
 }
 
 std::array<double, 2> pair(const json &j, const std::string &path) {
@@ -147,7 +168,7 @@ HitSpec hit(const json &j, const std::string &path) {
 		h.deferred = boolean(*v, path + ".deferred");
 	}
 	if (h.kind == "state") {
-		h.key = str(req(j, "key", path), path + ".key");
+		h.key = write_key(req(j, "key", path), path + ".key");
 		if (const json *v = opt(j, "op")) {
 			h.op = str(*v, path + ".op");
 		}
@@ -161,7 +182,7 @@ HitSpec hit(const json &j, const std::string &path) {
 			for (size_t i = 0; i < w->size(); i++) {
 				const std::string wp = path + ".when[" + std::to_string(i) + "]";
 				only_keys((*w)[i], wp, {"key", "values"});
-				h.when.push_back({str(req((*w)[i], "key", wp), wp + ".key"), strings(req((*w)[i], "values", wp), wp + ".values")});
+				h.when.push_back({read_key(req((*w)[i], "key", wp), wp + ".key"), strings(req((*w)[i], "values", wp), wp + ".values")});
 			}
 		}
 	} else if (opt(j, "when")) {
@@ -262,7 +283,7 @@ SurfaceSpec surface_spec(const json &j, const std::string &path, bool in_level) 
 	if (const json *r = opt(j, "resolver")) {
 		const std::string rp = path + ".resolver";
 		only_keys(*r, rp, {"key", "table"});
-		s.resolver_key = str(req(*r, "key", rp), rp + ".key");
+		s.resolver_key = read_key(req(*r, "key", rp), rp + ".key");
 		const json &t = req(*r, "table", rp);
 		if (!t.is_array()) {
 			fail(rp + ".table", "an array of [value, {left, right}] expected");
@@ -283,7 +304,7 @@ SurfaceSpec surface_spec(const json &j, const std::string &path, bool in_level) 
 		for (size_t i = 0; i < p->size(); i++) {
 			const std::string pp = path + ".presence[" + std::to_string(i) + "]";
 			only_keys((*p)[i], pp, {"key", "values"});
-			s.presence.push_back({str(req((*p)[i], "key", pp), pp + ".key"), strings(req((*p)[i], "values", pp), pp + ".values")});
+			s.presence.push_back({read_key(req((*p)[i], "key", pp), pp + ".key"), strings(req((*p)[i], "values", pp), pp + ".values")});
 		}
 	}
 	if (const json *v = opt(j, "player_solid")) {
@@ -324,7 +345,7 @@ std::vector<PresenceSpec> conditions(const json &j, const std::string &path) {
 	for (size_t i = 0; i < j.size(); i++) {
 		const std::string pp = path + "[" + std::to_string(i) + "]";
 		only_keys(j[i], pp, {"key", "values"});
-		out.push_back({str(req(j[i], "key", pp), pp + ".key"), strings(req(j[i], "values", pp), pp + ".values")});
+		out.push_back({read_key(req(j[i], "key", pp), pp + ".key"), strings(req(j[i], "values", pp), pp + ".values")});
 	}
 	return out;
 }
@@ -378,7 +399,7 @@ void parse_goals(const json &j, Level &lv) {
 			}
 			det.flag = "det:" + det.name;
 			if (const json *v = opt(d, "flag")) {
-				det.flag = str(*v, dp + ".flag");
+				det.flag = write_key(*v, dp + ".flag");
 			}
 			if (const json *v = opt(d, "mode")) {
 				det.mode = str(*v, dp + ".mode");
@@ -645,7 +666,7 @@ Level parse_level_json(const json &j) {
 			const std::string rp = "level.spread[" + std::to_string(i) + "]";
 			only_keys((*sp)[i], rp, {"flag", "tag", "persist", "sources"});
 			SpreadRule r;
-			r.flag = str(req((*sp)[i], "flag", rp), rp + ".flag");
+			r.flag = write_key(req((*sp)[i], "flag", rp), rp + ".flag");
 			r.tag = str(req((*sp)[i], "tag", rp), rp + ".tag");
 			if (const json *v = opt((*sp)[i], "persist")) {
 				r.persist = boolean(*v, rp + ".persist");
@@ -720,7 +741,7 @@ Level parse_level_json(const json &j) {
 			if (!d["when"].is_string()) {
 				fail(sp + ".when", "a flag key expected (empty: always)");
 			}
-			sh.when = d["when"].get<std::string>();
+			sh.when = read_key(d["when"], sp + ".when");
 		}
 		const std::string &prefix = sd.at;
 		bool found = false;
@@ -748,6 +769,9 @@ Level parse_level_json(const json &j) {
 		rc::FlagValue f = v.is_boolean() ? rc::FlagValue(v.get<bool>())
 				: v.is_number()			 ? rc::FlagValue(v.get<double>())
 										 : rc::FlagValue(v.get<std::string>());
+		if (rc::FlagExpr::is_expression(it.key())) {
+			fail("level.flags", "a flag set is a name, not an expression ('" + it.key() + "')");
+		}
 		lv.flags.emplace_back(it.key(), std::move(f));
 	}
 	for (const Object &o : lv.objects) { // Stage 156: an object's tags' starting flags (unless the level sets them)

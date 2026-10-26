@@ -104,7 +104,7 @@ TEST_CASE("level data: every level built natively equals the game's level dump")
 		CHECK_MESSAGE(diff.empty(), diff);
 		n++;
 	}
-	CHECK(n == 47);
+	CHECK(n == 48);
 }
 
 TEST_CASE("level data: the schema is strict") {

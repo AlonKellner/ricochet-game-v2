@@ -65,6 +65,7 @@ run it:
 | Ctrl+Left / Ctrl+Right, the panel's `<` / `>` | the previous / next level in the list |
 | Ctrl+N, the list's `+ new empty level` | a new empty level: type its name (a path under `data/levels`), Enter creates it, Esc cancels; it is written on the first save (Stage 165) |
 | the list's `+ copy of a level` | pick a level, then name the copy (default `<level>_copy`): the copy opens under the new name, unsaved |
+| F2, the list's `~ rename this level`, the level's `name` field | rename the level: type its new name (a path under `data/levels`), Enter renames it and saves it under the new name at once (unsaved changes with it), the old file removed; Esc cancels. A name in use is refused. A level other files name (a scene's `level_path`, a session script, the lowerings) keeps those names: rename them too (Stage 170) |
 | F5 | play the level (refused while it has problems); Esc returns |
 | G | the grid on or off (off: whole units) |
 | F | frame the level's bounds (the view frames them on every resize until you pan or zoom) |
@@ -169,7 +170,8 @@ Every action is a command, a JSON object, which is also how scripts and tests dr
 | `{"op": "tool", "tool": "select" \| "line" \| "arc" \| "circle" \| "player" \| "goal" \| "detector" \| "object" \| "carrier_line" \| "carrier_circle"}`, `{"op": "kind", "kind": k}` | the tool; what it places |
 | `{"op": "snap", "grid": bool}`, `{"op": "view", "center": [x, y], "zoom": z}`, `{"op": "frame"}` | the grid; the view |
 | `{"op": "validate"}` | `{"errors": [{"element", "name", "message"}]}` |
-| `{"op": "save"}`, `{"op": "saved"}`, `{"op": "save_cancelled"}` | request a save; the host saved; the host could not |
+| `{"op": "save"}`, `{"op": "saved", "name"?: n}`, `{"op": "save_cancelled"}` | request a save; the host saved (`name`: the name an unnamed level was saved under); the host could not |
+| `{"op": "rename_level", "to": m}` | rename the level (Stage 170): a save is requested at once; `{"op": "state"}`'s `renamed_from` names the old file until the save (`{"name", "from"}`) |
 | `{"op": "play"}`, `{"op": "stop"}` | play mode (`{"from": [x, y]}`), edit mode |
 | `{"op": "document"}`, `{"op": "lower"}` | the document (`"document"`, `"text"`); its `rc-level/1` lowering (`"level"`) |
 | `{"op": "state"}`, `{"op": "panel"}` | the tool, kind, selection, mode, undo depth, focus, hint...; the panel's rows |

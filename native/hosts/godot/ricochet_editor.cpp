@@ -272,7 +272,22 @@ void RicochetEditor::after_input() {
 		if (f.is_valid()) {
 			f->store_string(document());
 			f->close();
-			run("{\"op\": \"saved\"}");
+			// Stage 170: a renamed level -- saved under its new name in the levels' folder, its old file removed
+			const Dictionary es = state();
+			const String from = es.get("renamed_from", String()), level = es.get("level", String());
+			const String old = levels_dir().path_join(from + String(".json"));
+			if (!from.is_empty() && target == levels_dir().path_join(level + String(".json")) && old != target && FileAccess::file_exists(old)) {
+				DirAccess::remove_absolute(old);
+				UtilityFunctions::print("RicochetEditor: removed ", old, " (renamed)");
+			}
+			// (an unnamed level saved in the levels' folder: named by its file)
+			Dictionary saved;
+			saved["op"] = "saved";
+			if (level.is_empty() && target.begins_with(levels_dir() + String("/"))) {
+				saved["name"] = target.substr(levels_dir().length() + 1).get_basename();
+			}
+			const CharString text = JSON::stringify(saved).utf8();
+			run(text.get_data());
 			UtilityFunctions::print("RicochetEditor: saved ", target);
 		} else {
 			run("{\"op\": \"save_cancelled\"}");
@@ -339,22 +354,24 @@ String RicochetEditor::document() const {
 	return String::utf8(out, int64_t(n));
 }
 
+Dictionary RicochetEditor::state() const {
+	const char *take = "{\"op\": \"state\"}";
+	const char *out = nullptr;
+	size_t n = 0;
+	if (editor_ == nullptr || rc_editor_command(editor_, take, std::strlen(take), &out, &n) != RC_OK) {
+		return Dictionary();
+	}
+	return JSON::parse_string(String::utf8(out, int64_t(n)));
+}
+
 String RicochetEditor::save_target() const {
 	if (!save_path_.is_empty()) {
 		return save_path_;
 	}
 	// Stage 165: the editor's level name places it under the levels' folder (a new level, a copy)
-	if (editor_ != nullptr) {
-		const char *take = "{\"op\": \"state\"}";
-		const char *out = nullptr;
-		size_t n = 0;
-		if (rc_editor_command(editor_, take, std::strlen(take), &out, &n) == RC_OK) {
-			const Dictionary st = JSON::parse_string(String::utf8(out, int64_t(n)));
-			const String level = st.get("level", String());
-			if (!level.is_empty()) {
-				return levels_dir().path_join(level + String(".json"));
-			}
-		}
+	const String level = state().get("level", String());
+	if (!level.is_empty()) {
+		return levels_dir().path_join(level + String(".json"));
 	}
 	// a level under res://data is a copy (make native) of the repository's data: save the original
 	const String root = ProjectSettings::get_singleton()->globalize_path("res://").path_join("../../data").simplify_path();

@@ -60,6 +60,7 @@ Engine: **engine-agnostic** (Stage 119): the game is native C++20 (`native/core`
 | The novel-element kit: per-shot flags (`shot:*`, erased at landing) and templates for breakable, toggle, frost, fire and charge elements (§10.6; docs/ELEMENTS.md, docs/TDD_52, Stage 147) | Done |
 | Objects, the pull and the grapple: circle bodies (pullable ones fall under gravity); a pull brings an object back along the arrow's path, a grapple takes the player along it, either stopped by what blocks the traveller (§10.6, §25.5-25.6; docs/TDD_51, Stage 146) | Done |
 | The goal and detectors: a level's goal region gated by flag conditions, won when the player stands in it; detectors writing flags as the player moves; a level without a goal won when every target is hit (§3.2, §24.5-24.6; docs/TDD_50, Stage 145) | Done |
+| Flag expressions: wherever a flag is read, `!` `^` `&&` `\|\|` and parentheses over flags (§9.11; docs/TDD_75, Stage 171) | Done |
 | Level editor: native (`rcg::Editor`, the C API's `rc_editor_*`), its tools, panel, validation and play-test; the Python host (tkinter) and the Godot host (`RicochetEditor`) (§19.2; docs/EDITOR.md, docs/TDD_48-49, Stages 143-144) | Done |
 | Menus, HUD, save system | Planned |
 
@@ -792,6 +793,34 @@ ids (a wrap's portal pair two). An edge's name is `edge_<top|right|bottom|left>`
 `edge_wrap_y`). **Infinity**: the ∞ band lies only along the edges that pass. An edge that stops, turns or carries
 the arrow is no way to infinity there (in a frame where infinity is a point on screen, the circled cross is planned
 as before).
+
+### 9.11 Flag expressions
+
+> **Status: implemented (Stage 171, docs/TDD_75_FLAG_LOGIC.md).**
+
+Wherever a flag is **read** -- a presence condition (§9.6, a door's `flag`), a resolver's key (§9.4, a
+switchable's `flag`), a state change's conditions (§10.6, `when`), the goal's conditions (§24.6), a shade's `when`
+(§9.9) -- the key may be an **expression** over flags instead of one flag:
+
+| Operator | Means | Example |
+|---|---|---|
+| `!x` | not | `!det:plate` (a door closed while the player stands on the plate) |
+| `x ^ y` | exclusive or (one of them, not both) | `x ^ y ^ z` (an odd number of them) |
+| `x && y` | and | `det:red && det:blue` |
+| `x \|\| y` | or | `(!x) \|\| (!y) \|\| (!z)` |
+| `( ... )` | grouping | `(x && y) \|\| (w && z)` |
+
+The precedence is C's: `!` binds tightest, then `^`, then `&&`, then `||` (`x && y ^ z` is `x && (y ^ z)`; when in
+doubt, use parentheses). Each flag is read as its truth: `true`, a non-zero number, a non-empty string; a missing
+flag is false. A key with an operator character (`& | ^ !`), a parenthesis or a space is an expression; any other key
+is one flag, as before. An expression is **true or false**: true matches the value `"true"`, false matches `"false"`
+and `"DEFAULT"` (a false expression reads as a missing flag, so a door -- present while its flag is unset or false --
+is closed while its expression is false). A malformed expression is a level error naming its place. A flag
+**written** (a state change's key, a detector's or a spread rule's flag, the level's starting `flags`) is always a
+name, never an expression.
+
+Expressions are evaluated under the walk's current flags like any flag (§9.6): a hit that writes one of an
+expression's flags switches it mid-shot, and the planned path reads them under the plan's simulated flags.
 
 ## 10. Effect system
 
@@ -2073,7 +2102,7 @@ arcs only: its whole has no float32 form. Crossings of two exact carriers are no
 
 ### 19.2 Editor requirements
 
-> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Since Stage 167 the level list is searchable (a soft match ranks the levels, the matched characters lit). Since Stage 165 the level menu creates a new level, empty or a copy of a listed one, named in the panel and written on its first save. Since Stage 164 every level element is visible and editable in the editor (colliders and the camera as items, the background outlined, every level key a panel field), and colliders are drawn in play too (`["colliders"]`). Since Stage 155 the panel lists the levels (the host's `data/levels`): a click, Ctrl+O, or the previous/next buttons open another level in place, asking again before discarding unsaved changes. Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
+> **Status: implemented (Stage 143, docs/EDITOR.md, docs/TDD_48_NATIVE_EDITOR.md).** The editor is native (`rcg::Editor`) behind the C API (`rc_editor_*`); a host paints its draw list and forwards input. Hosts: the Python host (tkinter) and Godot (`RicochetEditor`, Stage 144). Since Stage 170 a level is renamed in place (F2, the level menu, or its `name` field): saved under the new name at once, the old file removed. Since Stage 167 the level list is searchable (a soft match ranks the levels, the matched characters lit). Since Stage 165 the level menu creates a new level, empty or a copy of a listed one, named in the panel and written on its first save. Since Stage 164 every level element is visible and editable in the editor (colliders and the camera as items, the background outlined, every level key a panel field), and colliders are drawn in play too (`["colliders"]`). Since Stage 155 the panel lists the levels (the host's `data/levels`): a click, Ctrl+O, or the previous/next buttons open another level in place, asking again before discarding unsaved changes. Of the table below, everything but compound effects and cache overrides (neither is in the format) is there: effects are assigned by an element's kind and parameters (docs/ELEMENTS.md); a target is the `target` kind; validation runs live, per element.
 
 The level editor must support:
 
@@ -2994,4 +3023,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.76.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.77.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -1,0 +1,72 @@
+{
+ "kind": "kinematic",
+ "level": "objectives/logic_doors",
+ "schema": "rc-session/1",
+ "steps": [
+  {
+   "actions": ["move_right"],
+   "op": "hold",
+   "ticks": 200
+  },
+  {
+   "actions": ["move_left"],
+   "op": "hold",
+   "ticks": 200
+  },
+  {
+   "actions": ["move_up"],
+   "op": "hold",
+   "ticks": 60
+  },
+  {
+   "actions": ["move_right"],
+   "op": "hold",
+   "ticks": 200
+  },
+  {
+   "actions": ["move_left"],
+   "op": "hold",
+   "ticks": 200
+  },
+  {
+   "actions": ["move_down"],
+   "op": "hold",
+   "ticks": 120
+  },
+  {
+   "actions": ["move_up"],
+   "op": "hold",
+   "ticks": 45
+  },
+  {
+   "actions": ["move_right"],
+   "op": "hold",
+   "ticks": 200
+  },
+  {
+   "actions": ["move_left"],
+   "op": "hold",
+   "ticks": 200
+  },
+  {
+   "actions": ["move_down"],
+   "op": "hold",
+   "ticks": 45
+  },
+  {
+   "actions": ["move_right"],
+   "op": "hold",
+   "ticks": 30
+  },
+  {
+   "actions": ["move_up"],
+   "op": "hold",
+   "ticks": 45
+  },
+  {
+   "actions": ["move_right"],
+   "op": "hold",
+   "ticks": 200
+  }
+ ]
+}

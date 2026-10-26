@@ -1356,7 +1356,7 @@ void Session::shadow() {
 	}
 	std::vector<bool> active;
 	for (const Shade &sh : level_.shades) {
-		active.push_back(sh.when.empty() || flags_.is_true(sh.when));
+		active.push_back(sh.when.empty() || rc::key_true(sh.when, flags_));
 	}
 	const bool flagged = active != shade_active_;
 	if (flagged) {

@@ -5,6 +5,8 @@
 // and GDScript Variants carry them.
 #pragma once
 
+#include <cstdint>
+#include <memory>
 #include <string>
 #include <utility>
 #include <variant>
@@ -23,13 +25,50 @@ bool flag_truth(const FlagValue &v);
 // presence conditions and the categorical tables ask this per effect lookup.
 bool flag_key_is(const FlagValue &v, const std::string &s);
 
+class Flags;
+
+// Stage 171 (GAME_SPEC 9.11): a flag expression -- flags combined with ! ^ && ||
+// and parentheses, C's precedence (! then ^ then && then ||), each flag read as
+// its truth (a missing flag is false). Wherever a flag is read (presence, a
+// resolver's key, a state change's conditions, the goal's) its key may be one:
+// a key with an operator character, a parenthesis or a space is an expression,
+// else a plain flag. Compiled once, evaluated without allocating.
+class FlagExpr {
+public:
+	static bool is_expression(const std::string &key);
+	// nullptr: a plain flag; throws std::invalid_argument when malformed
+	static std::shared_ptr<const FlagExpr> compile(const std::string &key);
+	// the compiled form of a key kept per process (the game layer's string-keyed reads)
+	static std::shared_ptr<const FlagExpr> cached(const std::string &key);
+	bool eval(const Flags &flags) const;
+	const std::string &source() const { return source_; }
+	const std::vector<std::string> &names() const { return names_; } // the flags it reads
+
+private:
+	enum Op : std::uint8_t { Push, Not, And, Or, Xor };
+	std::string source_;
+	std::vector<std::string> names_;
+	std::vector<std::pair<Op, std::uint32_t>> code_; // postfix (Push: the name's index)
+};
+
 // Stage 156: a condition on a flag {key, values}: flag_key(flags[key]) is one of
-// `values` ("DEFAULT" = the key is missing) -- the presence form.
+// `values` ("DEFAULT" = the key is missing) -- the presence form. Stage 171: the
+// key may be an expression, true or false: true matches "true", false "false"
+// and "DEFAULT" (a false expression reads as a missing flag).
 struct FlagCond {
 	std::string key;
 	std::vector<std::string> values;
-	bool operator==(const FlagCond &) const = default;
+	std::shared_ptr<const FlagExpr> expr; // (the key compiled, when an expression)
+	FlagCond() = default;
+	FlagCond(std::string k, std::vector<std::string> v) : key(std::move(k)), values(std::move(v)), expr(FlagExpr::compile(key)) {}
+	inline bool holds(const Flags &flags) const;
+	bool operator==(const FlagCond &o) const { return key == o.key && values == o.values; }
 };
+
+// Stage 171: a flag read as a truth -- an expression's value, else the flag is the bool true (Flags::is_true)
+bool key_true(const std::string &key, const Flags &flags);
+// Stage 171: a condition {key, values} by its key's spelling (the game layer's reads; expressions cached)
+bool key_holds(const std::string &key, const std::vector<std::string> &values, const Flags &flags);
 
 struct StateChangeDef {
 	std::string key;
@@ -92,5 +131,25 @@ private:
 	mutable bool key_ok_ = false;
 	mutable std::string key_;
 };
+
+inline bool FlagCond::holds(const Flags &flags) const {
+	if (expr) {
+		const bool t = expr->eval(flags);
+		for (const std::string &val : values) {
+			if (t ? val == "true" : (val == "false" || val == "DEFAULT")) {
+				return true;
+			}
+		}
+		return false;
+	}
+	const FlagValue *v = flags.get(key);
+	// (Stage 141: the spelling compared in place, no string built per check)
+	for (const std::string &val : values) {
+		if (v ? flag_key_is(*v, val) : val == "DEFAULT") {
+			return true;
+		}
+	}
+	return false;
+}
 
 } // namespace rc

@@ -12,6 +12,7 @@
 #include <godot_cpp/classes/input_event.hpp>
 #include <godot_cpp/classes/label.hpp>
 #include <godot_cpp/classes/node2d.hpp>
+#include <godot_cpp/variant/dictionary.hpp>
 #include <godot_cpp/variant/string.hpp>
 
 #include <map>
@@ -51,6 +52,7 @@ protected:
 
 private:
 	void run(const char *json); // a command whose result is not needed
+	godot::Dictionary state() const; // the editor's {"op": "state"}
 	void after_input(); // a save requested, play mode entered or left
 	void sync();
 	void start_play();

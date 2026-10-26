@@ -61,11 +61,9 @@ struct SideDef {
 
 // Stage 107: a presence condition {key, values}: the surface exists while
 // flag_key(flags[key]) is one of `values` ("DEFAULT" = the key is missing).
-struct PresenceCond {
-	std::string key;
-	std::vector<std::string> values;
-	bool operator==(const PresenceCond &) const = default;
-};
+// Stage 171: the condition form of a state change's (rc/flags.hpp), its key an
+// expression or a flag.
+using PresenceCond = FlagCond;
 
 // A categorical resolver: {key, table: flag_key -> {left, right}} in table order.
 struct ResolverDef {
@@ -133,6 +131,7 @@ struct Surf {
 	std::vector<StateChangeDef> left_frost_states;
 	std::vector<StateChangeDef> right_frost_states;
 	std::string state_key;
+	std::shared_ptr<const FlagExpr> state_expr; // Stage 171: the key compiled, when an expression
 	struct TableEntry {
 		EffectType left_type;
 		EffectType right_type;
@@ -172,16 +171,7 @@ struct Surf {
 	// Whether the surface exists under the flags (GAME_SPEC 9.6).
 	bool present(const Flags &flags) const {
 		for (const PresenceCond &c : presence) {
-			const FlagValue *v = flags.get(c.key);
-			// (Stage 141: the spelling compared in place, no string built per check)
-			bool found = false;
-			for (const std::string &val : c.values) {
-				if (v ? flag_key_is(*v, val) : val == "DEFAULT") {
-					found = true;
-					break;
-				}
-			}
-			if (!found) {
+			if (!c.holds(flags)) {
 				return false;
 			}
 		}
@@ -194,7 +184,14 @@ struct Surf {
 		if (state_key.empty()) {
 			return nullptr;
 		}
-		if (const FlagValue *v = flags.get(state_key)) {
+		if (state_expr) { // Stage 171: an expression's row -- "true", or "false" then "DEFAULT"
+			const bool t = state_expr->eval(flags);
+			for (const auto &row : table) {
+				if (row.first == (t ? "true" : "false")) {
+					return &row.second;
+				}
+			}
+		} else if (const FlagValue *v = flags.get(state_key)) {
 			for (const auto &row : table) {
 				if (flag_key_is(*v, row.first)) { // (Stage 141: compared in place)
 					return &row.second;
@@ -428,6 +425,7 @@ Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like)
 		RC_ASSERT(d.presence.empty() || !d.pre_transform, "a pre-transform surface is always present");
 		if (d.resolver) {
 			s->state_key = d.resolver->key;
+			s->state_expr = FlagExpr::compile(s->state_key); // (Stage 171)
 			for (const auto &row : d.resolver->table) {
 				const auto &l = row.second.first;
 				const auto &r = row.second.second;

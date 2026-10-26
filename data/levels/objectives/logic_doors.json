@@ -1,0 +1,86 @@
+{
+ "background": {
+  "color": [0.10000000149011612, 0.10000000149011612, 0.10000000149011612, 1.0],
+  "rect": [0.0, 0.0, 1920.0, 1080.0]
+ },
+ "bounds": [0.0, 0.0, 1920.0, 1080.0],
+ "camera": null,
+ "colliders": [],
+ "detectors": [
+  {
+   "mode": "enter",
+   "name": "red",
+   "region": {
+    "rect": [620.0, 280.0, 100.0, 80.0]
+   }
+  },
+  {
+   "mode": "enter",
+   "name": "blue",
+   "region": {
+    "rect": [620.0, 700.0, 100.0, 80.0]
+   }
+  },
+  {
+   "mode": "while",
+   "name": "trap",
+   "region": {
+    "rect": [900.0, 260.0, 120.0, 260.0]
+   }
+  }
+ ],
+ "elements": [
+  {
+   "end": [960.0, 840.0],
+   "flag": "!det:trap",
+   "kind": "door",
+   "name": "trap",
+   "start": [960.0, 240.0]
+  },
+  {
+   "end": [1050.0, 840.0],
+   "flag": "!(det:red ^ det:blue)",
+   "kind": "door",
+   "name": "odd",
+   "start": [1050.0, 240.0]
+  },
+  {
+   "end": [1150.0, 840.0],
+   "flag": "det:red && det:blue",
+   "kind": "door",
+   "name": "vault",
+   "start": [1150.0, 240.0]
+  }
+ ],
+ "features": {
+  "arrow": true,
+  "cursor": true,
+  "game": true,
+  "hud": true,
+  "preview": true
+ },
+ "gravity": [0.0, 0.0],
+ "name": "objectives/logic_doors",
+ "objective": {
+  "goal": {
+   "circle": {
+    "center": [1260.0, 540.0],
+    "radius": 60.0
+   }
+  },
+  "requires": [
+   {
+    "key": "det:red && det:blue",
+    "values": ["true"]
+   }
+  ]
+ },
+ "player": {
+  "start": [660.0, 540.0]
+ },
+ "room": {
+  "built": true,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}
