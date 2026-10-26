@@ -18,6 +18,15 @@ using json = nlohmann::json;
 
 [[noreturn]] void refuse(const std::string &why) { throw std::runtime_error(why); }
 
+// Stage 165: a level's name -- a path under data/levels, no .json
+void check_level_name(const std::string &name) {
+	const bool ok_chars = !name.empty() && name.front() != '/' && name.back() != '/' && name.find("..") == std::string::npos
+		&& name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-/") == std::string::npos;
+	if (!ok_chars) {
+		refuse("a level's name: letters, digits, _ and -, folders with / (a path under data/levels, no .json)");
+	}
+}
+
 json new_level() {
 	return json::parse(R"({"elements": [], "name": "untitled", "player": {"start": [960.0, 540.0]},
 		"room": {"built": true, "rect": [560.0, 240.0, 800.0, 600.0]}, "schema": "rc-level/2"})");
@@ -179,6 +188,8 @@ void Editor::set_document(json doc, bool clean) {
 	redo_.clear();
 	dirty_ = !clean;
 	save_requested_ = false;
+	rename_from_.reset();
+	rename_prompt_ = false;
 	selected_.clear();
 	item_.clear();
 	clicks_.clear();
@@ -479,11 +490,7 @@ json Editor::op(const json &cmd) {
 	if (o == "new_level") {
 		const std::string name = cmd.at("name").get<std::string>();
 		const std::string from = cmd.value("copy_of", std::string());
-		const bool ok_chars = !name.empty() && name.front() != '/' && name.back() != '/' && name.find("..") == std::string::npos
-			&& name.find_first_not_of("abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789_-/") == std::string::npos;
-		if (!ok_chars) {
-			refuse("a level's name: letters, digits, _ and -, folders with / (a path under data/levels, no .json)");
-		}
+		check_level_name(name);
 		if (std::find(levels_.begin(), levels_.end(), name) != levels_.end()) {
 			refuse("'" + name + "' is a level already: pick another name");
 		}
@@ -509,6 +516,38 @@ json Editor::op(const json &cmd) {
 		level_name_ = name;
 		levels_.insert(std::upper_bound(levels_.begin(), levels_.end(), name), name);
 		return {{"name", name}};
+	}
+	// Stage 170: the level renamed -- saved under the new name at once (its unsaved changes with it); the host then
+	// removes the old file ({"op": "state"}'s renamed_from). A failed save keeps the rename waiting for the next one.
+	if (o == "rename_level") {
+		editing();
+		const std::string name = cmd.at("to").get<std::string>();
+		const std::string from = level_name_;
+		check_level_name(name);
+		if (name == from) {
+			return {{"name", name}};
+		}
+		if (std::find(levels_.begin(), levels_.end(), name) != levels_.end()) {
+			refuse("'" + name + "' is a level already: pick another name");
+		}
+		if (!rename_from_) {
+			rename_from_ = from; // (renamed twice before a save: the file on disk has the first name)
+		} else if (*rename_from_ == name) {
+			rename_from_.reset(); // (back to the name on disk)
+		}
+		levels_.erase(std::remove(levels_.begin(), levels_.end(), from), levels_.end());
+		levels_.insert(std::upper_bound(levels_.begin(), levels_.end(), name), name);
+		level_name_ = name;
+		doc_["name"] = name;
+		for (std::vector<json> *stack : {&undo_, &redo_}) {
+			for (json &d : *stack) {
+				d["name"] = name; // (an undo keeps the name: the file has it)
+			}
+		}
+		dirty_ = true;
+		save_requested_ = true;
+		version_++;
+		return {{"name", name}, {"from", from}};
 	}
 	if (o == "add") {
 		editing();
@@ -705,6 +744,13 @@ json Editor::op(const json &cmd) {
 	if (o == "saved") {
 		save_requested_ = false;
 		dirty_ = false;
+		rename_from_.reset(); // (Stage 170: the host removed the old file)
+		if (cmd.contains("name") && cmd["name"].is_string() && level_name_.empty()) { // (an unnamed level the host saved under a name)
+			level_name_ = cmd["name"].get<std::string>();
+			if (std::find(levels_.begin(), levels_.end(), level_name_) == levels_.end()) {
+				levels_.insert(std::upper_bound(levels_.begin(), levels_.end(), level_name_), level_name_);
+			}
+		}
 		return {};
 	}
 	if (o == "play") {
@@ -736,7 +782,8 @@ json Editor::op(const json &cmd) {
 				{"view", {{"center", point(center_.x, center_.y)}, {"zoom", zoom_}}}, {"focus", focus_ ? json(focus_->key) : json()},
 				{"save_requested", save_requested_}, {"hint", hint_}, {"level", level_name_}, {"levels", levels_.size()},
 				{"level_menu", level_menu_}, {"open_requested", !open_request_.empty()},
-				{"new_prompt", new_prompt_}, {"copy_pick", copy_pick_}};
+				{"new_prompt", new_prompt_}, {"copy_pick", copy_pick_}, {"rename_prompt", rename_prompt_},
+				{"renamed_from", rename_from_ && !rename_from_->empty() ? json(*rename_from_) : json()}};
 	}
 	if (o == "panel") { // the panel's rows as drawn (tests, debugging): label, value, y
 		json rs = json::array();

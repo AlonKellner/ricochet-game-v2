@@ -100,3 +100,18 @@ func test_a_new_level_and_a_copy_save_under_their_names() -> void:
 	assert_true(_editor.document().contains("scratch/gut_copy"))
 	assert_true(_editor.save_target().ends_with("data/levels/scratch/gut_copy.json"))
 	assert_false(FileAccess.file_exists(_editor.save_target()), "nothing written until a save")
+
+func test_a_rename_saves_at_once_and_removes_only_the_levels_own_file() -> void:
+	var repo := ProjectSettings.globalize_path("res://").path_join("../../data/levels/test_levels/flag_switches.json").simplify_path()
+	assert_true(FileAccess.file_exists(repo))
+	_key(KEY_F2)
+	assert_true(_command({"op": "state"})["rename_prompt"], "F2: the rename's prompt")
+	_key(KEY_ESCAPE)
+	assert_true(_command({"op": "rename_level", "to": "test_levels/gut_renamed"})["ok"])
+	var st := _command({"op": "state"})
+	assert_eq(st["level"], "test_levels/gut_renamed")
+	assert_false(st["dirty"], "saved at once")
+	assert_eq(FileAccess.get_file_as_string(SAVE), _editor.document(), "written where the host saves (save_path)")
+	assert_true(FileAccess.file_exists(repo), "a save elsewhere removes no level")
+	assert_true(_editor.document().contains("test_levels/gut_renamed"))
+	DirAccess.remove_absolute(ProjectSettings.globalize_path(SAVE))

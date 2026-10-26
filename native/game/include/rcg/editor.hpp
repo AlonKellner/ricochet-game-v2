@@ -152,6 +152,11 @@ private:
 	std::string open_as_, new_from_;
 	bool new_prompt_ = false, copy_pick_ = false;
 	void start_new_prompt(const std::string &from);
+	// Stage 170: the level renamed -- the name its file has on disk until the save under the new name (none: no
+	// rename waiting), the rename's prompt
+	std::optional<std::string> rename_from_;
+	bool rename_prompt_ = false;
+	void start_rename_prompt();
 	// Stage 167: the level list's search -- the levels ranked by a soft match of the query (matches first, their
 	// matched characters), and the one picked (Up/Down, Enter)
 	struct Ranked {

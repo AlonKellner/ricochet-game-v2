@@ -880,6 +880,9 @@ void Editor::key(int code, unsigned mods, bool down) {
 			if (focus_->key == "#new_level") {
 				new_prompt_ = false; // Stage 165: no new level
 			}
+			if (focus_->key == "#rename_level") {
+				rename_prompt_ = false; // Stage 170: no rename
+			}
 			focus_.reset();
 		} else if (code == KeyBackspace && !buffer_.empty()) {
 			size_t n = buffer_.size() - 1;
@@ -940,8 +943,8 @@ void Editor::key(int code, unsigned mods, bool down) {
 			}
 			return;
 		case KeyEscape:
-			if (copy_pick_ || new_prompt_) {
-				copy_pick_ = new_prompt_ = false; // Stage 165
+			if (copy_pick_ || new_prompt_ || rename_prompt_) {
+				copy_pick_ = new_prompt_ = rename_prompt_ = false; // Stage 165, Stage 170
 			} else if (level_menu_) {
 				level_menu_ = false; // Stage 155
 			} else if (kind_pick_) {
@@ -983,6 +986,9 @@ void Editor::key(int code, unsigned mods, bool down) {
 		kind_ = pal[size_t(code - '1')];
 		return;
 	}
+	if (code == KeyF1 + 1) {
+		start_rename_prompt(); // Stage 170
+	}
 	if (code == KeyF1 + 4) {
 		run({{"op", "play"}});
 	}
@@ -1015,6 +1021,16 @@ void Editor::start_new_prompt(const std::string &from) {
 	buffer_ = name;
 }
 
+// Stage 170: the rename's prompt, in the level menu (the level's name to edit)
+void Editor::start_rename_prompt() {
+	level_menu_ = true;
+	copy_pick_ = new_prompt_ = false;
+	rename_prompt_ = true;
+	panel_scroll_ = 0;
+	focus_ = Field{"", "#rename_level"};
+	buffer_ = level_name_.empty() ? doc_.value("name", std::string("untitled")) : level_name_;
+}
+
 void Editor::commit_field() {
 	if (focus_->key == "#level_search") { // Stage 167: Enter opens the picked level (copy mode: names its copy)
 		const std::vector<Ranked> rk = ranked_levels();
@@ -1041,6 +1057,19 @@ void Editor::commit_field() {
 		if (r.value("ok", false)) {
 			hint_ = new_from_.empty() ? "a new level: " + buffer_ + " (save to write it)" : "a copy of " + new_from_ + " as " + buffer_ + " (save to write it)";
 			new_prompt_ = false;
+		} else {
+			hint_ = r.value("error", std::string());
+			focus_ = f; // (still asking)
+		}
+		return;
+	}
+	if (f.key == "#rename_level" || (f.key == "/name" && f.element.empty() && item_.empty())) {
+		// Stage 170: the level renamed (its prompt, or the level's name field) -- saved under the new name
+		const json r = command({{"op", "rename_level"}, {"to", buffer_}});
+		if (r.value("ok", false)) {
+			const std::string from = r.value("from", std::string());
+			hint_ = !r.contains("from") ? "" : from.empty() ? "named " + buffer_ + " (saved)" : "renamed " + from + " to " + buffer_ + " (saved)";
+			rename_prompt_ = false;
 		} else {
 			hint_ = r.value("error", std::string());
 			focus_ = f; // (still asking)
@@ -1171,6 +1200,15 @@ std::vector<Editor::Row> Editor::rows() const {
 			}
 			return out;
 		}
+		// Stage 170: the rename's prompt
+		if (rename_prompt_) {
+			add({Row::Value, "rename to", buffer_, "its new name: a path under data/levels (Enter: rename and save, Esc: cancel)",
+					Field{"", "#rename_level"}, "", -1, 0, {}});
+			text_rows(level_name_.empty() ? std::string("names the unnamed level; Enter saves it under the name")
+										  : "renames " + level_name_ + ": Enter saves it under the new name and removes " + level_name_ + ".json",
+					Row::Text, -1);
+			return out;
+		}
 		if (copy_pick_) {
 			text_rows("pick the level to copy (Esc: cancel)", Row::Header, -1);
 		} else {
@@ -1186,6 +1224,12 @@ std::vector<Editor::Row> Editor::rows() const {
 			cp.value = "#copy";
 			cp.hint = "then pick the level to copy";
 			add(cp);
+			Row rn;
+			rn.kind = Row::Level;
+			rn.label = "~ rename this level";
+			rn.value = "#rename";
+			rn.hint = "a new name: saved under it, the old file removed (F2)";
+			add(rn);
 		}
 		if (levels_.empty()) {
 			text_rows("no levels listed by the host", Row::Text, -1);
@@ -1284,7 +1328,7 @@ std::vector<Editor::Row> Editor::rows() const {
 			const json v = doc_.contains(ptr) ? doc_[ptr] : json();
 			add({Row::Value, label, v.is_null() ? std::string("(none)") : spell(v), hint, Field{"", path}, choice, -1, 0, {}});
 		};
-		field("name", "/name", "the level's path under data/levels");
+		field("name", "/name", "the level's path under data/levels (a new name renames the level: saved under it, the old file removed; F2)");
 		field("bounds", "/bounds", "[x, y, w, h]: the level's edges (by default the arrow wraps there)");
 		field("edges", "/edges", "the edges' kind -- wall, mirror, two_sided_mirror, arrow_block, target, ... -- or {\"kind\", params}, \"wrap\" (opposite edges a portal pair), or {top, right, bottom, left} of those (none: they pass)");
 		field("gravity", "/gravity", "[gx, gy] px/s^2 (the player's)");
@@ -1359,6 +1403,8 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		} else if (r.value == "#copy") {
 			copy_pick_ = true;
 			panel_scroll_ = 0;
+		} else if (r.value == "#rename") {
+			start_rename_prompt(); // Stage 170
 		} else if (copy_pick_) {
 			start_new_prompt(r.label);
 		} else {

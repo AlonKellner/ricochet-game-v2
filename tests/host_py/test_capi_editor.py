@@ -165,3 +165,22 @@ def test_a_new_level_and_a_copy():
     doc = json.loads(ed.document())
     assert doc["name"] == "scratch/copy" and len(doc["elements"]) == len(json.loads(text)["elements"])
     assert ed.status().dirty == 1
+
+
+def test_a_level_renamed():
+    """Stage 170: F2 renames the level -- a save asked for under the new name, the old name for the host to remove."""
+    ed = rc_host.Editor()
+    ed.resize(1600, 900)
+    ed.command({"op": "levels", "list": ["a/one", "a/two"], "current": "a/one"})
+    ed.command({"op": "load", "text": '{"schema": "rc-level/2", "name": "a/one", "elements": []}', "name": "a/one"})
+    ed.key(rc_host.EDKEY_F1 + 1)
+    assert ed.command({"op": "state"})["rename_prompt"]
+    ed.text("_b")
+    ed.key(rc_host.EDKEY_ENTER)
+    st = ed.command({"op": "state"})
+    assert st["level"] == "a/one_b" and st["renamed_from"] == "a/one"
+    assert ed.status().save_requested == 1
+    assert json.loads(ed.document())["name"] == "a/one_b"
+    ed.command({"op": "saved"})
+    assert ed.command({"op": "state"})["renamed_from"] is None
+    assert not ed.command({"op": "rename_level", "to": "a/two"})["ok"]

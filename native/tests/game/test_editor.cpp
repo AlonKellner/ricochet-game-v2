@@ -799,6 +799,92 @@ TEST_CASE("editor: a new level -- empty or a copy, named in a prompt, unsaved un
 	CHECK(ok(ed, {{"op", "state"}})["level"] == "a/two_copy");
 }
 
+TEST_CASE("editor: a level renamed -- saved under the new name at once, the old name for the host to remove (Stage 170)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "levels"}, {"list", {"a/one", "a/two"}}, {"current", "a/one"}});
+	ok(ed, {{"op", "load"}, {"text", R"({"schema": "rc-level/2", "name": "a/one", "elements": []})"}, {"name", "a/one"}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"start", {700, 300}}, {"end", {700, 500}}}}});
+	// the menu's "~ rename this level": a prompt with the level's name; Enter renames it and asks for a save
+	ok(ed, {{"op", "level_menu"}, {"show", true}});
+	click_row(ed, "~ rename this level");
+	json st = ok(ed, {{"op", "state"}});
+	CHECK(st["rename_prompt"] == true);
+	CHECK(st["focus"] == "#rename_level");
+	for (int i = 0; i < 3; i++) {
+		ed.key(rcg::Editor::KeyBackspace, 0, true); // (a/one -> a/)
+	}
+	ed.text("uno");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	st = ok(ed, {{"op", "state"}});
+	CHECK(st["level"] == "a/uno");
+	CHECK(st["renamed_from"] == "a/one");
+	CHECK(st["save_requested"] == true);
+	CHECK(st["rename_prompt"] == false);
+	CHECK(st["hint"] == "renamed a/one to a/uno (saved)");
+	CHECK(ok(ed, {{"op", "document"}})["document"]["name"] == "a/uno");
+	json names = json::array();
+	const json listed = ok(ed, {{"op", "level_search"}, {"query", ""}}); // (kept: a range over a temporary's member dangles)
+	for (const json &l : listed["levels"]) {
+		names.push_back(l["name"]);
+	}
+	CHECK(names == json::array({"a/two", "a/uno"})); // (the list has the new name, not the old)
+	// an undo keeps the name (the file has it); the unsaved wall goes with the save
+	ok(ed, {{"op", "undo"}});
+	CHECK(ok(ed, {{"op", "document"}})["document"]["name"] == "a/uno");
+	CHECK(ok(ed, {{"op", "document"}})["document"]["elements"].empty());
+	ok(ed, {{"op", "redo"}});
+	CHECK(ok(ed, {{"op", "document"}})["document"]["elements"].size() == 1);
+	ok(ed, {{"op", "saved"}});
+	st = ok(ed, {{"op", "state"}});
+	CHECK(st["renamed_from"].is_null());
+	CHECK(st["dirty"] == false);
+	// a name in use or not a level's name is refused; the same name does nothing
+	CHECK(ed.command({{"op", "rename_level"}, {"to", "a/two"}})["ok"] == false);
+	CHECK(ed.command({{"op", "rename_level"}, {"to", "../x"}})["ok"] == false);
+	CHECK_FALSE(ok(ed, {{"op", "rename_level"}, {"to", "a/uno"}}).contains("from"));
+	CHECK(ok(ed, {{"op", "state"}})["save_requested"] == false);
+	// renamed twice before a save (the first save failed): the file on disk keeps the first name; back to it, nothing to remove
+	ok(ed, {{"op", "rename_level"}, {"to", "b/x"}});
+	ok(ed, {{"op", "save_cancelled"}});
+	ok(ed, {{"op", "rename_level"}, {"to", "b/y"}});
+	CHECK(ok(ed, {{"op", "state"}})["renamed_from"] == "a/uno");
+	ok(ed, {{"op", "rename_level"}, {"to", "a/uno"}});
+	CHECK(ok(ed, {{"op", "state"}})["renamed_from"].is_null());
+	ok(ed, {{"op", "saved"}});
+	// F2 opens the prompt, Esc cancels it
+	ed.key(rcg::Editor::KeyF1 + 1, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["rename_prompt"] == true);
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	st = ok(ed, {{"op", "state"}});
+	CHECK(st["rename_prompt"] == false);
+	CHECK(st["level"] == "a/uno");
+	// the level's name field renames too
+	ok(ed, {{"op", "level_menu"}, {"show", false}});
+	click_row(ed, "name");
+	REQUIRE(ok(ed, {{"op", "state"}})["focus"] == "/name");
+	ed.text("_2");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	st = ok(ed, {{"op", "state"}});
+	CHECK(st["level"] == "a/uno_2");
+	CHECK(st["renamed_from"] == "a/uno");
+	// playing: refused
+	ok(ed, {{"op", "saved"}});
+	ok(ed, {{"op", "play"}});
+	CHECK(ed.command({{"op", "rename_level"}, {"to", "c"}})["ok"] == false);
+	ok(ed, {{"op", "stop"}});
+	// an unnamed level is named: nothing to remove; a host saving an unnamed level names it
+	rcg::Editor fresh;
+	ok(fresh, {{"op", "rename_level"}, {"to", "fresh"}});
+	st = ok(fresh, {{"op", "state"}});
+	CHECK(st["level"] == "fresh");
+	CHECK(st["renamed_from"].is_null());
+	CHECK(st["save_requested"] == true);
+	rcg::Editor unnamed;
+	ok(unnamed, {{"op", "saved"}, {"name", "untitled"}});
+	CHECK(ok(unnamed, {{"op", "state"}})["level"] == "untitled");
+}
+
 TEST_CASE("editor: the level list is searchable -- soft matches first, their characters marked; up/down and Enter (Stage 167)") {
 	rcg::Editor ed;
 	ed.resize(1920, 1080);
