@@ -132,6 +132,27 @@ TEST_CASE("objective: the demo levels play to their goals") {
 		s.hold({"move_right"}, 120);
 		CHECK(s.won());
 	}
+	{
+		// Stage 171: doors on flag expressions -- the vault "det:red && det:blue", the odd door "!(det:red ^ det:blue)",
+		// the trap "!det:trap" (closed while the player is on its plate)
+		rcg::Session s(rcg::load_level((root / "data/levels/objectives/logic_doors.json").string()));
+		s.hold({"move_right"}, 200);
+		CHECK(s.player().x < 1150 - 11); // the vault holds
+		s.hold({"move_left"}, 200);
+		s.hold({"move_up"}, 60);
+		s.hold({"move_right"}, 200); // red pressed on the way, then the trap's plate
+		CHECK(s.player().x < 960 - 11); // the trap holds while the player is on its plate
+		s.hold({"move_left"}, 200);
+		s.hold({"move_down"}, 75); // (y 590)
+		s.hold({"move_right"}, 200);
+		CHECK(s.player().x < 1050 - 11); // one plate: the odd door holds
+		s.hold({"move_left"}, 200);
+		s.hold({"move_down"}, 45);
+		s.hold({"move_right"}, 30); // blue
+		s.hold({"move_up"}, 45);
+		s.hold({"move_right"}, 200);
+		CHECK(s.won());
+	}
 }
 
 TEST_CASE("objective: the schema") {
@@ -144,4 +165,42 @@ TEST_CASE("objective: the schema") {
 			!= std::string::npos);
 	CHECK(e(R"({"detectors": [{"name": "x", "for": "ghosts", "region": {"rect": [0, 0, 9, 9]}}]})").find("player, object or any") != std::string::npos);
 	CHECK(e(R"({"detectors": [{"name": "x"}]})").find("a region or a segment") != std::string::npos);
+}
+
+TEST_CASE("flag logic: a door closed while the player stands on a plate (\"!det:plate\"), a goal on an expression (Stage 171)") {
+	const auto lv = [] {
+		return level_of(json::parse(R"J({"gravity": [0, 0],
+			"elements": [{"kind": "door", "name": "gate", "start": [960, 240], "end": [960, 840], "flag": "!det:plate"}],
+			"detectors": [{"name": "plate", "region": {"rect": [880, 640, 160, 120]}}],
+			"objective": {"goal": {"circle": {"center": [1200, 540], "radius": 70}},
+				"requires": [{"key": "!det:plate && (det:a ^ det:b)", "values": ["true"]}]},
+			"flags": {"det:a": true}})J"));
+	};
+	// off the plate the door is open: the player walks through it
+	rcg::Session s(lv());
+	CHECK(s.hud() == "Goal: open"); // (!det:plate, and det:a ^ det:b)
+	s.hold({"move_right"}, 240);
+	CHECK(s.player().x > 1000.0f);
+	CHECK(s.won()); // (the walk crossed the open goal)
+	// on the plate it is closed: the player stops at it; off the plate it opens again
+	rcg::Session t(lv());
+	t.teleport(rc::V2::of(900, 700));
+	t.hold({}, 1);
+	CHECK(t.hud() == "Goal: locked");
+	t.hold({"move_right"}, 120);
+	CHECK(t.player().x < 960.0f);
+	t.hold({"move_left"}, 60); // (off the plate: x < 880)
+	REQUIRE(t.player().x < 880.0f);
+	t.teleport(rc::V2::of(900, 540)); // (above the plate, at the door)
+	t.hold({"move_right"}, 120);
+	CHECK(t.player().x > 960.0f);
+}
+
+TEST_CASE("flag logic: the schema -- a flag read may be an expression (it must parse), a flag written never") {
+	CHECK(err(json::parse(R"J({"detectors": [{"name": "p", "region": {"rect": [0, 0, 10, 10]}, "flag": "a && b"}]})J")).find("level.detectors[0].flag: a flag written is a name") != std::string::npos);
+	CHECK(err(json::parse(R"J({"flags": {"a || b": true}})J")).find("a flag set is a name") != std::string::npos);
+	CHECK(err(json::parse(R"J({"objective": {"goal": {"rect": [0, 0, 10, 10]}, "requires": [{"key": "a &&", "values": ["true"]}]}})J")).find("flag expression 'a &&'") != std::string::npos);
+	CHECK(err(json::parse(R"J({"elements": [{"kind": "door", "name": "d", "start": [0, 0], "end": [0, 10], "flag": "(a || b"}]})J")).find("not closed") != std::string::npos);
+	CHECK(err(json::parse(R"J({"elements": [{"kind": "button", "name": "b", "start": [0, 0], "end": [0, 10], "opens": "d", "flag": "!x"}]})J")).find("a flag written is a name") != std::string::npos);
+	CHECK(err(json::parse(R"J({"elements": [{"kind": "switchable", "name": "s", "start": [0, 0], "end": [0, 10], "flag": "x ^ y"}]})J")) == "no error");
 }

@@ -113,6 +113,8 @@ the level's surfaces, the four edge walls (pass, not plannable, not drawn) and t
 | `left`, `right` | a side (below) or `null` (the pass) |
 | `resolver` | `{"key": flag, "table": [[value, {"left": side, "right": side}], ...]}`: categorical sides (GAME_SPEC 9.4; `"DEFAULT"` matches an unset flag); the order is the table's |
 | `presence` | `[{"key": flag, "values": [...]}]`: the surface exists while every condition holds (GAME_SPEC 9.6); a surface that spawns gets its channels' host conditions when built |
+
+Stage 171: a `key` that is read -- a resolver's, a presence condition's, a `when` condition's, the goal's `requires`, a shade's `when` -- may be a flag expression (`!`, `^`, `&&`, `||`, parentheses; GAME_SPEC 9.11): `"key": "det:red && !det:blue"`. It is true or false: true matches `"true"`, false `"false"` and `"DEFAULT"`. A key that is written (a hit's `key`, a detector's or a spread rule's `flag`, `flags`) is a name.
 | `player_solid` | `true`: the player collides with it |
 
 A side: `{"effect": effect, "interactive": bool, "hits": [hit, ...]}` (`interactive`: plannable).

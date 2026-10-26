@@ -72,6 +72,18 @@ Flags are named after what writes or reads them, so levels and templates agree w
 
 The level's `flags` sets any of them at the start. For example, `{"door:gate": true}` starts with the door open.
 
+**Flag expressions** (Stage 171, GAME_SPEC 9.11). A parameter that reads a flag -- a door's or a switchable's
+`flag`, a conditional button's condition -- may combine flags: `!` (not), `^` (exclusive or), `&&` (and), `||` (or)
+and parentheses, with C's precedence (`!`, then `^`, then `&&`, then `||`). A missing flag is false. For example:
+
+```json
+{"kind": "door", "name": "trap", "start": [960, 240], "end": [960, 840], "flag": "!det:plate"}
+{"kind": "door", "name": "vault", "start": [1100, 240], "end": [1100, 840], "flag": "(det:red && det:blue) || det:key"}
+```
+
+The first is closed while the player stands on the plate (a `while` detector) and open otherwise; the second opens
+when both plates are pressed, or with the key. A parameter that writes a flag (a button's `flag`) takes a name only.
+
 ## The template language
 
 A template is an object:

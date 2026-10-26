@@ -1671,11 +1671,11 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 						// lights and darks switching
 						for (size_t k = 0; k < level_.shades.size(); k++) {
 							const Shade &sh = level_.shades[k];
-							if (sh.when.empty() || flags_.is_true(sh.when) == pred.is_true(sh.when)) {
+							if (sh.when.empty() || rc::key_true(sh.when, flags_) == rc::key_true(sh.when, pred)) {
 								continue;
 							}
 							const Color on = sh.dark ? rgba(0.65, 0.55, 1.0, 0.95) : rgba(1.0, 0.9, 0.4, 0.95);
-							outline_seg(out, segment_of(level_.surfaces[sh.surface].spec), pred.is_true(sh.when) ? on : rgba(0.5, 0.5, 0.55, 0.95), 3.0, true);
+							outline_seg(out, segment_of(level_.surfaces[sh.surface].spec), rc::key_true(sh.when, pred) ? on : rgba(0.5, 0.5, 0.55, 0.95), 3.0, true);
 						}
 						// objects a popped bubble releases (they fall)
 						for (const World::Body &body : world_->bodies()) {

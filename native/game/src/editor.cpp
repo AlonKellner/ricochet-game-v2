@@ -306,10 +306,11 @@ void Editor::refresh() {
 				std::vector<bool> active;
 				for (const Shade &sh : lv.shades) {
 					regions.push_back(shade::region_of(segment_of(lv.surfaces[sh.surface].spec), sh.side, sh.dark));
-					bool on = sh.when.empty();
+					rc::Flags start;
 					for (const auto &[k, v] : lv.flags) {
-						on = on || (k == sh.when && std::holds_alternative<bool>(v) && std::get<bool>(v));
+						start.set(k, v);
 					}
+					const bool on = sh.when.empty() || rc::key_true(sh.when, start); // (Stage 171: an expression too)
 					active.push_back(on);
 					for (size_t i = 0; i < es.size(); i++) {
 						if (es[i].is_object() && es[i].value("name", "") == sh.name) {

@@ -133,6 +133,10 @@ Hit effects and presence (Stage 107, GAME_SPEC 9.6 / 10.6):
   the current flags, so a surface can vanish or appear mid-loop), it blocks no
   junction, and a plan entry on it resolves to nothing (no effect, no state
   change) and is never consumed.
+- Stage 171 (GAME_SPEC 9.11): a presence condition's, a resolver's or a "when"
+  condition's key may be a flag expression -- ! ^ && || and parentheses, C's
+  precedence, each flag read as its truth (missing: false). An expression is
+  true or false: true matches "true", false "false" and "DEFAULT".
 
 Infinity (Stage 88): a plan entry INFINITY_ID (the player clicked the screen
 edge) means "the beam wraps through infinity here". Every plan has two
@@ -229,16 +233,99 @@ def is_ghost_toggler(cfg):
     return any(ch.get("key") == GHOST for ch in side_states(cfg))
 
 
+# Stage 171 (GAME_SPEC 9.11): flag expressions. Wherever a flag is read (a
+# presence condition, a resolver's key, a state change's "when") its key may be
+# an expression: flags combined with ! ^ && || and parentheses, C's precedence
+# (! then ^ then && then ||), each flag read as its truth (a missing flag is
+# false). A key with an operator character, a parenthesis or a space is one.
+EXPR_CHARS = set("&|^!() \t")
+_EXPR_MEMO = {}
+
+
+def is_expression(key):
+    return any(c in EXPR_CHARS for c in key)
+
+
+def compile_expression(key):
+    """The expression's evaluator: flags -> bool (ValueError when malformed)."""
+    if key in _EXPR_MEMO:
+        return _EXPR_MEMO[key]
+    toks, i = [], 0
+    while i < len(key):
+        c = key[i]
+        if c in " \t":
+            i += 1
+        elif c in "&|" and key[i:i + 2] == c * 2:
+            toks.append(c * 2)
+            i += 2
+        elif c in "&|":
+            raise ValueError("flag expression %r: %r alone" % (key, c))
+        elif c in EXPR_CHARS:
+            toks.append(c)
+            i += 1
+        else:
+            j = i
+            while j < len(key) and key[j] not in EXPR_CHARS:
+                j += 1
+            toks.append(key[i:j])
+            i = j
+    pos = [0]
+
+    def peek():
+        return toks[pos[0]] if pos[0] < len(toks) else None
+
+    def unary():
+        t = peek()
+        if t is None or t in (")", "&&", "||", "^"):
+            raise ValueError("flag expression %r: a flag expected at %r" % (key, t))
+        pos[0] += 1
+        if t == "!":
+            a = unary()
+            return lambda f: not a(f)
+        if t == "(":
+            a = or_()
+            if peek() != ")":
+                raise ValueError("flag expression %r: a '(' is not closed" % key)
+            pos[0] += 1
+            return a
+        return lambda f, name=t: bool(f.get(name, False)) if f is not None else False
+
+    def binary(tok, combine, operand):
+        def parse():
+            a = operand()
+            while peek() == tok:
+                pos[0] += 1
+                b = operand()
+                a = (lambda x, y: lambda f: combine(x(f), y(f)))(a, b)
+            return a
+        return parse
+
+    xor_ = binary("^", lambda x, y: x != y, unary)
+    and_ = binary("&&", lambda x, y: x and y, xor_)
+    or_ = binary("||", lambda x, y: x or y, and_)
+    ev = or_()
+    if pos[0] != len(toks):
+        raise ValueError("flag expression %r: %r after a whole expression" % (key, toks[pos[0]]))
+    _EXPR_MEMO[key] = ev
+    return ev
+
+
+def cond_holds(key, values, flags):
+    """A condition {key, values} (the presence form): flag_key of the key's
+    value is one of values ("DEFAULT" a missing key). Stage 171: an expression
+    key is true or false -- true matches "true", false "false" and "DEFAULT"."""
+    if is_expression(key):
+        t = compile_expression(key)(flags)
+        return "true" in values if t else ("false" in values or "DEFAULT" in values)
+    v = flag_key(flags[key]) if flags is not None and key in flags else "DEFAULT"
+    return v in values
+
+
 def present(presence, flags):
     """Whether a surface with these presence conditions exists under the
     flags (Stage 107): every condition's values hold flag_key of its key's
     value ("DEFAULT" for a missing key)."""
-    for cond in presence or ():
-        k = cond["key"]
-        v = flag_key(flags[k]) if flags is not None and k in flags else "DEFAULT"
-        if v not in cond["values"]:
-            return False
-    return True
+    return all(cond_holds(c["key"], c["values"], flags) for c in presence or ())
 
 
 def flag_key(v):
@@ -319,7 +406,12 @@ class Surface:
         k = self.resolver["key"]
         flags = flags or {}
         entry = None
-        if k in flags and flag_key(flags[k]) in table:
+        if is_expression(k):   # Stage 171: an expression's row -- "true", or "false" then DEFAULT
+            t = compile_expression(k)(flags)
+            entry = table.get("true" if t else "false")
+            if entry is None:
+                entry = table.get("DEFAULT", next(iter(table.values())))
+        elif k in flags and flag_key(flags[k]) in table:
             entry = table[flag_key(flags[k])]
         elif "DEFAULT" in table:
             entry = table["DEFAULT"]

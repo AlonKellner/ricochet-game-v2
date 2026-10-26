@@ -38,7 +38,15 @@ const BuiltSide *active_side(const BuiltSurface &s, Side side, const rc::Flags &
 		return cfg ? &*cfg : nullptr;
 	}
 	const BuiltRow *row = nullptr;
-	if (const rc::FlagValue *v = flags.get(s.resolver_key)) {
+	if (rc::FlagExpr::is_expression(s.resolver_key)) { // Stage 171: an expression's row -- "true", or "false" then "DEFAULT"
+		const std::string k = rc::FlagExpr::cached(s.resolver_key)->eval(flags) ? "true" : "false";
+		for (const BuiltRow &r : s.resolver) {
+			if (r.value == k) {
+				row = &r;
+				break;
+			}
+		}
+	} else if (const rc::FlagValue *v = flags.get(s.resolver_key)) {
 		const std::string k = rc::flag_key(*v);
 		for (const BuiltRow &r : s.resolver) {
 			if (r.value == k) {
@@ -66,9 +74,7 @@ bool present(const BuiltSurface &s, const rc::Flags &flags) { return holds(s.pre
 
 bool holds(const std::vector<PresenceSpec> &conditions, const rc::Flags &flags) {
 	for (const PresenceSpec &c : conditions) {
-		const rc::FlagValue *v = flags.get(c.key);
-		const std::string k = v ? rc::flag_key(*v) : std::string("DEFAULT");
-		if (std::find(c.values.begin(), c.values.end(), k) == c.values.end()) {
+		if (!rc::key_holds(c.key, c.values, flags)) { // (Stage 171: the key an expression or a flag)
 			return false;
 		}
 	}
