@@ -416,6 +416,7 @@ std::vector<BuiltSurface> build_spec(const SurfaceSpec &s, int first_id, const s
 	b.label = label;
 	b.seg = segment_of(s);
 	b.player_solid = s.player_solid;
+	b.platform = s.platform;
 	if (s.pre_transform) {
 		// Surface.pre_transform_circle: an inversion on both sides, not plannable, not solid
 		BuiltEffect inv_eff;
@@ -424,6 +425,7 @@ std::vector<BuiltSurface> build_spec(const SurfaceSpec &s, int first_id, const s
 		b.left = inv;
 		b.right = inv;
 		b.player_solid = false;
+		b.platform = false;
 		b.pre_transform = true;
 		out.push_back(std::move(b));
 		return out;
@@ -524,6 +526,9 @@ json describe_surface(const BuiltSurface &s) {
 	};
 	if (s.pre_transform) {
 		out["pre_transform"] = true;
+	}
+	if (s.platform) {
+		out["platform"] = true; // only when set: every other dump unchanged
 	}
 	if (!s.presence.empty()) {
 		json p = json::array();

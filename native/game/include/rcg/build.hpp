@@ -48,6 +48,7 @@ struct BuiltSurface {
 	std::vector<BuiltRow> resolver; // non-empty: a categorical surface
 	std::vector<PresenceSpec> presence; // authored, then the host conditions of its spawn channels
 	bool player_solid = false;
+	bool platform = false; // Stage 172: a one-way platform (GAME_SPEC 25.1)
 	bool pre_transform = false;
 	int portal_pair = 0; // a portal: the id of the surface with the inverse motion (0: none)
 

@@ -389,7 +389,8 @@ private:
 	void start_journey();             // at landing: the first fired grapple or pull of the shot
 	void advance_journey(double dt);
 	std::vector<kinematics::Collider> colliders_except(int body) const; // what a body or the player meets
-	std::vector<kinematics::Collider> colliders_except(int body, const rc::Flags &flags) const; // ... under these flags
+	// ... under these flags; a journey's (journey) without the platforms (Stage 172: a traveller passes them)
+	std::vector<kinematics::Collider> colliders_except(int body, const rc::Flags &flags, bool journey = false) const;
 	std::vector<Checkpoint> checkpoints_;
 	Checkpoint initial_;
 	int display_mode_ = 0;

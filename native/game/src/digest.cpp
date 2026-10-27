@@ -131,7 +131,7 @@ json spec_data(const SurfaceSpec &s) {
 	for (const PresenceSpec &c : s.presence) {
 		presence.push_back({{"key", c.key}, {"values", c.values}});
 	}
-	return {
+	json out = {
 		{"start", vec(s.start)},
 		{"end", vec(s.end)},
 		{"via", vec(s.via)},
@@ -146,6 +146,10 @@ json spec_data(const SurfaceSpec &s) {
 		{"presence", presence},
 		{"player_solid", s.player_solid},
 	};
+	if (s.platform) {
+		out["platform"] = true; // only when set: every other digest unchanged
+	}
+	return out;
 }
 
 } // namespace rcg::digest

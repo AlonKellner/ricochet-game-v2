@@ -19,9 +19,13 @@ namespace {
 namespace k = rcg::kinematics;
 using rc::V2;
 
+// (a platform is not counted: it is overlapped whenever something passes it)
 double clearance(const std::vector<k::Collider> &cs, double x, double y) {
 	double best = std::numeric_limits<double>::infinity();
 	for (const k::Collider &c : cs) {
+		if (c.platform) {
+			continue;
+		}
 		double nx, ny;
 		best = std::min(best, k::distance(c, x, y, nx, ny));
 	}
@@ -35,6 +39,21 @@ k::Collider wall(double ax, double ay, double bx, double by) {
 	c.bx = bx;
 	c.by = by;
 	return c;
+}
+
+k::Collider platform(double ax, double ay, double bx, double by) {
+	k::Collider c = wall(ax, ay, bx, by);
+	c.platform = true;
+	return c;
+}
+
+const V2 G{0, 980};
+const double REST = k::RADIUS + k::SKIN; // a body's centre above what it rests on
+
+void run(k::Body &b, const k::Input &in, const V2 &g, const std::vector<k::Collider> &cs, int ticks) {
+	for (int i = 0; i < ticks; i++) {
+		k::step(b, in, g, cs);
+	}
 }
 
 } // namespace
@@ -154,4 +173,159 @@ TEST_CASE("kinematics: a fall at any speed does not tunnel through a thin floor"
 		CHECK(b.pos.y == doctest::Approx(500 - k::RADIUS - k::SKIN).epsilon(1e-6));
 		CHECK(b.on_floor);
 	}
+}
+
+// Stage 172: platforms -- one-way, stood on from above, dropped through with down held
+
+TEST_CASE("platforms: a body falling onto one rests on its top") {
+	const std::vector<k::Collider> cs{platform(0, 500, 1000, 500), wall(0, 1000, 1000, 1000)};
+	k::Body b{V2{500, 300}, V2{}, false};
+	run(b, k::Input{}, G, cs, 120);
+	CHECK(b.on_floor);
+	CHECK(b.pos.y == doctest::Approx(500 - REST).epsilon(1e-6));
+	// walking along it keeps it there
+	run(b, k::Input{1.0f, 0.0f, false}, G, cs, 30);
+	CHECK(b.on_floor);
+	CHECK(b.pos.y == doctest::Approx(500 - REST).epsilon(1e-6));
+}
+
+TEST_CASE("platforms: a jump from below passes up through one, keeps its whole height and lands on top") {
+	const std::vector<k::Collider> floor{wall(0, 1000, 1000, 1000)};
+	std::vector<k::Collider> cs = floor;
+	cs.push_back(platform(0, 950, 1000, 950));
+	auto apex = [](const std::vector<k::Collider> &with) {
+		k::Body b{V2{500, float(1000 - REST)}, V2{}, true};
+		k::step(b, k::Input{0, 0, true}, G, with);
+		float top = b.pos.y;
+		for (int i = 0; i < 120; i++) {
+			k::step(b, k::Input{}, G, with);
+			top = std::min(top, b.pos.y);
+		}
+		return std::pair{top, b};
+	};
+	const auto [free_top, free_end] = apex(floor);
+	const auto [top, end] = apex(cs);
+	CHECK(top == free_top); // the platform neither stopped nor lifted the jump
+	CHECK(free_end.pos.y == doctest::Approx(1000 - REST).epsilon(1e-6));
+	CHECK(end.on_floor);
+	CHECK(end.pos.y == doctest::Approx(950 - REST).epsilon(1e-6)); // on the platform
+}
+
+TEST_CASE("platforms: down held drops through; released before the centre passes, back on top; after, on down") {
+	const std::vector<k::Collider> cs{platform(0, 500, 1000, 500), wall(0, 1000, 1000, 1000)};
+	const k::Input down{0.0f, 1.0f, false};
+	k::Body standing{V2{500, float(500 - REST)}, V2{}, true};
+	run(standing, k::Input{}, G, cs, 5);
+	REQUIRE(standing.on_floor);
+	SUBCASE("held: through, onto the floor below") {
+		k::Body b = standing;
+		run(b, down, G, cs, 120);
+		CHECK(b.on_floor);
+		CHECK(b.pos.y == doctest::Approx(1000 - REST).epsilon(1e-6));
+	}
+	SUBCASE("released early: the centre still above, put back on top") {
+		k::Body b = standing;
+		run(b, down, G, cs, 4);
+		CHECK(b.pos.y > standing.pos.y); // it did start to fall
+		CHECK(b.pos.y < 500.0f);
+		run(b, k::Input{}, G, cs, 30);
+		CHECK(b.on_floor);
+		CHECK(b.pos.y == doctest::Approx(500 - REST).epsilon(1e-6));
+	}
+	SUBCASE("released once the centre is below: it falls on") {
+		k::Body b = standing;
+		int ticks = 0;
+		while (b.pos.y <= 500.0f && ticks < 100) {
+			k::step(b, down, G, cs);
+			ticks++;
+		}
+		CHECK(ticks < 20); // about a sixth of a second
+		run(b, k::Input{}, G, cs, 120);
+		CHECK(b.on_floor);
+		CHECK(b.pos.y == doctest::Approx(1000 - REST).epsilon(1e-6));
+	}
+	SUBCASE("down held in the air falls past it") {
+		k::Body b{V2{500, 300}, V2{}, false};
+		run(b, down, G, cs, 120);
+		CHECK(b.pos.y == doctest::Approx(1000 - REST).epsilon(1e-6));
+	}
+}
+
+TEST_CASE("platforms: half through one, the centre decides -- above is put on top, below falls through") {
+	const std::vector<k::Collider> cs{platform(0, 500, 1000, 500), wall(0, 1000, 1000, 1000)};
+	k::Body above{V2{500, 495}, V2{}, false};
+	k::step(above, k::Input{}, G, cs);
+	CHECK(above.on_floor);
+	CHECK(above.pos.y == doctest::Approx(500 - REST).epsilon(1e-6));
+	k::Body below{V2{500, 505}, V2{}, false};
+	run(below, k::Input{}, G, cs, 120);
+	CHECK(below.pos.y == doctest::Approx(1000 - REST).epsilon(1e-6));
+	// settle (a journey's end) alike: on top or left where it is
+	k::Body s1{V2{500, 495}, V2{}, false};
+	k::settle(s1, cs, k::RADIUS);
+	CHECK(s1.on_floor);
+	CHECK(s1.pos.y == doctest::Approx(500 - REST).epsilon(1e-6));
+	k::Body s2{V2{500, 505}, V2{}, false};
+	k::settle(s2, cs, k::RADIUS);
+	CHECK_FALSE(s2.on_floor);
+	CHECK(s2.pos.y == 505.0f);
+	// settle moves nothing onto a wall or a fence (only platforms)
+	k::Body s3{V2{500, 995}, V2{}, false};
+	k::settle(s3, cs, k::RADIUS);
+	CHECK(s3.pos.y == 995.0f);
+}
+
+TEST_CASE("platforms: from below and the side never blocks; without gravity it passes both ways") {
+	const std::vector<k::Collider> cs{platform(400, 500, 600, 500)};
+	// from the side: walks through its end
+	k::Body side{V2{300, 500}, V2{}, false};
+	run(side, k::Input{1.0f, 0.0f, false}, V2{}, cs, 120);
+	CHECK(side.pos.x > 650.0f);
+	// top-down: down through it, and back up
+	k::Body b{V2{500, 400}, V2{}, false};
+	run(b, k::Input{0.0f, 1.0f, false}, V2{}, cs, 60);
+	CHECK(b.pos.y > 550.0f);
+	run(b, k::Input{0.0f, -1.0f, false}, V2{}, cs, 60);
+	CHECK(b.pos.y < 450.0f);
+}
+
+TEST_CASE("platforms: a circle holds on its top and passes from below; a slope over 45 degrees never holds") {
+	k::Collider ring = k::circle_collider(V2{500, 500}, 50);
+	ring.platform = true;
+	const std::vector<k::Collider> cs{ring, wall(0, 1000, 1000, 1000)};
+	k::Body b{V2{500, 300}, V2{}, false};
+	run(b, k::Input{}, G, cs, 120);
+	CHECK(b.on_floor);
+	CHECK(b.pos.y == doctest::Approx(450 - REST).epsilon(1e-6));
+	// rising through it from below (an upward push, no gravity: straight up and out of its top)
+	k::Body up{V2{500, 600}, V2{}, false};
+	run(up, k::Input{0.0f, -1.0f, false}, V2{}, cs, 90);
+	CHECK(up.pos.y == doctest::Approx(300).epsilon(1e-6)); // 300 px unhindered
+	// a steep platform (60 degrees) holds nothing
+	const std::vector<k::Collider> steep{platform(500, 400, 500 + 100 * 0.5, 400 + 100 * 0.8660254037844386), wall(0, 1000, 1000, 1000)};
+	k::Body s{V2{520, 300}, V2{}, false};
+	run(s, k::Input{}, G, steep, 120);
+	CHECK(s.pos.y == doctest::Approx(1000 - REST).epsilon(1e-6));
+}
+
+TEST_CASE("platforms: a platform surface is a platform collider; a platform is never also player_solid") {
+	const rcg::Level lv = rcg::parse_level(R"({"schema": "rc-level/1", "surfaces": [
+		{"ids": [1], "start": [0, 500], "end": [1000, 500], "via": [500, 500], "platform": true,
+		 "left": {"effect": {"type": "pass"}}, "right": {"effect": {"type": "pass"}}}]})");
+	const std::vector<rcg::BuiltSurface> world = rcg::build_level(lv);
+	REQUIRE(world.size() == 1);
+	CHECK(world[0].platform);
+	CHECK_FALSE(world[0].player_solid);
+	CHECK(rcg::describe_surface(world[0])["platform"] == true);
+	const std::vector<k::Collider> cs = k::colliders_of(world, rc::Flags{}, lv);
+	REQUIRE(cs.size() == 1);
+	CHECK(cs[0].platform);
+	CHECK_THROWS_AS(rcg::parse_level(R"({"schema": "rc-level/1", "surfaces": [
+		{"ids": [1], "start": [0, 500], "end": [1000, 500], "via": [500, 500], "platform": true, "player_solid": true,
+		 "left": null, "right": null}]})"), rcg::LevelError);
+	// a surface that is not a platform is described as before (no key)
+	const rcg::Level wall_lv = rcg::parse_level(R"({"schema": "rc-level/1", "surfaces": [
+		{"ids": [1], "start": [0, 500], "end": [1000, 500], "via": [500, 500], "player_solid": true,
+		 "left": {"effect": {"type": "terminal"}}, "right": {"effect": {"type": "terminal"}}}]})");
+	CHECK_FALSE(rcg::describe_surface(rcg::build_level(wall_lv)[0]).contains("platform"));
 }

@@ -76,7 +76,14 @@ struct Hit {
 	double nx = 0, ny = 0;
 };
 
-void consider(Hit &best, double t, double nx, double ny) {
+// a floor: a contact normal within 45 degrees of up (0, -1)
+bool floor_like(double, double ny) { return -ny >= FLOOR_MIN_DOT - 1e-12; }
+
+// Stage 172: a platform's contacts are its floor-like ones only (met from above)
+void consider(Hit &best, double t, double nx, double ny, bool floor_only) {
+	if (floor_only && !floor_like(nx, ny)) {
+		return;
+	}
 	if (t < best.t) {
 		best = Hit{t, nx, ny};
 	}
@@ -101,7 +108,7 @@ void sweep(const Collider &c, double px, double py, double dx, double dy, Hit &b
 					const double qx = px + dx * t, qy = py + dy * t;
 					const double u = ((qx - c.ax) * ex + (qy - c.ay) * ey) / (len * len);
 					if (u >= 0.0 && u <= 1.0) {
-						consider(best, t, mx * sgn, my * sgn);
+						consider(best, t, mx * sgn, my * sgn, c.platform);
 					}
 				}
 			}
@@ -112,7 +119,7 @@ void sweep(const Collider &c, double px, double py, double dx, double dy, Hit &b
 				const double cx = px + dx * t - qx, cy = py + dy * t - qy;
 				const double n = std::sqrt(cx * cx + cy * cy);
 				if (n > 0.0) {
-					consider(best, t, cx / n, cy / n);
+					consider(best, t, cx / n, cy / n, c.platform);
 				}
 			}
 		}
@@ -127,14 +134,14 @@ void sweep(const Collider &c, double px, double py, double dx, double dy, Hit &b
 		const double qx = px + dx * t - c.cx, qy = py + dy * t - c.cy;
 		const double n = std::sqrt(qx * qx + qy * qy);
 		if (n > 0.0 && on_arc(c, qx / n, qy / n)) {
-			consider(best, t, qx / n, qy / n);
+			consider(best, t, qx / n, qy / n, c.platform);
 		}
 	}
 	if (c.r > R0 && dist_c <= c.r && circle_exit_toi(px, py, dx, dy, c.cx, c.cy, c.r - R0, t)) {
 		const double qx = px + dx * t - c.cx, qy = py + dy * t - c.cy;
 		const double n = std::sqrt(qx * qx + qy * qy);
 		if (n > 0.0 && on_arc(c, qx / n, qy / n)) {
-			consider(best, t, -qx / n, -qy / n);
+			consider(best, t, -qx / n, -qy / n, c.platform);
 		}
 	}
 	if (!c.full) {
@@ -143,15 +150,12 @@ void sweep(const Collider &c, double px, double py, double dx, double dy, Hit &b
 				const double cx = px + dx * t - qx, cy = py + dy * t - qy;
 				const double n = std::sqrt(cx * cx + cy * cy);
 				if (n > 0.0) {
-					consider(best, t, cx / n, cy / n);
+					consider(best, t, cx / n, cy / n, c.platform);
 				}
 			}
 		}
 	}
 }
-
-// a floor: a contact normal within 45 degrees of up (0, -1)
-bool floor_like(double, double ny) { return -ny >= FLOOR_MIN_DOT - 1e-12; }
 
 } // namespace
 
@@ -190,6 +194,44 @@ double distance(const Collider &c, double px, double py, double &nx, double &ny)
 	return d;
 }
 
+namespace {
+
+// Stage 172: is the centre on a platform's upper side? A line: the side its
+// up-facing normal points to, along the whole carrier (a line steeper than 45
+// degrees has none); an arc: where the normal from its nearest point is floor-like.
+bool above(const Collider &c, double px, double py) {
+	if (!c.arc) {
+		const double ex = c.bx - c.ax, ey = c.by - c.ay;
+		const double len = std::sqrt(ex * ex + ey * ey);
+		if (len == 0.0) {
+			return false;
+		}
+		double ux = -ey / len, uy = ex / len;
+		if (uy > 0.0) {
+			ux = -ux;
+			uy = -uy;
+		}
+		return floor_like(ux, uy) && (px - c.ax) * ux + (py - c.ay) * uy > 0.0;
+	}
+	double nx, ny;
+	return distance(c, px, py, nx, ny) > 0.0 && floor_like(nx, ny);
+}
+
+// Out of one collider's overlap; a platform only up onto its top. True: moved.
+bool push_out(const Collider &c, double &px, double &py, double R0, bool &on_floor) {
+	double nx, ny;
+	const double d = distance(c, px, py, nx, ny);
+	if (d >= R0 - EPS || (c.platform && !floor_like(nx, ny))) {
+		return false;
+	}
+	px += nx * (R0 - d);
+	py += ny * (R0 - d);
+	on_floor = on_floor || floor_like(nx, ny);
+	return true;
+}
+
+} // namespace
+
 Collider collider_of(const rc::arc::SegGeom &seg) {
 	Collider c;
 	c.ax = seg.s.x;
@@ -220,8 +262,9 @@ Collider segment_collider(const V2 &a, const V2 &b) {
 std::vector<Collider> colliders_of(const std::vector<BuiltSurface> &world, const rc::Flags &flags, const Level &level) {
 	std::vector<Collider> out;
 	for (const BuiltSurface &s : world) {
-		if (s.player_solid && !s.pre_transform && present(s, flags)) {
+		if ((s.player_solid || s.platform) && !s.pre_transform && present(s, flags)) {
 			out.push_back(collider_of(s.seg));
+			out.back().platform = s.platform;
 		}
 	}
 	for (const auto &k : level.colliders) {
@@ -254,6 +297,13 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 		}
 		v = dir * float(SPEED);
 	}
+	// Stage 172: a platform takes part only while the centre is above it at the
+	// step's start and the body is not dropping (down held)
+	const bool drop = in.axis_y > 0.0f;
+	std::vector<char> off(colliders.size(), 0);
+	for (size_t i = 0; i < colliders.size(); i++) {
+		off[i] = colliders[i].platform && (drop || !above(colliders[i], body.pos.x, body.pos.y));
+	}
 	// the move: swept, sliding along what it meets
 	double px = body.pos.x, py = body.pos.y;
 	double vx = v.x, vy = v.y;
@@ -264,8 +314,10 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 			break;
 		}
 		Hit best;
-		for (const Collider &c : colliders) {
-			sweep(c, px, py, mx, my, best, R0);
+		for (size_t i = 0; i < colliders.size(); i++) {
+			if (!off[i]) {
+				sweep(colliders[i], px, py, mx, my, best, R0);
+			}
 		}
 		if (best.t > 1.0) {
 			px += mx;
@@ -287,17 +339,13 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 		mx = rx;
 		my = ry;
 	}
-	// out of any overlap
+	// out of any overlap; a platform not while rising (the jump carries on, then lands on top)
+	const bool rising = vy < 0.0;
 	for (int it = 0; it < 4; it++) {
 		bool moved = false;
-		for (const Collider &c : colliders) {
-			double nx, ny;
-			const double d = distance(c, px, py, nx, ny);
-			if (d < R0 - EPS) {
-				px += nx * (R0 - d);
-				py += ny * (R0 - d);
-				moved = true;
-				on_floor = on_floor || floor_like(nx, ny);
+		for (size_t i = 0; i < colliders.size(); i++) {
+			if (!off[i] && !(rising && colliders[i].platform)) {
+				moved = push_out(colliders[i], px, py, R0, on_floor) || moved;
 			}
 		}
 		if (!moved) {
@@ -308,9 +356,12 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 	// not rising -- within the snap below (stay on it)
 	if (has_gravity && vy >= 0.0 && !on_floor) {
 		double best_d = std::numeric_limits<double>::infinity(), bnx = 0, bny = 0;
-		for (const Collider &c : colliders) {
+		for (size_t i = 0; i < colliders.size(); i++) {
+			if (off[i]) {
+				continue;
+			}
 			double nx, ny;
-			const double d = distance(c, px, py, nx, ny);
+			const double d = distance(colliders[i], px, py, nx, ny);
 			if (d <= R0 + FLOOR_SNAP && floor_like(nx, ny) && d < best_d) {
 				best_d = d;
 				bnx = nx;
@@ -328,6 +379,25 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 	body.pos = V2::of(px, py);
 	body.vel = V2::of(vx, vy);
 	body.on_floor = on_floor;
+}
+
+void settle(Body &body, const std::vector<Collider> &colliders, double radius) {
+	const double R0 = radius + SKIN;
+	double px = body.pos.x, py = body.pos.y;
+	bool on_floor = false;
+	for (int it = 0; it < 4; it++) {
+		bool moved = false;
+		for (const Collider &c : colliders) {
+			if (c.platform && above(c, body.pos.x, body.pos.y)) {
+				moved = push_out(c, px, py, R0, on_floor) || moved;
+			}
+		}
+		if (!moved) {
+			break;
+		}
+	}
+	body.pos = V2::of(px, py);
+	body.on_floor = body.on_floor || on_floor;
 }
 
 double sweep_fraction(double px, double py, double dx, double dy, const std::vector<Collider> &colliders, double radius) {

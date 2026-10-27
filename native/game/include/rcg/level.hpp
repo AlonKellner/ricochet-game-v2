@@ -102,6 +102,7 @@ struct SurfaceSpec {
 	std::vector<ResolverRow> resolver; // empty: fixed sides
 	std::vector<PresenceSpec> presence;
 	bool player_solid = false;
+	bool platform = false; // Stage 172: one-way, stood on from above, dropped through (GAME_SPEC 25.1)
 
 	bool is_portal() const { return resolver.empty() && left && left->effect.type == "portal"; }
 };

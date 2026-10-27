@@ -67,6 +67,7 @@ SurfaceSpec mapped(const SurfaceSpec &s, const rc::Xf2 &xf) {
 	}
 	o.presence = s.presence;
 	o.player_solid = s.player_solid;
+	o.platform = s.platform;
 	return o;
 }
 

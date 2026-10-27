@@ -61,6 +61,7 @@ const Color GHOST_TOGGLER_COLOR = rgba(0.75, 0.95, 1.0);
 const Color FLAG_TOGGLER_COLOR = rgba(1.0, 0.85, 0.2);
 const Color PRE_TRANSFORM_COLOR = rgba(0.55, 0.45, 0.85, 0.35);
 const Color ABSENT_COLOR = rgba(0.6, 0.6, 0.6, 0.35);
+const Color PLATFORM_COLOR = rgba(0.62, 0.42, 0.22); // Stage 172: wood brown
 // Stage 153: the shadow, a dark shade's edge, a light one's
 const Color SHADOW_FILL = rgba(0.02, 0.02, 0.05, 0.82);
 const Color SHADE_DARK = rgba(0.55, 0.45, 0.95);
@@ -424,7 +425,11 @@ struct SurfacePainter {
 		}
 		const BuiltSide *left = active_side(surface, Side::Left, flags);
 		const BuiltSide *right = active_side(surface, Side::Right, flags);
-		const Color lc = config_color(left), rc_ = config_color(right);
+		Color lc = config_color(left), rc_ = config_color(right);
+		if (surface.platform) { // Stage 172: a platform's plain sides in its own colour
+			lc = lc == GRAY ? PLATFORM_COLOR : lc;
+			rc_ = rc_ == GRAY ? PLATFORM_COLOR : rc_;
+		}
 		const bool arcs = !seg.is_line();
 		const bool l_outer = left_outer();
 		if (lc == rc_) {
