@@ -30,7 +30,7 @@
  "objects": [
   {
    "circle": {
-    "center": [880.0, 960.0],
+    "center": [890.0, 700.0],
     "radius": 16.0
    },
    "name": "object_1"
