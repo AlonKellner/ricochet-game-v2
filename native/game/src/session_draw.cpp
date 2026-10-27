@@ -62,6 +62,7 @@ const Color FLAG_TOGGLER_COLOR = rgba(1.0, 0.85, 0.2);
 const Color PRE_TRANSFORM_COLOR = rgba(0.55, 0.45, 0.85, 0.35);
 const Color ABSENT_COLOR = rgba(0.6, 0.6, 0.6, 0.35);
 const Color PLATFORM_COLOR = rgba(0.62, 0.42, 0.22); // Stage 172: wood brown
+const Color BODY_COLOR = rgba(0.8, 0.8, 0.8);        // Stage 173: the tall player's body under its triangle
 // Stage 153: the shadow, a dark shade's edge, a light one's
 const Color SHADOW_FILL = rgba(0.02, 0.02, 0.05, 0.82);
 const Color SHADE_DARK = rgba(0.55, 0.45, 0.95);
@@ -1746,13 +1747,25 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		});
 	}
 	const bool player_crossing = journey_ && journey_->crossing && journey_->body < 0;
+	// Stage 173 (the user): under gravity a rectangle from the triangle down to the feet (it does not turn)
+	const float feet = float(kinematics::BODY + kinematics::RADIUS);
+	const std::vector<V2> body_pts = {V2{-8, 0}, V2{8, 0}, V2{8, feet}, V2{-8, feet}};
 	if (level_.player_start && !player_crossing) {
+		std::vector<Call> calls;
+		if (tall()) {
+			Call legs;
+			legs.kind = Kind::Polygon2D;
+			legs.pts = body_pts;
+			legs.colors = {BODY_COLOR};
+			calls.push_back(legs);
+		}
 		Call k;
 		k.kind = Kind::Polygon2D;
 		k.pts = {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}};
 		k.colors = {WHITE};
 		k.rotation = double(facing_);
-		fresh(NodeKind::Player, 0, player_, WHITE, {k});
+		calls.push_back(k);
+		fresh(NodeKind::Player, 0, player_, WHITE, std::move(calls));
 	}
 	// Stage 166: a traveller crossing a portal -- the part still before the entry, and its copy's part beyond the
 	// exit (the portal's motion of the part already through)
@@ -1785,12 +1798,22 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 			flush(near_pts);
 			flush(far_pts);
 		} else {
-			// the player's triangle, cut by the entry's line: the near part here, the far part at the exit
+			// the player's triangle (and body), cut by the entry's line: the near part here, the far part at the exit
 			const double c = std::cos(double(facing_)), sn = std::sin(double(facing_));
-			std::vector<V2> tri;
-			for (const V2 &q : {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}}) {
-				tri.push_back(V2::of(double(at.x) + c * q.x - sn * q.y, double(at.y) + sn * q.x + c * q.y));
+			std::vector<std::pair<std::vector<V2>, Color>> parts;
+			if (tall()) {
+				std::vector<V2> body;
+				for (const V2 &q : body_pts) {
+					body.push_back(V2::of(double(at.x) + q.x, double(at.y) + q.y));
+				}
+				parts.push_back({body, BODY_COLOR});
 			}
+			std::vector<V2> head;
+			for (const V2 &q : {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}}) {
+				head.push_back(V2::of(double(at.x) + c * q.x - sn * q.y, double(at.y) + sn * q.x + c * q.y));
+			}
+			parts.push_back({head, WHITE});
+			for (const auto &[tri, color] : parts)
 			for (const bool near_side : {true, false}) {
 				std::vector<V2> poly;
 				for (size_t i = 0; i < tri.size(); i++) {
@@ -1815,7 +1838,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 					Call k;
 					k.kind = Kind::Polygon;
 					k.pts = poly;
-					k.colors.assign(poly.size(), WHITE); // (one per point)
+					k.colors.assign(poly.size(), color); // (one per point)
 					calls.push_back(k);
 				}
 			}

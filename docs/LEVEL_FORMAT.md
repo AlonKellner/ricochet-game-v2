@@ -90,7 +90,7 @@ the generated ones (configured edges read back as the `edges` key), every run of
 | `bounds` | `[x, y, w, h]`: the level's edge (the arrow wraps there, the ∞ entry is clicked there) | `[0, 0, 1920, 1080]` |
 | `gravity` | `[gx, gy]` (px/s²; the player's controller) | `[0, 0]` |
 | `room` | `{"rect": [x, y, w, h], "built": bool}`: the room (its walls are listed in `surfaces` when built; the sweeps bound their positions by it) | `[560, 240, 800, 600]`, built |
-| `player` | `{"start": [x, y]}` or `null` | `null` |
+| `player` | `{"start": [x, y]}` or `null` -- with gravity where the player stands, its feet (Stage 173: its head, the arrow's origin, 24 above); without gravity its position | `null` |
 | `camera` | `{"start": [x, y], "smoothing": bool, "smoothing_speed": number}` or `null` (no camera: the view is the bounds) | `null` |
 | `background` | `{"rect": [x, y, w, h], "color": [r, g, b, a]}` or `null` | `null` |
 | `colliders` | `[{"a": [x, y], "b": [x, y]}]`: segments only the player collides with (floors) | `[]` |

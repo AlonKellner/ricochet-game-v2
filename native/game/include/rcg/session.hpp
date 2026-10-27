@@ -106,6 +106,18 @@ public:
 	// inputs
 	void set_cursor(const V2 &p) { cursor_ = p; }
 	void teleport(const V2 &p);
+	// Stage 173: under gravity the player is tall -- its position (the arrow's origin) its head, its feet BODY
+	// below; without gravity it is the circle it was. Its shape, and where it stands at p (its feet: what
+	// detectors and the goal see; without gravity p itself).
+	bool tall() const { return gravity_.length_squared() > 0.0f; }
+	kinematics::Shape player_shape() const { return tall() ? kinematics::PLAYER : kinematics::Shape{}; }
+	V2 feet(const V2 &p) const { return tall() ? V2::of(p.x, double(p.y) + kinematics::BODY) : p; }
+	// Stage 173: where the player starts -- with gravity the start is where it stands (its feet; its head, its
+	// position, BODY above), without it the start is its position (the arrow's origin, as before)
+	static V2 spawn_point(const Level &level) {
+		const V2 s = level.player_start.value_or(V2{});
+		return level.gravity.length_squared() > 0.0f ? V2::of(s.x, double(s.y) - kinematics::BODY) : s;
+	}
 	void click(bool right);
 	// Stage 129 (tools: the violation viewer): the plan set as it is -- entries by
 	// surface and side, each with its click and the span of its piece (matched to
@@ -359,7 +371,8 @@ private:
 	};
 	std::optional<Journey> journey_;
 	std::optional<Journey> journey_of(const rc::TracePath &path, int *hit_index = nullptr) const; // Stage 159
-	bool journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, double radius, double dt) const;
+	bool journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, const kinematics::Shape &shape, double dt) const;
+	std::vector<int> body_ids() const; // (Stage 173: the objects' surfaces, which the player passes)
 	// Stage 151: the cycle
 	double phase_ = 0.0;
 	bool cycle_auto_ = true;

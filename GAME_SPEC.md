@@ -2065,7 +2065,7 @@ Level (rc-level/1):
     bounds:      [x, y, w, h]                # the level's edge (default 0, 0, 1920, 1080)
     gravity:     [gx, gy]                    # default (0, 0) -- no gravity
     room:        {rect: [x, y, w, h], built: bool}
-    player:      {start: [x, y]}
+    player:      {start: [x, y]}            # with gravity where the player stands (its feet, §25.1); without, its position
     camera:      {start, smoothing, smoothing_speed} or null
     background:  {rect, color} or null
     colliders:   [{a: [x, y], b: [x, y]}]    # player-only collision segments (§25.1)
@@ -2279,7 +2279,7 @@ V1 uses a wireframe/debug aesthetic. No art assets required.
 | Element | Visual |
 |---------|--------|
 | **Surfaces** | Colored lines/arcs. Color indicates effect type. |
-| **Player** | Small triangle or circle at spawn/current position. |
+| **Player** | A white triangle turned toward the aim, at the player's position (the arrow origin); under gravity a light-gray rectangle under it, down to the feet (Stage 173, §25.1). |
 | **Arrow** | Line segment (length ~40 units) with a triangular head (30° angle, ~16 units). Single draw call. Rotates to follow the path tangent direction (including arc tangents). |
 | **Targets** | Distinct color (e.g., gold/yellow) and shape (e.g., thicker line, pulsing). |
 | **Cursor** | Crosshair or dot at mouse position. |
@@ -2408,7 +2408,8 @@ the player steps on a plate. It is a region (a rectangle or a circle) or a segme
 | `enter` | the value when the player enters the region, or crosses the segment |
 | `toggle` | the flag's negation (a missing flag is false) on entering, or on crossing |
 
-Detectors are checked after every physics tick, against the player's center: a region on its boundary counts
+Detectors are checked after every physics tick, against the player's center (Stage 173: under gravity its feet's
+centre -- where it stands, §25.1): a region on its boundary counts
 as inside, and a segment is crossed when a tick's move goes from one side of its line onto or past it within the
 segment (a move off the line is no crossing). Their writes are ordinary flag writes (§10.6): presence (§9.6) and
 resolvers (§9.4) follow at once, so does the player's collision. The flags, and which regions the player is in,
@@ -2419,7 +2420,7 @@ are part of the checkpoint (§3.3). A detector `for` objects waits for objects (
 > **Status: implemented (Stage 145).**
 
 A level may have a **goal**: a region and conditions (the presence form, §9.6: `{key, values}`, all required).
-The goal is **open** while its conditions hold. The player wins by standing in it while it is open (checked
+The goal is **open** while its conditions hold. The player wins by standing in it (its feet under gravity, §25.1) while it is open (checked
 after every physics tick and when a shot lands). Targets are then ordinary flag writers that open doors or the
 goal; a level without a goal keeps the all-targets rule (§3.2). The goal is drawn green: dashed while locked,
 solid when open, filled when won. A level with a goal shows `Goal: locked | open | reached!` as the HUD's first
@@ -2434,8 +2435,15 @@ line, and its session record holds `won`.
 The player is a circle of radius **12 units** moved by the native player controller (Stage 117,
 `rcg/kinematics.hpp`; every host drives the same one): at a fixed physics step of 1/60 s it is swept exactly
 (no tunnelling at any speed) against what it collides with, slides along what it meets (at most four contacts
-a step), is pushed out of any overlap, and rests a **0.08-unit skin** away from what it touches. It collides
-with two kinds of geometry:
+a step), is pushed out of any overlap, and rests a **0.08-unit skin** away from what it touches.
+
+**Under gravity the player is tall** (Stage 173, the user): three such circles stacked from its **head** -- its
+position, the arrow's origin -- down to its **feet**, 24 units below (a capsule 48 units high but for notches no
+floor rests in; the head 36 units above what the player stands on). Without gravity it is the one circle. Its
+**feet** are where it stands: a level's `player.start` under gravity is the feet's centre (the head spawns 24
+above it; without gravity the start is the position), detectors (§24.5) and the goal (§24.6) see the feet, and
+platforms judge the feet (below). Toggling gravity keeps the feet where they are (the player stands up, or folds
+back into its circle). The player and objects **pass each other** (§25.5). It collides with:
 
 1. **Colliders** — the level's player-only segments (`colliders`, §19.1: floors, platforms, ceilings in
    gravity levels). They are invisible to arrow tracing, visibility, and planning.
@@ -2459,7 +2467,7 @@ A **floor** is a contact whose normal is within 45° of up `(0, -1)`. With gravi
 floor and is not rising keeps to it within **1 unit** (a floor snap: walking off a ledge drops, walking along
 a floor stays on it).
 
-**Arrow origin:** the arrow originates from the **center of the player's collision shape** (no offset).
+**Arrow origin:** the arrow originates from the **player's position**: the centre of its collision circle, under gravity its head's (Stage 173).
 
 **Arrow–player interaction:** the arrow does **not** collide with the player. The player is not a surface for ray tracing purposes. The player can stand on or near a surface without blocking their own shot.
 
@@ -2485,8 +2493,8 @@ a floor stays on it).
 
 An **object** is a circle body with a surface: a full circle whose sides are a wall's (terminal), a mirror's or a
 pass, player-solid by default. A **pullable** object falls under the level's gravity and rests on what holds it,
-moved by the player's controller at its own radius. It meets the player (a falling object stops on the player),
-but not other objects (v1). It stands on platforms (§25.1) and never drops through one (it holds no down). A **static** object stays. Its surface takes the next ids after the level's
+moved by the player's controller at its own radius. It and the player **pass each other** (Stage 173, the user:
+neither stops the other), and it does not meet other objects (v1). It stands on platforms (§25.1) and never drops through one (it holds no down). A **static** object stays. Its surface takes the next ids after the level's
 surfaces, so it is planned and hit like any surface, and it moves with the body. While an object moves, nothing
 is fired. The bodies' positions are part of the checkpoint, and detectors `for` objects see their centers
 (§24.5, regions only).
@@ -2503,10 +2511,13 @@ A **pull** (a pullable object's sides carry it) and a **grapple** (the `grapple`
 effects applied when the shot lands (§10.6). The first one the shot fired starts a **journey** along the
 physical path:
 - a grapple takes the player forward, from the origin to the hit;
-- a pull takes the object back, from the hit to the player, keeping its center's offset from the hit point.
+- a pull takes the object back, from the hit to the player -- to the arrow's origin: under gravity the player's
+  head, so an object pulled to a player standing on a floor or a platform ends above it and falls the last bit onto
+  it, over the player's feet (Stage 173).
 
 The traveller moves at 900 px/s, swept against what it collides with: present player-solid surfaces and
-colliders, and for an object the player. It stops at the first contact or at the path's end. A fence (an
+colliders (a pulled object passes the player, Stage 173; a grappled player is its whole tall shape). It stops at
+the first contact or at the path's end. A fence (an
 arrow-pass barrier) stops it; an arrow-block barrier is not solid and does not. **A platform does not stop it**
 (Stage 172): a pulled object or a grappled player passes through platforms. Where the journey ends, a traveller
 half through a platform is settled by its centre (§25.1): above it, it is put on top and stands; below it, it
@@ -3041,4 +3052,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.78.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.79.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

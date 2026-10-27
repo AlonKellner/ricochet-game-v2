@@ -4,6 +4,9 @@
 // (exact segments and arcs) and the level's colliders: swept exactly (no
 // tunnelling), sliding along what it meets (at most four contacts a step),
 // pushed out of any overlap, resting a skin away from what it touches.
+// Stage 173 (the user): the player is taller -- three such circles stacked
+// from its head (the arrow origin) down to its feet (PLAYER); an object stays
+// one circle.
 //
 // Top-down (no gravity): the input direction, normalized, times SPEED.
 // Gravity: the horizontal input times SPEED; gravity integrated in the air;
@@ -37,6 +40,19 @@ constexpr double FLOOR_SNAP = 1.0;
 constexpr int MAX_SLIDES = 4;
 constexpr double FLOOR_MIN_DOT = 0.7071067811865476; // cos 45 degrees
 constexpr double STEP = 1.0 / 60.0;                  // the physics tick
+constexpr double BODY = 24.0;                        // Stage 173: the player's feet below its head (the arrow origin)
+
+// Stage 173: a body's shape -- circles of one radius stacked straight down from
+// its position. An object is one circle; the player three, head to feet, spaced
+// a radius apart (their union a capsule but for notches no floor can rest in),
+// its position the head's centre: the arrow's origin.
+struct Shape {
+	double radius = RADIUS;
+	int n = 1;
+	double drop[3] = {0.0, 0.0, 0.0}; // each circle's centre below the position
+	double feet() const { return drop[n - 1]; }
+};
+constexpr Shape PLAYER{RADIUS, 3, {0.0, BODY / 2, BODY}};
 
 // What the player collides with: a segment, or an arc (a full circle, or the
 // part of its carrier from start through via to end).
@@ -50,8 +66,10 @@ struct Collider {
 };
 
 // The present player-solid surfaces and platforms (absent ones do not block:
-// TDD_22) and the level's colliders.
-std::vector<Collider> colliders_of(const std::vector<BuiltSurface> &world, const rc::Flags &flags, const Level &level);
+// TDD_22) and the level's colliders; but the surfaces of `except` (Stage 173:
+// the objects' -- the player passes them).
+std::vector<Collider> colliders_of(const std::vector<BuiltSurface> &world, const rc::Flags &flags, const Level &level,
+		const std::vector<int> &except = {});
 
 // A collider from a surface's segment (a line, an arc, a full circle) or two points.
 Collider collider_of(const rc::arc::SegGeom &seg);
@@ -69,20 +87,23 @@ struct Input {
 	bool jump = false;   // the up action just pressed (gravity: a jump)
 };
 
-// One physics tick (player.gd's _physics_process: the velocity, then the move).
+// One physics tick of the player (player.gd's _physics_process: the velocity, then the move; Stage 173: PLAYER).
 void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders);
-// Stage 146: the same for a body of any radius (step() is step_body with RADIUS).
+// Stage 146: the same for a circle of any radius; Stage 173: for any shape.
 void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, double radius);
+void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, const Shape &shape);
 // Stage 172: a body whose centre is above a platform it overlaps moved up onto
 // its top (on the floor); one whose centre is below it left to fall through.
-void settle(Body &body, const std::vector<Collider> &colliders, double radius);
+void settle(Body &body, const std::vector<Collider> &colliders, const Shape &shape);
 // Stage 146: how far (0..1) a circle of that radius moves along (dx, dy) before
 // it first touches a collider (1: freely); what it touches only while approaching.
-double sweep_fraction(double px, double py, double dx, double dy, const std::vector<Collider> &colliders, double radius);
+double sweep_fraction(double px, double py, double dx, double dy, const std::vector<Collider> &colliders, const Shape &shape);
 // Stage 146: a full circle (a body, the player, as others collide with them).
 Collider circle_collider(const V2 &center, double r);
 
 // The distance from a point to a collider and the unit normal from it toward the point.
 double distance(const Collider &c, double px, double py, double &nx, double &ny);
+// Stage 173: the same from a shape's nearest circle centre (a shape at (px, py)).
+double distance(const Collider &c, const Shape &shape, double px, double py, double &nx, double &ny);
 
 } // namespace rcg::kinematics
