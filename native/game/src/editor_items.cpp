@@ -4,6 +4,7 @@
 // "object:<name>"; its handles move the JSON they point at.
 #include "rcg/canon.hpp"
 #include "rcg/editor.hpp"
+#include "rcg/kinematics.hpp"
 #include "rcg/level2.hpp"
 
 #include <algorithm>
@@ -97,6 +98,12 @@ std::optional<std::string> Editor::item_path(const std::string &item) const {
 		}
 		return std::nullopt;
 	}
+	if (kind == "player") { // Stage 175: the player's start
+		if (doc_.contains("player") && doc_["player"].is_object() && is_point(doc_["player"].value("start", json()))) {
+			return std::string("/player");
+		}
+		return std::nullopt;
+	}
 	if (kind == "camera") { // Stage 164: the camera's start
 		if (doc_.contains("camera") && doc_["camera"].is_object()) {
 			return std::string("/camera");
@@ -124,8 +131,8 @@ std::optional<std::string> Editor::item_path(const std::string &item) const {
 std::vector<Editor::Handle> Editor::item_handles() const {
 	std::vector<Handle> out;
 	const std::optional<std::string> path = item_.empty() ? std::nullopt : item_path(item_);
-	if (!path) {
-		return out;
+	if (!path || item_ == "player") {
+		return out; // (the player's start is always a handle)
 	}
 	const json &j = doc_[json::json_pointer(*path)];
 	// a region (the goal; a detector's region), a segment, a circle holder (an object)
@@ -192,6 +199,17 @@ std::string Editor::item_at(const V2 &screen) const {
 		const double u = l2 > 0 ? std::clamp(((double(screen.x) - a.x) * ex + (double(screen.y) - a.y) * ey) / l2, 0.0, 1.0) : 0.0;
 		return std::hypot(double(a.x) + ex * u - screen.x, double(a.y) + ey * u - screen.y) <= 8.0;
 	};
+	// Stage 175: the player (its start; under gravity up to its head)
+	if (item_path("player")) {
+		const V2 p = to_screen(pt(doc_["player"]["start"]));
+		const json g = doc_.value("gravity", json::array({0.0, 0.0}));
+		const bool tall = g.is_array() && g.size() == 2 && g[0].is_number() && g[1].is_number() && (g[0].get<double>() != 0.0 || g[1].get<double>() != 0.0);
+		const double r = kinematics::RADIUS * zoom_ + 4.0, top = double(p.y) - (tall ? kinematics::BODY * zoom_ : 0.0);
+		const double dy = screen.y > p.y ? double(screen.y) - p.y : screen.y < top ? top - screen.y : 0.0;
+		if (std::hypot(double(screen.x) - p.x, dy) <= r) {
+			return "player";
+		}
+	}
 	// Stage 164: the camera's start (its marker), a collider (thin, like an element)
 	if (doc_.contains("camera") && doc_["camera"].is_object() && is_point(doc_["camera"].value("start", json()))) {
 		const V2 c = to_screen(pt(doc_["camera"]["start"]));
@@ -342,7 +360,7 @@ std::vector<Editor::Row> Editor::item_rows() const {
 	};
 	Row head;
 	head.kind = Row::Header;
-	head.label = kind == "goal" || kind == "camera" ? kind : kind + " " + name;
+	head.label = kind == "goal" || kind == "camera" || kind == "player" ? kind : kind + " " + name;
 	if (kind == "carrier") {
 		head.label += j.contains("line") ? " (a line)" : " (a circle)";
 	}
@@ -370,6 +388,8 @@ std::vector<Editor::Row> Editor::item_rows() const {
 		r.kind = Row::Text;
 		r.label = "player-only: it holds the player; arrows pass";
 		out.push_back(r);
+	} else if (kind == "player") { // Stage 175
+		row("start", *path + "/start", "[x, y]: where the player starts -- under gravity its feet (drag it)");
 	} else if (kind == "camera") { // Stage 164
 		row("start", *path + "/start", "[x, y]: where the camera starts (drag it)");
 		row("smoothing", *path + "/smoothing", "the camera eases after the player", "false", "bool");
@@ -418,7 +438,8 @@ std::vector<Editor::Row> Editor::item_rows() const {
 	}
 	Row keys;
 	keys.kind = Row::Text;
-	keys.label = kind == "goal" || kind == "camera" ? "Delete: remove the " + kind + "; arrows: move it" : "Delete: remove; ctrl+D: duplicate; arrows: move";
+	keys.label = kind == "player" ? "arrows: move it; ctrl+click: select it with others"
+			: kind == "goal" || kind == "camera" ? "Delete: remove the " + kind + "; arrows: move it" : "Delete: remove; ctrl+D: duplicate; arrows: move";
 	out.push_back(keys);
 	return out;
 }
@@ -435,9 +456,11 @@ json Editor::item_op(const std::string &o, const json &cmd) {
 	const auto [kind, name] = split(item);
 	const json::json_pointer ptr(*path);
 	if (o == "select") {
-		selected_.clear();
-		item_ = item;
+		set_selection({item});
 		return {};
+	}
+	if (kind == "player" && o != "move") {
+		refuse("the player's start is one: it is moved, never " + std::string(o == "remove" ? "removed" : o == "duplicate" ? "duplicated" : "renamed"));
 	}
 	if (o == "remove") {
 		json freed = doc_["elements"];
@@ -508,7 +531,7 @@ json Editor::item_op(const std::string &o, const json &cmd) {
 		translate_item(copy, by[0].get<double>(), by[1].get<double>());
 		const size_t at = std::stoul(ptr.back()) + 1;
 		change([&](json &d) { d["colliders"].insert(d["colliders"].begin() + long(at), copy); });
-		item_ = "collider:" + std::to_string(at);
+		set_selection({"collider:" + std::to_string(at)});
 		return {{"item", item_}};
 	}
 	const char *list = kind == "detector" ? "detectors" : kind == "carrier" ? "carriers" : "objects";
@@ -520,7 +543,7 @@ json Editor::item_op(const std::string &o, const json &cmd) {
 		const json by = cmd.value("by", jpoint(20.0, 20.0));
 		translate_item(copy, by[0].get<double>(), by[1].get<double>());
 		change([&](json &d) { d[list].insert(d[list].begin() + long(std::stoul(ptr.back())) + 1, copy); });
-		item_ = kind + ":" + nn;
+		set_selection({kind + ":" + nn});
 		return {{"item", item_}};
 	}
 	if (o == "rename") {
@@ -561,6 +584,386 @@ json Editor::item_op(const std::string &o, const json &cmd) {
 			}
 		});
 		return {{"item", item_}};
+	}
+	refuse("unknown op '" + o + "'");
+}
+
+// ---------------------------------------------------------------- Stage 175: the selection
+
+std::vector<std::string> Editor::selection() const {
+	if (!group_.empty()) {
+		return group_;
+	}
+	if (!selected_.empty()) {
+		return {"element:" + selected_};
+	}
+	if (!item_.empty()) {
+		return {item_};
+	}
+	return {};
+}
+
+void Editor::set_selection(std::vector<std::string> entries) {
+	std::vector<std::string> once;
+	for (std::string &e : entries) {
+		if (std::find(once.begin(), once.end(), e) == once.end()) {
+			once.push_back(std::move(e));
+		}
+	}
+	selected_.clear();
+	item_.clear();
+	group_.clear();
+	if (once.size() == 1) {
+		if (once[0].rfind("element:", 0) == 0) {
+			selected_ = once[0].substr(8);
+		} else {
+			item_ = once[0];
+		}
+	} else if (once.size() > 1) {
+		group_ = std::move(once);
+	}
+}
+
+bool Editor::exists(const std::string &entry) const {
+	return entry.rfind("element:", 0) == 0 ? index_of(entry.substr(8)) >= 0 : item_path(entry).has_value();
+}
+
+// Scales the entries' geometry in doc: every point about (ax, ay) by (sx, sy), then by (bx, by), onto the grid
+// (step; 0: float32 as it is). A rectangle stays one (its corners), a circle's radius scales by the mean factor
+// (to whole units), a portal's displacement and a motion's offsets by the factors.
+void Editor::scale(json &doc, const std::vector<std::string> &entries, const Scale &t, double step) const {
+	auto snapped = [&](double v) { return step > 0 ? std::round(v / step) * step : double(float(v)); };
+	auto map = [&](json &p) {
+		if (is_point(p)) {
+			p = jpoint(snapped(t.ax + (p[0].get<double>() - t.ax) * t.sx + t.bx), snapped(t.ay + (p[1].get<double>() - t.ay) * t.sy + t.by));
+		}
+	};
+	auto radius = [&](json &r) {
+		if (r.is_number()) {
+			const double v = r.get<double>() * std::sqrt(std::abs(t.sx * t.sy));
+			r = step > 0 ? std::max(1.0, std::round(v)) : double(float(v)); // (whole units: a radius is no point on the grid)
+		}
+	};
+	auto circle = [&](json &c) {
+		if (is_circle(c)) {
+			map(c["center"]);
+			radius(c["radius"]);
+		}
+	};
+	auto region = [&](json &reg) {
+		if (reg.contains("rect") && is_rect(reg["rect"])) {
+			json &r = reg["rect"];
+			json a = jpoint(r[0].get<double>(), r[1].get<double>()), b = jpoint(r[0].get<double>() + r[2].get<double>(), r[1].get<double>() + r[3].get<double>());
+			map(a);
+			map(b);
+			const double x0 = a[0].get<double>(), y0 = a[1].get<double>(), x1 = b[0].get<double>(), y1 = b[1].get<double>();
+			r = json::array({std::min(x0, x1), std::min(y0, y1), std::abs(x1 - x0), std::abs(y1 - y0)});
+		}
+		if (reg.contains("circle")) {
+			circle(reg["circle"]);
+		}
+	};
+	for (const std::string &entry : entries) {
+		if (entry.rfind("element:", 0) == 0) {
+			const int i = index_in(doc, "elements", entry.substr(8));
+			if (i < 0) {
+				continue;
+			}
+			json &e = doc["elements"][size_t(i)];
+			json &g = e.value("kind", "") == "raw" && e.contains("surface") && e["surface"].is_object() ? e["surface"] : e;
+			for (const char *k : {"start", "end", "via"}) {
+				if (g.contains(k)) {
+					map(g[k]);
+				}
+			}
+			for (const char *k : {"from", "to"}) { // (on a carrier: projected onto it)
+				if (e.contains(k)) {
+					map(e[k]);
+				}
+			}
+			if (g.contains("circle")) {
+				circle(g["circle"]);
+			}
+			if (e.value("kind", "") == "portal" && is_point(e.value("d", json()))) { // the image's displacement
+				const json d = e["d"];
+				e["d"] = jpoint(snapped(d[0].get<double>() * t.sx), snapped(d[1].get<double>() * t.sy));
+			}
+			if (e.contains("motion") && e["motion"].is_object()) {
+				json &m = e["motion"];
+				if (m.contains("pivot")) {
+					map(m["pivot"]);
+				}
+				if (m.value("keys", json()).is_array()) {
+					for (json &k : m["keys"]) {
+						if (k.is_array() && k.size() == 4 && k[1].is_number() && k[2].is_number()) {
+							k[1] = double(float(k[1].get<double>() * t.sx));
+							k[2] = double(float(k[2].get<double>() * t.sy));
+						}
+					}
+				}
+			}
+			continue;
+		}
+		const std::optional<std::string> path = item_path(entry);
+		const json::json_pointer ptr(path ? *path : "/none");
+		if (!path || !doc.contains(ptr)) {
+			continue;
+		}
+		json &j = doc[ptr];
+		const std::string kind = split(entry).first;
+		if (kind == "goal") {
+			region(j);
+		} else if (kind == "detector") {
+			if (j.contains("region") && j["region"].is_object()) {
+				region(j["region"]);
+			}
+			if (j.contains("segment") && j["segment"].is_object()) {
+				map(j["segment"]["a"]);
+				map(j["segment"]["b"]);
+			}
+		} else if (kind == "object") {
+			if (j.contains("circle")) {
+				circle(j["circle"]);
+			}
+		} else if (kind == "carrier") {
+			if (j.contains("line") && j["line"].is_object()) {
+				map(j["line"]["a"]);
+				map(j["line"]["b"]);
+			}
+			if (j.contains("circle")) {
+				circle(j["circle"]);
+			}
+		} else {
+			for (const char *k : {"a", "b", "start"}) { // a collider's ends, the camera's start
+				if (j.contains(k)) {
+					map(j[k]);
+				}
+			}
+		}
+	}
+}
+
+// The clipboard: the entries' JSON by where it goes ({"elements": [...], "detectors": [...], ...}) and their box. An
+// element on a carrier not copied with it is copied as its own geometry.
+json Editor::copied(const std::vector<std::string> &entries) const {
+	json clip = json::object();
+	std::vector<std::string> carriers;
+	for (const std::string &e : entries) {
+		if (e.rfind("carrier:", 0) == 0) {
+			carriers.push_back(e.substr(8));
+		}
+	}
+	for (const std::string &entry : entries) {
+		if (entry.rfind("element:", 0) == 0) {
+			const int i = index_of(entry.substr(8));
+			if (i < 0) {
+				continue;
+			}
+			json e = doc_["elements"][size_t(i)];
+			if (e.contains("carrier") && std::find(carriers.begin(), carriers.end(), e.value("carrier", "")) == carriers.end()) {
+				e = off_carrier(e, doc_);
+			}
+			clip["elements"].push_back(std::move(e));
+			continue;
+		}
+		const std::optional<std::string> path = item_path(entry);
+		if (!path) {
+			continue;
+		}
+		const std::string kind = split(entry).first;
+		const json &j = doc_[json::json_pointer(*path)];
+		if (kind == "goal" || kind == "camera" || kind == "player") {
+			clip[kind] = j;
+		} else {
+			clip[kind == "detector" ? "detectors" : kind == "object" ? "objects" : kind == "carrier" ? "carriers" : "colliders"].push_back(j);
+		}
+	}
+	if (const std::optional<Box> b = box_of(entries)) {
+		clip["box"] = json::array({b->x0, b->y0, b->x1, b->y1});
+	}
+	return clip;
+}
+
+// Pastes the clipboard into doc, moved by (dx, dy): fresh names (the buttons, flags and carriers among the pasted
+// follow their own), the goal and the camera only where the level has none.
+std::vector<std::string> Editor::paste(json &doc, const json &clip, double dx, double dy) {
+	std::vector<std::string> out;
+	std::vector<std::pair<std::string, std::string>> renamed_elements, renamed_carriers, renamed_detectors, renamed_objects;
+	auto rename = [](const std::vector<std::pair<std::string, std::string>> &m, const std::string &n) {
+		for (const auto &[from, to] : m) {
+			if (from == n) {
+				return to;
+			}
+		}
+		return n;
+	};
+	auto base_of = [](const std::string &name) { return name.find('_') != std::string::npos ? name.substr(0, name.rfind('_')) : name; };
+	auto add_list = [&](const char *list, const char *kind, std::vector<std::pair<std::string, std::string>> *names) {
+		if (!clip.contains(list)) {
+			return;
+		}
+		if (!doc.contains(list) || !doc[list].is_array()) {
+			doc[list] = json::array();
+		}
+		for (json j : clip[list]) {
+			if (names != nullptr) {
+				const std::string from = j.value("name", "");
+				const std::string to = fresh(doc, list, base_of(from.empty() ? std::string(kind) : from));
+				names->push_back({from, to});
+				j["name"] = to;
+				out.push_back(std::string(kind) + ":" + to);
+			} else {
+				out.push_back(std::string(kind) + ":" + std::to_string(doc[list].size()));
+			}
+			doc[list].push_back(std::move(j));
+		}
+	};
+	add_list("carriers", "carrier", &renamed_carriers);
+	add_list("detectors", "detector", &renamed_detectors);
+	add_list("objects", "object", &renamed_objects);
+	add_list("colliders", "collider", nullptr);
+	for (const char *k : {"goal", "camera", "player"}) {
+		const bool has = std::string(k) == "goal" ? doc.contains("objective") && doc["objective"].is_object() && doc["objective"].contains("goal")
+												  : doc.contains(k);
+		if (clip.contains(k) && !has) {
+			(std::string(k) == "goal" ? doc["objective"]["goal"] : doc[k]) = clip[k];
+			out.push_back(k);
+		}
+	}
+	if (clip.contains("elements")) {
+		for (const json &e : clip["elements"]) {
+			const std::string from = e.value("name", "");
+			std::string to;
+			for (int n = 1;; n++) { // (fresh_name's spelling, in doc)
+				to = e.value("kind", "element") + "_" + std::to_string(n);
+				if (index_in(doc, "elements", to) < 0 && std::none_of(renamed_elements.begin(), renamed_elements.end(), [&](const auto &p) { return p.second == to; })) {
+					break;
+				}
+			}
+			renamed_elements.push_back({from, to});
+		}
+		for (size_t k = 0; k < clip["elements"].size(); k++) {
+			json e = clip["elements"][k];
+			e["name"] = renamed_elements[k].second;
+			if (e.value("opens", json()).is_string()) {
+				e["opens"] = rename(renamed_elements, e["opens"].get<std::string>());
+			}
+			if (e.value("carrier", json()).is_string()) {
+				e["carrier"] = rename(renamed_carriers, e["carrier"].get<std::string>());
+			}
+			if (e.value("flag", json()).is_string()) { // door:<name>, det:<name> of the pasted
+				const std::string f = e["flag"].get<std::string>();
+				if (f.rfind("door:", 0) == 0) {
+					e["flag"] = "door:" + rename(renamed_elements, f.substr(5));
+				} else if (f.rfind("det:", 0) == 0) {
+					e["flag"] = "det:" + rename(renamed_detectors, f.substr(4));
+				}
+			}
+			doc["elements"].push_back(std::move(e));
+			out.push_back("element:" + renamed_elements[k].second);
+		}
+	}
+	// (the item paths are doc_'s: doc is doc_ inside change())
+	Scale t;
+	t.bx = dx;
+	t.by = dy;
+	scale(doc, out, t, 0.0);
+	return out;
+}
+
+// An op on what is selected ({"selection": true}): move, scale, remove, duplicate, copy, cut.
+json Editor::selection_op(const std::string &o, const json &cmd) {
+	if (mode_ == Mode::Play && o != "copy") {
+		refuse("playing: stop first");
+	}
+	const std::vector<std::string> sel = selection();
+	if (sel.empty()) {
+		refuse("nothing selected");
+	}
+	if (o == "move") {
+		const json by = cmd.at("by");
+		Scale t;
+		t.bx = by[0].get<double>();
+		t.by = by[1].get<double>();
+		change([&](json &d) { scale(d, sel, t, 0.0); });
+		return {};
+	}
+	if (o == "scale") {
+		const json s = cmd.at("by");
+		const std::optional<Box> b = box_of(sel);
+		if (!b) {
+			refuse("the selection has no geometry");
+		}
+		Scale t;
+		t.sx = s.is_array() ? s[0].get<double>() : s.get<double>();
+		t.sy = s.is_array() ? s[1].get<double>() : s.get<double>();
+		if (!(t.sx > 0 && t.sy > 0)) {
+			refuse("scale: positive factors expected");
+		}
+		const json about = cmd.value("about", jpoint((b->x0 + b->x1) / 2, (b->y0 + b->y1) / 2));
+		t.ax = about[0].get<double>();
+		t.ay = about[1].get<double>();
+		const double step = cmd.value("snap", true) ? (grid_ ? 10.0 : 1.0) : 0.0;
+		change([&](json &d) { scale(d, sel, t, step); });
+		return {};
+	}
+	if (o == "copy" || o == "cut") {
+		clipboard_ = copied(sel);
+		if (o == "cut") {
+			selection_op("remove", cmd);
+		}
+		return {{"copied", sel.size()}};
+	}
+	if (o == "duplicate") {
+		const json clip = copied(sel);
+		const json by = cmd.value("by", jpoint(20.0, 20.0));
+		std::vector<std::string> made;
+		change([&](json &d) { made = paste(d, clip, by[0].get<double>(), by[1].get<double>()); });
+		set_selection(made);
+		return {{"selection", made}};
+	}
+	if (o == "remove") {
+		json freed = doc_["elements"];
+		for (const std::string &e : sel) { // a carrier's elements keep their places, as their own geometry
+			if (e.rfind("carrier:", 0) == 0) {
+				for (json &x : freed) {
+					if (x.is_object() && x.value("carrier", json()) == e.substr(8)) {
+						x = off_carrier(x, doc_);
+					}
+				}
+			}
+		}
+		auto picked = [&](const std::string &e) { return std::find(sel.begin(), sel.end(), e) != sel.end(); };
+		change([&](json &d) {
+			d["elements"] = freed;
+			auto keep = [&](const char *list, const char *kind, bool by_index) {
+				if (!d.contains(list) || !d[list].is_array()) {
+					return;
+				}
+				json kept = json::array();
+				for (size_t i = 0; i < d[list].size(); i++) {
+					const json &j = d[list][i];
+					const std::string name = by_index ? std::to_string(i) : j.is_object() ? j.value("name", "") : "";
+					if (!picked(std::string(kind) + ":" + name)) {
+						kept.push_back(j);
+					}
+				}
+				d[list] = kept;
+			};
+			keep("elements", "element", false);
+			keep("detectors", "detector", false);
+			keep("objects", "object", false);
+			keep("carriers", "carrier", false);
+			keep("colliders", "collider", true);
+			if (picked("goal")) {
+				d.erase("objective");
+			}
+			if (picked("camera")) {
+				d.erase("camera");
+			}
+		});
+		set_selection({});
+		return {};
 	}
 	refuse("unknown op '" + o + "'");
 }

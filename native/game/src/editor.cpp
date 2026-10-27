@@ -9,6 +9,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <iterator>
 #include <stdexcept>
 
 namespace rcg {
@@ -190,8 +191,8 @@ void Editor::set_document(json doc, bool clean) {
 	save_requested_ = false;
 	rename_from_.reset();
 	rename_prompt_ = false;
-	selected_.clear();
-	item_.clear();
+	set_selection({});
+	marquee_.reset();
 	clicks_.clear();
 	drag_.reset();
 	focus_.reset();
@@ -330,6 +331,13 @@ void Editor::refresh() {
 	if (!item_.empty() && !item_path(item_)) {
 		item_.clear(); // (an undo took it away)
 	}
+	if (!group_.empty()) { // Stage 175: what is gone leaves the selection
+		std::vector<std::string> kept;
+		std::copy_if(group_.begin(), group_.end(), std::back_inserter(kept), [&](const std::string &e) { return exists(e); });
+		if (kept.size() != group_.size()) {
+			set_selection(kept);
+		}
+	}
 }
 
 Editor::Status Editor::status() const {
@@ -379,6 +387,51 @@ json Editor::op(const json &cmd) {
 		}
 		return i;
 	};
+	if (cmd.value("selection", false) && (o == "move" || o == "scale" || o == "remove" || o == "duplicate" || o == "copy" || o == "cut")) {
+		return selection_op(o, cmd); // Stage 175: what is selected, one or several
+	}
+	if (o == "copy" || o == "cut") {
+		return selection_op(o, cmd);
+	}
+	if (o == "paste") { // Stage 175: the clipboard, its box's center at "at" (a grid step's multiple away), else 20, 20 on
+		editing();
+		if (clipboard_.is_null()) {
+			refuse("nothing copied");
+		}
+		double dx = 20, dy = 20;
+		if (cmd.contains("at") && clipboard_.contains("box")) {
+			const json &b = clipboard_["box"];
+			const double step = grid_ ? 10.0 : 1.0;
+			dx = std::round((cmd["at"][0].get<double>() - (b[0].get<double>() + b[2].get<double>()) / 2) / step) * step;
+			dy = std::round((cmd["at"][1].get<double>() - (b[1].get<double>() + b[3].get<double>()) / 2) / step) * step;
+		}
+		std::vector<std::string> made;
+		change([&](json &d) { made = paste(d, clipboard_, dx, dy); });
+		if (made.empty()) {
+			refuse("nothing to paste here (the level has its goal and camera)");
+		}
+		set_selection(made);
+		return {{"selection", made}};
+	}
+	if (o == "select" && (cmd.contains("group") || cmd.contains("rect"))) { // Stage 175: several
+		std::vector<std::string> sel = cmd.value("add", false) ? selection() : std::vector<std::string>{};
+		if (cmd.contains("rect")) {
+			const json &r = cmd["rect"];
+			const double x = r[0].get<double>(), y = r[1].get<double>();
+			for (std::string &e : in_rect(V2::of(x, y), V2::of(x + r[2].get<double>(), y + r[3].get<double>()))) {
+				sel.push_back(std::move(e));
+			}
+		} else {
+			for (const json &e : cmd["group"]) {
+				if (!exists(e.get<std::string>())) {
+					refuse("no '" + e.get<std::string>() + "' to select");
+				}
+				sel.push_back(e.get<std::string>());
+			}
+		}
+		set_selection(sel);
+		return {{"selection", selection()}};
+	}
 	if (cmd.contains("item") && (o == "select" || o == "remove" || o == "duplicate" || o == "move" || o == "rename")) {
 		// Stage 148: the goal, a detector, an object; Stage 149: a carrier
 		return item_op(o, cmd); // Stage 148: the goal, a detector, an object
@@ -670,8 +723,7 @@ json Editor::op(const json &cmd) {
 	}
 	if (o == "select") {
 		if (cmd.value("name", json()).is_null()) {
-			selected_.clear();
-			item_.clear();
+			set_selection({});
 		} else {
 			select_element(doc_["elements"][size_t(element("name"))]["name"].get<std::string>());
 		}
@@ -761,6 +813,7 @@ json Editor::op(const json &cmd) {
 		mode_ = Mode::Play;
 		clicks_.clear();
 		drag_.reset();
+		marquee_.reset();
 		const Status s = status();
 		return {{"from", point(s.play_from.x, s.play_from.y)}};
 	}
@@ -777,7 +830,7 @@ json Editor::op(const json &cmd) {
 	if (o == "state") {
 		const Status s = status();
 		return {{"tool", TOOLS[int(tool_)]}, {"kind", kind_}, {"selected", selected_.empty() ? json() : json(selected_)},
-				{"item", item_.empty() ? json() : json(item_)},
+				{"item", item_.empty() ? json() : json(item_)}, {"selection", selection()},
 				{"mode", mode_ == Mode::Play ? "play" : "edit"}, {"dirty", dirty_}, {"errors", s.errors}, {"grid", grid_},
 				{"placing", clicks_.size()}, {"undo", undo_.size()}, {"redo", redo_.size()},
 				{"view", {{"center", point(center_.x, center_.y)}, {"zoom", zoom_}}}, {"focus", focus_ ? json(focus_->key) : json()},

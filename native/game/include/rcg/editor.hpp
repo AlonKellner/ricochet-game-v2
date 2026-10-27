@@ -119,7 +119,25 @@ private:
 	void drag_item(const V2 &screen, unsigned mods);
 	std::vector<Row> item_rows() const;
 	nlohmann::json item_op(const std::string &op, const nlohmann::json &cmd);
-	void select_element(const std::string &name) { selected_ = name; item_.clear(); }
+	void select_element(const std::string &name) { selected_ = name; item_.clear(); group_.clear(); }
+	// Stage 175: the selection -- one element or item, or several (elements as "element:<name>", items as
+	// their names), picked by a marquee or ctrl+click, moved and scaled by their box, copied and pasted
+	struct Box {
+		double x0 = 0, y0 = 0, x1 = 0, y1 = 0;
+	};
+	struct Scale { // p -> about + (sx, sy) (p - about) + by
+		double ax = 0, ay = 0, sx = 1, sy = 1, bx = 0, by = 0;
+	};
+	std::vector<std::string> selection() const;
+	void set_selection(std::vector<std::string> entries);
+	bool exists(const std::string &entry) const;
+	std::optional<Box> box_of(const std::vector<std::string> &entries) const; // their bounds (world)
+	std::vector<std::string> in_rect(const V2 &a, const V2 &b) const;        // what lies wholly inside (world corners)
+	void scale(nlohmann::json &doc, const std::vector<std::string> &entries, const Scale &t, double step) const; // step 0: no grid
+	nlohmann::json selection_op(const std::string &op, const nlohmann::json &cmd);
+	nlohmann::json copied(const std::vector<std::string> &entries) const;    // the clipboard's content
+	std::vector<std::string> paste(nlohmann::json &doc, const nlohmann::json &clip, double dx, double dy); // the pasted entries
+	void drag_group(const V2 &screen, unsigned mods);
 	nlohmann::json kinds() const; // kind -> template (builtin and the level's)
 	std::vector<std::string> palette() const; // the kinds in the palette's order (builtin by priority, then the level's)
 	nlohmann::json op(const nlohmann::json &cmd); // throws std::runtime_error / LevelError
@@ -173,6 +191,13 @@ private:
 	bool grid_ = true;
 	std::string selected_;      // an element's name, "" none
 	std::string item_;          // Stage 148: the selected item: "goal", "detector:<name>", "object:<name>"; "" none
+	std::vector<std::string> group_; // Stage 175: several selected (then selected_ and item_ are empty)
+	std::optional<V2> marquee_;      // ... the marquee's first corner (screen) while it is dragged
+	std::vector<std::string> marquee_keep_; // ... what stays selected with it (ctrl held)
+	nlohmann::json group_from_;      // ... the document when the box's drag began
+	Box box_from_;                   // ... the box then
+	V2 press_;                       // ... the press (world)
+	nlohmann::json clipboard_;       // ... what ctrl+C copied (kept across levels; null: nothing)
 	std::vector<Error> errors_;
 	std::vector<Drawn> drawn_;  // per element
 	Drawn edges_drawn_;         // Stage 169: the configured edges (none: they pass)

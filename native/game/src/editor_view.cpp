@@ -340,6 +340,18 @@ std::vector<Editor::Handle> Editor::handles() const {
 	for (Handle &h : item_handles()) {
 		out.push_back(std::move(h));
 	}
+	// Stage 175: several selected -- their box's corners (scale) and sides' middles (stretch)
+	if (group_.size() > 1) {
+		if (const std::optional<Box> b = box_of(group_)) {
+			const double mx = (b->x0 + b->x1) / 2, my = (b->y0 + b->y1) / 2;
+			const V2 at[8] = {V2::of(b->x0, b->y0), V2::of(b->x1, b->y0), V2::of(b->x1, b->y1), V2::of(b->x0, b->y1),
+				V2::of(mx, b->y0), V2::of(b->x1, my), V2::of(mx, b->y1), V2::of(b->x0, my)};
+			static const char *const KIND[8] = {"box:0", "box:1", "box:2", "box:3", "box:n", "box:e", "box:s", "box:w"};
+			for (int k = 0; k < 8; k++) {
+				out.push_back({"", KIND[k], at[k], ""});
+			}
+		}
+	}
 	if (doc_.contains("player") && doc_["player"].is_object() && is_point(doc_["player"].value("start", json()))) {
 		out.push_back({"", "player", pt(doc_["player"]["start"]), ""});
 	}
@@ -384,6 +396,146 @@ int Editor::element_at(const V2 &screen) const {
 		}
 	}
 	return best;
+}
+
+// Stage 175: the bounds of what is selected (world): an element's drawn surfaces (an arc's extremes), an item's
+// region, segment, circle or point; a line carrier has none.
+std::optional<Editor::Box> Editor::box_of(const std::vector<std::string> &entries) const {
+	Box b{1e300, 1e300, -1e300, -1e300};
+	bool any = false;
+	auto add = [&](double x, double y) {
+		b.x0 = std::min(b.x0, x);
+		b.y0 = std::min(b.y0, y);
+		b.x1 = std::max(b.x1, x);
+		b.y1 = std::max(b.y1, y);
+		any = true;
+	};
+	auto seg = [&](const rc::arc::SegGeom &s) {
+		if (s.is_line()) {
+			add(s.s.x, s.s.y);
+			add(s.e.x, s.e.y);
+			return;
+		}
+		const rc::arc::GeneralizedCircle &g = s.get_carrier();
+		const V2 c = rc::arc::center_of(g);
+		const double r = g.radius();
+		if (s.full) {
+			add(double(c.x) - r, double(c.y) - r);
+			add(double(c.x) + r, double(c.y) + r);
+			return;
+		}
+		add(s.s.x, s.s.y);
+		add(s.e.x, s.e.y);
+		add(s.v.x, s.v.y);
+		if (r > rc::arc::MAX_ARC_RADIUS) {
+			return;
+		}
+		const double a0 = std::atan2(double(s.s.y) - c.y, double(s.s.x) - c.x);
+		const double am = wrap_angle(std::atan2(double(s.v.y) - c.y, double(s.v.x) - c.x) - a0);
+		const double a1 = wrap_angle(std::atan2(double(s.e.y) - c.y, double(s.e.x) - c.x) - a0);
+		const double span = am < a1 ? a1 : a1 - TAU;
+		for (int k = 0; k < 4; k++) { // the circle's extremes the arc passes
+			const double d = wrap_angle(TAU * k / 4 - a0);
+			if (span > 0 ? d <= span : d >= TAU + span) {
+				add(double(c.x) + r * std::cos(TAU * k / 4), double(c.y) + r * std::sin(TAU * k / 4));
+			}
+		}
+	};
+	auto point = [&](const json &p) {
+		if (is_point(p)) {
+			add(p[0].get<double>(), p[1].get<double>());
+		}
+	};
+	auto circle = [&](const json &c) {
+		if (c.is_object() && is_point(c.value("center", json())) && c.value("radius", json()).is_number()) {
+			const double x = c["center"][0].get<double>(), y = c["center"][1].get<double>(), r = c["radius"].get<double>();
+			add(x - r, y - r);
+			add(x + r, y + r);
+		}
+	};
+	auto region = [&](const json &reg) {
+		if (!reg.is_object()) {
+			return;
+		}
+		const json &r = reg.value("rect", json());
+		if (r.is_array() && r.size() == 4) {
+			add(r[0].get<double>(), r[1].get<double>());
+			add(r[0].get<double>() + r[2].get<double>(), r[1].get<double>() + r[3].get<double>());
+		}
+		circle(reg.value("circle", json()));
+	};
+	for (const std::string &entry : entries) {
+		if (entry.rfind("element:", 0) == 0) {
+			const int i = index_of(entry.substr(8));
+			if (i >= 0 && size_t(i) < drawn_.size()) {
+				for (const BuiltSurface &s : drawn_[size_t(i)].built) {
+					seg(s.seg);
+				}
+				for (const rc::arc::SegGeom &s : drawn_[size_t(i)].broken) {
+					seg(s);
+				}
+			}
+			continue;
+		}
+		const std::optional<std::string> path = item_path(entry);
+		if (!path) {
+			continue;
+		}
+		const json &j = doc_[json::json_pointer(*path)];
+		const std::string kind = entry.substr(0, entry.find(':'));
+		if (kind == "goal") {
+			region(j);
+		} else if (kind == "detector") {
+			region(j.value("region", json()));
+			if (j.contains("segment") && j["segment"].is_object()) {
+				point(j["segment"].value("a", json()));
+				point(j["segment"].value("b", json()));
+			}
+		} else if (kind == "object" || kind == "carrier") {
+			circle(j.value("circle", json()));
+		} else {
+			for (const char *k : {"a", "b", "start"}) {
+				point(j.value(k, json()));
+			}
+		}
+	}
+	return any ? std::optional<Box>(b) : std::nullopt;
+}
+
+// Stage 175: what lies wholly inside a rectangle (world corners): the elements, the goal, detectors, objects,
+// colliders, the camera's start and the player's (not the carriers, which run across the level)
+std::vector<std::string> Editor::in_rect(const V2 &a, const V2 &b) const {
+	const double x0 = std::min(a.x, b.x), y0 = std::min(a.y, b.y), x1 = std::max(a.x, b.x), y1 = std::max(a.y, b.y);
+	std::vector<std::string> candidates, out;
+	for (const json &e : doc_["elements"]) {
+		if (e.is_object() && e.contains("name")) {
+			candidates.push_back("element:" + e.value("name", ""));
+		}
+	}
+	candidates.push_back("goal");
+	for (const char *list : {"detectors", "objects"}) {
+		if (doc_.contains(list) && doc_[list].is_array()) {
+			for (const json &j : doc_[list]) {
+				if (j.is_object()) {
+					candidates.push_back(std::string(list == std::string("detectors") ? "detector:" : "object:") + j.value("name", ""));
+				}
+			}
+		}
+	}
+	if (doc_.contains("colliders") && doc_["colliders"].is_array()) {
+		for (size_t i = 0; i < doc_["colliders"].size(); i++) {
+			candidates.push_back("collider:" + std::to_string(i));
+		}
+	}
+	candidates.push_back("camera");
+	candidates.push_back("player");
+	for (const std::string &c : candidates) {
+		const std::optional<Box> k = exists(c) ? box_of({c}) : std::nullopt;
+		if (k && k->x0 >= x0 && k->y0 >= y0 && k->x1 <= x1 && k->y1 <= y1) {
+			out.push_back(c);
+		}
+	}
+	return out;
 }
 
 // A point placed at the pointer: another handle's point exactly (the same
@@ -634,7 +786,63 @@ void Editor::place(const json &p, unsigned) {
 	hint_ = r.value("ok", false) ? "placed " + r.value("name", std::string()) : r.value("error", std::string());
 }
 
+// Stage 175: several dragged -- a member moves them all by whole grid steps (their shapes kept); a box corner
+// scales them about the opposite one (uniformly; shift: each axis free), a side's middle stretches them from the
+// opposite side, their points onto the grid. Each step starts again from the document at the press.
+void Editor::drag_group(const V2 &screen, unsigned mods) {
+	const double step = (mods & ModAlt) ? 0.0 : grid_ ? 10.0 : 1.0;
+	const V2 w = to_world(screen);
+	double px = w.x, py = w.y;
+	const std::string &k = drag_->kind;
+	Scale t;
+	double onto = step;
+	if (k == "group") {
+		t.bx = px - press_.x;
+		t.by = py - press_.y;
+		if (step > 0) {
+			t.bx = std::round(t.bx / step) * step;
+			t.by = std::round(t.by / step) * step;
+		}
+		onto = 0.0;
+	} else {
+		if (step > 0) {
+			px = std::round(px / step) * step;
+			py = std::round(py / step) * step;
+		}
+		const Box &b = box_from_;
+		const double least = std::max(step, 1.0); // (the box keeps a grid step)
+		auto factor = [&](double p, double o, double c) { return c == o ? 1.0 : std::max((p - o) / (c - o), least / std::abs(c - o)); };
+		const char c = k.back();
+		if (c >= '0' && c <= '3') {
+			const int n = c - '0';
+			const double cx = (n == 1 || n == 2) ? b.x1 : b.x0, cy = n >= 2 ? b.y1 : b.y0;
+			const double ox = (n == 1 || n == 2) ? b.x0 : b.x1, oy = n >= 2 ? b.y0 : b.y1;
+			t.ax = ox;
+			t.ay = oy;
+			t.sx = factor(px, ox, cx);
+			t.sy = factor(py, oy, cy);
+			if (!(mods & ModShift)) {
+				t.sx = t.sy = cx == ox ? t.sy : cy == oy ? t.sx : std::max(t.sx, t.sy);
+			}
+		} else if (c == 'n' || c == 's') {
+			t.ay = c == 'n' ? b.y1 : b.y0;
+			t.sy = factor(py, t.ay, c == 'n' ? b.y0 : b.y1);
+		} else {
+			t.ax = c == 'w' ? b.x1 : b.x0;
+			t.sx = factor(px, t.ax, c == 'w' ? b.x0 : b.x1);
+		}
+	}
+	doc_ = group_from_;
+	scale(doc_, group_, t, onto);
+	drag_changed_ = canonical(doc_) != canonical(group_from_);
+	refresh();
+}
+
 void Editor::drag_to(const V2 &screen, unsigned mods) {
+	if (drag_->kind == "group" || drag_->kind.rfind("box:", 0) == 0) {
+		drag_group(screen, mods);
+		return;
+	}
 	if (!drag_->item.empty()) {
 		drag_item(screen, mods);
 		return;
@@ -735,6 +943,19 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 		if (panning_ && (buttons & (BtnMiddle | BtnLeft))) {
 			panning_ = false;
 		}
+		if (marquee_ && (buttons & BtnLeft)) { // Stage 175: what the marquee holds is selected
+			const V2 a = *marquee_;
+			marquee_.reset();
+			if (std::abs(double(a.x) - x) >= 3 || std::abs(double(a.y) - y) >= 3) {
+				std::vector<std::string> sel = marquee_keep_;
+				for (std::string &e : in_rect(to_world(a), to_world(mouse_))) {
+					sel.push_back(std::move(e));
+				}
+				set_selection(sel);
+				hint_ = std::to_string(selection().size()) + " selected";
+			}
+			return;
+		}
 		if (drag_ && (buttons & BtnLeft)) {
 			if (drag_changed_) {
 				redo_.clear();
@@ -772,8 +993,8 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 		if (!clicks_.empty()) {
 			clicks_.clear();
 		} else {
-			selected_.clear();
-			item_.clear();
+			marquee_.reset();
+			set_selection({});
 		}
 		return;
 	}
@@ -782,27 +1003,59 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 	}
 	switch (tool_) {
 		case Tool::Select: {
+			// Stage 175: what is under the pointer, as a selection entry
+			const int under = element_at(mouse_);
+			const std::string entry = under >= 0 ? "element:" + doc_["elements"][size_t(under)].value("name", "") : item_at(mouse_);
+			if (mods & ModCtrl) { // ctrl (command) + click: add it to the selection or take it out; on nothing, a marquee that adds
+				if (entry.empty()) {
+					marquee_ = mouse_;
+					marquee_keep_ = selection();
+					return;
+				}
+				std::vector<std::string> sel = selection();
+				const auto at = std::find(sel.begin(), sel.end(), entry);
+				if (at != sel.end()) {
+					sel.erase(at);
+				} else {
+					sel.push_back(entry);
+				}
+				set_selection(sel);
+				hint_ = std::to_string(selection().size()) + " selected";
+				return;
+			}
 			std::optional<Handle> h = handle_at(mouse_);
+			if ((!h || h->kind == "player") && !entry.empty() && std::find(group_.begin(), group_.end(), entry) != group_.end()) {
+				h = Handle{"", "group", to_world(mouse_), ""}; // a member: they all move
+			}
+			if (h && (h->kind == "group" || h->kind.rfind("box:", 0) == 0)) {
+				undo_.push_back(doc_);
+				group_from_ = doc_;
+				box_from_ = box_of(group_).value_or(Box{});
+				press_ = to_world(mouse_);
+				drag_ = h;
+				drag_changed_ = false;
+				return;
+			}
 			if (!h) {
-				const int i = element_at(mouse_);
-				if (i >= 0) {
-					select_element(doc_["elements"][size_t(i)].value("name", ""));
+				if (under >= 0) {
+					select_element(doc_["elements"][size_t(under)].value("name", ""));
 					h = Handle{selected_, "body", to_world(mouse_), ""};
 				} else {
 					// Stage 148: an item (the goal, a detector, an object) under the pointer
-					const std::string it = item_at(mouse_);
-					selected_.clear();
-					item_ = it;
-					if (it.empty()) {
+					set_selection(entry.empty() ? std::vector<std::string>{} : std::vector<std::string>{entry});
+					if (entry.empty()) {
+						marquee_ = mouse_; // Stage 175: on nothing, a marquee
+						marquee_keep_.clear();
 						return;
 					}
-					h = Handle{*item_path(it), "body", to_world(mouse_), it};
+					h = Handle{*item_path(entry), "body", to_world(mouse_), entry};
 				}
 			} else if (!h->item.empty()) {
-				selected_.clear();
-				item_ = h->item;
+				set_selection({h->item});
 			} else if (!h->element.empty()) {
 				select_element(h->element);
+			} else if (h->kind == "player") {
+				set_selection({"player"}); // Stage 175: the player's start is selected like an item
 			}
 			undo_.push_back(doc_);
 			drag_ = h;
@@ -918,10 +1171,23 @@ void Editor::key(int code, unsigned mods, bool down) {
 			start_new_prompt(""); // Stage 165
 		} else if (code == KeyLeft || code == KeyRight) {
 			run({{"op", "next_level"}, {"by", code == KeyLeft ? -1 : 1}});
+		} else if (code == 'D' && !group_.empty()) {
+			run({{"op", "duplicate"}, {"selection", true}}); // Stage 175
 		} else if (code == 'D' && !selected_.empty()) {
 			run({{"op", "duplicate"}, {"name", selected_}});
 		} else if (code == 'D' && !item_.empty()) {
 			run({{"op", "duplicate"}, {"item", item_}});
+		} else if (code == 'C' || code == 'X') { // Stage 175: copy, cut
+			const json r = command({{"op", code == 'C' ? "copy" : "cut"}});
+			hint_ = r.value("ok", false) ? std::to_string(r.value("copied", 0)) + (code == 'C' ? " copied" : " cut") : r.value("error", std::string());
+		} else if (code == 'V') { // ... paste: at the pointer over the canvas, else beside the copied
+			json c = {{"op", "paste"}};
+			if (mouse_.x < width_ - PANEL_WIDTH && mouse_.y < height_ - STATUS_HEIGHT) {
+				const V2 w = to_world(mouse_);
+				c["at"] = jpoint(w.x, w.y);
+			}
+			const json r = command(c);
+			hint_ = r.value("ok", false) ? std::to_string(r["selection"].size()) + " pasted" : r.value("error", std::string());
 		}
 		return;
 	}
@@ -943,7 +1209,9 @@ void Editor::key(int code, unsigned mods, bool down) {
 		case 'F': frame_all(); view_touched_ = false; return;
 		case KeyDelete:
 		case KeyBackspace:
-			if (!selected_.empty()) {
+			if (!group_.empty()) {
+				run({{"op", "remove"}, {"selection", true}}); // Stage 175
+			} else if (!selected_.empty()) {
 				run({{"op", "remove"}, {"name", selected_}});
 			} else if (!item_.empty()) {
 				run({{"op", "remove"}, {"item", item_}});
@@ -952,6 +1220,8 @@ void Editor::key(int code, unsigned mods, bool down) {
 		case KeyEscape:
 			if (copy_pick_ || new_prompt_ || rename_prompt_) {
 				copy_pick_ = new_prompt_ = rename_prompt_ = false; // Stage 165, Stage 170
+			} else if (marquee_) {
+				marquee_.reset(); // Stage 175
 			} else if (level_menu_) {
 				level_menu_ = false; // Stage 155
 			} else if (kind_pick_) {
@@ -960,8 +1230,7 @@ void Editor::key(int code, unsigned mods, bool down) {
 			} else if (!clicks_.empty()) {
 				clicks_.clear();
 			} else {
-				selected_.clear();
-				item_.clear();
+				set_selection({});
 			}
 			return;
 		case KeyTab:
@@ -975,11 +1244,13 @@ void Editor::key(int code, unsigned mods, bool down) {
 		case KeyRight:
 		case KeyUp:
 		case KeyDown:
-			if (!selected_.empty() || !item_.empty()) {
+			if (!selected_.empty() || !item_.empty() || !group_.empty()) {
 				const double step = (grid_ ? 10.0 : 1.0) * ((mods & ModShift) ? 10.0 : 1.0);
 				const double dx = code == KeyLeft ? -step : code == KeyRight ? step : 0.0;
 				const double dy = code == KeyUp ? -step : code == KeyDown ? step : 0.0;
-				if (!selected_.empty()) {
+				if (!group_.empty()) {
+					run({{"op", "move"}, {"selection", true}, {"by", jpoint(dx, dy)}}); // Stage 175
+				} else if (!selected_.empty()) {
 					run({{"op", "move"}, {"name", selected_}, {"handle", "body"}, {"by", jpoint(dx, dy)}});
 				} else {
 					run({{"op", "move"}, {"item", item_}, {"handle", "body"}, {"by", jpoint(dx, dy)}});
@@ -1324,6 +1595,15 @@ std::vector<Editor::Row> Editor::rows() const {
 				add({Row::Value, it.key(), value, spec.value("doc", ""), Field{selected_, it.key()}, choice, -1, 0, {}});
 			}
 		}
+	} else if (!group_.empty()) { // Stage 175: several selected
+		add({Row::Header, std::to_string(group_.size()) + " selected", "", "", std::nullopt, "", -1, 0, {}});
+		std::string names;
+		for (const std::string &e : group_) {
+			names += (names.empty() ? "" : ", ") + (e.rfind("element:", 0) == 0 ? e.substr(8) : e);
+		}
+		text_rows(names, Row::Text, -1);
+		text_rows("drag one: move them; a box corner: scale (shift: free), a side: stretch; alt: off the grid", Row::Text, -1);
+		text_rows("ctrl+click: add or drop one; Delete: remove; ctrl+D: duplicate; ctrl+C / X / V: copy, cut, paste; arrows: move", Row::Text, -1);
 	} else if (!item_.empty()) {
 		for (Row r : item_rows()) {
 			add(std::move(r));
@@ -1559,6 +1839,14 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 	Out out{nodes};
 	const float cw = width_ - PANEL_WIDTH, ch = height_ - STATUS_HEIGHT;
 	out.add(L_CANVAS, 0, 0, {rect(V2{0, 0}, V2{cw, ch}, CANVAS)});
+	// what is drawn selected: the selection, and what the marquee holds (Stage 175)
+	std::vector<std::string> lit_entries = selection();
+	if (marquee_) {
+		for (std::string &e : in_rect(to_world(*marquee_), to_world(mouse_))) {
+			lit_entries.push_back(std::move(e));
+		}
+	}
+	auto lit = [&](const std::string &e) { return std::find(lit_entries.begin(), lit_entries.end(), e) != lit_entries.end(); };
 	// the grid: every 10 units when it is 6 px or more, every 50 when it is 6 px or more
 	{
 		std::vector<Call> g;
@@ -1623,7 +1911,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				if (!c.is_object()) {
 					continue;
 				}
-				const bool picked = item_ == "carrier:" + c.value("name", "");
+				const bool picked = lit("carrier:" + c.value("name", ""));
 				const Color col = picked ? rgba(0.6, 0.85, 1.0, 0.9) : CARRIER;
 				V2 label_at;
 				if (c.contains("line") && c["line"].is_object() && is_point(c["line"].value("a", json())) && is_point(c["line"].value("b", json()))) {
@@ -1689,7 +1977,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			g.back().alignment = 1;
 		};
 		if (doc_.contains("objective") && doc_["objective"].is_object()) {
-			region(doc_["objective"].value("goal", json()), GOAL, "goal", item_ == "goal");
+			region(doc_["objective"].value("goal", json()), GOAL, "goal", lit("goal"));
 		}
 		if (doc_.contains("detectors") && doc_["detectors"].is_array()) {
 			for (const json &d : doc_["detectors"]) {
@@ -1697,7 +1985,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 					continue;
 				}
 				const std::string name = d.value("name", "");
-				const bool picked = item_ == "detector:" + name;
+				const bool picked = lit("detector:" + name);
 				if (d.contains("segment") && d["segment"].is_object() && is_point(d["segment"].value("a", json())) && is_point(d["segment"].value("b", json()))) {
 					const V2 a = to_screen(pt(d["segment"]["a"])), b = to_screen(pt(d["segment"]["b"]));
 					if (picked) {
@@ -1729,7 +2017,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 					continue;
 				}
 				const V2 a = to_screen(pt(k["a"])), b = to_screen(pt(k["b"]));
-				if (item_ == "collider:" + std::to_string(i)) {
+				if (lit("collider:" + std::to_string(i))) {
 					g.push_back(line(a, b, SELECT, 9.0));
 				}
 				g.push_back(line(a, b, COLLIDER, 3.0));
@@ -1743,7 +2031,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 		}
 		if (doc_.contains("camera") && doc_["camera"].is_object() && is_point(doc_["camera"].value("start", json()))) {
 			const V2 c = to_screen(pt(doc_["camera"]["start"]));
-			if (item_ == "camera") {
+			if (lit("camera")) {
 				g.push_back(arc(c, 14.0, 0, TAU, SELECT, 9.0));
 			}
 			const V2 p[4] = {V2::of(double(c.x) - 10, double(c.y) - 7), V2::of(double(c.x) + 10, double(c.y) - 7), V2::of(double(c.x) + 10, double(c.y) + 7),
@@ -1762,7 +2050,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				const V2 c = to_screen(pt(o["circle"]["center"]));
 				const double r = o["circle"].value("radius", 16.0) * zoom_;
 				const bool pullable = o.value("kind", "pullable") == "pullable";
-				if (item_ == "object:" + o.value("name", "")) {
+				if (lit("object:" + o.value("name", ""))) {
 					g.push_back(arc(c, r, 0, TAU, SELECT, 9.0));
 				}
 				g.push_back(arc(c, r, 0, TAU, pullable ? OBJECT : GRAY, 2.5));
@@ -1786,8 +2074,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 		out.add(L_SHADOW, 0, 1, {k});
 	}
 	// the elements
-	const int sel = index_of(selected_);
-	const bool hovering = tool_ == Tool::Select && !drag_ && mouse_.x < cw && mouse_.y < ch;
+	const bool hovering = tool_ == Tool::Select && !drag_ && !marquee_ && mouse_.x < cw && mouse_.y < ch;
 	const int hov = hovering ? element_at(mouse_) : -1;
 	std::vector<bool> bad(drawn_.size(), false);
 	for (const Error &e : errors_) {
@@ -1846,7 +2133,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				n = V2{-n.x, -n.y};
 			}
 		};
-		const bool picked = int(i) == sel, hover = int(i) == hov;
+		const bool picked = lit("element:" + doc_["elements"][i].value("name", "")), hover = int(i) == hov;
 		for (const BuiltSurface &b : drawn_[i].built) {
 			if (picked || hover) {
 				stroke(b.seg, picked ? SELECT : HOVER, 9.0, false);
@@ -1938,15 +2225,22 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 		const V2 p = to_screen(pt(doc_["player"]["start"]));
 		const json g = doc_.value("gravity", json::array({0.0, 0.0}));
 		const bool tall = g.is_array() && g.size() == 2 && g[0].is_number() && g[1].is_number() && (g[0].get<double>() != 0.0 || g[1].get<double>() != 0.0);
-		if (tall) { // Stage 173: with gravity the start is where the player stands -- its feet; its head (the origin) above
-			const double r = kinematics::RADIUS * zoom_;
-			const V2 h = V2::of(p.x, double(p.y) - kinematics::BODY * zoom_);
-			out.add(L_PLAYER, 0, 4, {arc(p, r, 0, TAU / 2, GREEN, 2.0), arc(h, r, TAU / 2, TAU, GREEN, 2.0),
-					line(V2::of(double(p.x) - r, p.y), V2::of(double(h.x) - r, h.y), GREEN, 2.0),
-					line(V2::of(double(p.x) + r, p.y), V2::of(double(h.x) + r, h.y), GREEN, 2.0), circle(h, 2.5, GREEN)});
-		} else {
-			out.add(L_PLAYER, 0, 4, {arc(p, kinematics::RADIUS * zoom_, 0, TAU, GREEN, 2.0), circle(p, 2.5, GREEN)});
+		const double r = kinematics::RADIUS * zoom_;
+		const V2 h = tall ? V2::of(p.x, double(p.y) - kinematics::BODY * zoom_) : p;
+		// its outline (Stage 173: with gravity the start is where the player stands -- its feet; its head, the origin, above)
+		auto outline = [&](const Color &c, double w) {
+			if (!tall) {
+				return std::vector<Call>{arc(p, r, 0, TAU, c, w)};
+			}
+			return std::vector<Call>{arc(p, r, 0, TAU / 2, c, w), arc(h, r, TAU / 2, TAU, c, w), line(V2::of(double(p.x) - r, p.y), V2::of(double(h.x) - r, h.y), c, w),
+				line(V2::of(double(p.x) + r, p.y), V2::of(double(h.x) + r, h.y), c, w)};
+		};
+		std::vector<Call> pc = lit("player") ? outline(SELECT, 9.0) : std::vector<Call>{}; // (Stage 175: selected)
+		for (Call &c : outline(GREEN, 2.0)) {
+			pc.push_back(std::move(c));
 		}
+		pc.push_back(circle(h, 2.5, GREEN));
+		out.add(L_PLAYER, 0, 4, std::move(pc));
 	}
 	// a placement under way, and where the pointer snaps
 	{
@@ -1981,6 +2275,25 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				}
 			} else if (!pts.empty()) {
 				pv.push_back(dashed(pts.back(), at, ACCENT, 1.0, 6.0));
+			}
+		}
+		// Stage 175: the box of several selected, and the marquee being dragged
+		if (group_.size() > 1) {
+			if (const std::optional<Box> b = box_of(group_)) {
+				const V2 a = to_screen(V2::of(b->x0, b->y0)), z = to_screen(V2::of(b->x1, b->y1));
+				const V2 p[4] = {a, V2{z.x, a.y}, z, V2{a.x, z.y}};
+				for (int k = 0; k < 4; k++) {
+					pv.push_back(dashed(p[k], p[(k + 1) % 4], SELECT, 1.0, 6.0));
+				}
+			}
+		}
+		if (marquee_) {
+			const V2 a = *marquee_;
+			pv.push_back(rect(V2::of(std::min(a.x, mouse_.x), std::min(a.y, mouse_.y)), V2::of(std::abs(double(mouse_.x) - a.x), std::abs(double(mouse_.y) - a.y)),
+					rgba(1.0, 0.8, 0.3, 0.08)));
+			const V2 p[4] = {a, V2{mouse_.x, a.y}, mouse_, V2{a.x, mouse_.y}};
+			for (int k = 0; k < 4; k++) {
+				pv.push_back(dashed(p[k], p[(k + 1) % 4], ACCENT, 1.0, 6.0));
 			}
 		}
 		out.add(L_PREVIEW, 0, 5, std::move(pv));
