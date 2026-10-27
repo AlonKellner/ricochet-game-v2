@@ -949,3 +949,97 @@ TEST_CASE("editor: the level's edges -- a panel field, drawn as their kind, thei
 	CHECK(faces() == 0);
 	CHECK_FALSE(ed.document().contains("edges"));
 }
+
+TEST_CASE("editor: several selected -- a marquee or ctrl+click; moved, scaled, stretched, copied and pasted together (Stage 175)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	auto state = [&] { return ok(ed, {{"op", "state"}}); };
+	auto object = [&] { return ed.document()["objects"][0]["circle"]; };
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "door"}, {"name", "gate"}, {"start", {600.0, 300.0}}, {"end", {600.0, 400.0}}}}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "button"}, {"name", "b"}, {"opens", "gate"}, {"start", {700.0, 300.0}}, {"end", {800.0, 300.0}}}}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"name", "far"}, {"start", {1300.0, 300.0}}, {"end", {1300.0, 400.0}}}}});
+	ok(ed, {{"op", "set"}, {"path", "/objects"}, {"value", json::parse(R"([{"name": "box_1", "circle": {"center": [700, 380], "radius": 16}}])")}});
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	// a press on nothing, held and dragged: what lies wholly inside the marquee is selected
+	drag(ed, 550, 250, 850, 450);
+	CHECK(state()["selection"] == json::array({"element:gate", "element:b", "object:box_1"}));
+	CHECK(state()["selected"].is_null());
+	// ctrl (command) + click adds one or takes it out
+	click(ed, 1300, 350, rcg::Editor::BtnLeft, rcg::Editor::ModCtrl);
+	CHECK(state()["selection"].size() == 4);
+	click(ed, 1300, 350, rcg::Editor::BtnLeft, rcg::Editor::ModCtrl);
+	click(ed, 700, 380, rcg::Editor::BtnLeft, rcg::Editor::ModCtrl);
+	CHECK(state()["selection"] == json::array({"element:gate", "element:b"}));
+	click(ed, 700, 380, rcg::Editor::BtnLeft, rcg::Editor::ModCtrl);
+	CHECK(state()["selection"].size() == 3);
+	// a member dragged: they all move, by whole grid steps, in one undo step
+	const size_t undo0 = state()["undo"];
+	drag(ed, 600, 325, 643, 343);
+	CHECK(element(ed, "gate")["start"] == json::array({640.0, 320.0}));
+	CHECK(element(ed, "b")["end"] == json::array({840.0, 320.0}));
+	CHECK(object()["center"] == json::array({740.0, 400.0}));
+	CHECK(element(ed, "far")["start"] == json::array({1300.0, 300.0}));
+	CHECK(state()["undo"] == undo0 + 1);
+	CHECK(state()["selection"].size() == 3);
+	// the box (640..840, 320..420): a corner scales about the opposite one, uniformly, the radius with it
+	drag(ed, 840, 420, 1040, 520);
+	CHECK(element(ed, "gate")["start"] == json::array({640.0, 320.0}));
+	CHECK(element(ed, "gate")["end"] == json::array({640.0, 520.0}));
+	CHECK(element(ed, "b")["start"] == json::array({840.0, 320.0}));
+	CHECK(element(ed, "b")["end"] == json::array({1040.0, 320.0}));
+	CHECK(object()["center"] == json::array({840.0, 480.0}));
+	CHECK(object()["radius"] == 32.0);
+	// a side's middle stretches from the opposite side; the points and the radius onto the grid
+	drag(ed, 1040, 420, 840, 420);
+	CHECK(element(ed, "b")["start"] == json::array({740.0, 320.0}));
+	CHECK(element(ed, "b")["end"] == json::array({840.0, 320.0}));
+	CHECK(element(ed, "gate")["end"] == json::array({640.0, 520.0}));
+	CHECK(object()["center"] == json::array({740.0, 480.0}));
+	CHECK(object()["radius"] == 23.0); // (32 x sqrt(0.5), to whole units)
+	CHECK(state()["undo"] == undo0 + 3);
+	// by command: each axis its own factor, about a point
+	ok(ed, {{"op", "scale"}, {"selection", true}, {"by", {1.0, 0.5}}, {"about", {640.0, 320.0}}});
+	CHECK(element(ed, "gate")["end"] == json::array({640.0, 420.0}));
+	ok(ed, {{"op", "undo"}});
+	// copy, then paste at the pointer: the box's center there (whole grid steps), fresh names, the button opening
+	// the pasted door
+	ed.key('C', rcg::Editor::ModCtrl, true);
+	{
+		const rc::V2 s = ed.to_screen(rc::V2::of(1500, 800));
+		ed.pointer(rcg::Editor::PtrMove, s.x, s.y, 0, 0);
+	}
+	ed.key('V', rcg::Editor::ModCtrl, true);
+	CHECK(state()["selection"] == json::array({"object:box_2", "element:door_1", "element:button_1"}));
+	CHECK(element(ed, "door_1")["start"] == json::array({1400.0, 700.0})); // (the box 640..840, 320..520: moved 760, 380)
+	CHECK(element(ed, "button_1")["opens"] == "door_1");
+	CHECK(element(ed, "b")["opens"] == "gate");
+	CHECK(ed.document()["objects"].size() == 2);
+	// Delete removes them all; ctrl+D duplicates; Esc deselects
+	ed.key(rcg::Editor::KeyDelete, 0, true);
+	CHECK(ed.document()["elements"].size() == 3);
+	CHECK(ed.document()["objects"].size() == 1);
+	CHECK(state()["selection"].empty());
+	ok(ed, {{"op", "select"}, {"group", {"element:gate", "element:b"}}});
+	ed.key('D', rcg::Editor::ModCtrl, true);
+	CHECK(state()["selection"] == json::array({"element:door_1", "element:button_1"}));
+	CHECK(element(ed, "door_1")["start"] == json::array({660.0, 340.0}));
+	CHECK(element(ed, "button_1")["opens"] == "door_1");
+	ed.key(rcg::Editor::KeyRight, 0, true);
+	CHECK(element(ed, "door_1")["start"] == json::array({670.0, 340.0}));
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(state()["selection"].empty());
+	// cut and paste (no pointer over the canvas: beside where it was); the clipboard outlives the level
+	ok(ed, {{"op", "select"}, {"group", {"element:door_1", "element:button_1"}}});
+	CHECK(ok(ed, {{"op", "cut"}})["copied"] == 2);
+	CHECK(ed.document()["elements"].size() == 3);
+	ok(ed, {{"op", "new"}});
+	CHECK(ok(ed, {{"op", "paste"}})["selection"].size() == 2);
+	CHECK(element(ed, "door_1")["start"] == json::array({690.0, 360.0}));
+	// a ctrl+marquee adds to what is selected; one selected is the ordinary selection
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	drag(ed, 650, 330, 720, 600, rcg::Editor::ModCtrl);
+	CHECK(state()["selected"] == "door_1");
+	drag(ed, 750, 330, 900, 380, rcg::Editor::ModCtrl);
+	CHECK(state()["selection"] == json::array({"element:door_1", "element:button_1"}));
+	CHECK(ed.errors().empty());
+}

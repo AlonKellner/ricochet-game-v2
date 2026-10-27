@@ -45,7 +45,8 @@ run it:
 
 | Key | What |
 |---|---|
-| V | select: click an element, the goal, a detector or an object to select it; drag it to move it, drag a handle to reshape it |
+| V | select: click an element, the goal, a detector or an object to select it; drag it to move it, drag a handle to reshape it. Press on nothing and drag: a marquee selects what lies wholly inside it (Stage 175) |
+| Ctrl+click, Ctrl+drag on nothing | add an element or item to the selection, or take it out; a marquee that adds |
 | L | line: two clicks, start and end (a line; its middle handle bends it into an arc) |
 | A | arc: three clicks, start, end, and a point on the arc between them |
 | C | circle: two clicks, the center and a point on the circle |
@@ -56,8 +57,9 @@ run it:
 | K, Shift+K | a carrier: a line by two points, a circle by its center and a point on it (drawn faint and dashed across the canvas) |
 | X | a collider: two clicks, a player-only segment -- a floor or a ledge the player stands on, which arrows pass (Stage 164) |
 | Tab / Shift+Tab, 1-9, or a kind in the panel's palette | what the line, arc and circle tools place (every kind, the level's own last; clicking a kind also picks the line tool, the circle tool for a circle-only kind) |
-| Delete, Backspace | remove the selected element |
+| Delete, Backspace | remove the selection |
 | Ctrl+D | duplicate it (offset by 20, 20) |
+| Ctrl+C, Ctrl+X, Ctrl+V | copy, cut, paste the selection: pasted at the pointer (the copied box's center there, whole grid steps away), else 20, 20 on; the clipboard outlives the level (Stage 175) |
 | arrows (Shift: x10) | move it by a grid step |
 | Ctrl+Z, Ctrl+Shift+Z / Ctrl+Y | undo, redo (a drag is one step) |
 | Ctrl+S | save |
@@ -97,6 +99,20 @@ tool (or the three of the arc tool on a circle) land on one carrier, the element
 are its defining points (a line's two, a circle's center and radius), and dragging them moves every element on
 it. Renaming it carries the elements, and deleting it frees them, each keeping its place as its own geometry. Its `exact` row
 (Stage 154) snaps its elements onto points exactly on it (GAME_SPEC 19.1).
+
+**Several selected** (Stage 175). A marquee or Ctrl+click selects several: elements, the goal, detectors,
+objects, colliders, the camera's start (a carrier by Ctrl+click; the marquee leaves the carriers, which run across
+the level). They are lit, the panel lists them, and their box is drawn dashed with eight handles:
+- drag any of them: they all move, by whole grid steps, their shapes kept;
+- a corner: they scale about the opposite corner, uniformly (Shift: each axis free); a side's middle: they stretch
+  from the opposite side. Every point lands on the grid (Alt: off it), a rectangle stays a rectangle, a circle's
+  radius scales by the mean factor (to whole units), a portal's displacement and a motion's offsets scale with them.
+  The box keeps at least a grid step;
+- Delete removes them, Ctrl+D duplicates them, the arrows move them, Esc deselects.
+
+A copy (Ctrl+D, or a paste) takes fresh names; a button opening a copied door opens the copy, and a door's or an
+element's `door:<name>` / `det:<name>` flag follows the copied door or detector. An element on a carrier not copied
+with it is copied as its own geometry. The goal and the camera are pasted only into a level without one.
 
 **Every level element is on the canvas** (Stage 164). Colliders are drawn as hatched floors; a click selects one,
 its ends drag, Ctrl+D duplicates it and Delete removes it. The camera's start is a small frame labelled `camera`
@@ -164,6 +180,9 @@ Every action is a command, a JSON object, which is also how scripts and tests dr
 | `{"op": "duplicate", "name": n, "by": [dx, dy]?}` | duplicate it; `{"name": ...}` |
 | `{"op": "undo"}`, `{"op": "redo"}` | undo, redo |
 | `{"op": "select", "name": n \| null}` | select |
+| `{"op": "select", "group": ["element:<name>" \| item, ...]}`, `{"op": "select", "rect": [x, y, w, h], "add"?: bool}` | select several; what lies wholly inside a rectangle (Stage 175); `{"op": "state"}`'s `selection` lists what is selected |
+| `{"op": "move", "selection": true, "by": [dx, dy]}`, `{"op": "scale", "selection": true, "by": s \| [sx, sy], "about"?: [x, y], "snap"?: bool}` | move, scale the selection (about its box's center; its points onto the grid unless `snap` is false) |
+| `{"op": "remove" \| "duplicate", "selection": true}`, `{"op": "copy"}`, `{"op": "cut"}`, `{"op": "paste", "at"?: [x, y]}` | remove, duplicate (`by`), copy, cut the selection; paste the clipboard (`{"selection"}`: what was pasted) |
 | `{"op": "select" \| "remove" \| "duplicate", "item": "goal" \| "detector:<name>" \| "object:<name>" \| "carrier:<name>"}` | an item: select it, remove it (a carrier's elements freed), duplicate it (`{"item": ...}`) |
 | `{"op": "move", "item": i, "handle": "body", "by": [dx, dy]}`, `{"op": "move", "item": i, "handle": "corner0".."corner3" \| "center" \| "radius" \| "a" \| "b", "to": v}` | move an item, or a handle of it |
 | `{"op": "rename", "item": "detector:<name>" \| "object:<name>" \| "carrier:<name>", "to": m}` | rename it (a detector's `det:<name>`, a carrier's elements follow) |

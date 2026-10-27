@@ -3052,4 +3052,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.79.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.79.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
