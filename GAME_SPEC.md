@@ -244,7 +244,7 @@ Movement and aiming are independent and simultaneous. *(Principle 16.)*
 | **Clear plan** | C / dedicated button | Clears the plan without resetting the level or respawning the player. |
 | **Undo last shot** | Z / dedicated button | Reverts to the checkpoint saved before the most recent shot. |
 | **Full reset** | R / dedicated button | Reverts to the level's initial state (all surfaces restored, player at spawn). |
-| **Jump (with gravity)** | W / Up / left-stick-up | Standard platformer jump. No effect when gravity is zero. |
+| **Jump (with gravity)** | W / Up / left-stick-up | Standard platformer jump. No effect when gravity is zero. Held, it climbs a platform the player touches from below and a steep one (a ladder, a rope): at least 150 units/s up (§25.1, Stage 176). |
 | **Pause** | Escape / start | Opens pause menu. |
 
 **Cursor coordinate space:** the cursor position is in **world space**, not screen space. The visual layer converts mouse screen position to world position using the camera's inverse transform (`get_global_mouse_position()` in Godot). The initial ray (§12.1) uses the world-space cursor directly.
@@ -2463,6 +2463,16 @@ back into its circle). The player and objects **pass each other** (§25.5). It c
    player pass both ways (moving down holds down). The arrow passes a platform (its sides are passes), and so do
    visibility and planning.
 
+   **Climbing** (Stage 176, the user): with gravity, while **up is held** and the player touches a platform
+   that does not hold it -- one its feet are below, or one steeper than 45°, a **ladder** or a **rope** -- along
+   its length (within the radius plus the skin of one of its circles or of its **hands**, a circle one radius
+   above its head, nearest a point between the platform's ends; an end alone is no hold), the player rises at least **150 units/s** (a faster rise, a jump, keeps its
+   own speed). So pressed and held under a platform, the jump that reaches it carries on up through it and lands
+   on its top; standing under a stack of platforms (each just over the head), up held climbs it platform after
+   platform; held against a rope, the player goes up it, steps onto what is at its top (a bare rope's top: it
+   hops there while up is held) and falls when released. A platform that holds the player is no climb, so
+   standing on one with up held stays. Objects never climb.
+
 A **floor** is a contact whose normal is within 45° of up `(0, -1)`. With gravity, a player that stood on a
 floor and is not rising keeps to it within **1 unit** (a floor snap: walking off a ledge drops, walking along
 a floor stays on it).
@@ -2477,6 +2487,7 @@ a floor stays on it).
 - Default speed: **200 units/sec**. Horizontal input response is instant (no acceleration ramp). Gravity applies vertically as configured in `LevelData.gravity` — the player can fall and needs platforms when gravity is non-zero. Configurable per level.
 - Default jump velocity: **400 units/sec upward**, from a floor only (the up action just pressed). Single jump (no double jump). No coyote time. Without gravity the movement is the input direction, normalized, times the speed.
 - Drop: down held lets the player through platforms (§25.1, Stage 172).
+- Climb: up held while touching a platform from below or a steep one (a ladder, a rope) rises at least **150 units/sec** (§25.1, Stage 176).
 - **The arrow is never affected by gravity** — it follows pure geometric ray tracing regardless of the level's gravity setting.
 - The player can move while aiming. *(Principle 16.)*
 
@@ -3052,4 +3063,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.79.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.80.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

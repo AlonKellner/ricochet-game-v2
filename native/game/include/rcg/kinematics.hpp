@@ -20,6 +20,12 @@
 // above, never from below or the side), and an overlap pushes the body up onto
 // its top -- not while rising: a jump through it carries on and lands on it.
 //
+// Stage 176, climbing (the user): up held, under gravity, while the body touches
+// a platform along its length that does not hold it (one it is below, or one
+// steeper than 45 degrees: a ladder, a rope) rises at least CLIMB_SPEED -- up
+// through a platform, up a ladder; past its top it lands on what is there. Its
+// hands reach REACH above its head: standing, it grabs a platform just over it.
+//
 // Deterministic: float64 inside a step, the position and velocity kept as the
 // game's float32 vectors between steps.
 #pragma once
@@ -41,6 +47,8 @@ constexpr int MAX_SLIDES = 4;
 constexpr double FLOOR_MIN_DOT = 0.7071067811865476; // cos 45 degrees
 constexpr double STEP = 1.0 / 60.0;                  // the physics tick
 constexpr double BODY = 24.0;                        // Stage 173: the player's feet below its head (the arrow origin)
+constexpr double CLIMB_SPEED = 150.0;                // Stage 176: the least upward speed while climbing a platform
+constexpr double REACH = RADIUS;                      // Stage 176: the hands above the head (a climb's reach)
 
 // Stage 173: a body's shape -- circles of one radius stacked straight down from
 // its position. An object is one circle; the player three, head to feet, spaced

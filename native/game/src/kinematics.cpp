@@ -217,6 +217,23 @@ bool above(const Collider &c, double px, double py) {
 	return distance(c, px, py, nx, ny) > 0.0 && floor_like(nx, ny);
 }
 
+// Stage 176: does a circle (R0 at (px, py)) touch a collider along its length --
+// within R0 of it, nearest to a point between its ends (a rope's top end is no hold)?
+bool touches_along(const Collider &c, double px, double py, double R0) {
+	if (!c.arc) {
+		const double ex = c.bx - c.ax, ey = c.by - c.ay;
+		const double l2 = ex * ex + ey * ey;
+		if (l2 == 0.0) {
+			return false;
+		}
+		const double u = ((px - c.ax) * ex + (py - c.ay) * ey) / l2;
+		return u > 0.0 && u < 1.0 && std::abs((px - c.ax) * ey - (py - c.ay) * ex) <= R0 * std::sqrt(l2);
+	}
+	const double fx = px - c.cx, fy = py - c.cy;
+	const double n = std::sqrt(fx * fx + fy * fy);
+	return n > 0.0 && std::abs(n - c.r) <= R0 && on_arc(c, fx / n, fy / n);
+}
+
 // Out of one collider's overlap (a circle `drop` below (px, py)); a platform only
 // up onto its top. True: moved.
 bool push_out(const Collider &c, double &px, double &py, double drop, double R0, bool &on_floor) {
@@ -324,6 +341,19 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 	std::vector<char> off(colliders.size(), 0);
 	for (size_t i = 0; i < colliders.size(); i++) {
 		off[i] = colliders[i].platform && (drop || !above(colliders[i], body.pos.x, body.pos.y + shape.feet()));
+	}
+	// Stage 176: up held while touching one that does not hold the body climbs it (the hands: a circle REACH
+	// above the head, so a platform just over the head of one standing is in reach)
+	if (has_gravity && in.axis_y < 0.0f) {
+		bool climbing = false;
+		for (size_t i = 0; i < colliders.size() && !climbing; i++) {
+			for (int k = -1; k < shape.n && off[i] && !climbing; k++) {
+				climbing = touches_along(colliders[i], body.pos.x, body.pos.y + (k < 0 ? -REACH : shape.drop[k]), R0);
+			}
+		}
+		if (climbing) {
+			v.y = std::min(v.y, -float(CLIMB_SPEED));
+		}
 	}
 	// the move: swept, sliding along what it meets
 	double px = body.pos.x, py = body.pos.y;
