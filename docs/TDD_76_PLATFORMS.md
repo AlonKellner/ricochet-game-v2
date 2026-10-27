@@ -16,8 +16,8 @@ they should move on top of it, if it's below they should fall through." The spec
 | 172.1 | The data: the surface key `platform` (`SurfaceSpec`, `BuiltSurface`, spawned surfaces; never with `player_solid`), written into dumps and digests only when set; the oracle's builder (`level_json.py`) the same; the builtin element `platform` (priority 14, after `passthrough`) | Done |
 | 172.2 | The kinematics: `Collider::platform`; in `step_body` a platform is off for a step unless the body's centre is above it at the step's start and down is not held; then floor-like contacts only (the sweep, the push-out, the snap), and no push-out while rising; `kinematics::settle`; `rcg_tests` "platforms: ..." | Done |
 | 172.3 | The session: `colliders_except(..., journey)` leaves platforms out of journeys (live and the preview's trip); the traveller settled at the journey's end, live and in the preview alike; the draw (wood brown in the game and the editor); the demo level `objectives/platforms` | Done |
-| 172.4 | Docs; `make gate`; the session `objectives__platforms__play` (its golden after your approval) | In progress |
-| 172.5 | Your interactive sign-off | Open |
+| 172.4 | Docs; `make gate`; the session `objectives__platforms__play` (its golden, approved 2026-10-27) | Done |
+| 172.5 | Your interactive sign-off | Done (the user's sign-off 2026-10-27) |
 
 ## Decisions
 
