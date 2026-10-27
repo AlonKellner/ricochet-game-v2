@@ -16,6 +16,7 @@ surface already does (GAME_SPEC 9-10).
 | `arrow_block` | An arrow-block barrier (an energy field): stops the arrow at either side; the player passes. | -- | `ArrowBlock` |
 | `fence` | An arrow-pass barrier (an iron fence): the arrow passes, the player is blocked. | -- | `Fence` |
 | `passthrough` | A surface nothing collides with: the arrow passes (a step boundary, nothing else) and so does the player. A marker. | -- | `PassThrough` |
+| `platform` | A one-way platform (GAME_SPEC 25.1): the arrow passes; the player and objects stand on its top and pass it from below or the side; the player holding down drops through; a pulled object or a grappled player passes it (ending half through it, put on top when its centre is above, else falling through). Drawn wood brown. Unlike a `fence`, which blocks the player every way and stops a pull. | -- | `Platform` |
 | `mirror` | A one-sided mirror: its left side (left of the walk start -> via -> end) reflects and is plannable; its back passes or blocks. `flip`: the mirror faces right. | `back`="pass" (or "block"), `solid`=false | `Mirror` |
 | `two_sided_mirror` | A mirror reflecting on both sides, both plannable. | `solid`=false | `MirrorB` |
 | `inversion` | A circle inversion (an arc or a full circle): both sides invert, or only the left one (the other passes; `flip` for the right). | `sides`="both" (or "left"), `solid`=true | `FullInversion` / `Inversion` |
@@ -113,7 +114,8 @@ right sides, its resolver's too.
 
 What a template cannot say: arithmetic, geometry of its own (offsets, a second shape), conditions beyond
 `$switch`, loops, a new hit-effect kind or a new path effect. Those need a primitive in the game. The editor
-program adds four of them: the goal objective, detectors, bodies, and grapple and pull.
+program adds four of them: the goal objective, detectors, bodies, and grapple and pull; Stage 172 adds the
+platform (the surface key `platform`).
 
 ## Designing a new element
 

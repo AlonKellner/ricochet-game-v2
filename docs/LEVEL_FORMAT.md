@@ -116,6 +116,7 @@ the level's surfaces, the four edge walls (pass, not plannable, not drawn) and t
 
 Stage 171: a `key` that is read -- a resolver's, a presence condition's, a `when` condition's, the goal's `requires`, a shade's `when` -- may be a flag expression (`!`, `^`, `&&`, `||`, parentheses; GAME_SPEC 9.11): `"key": "det:red && !det:blue"`. It is true or false: true matches `"true"`, false `"false"` and `"DEFAULT"`. A key that is written (a hit's `key`, a detector's or a spread rule's `flag`, `flags`) is a name.
 | `player_solid` | `true`: the player collides with it |
+| `platform` | `true` (Stage 172): a one-way platform -- the player and objects stand on its top, pass it from below and the side, the player drops through it holding down, a pull or grapple's traveller passes it (GAME_SPEC 25.1); never with `player_solid` |
 
 A side: `{"effect": effect, "interactive": bool, "hits": [hit, ...]}` (`interactive`: plannable).
 
