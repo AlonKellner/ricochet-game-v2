@@ -1137,7 +1137,9 @@ std::optional<Session::Journey> Session::journey_of(const rc::TracePath &path, i
 		// last ended (a portal) is reached by a jump; a step through infinity ends the path
 		Journey j;
 		j.body = grapple ? -1 : body;
-		std::vector<int> leg;
+		// (Stage 174: the jumps marked as the path is built -- a step starting where the last ended skips its first
+		// point, so a step boundary is no jump, though its next point is a sample on)
+		std::vector<bool> gap; // gap[i]: path[i] is reached from path[i - 1] by a jump
 		for (int k = 0; k <= h.step_index && k < int(path.steps.size()); k++) {
 			const rc::TraceStep &st = path.steps[size_t(k)];
 			if (st.start.is_inf() || st.end.is_inf()) {
@@ -1147,23 +1149,23 @@ std::optional<Session::Journey> Session::journey_of(const rc::TracePath &path, i
 			const bool arc = rc::arc::step_is_arc(g);
 			const double len = arc ? rc::arc::arc_length(g) : double((st.end - st.start).length());
 			const int n = std::max(1, int(std::ceil(len / JOURNEY_SAMPLE)));
+			const bool jumps = !j.path.empty() && (st.start - j.path.back()).length() > 1e-3f;
 			for (int m = j.path.empty() ? 0 : (st.start == j.path.back() ? 1 : 0); m <= n; m++) {
 				const double t = double(m) / n;
 				j.path.push_back(arc ? rc::arc::arc_interpolate(g, t).position : st.start + (st.end - st.start) * float(t));
-				leg.push_back(k);
+				gap.push_back(jumps && m == 0);
 			}
 		}
 		if (j.path.empty() || j.path.back() != h.point) {
 			j.path.push_back(h.point);
-			leg.push_back(leg.empty() ? 0 : leg.back());
-		}
-		if (j.body >= 0) {
-			std::reverse(j.path.begin(), j.path.end());
-			std::reverse(leg.begin(), leg.end());
+			gap.push_back(false);
 		}
 		j.jump.assign(j.path.size(), false);
 		for (size_t m = 1; m < j.path.size(); m++) {
-			j.jump[m] = leg[m] != leg[m - 1] && (j.path[m] - j.path[m - 1]).length() > 1e-3f;
+			j.jump[m] = j.body >= 0 ? gap[j.path.size() - m] : gap[m]; // (a pull walks it back: the gap into path[N - m])
+		}
+		if (j.body >= 0) {
+			std::reverse(j.path.begin(), j.path.end());
 		}
 		// Stage 166: the guide starts where the path does (a pull: the hit; a grapple: the player), close enough
 		// when it is inside the traveller
@@ -1293,10 +1295,16 @@ bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Co
 			}
 			// (the user: the slide keeps the pull's speed -- the rest's full length along the contact, not its
 			// projection, which shrinks to a crawl that never converges)
-			const double sx = rx - into * nx, sy = ry - into * ny, sl = std::hypot(sx, sy), rl = std::hypot(rx, ry);
+			double sx = rx - into * nx, sy = ry - into * ny;
+			const double sl = std::hypot(sx, sy), rl = std::hypot(rx, ry);
 			if (!(sl > 1e-9)) {
 				break; // (straight into the contact: no way along it)
 			}
+			// Stage 174 (the user's pulling_2): a hair off the contact -- the nearest point's rounding tilts the normal
+			// by ~1e-16, leaving the slide a residue into the contact, and a body resting a float32 ulp inside its skin
+			// meets that at once (no move: the box stopped on the floor short of the player)
+			sx += nx * sl * 1e-9;
+			sy += ny * sl * 1e-9;
 			// ... up to the point nearest the guide on its way (a slide past it, round a curved contact, would come
 			// back and oscillate)
 			const double ux = sx / sl, uy = sy / sl;
