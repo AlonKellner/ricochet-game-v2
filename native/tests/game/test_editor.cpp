@@ -1043,3 +1043,46 @@ TEST_CASE("editor: several selected -- a marquee or ctrl+click; moved, scaled, s
 	CHECK(state()["selection"] == json::array({"element:door_1", "element:button_1"}));
 	CHECK(ed.errors().empty());
 }
+
+TEST_CASE("editor: the player's start is selected like an item -- alone, by the marquee, by ctrl+click; moved and scaled with the rest (Stage 175)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	auto state = [&] { return ok(ed, {{"op", "state"}}); };
+	auto player = [&] { return ed.document()["player"]["start"]; };
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"name", "w"}, {"start", {800.0, 600.0}}, {"end", {900.0, 600.0}}}}});
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	// a click on it selects it; its panel shows its start; it is moved, never removed or duplicated
+	click(ed, 960, 540);
+	CHECK(state()["item"] == "player");
+	const json panel = ok(ed, {{"op", "panel"}});
+	CHECK(std::any_of(panel["rows"].begin(), panel["rows"].end(), [](const json &r) { return r["label"] == "start"; }));
+	ed.key(rcg::Editor::KeyDelete, 0, true);
+	CHECK(player() == json::array({960.0, 540.0}));
+	CHECK(ed.command({{"op", "duplicate"}, {"item", "player"}})["ok"] == false);
+	ed.key(rcg::Editor::KeyRight, 0, true);
+	CHECK(player() == json::array({970.0, 540.0}));
+	// the marquee takes it with the wall; dragging it moves them both
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	drag(ed, 750, 450, 1050, 650);
+	CHECK(state()["selection"] == json::array({"element:w", "player"}));
+	drag(ed, 970, 540, 990, 520);
+	CHECK(player() == json::array({990.0, 520.0}));
+	CHECK(element(ed, "w")["start"] == json::array({820.0, 580.0}));
+	// the box (820..990, 520..580): its corner scales the player's start too
+	drag(ed, 820, 520, 650, 460);
+	CHECK(element(ed, "w")["start"] == json::array({650.0, 580.0}));
+	CHECK(player() == json::array({990.0, 460.0})); // (about the opposite corner, 990, 580: x2)
+	// ctrl+click takes it out and puts it back
+	click(ed, 990, 460, rcg::Editor::BtnLeft, rcg::Editor::ModCtrl);
+	CHECK(state()["selected"] == "w");
+	click(ed, 990, 460, rcg::Editor::BtnLeft, rcg::Editor::ModCtrl);
+	CHECK(state()["selection"] == json::array({"element:w", "player"}));
+	// copied with the rest, it is not pasted where the level has one; Delete leaves it
+	ed.key('C', rcg::Editor::ModCtrl, true);
+	CHECK(ok(ed, {{"op", "paste"}})["selection"] == json::array({"element:wall_1"}));
+	ok(ed, {{"op", "select"}, {"group", {"element:w", "player"}}});
+	ed.key(rcg::Editor::KeyDelete, 0, true);
+	CHECK(ed.document()["elements"].size() == 1);
+	CHECK(player() == json::array({990.0, 460.0}));
+	CHECK(ed.errors().empty());
+}

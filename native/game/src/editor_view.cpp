@@ -503,7 +503,7 @@ std::optional<Editor::Box> Editor::box_of(const std::vector<std::string> &entrie
 }
 
 // Stage 175: what lies wholly inside a rectangle (world corners): the elements, the goal, detectors, objects,
-// colliders and the camera's start (not the carriers, which run across the level)
+// colliders, the camera's start and the player's (not the carriers, which run across the level)
 std::vector<std::string> Editor::in_rect(const V2 &a, const V2 &b) const {
 	const double x0 = std::min(a.x, b.x), y0 = std::min(a.y, b.y), x1 = std::max(a.x, b.x), y1 = std::max(a.y, b.y);
 	std::vector<std::string> candidates, out;
@@ -528,6 +528,7 @@ std::vector<std::string> Editor::in_rect(const V2 &a, const V2 &b) const {
 		}
 	}
 	candidates.push_back("camera");
+	candidates.push_back("player");
 	for (const std::string &c : candidates) {
 		const std::optional<Box> k = exists(c) ? box_of({c}) : std::nullopt;
 		if (k && k->x0 >= x0 && k->y0 >= y0 && k->x1 <= x1 && k->y1 <= y1) {
@@ -1023,7 +1024,7 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 				return;
 			}
 			std::optional<Handle> h = handle_at(mouse_);
-			if (!h && !entry.empty() && std::find(group_.begin(), group_.end(), entry) != group_.end()) {
+			if ((!h || h->kind == "player") && !entry.empty() && std::find(group_.begin(), group_.end(), entry) != group_.end()) {
 				h = Handle{"", "group", to_world(mouse_), ""}; // a member: they all move
 			}
 			if (h && (h->kind == "group" || h->kind.rfind("box:", 0) == 0)) {
@@ -1053,6 +1054,8 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 				set_selection({h->item});
 			} else if (!h->element.empty()) {
 				select_element(h->element);
+			} else if (h->kind == "player") {
+				set_selection({"player"}); // Stage 175: the player's start is selected like an item
 			}
 			undo_.push_back(doc_);
 			drag_ = h;
@@ -2222,15 +2225,22 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 		const V2 p = to_screen(pt(doc_["player"]["start"]));
 		const json g = doc_.value("gravity", json::array({0.0, 0.0}));
 		const bool tall = g.is_array() && g.size() == 2 && g[0].is_number() && g[1].is_number() && (g[0].get<double>() != 0.0 || g[1].get<double>() != 0.0);
-		if (tall) { // Stage 173: with gravity the start is where the player stands -- its feet; its head (the origin) above
-			const double r = kinematics::RADIUS * zoom_;
-			const V2 h = V2::of(p.x, double(p.y) - kinematics::BODY * zoom_);
-			out.add(L_PLAYER, 0, 4, {arc(p, r, 0, TAU / 2, GREEN, 2.0), arc(h, r, TAU / 2, TAU, GREEN, 2.0),
-					line(V2::of(double(p.x) - r, p.y), V2::of(double(h.x) - r, h.y), GREEN, 2.0),
-					line(V2::of(double(p.x) + r, p.y), V2::of(double(h.x) + r, h.y), GREEN, 2.0), circle(h, 2.5, GREEN)});
-		} else {
-			out.add(L_PLAYER, 0, 4, {arc(p, kinematics::RADIUS * zoom_, 0, TAU, GREEN, 2.0), circle(p, 2.5, GREEN)});
+		const double r = kinematics::RADIUS * zoom_;
+		const V2 h = tall ? V2::of(p.x, double(p.y) - kinematics::BODY * zoom_) : p;
+		// its outline (Stage 173: with gravity the start is where the player stands -- its feet; its head, the origin, above)
+		auto outline = [&](const Color &c, double w) {
+			if (!tall) {
+				return std::vector<Call>{arc(p, r, 0, TAU, c, w)};
+			}
+			return std::vector<Call>{arc(p, r, 0, TAU / 2, c, w), arc(h, r, TAU / 2, TAU, c, w), line(V2::of(double(p.x) - r, p.y), V2::of(double(h.x) - r, h.y), c, w),
+				line(V2::of(double(p.x) + r, p.y), V2::of(double(h.x) + r, h.y), c, w)};
+		};
+		std::vector<Call> pc = lit("player") ? outline(SELECT, 9.0) : std::vector<Call>{}; // (Stage 175: selected)
+		for (Call &c : outline(GREEN, 2.0)) {
+			pc.push_back(std::move(c));
 		}
+		pc.push_back(circle(h, 2.5, GREEN));
+		out.add(L_PLAYER, 0, 4, std::move(pc));
 	}
 	// a placement under way, and where the pointer snaps
 	{

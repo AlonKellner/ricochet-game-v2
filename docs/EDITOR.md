@@ -45,7 +45,7 @@ run it:
 
 | Key | What |
 |---|---|
-| V | select: click an element, the goal, a detector or an object to select it; drag it to move it, drag a handle to reshape it. Press on nothing and drag: a marquee selects what lies wholly inside it (Stage 175) |
+| V | select: click an element, the goal, a detector, an object or the player's start to select it; drag it to move it, drag a handle to reshape it. Press on nothing and drag: a marquee selects what lies wholly inside it (Stage 175) |
 | Ctrl+click, Ctrl+drag on nothing | add an element or item to the selection, or take it out; a marquee that adds |
 | L | line: two clicks, start and end (a line; its middle handle bends it into an arc) |
 | A | arc: three clicks, start, end, and a point on the arc between them |
@@ -101,7 +101,7 @@ it. Renaming it carries the elements, and deleting it frees them, each keeping i
 (Stage 154) snaps its elements onto points exactly on it (GAME_SPEC 19.1).
 
 **Several selected** (Stage 175). A marquee or Ctrl+click selects several: elements, the goal, detectors,
-objects, colliders, the camera's start (a carrier by Ctrl+click; the marquee leaves the carriers, which run across
+objects, colliders, the camera's start, the player's start (a carrier by Ctrl+click; the marquee leaves the carriers, which run across
 the level). They are lit, the panel lists them, and their box is drawn dashed with eight handles:
 - drag any of them: they all move, by whole grid steps, their shapes kept;
 - a corner: they scale about the opposite corner, uniformly (Shift: each axis free); a side's middle: they stretch
@@ -112,7 +112,8 @@ the level). They are lit, the panel lists them, and their box is drawn dashed wi
 
 A copy (Ctrl+D, or a paste) takes fresh names; a button opening a copied door opens the copy, and a door's or an
 element's `door:<name>` / `det:<name>` flag follows the copied door or detector. An element on a carrier not copied
-with it is copied as its own geometry. The goal and the camera are pasted only into a level without one.
+with it is copied as its own geometry. The goal, the camera and the player's start are pasted only into a level without one. The player's start is
+moved, never removed or duplicated (Delete leaves it).
 
 **Every level element is on the canvas** (Stage 164). Colliders are drawn as hatched floors; a click selects one,
 its ends drag, Ctrl+D duplicates it and Delete removes it. The camera's start is a small frame labelled `camera`

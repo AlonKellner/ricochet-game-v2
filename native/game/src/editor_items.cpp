@@ -4,6 +4,7 @@
 // "object:<name>"; its handles move the JSON they point at.
 #include "rcg/canon.hpp"
 #include "rcg/editor.hpp"
+#include "rcg/kinematics.hpp"
 #include "rcg/level2.hpp"
 
 #include <algorithm>
@@ -97,6 +98,12 @@ std::optional<std::string> Editor::item_path(const std::string &item) const {
 		}
 		return std::nullopt;
 	}
+	if (kind == "player") { // Stage 175: the player's start
+		if (doc_.contains("player") && doc_["player"].is_object() && is_point(doc_["player"].value("start", json()))) {
+			return std::string("/player");
+		}
+		return std::nullopt;
+	}
 	if (kind == "camera") { // Stage 164: the camera's start
 		if (doc_.contains("camera") && doc_["camera"].is_object()) {
 			return std::string("/camera");
@@ -124,8 +131,8 @@ std::optional<std::string> Editor::item_path(const std::string &item) const {
 std::vector<Editor::Handle> Editor::item_handles() const {
 	std::vector<Handle> out;
 	const std::optional<std::string> path = item_.empty() ? std::nullopt : item_path(item_);
-	if (!path) {
-		return out;
+	if (!path || item_ == "player") {
+		return out; // (the player's start is always a handle)
 	}
 	const json &j = doc_[json::json_pointer(*path)];
 	// a region (the goal; a detector's region), a segment, a circle holder (an object)
@@ -192,6 +199,17 @@ std::string Editor::item_at(const V2 &screen) const {
 		const double u = l2 > 0 ? std::clamp(((double(screen.x) - a.x) * ex + (double(screen.y) - a.y) * ey) / l2, 0.0, 1.0) : 0.0;
 		return std::hypot(double(a.x) + ex * u - screen.x, double(a.y) + ey * u - screen.y) <= 8.0;
 	};
+	// Stage 175: the player (its start; under gravity up to its head)
+	if (item_path("player")) {
+		const V2 p = to_screen(pt(doc_["player"]["start"]));
+		const json g = doc_.value("gravity", json::array({0.0, 0.0}));
+		const bool tall = g.is_array() && g.size() == 2 && g[0].is_number() && g[1].is_number() && (g[0].get<double>() != 0.0 || g[1].get<double>() != 0.0);
+		const double r = kinematics::RADIUS * zoom_ + 4.0, top = double(p.y) - (tall ? kinematics::BODY * zoom_ : 0.0);
+		const double dy = screen.y > p.y ? double(screen.y) - p.y : screen.y < top ? top - screen.y : 0.0;
+		if (std::hypot(double(screen.x) - p.x, dy) <= r) {
+			return "player";
+		}
+	}
 	// Stage 164: the camera's start (its marker), a collider (thin, like an element)
 	if (doc_.contains("camera") && doc_["camera"].is_object() && is_point(doc_["camera"].value("start", json()))) {
 		const V2 c = to_screen(pt(doc_["camera"]["start"]));
@@ -342,7 +360,7 @@ std::vector<Editor::Row> Editor::item_rows() const {
 	};
 	Row head;
 	head.kind = Row::Header;
-	head.label = kind == "goal" || kind == "camera" ? kind : kind + " " + name;
+	head.label = kind == "goal" || kind == "camera" || kind == "player" ? kind : kind + " " + name;
 	if (kind == "carrier") {
 		head.label += j.contains("line") ? " (a line)" : " (a circle)";
 	}
@@ -370,6 +388,8 @@ std::vector<Editor::Row> Editor::item_rows() const {
 		r.kind = Row::Text;
 		r.label = "player-only: it holds the player; arrows pass";
 		out.push_back(r);
+	} else if (kind == "player") { // Stage 175
+		row("start", *path + "/start", "[x, y]: where the player starts -- under gravity its feet (drag it)");
 	} else if (kind == "camera") { // Stage 164
 		row("start", *path + "/start", "[x, y]: where the camera starts (drag it)");
 		row("smoothing", *path + "/smoothing", "the camera eases after the player", "false", "bool");
@@ -418,7 +438,8 @@ std::vector<Editor::Row> Editor::item_rows() const {
 	}
 	Row keys;
 	keys.kind = Row::Text;
-	keys.label = kind == "goal" || kind == "camera" ? "Delete: remove the " + kind + "; arrows: move it" : "Delete: remove; ctrl+D: duplicate; arrows: move";
+	keys.label = kind == "player" ? "arrows: move it; ctrl+click: select it with others"
+			: kind == "goal" || kind == "camera" ? "Delete: remove the " + kind + "; arrows: move it" : "Delete: remove; ctrl+D: duplicate; arrows: move";
 	out.push_back(keys);
 	return out;
 }
@@ -437,6 +458,9 @@ json Editor::item_op(const std::string &o, const json &cmd) {
 	if (o == "select") {
 		set_selection({item});
 		return {};
+	}
+	if (kind == "player" && o != "move") {
+		refuse("the player's start is one: it is moved, never " + std::string(o == "remove" ? "removed" : o == "duplicate" ? "duplicated" : "renamed"));
 	}
 	if (o == "remove") {
 		json freed = doc_["elements"];
@@ -748,7 +772,7 @@ json Editor::copied(const std::vector<std::string> &entries) const {
 		}
 		const std::string kind = split(entry).first;
 		const json &j = doc_[json::json_pointer(*path)];
-		if (kind == "goal" || kind == "camera") {
+		if (kind == "goal" || kind == "camera" || kind == "player") {
 			clip[kind] = j;
 		} else {
 			clip[kind == "detector" ? "detectors" : kind == "object" ? "objects" : kind == "carrier" ? "carriers" : "colliders"].push_back(j);
@@ -798,11 +822,11 @@ std::vector<std::string> Editor::paste(json &doc, const json &clip, double dx, d
 	add_list("detectors", "detector", &renamed_detectors);
 	add_list("objects", "object", &renamed_objects);
 	add_list("colliders", "collider", nullptr);
-	for (const char *k : {"goal", "camera"}) {
+	for (const char *k : {"goal", "camera", "player"}) {
 		const bool has = std::string(k) == "goal" ? doc.contains("objective") && doc["objective"].is_object() && doc["objective"].contains("goal")
-												  : doc.contains("camera");
+												  : doc.contains(k);
 		if (clip.contains(k) && !has) {
-			(std::string(k) == "goal" ? doc["objective"]["goal"] : doc["camera"]) = clip[k];
+			(std::string(k) == "goal" ? doc["objective"]["goal"] : doc[k]) = clip[k];
 			out.push_back(k);
 		}
 	}
