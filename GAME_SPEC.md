@@ -236,6 +236,7 @@ Movement and aiming are independent and simultaneous. *(Principle 16.)*
 |--------|-------|----------|
 | **Move (zero gravity)** | WASD / left stick | 4-directional movement. W = up, S = down, A = left, D = right. |
 | **Move (with gravity)** | AD / left stick horizontal | Horizontal movement only. |
+| **Drop (with gravity)** | S / Down held | Platforms (§25.1) do not hold the player while it is held: standing on one, the player falls through it; in the air, past them. No other effect with gravity (Stage 172). |
 | **Aim** | Mouse position / right stick | Updates cursor point continuously. Preview updates every frame. |
 | **Add to plan** | Left-click on a surface | Appends the clicked surface to the plan. |
 | **Remove / Clear plan** | Right-click | If cursor is over a **planned surface**: removes the **latest instance** of that surface from the plan. If cursor is over an unplanned surface or empty space: **clears the entire plan**. |
@@ -578,6 +579,7 @@ Surface:
     presence:     Array[PresenceCond]  # flag-gated existence, AND of conditions; empty = always (§9.6)
     is_target:    bool           # derived: a side carries a TargetHit (§10.6)
     player_solid: bool           # true = player collides with this surface (default true)
+    platform:     bool           # Stage 172: a one-way platform (§25.1); never also player_solid
 
 SideConfig:
     effect:       TransformativeEffect | ProjectiveEffect | TerminalEffect | null   # the PATH axis: exactly one
@@ -2298,6 +2300,7 @@ For arc steps in the visual frame, the tangent direction is perpendicular to the
 | Projective | Orange |
 | Block | Red |
 | Pass-through | Gray |
+| Platform (§25.1; its pass sides) | Wood brown |
 | Target | Gold |
 
 Target surfaces display their effect color on each side plus a **gold outline** or gold endpoint markers to indicate target status.
@@ -2440,6 +2443,17 @@ with two kinds of geometry:
    (its part of the circle from start through via to end, and its two ends), a full circle. An absent surface
    does not block the player (Stage 117, as the arrow passes it). Surfaces with `player_solid = false` do not
    impede the player. `player_solid` is per-surface (not per-side); sides do not matter to the player.
+3. **Platforms** (Stage 172, the `platform` element): present surfaces with `platform = true`, one-way. A
+   platform takes part in a physics step only while the body's **centre is above it** at the step's start (a
+   line: on the side its up-facing normal points to, along its whole carrier; a line steeper than 45° has no
+   upper side and never holds anything; an arc: where the normal from its nearest point to the centre is within
+   45° of up) and, for the player, down is not held (§4.1). Then only its floor-like contacts count: it is met
+   from above and never from below or the side, so a jump passes up through it. A body **half through** a
+   platform with its centre above it is pushed up onto its top -- but not while rising, so a jump through it
+   keeps its whole height and lands on it; with its centre below it, the body passes on (a drop released early
+   is put back on top; one released once the centre is past falls on). Without gravity the same rule lets the
+   player pass both ways (moving down holds down). The arrow passes a platform (its sides are passes), and so do
+   visibility and planning.
 
 A **floor** is a contact whose normal is within 45° of up `(0, -1)`. With gravity, a player that stood on a
 floor and is not rising keeps to it within **1 unit** (a floor snap: walking off a ledge drops, walking along
@@ -2454,6 +2468,7 @@ a floor stays on it).
 - Move: WASD / left stick.
 - Default speed: **200 units/sec**. Horizontal input response is instant (no acceleration ramp). Gravity applies vertically as configured in `LevelData.gravity` — the player can fall and needs platforms when gravity is non-zero. Configurable per level.
 - Default jump velocity: **400 units/sec upward**, from a floor only (the up action just pressed). Single jump (no double jump). No coyote time. Without gravity the movement is the input direction, normalized, times the speed.
+- Drop: down held lets the player through platforms (§25.1, Stage 172).
 - **The arrow is never affected by gravity** — it follows pure geometric ray tracing regardless of the level's gravity setting.
 - The player can move while aiming. *(Principle 16.)*
 
@@ -2471,7 +2486,7 @@ a floor stays on it).
 An **object** is a circle body with a surface: a full circle whose sides are a wall's (terminal), a mirror's or a
 pass, player-solid by default. A **pullable** object falls under the level's gravity and rests on what holds it,
 moved by the player's controller at its own radius. It meets the player (a falling object stops on the player),
-but not other objects (v1). A **static** object stays. Its surface takes the next ids after the level's
+but not other objects (v1). It stands on platforms (§25.1) and never drops through one (it holds no down). A **static** object stays. Its surface takes the next ids after the level's
 surfaces, so it is planned and hit like any surface, and it moves with the body. While an object moves, nothing
 is fired. The bodies' positions are part of the checkpoint, and detectors `for` objects see their centers
 (§24.5, regions only).
@@ -2492,7 +2507,10 @@ physical path:
 
 The traveller moves at 900 px/s, swept against what it collides with: present player-solid surfaces and
 colliders, and for an object the player. It stops at the first contact or at the path's end. A fence (an
-arrow-pass barrier) stops it; an arrow-block barrier is not solid and does not. A step that starts where the last
+arrow-pass barrier) stops it; an arrow-block barrier is not solid and does not. **A platform does not stop it**
+(Stage 172): a pulled object or a grappled player passes through platforms. Where the journey ends, a traveller
+half through a platform is settled by its centre (§25.1): above it, it is put on top and stands; below it, it
+stays and falls on. The preview's trip ends where the shot's settles (§14.12). A step that starts where the last
 did not end (a portal) is crossed by a jump, and a step through infinity ends the path. The game is paused during
 a journey as during a flight (`flying`), and the journey is part of the shot.
 
@@ -3023,4 +3041,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.77.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.78.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -1,0 +1,75 @@
+{
+ "kind": "kinematic",
+ "level": "objectives/platforms",
+ "schema": "rc-session/1",
+ "steps": [
+  {
+   "actions": [],
+   "op": "hold",
+   "ticks": 60
+  },
+  {
+   "actions": [
+    "move_up"
+   ],
+   "op": "hold",
+   "ticks": 2
+  },
+  {
+   "actions": [],
+   "op": "hold",
+   "ticks": 60
+  },
+  {
+   "actions": [
+    "move_up"
+   ],
+   "op": "hold",
+   "ticks": 2
+  },
+  {
+   "actions": [],
+   "op": "hold",
+   "ticks": 60
+  },
+  {
+   "actions": [
+    "move_down"
+   ],
+   "op": "hold",
+   "ticks": 60
+  },
+  {
+   "at": [
+    760.0,
+    680.0
+   ],
+   "op": "cursor"
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "actions": [
+    "move_right"
+   ],
+   "op": "hold",
+   "ticks": 170
+  },
+  {
+   "at": [
+    1226.0,
+    300.0
+   ],
+   "op": "cursor"
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "actions": [],
+   "op": "hold",
+   "ticks": 60
+  }
+ ]
+}

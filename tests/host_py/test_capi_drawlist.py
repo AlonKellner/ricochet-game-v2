@@ -156,3 +156,12 @@ def test_an_animated_game_smooths_only_a_late_region():
     assert region(late) != region(plain)
     late.advance(0.5)
     assert region(late) == region(plain)
+
+
+def test_platforms_are_drawn_wood_brown():
+    """Stage 172: a platform's pass sides in its own colour, through the C API."""
+    game = rc_host.Game(rc_host.Level((rc_host.ROOT / "data" / "levels" / "objectives" / "platforms.json").read_text()))
+    game.advance(0)
+    brown = [c for n in game.draw_list() for c in n[4]
+             if c["kind"] in ("line", "arc") and c["colors"] and all(abs(a - b) < 1e-6 for a, b in zip(c["colors"][0], (0.62, 0.42, 0.22, 1.0)))]
+    assert sorted(c["kind"] for c in brown) == ["arc", "line", "line", "line"]  # low, high, ledge; the hump

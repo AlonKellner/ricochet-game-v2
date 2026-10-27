@@ -254,9 +254,9 @@ std::optional<SideSpec> side_at(const json &j, const char *key, const std::strin
 SurfaceSpec surface_spec(const json &j, const std::string &path, bool in_level) {
 	if (in_level) {
 		only_keys(j, path, {"ids", "label", "start", "end", "via", "circle", "straight", "pre_transform", "left", "right",
-				"resolver", "presence", "player_solid"});
+				"resolver", "presence", "player_solid", "platform"});
 	} else {
-		only_keys(j, path, {"start", "end", "via", "circle", "straight", "left", "right", "resolver", "presence", "player_solid"});
+		only_keys(j, path, {"start", "end", "via", "circle", "straight", "left", "right", "resolver", "presence", "player_solid", "platform"});
 	}
 	SurfaceSpec s;
 	if (const json *c = opt(j, "circle")) {
@@ -309,6 +309,12 @@ SurfaceSpec surface_spec(const json &j, const std::string &path, bool in_level) 
 	}
 	if (const json *v = opt(j, "player_solid")) {
 		s.player_solid = boolean(*v, path + ".player_solid");
+	}
+	if (const json *v = opt(j, "platform")) {
+		s.platform = boolean(*v, path + ".platform");
+		if (s.platform && s.player_solid) {
+			fail(path + ".platform", "a platform is not also player_solid (it collides one way)");
+		}
 	}
 	return s;
 }

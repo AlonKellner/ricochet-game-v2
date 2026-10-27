@@ -187,6 +187,8 @@ def build_defs(level):
             d = {"circle": g["circle"], "id": sid, "start": list(p), "end": list(q), "via": list(w), "full": g["full"],
                  "line": g["line"], "left": left, "right": right, "is_target": is_target,
                  "player_solid": bool(spec.get("player_solid", False))}
+            if spec.get("platform"):
+                d["platform"] = True  # Stage 172: only when set (describe_surface)
             if presence:
                 d["presence"] = presence
             return d

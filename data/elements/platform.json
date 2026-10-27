@@ -1,0 +1,23 @@
+{
+ "doc": "A one-way platform: the arrow passes; the player and objects stand on its top and pass it from below; the player holding down drops through; a pulled object or a grappled player passes it.",
+ "label": "Platform",
+ "params": {},
+ "priority": 14,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   }
+  }
+ ]
+}

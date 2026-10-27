@@ -57,6 +57,7 @@ const Color DETECTOR = rgba(1.0, 0.8, 0.25, 0.85);
 const Color OBJECT = rgba(0.95, 0.6, 0.3);
 const Color CARRIER = rgba(0.45, 0.7, 1.0, 0.45);
 const Color COLLIDER = rgba(0.6, 0.72, 0.85); // Stage 164: a player-only collider
+const Color PLATFORM = rgba(0.62, 0.42, 0.22);  // Stage 172: a platform (wood brown)
 const Color CAMERA = rgba(0.85, 0.6, 1.0);
 
 // An element's layers (the draw nodes' keys: ["editor", layer, index])
@@ -237,6 +238,12 @@ const BuiltSide *shown_side(const BuiltSurface &b, bool left) {
 		}
 	}
 	return left ? (row->left ? &*row->left : nullptr) : (row->right ? &*row->right : nullptr);
+}
+
+// The colour a surface's side is shown in (Stage 172: a platform's plain sides in its own).
+Color surface_color(const BuiltSurface &b, bool left) {
+	const Color c = side_color(shown_side(b, left));
+	return b.platform && c == GRAY ? PLATFORM : c;
 }
 
 } // namespace
@@ -1590,7 +1597,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			if (!b.seg.is_line() || b.label == std::nullopt) {
 				continue; // (a pass is not drawn)
 			}
-			const Color c = side_color(shown_side(b, true));
+			const Color c = surface_color(b, true);
 			const V2 a = to_screen(b.seg.s), e = to_screen(b.seg.e);
 			r.push_back(line(a, e, c, 3.0));
 			const double dx = double(b.seg.e.x) - b.seg.s.x, dy = double(b.seg.e.y) - b.seg.s.y, len = std::hypot(dx, dy);
@@ -1854,7 +1861,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				stroke(b.seg, PRE_TRANSFORM, 1.5, true);
 				continue;
 			}
-			const Color left = side_color(shown_side(b, true)), right = side_color(shown_side(b, false));
+			const Color left = surface_color(b, true), right = surface_color(b, false);
 			const bool gated = std::any_of(b.presence.begin(), b.presence.end(), [](const PresenceSpec &c) { return c.key.rfind("chan:", 0) != 0; });
 			stroke(b.seg, left, 3.0, gated); // (dashed: present only under a flag; a spawner's channel is not drawn so)
 			V2 m, n;

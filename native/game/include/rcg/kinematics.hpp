@@ -11,6 +11,12 @@
 // is within 45 degrees of up (0, -1). Godot's numbers: SPEED 200, JUMP 400,
 // a 1 px floor snap, a 0.08 px skin (the engine's safe margin).
 //
+// Stage 172, platforms (GAME_SPEC 25.1): one-way colliders. A platform takes
+// part in a step only while the body's centre is above it at the step's start
+// and down is not held; then only its floor-like contacts count (it is met from
+// above, never from below or the side), and an overlap pushes the body up onto
+// its top -- not while rising: a jump through it carries on and lands on it.
+//
 // Deterministic: float64 inside a step, the position and velocity kept as the
 // game's float32 vectors between steps.
 #pragma once
@@ -40,10 +46,11 @@ struct Collider {
 	double cx = 0, cy = 0, r = 0;          // an arc's circle
 	bool full = false;
 	rc::arc::SegGeom seg;                  // an arc's segment (its angular range)
+	bool platform = false;                 // Stage 172: one-way (see step_body)
 };
 
-// The present player-solid surfaces (absent ones do not block: TDD_22) and the
-// level's colliders.
+// The present player-solid surfaces and platforms (absent ones do not block:
+// TDD_22) and the level's colliders.
 std::vector<Collider> colliders_of(const std::vector<BuiltSurface> &world, const rc::Flags &flags, const Level &level);
 
 // A collider from a surface's segment (a line, an arc, a full circle) or two points.
@@ -66,6 +73,9 @@ struct Input {
 void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders);
 // Stage 146: the same for a body of any radius (step() is step_body with RADIUS).
 void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, double radius);
+// Stage 172: a body whose centre is above a platform it overlaps moved up onto
+// its top (on the floor); one whose centre is below it left to fall through.
+void settle(Body &body, const std::vector<Collider> &colliders, double radius);
 // Stage 146: how far (0..1) a circle of that radius moves along (dx, dy) before
 // it first touches a collider (1: freely); what it touches only while approaching.
 double sweep_fraction(double px, double py, double dx, double dy, const std::vector<Collider> &colliders, double radius);
