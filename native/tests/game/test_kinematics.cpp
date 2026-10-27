@@ -314,6 +314,104 @@ TEST_CASE("platforms: a circle holds on its top and passes from below; a slope o
 	CHECK(s.pos.y == doctest::Approx(1000 - REST).epsilon(1e-6));
 }
 
+// Stage 176: climbing -- up held while touching a platform that does not hold the body
+
+TEST_CASE("climbing: up held lifts a jump that touches a platform from below through it, onto its top") {
+	const std::vector<k::Collider> cs{platform(0, 895, 1000, 895), wall(0, 1000, 1000, 1000)};
+	const k::Body standing{V2{500, float(1000 - REST)}, V2{}, true};
+	// the jump alone: its top just touches the platform, it falls back to the floor
+	k::Body b = standing;
+	step1(b, k::Input{0, -1, true}, G, cs);
+	run(b, k::Input{}, G, cs, 120);
+	CHECK(b.on_floor);
+	CHECK(b.pos.y == doctest::Approx(1000 - REST).epsilon(1e-6));
+	// up held: climbed through, on top
+	b = standing;
+	step1(b, k::Input{0, -1, true}, G, cs);
+	bool climbed = false;
+	for (int i = 0; i < 120; i++) {
+		const bool touching = std::abs(b.pos.y - 895.0f) <= REST && b.pos.y > 895.0f;
+		step1(b, k::Input{0, -1, false}, G, cs);
+		if (touching) {
+			climbed = true;
+			CHECK(b.vel.y <= -float(k::CLIMB_SPEED));
+		}
+	}
+	CHECK(climbed);
+	CHECK(b.on_floor);
+	CHECK(b.pos.y == doctest::Approx(895 - REST).epsilon(1e-6));
+	// standing on it with up still held it stays (a platform that holds the body is no climb)
+	const float top = b.pos.y;
+	run(b, k::Input{0, -1, false}, G, cs, 60);
+	CHECK(b.on_floor);
+	CHECK(b.pos.y == top);
+}
+
+TEST_CASE("climbing: the player climbs a stack of platforms, a rope to the platform at its top; down or nothing passes") {
+	auto run_player = [](k::Body &b, const k::Input &in, const std::vector<k::Collider> &cs, int ticks) {
+		for (int i = 0; i < ticks; i++) {
+			k::step(b, in, G, cs);
+		}
+	};
+	const float feet_on_floor = float(1000 - REST - k::BODY); // the head, the feet resting on y = 1000
+	SUBCASE("a stack, 50 apart (the body is 48 tall): up held climbs to the top one and stands there") {
+		std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000)};
+		for (int y = 950; y >= 700; y -= 50) {
+			cs.push_back(platform(400, y, 600, y));
+		}
+		k::Body b{V2{500, feet_on_floor}, V2{}, true};
+		k::step(b, k::Input{0, -1, false}, G, cs);
+		CHECK(b.vel.y == -float(k::CLIMB_SPEED)); // the lowest just over the head: in the hands' reach
+		run_player(b, k::Input{0, -1, false}, cs, 300);
+		CHECK(b.on_floor);
+		CHECK(b.pos.y == doctest::Approx(700 - REST - k::BODY).epsilon(1e-6));
+		// a platform out of reach (some 27 over the head) is no climb
+		const std::vector<k::Collider> high{wall(0, 1000, 1000, 1000), platform(400, 925, 600, 925)};
+		k::Body c{V2{500, feet_on_floor}, V2{}, true};
+		run_player(c, k::Input{0, -1, false}, high, 60);
+		CHECK(c.pos.y == feet_on_floor);
+	}
+	SUBCASE("a rope with a platform at its top: up held climbs from the floor, steps onto the top and stays") {
+		const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(500, 1000, 500, 500), platform(450, 500, 550, 500)};
+		k::Body b{V2{500, feet_on_floor}, V2{}, true};
+		k::step(b, k::Input{0, -1, false}, G, cs);
+		CHECK(b.vel.y == -float(k::CLIMB_SPEED)); // held without the press: the climb's own speed
+		run_player(b, k::Input{0, -1, false}, cs, 300);
+		CHECK(b.on_floor);
+		CHECK(b.pos.y == doctest::Approx(500 - REST - k::BODY).epsilon(1e-6));
+		run_player(b, k::Input{0, -1, false}, cs, 60);
+		CHECK(b.pos.y == doctest::Approx(500 - REST - k::BODY).epsilon(1e-6)); // no bob at the top
+	}
+	SUBCASE("a bare rope: held, the player keeps near its top; released, it falls") {
+		const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(500, 1000, 500, 500)};
+		k::Body b{V2{500, feet_on_floor}, V2{}, true};
+		run_player(b, k::Input{0, -1, false}, cs, 300);
+		for (int i = 0; i < 60; i++) {
+			k::step(b, k::Input{0, -1, false}, G, cs);
+			CHECK(b.pos.y + k::BODY >= 500 - REST - 15); // the feet within a small hop of its top
+			CHECK(b.pos.y + k::BODY <= 500 + REST);
+		}
+		run_player(b, k::Input{}, cs, 120);
+		CHECK(b.on_floor);
+		CHECK(b.pos.y == doctest::Approx(feet_on_floor).epsilon(1e-6));
+	}
+	SUBCASE("not held, or down held: the rope does not hold the player") {
+		const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(500, 1000, 500, 500)};
+		k::Body b{V2{500, 600}, V2{}, false};
+		run_player(b, k::Input{}, cs, 120);
+		CHECK(b.pos.y == doctest::Approx(feet_on_floor).epsilon(1e-6));
+		b = k::Body{V2{500, 600}, V2{}, false};
+		run_player(b, k::Input{0, 1, false}, cs, 120);
+		CHECK(b.pos.y == doctest::Approx(feet_on_floor).epsilon(1e-6));
+	}
+	SUBCASE("without gravity up is the plain move") {
+		const std::vector<k::Collider> cs{platform(500, 1000, 500, 500)};
+		k::Body b{V2{500, 800}, V2{}, false};
+		k::step(b, k::Input{0, -1, false}, V2{}, cs);
+		CHECK(b.vel.y == -float(k::SPEED));
+	}
+}
+
 TEST_CASE("platforms: a platform surface is a platform collider; a platform is never also player_solid") {
 	const rcg::Level lv = rcg::parse_level(R"({"schema": "rc-level/1", "surfaces": [
 		{"ids": [1], "start": [0, 500], "end": [1000, 500], "via": [500, 500], "platform": true,
