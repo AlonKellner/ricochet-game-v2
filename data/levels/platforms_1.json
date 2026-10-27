@@ -1,0 +1,327 @@
+{
+ "edges": "wall",
+ "elements": [
+  {
+   "end": [100.0, 200.0],
+   "kind": "wall",
+   "name": "wall_1",
+   "start": [100.0, 400.0]
+  },
+  {
+   "end": [300.0, 200.0],
+   "kind": "wall",
+   "name": "wall_2",
+   "start": [100.0, 200.0]
+  },
+  {
+   "end": [300.0, 300.0],
+   "kind": "wall",
+   "name": "wall_3",
+   "start": [300.0, 200.0]
+  },
+  {
+   "end": [600.0, 550.0],
+   "kind": "platform",
+   "name": "platform_1",
+   "start": [400.0, 550.0]
+  },
+  {
+   "end": [300.0, 300.0],
+   "kind": "platform",
+   "name": "platform_2",
+   "start": [100.0, 300.0]
+  },
+  {
+   "end": [600.0, 400.0],
+   "kind": "platform",
+   "name": "platform_3",
+   "start": [400.0, 400.0]
+  },
+  {
+   "end": [600.0, 450.0],
+   "kind": "platform",
+   "name": "platform_4",
+   "start": [400.0, 450.0]
+  },
+  {
+   "end": [600.0, 500.0],
+   "kind": "platform",
+   "name": "platform_5",
+   "start": [400.0, 500.0]
+  },
+  {
+   "end": [150.0, 150.0],
+   "kind": "passthrough",
+   "name": "passthrough_1",
+   "start": [150.0, 50.0]
+  },
+  {
+   "end": [150.0, 150.0],
+   "kind": "passthrough",
+   "name": "passthrough_2",
+   "start": [130.0, 130.0]
+  },
+  {
+   "end": [150.0, 150.0],
+   "kind": "passthrough",
+   "name": "passthrough_3",
+   "start": [170.0, 130.0]
+  },
+  {
+   "end": [240.0, 60.0],
+   "kind": "passthrough",
+   "name": "passthrough_4",
+   "start": [260.0, 70.0]
+  },
+  {
+   "end": [240.0, 60.0],
+   "kind": "passthrough",
+   "name": "passthrough_5",
+   "start": [220.0, 60.0]
+  },
+  {
+   "end": [200.0, 80.0],
+   "kind": "passthrough",
+   "name": "passthrough_6",
+   "start": [220.0, 60.0]
+  },
+  {
+   "end": [210.0, 100.0],
+   "kind": "passthrough",
+   "name": "passthrough_7",
+   "start": [200.0, 80.0]
+  },
+  {
+   "end": [250.0, 110.0],
+   "kind": "passthrough",
+   "name": "passthrough_8",
+   "start": [210.0, 100.0]
+  },
+  {
+   "end": [260.0, 130.0],
+   "kind": "passthrough",
+   "name": "passthrough_9",
+   "start": [250.0, 110.0]
+  },
+  {
+   "end": [240.0, 150.0],
+   "kind": "passthrough",
+   "name": "passthrough_10",
+   "start": [260.0, 130.0]
+  },
+  {
+   "end": [220.0, 150.0],
+   "kind": "passthrough",
+   "name": "passthrough_11",
+   "start": [240.0, 150.0]
+  },
+  {
+   "end": [200.0, 140.0],
+   "kind": "passthrough",
+   "name": "passthrough_12",
+   "start": [220.0, 150.0]
+  },
+  {
+   "end": [400.0, 400.0],
+   "kind": "wall",
+   "name": "wall_4",
+   "start": [100.0, 400.0]
+  },
+  {
+   "end": [600.0, 300.0],
+   "kind": "wall",
+   "name": "wall_5",
+   "start": [300.0, 300.0]
+  },
+  {
+   "end": [600.0, 700.0],
+   "kind": "wall",
+   "name": "wall_6",
+   "start": [600.0, 300.0]
+  },
+  {
+   "end": [400.0, 800.0],
+   "kind": "wall",
+   "name": "wall_7",
+   "start": [400.0, 400.0]
+  },
+  {
+   "end": [1400.0, 800.0],
+   "kind": "wall",
+   "name": "wall_8",
+   "start": [400.0, 800.0]
+  },
+  {
+   "end": [1000.0, 400.0],
+   "kind": "wall",
+   "name": "wall_9",
+   "start": [1000.0, 800.0]
+  },
+  {
+   "end": [800.0, 300.0],
+   "kind": "wall",
+   "name": "wall_10",
+   "start": [800.0, 700.0]
+  },
+  {
+   "end": [600.0, 600.0],
+   "kind": "platform",
+   "name": "platform_6",
+   "start": [400.0, 600.0]
+  },
+  {
+   "end": [600.0, 650.0],
+   "kind": "platform",
+   "name": "platform_7",
+   "start": [400.0, 650.0]
+  },
+  {
+   "end": [600.0, 700.0],
+   "kind": "platform",
+   "name": "platform_8",
+   "start": [400.0, 700.0]
+  },
+  {
+   "end": [600.0, 750.0],
+   "kind": "platform",
+   "name": "platform_9",
+   "start": [400.0, 750.0]
+  },
+  {
+   "end": [1000.0, 550.0],
+   "kind": "platform",
+   "name": "platform_10",
+   "start": [800.0, 550.0]
+  },
+  {
+   "end": [1000.0, 400.0],
+   "kind": "platform",
+   "name": "platform_11",
+   "start": [800.0, 400.0]
+  },
+  {
+   "end": [1000.0, 450.0],
+   "kind": "platform",
+   "name": "platform_12",
+   "start": [800.0, 450.0]
+  },
+  {
+   "end": [1000.0, 500.0],
+   "kind": "platform",
+   "name": "platform_13",
+   "start": [800.0, 500.0]
+  },
+  {
+   "end": [1000.0, 600.0],
+   "kind": "platform",
+   "name": "platform_14",
+   "start": [800.0, 600.0]
+  },
+  {
+   "end": [1000.0, 650.0],
+   "kind": "platform",
+   "name": "platform_15",
+   "start": [800.0, 650.0]
+  },
+  {
+   "end": [1000.0, 700.0],
+   "kind": "platform",
+   "name": "platform_16",
+   "start": [800.0, 700.0]
+  },
+  {
+   "end": [1000.0, 750.0],
+   "kind": "platform",
+   "name": "platform_17",
+   "start": [800.0, 750.0]
+  },
+  {
+   "end": [1000.0, 300.0],
+   "kind": "platform",
+   "name": "platform_18",
+   "start": [1000.0, 400.0]
+  },
+  {
+   "end": [1340.0, 300.0],
+   "kind": "wall",
+   "name": "wall_11",
+   "start": [1340.0, 800.0]
+  },
+  {
+   "end": [1290.0, 300.0],
+   "kind": "platform",
+   "name": "platform_19",
+   "start": [1290.0, 800.0]
+  },
+  {
+   "end": [1310.0, 300.0],
+   "kind": "platform",
+   "name": "platform_20",
+   "start": [1310.0, 800.0]
+  },
+  {
+   "end": [1340.0, 300.0],
+   "kind": "platform",
+   "name": "platform_21",
+   "start": [1240.0, 300.0]
+  },
+  {
+   "end": [1270.0, 300.0],
+   "kind": "platform",
+   "name": "platform_22",
+   "start": [1270.0, 800.0]
+  },
+  {
+   "end": [850.0, 850.0],
+   "kind": "passthrough",
+   "name": "passthrough_13",
+   "start": [850.0, 950.0]
+  },
+  {
+   "end": [850.0, 850.0],
+   "kind": "passthrough",
+   "name": "passthrough_14",
+   "start": [830.0, 870.0]
+  },
+  {
+   "end": [850.0, 850.0],
+   "kind": "passthrough",
+   "name": "passthrough_15",
+   "start": [870.0, 870.0]
+  },
+  {
+   "end": [910.0, 940.0],
+   "kind": "passthrough",
+   "name": "passthrough_16",
+   "start": [890.0, 860.0]
+  },
+  {
+   "end": [930.0, 860.0],
+   "kind": "passthrough",
+   "name": "passthrough_17",
+   "start": [910.0, 940.0]
+  },
+  {
+   "end": [950.0, 940.0],
+   "kind": "passthrough",
+   "name": "passthrough_18",
+   "start": [930.0, 860.0]
+  },
+  {
+   "end": [970.0, 860.0],
+   "kind": "passthrough",
+   "name": "passthrough_19",
+   "start": [950.0, 940.0]
+  }
+ ],
+ "gravity": [0.0, 980.0],
+ "name": "platforms_1",
+ "player": {
+  "start": [200.0, 260.0]
+ },
+ "room": {
+  "built": false,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}
