@@ -12,6 +12,7 @@
 #include <cmath>
 #include <filesystem>
 #include <string>
+#include <utility>
 
 namespace {
 
@@ -417,4 +418,75 @@ TEST_CASE("platforms: the demo level plays to its goal") {
 	s.hold({}, 60); // and down onto the ledge, in the goal
 	CHECK(s.player().y == doctest::Approx(450 - 12 - 0.08).epsilon(1e-6));
 	CHECK(s.won());
+}
+
+namespace {
+
+// the previewed journey's trail: its legs (one per side of each portal crossed)
+int trail_legs(const rcg::Session &s) {
+	int legs = 0;
+	for (const auto &n : s.draw_frame()) {
+		if (n.key.kind == rcg::render::NodeKind::Glow) {
+			for (const auto &c : *n.calls) {
+				legs += c.kind == rcg::render::Kind::Polyline ? 1 : 0;
+			}
+		}
+	}
+	return legs;
+}
+
+// the user's pulling_2 (as in their dump): the level's walls, a box falling to the floor at y 1080
+rcg::Level pulling_2() {
+	return rcg::parse_level_json(json::parse(R"({"schema": "rc-level/2", "name": "pulling_2", "edges": "wall",
+		"gravity": [0.0, 980.0], "player": {"start": [550.0, 1050.0]}, "room": {"rect": [560.0, 240.0, 800.0, 600.0], "built": false},
+		"detectors": [{"flag": "close", "for": "any", "mode": "while", "name": "detector_1", "region": {"rect": [800.0, 1050.0, 150.0, 30.0]}}],
+		"elements": [{"kind": "door", "name": "door_1", "flag": "!close", "start": [1100.0, 1080.0], "end": [1100.0, 900.0]}],
+		"objective": {"goal": {"rect": [1250.0, 950.0, 100.0, 130.0]}},
+		"objects": [{"name": "object_1", "circle": {"center": [890.0, 700.0], "radius": 16.0}}]})"));
+}
+
+} // namespace
+
+TEST_CASE("pull: the user's pulling_2 -- the box slides along the floor to the player; no crossing where the cursor splits the path (Stage 174)") {
+	// the user's F12 dump: the preview's box froze on the floor at x 499 (a slide's rounding residue into the floor,
+	// the box a float32 ulp inside its skin) and crossed a portal that is not there at the cursor (a step's shared
+	// start taken for a jump)
+	rcg::Session s(pulling_2());
+	s.hold({}, 240); // the box falls and rests
+	s.teleport(rc::V2::of(0x1.575542p+8, 0x1.0afae2p+10));
+	s.hold({}, 60);
+	REQUIRE(s.player().x == 0x1.575542p+8f);
+	REQUIRE(s.player().y == 0x1.0afae2p+10f);
+	REQUIRE(body(s).x == 890.0f);
+	s.set_cursor(rc::V2::of(0x1.a638e2p+9, 0x1.0c186p+10)); // short of the box: two steps
+	s.settle();
+	const std::optional<rc::V2> end = s.preview_trip_end();
+	REQUIRE(end.has_value());
+	CHECK(dist(*end, s.player()) < 16 + 12 + 1); // at the player, not caught on the floor
+	CHECK(trail_legs(s) == 1);                    // no portal: one leg
+	shoot(s, 0x1.a638e2p+9, 0x1.0c186p+10);
+	CHECK(body(s).x == end->x); // the live journey ends where the preview said
+	CHECK(body(s).y == end->y);
+}
+
+TEST_CASE("pull: a box resting on the floor comes to the player from anywhere, the cursor on it or short of it (Stage 174)") {
+	rcg::Session s(pulling_2());
+	s.hold({}, 240); // the box rests on the floor
+	for (int i = 0; i < 40; i++) {
+		const double px = 100.5 + 17.37 * i; // (scattered: the residue's sign depends on the position)
+		s.teleport(rc::V2::of(px, 1060));
+		s.hold({}, 30);
+		// on the box (one step), short of it (two)
+		for (const auto &[cx, cy] : {std::pair{890.0, 1056.0}, std::pair{890.0, 1072.0}, std::pair{840.0, 1066.0}, std::pair{840.0, 1074.0}}) {
+			CAPTURE(px);
+			CAPTURE(cx);
+			CAPTURE(cy);
+			s.set_cursor(rc::V2::of(cx, cy));
+			s.settle();
+			const std::optional<rc::V2> end = s.preview_trip_end();
+			REQUIRE(end.has_value());
+			CHECK(dist(*end, s.player()) < 16 + 12 + 1);
+			CHECK(trail_legs(s) == 1);
+		}
+	}
 }
