@@ -1,8 +1,9 @@
 {
+ "colliders": [],
  "gravity": [0.0, 980.0],
  "name": "cage_maze_1",
  "player": {
-  "start": [160.0, 1060.0]
+  "start": [950.0, 940.0]
  },
  "room": {
   "built": false,
@@ -11,7 +12,7 @@
  "schema": "rc-level/1",
  "surfaces": [
   {
-   "end": [650.0, 350.0],
+   "end": [750.0, 250.0],
    "ids": [1],
    "label": "Fence",
    "left": {
@@ -27,11 +28,11 @@
     },
     "interactive": false
    },
-   "start": [650.0, 750.0],
-   "via": [650.0, 550.0]
+   "start": [750.0, 750.0],
+   "via": [750.0, 500.0]
   },
   {
-   "end": [1050.0, 350.0],
+   "end": [1150.0, 250.0],
    "ids": [2],
    "label": "Fence",
    "left": {
@@ -47,11 +48,11 @@
     },
     "interactive": false
    },
-   "start": [650.0, 350.0],
-   "via": [850.0, 350.0]
+   "start": [750.0, 250.0],
+   "via": [950.0, 250.0]
   },
   {
-   "end": [1050.0, 750.0],
+   "end": [1150.0, 750.0],
    "ids": [3],
    "label": "Fence",
    "left": {
@@ -67,11 +68,11 @@
     },
     "interactive": false
    },
-   "start": [1050.0, 350.0],
-   "via": [1050.0, 550.0]
+   "start": [1150.0, 250.0],
+   "via": [1150.0, 500.0]
   },
   {
-   "end": [650.0, 750.0],
+   "end": [750.0, 750.0],
    "ids": [4],
    "label": "Fence",
    "left": {
@@ -87,11 +88,11 @@
     },
     "interactive": false
    },
-   "start": [1050.0, 750.0],
-   "via": [850.0, 750.0]
+   "start": [1150.0, 750.0],
+   "via": [950.0, 750.0]
   },
   {
-   "end": [750.0, 650.0],
+   "end": [750.0, 450.0],
    "ids": [5],
    "label": "Fence",
    "left": {
@@ -107,11 +108,11 @@
     },
     "interactive": false
    },
-   "start": [1050.0, 650.0],
-   "via": [900.0, 650.0]
+   "start": [950.0, 450.0],
+   "via": [850.0, 450.0]
   },
   {
-   "end": [650.0, 550.0],
+   "end": [950.0, 350.0],
    "ids": [6],
    "label": "Fence",
    "left": {
@@ -127,11 +128,11 @@
     },
     "interactive": false
    },
-   "start": [950.0, 550.0],
-   "via": [800.0, 550.0]
+   "start": [950.0, 450.0],
+   "via": [950.0, 400.0]
   },
   {
-   "end": [1050.0, 450.0],
+   "end": [1050.0, 650.0],
    "ids": [7],
    "label": "Fence",
    "left": {
@@ -147,12 +148,218 @@
     },
     "interactive": false
    },
-   "start": [750.0, 450.0],
-   "via": [900.0, 450.0]
+   "start": [1050.0, 250.0],
+   "via": [1050.0, 450.0]
+  },
+  {
+   "end": [1050.0, 650.0],
+   "ids": [8],
+   "label": "Fence",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [850.0, 650.0],
+   "via": [950.0, 650.0]
+  },
+  {
+   "end": [1150.0, 350.0],
+   "ids": [9],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1050.0, 350.0],
+   "via": [1100.0, 350.0]
+  },
+  {
+   "end": [850.0, 550.0],
+   "ids": [10],
+   "label": "Fence",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [850.0, 650.0],
+   "via": [850.0, 600.0]
+  },
+  {
+   "end": [1050.0, 1000.0],
+   "ids": [11],
+   "label": "Fence",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1050.0, 800.0],
+   "via": [1050.0, 900.0]
+  },
+  {
+   "end": [850.0, 1000.0],
+   "ids": [12],
+   "label": "Fence",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [850.0, 800.0],
+   "via": [850.0, 900.0]
+  },
+  {
+   "end": [1050.0, 800.0],
+   "ids": [13],
+   "label": "Fence",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [850.0, 800.0],
+   "via": [950.0, 800.0]
+  },
+  {
+   "end": [1050.0, 1000.0],
+   "ids": [14],
+   "label": "Door",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "det:detector_1",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [850.0, 1000.0],
+   "via": [950.0, 1000.0]
+  },
+  {
+   "end": [1500.0, 1080.0],
+   "ids": [15],
+   "label": "MirrorB",
+   "left": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "start": [1500.0, 50.0],
+   "via": [1500.0, 565.0]
+  },
+  {
+   "end": [400.0, 1080.0],
+   "ids": [16],
+   "label": "MirrorB",
+   "left": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "start": [400.0, 50.0],
+   "via": [400.0, 565.0]
+  },
+  {
+   "end": [1500.0, 50.0],
+   "ids": [17],
+   "label": "MirrorB",
+   "left": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "start": [400.0, 50.0],
+   "via": [950.0, 50.0]
   },
   {
    "end": [0.0, 0.0],
-   "ids": [8],
+   "ids": [18],
    "label": "Surface",
    "left": {
     "effect": {
@@ -172,7 +379,7 @@
   },
   {
    "end": [1920.0, 0.0],
-   "ids": [9],
+   "ids": [19],
    "label": "Surface",
    "left": {
     "effect": {
@@ -192,7 +399,7 @@
   },
   {
    "end": [1920.0, 1080.0],
-   "ids": [10],
+   "ids": [20],
    "label": "Surface",
    "left": {
     "effect": {
@@ -212,7 +419,7 @@
   },
   {
    "end": [0.0, 1080.0],
-   "ids": [11],
+   "ids": [21],
    "label": "Surface",
    "left": {
     "effect": {
