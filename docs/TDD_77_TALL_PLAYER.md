@@ -15,7 +15,7 @@ a platform, they end up directly over the player's 'feet'." The spec is GAME_SPE
 | 173.1 | The kinematics: `kinematics::Shape` (circles of one radius stacked below a position), `PLAYER` (head, middle, feet: 0, 12, 24); `step_body`, `sweep_fraction`, `settle` and the shape's `distance` take a shape; platforms judge the feet; `rcg_tests` "tall player: ..." | Done |
 | 173.2 | The session: tall only under gravity (`tall()`, `player_shape()`); the spawn by the feet under gravity (`spawn_point`); detectors and the goal see the feet; the gravity toggle keeps the feet; the player and objects pass each other (the player's colliders skip the objects', the objects' skip the player); a pull ends at the arrow's origin (the preview's `blocked` no longer allows for the player) | Done |
 | 173.3 | The draw: the rectangle under the triangle (in play, and cut at a portal while crossing); the editor's start marker under gravity (the body's outline, the head marked) | Done |
-| 173.4 | Docs; the session goldens (the judge's report, your approval); `make gate` | In progress |
+| 173.4 | Docs; the session goldens (the judge's report: 32 of 59 sessions, every win kept; approved 2026-10-27, re-recorded after merging Stage 174); `make gates` | Done |
 | 173.5 | Your interactive sign-off | Open |
 
 ## Decisions
