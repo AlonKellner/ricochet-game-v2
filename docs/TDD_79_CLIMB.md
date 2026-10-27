@@ -10,7 +10,7 @@ ropes." The spec is GAME_SPEC 25.1 (with 4.1 and 25.2); the platform itself is S
 |---|---|---|
 | 176.1 | The kinematics: in `step_body`, with gravity and up held, a platform that does not hold the body this step, touched along its length by one of its circles or its hands (`REACH` above the head), sets the upward speed to at least `CLIMB_SPEED` (150); `rcg_tests` "climbing: ..." | Done |
 | 176.2 | Docs (GAME_SPEC 2.80.0, CHANGELOG); `make gate`; the session golden unchanged | Done |
-| 176.3 | Your interactive sign-off (`platforms_1`: the stacks and the ropes) | Open |
+| 176.3 | Your interactive sign-off (`platforms_1`: the stacks and the ropes) | Done (the user's sign-off 2026-10-28) |
 
 ## Decisions
 
