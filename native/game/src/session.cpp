@@ -193,7 +193,7 @@ Session::Session(const Level &level, const SessionConfig &config)
 		world_->set_moving(std::move(moving));
 		apply_phase();
 	}
-	player_ = level_.player_start.value_or(V2{});
+	player_ = level_.player_start ? spawn_point(level_) : V2{};
 	tick_from_ = player_;
 	settled_player_ = player_; // (a new session is standing still)
 	gravity_ = level_.gravity;
@@ -712,6 +712,9 @@ void Session::key(Action a) {
 			break;
 		case Action::ToggleGravity:
 			gravity_ = gravity_.length_squared() > 0.0f ? V2{} : V2{0.0f, 980.0f};
+			// (Stage 173: the player stands up, or folds back into its circle, where its feet were)
+			player_ = V2::of(player_.x, double(player_.y) + (tall() ? -kinematics::BODY : kinematics::BODY));
+			tick_from_ = player_;
 			break;
 		case Action::ToggleVisibility:
 			visibility_override_ = !visibility_on();
@@ -952,7 +955,7 @@ void Session::tick(const kinematics::Input &in) {
 	}
 	tick_from_ = player_;
 	kinematics::Body body{player_, velocity_, on_floor_};
-	kinematics::step(body, in, gravity_, kinematics::colliders_of(world_->surfaces(), flags_, level_));
+	kinematics::step_body(body, in, gravity_, kinematics::colliders_of(world_->surfaces(), flags_, level_, body_ids()), player_shape());
 	player_ = body.pos;
 	velocity_ = body.vel;
 	on_floor_ = body.on_floor;
@@ -960,7 +963,7 @@ void Session::tick(const kinematics::Input &in) {
 		step_bodies();
 	}
 	if (!level_.detectors.empty()) {
-		detect(tick_from_, player_);
+		detect(feet(tick_from_), feet(player_));
 	}
 	if (!level_.tagged.empty() || std::any_of(level_.objects.begin(), level_.objects.end(), [](const Object &o) { return !o.tags.empty(); })) {
 		spread(); // Stage 152: bodies moved, detectors wrote, surfaces moved
@@ -1037,6 +1040,14 @@ constexpr double JOURNEY_SPEED = 900.0; // px/s along the path
 constexpr double JOURNEY_SAMPLE = 4.0;  // px between the path's points
 } // namespace
 
+std::vector<int> Session::body_ids() const {
+	std::vector<int> out;
+	for (const World::Body &b : world_->bodies()) {
+		out.push_back(b.id);
+	}
+	return out;
+}
+
 std::vector<kinematics::Collider> Session::colliders_except(int body) const { return colliders_except(body, flags_); }
 
 std::vector<kinematics::Collider> Session::colliders_except(int body, const rc::Flags &flags, bool journey) const {
@@ -1051,10 +1062,7 @@ std::vector<kinematics::Collider> Session::colliders_except(int body, const rc::
 	for (const auto &k : level_.colliders) {
 		out.push_back(kinematics::segment_collider(k.a, k.b));
 	}
-	if (body >= 0) {
-		out.push_back(kinematics::circle_collider(player_, kinematics::RADIUS)); // a body meets the player
-	}
-	return out;
+	return out; // (Stage 173: a body and the player pass each other)
 }
 
 // Pullable bodies fall under gravity and rest on what holds them (no body meets
@@ -1191,7 +1199,7 @@ void Session::start_journey() {
 // the guide, sliding along what it touches. It is done when it reaches the guide at the path's end, or cannot get
 // closer to a waiting guide. At a portal the guide waits at the entry until the traveller holds it; the traveller
 // then crosses in and comes out of the exit (the portal's motion), and goes on.
-bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, double radius, double dt) const {
+bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, const kinematics::Shape &shape, double dt) const {
 	const double follow = JOURNEY_SPEED * 1.25 * dt; // (a little faster than the guide: it catches up)
 	auto dist = [](const V2 &a, const V2 &b) { return std::hypot(double(a.x) - double(b.x), double(a.y) - double(b.y)); };
 	if (j.crossing) {
@@ -1250,7 +1258,8 @@ bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Co
 				j.cross_dir = V2::of(bx, by);
 				const double along = std::max(0.05, bx * nx + by * ny);
 				const double ahead = (double(pos.x) - e.x) * nx + (double(pos.y) - e.y) * ny; // (negative: still before it)
-				j.cross_left = std::max(0.0, (radius - ahead) / along);
+				// (wholly through: the shape's reach below its position too -- Stage 173, the player's feet)
+				j.cross_left = std::max(0.0, (shape.radius + shape.feet() - ahead) / along);
 				j.crossing = true;
 				return false;
 			}
@@ -1273,7 +1282,7 @@ bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Co
 		const double f = std::min(1.0, follow / before);
 		double dx = (double(j.guide.x) - pos.x) * f, dy = (double(j.guide.y) - pos.y) * f;
 		for (int k = 0; k < 4 && (dx != 0.0 || dy != 0.0); k++) {
-			const double t = kinematics::sweep_fraction(pos.x, pos.y, dx, dy, cs, radius);
+			const double t = kinematics::sweep_fraction(pos.x, pos.y, dx, dy, cs, shape);
 			pos = V2::of(double(pos.x) + dx * t, double(pos.y) + dy * t);
 			if (t >= 1.0) {
 				break;
@@ -1282,7 +1291,7 @@ bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Co
 			double best = INFINITY, nx = 0.0, ny = 0.0;
 			for (const kinematics::Collider &c : cs) {
 				double cx = 0.0, cy = 0.0;
-				const double d = kinematics::distance(c, pos.x, pos.y, cx, cy);
+				const double d = kinematics::distance(c, shape, pos.x, pos.y, cx, cy);
 				if (d < best) {
 					best = d, nx = cx, ny = cy;
 				}
@@ -1322,15 +1331,15 @@ bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Co
 void Session::advance_journey(double dt) {
 	Journey &j = *journey_;
 	const bool player = j.body < 0;
-	const double radius = player ? kinematics::RADIUS : world_->bodies()[size_t(j.body)].object.radius;
+	const kinematics::Shape shape = player ? player_shape() : kinematics::Shape{world_->bodies()[size_t(j.body)].object.radius};
 	V2 pos = player ? player_ : world_->bodies()[size_t(j.body)].pos;
 	const V2 from = pos;
 	const std::vector<kinematics::Collider> cs = colliders_except(j.body, flags_, true);
-	const bool done = journey_move(j, pos, cs, radius, dt);
+	const bool done = journey_move(j, pos, cs, shape, dt);
 	bool floor = false;
 	if (done) {
 		kinematics::Body settled{pos, V2{}, false};
-		kinematics::settle(settled, colliders_except(j.body), radius);
+		kinematics::settle(settled, colliders_except(j.body), shape);
 		pos = settled.pos;
 		floor = settled.on_floor;
 	}
@@ -1342,14 +1351,14 @@ void Session::advance_journey(double dt) {
 			on_floor_ = true;
 		}
 		if (!level_.detectors.empty()) {
-			detect(from, pos);
+			detect(feet(from), feet(pos));
 		}
 		shadow(); // (Stage 168: the player's light follows)
 	} else {
 		world_->set_body(size_t(j.body), pos, V2{}, floor);
 		sync_nodes();
 		if (!level_.detectors.empty()) {
-			detect(player_, player_);
+			detect(feet(player_), feet(player_));
 		}
 	}
 	if (done) {
@@ -1606,7 +1615,7 @@ void Session::check_won() {
 	}
 	bool w = false;
 	if (level_.objective) {
-		w = goal_open() && level_.objective->goal.contains(player_);
+		w = goal_open() && level_.objective->goal.contains(feet(player_)); // (Stage 173: where the player stands)
 	} else {
 		int targets = 0;
 		bool all = true;
@@ -1934,12 +1943,12 @@ void Session::arrow_states(Preview &p) const {
 			trip.body = j->body;
 			const bool player = j->body < 0;
 			V2 pos = player ? player_ : world_->bodies()[size_t(j->body)].pos;
-			const double radius = player ? kinematics::RADIUS : world_->bodies()[size_t(j->body)].object.radius;
+			const kinematics::Shape shape = player ? player_shape() : kinematics::Shape{world_->bodies()[size_t(j->body)].object.radius};
 			const std::vector<kinematics::Collider> cs = colliders_except(j->body, landed, true);
 			trip.trail.push_back(pos);
 			for (int tick = 0; tick < 20000; tick++) {
 				const bool was_crossing = j->crossing;
-				const bool done = journey_move(*j, pos, cs, radius, 1.0 / 60.0);
+				const bool done = journey_move(*j, pos, cs, shape, 1.0 / 60.0);
 				if (was_crossing && !j->crossing) {
 					trip.breaks.push_back(trip.trail.size()); // (through a portal: the trail goes on from the exit)
 				}
@@ -1948,11 +1957,11 @@ void Session::arrow_states(Preview &p) const {
 					// (blocked: stopped short of where it arrives -- a pulled object against the player at the path's
 					// end, the player at the grapple -- by a barrier on the way)
 					const V2 last = j->path.back();
-					const double arrive = j->lead + (j->body >= 0 ? kinematics::RADIUS : 0.0) + 1.0;
+					const double arrive = j->lead + 1.0; // (Stage 173: a pulled object no longer stops at the player)
 					trip.blocked = std::hypot(double(pos.x) - last.x, double(pos.y) - last.y) > arrive;
 					// (Stage 172: settled as the live journey's end is -- onto a platform it ends half through)
 					kinematics::Body settled{pos, V2{}, false};
-					kinematics::settle(settled, colliders_except(j->body, landed), radius);
+					kinematics::settle(settled, colliders_except(j->body, landed), shape);
 					if (settled.pos.x != pos.x || settled.pos.y != pos.y) {
 						trip.trail.push_back(settled.pos);
 					}

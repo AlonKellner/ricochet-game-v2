@@ -1936,7 +1936,17 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 	// the player's start
 	if (doc_.contains("player") && doc_["player"].is_object() && is_point(doc_["player"].value("start", json()))) {
 		const V2 p = to_screen(pt(doc_["player"]["start"]));
-		out.add(L_PLAYER, 0, 4, {arc(p, kinematics::RADIUS * zoom_, 0, TAU, GREEN, 2.0), circle(p, 2.5, GREEN)});
+		const json g = doc_.value("gravity", json::array({0.0, 0.0}));
+		const bool tall = g.is_array() && g.size() == 2 && g[0].is_number() && g[1].is_number() && (g[0].get<double>() != 0.0 || g[1].get<double>() != 0.0);
+		if (tall) { // Stage 173: with gravity the start is where the player stands -- its feet; its head (the origin) above
+			const double r = kinematics::RADIUS * zoom_;
+			const V2 h = V2::of(p.x, double(p.y) - kinematics::BODY * zoom_);
+			out.add(L_PLAYER, 0, 4, {arc(p, r, 0, TAU / 2, GREEN, 2.0), arc(h, r, TAU / 2, TAU, GREEN, 2.0),
+					line(V2::of(double(p.x) - r, p.y), V2::of(double(h.x) - r, h.y), GREEN, 2.0),
+					line(V2::of(double(p.x) + r, p.y), V2::of(double(h.x) + r, h.y), GREEN, 2.0), circle(h, 2.5, GREEN)});
+		} else {
+			out.add(L_PLAYER, 0, 4, {arc(p, kinematics::RADIUS * zoom_, 0, TAU, GREEN, 2.0), circle(p, 2.5, GREEN)});
+		}
 	}
 	// a placement under way, and where the pointer snaps
 	{

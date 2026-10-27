@@ -19,18 +19,22 @@ namespace {
 namespace k = rcg::kinematics;
 using rc::V2;
 
-// (a platform is not counted: it is overlapped whenever something passes it)
-double clearance(const std::vector<k::Collider> &cs, double x, double y) {
+// (a platform is not counted: it is overlapped whenever something passes it;
+// a shape at (x, y): from its nearest circle)
+double clearance(const std::vector<k::Collider> &cs, double x, double y, const k::Shape &shape = k::Shape{}) {
 	double best = std::numeric_limits<double>::infinity();
 	for (const k::Collider &c : cs) {
 		if (c.platform) {
 			continue;
 		}
 		double nx, ny;
-		best = std::min(best, k::distance(c, x, y, nx, ny));
+		best = std::min(best, k::distance(c, shape, x, y, nx, ny));
 	}
 	return best;
 }
+
+// a circle body's tick (the controller's own rules, a circle of the player's radius)
+void step1(k::Body &b, const k::Input &in, const V2 &g, const std::vector<k::Collider> &cs) { k::step_body(b, in, g, cs, k::RADIUS); }
 
 k::Collider wall(double ax, double ay, double bx, double by) {
 	k::Collider c;
@@ -52,7 +56,7 @@ const double REST = k::RADIUS + k::SKIN; // a body's centre above what it rests 
 
 void run(k::Body &b, const k::Input &in, const V2 &g, const std::vector<k::Collider> &cs, int ticks) {
 	for (int i = 0; i < ticks; i++) {
-		k::step(b, in, g, cs);
+		step1(b, in, g, cs);
 	}
 }
 
@@ -62,7 +66,7 @@ TEST_CASE("kinematics: a wall stops the player a skin away; a floor holds it; a 
 	const std::vector<k::Collider> box{wall(0, 0, 1000, 0), wall(1000, 0, 1000, 1000), wall(1000, 1000, 0, 1000), wall(0, 1000, 0, 0)};
 	k::Body b{V2{500, 500}, V2{}, false};
 	for (int i = 0; i < 300; i++) {
-		k::step(b, k::Input{1.0f, 0.0f, false}, V2{}, box);
+		step1(b, k::Input{1.0f, 0.0f, false}, V2{}, box);
 	}
 	CHECK(b.pos.x == doctest::Approx(1000 - k::RADIUS - k::SKIN).epsilon(1e-6));
 	CHECK(b.pos.y == 500.0f);
@@ -70,16 +74,16 @@ TEST_CASE("kinematics: a wall stops the player a skin away; a floor holds it; a 
 	const V2 g{0, 980};
 	b = k::Body{V2{500, 500}, V2{}, false};
 	for (int i = 0; i < 120; i++) {
-		k::step(b, k::Input{}, g, box);
+		step1(b, k::Input{}, g, box);
 	}
 	CHECK(b.on_floor);
 	CHECK(b.pos.y == doctest::Approx(1000 - k::RADIUS - k::SKIN).epsilon(1e-6));
 	const float rest = b.pos.y;
 	// a jump: up by about v^2 / 2g (400^2 / 1960 = 81.6 px), back down to the floor
-	k::step(b, k::Input{0, 0, true}, g, box);
+	step1(b, k::Input{0, 0, true}, g, box);
 	float top = b.pos.y;
 	for (int i = 0; i < 120; i++) {
-		k::step(b, k::Input{}, g, box);
+		step1(b, k::Input{}, g, box);
 		top = std::min(top, b.pos.y);
 	}
 	CHECK(rest - top == doctest::Approx(81.6).epsilon(0.05));
@@ -89,7 +93,7 @@ TEST_CASE("kinematics: a wall stops the player a skin away; a floor holds it; a 
 	b.pos.y -= 200.0f;
 	b.on_floor = false;
 	b.vel = V2{};
-	k::step(b, k::Input{0, 0, true}, g, box);
+	step1(b, k::Input{0, 0, true}, g, box);
 	CHECK(b.vel.y > 0.0f);
 }
 
@@ -128,8 +132,10 @@ TEST_CASE("kinematics: no penetration, no tunnelling, on random input over every
 				seed = (seed ^ std::uint64_t(static_cast<unsigned char>(c))) * 0x100000001b3ull;
 			}
 			rcg::GodotRng rng(seed + (g.y > 0 ? 1u : 0u));
-			k::Body b{*lv.player_start, V2{}, false};
-			if (clearance(cs, b.pos.x, b.pos.y) < k::RADIUS) {
+			// (as a session spawns and moves it: tall under gravity)
+			const k::Shape shape = g.y > 0 ? k::PLAYER : k::Shape{};
+			k::Body b{g.y > 0 ? V2::of(lv.player_start->x, double(lv.player_start->y) - k::BODY) : *lv.player_start, V2{}, false};
+			if (clearance(cs, b.pos.x, b.pos.y, shape) < k::RADIUS) {
 				continue; // a start inside a solid (none today)
 			}
 			k::Input in;
@@ -140,9 +146,9 @@ TEST_CASE("kinematics: no penetration, no tunnelling, on random input over every
 				}
 				in.jump = rng.randi() % 30u == 0u;
 				const V2 before = b.pos;
-				k::step(b, in, g, cs);
+				k::step_body(b, in, g, cs, shape);
 				// no penetration (the float32 rounding of the position aside)
-				const double cl = clearance(cs, b.pos.x, b.pos.y);
+				const double cl = clearance(cs, b.pos.x, b.pos.y, shape);
 				REQUIRE_MESSAGE(cl >= k::RADIUS - 1e-3, "tick " << t << " at " << b.pos.x << "," << b.pos.y << ": clearance " << cl);
 				// no tunnelling: the straight path between the ticks keeps its distance -- but for the sagitta
 				// of a slide around a convex corner within the tick (the true path keeps outside it; its chord
@@ -151,7 +157,7 @@ TEST_CASE("kinematics: no penetration, no tunnelling, on random input over every
 				const double sagitta = chord * chord / (8.0 * k::RADIUS);
 				for (int s = 1; s < 8; s++) {
 					const double x = before.x + (b.pos.x - before.x) * s / 8.0, y = before.y + (b.pos.y - before.y) * s / 8.0;
-					REQUIRE_MESSAGE(clearance(cs, x, y) >= k::RADIUS - 1e-3 - sagitta, "tick " << t << " between the ticks");
+					REQUIRE_MESSAGE(clearance(cs, x, y, shape) >= k::RADIUS - 1e-3 - sagitta, "tick " << t << " between the ticks");
 				}
 				ticks++;
 			}
@@ -167,7 +173,7 @@ TEST_CASE("kinematics: a fall at any speed does not tunnel through a thin floor"
 		k::Body b{V2{100, 100}, V2{}, false};
 		// with g = 1e7 px/s^2 the fall passes the floor's whole approach in one tick
 		for (int i = 0; i < 60; i++) {
-			k::step(b, k::Input{}, V2{0.0f, g}, floor_only);
+			step1(b, k::Input{}, V2{0.0f, g}, floor_only);
 			REQUIRE(b.pos.y <= 500.0f);
 		}
 		CHECK(b.pos.y == doctest::Approx(500 - k::RADIUS - k::SKIN).epsilon(1e-6));
@@ -195,10 +201,10 @@ TEST_CASE("platforms: a jump from below passes up through one, keeps its whole h
 	cs.push_back(platform(0, 950, 1000, 950));
 	auto apex = [](const std::vector<k::Collider> &with) {
 		k::Body b{V2{500, float(1000 - REST)}, V2{}, true};
-		k::step(b, k::Input{0, 0, true}, G, with);
+		step1(b, k::Input{0, 0, true}, G, with);
 		float top = b.pos.y;
 		for (int i = 0; i < 120; i++) {
-			k::step(b, k::Input{}, G, with);
+			step1(b, k::Input{}, G, with);
 			top = std::min(top, b.pos.y);
 		}
 		return std::pair{top, b};
@@ -236,7 +242,7 @@ TEST_CASE("platforms: down held drops through; released before the centre passes
 		k::Body b = standing;
 		int ticks = 0;
 		while (b.pos.y <= 500.0f && ticks < 100) {
-			k::step(b, down, G, cs);
+			step1(b, down, G, cs);
 			ticks++;
 		}
 		CHECK(ticks < 20); // about a sixth of a second
@@ -254,7 +260,7 @@ TEST_CASE("platforms: down held drops through; released before the centre passes
 TEST_CASE("platforms: half through one, the centre decides -- above is put on top, below falls through") {
 	const std::vector<k::Collider> cs{platform(0, 500, 1000, 500), wall(0, 1000, 1000, 1000)};
 	k::Body above{V2{500, 495}, V2{}, false};
-	k::step(above, k::Input{}, G, cs);
+	step1(above, k::Input{}, G, cs);
 	CHECK(above.on_floor);
 	CHECK(above.pos.y == doctest::Approx(500 - REST).epsilon(1e-6));
 	k::Body below{V2{500, 505}, V2{}, false};
@@ -262,16 +268,16 @@ TEST_CASE("platforms: half through one, the centre decides -- above is put on to
 	CHECK(below.pos.y == doctest::Approx(1000 - REST).epsilon(1e-6));
 	// settle (a journey's end) alike: on top or left where it is
 	k::Body s1{V2{500, 495}, V2{}, false};
-	k::settle(s1, cs, k::RADIUS);
+	k::settle(s1, cs, k::Shape{k::RADIUS});
 	CHECK(s1.on_floor);
 	CHECK(s1.pos.y == doctest::Approx(500 - REST).epsilon(1e-6));
 	k::Body s2{V2{500, 505}, V2{}, false};
-	k::settle(s2, cs, k::RADIUS);
+	k::settle(s2, cs, k::Shape{k::RADIUS});
 	CHECK_FALSE(s2.on_floor);
 	CHECK(s2.pos.y == 505.0f);
 	// settle moves nothing onto a wall or a fence (only platforms)
 	k::Body s3{V2{500, 995}, V2{}, false};
-	k::settle(s3, cs, k::RADIUS);
+	k::settle(s3, cs, k::Shape{k::RADIUS});
 	CHECK(s3.pos.y == 995.0f);
 }
 
@@ -328,4 +334,70 @@ TEST_CASE("platforms: a platform surface is a platform collider; a platform is n
 		{"ids": [1], "start": [0, 500], "end": [1000, 500], "via": [500, 500], "player_solid": true,
 		 "left": {"effect": {"type": "terminal"}}, "right": {"effect": {"type": "terminal"}}}]})");
 	CHECK_FALSE(rcg::describe_surface(rcg::build_level(wall_lv)[0]).contains("platform"));
+}
+
+// Stage 173: the player is taller -- head (its position, the arrow origin) to feet, BODY apart
+
+TEST_CASE("tall player: it stands on its feet, its head stops at a low ceiling and under a passage too low for it") {
+	const double stand = 1000 - k::BODY - REST; // its position (the head) standing on the floor at 1000
+	k::Body b{V2{500, 500}, V2{}, false};
+	for (int i = 0; i < 120; i++) {
+		k::step(b, k::Input{}, G, {wall(0, 1000, 1000, 1000)});
+	}
+	CHECK(b.on_floor);
+	CHECK(b.pos.y == doctest::Approx(stand).epsilon(1e-6));
+	// a ceiling 70 above the floor cuts a jump (81.6 high) short at the head
+	const std::vector<k::Collider> low{wall(0, 1000, 1000, 1000), wall(0, 930, 1000, 930)};
+	k::Body j{V2{500, float(stand)}, V2{}, true};
+	k::step(j, k::Input{0, 0, true}, G, low);
+	float top = j.pos.y;
+	for (int i = 0; i < 60; i++) {
+		k::step(j, k::Input{}, G, low);
+		top = std::min(top, j.pos.y);
+	}
+	CHECK(top == doctest::Approx(930 + REST).epsilon(1e-6));
+	CHECK(j.pos.y == doctest::Approx(stand).epsilon(1e-6));
+	// a passage 40 high: a circle walks under it, the player does not
+	const std::vector<k::Collider> passage{wall(0, 1000, 2000, 1000), wall(600, 960, 1000, 960)};
+	k::Body circle{V2{400, float(1000 - REST)}, V2{}, true};
+	run(circle, k::Input{1.0f, 0.0f, false}, G, passage, 120);
+	CHECK(circle.pos.x > 700.0f);
+	k::Body player{V2{400, float(stand)}, V2{}, true};
+	for (int i = 0; i < 120; i++) {
+		k::step(player, k::Input{1.0f, 0.0f, false}, G, passage);
+	}
+	CHECK(player.pos.x < 600.0f);
+}
+
+TEST_CASE("tall player: platforms judge by its feet -- a jump through lands on top, a drop needs the feet past") {
+	const double on = 950 - k::BODY - REST; // standing on the platform at 950
+	const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(0, 950, 1000, 950)};
+	k::Body b{V2{500, float(1000 - k::BODY - REST)}, V2{}, true};
+	k::step(b, k::Input{0, 0, true}, G, cs);
+	for (int i = 0; i < 120; i++) {
+		k::step(b, k::Input{}, G, cs);
+	}
+	CHECK(b.on_floor);
+	CHECK(b.pos.y == doctest::Approx(on).epsilon(1e-6)); // its head passed first, never lifted
+	// a short drop (the feet still above): back on top; a long one: through to the floor
+	k::Body d = b;
+	for (int i = 0; i < 4; i++) {
+		k::step(d, k::Input{0.0f, 1.0f, false}, G, cs);
+	}
+	for (int i = 0; i < 60; i++) {
+		k::step(d, k::Input{}, G, cs);
+	}
+	CHECK(d.pos.y == doctest::Approx(on).epsilon(1e-6));
+	for (int i = 0; i < 60; i++) {
+		k::step(d, k::Input{0.0f, 1.0f, false}, G, cs);
+	}
+	CHECK(d.pos.y == doctest::Approx(1000 - k::BODY - REST).epsilon(1e-6));
+	// settled half through: its head above but its feet below stay through; its feet above, on top
+	k::Body s1{V2{500, float(950 - k::BODY + 5)}, V2{}, false};
+	k::settle(s1, cs, k::PLAYER);
+	CHECK(s1.pos.y == float(950 - k::BODY + 5));
+	k::Body s2{V2{500, float(950 - k::BODY - 5)}, V2{}, false};
+	k::settle(s2, cs, k::PLAYER);
+	CHECK(s2.on_floor);
+	CHECK(s2.pos.y == doctest::Approx(on).epsilon(1e-6));
 }

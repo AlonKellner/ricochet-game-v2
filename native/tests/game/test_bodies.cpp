@@ -74,8 +74,7 @@ TEST_CASE("pull: a shot at a pullable object brings it back along the path, to t
 		frames++;
 	}
 	CHECK(journeyed); // the game waits for the journey as for a flight
-	CHECK(dist(body(s), s.player()) == doctest::Approx(12 + 16 + 0.08).epsilon(1e-3)); // touching the player
-	CHECK(body(s).y == doctest::Approx(540).epsilon(1e-4));
+	CHECK(dist(body(s), s.player()) < 1e-3); // (Stage 173: at the arrow's origin -- it passes the player)
 	s.key(rcg::Action::Undo);
 	CHECK(body(s).x == 1100); // the checkpoint holds the bodies
 }
@@ -350,8 +349,9 @@ TEST_CASE("platforms: an object falls onto one and rests; a pull brings it down 
 	shoot(s, 900, 480); // the arrow passes the platform, the box comes down through it to the player
 	CHECK(end->x == body(s).x);
 	CHECK(end->y == body(s).y);
-	CHECK(body(s).y > 500 + 16);
-	CHECK(dist(body(s), s.player()) == doctest::Approx(12 + 16 + 0.08).epsilon(1e-3)); // touching the player
+	CHECK(dist(body(s), s.player()) < 1e-3); // (Stage 173: at the arrow's origin -- it passes the player)
+	s.hold({}, 60);
+	CHECK(body(s).y == doctest::Approx(840 - 16 - 0.08).epsilon(1e-6)); // and falls to the floor
 }
 
 TEST_CASE("platforms: a grapple takes the player up through one; the fall after lands on it") {
@@ -367,14 +367,15 @@ TEST_CASE("platforms: a grapple takes the player up through one; the fall after 
 	CHECK(end->y == s.player().y);
 	CHECK(s.player().y == doctest::Approx(300 + 12 + 0.08).epsilon(1e-4)); // at the grapple, past the platform
 	s.hold({}, 120);
-	CHECK(s.player().y == doctest::Approx(500 - 12 - 0.08).epsilon(1e-4)); // fell onto the platform
+	CHECK(s.player().y == doctest::Approx(500 - 24 - 12 - 0.08).epsilon(1e-4)); // fell onto the platform (its feet on it)
 	s.hold({"move_down"}, 60);
-	CHECK(s.player().y == doctest::Approx(840 - 12 - 0.08).epsilon(1e-4)); // dropped through to the floor
+	CHECK(s.player().y == doctest::Approx(840 - 24 - 12 - 0.08).epsilon(1e-4)); // dropped through to the floor
 }
 
 TEST_CASE("platforms: a pull ending half through one -- the centre above is put on top, below stays through") {
-	auto pulled = [](double bx, double by) {
-		const std::string level = R"({"player": {"start": [900, 487.92]},
+	// (the player floating -- no gravity: the start is its head, where the object arrives -- 5 above or below the platform)
+	auto pulled = [](double head, double bx, double by) {
+		const std::string level = R"({"player": {"start": [900, )" + std::to_string(head) + R"(]},
 			"elements": [{"kind": "platform", "start": [800, 500], "end": [1350, 500]}],
 			"objects": [{"name": "box", "circle": {"center": [)" + std::to_string(bx) + ", " + std::to_string(by) + R"(], "radius": 16}}]})";
 		rcg::Session s(level_of(level.c_str()));
@@ -387,12 +388,10 @@ TEST_CASE("platforms: a pull ending half through one -- the centre above is put 
 		CHECK(end->y == body(s).y);
 		return body(s);
 	};
-	// shallow: it arrives with its centre above the line, overlapping the platform -- put on top
-	CHECK(pulled(1300, 560).y == doctest::Approx(500 - 16 - 0.08).epsilon(1e-6));
-	// steep: its centre arrives below the line -- left through, where the journey ended
-	const rc::V2 steep = pulled(1100, 700);
-	CHECK(steep.y > 500);
-	CHECK(steep.y < 500 + 16);
+	// its centre arrives above the line, overlapping the platform -- put on top
+	CHECK(pulled(495, 1300, 560).y == doctest::Approx(500 - 16 - 0.08).epsilon(1e-6));
+	// its centre arrives below the line -- left through, where the journey ended
+	CHECK(pulled(505, 1300, 560).y == doctest::Approx(505).epsilon(1e-6));
 }
 
 TEST_CASE("platforms: the demo level plays to its goal") {
@@ -402,12 +401,12 @@ TEST_CASE("platforms: the demo level plays to its goal") {
 	CHECK(body(s).y == doctest::Approx(700 - 20 - 0.08).epsilon(1e-6)); // the box fell onto the high platform
 	s.hold({"move_up"}, 2); // a jump (on the second tick) up through the low platform, onto it
 	s.hold({}, 60);
-	CHECK(s.player().y == doctest::Approx(770 - 12 - 0.08).epsilon(1e-6));
+	CHECK(s.player().y == doctest::Approx(770 - 24 - 12 - 0.08).epsilon(1e-6));
 	s.hold({"move_up"}, 2); // and onto the high one
 	s.hold({}, 60);
-	CHECK(s.player().y == doctest::Approx(700 - 12 - 0.08).epsilon(1e-6));
+	CHECK(s.player().y == doctest::Approx(700 - 24 - 12 - 0.08).epsilon(1e-6));
 	s.hold({"move_down"}, 60); // down through both
-	CHECK(s.player().y == doctest::Approx(840 - 12 - 0.08).epsilon(1e-6));
+	CHECK(s.player().y == doctest::Approx(840 - 24 - 12 - 0.08).epsilon(1e-6));
 	shoot(s, 760, 680); // the box pulled down through both onto the plate
 	CHECK(body(s).y > 770);
 	CHECK(s.flags().is_true("det:plate"));
@@ -415,6 +414,39 @@ TEST_CASE("platforms: the demo level plays to its goal") {
 	s.hold({"move_right"}, 170);
 	shoot(s, s.player().x, 300); // grappled up through the ledge to the hook
 	s.hold({}, 60); // and down onto the ledge, in the goal
-	CHECK(s.player().y == doctest::Approx(450 - 12 - 0.08).epsilon(1e-6));
+	CHECK(s.player().y == doctest::Approx(450 - 24 - 12 - 0.08).epsilon(1e-6));
 	CHECK(s.won());
+}
+
+// Stage 173 (the user): the player is taller and passes objects; a pull ends at the arrow's origin, the
+// player's head, so standing on a platform and pulling an object up from below brings it onto the platform
+
+TEST_CASE("tall player: standing on a platform, a pull from below brings the object up onto it") {
+	for (const double r : {16.0, 20.0, 25.0}) {
+		CAPTURE(r);
+		const std::string level = R"({"gravity": [0, 980], "player": {"start": [900, 588]},
+			"elements": [{"kind": "platform", "start": [700, 600], "end": [1100, 600]}],
+			"objects": [{"name": "box", "circle": {"center": [1050, 700], "radius": )" + std::to_string(r) + "}}]}";
+		rcg::Session s(level_of(level.c_str()));
+		s.hold({}, 60);
+		REQUIRE(body(s).y == doctest::Approx(840 - r - 0.08).epsilon(1e-6)); // the box on the floor below
+		REQUIRE(s.player().y == doctest::Approx(600 - 24 - 12 - 0.08).epsilon(1e-6)); // the player on the platform
+		shoot(s, 1050, 840 - 2 * r + 4); // down at the box's top
+		CHECK(dist(body(s), s.player()) < 1e-3); // at the arrow's origin, over the player's feet
+		s.hold({}, 60);
+		CHECK(body(s).x == doctest::Approx(900).epsilon(1e-6));
+		CHECK(body(s).y == doctest::Approx(600 - r - 0.08).epsilon(1e-6)); // fell onto the platform
+	}
+}
+
+TEST_CASE("tall player: the player and objects pass each other") {
+	rcg::Session s(level_of(R"({"gravity": [0, 980], "player": {"start": [700, 828]},
+		"objects": [{"name": "post", "circle": {"center": [900, 810], "radius": 30}, "kind": "static"},
+			{"name": "box", "circle": {"center": [1100, 500], "radius": 16}}]})"));
+	s.hold({"move_right"}, 120); // through the solid post
+	CHECK(s.player().x > 1000.0f);
+	s.hold({}, 1);
+	s.teleport(rc::V2::of(1100, 816 - 24)); // under the falling box: it falls through the player to the floor
+	s.hold({}, 90);
+	CHECK(body(s, 1).y == doctest::Approx(840 - 16 - 0.08).epsilon(1e-6));
 }

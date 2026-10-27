@@ -217,10 +217,11 @@ bool above(const Collider &c, double px, double py) {
 	return distance(c, px, py, nx, ny) > 0.0 && floor_like(nx, ny);
 }
 
-// Out of one collider's overlap; a platform only up onto its top. True: moved.
-bool push_out(const Collider &c, double &px, double &py, double R0, bool &on_floor) {
+// Out of one collider's overlap (a circle `drop` below (px, py)); a platform only
+// up onto its top. True: moved.
+bool push_out(const Collider &c, double &px, double &py, double drop, double R0, bool &on_floor) {
 	double nx, ny;
-	const double d = distance(c, px, py, nx, ny);
+	const double d = distance(c, px, py + drop, nx, ny);
 	if (d >= R0 - EPS || (c.platform && !floor_like(nx, ny))) {
 		return false;
 	}
@@ -259,10 +260,26 @@ Collider segment_collider(const V2 &a, const V2 &b) {
 	return c;
 }
 
-std::vector<Collider> colliders_of(const std::vector<BuiltSurface> &world, const rc::Flags &flags, const Level &level) {
+double distance(const Collider &c, const Shape &shape, double px, double py, double &nx, double &ny) {
+	double best = std::numeric_limits<double>::infinity();
+	for (int k = 0; k < shape.n; k++) {
+		double cx, cy;
+		const double d = distance(c, px, py + shape.drop[k], cx, cy);
+		if (d < best) {
+			best = d;
+			nx = cx;
+			ny = cy;
+		}
+	}
+	return best;
+}
+
+std::vector<Collider> colliders_of(const std::vector<BuiltSurface> &world, const rc::Flags &flags, const Level &level,
+		const std::vector<int> &except) {
 	std::vector<Collider> out;
 	for (const BuiltSurface &s : world) {
-		if ((s.player_solid || s.platform) && !s.pre_transform && present(s, flags)) {
+		if ((s.player_solid || s.platform) && !s.pre_transform && present(s, flags) &&
+				std::find(except.begin(), except.end(), s.id) == except.end()) {
 			out.push_back(collider_of(s.seg));
 			out.back().platform = s.platform;
 		}
@@ -273,10 +290,14 @@ std::vector<Collider> colliders_of(const std::vector<BuiltSurface> &world, const
 	return out;
 }
 
-void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders) { step_body(body, in, gravity, colliders, RADIUS); }
+void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders) { step_body(body, in, gravity, colliders, PLAYER); }
 
 void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, double radius) {
-	const double R0 = radius + SKIN;
+	step_body(body, in, gravity, colliders, Shape{radius});
+}
+
+void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, const Shape &shape) {
+	const double R0 = shape.radius + SKIN;
 	// the velocity (player.gd), float32 as the engine keeps it
 	V2 v = body.vel;
 	const bool has_gravity = gravity.length_squared() > 0.0f;
@@ -297,12 +318,12 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 		}
 		v = dir * float(SPEED);
 	}
-	// Stage 172: a platform takes part only while the centre is above it at the
-	// step's start and the body is not dropping (down held)
+	// Stage 172: a platform takes part only while the centre (Stage 173: the feet's)
+	// is above it at the step's start and the body is not dropping (down held)
 	const bool drop = in.axis_y > 0.0f;
 	std::vector<char> off(colliders.size(), 0);
 	for (size_t i = 0; i < colliders.size(); i++) {
-		off[i] = colliders[i].platform && (drop || !above(colliders[i], body.pos.x, body.pos.y));
+		off[i] = colliders[i].platform && (drop || !above(colliders[i], body.pos.x, body.pos.y + shape.feet()));
 	}
 	// the move: swept, sliding along what it meets
 	double px = body.pos.x, py = body.pos.y;
@@ -315,8 +336,8 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 		}
 		Hit best;
 		for (size_t i = 0; i < colliders.size(); i++) {
-			if (!off[i]) {
-				sweep(colliders[i], px, py, mx, my, best, R0);
+			for (int k = 0; k < shape.n && !off[i]; k++) {
+				sweep(colliders[i], px, py + shape.drop[k], mx, my, best, R0);
 			}
 		}
 		if (best.t > 1.0) {
@@ -344,8 +365,8 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 	for (int it = 0; it < 4; it++) {
 		bool moved = false;
 		for (size_t i = 0; i < colliders.size(); i++) {
-			if (!off[i] && !(rising && colliders[i].platform)) {
-				moved = push_out(colliders[i], px, py, R0, on_floor) || moved;
+			for (int k = 0; k < shape.n && !off[i] && !(rising && colliders[i].platform); k++) {
+				moved = push_out(colliders[i], px, py, shape.drop[k], R0, on_floor) || moved;
 			}
 		}
 		if (!moved) {
@@ -361,7 +382,7 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 				continue;
 			}
 			double nx, ny;
-			const double d = distance(colliders[i], px, py, nx, ny);
+			const double d = distance(colliders[i], shape, px, py, nx, ny);
 			if (d <= R0 + FLOOR_SNAP && floor_like(nx, ny) && d < best_d) {
 				best_d = d;
 				bnx = nx;
@@ -381,15 +402,15 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 	body.on_floor = on_floor;
 }
 
-void settle(Body &body, const std::vector<Collider> &colliders, double radius) {
-	const double R0 = radius + SKIN;
+void settle(Body &body, const std::vector<Collider> &colliders, const Shape &shape) {
+	const double R0 = shape.radius + SKIN;
 	double px = body.pos.x, py = body.pos.y;
 	bool on_floor = false;
 	for (int it = 0; it < 4; it++) {
 		bool moved = false;
 		for (const Collider &c : colliders) {
-			if (c.platform && above(c, body.pos.x, body.pos.y)) {
-				moved = push_out(c, px, py, R0, on_floor) || moved;
+			if (c.platform && above(c, body.pos.x, body.pos.y + shape.feet())) {
+				moved = push_out(c, px, py, shape.feet(), R0, on_floor) || moved;
 			}
 		}
 		if (!moved) {
@@ -400,10 +421,12 @@ void settle(Body &body, const std::vector<Collider> &colliders, double radius) {
 	body.on_floor = body.on_floor || on_floor;
 }
 
-double sweep_fraction(double px, double py, double dx, double dy, const std::vector<Collider> &colliders, double radius) {
+double sweep_fraction(double px, double py, double dx, double dy, const std::vector<Collider> &colliders, const Shape &shape) {
 	Hit best;
 	for (const Collider &c : colliders) {
-		sweep(c, px, py, dx, dy, best, radius + SKIN);
+		for (int k = 0; k < shape.n; k++) {
+			sweep(c, px, py + shape.drop[k], dx, dy, best, shape.radius + SKIN);
+		}
 	}
 	return std::min(best.t, 1.0);
 }
