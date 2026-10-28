@@ -62,6 +62,8 @@ const Color FLAG_TOGGLER_COLOR = rgba(1.0, 0.85, 0.2);
 const Color PRE_TRANSFORM_COLOR = rgba(0.55, 0.45, 0.85, 0.35);
 const Color ABSENT_COLOR = rgba(0.6, 0.6, 0.6, 0.35);
 const Color PLATFORM_COLOR = rgba(0.62, 0.42, 0.22); // Stage 172: wood brown
+const double DESIGNER_MARKER_SIZE = 7.0;               // Stage 179: a designer's marker's radius
+const double ABSENT_MARKER_ALPHA = 0.4;                // ... on an absent surface
 const Color BODY_COLOR = rgba(0.8, 0.8, 0.8);        // Stage 173: the tall player's body under its triangle
 // Stage 153: the shadow, a dark shade's edge, a light one's
 const Color SHADOW_FILL = rgba(0.02, 0.02, 0.05, 0.82);
@@ -414,6 +416,15 @@ struct SurfacePainter {
 		}
 	}
 
+	// Stage 179: the designer's marker, on the surface's middle (a circle's top), once (on its first piece); faded
+	// while the surface is absent (an open door still shows what opened it)
+	void designer_marker(double alpha) {
+		if (!surface.marker || piece_index > 0) {
+			return;
+		}
+		render::marker(out, surface.marker->shape, surface.marker->color, marker_point(surface.seg), DESIGNER_MARKER_SIZE, alpha);
+	}
+
 	void draw(const std::vector<Overlay> &hover, const std::vector<Overlay> &plan, const std::vector<int> &plan_indices) {
 		if (surface.pre_transform) {
 			const rc::arc::GeneralizedCircle &g = seg.get_carrier();
@@ -422,6 +433,7 @@ struct SurfacePainter {
 		}
 		if (!present(surface, flags)) {
 			dashed(out, seg, ABSENT_COLOR, 1.5);
+			designer_marker(ABSENT_MARKER_ALPHA);
 			return;
 		}
 		const BuiltSide *left = active_side(surface, Side::Left, flags);
@@ -471,6 +483,7 @@ struct SurfacePainter {
 		if (piece_index <= 0) {
 			hit_markers(left, right);
 		}
+		designer_marker(1.0);
 		if (piece_index >= 0) {
 			for (const V2 &end : {seg.s, seg.e}) {
 				if (end != surface.seg.s && end != surface.seg.e) {
@@ -1560,6 +1573,11 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 				fill(dc, d.region, DETECTOR_FILL);
 			}
 			outline(dc, d.region, DETECTOR_COLOR, 2.0, true);
+		}
+		if (d.marker) { // Stage 179: at its middle
+			const V2 at = d.segment ? V2::of((double(d.a.x) + d.b.x) / 2, (double(d.a.y) + d.b.y) / 2)
+					: d.region.circle ? d.region.center : V2::of(d.region.rect.x + d.region.rect.w / 2, d.region.rect.y + d.region.rect.h / 2);
+			render::marker(dc, d.marker->shape, d.marker->color, at, DESIGNER_MARKER_SIZE);
 		}
 		fresh(NodeKind::Detector, 0, V2{}, WHITE, std::move(dc), int(i));
 	}

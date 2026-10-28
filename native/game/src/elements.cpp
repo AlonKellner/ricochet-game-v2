@@ -23,8 +23,10 @@ namespace {
 
 [[noreturn]] void fail(const std::string &path, const std::string &what) { throw LevelError(path + ": " + what); }
 
-const std::set<std::string> COMMON = {"kind", "name", "start", "end", "via", "circle", "straight", "label", "flip", "carrier", "from", "to", "motion", "tags"};
-const std::set<std::string> GEOMETRY = {"start", "end", "via", "circle", "straight"};
+const std::set<std::string> COMMON = {"kind", "name", "start", "end", "via", "circle", "straight", "label", "flip", "carrier", "from", "to", "motion", "tags",
+		"marker", "sync_marker"};
+// (Stage 179: a marker, like the geometry, is the element's and every one of its surfaces')
+const std::set<std::string> GEOMETRY = {"start", "end", "via", "circle", "straight", "marker"};
 const std::set<std::string> TYPES = {"string", "number", "bool", "point", "array", "object", "any"};
 
 bool ident_start(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
@@ -619,6 +621,9 @@ std::vector<json> expand(const json &tmpl, const json &element, const std::strin
 	}
 	if (circle && element.contains("straight")) {
 		fail(path + ".straight", "a circle is not straight");
+	}
+	if (element.contains("marker")) {
+		(void)marker_of(element["marker"], path + ".marker"); // (Stage 179: on every surface, checked here)
 	}
 	bool flip = false;
 	if (element.contains("flip")) {

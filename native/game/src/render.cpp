@@ -75,6 +75,66 @@ Color hex(std::uint32_t p) {
 
 Color with_alpha(const Color &c, double a) { return {c[0], c[1], c[2], float(a)}; }
 
+void marker(std::vector<Call> &out, const std::string &shape, const Color &color, const V2 &at, double size, double alpha) {
+	const Color fill = with_alpha(color, double(color[3]) * alpha);
+	const Color edge{0.06f, 0.06f, 0.08f, float(0.9 * alpha)};
+	auto poly = [&](const std::vector<V2> &pts) {
+		Call f;
+		f.kind = Kind::ColoredPolygon;
+		f.pts = pts;
+		f.colors = {fill};
+		out.push_back(f);
+		Call o;
+		o.kind = Kind::Polyline;
+		o.pts = pts;
+		o.pts.push_back(pts.front());
+		o.colors = {edge};
+		o.width = 1.5;
+		out.push_back(o);
+	};
+	auto around = [&](int n, double phase, double r, double r2) { // n points (a star: alternately r and r2)
+		std::vector<V2> pts;
+		for (int k = 0; k < n; k++) {
+			const double a = phase + 2.0 * 3.141592653589793 * k / n, rr = (k % 2 == 1) ? r2 : r;
+			pts.push_back(V2::of(double(at.x) + rr * std::cos(a), double(at.y) + rr * std::sin(a)));
+		}
+		return pts;
+	};
+	const double up = -3.141592653589793 / 2.0;
+	if (shape == "circle") {
+		Call o;
+		o.kind = Kind::Circle;
+		o.pts = {at};
+		o.radius = size + 1.5;
+		o.colors = {edge};
+		out.push_back(o);
+		Call f = o;
+		f.radius = size;
+		f.colors = {fill};
+		out.push_back(f);
+	} else if (shape == "square") {
+		poly(around(4, up + 3.141592653589793 / 4.0, size * 1.2, size * 1.2));
+	} else if (shape == "triangle") {
+		poly(around(3, up, size * 1.3, size * 1.3));
+	} else if (shape == "diamond") {
+		poly(around(4, up, size * 1.25, size * 1.25));
+	} else if (shape == "star") {
+		poly(around(10, up, size * 1.35, size * 0.6));
+	} else if (shape == "cross") {
+		for (const auto &[w, c] : {std::pair{size * 0.75, edge}, std::pair{size * 0.45, fill}}) {
+			for (const double a : {3.141592653589793 / 4.0, -3.141592653589793 / 4.0}) {
+				Call l;
+				l.kind = Kind::Line;
+				const double dx = std::cos(a) * size, dy = std::sin(a) * size;
+				l.pts = {V2::of(double(at.x) - dx, double(at.y) - dy), V2::of(double(at.x) + dx, double(at.y) + dy)};
+				l.colors = {c};
+				l.width = w;
+				out.push_back(l);
+			}
+		}
+	}
+}
+
 json call_json(const Call &c) {
 	const json col = c.colors.empty() ? json(nullptr) : color_json(c.colors.front());
 	switch (c.kind) {

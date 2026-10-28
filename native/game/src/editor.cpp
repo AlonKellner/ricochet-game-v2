@@ -297,8 +297,10 @@ void Editor::refresh() {
 	// what only the whole level shows (names, the level's own keys, ...)
 	shade_fill_ = {};
 	shade_of_.assign(es.size(), 0);
+	markers_ = FlagMarkers{};
 	if (errors_.empty()) {
 		try {
+			markers_ = flag_markers(doc_, lower_level(doc_));
 			const Level lv = parse_level_json(doc_);
 			build_level(lv);
 			// Stage 153: the shadow under the level's starting flags, and which elements are shades

@@ -89,6 +89,19 @@ struct ResolverRow {
 	std::optional<SideSpec> right;
 };
 
+// Stage 179 (the user): a designer's marker -- a shape in a colour drawn on an element (on each of its surfaces)
+// or a detector, so a level can show what opens what (a button and its door alike). Display only.
+struct Marker {
+	std::string shape;                 // circle, square, triangle, diamond, star, cross
+	std::array<float, 4> color{1, 1, 1, 1};
+	bool operator==(const Marker &) const = default;
+};
+// the shapes, and the named colours (a marker's colour is one of these or [r, g, b(, a)] in 0..1), in the editor's order
+const std::vector<std::string> &marker_shapes();
+const std::vector<std::pair<std::string, std::array<float, 4>>> &marker_colors();
+// a marker from its JSON ({"shape", "color"}). Throws LevelError at `path`.
+Marker marker_of(const nlohmann::json &j, const std::string &path);
+
 // A surface as data (SurfaceSpec): three points, or a full circle.
 struct SurfaceSpec {
 	bool full_circle = false;
@@ -103,6 +116,7 @@ struct SurfaceSpec {
 	std::vector<PresenceSpec> presence;
 	bool player_solid = false;
 	bool platform = false; // Stage 172: one-way, stood on from above, dropped through (GAME_SPEC 25.1)
+	std::optional<Marker> marker; // Stage 179
 
 	bool is_portal() const { return resolver.empty() && left && left->effect.type == "portal"; }
 };
@@ -216,6 +230,7 @@ struct Detector {
 	std::string flag; // default det:<name>
 	std::string mode = "while"; // while | enter | toggle
 	rc::FlagValue value = true;
+	std::optional<Marker> marker; // Stage 179
 };
 
 struct Level {

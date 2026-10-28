@@ -357,3 +357,133 @@ TEST_CASE("rc-level/2: carriers -- elements on a line or a circle, projected ont
 	CHECK(err(R"({"schema": "rc-level/2", "carriers": [{"name": "c", "circle": {"center": [0, 0], "radius": 5}},
 		{"name": "c", "circle": {"center": [0, 0], "radius": 6}}], "elements": []})").find("names another carrier") != std::string::npos);
 }
+
+// Stage 179 (the user): a designer's marker on an element (every one of its surfaces) and on a detector
+TEST_CASE("rc-level/2: a marker -- on every surface of its element, on a detector; checked; it migrates back; drawn in the game, faded on an absent door") {
+	const json door = seg({{"kind", "door"}, {"name", "gate"}, {"marker", {{"shape", "star"}, {"color", "green"}}}});
+	const json lv = level_of({door}, {{"detectors", json::parse(R"([{"name": "pad", "region": {"rect": [600, 600, 40, 40]},
+		"marker": {"shape": "diamond", "color": [0.5, 0.25, 1]}}])")}});
+	const std::vector<json> ss = element_surfaces(lv);
+	REQUIRE(ss.size() == 1);
+	CHECK(ss[0]["marker"] == json::parse(R"({"shape": "star", "color": "green"})"));
+	const rcg::Level level = rcg::parse_level_json(lv);
+	const std::vector<rcg::BuiltSurface> world = rcg::build_level(level);
+	bool marked = false;
+	for (const rcg::BuiltSurface &b : world) {
+		if (b.marker) {
+			marked = true;
+			CHECK(b.marker->shape == "star");
+			CHECK(b.marker->color == std::array<float, 4>{0.3f, 0.85f, 0.35f, 1});
+		}
+	}
+	CHECK(marked);
+	REQUIRE(level.detectors.size() == 1);
+	REQUIRE(level.detectors[0].marker);
+	CHECK(level.detectors[0].marker->shape == "diamond");
+	CHECK(level.detectors[0].marker->color == std::array<float, 4>{0.5f, 0.25f, 1, 1});
+	// display only: the dump is the unmarked one's
+	json plain = lv;
+	plain["elements"][0].erase("marker");
+	plain["detectors"][0].erase("marker");
+	CHECK(rcg::describe_level(rcg::build_level(rcg::parse_level_json(plain))) == rcg::describe_level(world));
+	// the lowering migrates back to the marked element
+	const json back = rcg::migrate_level(rcg::lower_level(lv).level);
+	bool found = false;
+	for (const json &e : back["elements"]) {
+		if (e.value("kind", "") == "door") { // (named by the lowering's order; its flag the gate's)
+			found = true;
+			CHECK(e["flag"] == "door:gate");
+			CHECK(e["marker"] == door["marker"]);
+		}
+	}
+	CHECK(found);
+	// checked
+	auto fails = [&](const json &m, const std::string &what) {
+		json bad = lv;
+		bad["elements"][0]["marker"] = m;
+		try {
+			rcg::lower_level(bad);
+			FAIL("no error for " << m.dump());
+		} catch (const rcg::LevelError &e) {
+			CHECK_MESSAGE(std::string(e.what()).find(what) != std::string::npos, std::string(e.what()));
+		}
+	};
+	fails(json::parse(R"({"shape": "hexagon"})"), "(gate).marker.shape: circle, square, triangle, diamond, star or cross expected");
+	fails(json::parse(R"({"shape": "star", "color": "mauve"})"), "(gate).marker.color: a colour name");
+	fails(json::parse(R"({"shape": "star", "color": [2, 0, 0]})"), "(gate).marker.color[0]: a value in 0..1 expected");
+	fails(json::parse(R"({"shape": "star", "size": 3})"), "(gate).marker: unknown key 'size'");
+	// drawn in the game: on the door, and faded once it is open (absent); on the detector
+	auto marker_fill = [&](const rcg::Session &s, rcg::render::NodeKind kind, float alpha) {
+		for (const rcg::render::FrameNode &n : s.draw_frame()) {
+			if (n.key.kind != kind) {
+				continue;
+			}
+			for (const rcg::render::Call &c : *n.calls) {
+				if (c.kind == rcg::render::Kind::ColoredPolygon && !c.colors.empty() && std::abs(c.colors[0][3] - alpha) < 1e-6f
+						&& (c.colors[0][1] == 0.85f || c.colors[0][0] == 0.5f)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	};
+	const rcg::Session shut(level);
+	CHECK(marker_fill(shut, rcg::render::NodeKind::Surface, 1.0f));
+	CHECK(marker_fill(shut, rcg::render::NodeKind::Detector, 1.0f));
+	json opened = lv;
+	opened["flags"] = {{"door:gate", true}};
+	const rcg::Session open(rcg::parse_level_json(opened));
+	CHECK(marker_fill(open, rcg::render::NodeKind::Surface, 0.4f));
+	CHECK_FALSE(marker_fill(open, rcg::render::NodeKind::Surface, 1.0f));
+}
+
+// Stage 179 (the user): each active flag's marker, shared by what connects to that flag alone
+TEST_CASE("rc-level/2: the markers flags give -- a flag two things connect to marks both alike (through a NOT too); the level's choice; sync_marker false keeps its own") {
+	const json button = seg({{"kind", "button"}, {"name", "b"}, {"opens", "gate"}}, 600, 300, 600, 400);
+	const json door = seg({{"kind", "door"}, {"name", "gate"}});
+	const json hatch = seg({{"kind", "door"}, {"name", "hatch"}, {"flag", "!det:pad"}}, 800, 300, 800, 700); // open until the pad
+	const json both = seg({{"kind", "door"}, {"name", "both"}, {"flag", "det:pad && door:gate"}}, 900, 300, 900, 700);
+	const json lone = seg({{"kind", "door"}, {"name", "lone"}}, 1000, 300, 1000, 700); // nothing opens it
+	const json pads = json::parse(R"([{"name": "pad", "region": {"rect": [600, 600, 40, 40]}}])");
+	json lv = level_of({button, door, hatch, both, lone}, {{"detectors", pads}});
+	rcg::FlagMarkers fm = rcg::flag_markers(lv, rcg::lower_level(lv));
+	CHECK(fm.active == std::vector<std::string>{"door:gate", "det:pad"});
+	REQUIRE(fm.element.size() == 5);
+	REQUIRE(fm.element[0]);
+	CHECK(fm.element[0] == fm.element[1]);       // the button and its door
+	CHECK(fm.element[2] == fm.detector[0]);      // the pad and the door it shuts (a NOT)
+	CHECK_FALSE(fm.element[0] == fm.element[2]); // two flags, two markers
+	CHECK_FALSE(fm.element[3]);                  // two active flags: none of its own
+	CHECK_FALSE(fm.element[4]);                  // a flag nothing else uses is no link
+	// the same every time (from the flag's name)
+	CHECK(rcg::flag_markers(lv, rcg::lower_level(lv)).of_flag == fm.of_flag);
+	// the level's choice for a flag, and none
+	lv["flag_markers"] = json::parse(R"({"door:gate": {"shape": "cross", "color": "blue"}, "det:pad": "none"})");
+	fm = rcg::flag_markers(lv, rcg::lower_level(lv));
+	CHECK(fm.element[0] == rcg::Marker{"cross", {0.3f, 0.5f, 1.0f, 1}});
+	CHECK(fm.element[1] == fm.element[0]);
+	CHECK_FALSE(fm.detector[0]);
+	CHECK_FALSE(fm.element[2]);
+	// not synced: its own (or none)
+	lv["elements"][1]["sync_marker"] = false;
+	lv["elements"][1]["marker"] = {{"shape", "star"}, {"color", "pink"}};
+	fm = rcg::flag_markers(lv, rcg::lower_level(lv));
+	CHECK(fm.element[1] == rcg::Marker{"star", {1.0f, 0.5f, 0.8f, 1}});
+	CHECK(fm.element[0] == rcg::Marker{"cross", {0.3f, 0.5f, 1.0f, 1}});
+	// the game draws them so (the built level's surfaces and detectors)
+	const rcg::Level level = rcg::parse_level_json(lv);
+	int crosses = 0, stars = 0;
+	for (const rcg::LevelSurface &s : level.surfaces) {
+		crosses += s.spec.marker && s.spec.marker->shape == "cross";
+		stars += s.spec.marker && s.spec.marker->shape == "star";
+	}
+	CHECK(crosses == 1); // the button
+	CHECK(stars == 1);   // the unsynced door
+	CHECK_FALSE(level.detectors[0].marker);
+	// checked
+	lv["flag_markers"]["door:gate"] = {{"shape", "blob"}};
+	CHECK_THROWS_WITH_AS(rcg::parse_level_json(lv), doctest::Contains("level.flag_markers.door:gate.shape"), rcg::LevelError);
+	lv["flag_markers"].erase("door:gate");
+	lv["elements"][1]["sync_marker"] = "no";
+	CHECK_THROWS_WITH_AS(rcg::parse_level_json(lv), doctest::Contains("level.elements[1].sync_marker: true or false expected"), rcg::LevelError);
+}

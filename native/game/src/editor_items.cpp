@@ -418,6 +418,9 @@ std::vector<Editor::Row> Editor::item_rows() const {
 		row("mode", *path + "/mode", "while (inside), enter, toggle (on entering or crossing)", "while", "options", {"while", "enter", "toggle"});
 		row("flag", *path + "/flag", "the flag it writes", "det:" + name);
 		row("value", *path + "/value", "the value it writes", "true");
+		for (Row r : marker_rows(Field{"", *path + "/marker"})) { // Stage 179
+			out.push_back(std::move(r));
+		}
 		if (j.contains("region")) {
 			shape(*path + "/region");
 		} else {

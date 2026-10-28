@@ -1086,3 +1086,84 @@ TEST_CASE("editor: the player's start is selected like an item -- alone, by the 
 	CHECK(player() == json::array({990.0, 460.0}));
 	CHECK(ed.errors().empty());
 }
+
+// Stage 179 (the user): a marker on an element and on a detector, from the panel
+TEST_CASE("editor: a marker -- the panel's rows cycle its shape (none: off) and colour, on an element and a detector; drawn") {
+	rcg::Editor ed;
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "door"}, {"name", "gate"}, {"start", {750.0, 240.0}}, {"end", {750.0, 840.0}}}}});
+	ok(ed, {{"op", "select"}, {"name", "gate"}});
+	click_row(ed, "marker");
+	CHECK(element(ed, "gate")["marker"] == json::parse(R"({"shape": "circle", "color": "red"})"));
+	click_row(ed, "marker"); // the next shape, the colour kept
+	click_row(ed, "marker color");
+	CHECK(element(ed, "gate")["marker"] == json::parse(R"({"shape": "square", "color": "orange"})"));
+	click_row(ed, "marker color", rcg::Editor::ModShift); // back
+	CHECK(element(ed, "gate")["marker"]["color"] == "red");
+	CHECK(ed.errors().empty());
+	auto drawn = [&](float r, float g) {
+		for (const auto &n : ed.draw()) {
+			for (const auto &c : *n.calls) {
+				if (c.kind == rcg::render::Kind::ColoredPolygon && !c.colors.empty() && c.colors[0][0] == r && c.colors[0][1] == g) {
+					return true;
+				}
+			}
+		}
+		return false;
+	};
+	CHECK(drawn(0.95f, 0.25f)); // the red square
+	click_row(ed, "marker", rcg::Editor::ModShift); // back to the circle
+	click_row(ed, "marker", rcg::Editor::ModShift); // none: no marker
+	CHECK_FALSE(element(ed, "gate").contains("marker"));
+	// a detector's
+	ok(ed, {{"op", "set"}, {"path", "/detectors"}, {"value", json::parse(R"([{"name": "pad", "region": {"rect": [600, 600, 40, 40]}}])")}});
+	ok(ed, {{"op", "select"}, {"item", "detector:pad"}});
+	click_row(ed, "marker");
+	click_row(ed, "marker");
+	click_row(ed, "marker");
+	click_row(ed, "marker color");
+	CHECK(ed.document()["detectors"][0]["marker"] == json::parse(R"({"shape": "triangle", "color": "orange"})"));
+	CHECK(ed.errors().empty());
+	CHECK(drawn(1.0f, 0.6f)); // the orange triangle
+}
+
+// Stage 179 (the user): a synced element's marker rows edit its flag's -- every element on the flag follows
+TEST_CASE("editor: a flag's marker -- a button and its door alike; editing one edits both; sync marker off keeps its own") {
+	rcg::Editor ed;
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "button"}, {"name", "b"}, {"opens", "gate"}, {"start", {600.0, 300.0}}, {"end", {600.0, 400.0}}}}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "door"}, {"name", "gate"}, {"start", {750.0, 240.0}}, {"end", {750.0, 840.0}}}}});
+	auto marker_of_level = [&](size_t i) {
+		const rcg::FlagMarkers fm = rcg::flag_markers(ed.document(), rcg::lower_level(ed.document()));
+		return fm.element.at(i);
+	};
+	REQUIRE(marker_of_level(0));
+	CHECK(marker_of_level(0) == marker_of_level(1)); // a default, shared
+	ok(ed, {{"op", "select"}, {"name", "gate"}});
+	click_row(ed, "marker"); // the flag's next shape
+	REQUIRE(ed.document().contains("flag_markers"));
+	CHECK(ed.document()["flag_markers"].contains("door:gate"));
+	CHECK_FALSE(element(ed, "gate").contains("marker"));
+	CHECK(marker_of_level(0) == marker_of_level(1)); // the button followed
+	click_row(ed, "marker color");
+	CHECK(marker_of_level(0) == marker_of_level(1));
+	const std::optional<rcg::Marker> shared = marker_of_level(0);
+	// sync off: the door keeps what it showed, as its own; then its own changes alone
+	click_row(ed, "sync marker");
+	CHECK(element(ed, "gate")["sync_marker"] == false);
+	CHECK(marker_of_level(1) == shared);
+	click_row(ed, "marker");
+	CHECK(element(ed, "gate").contains("marker"));
+	CHECK(marker_of_level(0) == shared);
+	CHECK_FALSE(marker_of_level(1) == shared);
+	// sync on again: the flag's
+	click_row(ed, "sync marker");
+	CHECK_FALSE(element(ed, "gate").contains("sync_marker"));
+	CHECK(marker_of_level(1) == shared);
+	// none on the flag: neither shows one
+	for (int k = 0; k < 7 && marker_of_level(0); k++) {
+		click_row(ed, "marker");
+	}
+	CHECK_FALSE(marker_of_level(0));
+	CHECK_FALSE(marker_of_level(1));
+	CHECK(ed.document()["flag_markers"]["door:gate"] == "none");
+	CHECK(ed.errors().empty());
+}
