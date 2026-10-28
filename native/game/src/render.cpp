@@ -92,15 +92,6 @@ void marker(std::vector<Call> &out, const std::string &shape, const Color &color
 		o.width = 1.5;
 		out.push_back(o);
 	};
-	auto around = [&](int n, double phase, double r, double r2) { // n points (a star: alternately r and r2)
-		std::vector<V2> pts;
-		for (int k = 0; k < n; k++) {
-			const double a = phase + 2.0 * 3.141592653589793 * k / n, rr = (k % 2 == 1) ? r2 : r;
-			pts.push_back(V2::of(double(at.x) + rr * std::cos(a), double(at.y) + rr * std::sin(a)));
-		}
-		return pts;
-	};
-	const double up = -3.141592653589793 / 2.0;
 	if (shape == "circle") {
 		Call o;
 		o.kind = Kind::Circle;
@@ -112,15 +103,12 @@ void marker(std::vector<Call> &out, const std::string &shape, const Color &color
 		f.radius = size;
 		f.colors = {fill};
 		out.push_back(f);
-	} else if (shape == "square") {
-		poly(around(4, up + 3.141592653589793 / 4.0, size * 1.2, size * 1.2));
-	} else if (shape == "triangle") {
-		poly(around(3, up, size * 1.3, size * 1.3));
-	} else if (shape == "diamond") {
-		poly(around(4, up, size * 1.25, size * 1.25));
-	} else if (shape == "star") {
-		poly(around(10, up, size * 1.35, size * 0.6));
-	} else if (shape == "cross") {
+	} else if (shape != "cross") {
+		const std::vector<V2> pts = shape_outline(shape, at, size);
+		if (!pts.empty()) {
+			poly(pts);
+		}
+	} else {
 		for (const auto &[w, c] : {std::pair{size * 0.75, edge}, std::pair{size * 0.45, fill}}) {
 			for (const double a : {3.141592653589793 / 4.0, -3.141592653589793 / 4.0}) {
 				Call l;
@@ -133,6 +121,42 @@ void marker(std::vector<Call> &out, const std::string &shape, const Color &color
 			}
 		}
 	}
+}
+
+std::vector<V2> shape_outline(const std::string &shape, const V2 &at, double size) {
+	auto around = [&](int n, double phase, double r, double r2) { // n points (a star: alternately r and r2)
+		std::vector<V2> pts;
+		for (int k = 0; k < n; k++) {
+			const double a = phase + 2.0 * 3.141592653589793 * k / n, rr = (k % 2 == 1) ? r2 : r;
+			pts.push_back(V2::of(double(at.x) + rr * std::cos(a), double(at.y) + rr * std::sin(a)));
+		}
+		return pts;
+	};
+	const double up = -3.141592653589793 / 2.0;
+	if (shape == "square") {
+		return around(4, up + 3.141592653589793 / 4.0, size * 1.2, size * 1.2);
+	}
+	if (shape == "triangle") {
+		return around(3, up, size * 1.3, size * 1.3);
+	}
+	if (shape == "diamond") {
+		return around(4, up, size * 1.25, size * 1.25);
+	}
+	if (shape == "star") {
+		return around(10, up, size * 1.35, size * 0.6);
+	}
+	if (shape == "cross") { // 12 corners: each arm's two ends, then the inner corner to the next arm
+		std::vector<V2> pts;
+		const double w = size * 0.35, l = size * 1.15;
+		for (int k = 0; k < 4; k++) {
+			const double a = 3.141592653589793 / 4.0 + k * 3.141592653589793 / 2.0, c = std::cos(a), sn = std::sin(a);
+			for (const auto &[u, v] : {std::pair{w, -w}, std::pair{l, -w}, std::pair{l, w}}) { // (along the arm, across it)
+				pts.push_back(V2::of(double(at.x) + c * u - sn * v, double(at.y) + sn * u + c * v));
+			}
+		}
+		return pts;
+	}
+	return {};
 }
 
 json call_json(const Call &c) {

@@ -65,6 +65,30 @@ const Color PLATFORM_COLOR = rgba(0.62, 0.42, 0.22); // Stage 172: wood brown
 const double DESIGNER_MARKER_SIZE = 7.0;               // Stage 179: a designer's marker's radius
 const double ABSENT_MARKER_ALPHA = 0.4;                // ... on an absent surface
 const Color BODY_COLOR = rgba(0.8, 0.8, 0.8);        // Stage 173: the tall player's body under its triangle
+const double SHAPE_HITBOX_ALPHA = 0.3;                 // Stage 181: a shaped object's circle under its outline
+// the player's triangle (about its origin, turned by its facing) and, Stage 173 (the user): under gravity a
+// rectangle from the triangle down to the feet (it does not turn)
+const std::vector<V2> PLAYER_HEAD = {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}};
+const std::vector<V2> PLAYER_BODY = {V2{-8, 0}, V2{8, 0}, V2{8, float(kinematics::BODY + kinematics::RADIUS)}, V2{-8, float(kinematics::BODY + kinematics::RADIUS)}};
+
+// Stage 181: the player at `at` as polygons -- its body (when tall), then its triangle
+std::vector<std::vector<V2>> player_outline(const V2 &at, double facing, bool tall) {
+	std::vector<std::vector<V2>> out;
+	if (tall) {
+		std::vector<V2> body;
+		for (const V2 &q : PLAYER_BODY) {
+			body.push_back(V2::of(double(at.x) + q.x, double(at.y) + q.y));
+		}
+		out.push_back(std::move(body));
+	}
+	const double c = std::cos(facing), sn = std::sin(facing);
+	std::vector<V2> head;
+	for (const V2 &q : PLAYER_HEAD) {
+		head.push_back(V2::of(double(at.x) + c * q.x - sn * q.y, double(at.y) + sn * q.x + c * q.y));
+	}
+	out.push_back(std::move(head));
+	return out;
+}
 // Stage 153: the shadow, a dark shade's edge, a light one's
 const Color SHADOW_FILL = rgba(0.02, 0.02, 0.05, 0.82);
 const Color SHADE_DARK = rgba(0.55, 0.45, 0.95);
@@ -298,6 +322,16 @@ struct SurfacePainter {
 		out.push_back(arc(a.ctr, a.r, a.sa, a.ea, a.pc, color, width));
 	}
 
+	// Stage 181: an object drawn in its shape (the user): the outline, and its circle (what it collides as) faint
+	bool shaped() const { return seg.full && !surface.shape.empty() && surface.shape != "circle"; }
+	void shape_stroke(const Color &color, double width) {
+		const ArcView a = arc_view();
+		out.push_back(arc(a.ctr, a.r, 0.0, rcg::TAU, a.pc, render::with_alpha(color, double(color[3]) * SHAPE_HITBOX_ALPHA), 1.0));
+		std::vector<V2> pts = render::shape_outline(surface.shape, a.ctr, a.r);
+		pts.push_back(pts.front());
+		out.push_back(stroke(Kind::Polyline, std::move(pts), color, width));
+	}
+
 	void gradient(int side, bool arcs, const Color &base, bool l_outer) {
 		const double strip = HOVER_WIDTH / GRADIENT_STRIPS;
 		const bool outer = (side == int(Side::Left)) == l_outer;
@@ -445,7 +479,9 @@ struct SurfacePainter {
 		}
 		const bool arcs = !seg.is_line();
 		const bool l_outer = left_outer();
-		if (lc == rc_) {
+		if (shaped()) {
+			shape_stroke(l_outer || lc == rc_ ? lc : rc_, LINE_WIDTH);
+		} else if (lc == rc_) {
 			if (arcs) {
 				surface_arc(lc, LINE_WIDTH);
 			} else {
@@ -1730,9 +1766,25 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 								}
 								from = to;
 							}
-							const double r = t.body < 0 ? kinematics::RADIUS : world_->bodies()[size_t(t.body)].object.radius;
+							// Stage 181 (the user): where it ends drawn as what moves -- the player's triangle (facing the cursor
+							// from there) and body, or the object's shape
 							const Color c = t.blocked ? rgba(1.0, 0.6, 0.2, 0.95) : rgba(0.6, 1.0, 0.7, 0.95);
-							out.push_back(arc(t.trail.back(), r, 0.0, rcg::TAU, 32, c, 2.0));
+							const V2 end = t.trail.back();
+							if (t.body < 0) {
+								for (std::vector<V2> &pts : player_outline(end, double((cursor_ - end).angle()), tall())) {
+									pts.push_back(pts.front());
+									out.push_back(stroke(Kind::Polyline, std::move(pts), c, 2.0));
+								}
+							} else {
+								const Object &o = world_->bodies()[size_t(t.body)].object;
+								std::vector<V2> pts = render::shape_outline(o.shape, end, o.radius);
+								if (pts.empty()) {
+									out.push_back(arc(end, o.radius, 0.0, rcg::TAU, 32, c, 2.0));
+								} else {
+									pts.push_back(pts.front());
+									out.push_back(stroke(Kind::Polyline, std::move(pts), c, 2.0));
+								}
+							}
 						}
 					});
 		}
@@ -1765,21 +1817,18 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		});
 	}
 	const bool player_crossing = journey_ && journey_->crossing && journey_->body < 0;
-	// Stage 173 (the user): under gravity a rectangle from the triangle down to the feet (it does not turn)
-	const float feet = float(kinematics::BODY + kinematics::RADIUS);
-	const std::vector<V2> body_pts = {V2{-8, 0}, V2{8, 0}, V2{8, feet}, V2{-8, feet}};
 	if (level_.player_start && !player_crossing) {
 		std::vector<Call> calls;
 		if (tall()) {
 			Call legs;
 			legs.kind = Kind::Polygon2D;
-			legs.pts = body_pts;
+			legs.pts = PLAYER_BODY;
 			legs.colors = {BODY_COLOR};
 			calls.push_back(legs);
 		}
 		Call k;
 		k.kind = Kind::Polygon2D;
-		k.pts = {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}};
+		k.pts = PLAYER_HEAD;
 		k.colors = {WHITE};
 		k.rotation = double(facing_);
 		calls.push_back(k);
@@ -1793,8 +1842,26 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		auto before = [&](const V2 &p) { return (double(p.x) - j.entry_a.x) * j.entry_n.x + (double(p.y) - j.entry_a.y) * j.entry_n.y <= 0.0; };
 		std::vector<Call> calls;
 		if (j.body >= 0) {
-			const double r = world_->bodies()[size_t(j.body)].object.radius;
+			const Object &o = world_->bodies()[size_t(j.body)].object;
+			const double r = o.radius;
 			const int n = 64;
+			// its outline: the circle's 65 points, or (Stage 181) its shape's, each side cut in 16
+			std::vector<V2> ring;
+			const std::vector<V2> corners = render::shape_outline(o.shape, at, r);
+			if (corners.empty()) {
+				for (int i = 0; i <= n; i++) {
+					const double a = TAU * i / n;
+					ring.push_back(V2::of(double(at.x) + r * std::cos(a), double(at.y) + r * std::sin(a)));
+				}
+			} else {
+				for (size_t i = 0; i < corners.size(); i++) {
+					const V2 &p = corners[i], &q = corners[(i + 1) % corners.size()];
+					for (int k = 0; k < 16; k++) {
+						ring.push_back(V2::of(double(p.x) + (double(q.x) - p.x) * k / 16, double(p.y) + (double(q.y) - p.y) * k / 16));
+					}
+				}
+				ring.push_back(corners.front());
+			}
 			std::vector<V2> near_pts, far_pts;
 			auto flush = [&](std::vector<V2> &pts) {
 				if (pts.size() >= 2) {
@@ -1802,9 +1869,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 				}
 				pts.clear();
 			};
-			for (int i = 0; i <= n; i++) {
-				const double a = TAU * i / n;
-				const V2 p = V2::of(double(at.x) + r * std::cos(a), double(at.y) + r * std::sin(a));
+			for (const V2 &p : ring) {
 				if (before(p)) {
 					near_pts.push_back(p);
 					flush(far_pts);
@@ -1817,20 +1882,11 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 			flush(far_pts);
 		} else {
 			// the player's triangle (and body), cut by the entry's line: the near part here, the far part at the exit
-			const double c = std::cos(double(facing_)), sn = std::sin(double(facing_));
 			std::vector<std::pair<std::vector<V2>, Color>> parts;
-			if (tall()) {
-				std::vector<V2> body;
-				for (const V2 &q : body_pts) {
-					body.push_back(V2::of(double(at.x) + q.x, double(at.y) + q.y));
-				}
-				parts.push_back({body, BODY_COLOR});
+			std::vector<std::vector<V2>> outlines = player_outline(at, double(facing_), tall());
+			for (size_t i = 0; i < outlines.size(); i++) {
+				parts.push_back({std::move(outlines[i]), i + 1 < outlines.size() ? BODY_COLOR : WHITE});
 			}
-			std::vector<V2> head;
-			for (const V2 &q : {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}}) {
-				head.push_back(V2::of(double(at.x) + c * q.x - sn * q.y, double(at.y) + sn * q.x + c * q.y));
-			}
-			parts.push_back({head, WHITE});
 			for (const auto &[tri, color] : parts)
 			for (const bool near_side : {true, false}) {
 				std::vector<V2> poly;

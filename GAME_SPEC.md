@@ -2540,6 +2540,10 @@ and rests against what is above it. An object that `pops` is popped by the arrow
 still), until an undo. An object may `carry` another, which then keeps its offset from the carrier and does not
 fall, until the carrier pops; then it falls (one level of carrying).
 
+**Its shape** (Stage 181, the user). An object's `shape` -- circle (the default), square, triangle, diamond, star or
+cross, the markers' (§22.5) -- is how it looks: drawn in that shape over its circle, faint. It is display only: the
+object is its circle to the arrow, the player and the journey alike.
+
 ### 25.6 The pull and the grapple
 
 A **pull** (a pullable object's sides carry it) and a **grapple** (the `grapple` element's sides) are hit
@@ -2556,7 +2560,8 @@ the first contact or at the path's end. A fence (an
 arrow-pass barrier) stops it; an arrow-block barrier is not solid and does not. **A platform does not stop it**
 (Stage 172): a pulled object or a grappled player passes through platforms. Where the journey ends, a traveller
 half through a platform is settled by its centre (§25.1): above it, it is put on top and stands; below it, it
-stays and falls on. The preview's trip ends where the shot's settles (§14.12). A step that starts where the last
+stays and falls on. The preview's trip ends where the shot's settles (§14.12), drawn as the traveller (Stage
+181, the user): the player's triangle, facing the cursor from there, and under gravity its body; an object's shape. A step that starts where the last
 did not end (a portal) is crossed by a jump, and a step through infinity ends the path. The game is paused during
 a journey as during a flight (`flying`), and the journey is part of the shot.
 
@@ -3097,4 +3102,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.83.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.84.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

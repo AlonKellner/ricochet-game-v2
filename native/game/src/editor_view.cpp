@@ -2226,7 +2226,20 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				if (lit("object:" + o.value("name", ""))) {
 					g.push_back(arc(c, r, 0, TAU, SELECT, 9.0));
 				}
-				g.push_back(arc(c, r, 0, TAU, pullable ? OBJECT : GRAY, 2.5));
+				const std::string shape = o.value("shape", "circle");
+				std::vector<V2> outline = render::shape_outline(shape, c, r); // Stage 181: drawn in its shape, its circle faint
+				if (outline.empty()) {
+					g.push_back(arc(c, r, 0, TAU, pullable ? OBJECT : GRAY, 2.5));
+				} else {
+					g.push_back(arc(c, r, 0, TAU, render::with_alpha(pullable ? OBJECT : GRAY, 0.3), 1.0));
+					outline.push_back(outline.front());
+					Call k;
+					k.kind = Kind::Polyline;
+					k.pts = std::move(outline);
+					k.colors = {pullable ? OBJECT : GRAY};
+					k.width = 2.5;
+					g.push_back(std::move(k));
+				}
 				g.push_back(text_at(V2::of(c.x, double(c.y) - r - 4), o.value("name", ""), pullable ? OBJECT : GRAY, 12));
 				g.back().alignment = 1;
 			}

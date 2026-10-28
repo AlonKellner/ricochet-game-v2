@@ -50,6 +50,7 @@ struct BuiltSurface {
 	bool player_solid = false;
 	bool platform = false; // Stage 172: a one-way platform (GAME_SPEC 25.1)
 	std::optional<Marker> marker; // Stage 179: a designer's marker (display only)
+	std::string shape;            // Stage 181: an object's look (none: its carrier; display only)
 	bool pre_transform = false;
 	int portal_pair = 0; // a portal: the id of the surface with the inverse motion (0: none)
 

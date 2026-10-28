@@ -131,7 +131,7 @@ wins the click). A rectangle has corner handles, a circle a center and a radius 
 two ends, and the whole thing drags. The panel shows its own fields:
 - the goal: its shape (click: a rectangle becomes the circle in it, and back) and its `requires`;
 - a detector: its name, `for` and `mode` (they cycle), flag, value, shape and marker;
-- an object: its name, `kind` and `face` (they cycle), solidity, center, radius and label.
+- an object: its name, `kind`, `face` and `shape` (they cycle; Stage 181: the shape is its look, drawn over its faint circle), solidity, center, radius and label.
 
 **Markers** (Stage 179, GAME_SPEC 22.5). An element's panel and a detector's have a `marker` row: a click sets the
 next shape (none, circle, square, triangle, diamond, star, cross; Shift: back; none removes it), and once there is
