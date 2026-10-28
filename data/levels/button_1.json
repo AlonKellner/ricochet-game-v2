@@ -21,12 +21,14 @@
   },
   {
    "end": [1250.0, 500.0],
+   "flag": "switch",
    "kind": "door",
    "name": "door_1",
    "start": [1250.0, 700.0]
   },
   {
    "end": [1200.0, 400.0],
+   "face": "terminal",
    "flag": "switch",
    "kind": "button",
    "name": "button_1",
@@ -36,7 +38,7 @@
    "end": [1000.0, 350.0],
    "kind": "passthrough",
    "name": "passthrough_1",
-   "start": [1030.0, 380.0]
+   "start": [1020.0, 370.0]
   },
   {
    "end": [1000.0, 280.0],
@@ -45,214 +47,358 @@
    "start": [1000.0, 350.0]
   },
   {
-   "end": [1030.0, 250.0],
+   "end": [1020.0, 260.0],
    "kind": "passthrough",
    "name": "passthrough_3",
    "start": [1000.0, 280.0]
   },
   {
-   "end": [1070.0, 250.0],
+   "end": [1060.0, 260.0],
    "kind": "passthrough",
    "name": "passthrough_4",
-   "start": [1030.0, 250.0]
+   "start": [1020.0, 260.0]
   },
   {
-   "end": [1100.0, 280.0],
+   "end": [1080.0, 280.0],
    "kind": "passthrough",
    "name": "passthrough_5",
-   "start": [1070.0, 250.0]
+   "start": [1060.0, 260.0]
   },
   {
-   "end": [1100.0, 350.0],
+   "end": [1080.0, 350.0],
    "kind": "passthrough",
    "name": "passthrough_6",
-   "start": [1100.0, 280.0]
+   "start": [1080.0, 280.0]
   },
   {
-   "end": [1070.0, 380.0],
+   "end": [1060.0, 370.0],
    "kind": "passthrough",
    "name": "passthrough_7",
-   "start": [1100.0, 350.0]
+   "start": [1080.0, 350.0]
   },
   {
-   "end": [1030.0, 380.0],
+   "end": [1020.0, 370.0],
    "kind": "passthrough",
    "name": "passthrough_8",
-   "start": [1070.0, 380.0]
+   "start": [1060.0, 370.0]
   },
   {
-   "end": [1100.0, 320.0],
+   "end": [1080.0, 320.0],
    "kind": "passthrough",
    "name": "passthrough_9",
    "start": [1000.0, 320.0]
   },
   {
-   "end": [1030.0, 260.0],
+   "end": [1020.0, 270.0],
    "kind": "passthrough",
-   "name": "passthrough_11",
+   "name": "passthrough_12",
    "start": [1010.0, 280.0]
+  },
+  {
+   "end": [1030.0, 270.0],
+   "kind": "passthrough",
+   "name": "passthrough_13",
+   "start": [1010.0, 290.0]
+  },
+  {
+   "end": [1030.0, 280.0],
+   "kind": "passthrough",
+   "name": "passthrough_14",
+   "start": [1010.0, 300.0]
+  },
+  {
+   "end": [1030.0, 290.0],
+   "kind": "passthrough",
+   "name": "passthrough_15",
+   "start": [1010.0, 310.0]
+  },
+  {
+   "end": [1030.0, 300.0],
+   "kind": "passthrough",
+   "name": "passthrough_16",
+   "start": [1020.0, 310.0]
   },
   {
    "end": [1040.0, 260.0],
    "kind": "passthrough",
-   "name": "passthrough_12",
-   "start": [1010.0, 290.0]
-  },
-  {
-   "end": [1040.0, 270.0],
-   "kind": "passthrough",
-   "name": "passthrough_13",
-   "start": [1010.0, 300.0]
-  },
-  {
-   "end": [1040.0, 280.0],
-   "kind": "passthrough",
-   "name": "passthrough_14",
-   "start": [1010.0, 310.0]
-  },
-  {
-   "end": [1040.0, 290.0],
-   "kind": "passthrough",
-   "name": "passthrough_15",
-   "start": [1020.0, 310.0]
-  },
-  {
-   "end": [1040.0, 300.0],
-   "kind": "passthrough",
-   "name": "passthrough_16",
-   "start": [1030.0, 310.0]
-  },
-  {
-   "end": [1050.0, 250.0],
-   "kind": "passthrough",
    "name": "passthrough_10",
-   "start": [1050.0, 320.0]
+   "start": [1040.0, 320.0]
   },
   {
-   "end": [980.0, 240.0],
+   "end": [1150.0, 340.0],
    "kind": "passthrough",
    "name": "passthrough_17",
-   "start": [980.0, 210.0]
+   "start": [1150.0, 310.0]
   },
   {
-   "end": [990.0, 230.0],
+   "end": [1160.0, 330.0],
    "kind": "passthrough",
    "name": "passthrough_18",
-   "start": [980.0, 240.0]
+   "start": [1150.0, 340.0]
   },
   {
-   "end": [990.0, 200.0],
+   "end": [1160.0, 300.0],
    "kind": "passthrough",
    "name": "passthrough_19",
-   "start": [980.0, 210.0]
+   "start": [1150.0, 310.0]
   },
   {
-   "end": [990.0, 230.0],
+   "end": [1160.0, 330.0],
    "kind": "passthrough",
    "name": "passthrough_20",
-   "start": [990.0, 200.0]
+   "start": [1160.0, 300.0]
   },
   {
-   "end": [1120.0, 240.0],
+   "end": [1290.0, 340.0],
    "kind": "passthrough",
    "name": "passthrough_21",
-   "start": [980.0, 240.0]
+   "start": [1150.0, 340.0]
   },
   {
-   "end": [1110.0, 230.0],
+   "end": [1280.0, 330.0],
    "kind": "passthrough",
    "name": "passthrough_22",
-   "start": [1120.0, 240.0]
+   "start": [1290.0, 340.0]
   },
   {
-   "end": [990.0, 230.0],
+   "end": [1160.0, 330.0],
    "kind": "passthrough",
    "name": "passthrough_23",
-   "start": [1110.0, 230.0]
+   "start": [1280.0, 330.0]
   },
   {
-   "end": [1110.0, 200.0],
+   "end": [1280.0, 300.0],
    "kind": "passthrough",
    "name": "passthrough_24",
-   "start": [1110.0, 230.0]
+   "start": [1280.0, 330.0]
   },
   {
-   "end": [1120.0, 210.0],
+   "end": [1290.0, 310.0],
    "kind": "passthrough",
    "name": "passthrough_25",
-   "start": [1110.0, 200.0]
+   "start": [1280.0, 300.0]
   },
   {
-   "end": [1120.0, 240.0],
+   "end": [1290.0, 340.0],
    "kind": "passthrough",
    "name": "passthrough_26",
-   "start": [1120.0, 210.0]
+   "start": [1290.0, 310.0]
   },
   {
-   "end": [990.0, 200.0],
+   "end": [1160.0, 300.0],
    "kind": "passthrough",
    "name": "passthrough_27",
-   "start": [1110.0, 200.0]
+   "start": [1280.0, 300.0]
   },
   {
-   "end": [1010.0, 210.0],
+   "end": [1180.0, 310.0],
    "kind": "passthrough",
    "name": "passthrough_28",
-   "start": [1000.0, 220.0]
+   "start": [1170.0, 320.0]
   },
   {
-   "end": [1020.0, 210.0],
+   "end": [1190.0, 310.0],
    "kind": "passthrough",
    "name": "passthrough_29",
-   "start": [1010.0, 220.0]
+   "start": [1180.0, 320.0]
   },
   {
-   "end": [1030.0, 210.0],
+   "end": [1200.0, 310.0],
    "kind": "passthrough",
    "name": "passthrough_30",
-   "start": [1020.0, 220.0]
+   "start": [1190.0, 320.0]
   },
   {
-   "end": [1040.0, 210.0],
+   "end": [1210.0, 310.0],
    "kind": "passthrough",
    "name": "passthrough_31",
-   "start": [1030.0, 220.0]
+   "start": [1200.0, 320.0]
   },
   {
-   "end": [1050.0, 210.0],
+   "end": [1220.0, 310.0],
    "kind": "passthrough",
    "name": "passthrough_32",
-   "start": [1040.0, 220.0]
+   "start": [1210.0, 320.0]
   },
   {
-   "end": [1060.0, 210.0],
+   "end": [1230.0, 310.0],
    "kind": "passthrough",
    "name": "passthrough_33",
-   "start": [1050.0, 220.0]
+   "start": [1220.0, 320.0]
   },
   {
-   "end": [1070.0, 210.0],
+   "end": [1240.0, 310.0],
    "kind": "passthrough",
    "name": "passthrough_34",
-   "start": [1060.0, 220.0]
+   "start": [1230.0, 320.0]
   },
   {
-   "end": [1080.0, 210.0],
+   "end": [1250.0, 310.0],
    "kind": "passthrough",
    "name": "passthrough_35",
-   "start": [1070.0, 220.0]
+   "start": [1240.0, 320.0]
   },
   {
-   "end": [1090.0, 210.0],
+   "end": [1260.0, 310.0],
    "kind": "passthrough",
    "name": "passthrough_36",
-   "start": [1080.0, 220.0]
+   "start": [1250.0, 320.0]
   },
   {
-   "end": [1100.0, 210.0],
+   "end": [1270.0, 310.0],
    "kind": "passthrough",
    "name": "passthrough_37",
-   "start": [1090.0, 220.0]
+   "start": [1260.0, 320.0]
+  },
+  {
+   "end": [1220.0, 290.0],
+   "kind": "passthrough",
+   "name": "passthrough_38",
+   "start": [1220.0, 250.0]
+  },
+  {
+   "end": [1220.0, 290.0],
+   "kind": "passthrough",
+   "name": "passthrough_39",
+   "start": [1210.0, 280.0]
+  },
+  {
+   "end": [1230.0, 280.0],
+   "kind": "passthrough",
+   "name": "passthrough_40",
+   "start": [1220.0, 290.0]
+  },
+  {
+   "end": [1020.0, 250.0],
+   "kind": "passthrough",
+   "name": "passthrough_41",
+   "start": [1020.0, 210.0]
+  },
+  {
+   "end": [1010.0, 240.0],
+   "kind": "passthrough",
+   "name": "passthrough_42",
+   "start": [1020.0, 250.0]
+  },
+  {
+   "end": [1030.0, 240.0],
+   "kind": "passthrough",
+   "name": "passthrough_43",
+   "start": [1020.0, 250.0]
+  },
+  {
+   "end": [1140.0, 240.0],
+   "kind": "passthrough",
+   "name": "passthrough_11",
+   "start": [1090.0, 390.0]
+  },
+  {
+   "end": [1100.0, 390.0],
+   "kind": "passthrough",
+   "name": "passthrough_44",
+   "start": [1150.0, 240.0]
+  },
+  {
+   "end": [1100.0, 390.0],
+   "kind": "passthrough",
+   "name": "passthrough_45",
+   "start": [1090.0, 390.0]
+  },
+  {
+   "end": [1150.0, 240.0],
+   "kind": "passthrough",
+   "name": "passthrough_46",
+   "start": [1140.0, 240.0]
+  },
+  {
+   "end": [900.0, 660.0],
+   "kind": "passthrough",
+   "name": "passthrough_47",
+   "start": [870.0, 630.0]
+  },
+  {
+   "end": [920.0, 610.0],
+   "kind": "passthrough",
+   "name": "passthrough_48",
+   "start": [900.0, 660.0]
+  },
+  {
+   "end": [870.0, 630.0],
+   "kind": "passthrough",
+   "name": "passthrough_49",
+   "start": [920.0, 610.0]
+  },
+  {
+   "end": [950.0, 580.0],
+   "kind": "passthrough",
+   "name": "passthrough_51",
+   "start": [930.0, 600.0]
+  },
+  {
+   "end": [990.0, 540.0],
+   "kind": "passthrough",
+   "name": "passthrough_52",
+   "start": [970.0, 560.0]
+  },
+  {
+   "end": [1030.0, 500.0],
+   "kind": "passthrough",
+   "name": "passthrough_53",
+   "start": [1010.0, 520.0]
+  },
+  {
+   "end": [1040.0, 480.0],
+   "kind": "passthrough",
+   "name": "passthrough_54",
+   "start": [1050.0, 480.0]
+  },
+  {
+   "end": [1050.0, 490.0],
+   "kind": "passthrough",
+   "name": "passthrough_55",
+   "start": [1050.0, 480.0]
+  },
+  {
+   "end": [1090.0, 440.0],
+   "kind": "passthrough",
+   "name": "passthrough_56",
+   "start": [1050.0, 480.0]
+  },
+  {
+   "end": [1070.0, 440.0],
+   "kind": "passthrough",
+   "name": "passthrough_57",
+   "start": [1090.0, 440.0]
+  },
+  {
+   "end": [1090.0, 460.0],
+   "kind": "passthrough",
+   "name": "passthrough_58",
+   "start": [1090.0, 440.0]
+  },
+  {
+   "end": [1040.0, 490.0],
+   "kind": "passthrough",
+   "name": "passthrough_59",
+   "start": [1050.0, 480.0]
+  },
+  {
+   "end": [880.0, 690.0],
+   "kind": "passthrough",
+   "name": "passthrough_60",
+   "start": [880.0, 640.0]
+  },
+  {
+   "end": [910.0, 690.0],
+   "kind": "passthrough",
+   "name": "passthrough_61",
+   "start": [880.0, 690.0]
+  },
+  {
+   "end": [910.0, 640.0],
+   "kind": "passthrough",
+   "name": "passthrough_62",
+   "start": [910.0, 690.0]
   }
  ],
  "gravity": [0.0, 980.0],

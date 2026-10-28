@@ -72,7 +72,7 @@
    "player_solid": true,
    "presence": [
     {
-     "key": "door:door_1",
+     "key": "switch",
      "values": ["DEFAULT", "false"]
     }
    ],
@@ -98,7 +98,7 @@
       "value": true
      }
     ],
-    "type": "pass"
+    "type": "terminal"
    },
    "line": true,
    "player_solid": false,
@@ -111,7 +111,7 @@
       "value": true
      }
     ],
-    "type": "pass"
+    "type": "terminal"
    },
    "start": [1050.0, 400.0],
    "via": [1125.0, 400.0]
@@ -132,8 +132,8 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1030.0, 380.0],
-   "via": [1015.0, 365.0]
+   "start": [1020.0, 370.0],
+   "via": [1010.0, 360.0]
   },
   {
    "circle": null,
@@ -156,7 +156,7 @@
   },
   {
    "circle": null,
-   "end": [1030.0, 250.0],
+   "end": [1020.0, 260.0],
    "full": false,
    "id": 8,
    "is_target": false,
@@ -171,11 +171,11 @@
     "type": "pass"
    },
    "start": [1000.0, 280.0],
-   "via": [1015.0, 265.0]
+   "via": [1010.0, 270.0]
   },
   {
    "circle": null,
-   "end": [1070.0, 250.0],
+   "end": [1060.0, 260.0],
    "full": false,
    "id": 9,
    "is_target": false,
@@ -189,12 +189,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1030.0, 250.0],
-   "via": [1050.0, 250.0]
+   "start": [1020.0, 260.0],
+   "via": [1040.0, 260.0]
   },
   {
    "circle": null,
-   "end": [1100.0, 280.0],
+   "end": [1080.0, 280.0],
    "full": false,
    "id": 10,
    "is_target": false,
@@ -208,12 +208,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1070.0, 250.0],
-   "via": [1085.0, 265.0]
+   "start": [1060.0, 260.0],
+   "via": [1070.0, 270.0]
   },
   {
    "circle": null,
-   "end": [1100.0, 350.0],
+   "end": [1080.0, 350.0],
    "full": false,
    "id": 11,
    "is_target": false,
@@ -227,12 +227,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1100.0, 280.0],
-   "via": [1100.0, 315.0]
+   "start": [1080.0, 280.0],
+   "via": [1080.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1070.0, 380.0],
+   "end": [1060.0, 370.0],
    "full": false,
    "id": 12,
    "is_target": false,
@@ -246,12 +246,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1100.0, 350.0],
-   "via": [1085.0, 365.0]
+   "start": [1080.0, 350.0],
+   "via": [1070.0, 360.0]
   },
   {
    "circle": null,
-   "end": [1030.0, 380.0],
+   "end": [1020.0, 370.0],
    "full": false,
    "id": 13,
    "is_target": false,
@@ -265,12 +265,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1070.0, 380.0],
-   "via": [1050.0, 380.0]
+   "start": [1060.0, 370.0],
+   "via": [1040.0, 370.0]
   },
   {
    "circle": null,
-   "end": [1100.0, 320.0],
+   "end": [1080.0, 320.0],
    "full": false,
    "id": 14,
    "is_target": false,
@@ -285,11 +285,11 @@
     "type": "pass"
    },
    "start": [1000.0, 320.0],
-   "via": [1050.0, 320.0]
+   "via": [1040.0, 320.0]
   },
   {
    "circle": null,
-   "end": [1030.0, 260.0],
+   "end": [1020.0, 270.0],
    "full": false,
    "id": 15,
    "is_target": false,
@@ -304,11 +304,11 @@
     "type": "pass"
    },
    "start": [1010.0, 280.0],
-   "via": [1020.0, 270.0]
+   "via": [1015.0, 275.0]
   },
   {
    "circle": null,
-   "end": [1040.0, 260.0],
+   "end": [1030.0, 270.0],
    "full": false,
    "id": 16,
    "is_target": false,
@@ -323,11 +323,11 @@
     "type": "pass"
    },
    "start": [1010.0, 290.0],
-   "via": [1025.0, 275.0]
+   "via": [1020.0, 280.0]
   },
   {
    "circle": null,
-   "end": [1040.0, 270.0],
+   "end": [1030.0, 280.0],
    "full": false,
    "id": 17,
    "is_target": false,
@@ -342,11 +342,11 @@
     "type": "pass"
    },
    "start": [1010.0, 300.0],
-   "via": [1025.0, 285.0]
+   "via": [1020.0, 290.0]
   },
   {
    "circle": null,
-   "end": [1040.0, 280.0],
+   "end": [1030.0, 290.0],
    "full": false,
    "id": 18,
    "is_target": false,
@@ -361,11 +361,11 @@
     "type": "pass"
    },
    "start": [1010.0, 310.0],
-   "via": [1025.0, 295.0]
+   "via": [1020.0, 300.0]
   },
   {
    "circle": null,
-   "end": [1040.0, 290.0],
+   "end": [1030.0, 300.0],
    "full": false,
    "id": 19,
    "is_target": false,
@@ -380,11 +380,11 @@
     "type": "pass"
    },
    "start": [1020.0, 310.0],
-   "via": [1030.0, 300.0]
+   "via": [1025.0, 305.0]
   },
   {
    "circle": null,
-   "end": [1040.0, 300.0],
+   "end": [1040.0, 260.0],
    "full": false,
    "id": 20,
    "is_target": false,
@@ -398,12 +398,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1030.0, 310.0],
-   "via": [1035.0, 305.0]
+   "start": [1040.0, 320.0],
+   "via": [1040.0, 290.0]
   },
   {
    "circle": null,
-   "end": [1050.0, 250.0],
+   "end": [1150.0, 340.0],
    "full": false,
    "id": 21,
    "is_target": false,
@@ -417,12 +417,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1050.0, 320.0],
-   "via": [1050.0, 285.0]
+   "start": [1150.0, 310.0],
+   "via": [1150.0, 325.0]
   },
   {
    "circle": null,
-   "end": [980.0, 240.0],
+   "end": [1160.0, 330.0],
    "full": false,
    "id": 22,
    "is_target": false,
@@ -436,12 +436,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [980.0, 210.0],
-   "via": [980.0, 225.0]
+   "start": [1150.0, 340.0],
+   "via": [1155.0, 335.0]
   },
   {
    "circle": null,
-   "end": [990.0, 230.0],
+   "end": [1160.0, 300.0],
    "full": false,
    "id": 23,
    "is_target": false,
@@ -455,12 +455,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [980.0, 240.0],
-   "via": [985.0, 235.0]
+   "start": [1150.0, 310.0],
+   "via": [1155.0, 305.0]
   },
   {
    "circle": null,
-   "end": [990.0, 200.0],
+   "end": [1160.0, 330.0],
    "full": false,
    "id": 24,
    "is_target": false,
@@ -474,12 +474,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [980.0, 210.0],
-   "via": [985.0, 205.0]
+   "start": [1160.0, 300.0],
+   "via": [1160.0, 315.0]
   },
   {
    "circle": null,
-   "end": [990.0, 230.0],
+   "end": [1290.0, 340.0],
    "full": false,
    "id": 25,
    "is_target": false,
@@ -493,12 +493,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [990.0, 200.0],
-   "via": [990.0, 215.0]
+   "start": [1150.0, 340.0],
+   "via": [1220.0, 340.0]
   },
   {
    "circle": null,
-   "end": [1120.0, 240.0],
+   "end": [1280.0, 330.0],
    "full": false,
    "id": 26,
    "is_target": false,
@@ -512,12 +512,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [980.0, 240.0],
-   "via": [1050.0, 240.0]
+   "start": [1290.0, 340.0],
+   "via": [1285.0, 335.0]
   },
   {
    "circle": null,
-   "end": [1110.0, 230.0],
+   "end": [1160.0, 330.0],
    "full": false,
    "id": 27,
    "is_target": false,
@@ -531,12 +531,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1120.0, 240.0],
-   "via": [1115.0, 235.0]
+   "start": [1280.0, 330.0],
+   "via": [1220.0, 330.0]
   },
   {
    "circle": null,
-   "end": [990.0, 230.0],
+   "end": [1280.0, 300.0],
    "full": false,
    "id": 28,
    "is_target": false,
@@ -550,12 +550,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1110.0, 230.0],
-   "via": [1050.0, 230.0]
+   "start": [1280.0, 330.0],
+   "via": [1280.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1110.0, 200.0],
+   "end": [1290.0, 310.0],
    "full": false,
    "id": 29,
    "is_target": false,
@@ -569,12 +569,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1110.0, 230.0],
-   "via": [1110.0, 215.0]
+   "start": [1280.0, 300.0],
+   "via": [1285.0, 305.0]
   },
   {
    "circle": null,
-   "end": [1120.0, 210.0],
+   "end": [1290.0, 340.0],
    "full": false,
    "id": 30,
    "is_target": false,
@@ -588,12 +588,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1110.0, 200.0],
-   "via": [1115.0, 205.0]
+   "start": [1290.0, 310.0],
+   "via": [1290.0, 325.0]
   },
   {
    "circle": null,
-   "end": [1120.0, 240.0],
+   "end": [1160.0, 300.0],
    "full": false,
    "id": 31,
    "is_target": false,
@@ -607,12 +607,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1120.0, 210.0],
-   "via": [1120.0, 225.0]
+   "start": [1280.0, 300.0],
+   "via": [1220.0, 300.0]
   },
   {
    "circle": null,
-   "end": [990.0, 200.0],
+   "end": [1180.0, 310.0],
    "full": false,
    "id": 32,
    "is_target": false,
@@ -626,12 +626,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1110.0, 200.0],
-   "via": [1050.0, 200.0]
+   "start": [1170.0, 320.0],
+   "via": [1175.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1010.0, 210.0],
+   "end": [1190.0, 310.0],
    "full": false,
    "id": 33,
    "is_target": false,
@@ -645,12 +645,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1000.0, 220.0],
-   "via": [1005.0, 215.0]
+   "start": [1180.0, 320.0],
+   "via": [1185.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1020.0, 210.0],
+   "end": [1200.0, 310.0],
    "full": false,
    "id": 34,
    "is_target": false,
@@ -664,12 +664,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1010.0, 220.0],
-   "via": [1015.0, 215.0]
+   "start": [1190.0, 320.0],
+   "via": [1195.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1030.0, 210.0],
+   "end": [1210.0, 310.0],
    "full": false,
    "id": 35,
    "is_target": false,
@@ -683,12 +683,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1020.0, 220.0],
-   "via": [1025.0, 215.0]
+   "start": [1200.0, 320.0],
+   "via": [1205.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1040.0, 210.0],
+   "end": [1220.0, 310.0],
    "full": false,
    "id": 36,
    "is_target": false,
@@ -702,12 +702,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1030.0, 220.0],
-   "via": [1035.0, 215.0]
+   "start": [1210.0, 320.0],
+   "via": [1215.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1050.0, 210.0],
+   "end": [1230.0, 310.0],
    "full": false,
    "id": 37,
    "is_target": false,
@@ -721,12 +721,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1040.0, 220.0],
-   "via": [1045.0, 215.0]
+   "start": [1220.0, 320.0],
+   "via": [1225.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1060.0, 210.0],
+   "end": [1240.0, 310.0],
    "full": false,
    "id": 38,
    "is_target": false,
@@ -740,12 +740,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1050.0, 220.0],
-   "via": [1055.0, 215.0]
+   "start": [1230.0, 320.0],
+   "via": [1235.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1070.0, 210.0],
+   "end": [1250.0, 310.0],
    "full": false,
    "id": 39,
    "is_target": false,
@@ -759,12 +759,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1060.0, 220.0],
-   "via": [1065.0, 215.0]
+   "start": [1240.0, 320.0],
+   "via": [1245.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1080.0, 210.0],
+   "end": [1260.0, 310.0],
    "full": false,
    "id": 40,
    "is_target": false,
@@ -778,12 +778,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1070.0, 220.0],
-   "via": [1075.0, 215.0]
+   "start": [1250.0, 320.0],
+   "via": [1255.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1090.0, 210.0],
+   "end": [1270.0, 310.0],
    "full": false,
    "id": 41,
    "is_target": false,
@@ -797,12 +797,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1080.0, 220.0],
-   "via": [1085.0, 215.0]
+   "start": [1260.0, 320.0],
+   "via": [1265.0, 315.0]
   },
   {
    "circle": null,
-   "end": [1100.0, 210.0],
+   "end": [1220.0, 290.0],
    "full": false,
    "id": 42,
    "is_target": false,
@@ -816,14 +816,470 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1090.0, 220.0],
-   "via": [1095.0, 215.0]
+   "start": [1220.0, 250.0],
+   "via": [1220.0, 270.0]
+  },
+  {
+   "circle": null,
+   "end": [1220.0, 290.0],
+   "full": false,
+   "id": 43,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1210.0, 280.0],
+   "via": [1215.0, 285.0]
+  },
+  {
+   "circle": null,
+   "end": [1230.0, 280.0],
+   "full": false,
+   "id": 44,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1220.0, 290.0],
+   "via": [1225.0, 285.0]
+  },
+  {
+   "circle": null,
+   "end": [1020.0, 250.0],
+   "full": false,
+   "id": 45,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1020.0, 210.0],
+   "via": [1020.0, 230.0]
+  },
+  {
+   "circle": null,
+   "end": [1010.0, 240.0],
+   "full": false,
+   "id": 46,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1020.0, 250.0],
+   "via": [1015.0, 245.0]
+  },
+  {
+   "circle": null,
+   "end": [1030.0, 240.0],
+   "full": false,
+   "id": 47,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1020.0, 250.0],
+   "via": [1025.0, 245.0]
+  },
+  {
+   "circle": null,
+   "end": [1140.0, 240.0],
+   "full": false,
+   "id": 48,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1090.0, 390.0],
+   "via": [1115.0, 315.0]
+  },
+  {
+   "circle": null,
+   "end": [1100.0, 390.0],
+   "full": false,
+   "id": 49,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1150.0, 240.0],
+   "via": [1125.0, 315.0]
+  },
+  {
+   "circle": null,
+   "end": [1100.0, 390.0],
+   "full": false,
+   "id": 50,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1090.0, 390.0],
+   "via": [1095.0, 390.0]
+  },
+  {
+   "circle": null,
+   "end": [1150.0, 240.0],
+   "full": false,
+   "id": 51,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1140.0, 240.0],
+   "via": [1145.0, 240.0]
+  },
+  {
+   "circle": null,
+   "end": [900.0, 660.0],
+   "full": false,
+   "id": 52,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [870.0, 630.0],
+   "via": [885.0, 645.0]
+  },
+  {
+   "circle": null,
+   "end": [920.0, 610.0],
+   "full": false,
+   "id": 53,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [900.0, 660.0],
+   "via": [910.0, 635.0]
+  },
+  {
+   "circle": null,
+   "end": [870.0, 630.0],
+   "full": false,
+   "id": 54,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [920.0, 610.0],
+   "via": [895.0, 620.0]
+  },
+  {
+   "circle": null,
+   "end": [950.0, 580.0],
+   "full": false,
+   "id": 55,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [930.0, 600.0],
+   "via": [940.0, 590.0]
+  },
+  {
+   "circle": null,
+   "end": [990.0, 540.0],
+   "full": false,
+   "id": 56,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [970.0, 560.0],
+   "via": [980.0, 550.0]
+  },
+  {
+   "circle": null,
+   "end": [1030.0, 500.0],
+   "full": false,
+   "id": 57,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1010.0, 520.0],
+   "via": [1020.0, 510.0]
+  },
+  {
+   "circle": null,
+   "end": [1040.0, 480.0],
+   "full": false,
+   "id": 58,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1050.0, 480.0],
+   "via": [1045.0, 480.0]
+  },
+  {
+   "circle": null,
+   "end": [1050.0, 490.0],
+   "full": false,
+   "id": 59,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1050.0, 480.0],
+   "via": [1050.0, 485.0]
+  },
+  {
+   "circle": null,
+   "end": [1090.0, 440.0],
+   "full": false,
+   "id": 60,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1050.0, 480.0],
+   "via": [1070.0, 460.0]
+  },
+  {
+   "circle": null,
+   "end": [1070.0, 440.0],
+   "full": false,
+   "id": 61,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1090.0, 440.0],
+   "via": [1080.0, 440.0]
+  },
+  {
+   "circle": null,
+   "end": [1090.0, 460.0],
+   "full": false,
+   "id": 62,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1090.0, 440.0],
+   "via": [1090.0, 450.0]
+  },
+  {
+   "circle": null,
+   "end": [1040.0, 490.0],
+   "full": false,
+   "id": 63,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [1050.0, 480.0],
+   "via": [1045.0, 485.0]
+  },
+  {
+   "circle": null,
+   "end": [880.0, 690.0],
+   "full": false,
+   "id": 64,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [880.0, 640.0],
+   "via": [880.0, 665.0]
+  },
+  {
+   "circle": null,
+   "end": [910.0, 690.0],
+   "full": false,
+   "id": 65,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [880.0, 690.0],
+   "via": [895.0, 690.0]
+  },
+  {
+   "circle": null,
+   "end": [910.0, 640.0],
+   "full": false,
+   "id": 66,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [910.0, 690.0],
+   "via": [910.0, 665.0]
   },
   {
    "circle": null,
    "end": [0.0, 0.0],
    "full": false,
-   "id": 43,
+   "id": 67,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -842,7 +1298,7 @@
    "circle": null,
    "end": [1920.0, 0.0],
    "full": false,
-   "id": 44,
+   "id": 68,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -861,7 +1317,7 @@
    "circle": null,
    "end": [1920.0, 1080.0],
    "full": false,
-   "id": 45,
+   "id": 69,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -880,7 +1336,7 @@
    "circle": null,
    "end": [0.0, 1080.0],
    "full": false,
-   "id": 46,
+   "id": 70,
    "is_target": false,
    "left": {
     "interactive": false,
