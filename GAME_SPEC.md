@@ -2520,7 +2520,7 @@ a floor stays on it).
     capped at **900 units/s**. A full held jump keeps the former reach: 85 units up, 167 across at full speed on
     the level, 50 ticks aloft.
 - Drop: down held lets the player through platforms (§25.1, Stage 172).
-- Climb: up held while touching a platform from below or a steep one (a ladder, a rope) rises at least **150 units/sec** (§25.1, Stage 176).
+- Climb: up held while touching a platform from below or a steep one (a ladder, a rope) rises at least **150 units/sec** (§25.1, Stage 176). Climbing kills the horizontal momentum, snappily (Stage 183, the user: up means up): the horizontal speed goes to the input's times **60 units/sec** (a slow shuffle) at **4000 units/s²** -- from full speed in 3 ticks.
 - **The arrow is never affected by gravity** — it follows pure geometric ray tracing regardless of the level's gravity setting.
 - The player can move while aiming. *(Principle 16.)*
 
@@ -3111,4 +3111,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.85.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.85.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

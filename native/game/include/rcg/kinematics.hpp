@@ -25,6 +25,9 @@
 // steeper than 45 degrees: a ladder, a rope) rises at least CLIMB_SPEED -- up
 // through a platform, up a ladder; past its top it lands on what is there. Its
 // hands reach REACH above its head: standing, it grabs a platform just over it.
+// Stage 183 (the user): climbing kills the horizontal momentum, snappily -- the
+// horizontal speed goes to the input's times CLIMB_SIDE_SPEED (a slow shuffle)
+// at CLIMB_GRIP: from full speed in 3 ticks.
 //
 // Stage 182, the player's feel (the user: platformer practice, restrictive -- the
 // arrow, the pull and the grapple should move it better than walking): under
@@ -58,6 +61,8 @@ constexpr double STEP = 1.0 / 60.0;                  // the physics tick
 constexpr double BODY = 24.0;                        // Stage 173: the player's feet below its head (the arrow origin)
 constexpr double CLIMB_SPEED = 150.0;                // Stage 176: the least upward speed while climbing a platform
 constexpr double REACH = RADIUS;                      // Stage 176: the hands above the head (a climb's reach)
+constexpr double CLIMB_SIDE_SPEED = 60.0;            // Stage 183: the horizontal speed while climbing (the input's; no momentum)
+constexpr double CLIMB_GRIP = 4000.0;                // ... reached at this rate, px/s^2 (from full speed in 3 ticks)
 // Stage 182: the player's feel (see above)
 constexpr double FEEL_JUMP_VELOCITY = 395.0; // (the apex hang and the faster fall: the old arc's height and reach)
 constexpr double GROUND_ACCEL = 1800.0;      // px/s^2 toward the input's speed on a floor (full speed in ~0.11 s)

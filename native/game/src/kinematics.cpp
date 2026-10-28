@@ -394,6 +394,9 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 		}
 		if (climbing) {
 			v.y = std::min(v.y, -float(CLIMB_SPEED));
+			// Stage 183 (the user): up means up -- the momentum gone in a few ticks (snappy, not a jump), to the input's slow shuffle
+			const double side = double(in.axis_x) * CLIMB_SIDE_SPEED, x = v.x;
+			v.x = float(x < side ? std::min(x + CLIMB_GRIP * STEP, side) : std::max(x - CLIMB_GRIP * STEP, side));
 		}
 	}
 	// the move: swept, sliding along what it meets
