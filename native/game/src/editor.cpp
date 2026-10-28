@@ -28,9 +28,10 @@ void check_level_name(const std::string &name) {
 	}
 }
 
+// (Stage 180, the user: gravity on, no room walls, wall edges; the player standing near the bottom edge)
 json new_level() {
-	return json::parse(R"({"elements": [], "name": "untitled", "player": {"start": [960.0, 540.0]},
-		"room": {"built": true, "rect": [560.0, 240.0, 800.0, 600.0]}, "schema": "rc-level/2"})");
+	return json::parse(R"({"edges": "wall", "elements": [], "gravity": [0.0, 980.0], "name": "untitled", "player": {"start": [960.0, 1040.0]},
+		"room": {"built": false, "rect": [560.0, 240.0, 800.0, 600.0]}, "schema": "rc-level/2"})");
 }
 
 const char *const TOOLS[] = {"select", "line", "arc", "circle", "player", "goal", "detector", "object", "carrier_line", "carrier_circle", "collider"};

@@ -37,7 +37,7 @@ def test_commands_and_undo():
     assert ed.command({"op": "undo"})["ok"] and ed.command({"op": "undo"})["ok"]
     assert ed.document() == empty
     lowered = ed.command({"op": "lower"})["level"]
-    assert lowered["schema"] == "rc-level/1" and len(lowered["surfaces"]) == 8  # the room, the edges
+    assert lowered["schema"] == "rc-level/1" and len(lowered["surfaces"]) == 4  # the wall edges (Stage 180: no room walls)
 
 
 def test_the_pointer_places_a_line_and_the_draw_list_shows_it():
