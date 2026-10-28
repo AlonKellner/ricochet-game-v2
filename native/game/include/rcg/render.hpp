@@ -106,5 +106,8 @@ Color with_alpha(const Color &c, double a); // Color(c, a)
 // Stage 179: a designer's marker -- the shape (circle, square, triangle, diamond, star, cross) filled in the colour
 // over a dark outline, centred at `at`, `size` its radius; `alpha` scales both (a faded marker: an absent surface's)
 void marker(std::vector<Call> &out, const std::string &shape, const Color &color, const V2 &at, double size, double alpha = 1.0);
+// Stage 181: a shape's outline as a closed polygon (the marker's proportions; a cross: a plus turned 45 degrees),
+// centred at `at`, `size` its radius; a circle: none (an arc draws it)
+std::vector<V2> shape_outline(const std::string &shape, const V2 &at, double size);
 
 } // namespace rcg::render

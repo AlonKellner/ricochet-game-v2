@@ -117,6 +117,7 @@ struct SurfaceSpec {
 	bool player_solid = false;
 	bool platform = false; // Stage 172: one-way, stood on from above, dropped through (GAME_SPEC 25.1)
 	std::optional<Marker> marker; // Stage 179
+	std::string shape; // Stage 181: an object's look (marker_shapes(); none: its carrier) -- display only, it collides as its circle
 
 	bool is_portal() const { return resolver.empty() && left && left->effect.type == "portal"; }
 };
@@ -163,6 +164,7 @@ struct Object {
 	bool pops = false;
 	std::string carries;
 	std::vector<std::string> tags; // Stage 152 (an object conducts, burns, ...)
+	std::string shape = "circle"; // Stage 181: its look (marker_shapes()); display only -- it collides as its circle
 };
 
 // Stage 152: an element with tags, and its surfaces (indices into Level::surfaces).

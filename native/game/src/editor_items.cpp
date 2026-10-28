@@ -430,6 +430,7 @@ std::vector<Editor::Row> Editor::item_rows() const {
 		row("name", *path + "/name", "the object's name");
 		row("kind", *path + "/kind", "pullable: falls, a pull brings it back; static: stays", "pullable", "options", {"pullable", "static"});
 		row("face", *path + "/face", "its sides: a wall, a mirror, a pass", "wall", "options", {"wall", "mirror", "pass"});
+		row("shape", *path + "/shape", "how it looks (it still collides as its circle)", "circle", "options", marker_shapes()); // Stage 181
 		row("solid", *path + "/solid", "the player collides with it", "true", "bool");
 		row("center", *path + "/circle/center", "[x, y]: drag it");
 		row("radius", *path + "/circle/radius", "drag its handle", "16");

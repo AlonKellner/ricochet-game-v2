@@ -2,8 +2,10 @@
 // grapple. A pullable object falls and rests; a pull brings it back along the
 // arrow's path to the player, a grapple takes the player along it to the hit;
 // either stops at the first thing that blocks the traveller.
+#include "rcg/build.hpp"
 #include "rcg/level.hpp"
 #include "rcg/model.hpp"
+#include "rcg/render.hpp"
 #include "rcg/session.hpp"
 
 #include <doctest/doctest.h>
@@ -560,5 +562,65 @@ TEST_CASE("pull: a box resting on the floor comes to the player from anywhere, t
 			CHECK(dist(*end, s.player()) < 16 + 12 + 1);
 			CHECK(trail_legs(s) == 1);
 		}
+	}
+}
+
+TEST_CASE("pull and grapple: the preview's end is drawn as what moves -- the player's triangle (and its body under gravity), the object's shape; an object drawn in its shape (Stage 181)") {
+	using rcg::render::Kind;
+	// the closed outlines (point counts) the preview's end draws in its colour, and the circles' radii
+	auto ends = [](const rcg::Session &s) {
+		std::pair<std::vector<size_t>, std::vector<double>> got;
+		for (const rcg::render::FrameNode &n : s.draw_frame()) {
+			for (const rcg::render::Call &c : *n.calls) {
+				if (c.colors.empty() || c.colors[0] != rcg::render::Color{0.6f, 1.0f, 0.7f, 0.95f}) {
+					continue;
+				}
+				if (c.kind == Kind::Polyline) {
+					got.first.push_back(c.pts.size());
+				} else if (c.kind == Kind::Arc) {
+					got.second.push_back(c.radius);
+				}
+			}
+		}
+		return got;
+	};
+	auto previewed = [](const char *level, double x, double y) {
+		rcg::Session s(level_of(level));
+		s.set_cursor(rc::V2::of(x, y));
+		s.settle();
+		REQUIRE(s.preview_trip_end().has_value());
+		return s;
+	};
+	// a grapple: the triangle; under gravity the body too
+	const char *grapple = R"({"elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 800]}]})";
+	CHECK(ends(previewed(grapple, 1200, 540)) == std::pair<std::vector<size_t>, std::vector<double>>{{4}, {}});
+	const char *tall = R"({"gravity": [0, 980], "elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 800]}]})";
+	CHECK(ends(previewed(tall, 1200, 540)) == std::pair<std::vector<size_t>, std::vector<double>>{{5, 4}, {}});
+	// a pull: the object's circle, or its shape
+	const char *ball = R"({"objects": [{"name": "box", "circle": {"center": [1100, 540], "radius": 16}}]})";
+	CHECK(ends(previewed(ball, 1100, 540)) == std::pair<std::vector<size_t>, std::vector<double>>{{}, {16.0}});
+	const char *box = R"({"objects": [{"name": "box", "circle": {"center": [1100, 540], "radius": 16}, "shape": "square"}]})";
+	CHECK(ends(previewed(box, 1100, 540)) == std::pair<std::vector<size_t>, std::vector<double>>{{5}, {}});
+	// the object itself: its square, its circle (what it collides as) faint; the collisions those of the circle
+	const rcg::Session s(level_of(box));
+	bool square = false, faint = false;
+	for (const rcg::render::FrameNode &n : s.draw_frame()) {
+		if (n.key.kind != rcg::render::NodeKind::Surface || n.key.a != s.world().bodies()[0].id) {
+			continue;
+		}
+		for (const rcg::render::Call &c : *n.calls) {
+			square = square || (c.kind == Kind::Polyline && c.pts.size() == 5);
+			faint = faint || (c.kind == Kind::Arc && c.radius == 16.0 && c.colors[0][3] < 0.5f);
+		}
+	}
+	CHECK(square);
+	CHECK(faint);
+	CHECK(rcg::describe_surface(s.world().bodies()[0].built) == rcg::describe_surface(rcg::Session(level_of(ball)).world().bodies()[0].built));
+	// checked
+	try {
+		level_of(R"({"objects": [{"name": "a", "circle": {"center": [0, 0]}, "shape": "hexagon"}]})");
+		FAIL("no error");
+	} catch (const rcg::LevelError &e) {
+		CHECK(std::string(e.what()).find("objects[0].shape: circle, square, triangle, diamond, star or cross expected") != std::string::npos);
 	}
 }

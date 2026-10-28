@@ -439,7 +439,7 @@ void parse_goals(const json &j, Level &lv) {
 		for (size_t i = 0; i < os->size(); i++) {
 			const json &o = (*os)[i];
 			const std::string op = P + ".objects[" + std::to_string(i) + "]";
-			only_keys(o, op, {"name", "circle", "kind", "solid", "face", "label", "gravity", "pops", "carries", "tags"});
+			only_keys(o, op, {"name", "circle", "kind", "solid", "face", "label", "gravity", "pops", "carries", "tags", "shape"});
 			Object ob;
 			ob.name = str(req(o, "name", op), op + ".name");
 			for (const Object &other : lv.objects) {
@@ -474,6 +474,13 @@ void parse_goals(const json &j, Level &lv) {
 			}
 			if (const json *v = opt(o, "label")) {
 				ob.label = str(*v, op + ".label");
+			}
+			if (const json *v = opt(o, "shape")) {
+				ob.shape = str(*v, op + ".shape");
+				const std::vector<std::string> &shapes = marker_shapes();
+				if (std::find(shapes.begin(), shapes.end(), ob.shape) == shapes.end()) {
+					fail(op + ".shape", "circle, square, triangle, diamond, star or cross expected");
+				}
 			}
 			if (const json *v = opt(o, "gravity")) {
 				ob.gravity = num(*v, op + ".gravity");
@@ -827,6 +834,7 @@ SurfaceSpec object_spec(const Object &o, const V2 &center) {
 	s.center = center;
 	s.radius = o.radius;
 	s.player_solid = o.solid;
+	s.shape = o.shape;
 	SideSpec side;
 	side.effect.type = o.face == "mirror" ? "reflection" : o.face == "pass" ? "pass" : "terminal";
 	side.effect.raw = {{"type", side.effect.type}};
