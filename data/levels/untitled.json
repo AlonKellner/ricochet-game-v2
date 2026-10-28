@@ -1,0 +1,14 @@
+{
+ "edges": "wall",
+ "elements": [],
+ "gravity": [0.0, 980.0],
+ "name": "untitled",
+ "player": {
+  "start": [960.0, 1040.0]
+ },
+ "room": {
+  "built": false,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}
