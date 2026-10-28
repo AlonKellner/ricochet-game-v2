@@ -1,0 +1,130 @@
+{
+ "detectors": [
+  {
+   "for": "object",
+   "mode": "enter",
+   "name": "detector_1",
+   "region": {
+    "rect": [1410.0, 790.0, 80.0, 80.0]
+   }
+  }
+ ],
+ "edges": "wall",
+ "elements": [
+  {
+   "end": [950.0, 780.0],
+   "kind": "fence",
+   "name": "fence_1",
+   "start": [950.0, 580.0]
+  },
+  {
+   "end": [1400.0, 580.0],
+   "kind": "fence",
+   "name": "fence_2",
+   "start": [1400.0, 880.0]
+  },
+  {
+   "end": [1920.0, 880.0],
+   "kind": "wall",
+   "name": "wall_1",
+   "start": [1400.0, 880.0]
+  },
+  {
+   "end": [850.0, 1080.0],
+   "kind": "wall",
+   "name": "wall_6",
+   "start": [850.0, 880.0]
+  },
+  {
+   "end": [500.0, 1080.0],
+   "kind": "wall",
+   "name": "wall_8",
+   "start": [500.0, 880.0]
+  },
+  {
+   "end": [0.0, 880.0],
+   "kind": "wall",
+   "name": "wall_9",
+   "start": [500.0, 880.0]
+  },
+  {
+   "end": [900.0, 880.0],
+   "kind": "wall",
+   "name": "wall_2",
+   "start": [850.0, 880.0]
+  },
+  {
+   "end": [1050.0, 1080.0],
+   "kind": "wall",
+   "name": "wall_3",
+   "start": [1050.0, 880.0]
+  },
+  {
+   "end": [1050.0, 880.0],
+   "kind": "wall",
+   "name": "wall_10",
+   "start": [1000.0, 880.0]
+  },
+  {
+   "end": [1000.0, 880.0],
+   "flag": "det:detector_1",
+   "kind": "door",
+   "name": "door_1",
+   "start": [900.0, 880.0]
+  },
+  {
+   "end": [1400.0, 1080.0],
+   "kind": "wall",
+   "name": "wall_5",
+   "start": [1400.0, 880.0]
+  },
+  {
+   "end": [1800.0, 0.0],
+   "kind": "grapple",
+   "name": "grapple_1",
+   "start": [1800.0, 880.0]
+  },
+  {
+   "end": [100.0, 0.0],
+   "kind": "grapple",
+   "name": "grapple_2",
+   "start": [100.0, 880.0]
+  },
+  {
+   "end": [1000.0, 880.0],
+   "kind": "wall",
+   "name": "wall_4",
+   "start": [1000.0, 1080.0]
+  },
+  {
+   "end": [900.0, 880.0],
+   "kind": "wall",
+   "name": "wall_7",
+   "start": [900.0, 1080.0]
+  }
+ ],
+ "gravity": [0.0, 980.0],
+ "name": "fence_1",
+ "objective": {
+  "goal": {
+   "rect": [910.0, 990.0, 80.0, 80.0]
+  }
+ },
+ "objects": [
+  {
+   "circle": {
+    "center": [1650.0, 730.0],
+    "radius": 16.0
+   },
+   "name": "object_1"
+  }
+ ],
+ "player": {
+  "start": [400.0, 840.0]
+ },
+ "room": {
+  "built": false,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}
