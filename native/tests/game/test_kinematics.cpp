@@ -444,13 +444,13 @@ TEST_CASE("tall player: it stands on its feet, its head stops at a low ceiling a
 	}
 	CHECK(b.on_floor);
 	CHECK(b.pos.y == doctest::Approx(stand).epsilon(1e-6));
-	// a ceiling 70 above the floor cuts a jump (81.6 high) short at the head
+	// a ceiling 70 above the floor cuts a jump (85 high, up held: Stage 182) short at the head
 	const std::vector<k::Collider> low{wall(0, 1000, 1000, 1000), wall(0, 930, 1000, 930)};
 	k::Body j{V2{500, float(stand)}, V2{}, true};
-	k::step(j, k::Input{0, 0, true}, G, low);
+	k::step(j, k::Input{0, -1, true}, G, low);
 	float top = j.pos.y;
 	for (int i = 0; i < 60; i++) {
-		k::step(j, k::Input{}, G, low);
+		k::step(j, k::Input{0, i < 30 ? -1.0f : 0.0f, false}, G, low);
 		top = std::min(top, j.pos.y);
 	}
 	CHECK(top == doctest::Approx(930 + REST).epsilon(1e-6));
@@ -471,9 +471,9 @@ TEST_CASE("tall player: platforms judge by its feet -- a jump through lands on t
 	const double on = 950 - k::BODY - REST; // standing on the platform at 950
 	const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(0, 950, 1000, 950)};
 	k::Body b{V2{500, float(1000 - k::BODY - REST)}, V2{}, true};
-	k::step(b, k::Input{0, 0, true}, G, cs);
+	k::step(b, k::Input{0, -1, true}, G, cs);
 	for (int i = 0; i < 120; i++) {
-		k::step(b, k::Input{}, G, cs);
+		k::step(b, k::Input{0, i < 30 ? -1.0f : 0.0f, false}, G, cs); // (up held: the whole jump, Stage 182)
 	}
 	CHECK(b.on_floor);
 	CHECK(b.pos.y == doctest::Approx(on).epsilon(1e-6)); // its head passed first, never lifted
@@ -498,4 +498,119 @@ TEST_CASE("tall player: platforms judge by its feet -- a jump through lands on t
 	k::settle(s2, cs, k::PLAYER);
 	CHECK(s2.on_floor);
 	CHECK(s2.pos.y == doctest::Approx(on).epsilon(1e-6));
+}
+
+// Stage 182 (the user): the player's feel -- platformer practice, restrictive
+TEST_CASE("feel: a full held jump keeps the old reach (85 up, 167 across in 50 ticks); a tap hops low") {
+	const std::vector<k::Collider> floor{wall(-5000, 1000, 5000, 1000)};
+	const float stand = float(1000 - k::BODY - REST);
+	auto jump = [&](int held, float run) { // up held this many ticks (the press on the first); the height, the run, the ticks aloft
+		k::Body b{V2{0, stand}, V2{run * float(k::SPEED), 0}, true};
+		float top = b.pos.y;
+		int ticks = 0;
+		for (; ticks < 200; ticks++) {
+			k::step(b, k::Input{run, ticks < held ? -1.0f : 0.0f, ticks == 0}, G, floor);
+			top = std::min(top, b.pos.y);
+			if (ticks > 0 && b.on_floor) {
+				break;
+			}
+		}
+		return std::tuple{double(stand - top), double(b.pos.x), ticks};
+	};
+	const auto [h, x, t] = jump(60, 1.0f);
+	CHECK(h >= 85.0);
+	CHECK(h < 86.0);
+	CHECK(x >= 166.6);
+	CHECK(x < 172.0);
+	CHECK(t == doctest::Approx(50).epsilon(0.05));
+	const auto [hop, hx, ht] = jump(1, 0.0f);
+	CHECK(hop < 30.0); // released at once: the jump cut
+	CHECK(hop > 10.0);
+	CHECK(hx == 0.0);
+	CHECK(ht < t);
+}
+
+TEST_CASE("feel: coyote time -- a jump just after walking off a ledge; not later, and not twice") {
+	// a ledge ending at x = 0 (the floor far below)
+	const std::vector<k::Collider> cs{wall(-1000, 1000, 0, 1000), wall(-1000, 2000, 1000, 2000)};
+	auto off_then_jump = [&](int late) { // walk right off the ledge; press up `late` ticks after leaving it
+		k::Body b{V2{-40, float(1000 - k::BODY - REST)}, V2{float(k::SPEED), 0}, true};
+		int left = -1;
+		for (int i = 0; i < 400 && left < 0; i++) {
+			k::step(b, k::Input{1, 0, false}, G, cs);
+			left = b.on_floor ? -1 : i;
+		}
+		REQUIRE(left >= 0);
+		for (int i = 1; i < late; i++) {
+			k::step(b, k::Input{1, 0, false}, G, cs);
+		}
+		k::step(b, k::Input{1, -1, true}, G, cs);
+		return b;
+	};
+	CHECK(off_then_jump(1).vel.y < 0.0f);
+	CHECK(off_then_jump(k::COYOTE_TICKS).vel.y < 0.0f);
+	CHECK(off_then_jump(k::COYOTE_TICKS + 1).vel.y > 0.0f);
+	// a jump spends it: a second press in the air does nothing
+	k::Body b{V2{0, float(1000 - k::BODY - REST)}, V2{}, true};
+	k::step(b, k::Input{0, -1, true}, G, cs);
+	k::step(b, k::Input{0, 0, false}, G, cs);
+	const float rising = b.vel.y;
+	k::step(b, k::Input{0, -1, true}, G, cs);
+	CHECK(b.vel.y > rising);
+}
+
+TEST_CASE("feel: a jump pressed just before landing is taken on landing; one pressed long before is not") {
+	const std::vector<k::Collider> floor{wall(-1000, 1000, 1000, 1000)};
+	auto land_after_press = [&](int early) { // falling; up pressed `early` ticks before the landing tick, then held
+		k::Body probe{V2{0, 800}, V2{}, false};
+		int lands = 0;
+		for (; !probe.on_floor; lands++) {
+			k::step(probe, k::Input{}, G, floor);
+		}
+		k::Body b{V2{0, 800}, V2{}, false};
+		bool jumped = false;
+		for (int i = 0; i < lands + 3; i++) {
+			const bool press = i == lands - early;
+			k::step(b, k::Input{0, i >= lands - early ? -1.0f : 0.0f, press}, G, floor);
+			jumped = jumped || (i >= lands && b.vel.y < 0.0f);
+		}
+		return jumped;
+	};
+	CHECK(land_after_press(1));
+	CHECK(land_after_press(k::JUMP_BUFFER_TICKS - 1));
+	CHECK_FALSE(land_after_press(k::JUMP_BUFFER_TICKS + 3));
+}
+
+TEST_CASE("feel: it accelerates to its speed (slowly in the air) and slows to a stop; it falls no faster than MAX_FALL") {
+	const std::vector<k::Collider> floor{wall(-5000, 1000, 5000, 1000)};
+	k::Body b{V2{0, float(1000 - k::BODY - REST)}, V2{}, true};
+	k::step(b, k::Input{1, 0, false}, G, floor);
+	CHECK(b.vel.x == doctest::Approx(k::GROUND_ACCEL * k::STEP));
+	for (int i = 0; i < 10; i++) {
+		k::step(b, k::Input{1, 0, false}, G, floor);
+	}
+	CHECK(b.vel.x == float(k::SPEED));
+	for (int i = 0; i < 4; i++) {
+		k::step(b, k::Input{}, G, floor);
+	}
+	CHECK(b.vel.x > 0.0f);
+	for (int i = 0; i < 4; i++) {
+		k::step(b, k::Input{}, G, floor);
+	}
+	CHECK(b.vel.x == 0.0f);
+	// in the air: slower to speed up
+	k::Body a{V2{0, 0}, V2{}, false};
+	k::step(a, k::Input{1, 0, false}, G, floor);
+	CHECK(a.vel.x == doctest::Approx(k::AIR_ACCEL * k::STEP));
+	// a long fall: capped
+	k::Body f{V2{0, -20000}, V2{}, false};
+	for (int i = 0; i < 300; i++) {
+		k::step(f, k::Input{}, G, floor);
+	}
+	CHECK(f.vel.y == float(k::MAX_FALL));
+	// an object keeps the plain motion (its speed at once, gravity as it is)
+	k::Body o{V2{0, 0}, V2{}, false};
+	step1(o, k::Input{1, 0, false}, G, floor);
+	CHECK(o.vel.x == float(k::SPEED));
+	CHECK(o.vel.y == doctest::Approx(980.0 / 60.0));
 }

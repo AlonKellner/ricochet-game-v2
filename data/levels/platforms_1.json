@@ -326,7 +326,8 @@
     "center": [1450.0, 750.0],
     "radius": 16.0
    },
-   "name": "object_1"
+   "name": "object_1",
+   "shape": "star"
   }
  ],
  "player": {
