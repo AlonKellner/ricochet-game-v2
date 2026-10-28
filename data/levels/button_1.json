@@ -127,6 +127,132 @@
    "kind": "passthrough",
    "name": "passthrough_10",
    "start": [1050.0, 320.0]
+  },
+  {
+   "end": [980.0, 240.0],
+   "kind": "passthrough",
+   "name": "passthrough_17",
+   "start": [980.0, 210.0]
+  },
+  {
+   "end": [990.0, 230.0],
+   "kind": "passthrough",
+   "name": "passthrough_18",
+   "start": [980.0, 240.0]
+  },
+  {
+   "end": [990.0, 200.0],
+   "kind": "passthrough",
+   "name": "passthrough_19",
+   "start": [980.0, 210.0]
+  },
+  {
+   "end": [990.0, 230.0],
+   "kind": "passthrough",
+   "name": "passthrough_20",
+   "start": [990.0, 200.0]
+  },
+  {
+   "end": [1120.0, 240.0],
+   "kind": "passthrough",
+   "name": "passthrough_21",
+   "start": [980.0, 240.0]
+  },
+  {
+   "end": [1110.0, 230.0],
+   "kind": "passthrough",
+   "name": "passthrough_22",
+   "start": [1120.0, 240.0]
+  },
+  {
+   "end": [990.0, 230.0],
+   "kind": "passthrough",
+   "name": "passthrough_23",
+   "start": [1110.0, 230.0]
+  },
+  {
+   "end": [1110.0, 200.0],
+   "kind": "passthrough",
+   "name": "passthrough_24",
+   "start": [1110.0, 230.0]
+  },
+  {
+   "end": [1120.0, 210.0],
+   "kind": "passthrough",
+   "name": "passthrough_25",
+   "start": [1110.0, 200.0]
+  },
+  {
+   "end": [1120.0, 240.0],
+   "kind": "passthrough",
+   "name": "passthrough_26",
+   "start": [1120.0, 210.0]
+  },
+  {
+   "end": [990.0, 200.0],
+   "kind": "passthrough",
+   "name": "passthrough_27",
+   "start": [1110.0, 200.0]
+  },
+  {
+   "end": [1010.0, 210.0],
+   "kind": "passthrough",
+   "name": "passthrough_28",
+   "start": [1000.0, 220.0]
+  },
+  {
+   "end": [1020.0, 210.0],
+   "kind": "passthrough",
+   "name": "passthrough_29",
+   "start": [1010.0, 220.0]
+  },
+  {
+   "end": [1030.0, 210.0],
+   "kind": "passthrough",
+   "name": "passthrough_30",
+   "start": [1020.0, 220.0]
+  },
+  {
+   "end": [1040.0, 210.0],
+   "kind": "passthrough",
+   "name": "passthrough_31",
+   "start": [1030.0, 220.0]
+  },
+  {
+   "end": [1050.0, 210.0],
+   "kind": "passthrough",
+   "name": "passthrough_32",
+   "start": [1040.0, 220.0]
+  },
+  {
+   "end": [1060.0, 210.0],
+   "kind": "passthrough",
+   "name": "passthrough_33",
+   "start": [1050.0, 220.0]
+  },
+  {
+   "end": [1070.0, 210.0],
+   "kind": "passthrough",
+   "name": "passthrough_34",
+   "start": [1060.0, 220.0]
+  },
+  {
+   "end": [1080.0, 210.0],
+   "kind": "passthrough",
+   "name": "passthrough_35",
+   "start": [1070.0, 220.0]
+  },
+  {
+   "end": [1090.0, 210.0],
+   "kind": "passthrough",
+   "name": "passthrough_36",
+   "start": [1080.0, 220.0]
+  },
+  {
+   "end": [1100.0, 210.0],
+   "kind": "passthrough",
+   "name": "passthrough_37",
+   "start": [1090.0, 220.0]
   }
  ],
  "gravity": [0.0, 980.0],
