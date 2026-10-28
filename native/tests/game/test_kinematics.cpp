@@ -614,3 +614,27 @@ TEST_CASE("feel: it accelerates to its speed (slowly in the air) and slows to a 
 	CHECK(o.vel.x == float(k::SPEED));
 	CHECK(o.vel.y == doctest::Approx(980.0 / 60.0));
 }
+
+TEST_CASE("climbing kills the horizontal momentum in 3 ticks: up held on a rope, running, it goes up; held sideways it shuffles slowly (Stage 183)") {
+	// a vertical rope at x = 500 (a steep platform), the floor at 1000; the player touching it, running right at full speed
+	const std::vector<k::Collider> cs{wall(-5000, 1000, 5000, 1000), platform(500, 700, 500, 1000)};
+	const float stand = float(1000 - k::BODY - REST);
+	auto climb = [&](float side) { // up pressed, `side` held: the horizontal speeds of the first ticks
+		k::Body b{V2{490, stand}, V2{float(k::SPEED), 0}, true};
+		std::vector<float> vx;
+		for (int i = 0; i < 5; i++) {
+			k::step(b, k::Input{side, -1, i == 0}, G, cs);
+			vx.push_back(b.vel.x);
+			CHECK(b.vel.y <= -float(k::CLIMB_SPEED));
+		}
+		return vx;
+	};
+	const std::vector<float> up = climb(0.0f);
+	CHECK(up[0] < float(k::SPEED)); // slowing from the first tick
+	CHECK(up[0] > 0.0f);            // (not a jump to a stop)
+	CHECK(up[2] == 0.0f);           // stopped by the third
+	CHECK(up[4] == 0.0f);
+	const std::vector<float> shuffle = climb(1.0f);
+	CHECK(shuffle[2] == float(k::CLIMB_SIDE_SPEED));
+	CHECK(shuffle[4] == float(k::CLIMB_SIDE_SPEED));
+}
