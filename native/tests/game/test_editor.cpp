@@ -3,7 +3,9 @@
 // paints, driven here as a host drives it.
 #include "rcg/canon.hpp"
 #include "rcg/editor.hpp"
+#include "rcg/kinematics.hpp"
 #include "rcg/level2.hpp"
+#include "rcg/session.hpp"
 
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
@@ -29,6 +31,11 @@ std::string read_text(const fs::path &p) {
 	ss << in.rdbuf();
 	return ss.str();
 }
+
+// the blank level before Stage 180 -- no gravity, the room built, no edges, the player in the middle: what the
+// older tests draw on
+const json CLASSIC = json::parse(R"({"elements": [], "name": "untitled", "player": {"start": [960.0, 540.0]},
+	"room": {"built": true, "rect": [560.0, 240.0, 800.0, 600.0]}, "schema": "rc-level/2"})");
 
 json ok(rcg::Editor &ed, const json &cmd) {
 	const json r = ed.command(cmd);
@@ -210,7 +217,7 @@ TEST_CASE("editor: the pointer places elements on the grid and on other points e
 }
 
 TEST_CASE("editor: dragging handles and bodies") {
-	rcg::Editor ed;
+	rcg::Editor ed(&CLASSIC); // (the blank level before Stage 180)
 	ed.resize(1920, 1080);
 	ok(ed, {{"op", "add"}, {"element", {{"kind", "two_sided_mirror"}, {"name", "m"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
 	ok(ed, {{"op", "select"}, {"name", "m"}});
@@ -281,7 +288,7 @@ TEST_CASE("editor: keys") {
 }
 
 TEST_CASE("editor: problems are named, drawn and block a play-test") {
-	rcg::Editor ed;
+	rcg::Editor ed(&CLASSIC); // (the blank level before Stage 180)
 	ok(ed, {{"op", "add"}, {"element", {{"kind", "inversion"}, {"name", "lens"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
 	REQUIRE_FALSE(ed.errors().empty()); // one per side
 	for (const auto &e : ed.errors()) {
@@ -302,7 +309,7 @@ TEST_CASE("editor: problems are named, drawn and block a play-test") {
 }
 
 TEST_CASE("editor: the panel edits the selected element and the level") {
-	rcg::Editor ed;
+	rcg::Editor ed(&CLASSIC); // (the blank level before Stage 180)
 	ed.resize(1920, 1080);
 	ok(ed, {{"op", "add"}, {"element", {{"kind", "mirror"}, {"name", "m"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
 	ok(ed, {{"op", "select"}, {"name", "m"}});
@@ -922,7 +929,7 @@ TEST_CASE("editor: the level list is searchable -- soft matches first, their cha
 }
 
 TEST_CASE("editor: the level's edges -- a panel field, drawn as their kind, their mistakes named (Stage 169)") {
-	rcg::Editor ed;
+	rcg::Editor ed(&CLASSIC); // (the blank level before Stage 180)
 	ed.resize(1920, 1080);
 	auto faces = [&] { // the configured edges' strokes (an element's are 3 px too; this level has none)
 		int n = 0;
@@ -1045,7 +1052,7 @@ TEST_CASE("editor: several selected -- a marquee or ctrl+click; moved, scaled, s
 }
 
 TEST_CASE("editor: the player's start is selected like an item -- alone, by the marquee, by ctrl+click; moved and scaled with the rest (Stage 175)") {
-	rcg::Editor ed;
+	rcg::Editor ed(&CLASSIC); // (the blank level before Stage 180)
 	ed.resize(1920, 1080);
 	auto state = [&] { return ok(ed, {{"op", "state"}}); };
 	auto player = [&] { return ed.document()["player"]["start"]; };
@@ -1166,4 +1173,20 @@ TEST_CASE("editor: a flag's marker -- a button and its door alike; editing one e
 	CHECK_FALSE(marker_of_level(1));
 	CHECK(ed.document()["flag_markers"]["door:gate"] == "none");
 	CHECK(ed.errors().empty());
+}
+
+// Stage 180 (the user): a new level -- gravity on, no room walls, wall edges, the player standing near the bottom
+TEST_CASE("editor: a new level has gravity, no room walls and wall edges; the player stands on the bottom edge (Stage 180)") {
+	rcg::Editor ed;
+	CHECK(ed.document()["gravity"] == json::array({0.0, 980.0}));
+	CHECK(ed.document()["room"]["built"] == false);
+	CHECK(ed.document()["edges"] == "wall");
+	CHECK(ed.errors().empty());
+	ok(ed, {{"op", "new"}});
+	CHECK(ed.document()["edges"] == "wall");
+	// played: the player falls the little way onto the bottom edge and stands there
+	rcg::Session s(rcg::parse_level_json(ed.document()));
+	s.hold({}, 60);
+	CHECK(s.player().y + rcg::kinematics::BODY == doctest::Approx(1080 - rcg::kinematics::RADIUS - rcg::kinematics::SKIN).epsilon(1e-6));
+	CHECK(s.player().x == 960.0f);
 }

@@ -27,6 +27,10 @@ run it:
   (`data/levels/...`), never the copy. A new level saves to `data/levels/untitled.json`. Play-testing runs a
   `RicochetGame` child on the document.
 
+A new level (Stage 180) has gravity on (`[0, 980]`), its room not built (no room walls), wall edges (`"edges":
+"wall"`: the four walls of the bounds) and the player's start at the bottom middle, `[960, 1040]` (its feet; it
+stands on the bottom edge).
+
 ## The window
 
 - **The canvas**, left: the level, with the grid (10 units, and 50), the bounds (dashed) and the room's walls.
