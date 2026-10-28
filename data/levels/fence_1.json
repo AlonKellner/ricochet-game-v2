@@ -116,7 +116,8 @@
     "center": [1650.0, 730.0],
     "radius": 16.0
    },
-   "name": "object_1"
+   "name": "object_1",
+   "shape": "cross"
   }
  ],
  "player": {
