@@ -33,7 +33,8 @@
     "center": [890.0, 700.0],
     "radius": 16.0
    },
-   "name": "object_1"
+   "name": "object_1",
+   "shape": "square"
   }
  ],
  "player": {

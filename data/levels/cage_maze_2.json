@@ -135,7 +135,8 @@
     "center": [850.0, 400.0],
     "radius": 16.0
    },
-   "name": "object_1"
+   "name": "object_1",
+   "shape": "triangle"
   }
  ],
  "player": {
