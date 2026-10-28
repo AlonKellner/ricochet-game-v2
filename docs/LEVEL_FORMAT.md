@@ -28,7 +28,7 @@ too).
 | `elements` | the elements, in build order (below) | required |
 | `templates` | `{kind: template}`: the level's own element kinds, added to the builtin ones or replacing one (docs/ELEMENTS.md) | `{}` |
 | `objective` | `{"goal": region, "requires": [{"key", "values"}]}`: reach the goal while every condition holds to win (GAME_SPEC 24.6); none: every target hit wins | none |
-| `detectors` | `[{"name", "region": region \| "segment": {"a", "b"}, "mode": "while" \| "enter" \| "toggle", "flag", "value", "for"}]`: flags written as the player moves (GAME_SPEC 24.5; flag default `det:<name>`, mode `while`, value `true`, for `player`) | `[]` |
+| `detectors` | `[{"name", "region": region \| "segment": {"a", "b"}, "mode": "while" \| "enter" \| "toggle", "flag", "value", "for"}]`: flags written as the player moves (GAME_SPEC 24.5; flag default `det:<name>`, mode `while`, value `true`, for `player`); `marker` (Stage 179) as an element's, at its centre | `[]` |
 | `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "wall" \| "mirror" \| "pass", "solid", "label", "gravity", "pops", "carries", "tags"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, wall, solid, label `Object` by default); their surfaces take the ids after the level's. Stage 150: `gravity` a factor of the level's (default 1; negative floats up), `pops` (the arrow pops it: flag `obj:<name>:popped`), `carries` another object until it pops. Stage 152: `tags` (what spread rules flow through: `["conductive"]`) | `[]` |
 | `cycle` | `{"period": s, "resume_after": s}`: the moving elements' cycle (GAME_SPEC 9.8; 4 and 10 by default) | |
 | `spread` | `[{"flag", "tag", "persist", "sources"}]`: flags flowing through tagged elements and objects that touch (GAME_SPEC 10.6, docs/ELEMENTS.md "Fire, charge and frost: tags"; `persist` false and `sources` `[]` by default) | none (Stage 156) |
@@ -51,6 +51,7 @@ An element:
 | `flip` | `true`: left and right swapped (a mirror facing right) |
 | `motion` | `{"keys": [[phase, dx, dy, angle], ...], "pivot": [x, y]}` (Stage 151): the element moves over the level's cycle -- phases in [0, 1), increasing; offsets and angles (radians, about the pivot: default its middle) interpolated, looping |
 | `tags` | `[tag, ...]` (Stage 152): added to the kind's own tags; the level's spread rules flow through them |
+| `marker` | `{"shape", "color"}` (Stage 179, GAME_SPEC 22.5): a designer's marker on every one of its surfaces -- shape `circle`, `square`, `triangle`, `diamond`, `star` or `cross`; color a name (`red`, `orange`, `yellow`, `green`, `cyan`, `blue`, `purple`, `pink`, `white`) or `[r, g, b(, a)]` in 0..1, default white. Display only |
 | `carrier`, `from`, `to` | instead of the geometry (Stage 149): on the named carrier, from one point to another (both projected onto it); on a circle `via` picks the arc (default: the shorter one), and neither `from` nor `to` is the whole circle |
 | *parameters* | the kind's own (`back`, `flag`, `d`, ...), each with a default unless required |
 

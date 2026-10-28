@@ -152,6 +152,7 @@ private:
 	void drag_to(const V2 &screen, unsigned mods);
 	void commit_field();
 	std::vector<Row> rows() const;
+	std::vector<Row> marker_rows(const Field &owner) const; // Stage 179: an element's or a detector's marker (shape, colour)
 	void click_row(const Row &r, unsigned mods);
 	void frame_all();
 

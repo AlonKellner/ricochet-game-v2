@@ -1581,6 +1581,9 @@ std::vector<Editor::Row> Editor::rows() const {
 			add({Row::Value, "tags", e.contains("tags") ? spell(e["tags"]) : "(the kind's)",
 					"[tag, ...]: added to the kind's tags; the level's spread rules flow through them (flammable, conductive, powered)",
 					Field{selected_, "tags"}, "", -1, 0, {}});
+			for (Row r : marker_rows(Field{selected_, "marker"})) { // Stage 179
+				add(std::move(r));
+			}
 			const json params = ks.contains(kind) ? ks[kind].value("params", json::object()) : json::object();
 			for (auto it = params.begin(); it != params.end(); ++it) {
 				const json &spec = it.value();
@@ -1641,6 +1644,26 @@ std::vector<Editor::Row> Editor::rows() const {
 	add({Row::Header, errors_.empty() ? "no problems" : std::to_string(errors_.size()) + " problem(s)", "", "", std::nullopt, "", -1, 0, {}});
 	for (const Error &er : errors_) {
 		text_rows(er.message, Row::Error, er.element);
+	}
+	return out;
+}
+
+// Stage 179: a marker's rows -- its shape (none: no marker) and, when it has one, its colour
+std::vector<Editor::Row> Editor::marker_rows(const Field &owner) const {
+	json m;
+	if (!owner.element.empty()) {
+		const int i = index_of(owner.element);
+		m = i >= 0 ? doc_["elements"][size_t(i)].value(owner.key, json()) : json();
+	} else if (const json::json_pointer ptr(owner.key); doc_.contains(ptr)) {
+		m = doc_[ptr];
+	}
+	std::vector<Row> out;
+	const bool on = m.is_object() && m.contains("shape");
+	out.push_back({Row::Value, "marker", on ? spell(m["shape"]) : "(none)",
+			"a shape on it, to show what opens what (a button and its door alike): click: the next shape (shift: back)", owner, "marker", -1, 0, {}});
+	if (on) {
+		out.push_back({Row::Value, "marker color", m.contains("color") ? spell(m["color"]) : "(white)",
+				"click: the next colour (shift: back); or [r, g, b] typed in the marker's JSON", owner, "marker_color", -1, 0, {}});
 	}
 	return out;
 }
@@ -1756,6 +1779,41 @@ void Editor::click_row(const Row &r, unsigned mods) {
 			run({{"op", "set"}, {"path", f.key}, {"value", !now}});
 		} else {
 			run({{"op", "set"}, {"name", f.element}, {"key", f.key}, {"value", !now}});
+		}
+		return;
+	}
+	if (r.choice == "marker" || r.choice == "marker_color") { // Stage 179: the next shape (none: off) / colour
+		json cur;
+		if (!f.element.empty()) {
+			const int i = index_of(f.element);
+			cur = i >= 0 ? doc_["elements"][size_t(i)].value(f.key, json()) : json();
+		} else if (const json::json_pointer ptr(f.key); doc_.contains(ptr)) {
+			cur = doc_[ptr];
+		}
+		json next = cur.is_object() ? cur : json::object();
+		if (r.choice == "marker") {
+			std::vector<std::string> shapes{"none"};
+			shapes.insert(shapes.end(), marker_shapes().begin(), marker_shapes().end());
+			const std::string s = cycle(shapes, next.value("shape", "none"));
+			if (s == "none") {
+				next = json();
+			} else {
+				next["shape"] = s;
+				if (!next.contains("color")) {
+					next["color"] = marker_colors().front().first;
+				}
+			}
+		} else {
+			std::vector<std::string> names;
+			for (const auto &[n, c] : marker_colors()) {
+				names.push_back(n);
+			}
+			next["color"] = cycle(names, next.value("color", json()).is_string() ? next["color"].get<std::string>() : names.back());
+		}
+		if (f.element.empty()) {
+			run({{"op", "set"}, {"path", f.key}, {"value", next}});
+		} else {
+			run({{"op", "set"}, {"name", f.element}, {"key", f.key}, {"value", next}});
 		}
 		return;
 	}
@@ -1986,6 +2044,13 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				}
 				const std::string name = d.value("name", "");
 				const bool picked = lit("detector:" + name);
+				std::optional<Marker> mk; // Stage 179: its marker (drawn at its middle, as in the game)
+				try {
+					if (d.contains("marker")) {
+						mk = marker_of(d["marker"], "");
+					}
+				} catch (const LevelError &) {
+				}
 				if (d.contains("segment") && d["segment"].is_object() && is_point(d["segment"].value("a", json())) && is_point(d["segment"].value("b", json()))) {
 					const V2 a = to_screen(pt(d["segment"]["a"])), b = to_screen(pt(d["segment"]["b"]));
 					if (picked) {
@@ -1993,8 +2058,24 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 					}
 					g.push_back(dashed(a, b, DETECTOR, 2.0, 8.0));
 					g.push_back(text_at(V2::of((double(a.x) + b.x) / 2 + 6, (double(a.y) + b.y) / 2 - 6), name, DETECTOR, 12));
+					if (mk) {
+						render::marker(g, mk->shape, mk->color, V2::of((double(a.x) + b.x) / 2, (double(a.y) + b.y) / 2), std::max(3.0, 7.0 * zoom_));
+					}
 				} else {
 					region(d.value("region", json()), DETECTOR, name, picked);
+					const json reg = d.value("region", json());
+					if (mk && reg.is_object()) {
+						std::optional<V2> at;
+						if (reg.contains("rect") && reg["rect"].is_array() && reg["rect"].size() == 4 && reg["rect"][0].is_number() && reg["rect"][1].is_number()
+								&& reg["rect"][2].is_number() && reg["rect"][3].is_number()) {
+							at = V2::of(reg["rect"][0].get<double>() + reg["rect"][2].get<double>() / 2, reg["rect"][1].get<double>() + reg["rect"][3].get<double>() / 2);
+						} else if (reg.contains("circle") && reg["circle"].is_object() && is_point(reg["circle"].value("center", json()))) {
+							at = pt(reg["circle"]["center"]);
+						}
+						if (at) {
+							render::marker(g, mk->shape, mk->color, to_screen(*at), std::max(3.0, 7.0 * zoom_));
+						}
+					}
 				}
 			}
 		}
@@ -2157,6 +2238,9 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			calls.push_back(line(sm, V2::of(double(sm.x) + n.x * 9, double(sm.y) + n.y * 9), left, 2.0));
 			if (right != left || shown_side(b, false) != nullptr) {
 				calls.push_back(line(sm, V2::of(double(sm.x) - n.x * 9, double(sm.y) - n.y * 9), right, 2.0));
+			}
+			if (b.marker) { // Stage 179: the designer's marker, as the game draws it
+				render::marker(calls, b.marker->shape, b.marker->color, to_screen(marker_point(b.seg)), std::max(3.0, 7.0 * zoom_));
 			}
 		}
 		for (const rc::arc::SegGeom &s : drawn_[i].broken) {

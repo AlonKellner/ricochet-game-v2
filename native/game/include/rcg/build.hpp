@@ -49,6 +49,7 @@ struct BuiltSurface {
 	std::vector<PresenceSpec> presence; // authored, then the host conditions of its spawn channels
 	bool player_solid = false;
 	bool platform = false; // Stage 172: a one-way platform (GAME_SPEC 25.1)
+	std::optional<Marker> marker; // Stage 179: a designer's marker (display only)
 	bool pre_transform = false;
 	int portal_pair = 0; // a portal: the id of the surface with the inverse motion (0: none)
 
@@ -56,6 +57,9 @@ struct BuiltSurface {
 	std::vector<const BuiltSide *> all_sides() const;
 	bool is_target() const;
 };
+
+// Stage 179: where a surface's designer marker sits -- a line's middle, an arc's via, a full circle's top.
+V2 marker_point(const rc::arc::SegGeom &seg);
 
 // The surfaces of a level in build order. Throws LevelError (a spec that
 // does not validate).

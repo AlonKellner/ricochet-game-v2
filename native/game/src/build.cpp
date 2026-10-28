@@ -409,6 +409,17 @@ json in_shot_writes(const BuiltSide &side, int host_id) {
 
 std::vector<std::string> validate_spec(const SurfaceSpec &s) { return validate(s); }
 
+V2 marker_point(const rc::arc::SegGeom &seg) {
+	if (seg.is_line()) {
+		return V2::of((double(seg.s.x) + seg.e.x) / 2, (double(seg.s.y) + seg.e.y) / 2);
+	}
+	if (seg.full) {
+		const V2 c = rc::arc::center_of(seg.get_carrier());
+		return V2::of(c.x, double(c.y) - seg.get_carrier().radius());
+	}
+	return seg.v;
+}
+
 std::vector<BuiltSurface> build_spec(const SurfaceSpec &s, int first_id, const std::optional<std::string> &label) {
 	std::vector<BuiltSurface> out;
 	BuiltSurface b;
@@ -417,6 +428,7 @@ std::vector<BuiltSurface> build_spec(const SurfaceSpec &s, int first_id, const s
 	b.seg = segment_of(s);
 	b.player_solid = s.player_solid;
 	b.platform = s.platform;
+	b.marker = s.marker;
 	if (s.pre_transform) {
 		// Surface.pre_transform_circle: an inversion on both sides, not plannable, not solid
 		BuiltEffect inv_eff;

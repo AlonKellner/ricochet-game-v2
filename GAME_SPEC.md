@@ -581,6 +581,7 @@ Surface:
     is_target:    bool           # derived: a side carries a TargetHit (§10.6)
     player_solid: bool           # true = player collides with this surface (default true)
     platform:     bool           # Stage 172: a one-way platform (§25.1); never also player_solid
+    marker:       Marker | null  # Stage 179: a designer's marker (§22.5); display only
 
 SideConfig:
     effect:       TransformativeEffect | ProjectiveEffect | TerminalEffect | null   # the PATH axis: exactly one
@@ -2339,6 +2340,19 @@ Default surface line width: **3 pixels**. Default trajectory/preview line width:
 
 Default `draw_arc()` point_count: **64 per full circle**, scaled by arc span (e.g., 90° arc = 16 points).
 
+### 22.5 Designer markers (Stage 179)
+
+A level designer may put a **marker** on any element and on any detector, to show what goes with what -- a button
+and the door it opens, a pad and the bridge it raises: the same shape in the same colour on each. A marker is a
+**shape** (`circle`, `square`, `triangle`, `diamond`, `star`, `cross`) in a **colour** (one of `red`, `orange`,
+`yellow`, `green`, `cyan`, `blue`, `purple`, `pink`, `white`, or `[r, g, b(, a)]` in 0..1; white by default), filled
+over a dark outline, about 14 units across. It sits on an element's middle -- a line's midpoint, an arc's via, a
+full circle's top -- on every one of its surfaces, and at a detector's centre (a segment's midpoint); it moves with
+a moving element. While the surface is absent (an open door) its marker stays, faded to 40%, so what opened it
+stays readable. Markers are display only: the arrow, the player, planning and the solver never see them, and they
+are left out of the level dumps and digests. The editor draws them as the game does and sets them from the panel
+(§19.2).
+
 ---
 
 ## 23. Constraints and limits
@@ -3074,4 +3088,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.82.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.83.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -254,9 +254,9 @@ std::optional<SideSpec> side_at(const json &j, const char *key, const std::strin
 SurfaceSpec surface_spec(const json &j, const std::string &path, bool in_level) {
 	if (in_level) {
 		only_keys(j, path, {"ids", "label", "start", "end", "via", "circle", "straight", "pre_transform", "left", "right",
-				"resolver", "presence", "player_solid", "platform"});
+				"resolver", "presence", "player_solid", "platform", "marker"});
 	} else {
-		only_keys(j, path, {"start", "end", "via", "circle", "straight", "left", "right", "resolver", "presence", "player_solid", "platform"});
+		only_keys(j, path, {"start", "end", "via", "circle", "straight", "left", "right", "resolver", "presence", "player_solid", "platform", "marker"});
 	}
 	SurfaceSpec s;
 	if (const json *c = opt(j, "circle")) {
@@ -315,6 +315,9 @@ SurfaceSpec surface_spec(const json &j, const std::string &path, bool in_level) 
 		if (s.platform && s.player_solid) {
 			fail(path + ".platform", "a platform is not also player_solid (it collides one way)");
 		}
+	}
+	if (const json *v = opt(j, "marker")) {
+		s.marker = marker_of(*v, path + ".marker");
 	}
 	return s;
 }
@@ -376,7 +379,7 @@ void parse_goals(const json &j, Level &lv) {
 		for (size_t i = 0; i < ds->size(); i++) {
 			const json &d = (*ds)[i];
 			const std::string dp = P + ".detectors[" + std::to_string(i) + "]";
-			only_keys(d, dp, {"name", "for", "region", "segment", "flag", "mode", "value"});
+			only_keys(d, dp, {"name", "for", "region", "segment", "flag", "mode", "value", "marker"});
 			Detector det;
 			det.name = str(req(d, "name", dp), dp + ".name");
 			for (const Detector &other : lv.detectors) {
@@ -422,6 +425,9 @@ void parse_goals(const json &j, Level &lv) {
 						: std::holds_alternative<std::int64_t>(fv) ? rc::FlagValue(double(std::get<std::int64_t>(fv)))
 						: std::holds_alternative<double>(fv)	   ? rc::FlagValue(std::get<double>(fv))
 																   : rc::FlagValue(std::get<std::string>(fv));
+			}
+			if (const json *v = opt(d, "marker")) {
+				det.marker = marker_of(*v, dp + ".marker");
 			}
 			lv.detectors.push_back(std::move(det));
 		}
@@ -856,6 +862,59 @@ Level load_level(const std::string &path) {
 	} catch (const LevelError &e) {
 		throw LevelError(path + ": " + e.what());
 	}
+}
+
+// Stage 179: markers
+const std::vector<std::string> &marker_shapes() {
+	static const std::vector<std::string> shapes = {"circle", "square", "triangle", "diamond", "star", "cross"};
+	return shapes;
+}
+
+const std::vector<std::pair<std::string, std::array<float, 4>>> &marker_colors() {
+	static const std::vector<std::pair<std::string, std::array<float, 4>>> colors = {
+			{"red", {0.95f, 0.25f, 0.25f, 1}}, {"orange", {1.0f, 0.6f, 0.15f, 1}}, {"yellow", {1.0f, 0.9f, 0.2f, 1}},
+			{"green", {0.3f, 0.85f, 0.35f, 1}}, {"cyan", {0.25f, 0.9f, 0.95f, 1}}, {"blue", {0.3f, 0.5f, 1.0f, 1}},
+			{"purple", {0.7f, 0.4f, 1.0f, 1}}, {"pink", {1.0f, 0.5f, 0.8f, 1}}, {"white", {1, 1, 1, 1}}};
+	return colors;
+}
+
+Marker marker_of(const json &j, const std::string &path) {
+	if (!j.is_object()) {
+		fail(path, "{\"shape\", \"color\"} expected");
+	}
+	only_keys(j, path, {"shape", "color"});
+	Marker m;
+	m.shape = str(req(j, "shape", path), path + ".shape");
+	const std::vector<std::string> &shapes = marker_shapes();
+	if (std::find(shapes.begin(), shapes.end(), m.shape) == shapes.end()) {
+		fail(path + ".shape", "circle, square, triangle, diamond, star or cross expected");
+	}
+	if (const json *c = opt(j, "color")) {
+		if (c->is_string()) {
+			const std::string name = c->get<std::string>();
+			bool known = false;
+			for (const auto &[n, rgba] : marker_colors()) {
+				if (n == name) {
+					m.color = rgba;
+					known = true;
+				}
+			}
+			if (!known) {
+				fail(path + ".color", "a colour name (red, orange, yellow, green, cyan, blue, purple, pink, white) or [r, g, b(, a)] expected");
+			}
+		} else if (c->is_array() && (c->size() == 3 || c->size() == 4)) {
+			for (size_t k = 0; k < c->size(); k++) {
+				const double v = num((*c)[k], path + ".color[" + std::to_string(k) + "]");
+				if (!(v >= 0.0 && v <= 1.0)) {
+					fail(path + ".color[" + std::to_string(k) + "]", "a value in 0..1 expected");
+				}
+				m.color[k] = float(v);
+			}
+		} else {
+			fail(path + ".color", "a colour name or [r, g, b(, a)] expected");
+		}
+	}
+	return m;
 }
 
 } // namespace rcg

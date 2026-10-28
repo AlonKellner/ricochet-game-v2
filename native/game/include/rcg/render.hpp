@@ -103,4 +103,8 @@ std::vector<V2> tessellate_arc(const V2 &center, double radius, double start, do
 Color hex(std::uint32_t rgba);
 Color with_alpha(const Color &c, double a); // Color(c, a)
 
+// Stage 179: a designer's marker -- the shape (circle, square, triangle, diamond, star, cross) filled in the colour
+// over a dark outline, centred at `at`, `size` its radius; `alpha` scales both (a faded marker: an absent surface's)
+void marker(std::vector<Call> &out, const std::string &shape, const Color &color, const V2 &at, double size, double alpha = 1.0);
+
 } // namespace rcg::render

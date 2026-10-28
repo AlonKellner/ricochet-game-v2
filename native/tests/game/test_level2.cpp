@@ -357,3 +357,82 @@ TEST_CASE("rc-level/2: carriers -- elements on a line or a circle, projected ont
 	CHECK(err(R"({"schema": "rc-level/2", "carriers": [{"name": "c", "circle": {"center": [0, 0], "radius": 5}},
 		{"name": "c", "circle": {"center": [0, 0], "radius": 6}}], "elements": []})").find("names another carrier") != std::string::npos);
 }
+
+// Stage 179 (the user): a designer's marker on an element (every one of its surfaces) and on a detector
+TEST_CASE("rc-level/2: a marker -- on every surface of its element, on a detector; checked; it migrates back; drawn in the game, faded on an absent door") {
+	const json door = seg({{"kind", "door"}, {"name", "gate"}, {"marker", {{"shape", "star"}, {"color", "green"}}}});
+	const json lv = level_of({door}, {{"detectors", json::parse(R"([{"name": "pad", "region": {"rect": [600, 600, 40, 40]},
+		"marker": {"shape": "diamond", "color": [0.5, 0.25, 1]}}])")}});
+	const std::vector<json> ss = element_surfaces(lv);
+	REQUIRE(ss.size() == 1);
+	CHECK(ss[0]["marker"] == json::parse(R"({"shape": "star", "color": "green"})"));
+	const rcg::Level level = rcg::parse_level_json(lv);
+	const std::vector<rcg::BuiltSurface> world = rcg::build_level(level);
+	bool marked = false;
+	for (const rcg::BuiltSurface &b : world) {
+		if (b.marker) {
+			marked = true;
+			CHECK(b.marker->shape == "star");
+			CHECK(b.marker->color == std::array<float, 4>{0.3f, 0.85f, 0.35f, 1});
+		}
+	}
+	CHECK(marked);
+	REQUIRE(level.detectors.size() == 1);
+	REQUIRE(level.detectors[0].marker);
+	CHECK(level.detectors[0].marker->shape == "diamond");
+	CHECK(level.detectors[0].marker->color == std::array<float, 4>{0.5f, 0.25f, 1, 1});
+	// display only: the dump is the unmarked one's
+	json plain = lv;
+	plain["elements"][0].erase("marker");
+	plain["detectors"][0].erase("marker");
+	CHECK(rcg::describe_level(rcg::build_level(rcg::parse_level_json(plain))) == rcg::describe_level(world));
+	// the lowering migrates back to the marked element
+	const json back = rcg::migrate_level(rcg::lower_level(lv).level);
+	bool found = false;
+	for (const json &e : back["elements"]) {
+		if (e.value("kind", "") == "door") { // (named by the lowering's order; its flag the gate's)
+			found = true;
+			CHECK(e["flag"] == "door:gate");
+			CHECK(e["marker"] == door["marker"]);
+		}
+	}
+	CHECK(found);
+	// checked
+	auto fails = [&](const json &m, const std::string &what) {
+		json bad = lv;
+		bad["elements"][0]["marker"] = m;
+		try {
+			rcg::lower_level(bad);
+			FAIL("no error for " << m.dump());
+		} catch (const rcg::LevelError &e) {
+			CHECK_MESSAGE(std::string(e.what()).find(what) != std::string::npos, std::string(e.what()));
+		}
+	};
+	fails(json::parse(R"({"shape": "hexagon"})"), "(gate).marker.shape: circle, square, triangle, diamond, star or cross expected");
+	fails(json::parse(R"({"shape": "star", "color": "mauve"})"), "(gate).marker.color: a colour name");
+	fails(json::parse(R"({"shape": "star", "color": [2, 0, 0]})"), "(gate).marker.color[0]: a value in 0..1 expected");
+	fails(json::parse(R"({"shape": "star", "size": 3})"), "(gate).marker: unknown key 'size'");
+	// drawn in the game: on the door, and faded once it is open (absent); on the detector
+	auto marker_fill = [&](const rcg::Session &s, rcg::render::NodeKind kind, float alpha) {
+		for (const rcg::render::FrameNode &n : s.draw_frame()) {
+			if (n.key.kind != kind) {
+				continue;
+			}
+			for (const rcg::render::Call &c : *n.calls) {
+				if (c.kind == rcg::render::Kind::ColoredPolygon && !c.colors.empty() && std::abs(c.colors[0][3] - alpha) < 1e-6f
+						&& (c.colors[0][1] == 0.85f || c.colors[0][0] == 0.5f)) {
+					return true;
+				}
+			}
+		}
+		return false;
+	};
+	const rcg::Session shut(level);
+	CHECK(marker_fill(shut, rcg::render::NodeKind::Surface, 1.0f));
+	CHECK(marker_fill(shut, rcg::render::NodeKind::Detector, 1.0f));
+	json opened = lv;
+	opened["flags"] = {{"door:gate", true}};
+	const rcg::Session open(rcg::parse_level_json(opened));
+	CHECK(marker_fill(open, rcg::render::NodeKind::Surface, 0.4f));
+	CHECK_FALSE(marker_fill(open, rcg::render::NodeKind::Surface, 1.0f));
+}
