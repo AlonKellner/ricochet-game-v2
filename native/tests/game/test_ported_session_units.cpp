@@ -686,6 +686,35 @@ TEST_CASE("ported: test_stage22_plan: test_stage22_nearest_surface_wins") {
 	CHECK_MESSAGE(plan[0].surface_id == 2, "Nearest surface should win"); // ids in order: x = 405 is the second
 }
 
+// Stage 177 (the user): a left click over nothing plannable fires, as the fire action does
+TEST_CASE("plan: a left click over nothing plannable fires; over a plannable side it plans, a right click never fires") {
+	const json w = side("terminal", false);
+	const rcg::Level lv = level_of({double_mirror(400), arc_json(v(700, 0), v(700, 600), v(700, 300), w, w)});
+	rcg::Session s(lv, rcg::SessionConfig{});
+	s.teleport(v(200, 300));
+	s.set_cursor(v(398, 300)); // the mirror: planned, nothing fired
+	CHECK_FALSE(s.click(false));
+	CHECK_FALSE(s.flying());
+	REQUIRE(s.plan().size() == 1);
+	s.set_cursor(v(300, 100)); // nothing plannable: fired with the plan
+	CHECK(s.click(false));
+	CHECK(s.flying());
+	const rcg::Flight f = s.fly(-1, FRAME);
+	CHECK(f.frames > 0);
+	CHECK_FALSE(s.flying());
+	CHECK(s.plan().size() == 1); // (the plan is kept after a shot)
+	s.set_cursor(v(700, 300)); // a wall: no plannable side -- fires
+	CHECK(s.click(false));
+	s.fly(-1, FRAME);
+	s.set_cursor(v(300, 100)); // a right click over nothing clears the plan, fires nothing
+	CHECK_FALSE(s.click(true));
+	CHECK_FALSE(s.flying());
+	CHECK(s.plan().empty());
+	s.set_cursor(s.player()); // over nothing but at the player: no shot (as the fire action)
+	CHECK_FALSE(s.click(false));
+	CHECK_FALSE(s.flying());
+}
+
 TEST_CASE("ported: test_stage22_plan: test_stage22_wall_not_interactive") {
 	// RoomBuilder.create_block_surface: terminal on both sides, not plannable
 	const json w = side("terminal", false);

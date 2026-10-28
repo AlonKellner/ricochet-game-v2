@@ -86,6 +86,23 @@ std::vector<std::string> replay(const json &script, const std::string &level_tex
 	};
 	auto settle = [&] { check(rc_game_advance(g, 0.0, 0, 0), "rc_game_advance"); };
 	auto at = [](const json &a) { return std::make_pair(a[0].get<float>(), a[1].get<float>()); };
+	// the flight under way: the arrow sampled before every frame; `any` after the speedup_at-th
+	auto fly = [&](int speedup_at) {
+		json stream = json::array();
+		int frames = 0;
+		for (rc_frame f = frame_of(g); f.flying; f = frame_of(g)) {
+			stream.push_back(json::array({vec(f.arrow_x, f.arrow_y), vec(f.arrow_dx, f.arrow_dy)}));
+			frames++;
+			check(rc_game_advance(g, FRAME, 0, 0), "rc_game_advance");
+			if (frames == speedup_at) {
+				check(rc_game_event(g, RC_EVENT_ANY_KEY), "rc_game_event");
+			}
+		}
+		const std::string text = stream.dump();
+		char sha[65];
+		check(rc_digest_sha(text.data(), text.size(), sha), "rc_digest_sha");
+		return json{{"frames", frames}, {"stream", sha}, {"end", stream.empty() ? json(nullptr) : stream.back()[0]}};
+	};
 	settle();
 	record({{"i", 0}, {"op", "start"}});
 	const json &steps = script["steps"];
@@ -103,28 +120,16 @@ std::vector<std::string> replay(const json &script, const std::string &level_tex
 			check(rc_game_set_cursor(g, x, y), "rc_game_set_cursor");
 		} else if (op == "click") {
 			check(rc_game_event(g, step["button"] == "right" ? RC_EVENT_PLAN_REMOVE : RC_EVENT_PLAN_ADD), "rc_game_event");
+			if (frame_of(g).flying) { // Stage 177: a left click over nothing plannable fired: its flight
+				extra["flight"] = fly(-1);
+			}
 		} else if (op == "key") {
 			const std::string a = step["action"].get<std::string>();
 			extra["action"] = a;
 			check(rc_game_event(g, event_of(a)), "rc_game_event");
 		} else if (op == "fire") {
-			// the arrow sampled before every frame; `any` after the speedup_at-th
-			const int speedup_at = step.value("speedup_at", -1);
 			check(rc_game_event(g, RC_EVENT_FIRE), "rc_game_event");
-			json stream = json::array();
-			int frames = 0;
-			for (rc_frame f = frame_of(g); f.flying; f = frame_of(g)) {
-				stream.push_back(json::array({vec(f.arrow_x, f.arrow_y), vec(f.arrow_dx, f.arrow_dy)}));
-				frames++;
-				check(rc_game_advance(g, FRAME, 0, 0), "rc_game_advance");
-				if (frames == speedup_at) {
-					check(rc_game_event(g, RC_EVENT_ANY_KEY), "rc_game_event");
-				}
-			}
-			const std::string text = stream.dump();
-			char sha[65];
-			check(rc_digest_sha(text.data(), text.size(), sha), "rc_digest_sha");
-			extra["flight"] = {{"frames", frames}, {"stream", sha}, {"end", stream.empty() ? json(nullptr) : stream.back()[0]}};
+			extra["flight"] = fly(step.value("speedup_at", -1));
 		} else if (op == "hold") {
 			// the keys held for `ticks` frames of one physics tick each; the up
 			// key reported just pressed on the second (the engine's input timing)

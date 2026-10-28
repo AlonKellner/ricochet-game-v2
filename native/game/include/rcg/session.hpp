@@ -118,7 +118,9 @@ public:
 		const V2 s = level.player_start.value_or(V2{});
 		return level.gravity.length_squared() > 0.0f ? V2::of(s.x, double(s.y) - kinematics::BODY) : s;
 	}
-	void click(bool right);
+	// a click at the cursor: left adds what is under it to the plan, right removes it (or clears the plan);
+	// Stage 177 (the user): a left click over nothing plannable fires, as the fire action does (true: fired)
+	bool click(bool right);
 	// Stage 129 (tools: the violation viewer): the plan set as it is -- entries by
 	// surface and side, each with its click and the span of its piece (matched to
 	// the world's pieces; a span that is none of them is kept as given)
@@ -127,6 +129,8 @@ public:
 	// the fire action, then the whole flight at a fixed frame time (speedup_at:
 	// the `any` key after that many frames; -1: never)
 	Flight fire(int speedup_at, double frame_dt);
+	// Stage 177: the flight under way played out the same way (a click that fired)
+	Flight fly(int speedup_at, double frame_dt);
 	// Stage 117: movement actions (move_left / move_right / move_up / move_down)
 	// held for `ticks` physics ticks (the native controller, rcg/kinematics.hpp):
 	// the player's position after every tick. The up action registers as just

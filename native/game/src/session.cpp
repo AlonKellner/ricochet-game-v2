@@ -628,16 +628,14 @@ void Session::set_plan(const std::vector<rc::PlanItem> &items) {
 	refresh_ui();
 }
 
-void Session::click(bool right) {
+bool Session::click(bool right) {
 	idle_ = 0.0; // (Stage 151: a plan change keeps a paused cycle paused)
 	const Hit r = detect_click();
-	if (r.origin_mark && !right) {
-		return; // (a planned origin's mark, not plannable here)
+	// Stage 177: a left click over nothing plannable (a planned origin's mark not plannable here included) fires
+	if (!right && (r.origin_mark || (!r.infinity && !r.has_surface && !r.origin))) {
+		return start_fire();
 	}
 	if (!r.infinity && !r.has_surface && !r.origin) {
-		if (!right) {
-			return;
-		}
 		plan_.clear();
 		plan_changed();
 	} else {
@@ -675,6 +673,7 @@ void Session::click(bool right) {
 		}
 	}
 	refresh_ui();
+	return false;
 }
 
 Session::Checkpoint Session::capture() const {
@@ -1642,10 +1641,14 @@ void Session::check_won() {
 }
 
 Flight Session::fire(int speedup_at, double frame_dt) {
-	Flight f;
 	if (!start_fire()) {
-		return f;
+		return Flight{};
 	}
+	return fly(speedup_at, frame_dt);
+}
+
+Flight Session::fly(int speedup_at, double frame_dt) {
+	Flight f;
 	while (flying()) {
 		f.stream.push_back({arrow_pos_, arrow_dir_});
 		f.frames++;
