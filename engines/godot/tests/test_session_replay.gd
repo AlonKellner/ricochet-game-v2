@@ -85,6 +85,8 @@ func test_the_host_plays_the_golden() -> void:
 					game.aim(Vector2(step["at"][0], step["at"][1]))
 				"click":
 					_click(step["button"] == "right")
+					while game.is_flying():   # Stage 177: a left click over nothing plannable fired
+						await wait_process_frames(1)
 				"key":
 					_key(KEYS[step["action"]])
 				"fire":

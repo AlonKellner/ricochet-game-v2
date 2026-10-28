@@ -38,6 +38,14 @@ std::vector<std::string> replay_session(const json &script, const std::string &l
 		}
 		lines.push_back(digest::encode(s.record(extra)));
 	};
+	auto flight_json = [](const Flight &f) {
+		json stream = json::array();
+		for (const auto &[p, d] : f.stream) {
+			stream.push_back(json::array({digest::vec(p), digest::vec(d)}));
+		}
+		return json{{"frames", f.frames}, {"stream", digest::sha(stream)},
+			{"end", f.stream.empty() ? json(nullptr) : digest::vec(f.stream.back().first)}};
+	};
 	s.settle();
 	record({{"i", 0}, {"op", "start"}});
 	const json &steps = script["steps"];
@@ -53,6 +61,9 @@ std::vector<std::string> replay_session(const json &script, const std::string &l
 			s.scroll(step["by"].get<double>());
 		} else if (op == "click") {
 			s.click(step["button"] == "right");
+			if (s.flying()) { // Stage 177: a left click over nothing plannable fired: its flight (a level without the arrow: none)
+				extra["flight"] = flight_json(s.fly(-1, 1.0 / 60.0));
+			}
 		} else if (op == "key") {
 			const std::string a = step["action"].get<std::string>();
 			extra["action"] = a;
@@ -62,13 +73,7 @@ std::vector<std::string> replay_session(const json &script, const std::string &l
 			}
 			s.key(*act);
 		} else if (op == "fire") {
-			const Flight f = s.fire(step.value("speedup_at", -1), 1.0 / 60.0);
-			json stream = json::array();
-			for (const auto &[p, d] : f.stream) {
-				stream.push_back(json::array({digest::vec(p), digest::vec(d)}));
-			}
-			extra["flight"] = {{"frames", f.frames}, {"stream", digest::sha(stream)},
-				{"end", f.stream.empty() ? json(nullptr) : digest::vec(f.stream.back().first)}};
+			extra["flight"] = flight_json(s.fire(step.value("speedup_at", -1), 1.0 / 60.0));
 		} else if (op == "hold") {
 			std::vector<std::string> actions;
 			for (const json &a : step["actions"]) {

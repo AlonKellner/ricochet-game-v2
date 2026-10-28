@@ -367,6 +367,19 @@ ACTIONS = {"undo": EVENT_UNDO, "reset": EVENT_RESET, "clear_plan": EVENT_CLEAR_P
 MOVES = {"move_left": KEY_LEFT, "move_right": KEY_RIGHT, "move_up": KEY_UP, "move_down": KEY_DOWN}
 
 
+def fly(game, speedup_at):
+    """The flight under way played out frame by frame (the any key after speedup_at frames): its record."""
+    stream = []
+    f = game.frame()
+    while f.flying:
+        stream.append([[f.arrow_x, f.arrow_y], [f.arrow_dx, f.arrow_dy]])
+        game.advance(FRAME)
+        if len(stream) == speedup_at:
+            game.event(EVENT_ANY_KEY)
+        f = game.frame()
+    return {"frames": len(stream), "stream": digest_sha(stream), "end": stream[-1][0] if stream else None}
+
+
 def replay(script, levels_dir=ROOT / "data" / "levels", draw_list=False):
     """A session script (data/sessions, rc-session/1) played through the C API:
     the golden's records (bench/sessions/<name>.jsonl lines)."""
@@ -387,22 +400,14 @@ def replay(script, levels_dir=ROOT / "data" / "levels", draw_list=False):
             game.scroll(step["by"])
         elif op == "click":
             game.event(EVENT_PLAN_REMOVE if step["button"] == "right" else EVENT_PLAN_ADD)
+            if game.frame().flying:   # Stage 177: a left click over nothing plannable fired: its flight
+                extra["flight"] = fly(game, -1)
         elif op == "key":
             extra["action"] = step["action"]
             game.event(ACTIONS[step["action"]])
         elif op == "fire":
-            speedup_at = step.get("speedup_at", -1)
             game.event(EVENT_FIRE)
-            stream = []
-            f = game.frame()
-            while f.flying:
-                stream.append([[f.arrow_x, f.arrow_y], [f.arrow_dx, f.arrow_dy]])
-                game.advance(FRAME)
-                if len(stream) == speedup_at:
-                    game.event(EVENT_ANY_KEY)
-                f = game.frame()
-            extra["flight"] = {"frames": len(stream), "stream": digest_sha(stream),
-                               "end": stream[-1][0] if stream else None}
+            extra["flight"] = fly(game, step.get("speedup_at", -1))
         elif op == "hold":
             held = 0
             for a in step["actions"]:
