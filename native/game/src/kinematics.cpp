@@ -307,18 +307,59 @@ std::vector<Collider> colliders_of(const std::vector<BuiltSurface> &world, const
 	return out;
 }
 
-void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders) { step_body(body, in, gravity, colliders, PLAYER); }
+void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders) { step_body(body, in, gravity, colliders, PLAYER, true); }
 
 void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, double radius) {
 	step_body(body, in, gravity, colliders, Shape{radius});
 }
 
-void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, const Shape &shape) {
+namespace {
+
+// Stage 182: the player's velocity under gravity with its feel (float64 math, kept as float32)
+V2 felt_velocity(Body &body, const Input &in, const V2 &gravity) {
+	const bool up = in.axis_y < 0.0f;
+	body.air = body.on_floor ? 0 : std::min(body.air + 1, LONG_AIR);
+	body.buffer = in.jump ? JUMP_BUFFER_TICKS : std::max(body.buffer - 1, 0);
+	if (body.on_floor) {
+		body.jumped = false;
+	}
+	double vx = body.vel.x, vy = body.vel.y;
+	// toward the input's speed: accelerating, or slowing (to a stop, or turning first)
+	const double target = double(in.axis_x) * SPEED;
+	const bool speeding = target != 0.0 && vx * target >= 0.0 && std::abs(target) > std::abs(vx);
+	const double rate = body.on_floor ? (speeding ? GROUND_ACCEL : GROUND_DECEL) : (speeding ? AIR_ACCEL : AIR_DECEL);
+	vx = vx < target ? std::min(vx + rate * STEP, target) : std::max(vx - rate * STEP, target);
+	if (!body.on_floor) {
+		// (gravity's y: the input sets x, as the plain motion's)
+		const bool falling = vy * double(gravity.y) > 0.0;
+		const double factor = falling ? FALL_GRAVITY : up && body.jumped && std::abs(vy) < APEX_SPEED ? APEX_GRAVITY : 1.0;
+		vy = std::clamp(vy + double(gravity.y) * factor * STEP, -MAX_FALL, MAX_FALL);
+	} else {
+		vy = 0.0;
+	}
+	if (body.jumped && !up && vy < 0.0) { // released while rising: the jump cut, once
+		vy *= JUMP_CUT;
+		body.jumped = false;
+	}
+	if (body.buffer > 0 && (body.on_floor || (body.air <= COYOTE_TICKS && !body.jumped))) {
+		vy = -FEEL_JUMP_VELOCITY;
+		body.jumped = true;
+		body.buffer = 0;
+		body.air = LONG_AIR; // (the coyote time spent)
+	}
+	return V2::of(vx, vy);
+}
+
+} // namespace
+
+void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, const Shape &shape, bool feel) {
 	const double R0 = shape.radius + SKIN;
 	// the velocity (player.gd), float32 as the engine keeps it
 	V2 v = body.vel;
 	const bool has_gravity = gravity.length_squared() > 0.0f;
-	if (has_gravity) {
+	if (has_gravity && feel) {
+		v = felt_velocity(body, in, gravity);
+	} else if (has_gravity) {
 		if (!body.on_floor) {
 			v = v + gravity * float(STEP);
 		} else {

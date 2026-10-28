@@ -2508,8 +2508,17 @@ a floor stays on it).
 ### 25.2 Movement
 
 - Move: WASD / left stick.
-- Default speed: **200 units/sec**. Horizontal input response is instant (no acceleration ramp). Gravity applies vertically as configured in `LevelData.gravity` — the player can fall and needs platforms when gravity is non-zero. Configurable per level.
-- Default jump velocity: **400 units/sec upward**, from a floor only (the up action just pressed). Single jump (no double jump). No coyote time. Without gravity the movement is the input direction, normalized, times the speed.
+- Default speed: **200 units/sec**. Gravity applies vertically as configured in `LevelData.gravity` — the player can fall and needs platforms when gravity is non-zero. Configurable per level. Without gravity the movement is the input direction, normalized, times the speed, at once.
+- **The feel under gravity** (Stage 182, the user: platformer practice, restrictive -- the arrow, the pull and the grapple
+  should move the player better than walking). Global constants (`rcg/kinematics.hpp`); objects keep the plain motion.
+  - Acceleration: toward the input's speed at **1800 units/s²** on a floor (**2400** slowing or turning), **900** in
+    the air (**300** slowing): a standing jump carries less far than a running one.
+  - Jump: **395 units/sec upward**, single (no double jump). A press is taken on a floor, or up to **5 ticks**
+    (coyote time) after walking off one; a press in the air waits up to **6 ticks** for a floor (the jump buffer).
+  - Variable height: releasing up while rising keeps **0.4** of the rising speed (a tap hops about 23 units).
+    Held near the apex (slower than **80 units/s**) gravity is halved; falling it is **1.6** times; the fall is
+    capped at **900 units/s**. A full held jump keeps the former reach: 85 units up, 167 across at full speed on
+    the level, 50 ticks aloft.
 - Drop: down held lets the player through platforms (§25.1, Stage 172).
 - Climb: up held while touching a platform from below or a steep one (a ladder, a rope) rises at least **150 units/sec** (§25.1, Stage 176).
 - **The arrow is never affected by gravity** — it follows pure geometric ray tracing regardless of the level's gravity setting.
@@ -3102,4 +3111,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.84.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.85.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

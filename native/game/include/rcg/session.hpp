@@ -504,6 +504,7 @@ private:
 	std::optional<rc::Flags> pending_flags_;
 	rc::TracePath pending_path_;
 	bool on_floor_ = false;
+	kinematics::Body feel_; // Stage 182: the player's feel's state (its air, buffer and jumped; reset where it is placed)
 	// Stage 121: the background jobs (async): their inputs, and what they make
 	struct VisJobIn {
 		std::shared_ptr<const std::vector<rc::SurfaceDef>> defs;

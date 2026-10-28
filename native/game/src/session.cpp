@@ -460,6 +460,7 @@ void Session::teleport(const V2 &p) {
 	player_ = p;
 	tick_from_ = p;
 	velocity_ = V2{};
+	feel_ = kinematics::Body{};
 	shadow(); // (Stage 168: the player's light)
 }
 
@@ -684,6 +685,7 @@ void Session::restore(const Checkpoint &c) {
 	player_ = c.player;
 	tick_from_ = c.player;
 	velocity_ = c.velocity;
+	feel_ = kinematics::Body{};
 	set_flags(c.flags);
 	world_->restore(c.world ? *c.world : world_->initial_snapshot());
 	shadow(); // Stage 153: the restored flags' shadow
@@ -953,11 +955,15 @@ void Session::tick(const kinematics::Input &in) {
 		apply_phase();
 	}
 	tick_from_ = player_;
-	kinematics::Body body{player_, velocity_, on_floor_};
-	kinematics::step_body(body, in, gravity_, kinematics::colliders_of(world_->surfaces(), flags_, level_, body_ids()), player_shape());
+	kinematics::Body body = feel_;
+	body.pos = player_;
+	body.vel = velocity_;
+	body.on_floor = on_floor_;
+	kinematics::step_body(body, in, gravity_, kinematics::colliders_of(world_->surfaces(), flags_, level_, body_ids()), player_shape(), true);
 	player_ = body.pos;
 	velocity_ = body.vel;
 	on_floor_ = body.on_floor;
+	feel_ = body;
 	if (!world_->bodies().empty()) {
 		step_bodies();
 	}
@@ -1487,6 +1493,7 @@ void Session::advance_journey(double dt) {
 		player_ = pos;
 		tick_from_ = pos;
 		velocity_ = V2{};
+		feel_ = kinematics::Body{}; // (Stage 182: no coyote time after a journey)
 		if (floor) {
 			on_floor_ = true;
 		}

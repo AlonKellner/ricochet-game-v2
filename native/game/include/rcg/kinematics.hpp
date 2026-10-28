@@ -26,6 +26,15 @@
 // through a platform, up a ladder; past its top it lands on what is there. Its
 // hands reach REACH above its head: standing, it grabs a platform just over it.
 //
+// Stage 182, the player's feel (the user: platformer practice, restrictive -- the
+// arrow, the pull and the grapple should move it better than walking): under
+// gravity it accelerates to SPEED (slowly in the air) instead of at once; a jump
+// is taken up to COYOTE_TICKS after leaving a floor, and a press waits up to
+// JUMP_BUFFER_TICKS for one; releasing up while rising cuts the jump (JUMP_CUT);
+// held at the apex it hangs (APEX_GRAVITY), and it falls faster (FALL_GRAVITY)
+// up to MAX_FALL. A full held jump keeps the old reach: 85 px up, 167 px across
+// at full speed on the level, in 50 ticks. Objects keep the plain motion.
+//
 // Deterministic: float64 inside a step, the position and velocity kept as the
 // game's float32 vectors between steps.
 #pragma once
@@ -49,6 +58,20 @@ constexpr double STEP = 1.0 / 60.0;                  // the physics tick
 constexpr double BODY = 24.0;                        // Stage 173: the player's feet below its head (the arrow origin)
 constexpr double CLIMB_SPEED = 150.0;                // Stage 176: the least upward speed while climbing a platform
 constexpr double REACH = RADIUS;                      // Stage 176: the hands above the head (a climb's reach)
+// Stage 182: the player's feel (see above)
+constexpr double FEEL_JUMP_VELOCITY = 395.0; // (the apex hang and the faster fall: the old arc's height and reach)
+constexpr double GROUND_ACCEL = 1800.0;      // px/s^2 toward the input's speed on a floor (full speed in ~0.11 s)
+constexpr double GROUND_DECEL = 2400.0;      // ... to a stop, or turning
+constexpr double AIR_ACCEL = 900.0;          // ... in the air
+constexpr double AIR_DECEL = 300.0;
+constexpr double FALL_GRAVITY = 1.6;         // gravity's factor falling
+constexpr double APEX_GRAVITY = 0.5;         // ... near the apex of a jump, up held
+constexpr double APEX_SPEED = 80.0;          // near the apex: slower than this
+constexpr double MAX_FALL = 900.0;           // the fastest fall
+constexpr double JUMP_CUT = 0.4;             // the rising speed kept when up is released
+constexpr int COYOTE_TICKS = 5;              // a jump still taken this many ticks off a floor
+constexpr int JUMP_BUFFER_TICKS = 6;         // a press waits this many ticks for a floor
+constexpr int LONG_AIR = 1 << 20;            // (ticks off a floor: never stood, or a jump spent the coyote time)
 
 // Stage 173: a body's shape -- circles of one radius stacked straight down from
 // its position. An object is one circle; the player three, head to feet, spaced
@@ -87,6 +110,10 @@ struct Body {
 	V2 pos;
 	V2 vel;
 	bool on_floor = false;
+	// Stage 182: the feel's state -- ticks since a floor, ticks a pressed jump still waits, rising from a jump
+	int air = LONG_AIR;
+	int buffer = 0;
+	bool jumped = false;
 };
 
 struct Input {
@@ -95,11 +122,13 @@ struct Input {
 	bool jump = false;   // the up action just pressed (gravity: a jump)
 };
 
-// One physics tick of the player (player.gd's _physics_process: the velocity, then the move; Stage 173: PLAYER).
+// One physics tick of the player (player.gd's _physics_process: the velocity, then the move; Stage 173: PLAYER;
+// Stage 182: with the player's feel).
 void step(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders);
-// Stage 146: the same for a circle of any radius; Stage 173: for any shape.
+// Stage 146: the same for a circle of any radius; Stage 173: for any shape; Stage 182: `feel` the player's
+// (else the plain motion: the input's speed at once, a jump from a floor, gravity as it is).
 void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, double radius);
-void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, const Shape &shape);
+void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector<Collider> &colliders, const Shape &shape, bool feel = false);
 // Stage 172: a body whose centre is above a platform it overlaps moved up onto
 // its top (on the floor); one whose centre is below it left to fall through.
 void settle(Body &body, const std::vector<Collider> &colliders, const Shape &shape);

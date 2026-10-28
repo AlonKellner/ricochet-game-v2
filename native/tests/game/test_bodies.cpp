@@ -438,10 +438,10 @@ TEST_CASE("platforms: the demo level plays to its goal") {
 	rcg::Session s(rcg::load_level((root / "data/levels/objectives/platforms.json").string()));
 	s.hold({}, 60);
 	CHECK(body(s).y == doctest::Approx(700 - 20 - 0.08).epsilon(1e-6)); // the box fell onto the high platform
-	s.hold({"move_up"}, 2); // a jump (on the second tick) up through the low platform, onto it
+	s.hold({"move_up"}, 30); // a jump (on the second tick, up held: Stage 182) up through the low platform, onto it
 	s.hold({}, 60);
 	CHECK(s.player().y == doctest::Approx(770 - 24 - 12 - 0.08).epsilon(1e-6));
-	s.hold({"move_up"}, 2); // and onto the high one
+	s.hold({"move_up"}, 30); // and onto the high one
 	s.hold({}, 60);
 	CHECK(s.player().y == doctest::Approx(700 - 24 - 12 - 0.08).epsilon(1e-6));
 	s.hold({"move_down"}, 60); // down through both
