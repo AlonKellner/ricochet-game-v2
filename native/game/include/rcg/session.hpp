@@ -376,6 +376,20 @@ private:
 	std::optional<Journey> journey_;
 	std::optional<Journey> journey_of(const rc::TracePath &path, int *hit_index = nullptr) const; // Stage 159
 	bool journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, const kinematics::Shape &shape, double dt) const;
+	// Stage 178 (the user: choppy where the traveller is turned aside by what it passes): a journey simulated tick
+	// by tick (journey_move at the physics step) to its end, then smoothed -- what the shot plays and the preview shows
+	struct JourneyRun {
+		std::vector<V2> at;            // the traveller after each tick (at[0]: where it starts)
+		std::vector<Journey> state;    // ... the journey's state then (its path and jumps left out)
+		std::vector<bool> exits;       // exits[k]: tick k came out of a portal (a jump from at[k - 1])
+		std::vector<V2> shown;         // at, smoothed: where the traveller is shown, and goes
+	};
+	// from tick `from` of a run (its state and position), under these colliders, to the journey's end
+	void run_journey(JourneyRun &r, size_t from, const Journey &j, const std::vector<kinematics::Collider> &cs, const kinematics::Shape &shape) const;
+	void smooth_run(JourneyRun &r, size_t fixed_until, const std::vector<kinematics::Collider> &cs, const kinematics::Shape &shape) const;
+	JourneyRun journey_run_;   // the live journey's
+	double journey_clock_ = 0; // ... the ticks played
+	int journey_flags_ = 0;      // ... the flags' version it was run under (a detector it passes may change them)
 	std::vector<int> body_ids() const; // (Stage 173: the objects' surfaces, which the player passes)
 	// Stage 151: the cycle
 	double phase_ = 0.0;

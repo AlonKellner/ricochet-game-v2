@@ -207,6 +207,42 @@ TEST_CASE("pull and grapple: the preview shows where the traveller ends -- the s
 			== doctest::Approx(900 + 16 + 0.08).epsilon(1e-4));
 }
 
+TEST_CASE("pull and grapple: turned aside by what it brushes past, the traveller bends smoothly -- never into it, the end exact; the preview agrees (Stage 178)") {
+	// a wall's end 5 px below the grapple's line: the player's circle (12) slides round it
+	rcg::Session s(level_of(R"({"elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 800]},
+		{"kind": "wall", "start": [900, 545], "end": [900, 800]}]})"));
+	s.set_cursor(rc::V2::of(1200, 540));
+	s.settle();
+	const std::optional<rc::V2> end = s.preview_trip_end();
+	REQUIRE(end.has_value());
+	REQUIRE(s.start_fire());
+	std::vector<rc::V2> at{s.player()};
+	for (int frames = 0; s.flying() && frames < 1000; frames++) {
+		s.advance(1.0 / 60.0, {});
+		if (dist(s.player(), at.back()) > 1e-6) {
+			at.push_back(s.player());
+		}
+	}
+	REQUIRE(at.size() > 10);
+	double turn = 0.0, clear = INFINITY, lifted = 0.0; // the largest turn between two frames' moves; the nearest it came to the wall's end
+	for (size_t i = 1; i < at.size(); i++) {
+		clear = std::min(clear, dist(at[i], rc::V2::of(900, 545)));
+		lifted = std::max(lifted, 540.0 - at[i].y);
+		if (i >= 2) {
+			const double ax = double(at[i - 1].x) - at[i - 2].x, ay = double(at[i - 1].y) - at[i - 2].y;
+			const double bx = double(at[i].x) - at[i - 1].x, by = double(at[i].y) - at[i - 1].y;
+			turn = std::max(turn, std::abs(std::atan2(ax * by - ay * bx, ax * bx + ay * by)));
+		}
+	}
+	CHECK(lifted > 3.0);   // it did go round the wall's end
+	CHECK(turn < 0.15);    // (unsmoothed: about 0.8 rad in one frame, back toward the path)
+	CHECK(clear >= 12 + 0.08 - 1e-3); // never into the wall
+	CHECK(s.player().x == doctest::Approx(1200 - 12 - 0.08).epsilon(1e-4)); // at the grapple
+	CHECK(s.player().y == doctest::Approx(540).epsilon(1e-4));
+	CHECK(end->x == s.player().x);
+	CHECK(end->y == s.player().y);
+}
+
 TEST_CASE("preview: the shot's lasting changes to the divergence -- a door a button opens (Stage 159)") {
 	rcg::Session s(level_of(R"({"elements": [{"kind": "button", "name": "b", "opens": "gate", "op": "set", "start": [1000, 400], "end": [1000, 700]},
 		{"kind": "door", "name": "gate", "start": [1200, 300], "end": [1200, 800]}]})"));
