@@ -731,28 +731,8 @@
    "via": [1000.0, 350.0]
   },
   {
-   "end": [1340.0, 300.0],
-   "ids": [37],
-   "label": "Surface",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [1340.0, 800.0],
-   "via": [1340.0, 550.0]
-  },
-  {
    "end": [1290.0, 300.0],
-   "ids": [38],
+   "ids": [37],
    "label": "Platform",
    "left": {
     "effect": {
@@ -772,7 +752,7 @@
   },
   {
    "end": [1310.0, 300.0],
-   "ids": [39],
+   "ids": [38],
    "label": "Platform",
    "left": {
     "effect": {
@@ -792,7 +772,7 @@
   },
   {
    "end": [1920.0, 300.0],
-   "ids": [40],
+   "ids": [39],
    "label": "Platform",
    "left": {
     "effect": {
@@ -812,7 +792,7 @@
   },
   {
    "end": [1270.0, 300.0],
-   "ids": [41],
+   "ids": [40],
    "label": "Platform",
    "left": {
     "effect": {
@@ -832,7 +812,7 @@
   },
   {
    "end": [850.0, 850.0],
-   "ids": [42],
+   "ids": [41],
    "label": "PassThrough",
    "left": {
     "effect": {
@@ -852,7 +832,7 @@
   },
   {
    "end": [850.0, 850.0],
-   "ids": [43],
+   "ids": [42],
    "label": "PassThrough",
    "left": {
     "effect": {
@@ -872,7 +852,7 @@
   },
   {
    "end": [850.0, 850.0],
-   "ids": [44],
+   "ids": [43],
    "label": "PassThrough",
    "left": {
     "effect": {
@@ -892,7 +872,7 @@
   },
   {
    "end": [910.0, 950.0],
-   "ids": [45],
+   "ids": [44],
    "label": "PassThrough",
    "left": {
     "effect": {
@@ -912,7 +892,7 @@
   },
   {
    "end": [930.0, 870.0],
-   "ids": [46],
+   "ids": [45],
    "label": "PassThrough",
    "left": {
     "effect": {
@@ -932,7 +912,7 @@
   },
   {
    "end": [950.0, 950.0],
-   "ids": [47],
+   "ids": [46],
    "label": "PassThrough",
    "left": {
     "effect": {
@@ -952,7 +932,7 @@
   },
   {
    "end": [970.0, 860.0],
-   "ids": [48],
+   "ids": [47],
    "label": "PassThrough",
    "left": {
     "effect": {
@@ -971,8 +951,8 @@
    "via": [960.0, 905.0]
   },
   {
-   "end": [1450.0, 0.0],
-   "ids": [49],
+   "end": [1700.0, 0.0],
+   "ids": [48],
    "label": "Surface",
    "left": {
     "effect": {
@@ -987,12 +967,12 @@
     },
     "interactive": false
    },
-   "start": [1450.0, 300.0],
-   "via": [1450.0, 150.0]
+   "start": [1700.0, 300.0],
+   "via": [1700.0, 150.0]
   },
   {
-   "end": [1800.0, 100.0],
-   "ids": [50],
+   "end": [1920.0, 100.0],
+   "ids": [49],
    "label": "Grapple",
    "left": {
     "effect": {
@@ -1017,8 +997,34 @@
     ],
     "interactive": true
    },
-   "start": [1550.0, 100.0],
-   "via": [1675.0, 100.0]
+   "start": [1700.0, 100.0],
+   "via": [1810.0, 100.0]
+  },
+  {
+   "end": [1700.0, 800.0],
+   "ids": [50],
+   "label": "Door",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "det:detector_1",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1700.0, 300.0],
+   "via": [1700.0, 550.0]
   },
   {
    "end": [0.0, 0.0],

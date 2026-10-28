@@ -2550,6 +2550,16 @@ waits at the entry until the traveller holds it; the traveller then moves throug
 of the exit by the portal's motion (both drawn clipped at the portal lines, the `["journey"]` node), and once it is
 wholly through the copy goes on. The preview runs the same per-tick motion (§14.12).
 
+**Smoothed motion (Stage 178, the user).** Where what the traveller brushes past turns it aside, its ticks turned at
+once (along the contact, then straight back toward the guide). The journey is now run tick by tick to its end when
+it starts (the physics step, 1/60 s), and the ticks' points are smoothed before they are played: 24 passes each move
+every free point half way toward its neighbours' middle and then out of anything it would overlap (a skin away, as
+the raw tick rests). So the traveller bends away a little before an obstacle and comes back gradually, never into
+anything; on a straight even stretch nothing moves. The first and last points are the raw ones (it ends exactly
+where it did), and a portal crossing and the points either side of its jump are not smoothed. The shot plays the
+run a tick per physics step (part way between ticks for a longer frame); when a detector the traveller passes
+changes the flags, the ticks after the last one reached are run again under them. The preview shows the same run.
+
 ### 25.4 Visual
 
 Simple shape (triangle pointing toward cursor, or circle). Wireframe aesthetic.
@@ -3064,4 +3074,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.81.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.82.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
