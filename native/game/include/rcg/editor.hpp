@@ -10,6 +10,7 @@
 
 #include "rc/visibility.hpp"
 #include "rcg/build.hpp"
+#include "rcg/level2.hpp"
 #include "rcg/render.hpp"
 
 #include <nlohmann/json.hpp>
@@ -201,6 +202,7 @@ private:
 	nlohmann::json clipboard_;       // ... what ctrl+C copied (kept across levels; null: nothing)
 	std::vector<Error> errors_;
 	std::vector<Drawn> drawn_;  // per element
+	FlagMarkers markers_;       // Stage 179: the markers the flags give (the whole level's; none while it does not lower)
 	Drawn edges_drawn_;         // Stage 169: the configured edges (none: they pass)
 	std::vector<int> shade_of_;  // Stage 153: per element, 1 a dark shade, 2 a light one
 	rc::vis::Fill shade_fill_;    // ... the shadow under the starting flags (world units)

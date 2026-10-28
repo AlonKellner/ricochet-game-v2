@@ -2353,6 +2353,15 @@ stays readable. Markers are display only: the arrow, the player, planning and th
 are left out of the level dumps and digests. The editor draws them as the game does and sets them from the panel
 (§19.2).
 
+**A flag's marker** (the user). Every **active** flag -- one that two or more elements or detectors connect to, by
+reading it (presence, a resolver's key, a condition; through a flag expression too, a NOT among them) or by writing it
+(a button's state change, a detector's flag; the per-shot `shot:*`, the channels `chan:*` and `ghost` aside) -- has
+a marker: the level's `flag_markers` entry for it (`"none"`: none), else a default picked from its name (the same on
+every load; distinct shape-and-colour pairs while they last). An element or a detector whose one active flag is F
+shows **F's marker**, so a button and its door, a pad and the door it shuts, are marked alike by default; its own
+`marker` is shown only when it connects to no active flag or to several, or when its `sync_marker` is `false` (default
+`true`). In the editor the marker rows of a synced element edit F's marker: every element and detector on F follows.
+
 ---
 
 ## 23. Constraints and limits

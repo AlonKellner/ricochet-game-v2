@@ -379,7 +379,7 @@ void parse_goals(const json &j, Level &lv) {
 		for (size_t i = 0; i < ds->size(); i++) {
 			const json &d = (*ds)[i];
 			const std::string dp = P + ".detectors[" + std::to_string(i) + "]";
-			only_keys(d, dp, {"name", "for", "region", "segment", "flag", "mode", "value", "marker"});
+			only_keys(d, dp, {"name", "for", "region", "segment", "flag", "mode", "value", "marker", "sync_marker"});
 			Detector det;
 			det.name = str(req(d, "name", dp), dp + ".name");
 			for (const Detector &other : lv.detectors) {
@@ -641,6 +641,21 @@ Level parse_level_json(const json &j) {
 		throw;
 	}
 	parse_goals(j, lv);
+	// Stage 179: the markers the flags give, on each element's surfaces and each detector
+	{
+		const FlagMarkers fm = flag_markers(j, low);
+		for (size_t i = 0; i < fm.element.size(); i++) {
+			const std::string prefix = "level.elements[" + std::to_string(i) + "] ";
+			for (size_t k = 0; k < low.origins.size() && k < lv.surfaces.size(); k++) {
+				if (low.origins[k].rfind(prefix, 0) == 0) {
+					lv.surfaces[k].spec.marker = fm.element[i];
+				}
+			}
+		}
+		for (size_t i = 0; i < fm.detector.size() && i < lv.detectors.size(); i++) {
+			lv.detectors[i].marker = fm.detector[i];
+		}
+	}
 	// Stage 151: the cycle and the elements' motions (their surfaces: the lowering's from that element)
 	if (const json *c = opt(j, "cycle")) {
 		only_keys(*c, "level.cycle", {"period", "resume_after"});

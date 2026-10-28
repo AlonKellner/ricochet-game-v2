@@ -131,8 +131,11 @@ two ends, and the whole thing drags. The panel shows its own fields:
 
 **Markers** (Stage 179, GAME_SPEC 22.5). An element's panel and a detector's have a `marker` row: a click sets the
 next shape (none, circle, square, triangle, diamond, star, cross; Shift: back; none removes it), and once there is
-one, a `marker color` row cycles its colour (red, orange, yellow, green, cyan, blue, purple, pink, white). Give a
-button and the door it opens the same marker. The canvas draws markers as the game does.
+one, a `marker color` row cycles its colour (red, orange, yellow, green, cyan, blue, purple, pink, white). A button
+and the door it opens share a flag, so by default they show that flag's marker, and on such an element the rows edit
+the flag's marker (the level's `flag_markers`): every element and detector on that flag changes with it. Its `sync
+marker` row turns that off (it keeps what it showed as its own marker) and back on. The canvas draws markers as the
+game does.
 
 Renaming a detector carries `det:<name>` to the doors and the goal's conditions that use it. Delete removes the
 selected item, Ctrl+D duplicates a detector or an object, and the arrows move it.

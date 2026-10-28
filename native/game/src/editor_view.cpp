@@ -1648,22 +1648,73 @@ std::vector<Editor::Row> Editor::rows() const {
 	return out;
 }
 
-// Stage 179: a marker's rows -- its shape (none: no marker) and, when it has one, its colour
+// Stage 179: a marker's rows -- its shape (none: no marker), its colour when it has one, and for an element or a
+// detector with one active flag whether it shows that flag's marker (sync marker): then the rows edit the flag's,
+// which every element and detector on that flag shows. `owner`: an element's (name, "marker"), a detector's (its path
+// + "/marker").
 std::vector<Editor::Row> Editor::marker_rows(const Field &owner) const {
-	json m;
+	json o;
+	const std::vector<std::string> *flags = nullptr;
+	const std::optional<Marker> *shown = nullptr;
+	std::string base; // the owner's path
 	if (!owner.element.empty()) {
 		const int i = index_of(owner.element);
-		m = i >= 0 ? doc_["elements"][size_t(i)].value(owner.key, json()) : json();
-	} else if (const json::json_pointer ptr(owner.key); doc_.contains(ptr)) {
-		m = doc_[ptr];
+		if (i >= 0) {
+			o = doc_["elements"][size_t(i)];
+			base = "/elements/" + std::to_string(i);
+			if (size_t(i) < markers_.element.size()) {
+				flags = &markers_.element_flags[size_t(i)];
+				shown = &markers_.element[size_t(i)];
+			}
+		}
+	} else {
+		base = owner.key.substr(0, owner.key.rfind('/'));
+		if (const json::json_pointer ptr(base); doc_.contains(ptr)) {
+			o = doc_[ptr];
+		}
+		const std::string head = "/detectors/";
+		if (base.rfind(head, 0) == 0) {
+			const size_t n = std::stoul(base.substr(head.size()));
+			if (n < markers_.detector.size()) {
+				flags = &markers_.detector_flags[n];
+				shown = &markers_.detector[n];
+			}
+		}
+	}
+	const bool one = flags != nullptr && flags->size() == 1;
+	const bool sync = !o.is_object() || o.value("sync_marker", json(true)) != json(false);
+	Field target = owner;
+	std::string whose = "its own";
+	if (one && sync) {
+		std::string f = (*flags)[0];
+		for (size_t p = 0; (p = f.find('~', p)) != std::string::npos; p += 2) {
+			f.replace(p, 1, "~0");
+		}
+		for (size_t p = 0; (p = f.find('/', p)) != std::string::npos; p += 2) {
+			f.replace(p, 1, "~1");
+		}
+		target = Field{"", "/flag_markers/" + f};
+		whose = (*flags)[0] + "'s: every element and detector on it shows it";
+	}
+	std::optional<Marker> m;
+	if (shown != nullptr) {
+		m = *shown;
+	} else if (o.is_object() && o.contains("marker")) {
+		try {
+			m = marker_of(o["marker"], "");
+		} catch (const LevelError &) {
+		}
 	}
 	std::vector<Row> out;
-	const bool on = m.is_object() && m.contains("shape");
-	out.push_back({Row::Value, "marker", on ? spell(m["shape"]) : "(none)",
-			"a shape on it, to show what opens what (a button and its door alike): click: the next shape (shift: back)", owner, "marker", -1, 0, {}});
-	if (on) {
-		out.push_back({Row::Value, "marker color", m.contains("color") ? spell(m["color"]) : "(white)",
-				"click: the next colour (shift: back); or [r, g, b] typed in the marker's JSON", owner, "marker_color", -1, 0, {}});
+	out.push_back({Row::Value, "marker", m ? m->shape : "(none)",
+			"a shape on it (" + whose + "), to show what goes with what: click: the next shape (shift: back)", target, "marker", -1, 0, {}});
+	if (m) {
+		out.push_back({Row::Value, "marker color", spell(marker_json(*m)["color"]),
+				"click: the next colour (shift: back); or [r, g, b] typed in the marker's JSON", target, "marker_color", -1, 0, {}});
+	}
+	if (one) {
+		out.push_back({Row::Value, "sync marker", sync ? "true" : "false",
+				"show " + (*flags)[0] + "'s marker (shared with what else is on it); false: its own", Field{"", base}, "sync_marker", -1, 0, {}});
 	}
 	return out;
 }
@@ -1783,22 +1834,34 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		return;
 	}
 	if (r.choice == "marker" || r.choice == "marker_color") { // Stage 179: the next shape (none: off) / colour
+		const bool of_flag = f.element.empty() && f.key.rfind("/flag_markers/", 0) == 0;
 		json cur;
 		if (!f.element.empty()) {
 			const int i = index_of(f.element);
 			cur = i >= 0 ? doc_["elements"][size_t(i)].value(f.key, json()) : json();
 		} else if (const json::json_pointer ptr(f.key); doc_.contains(ptr)) {
 			cur = doc_[ptr];
+		} else if (of_flag) { // (the flag's default)
+			std::string name = f.key.substr(std::string("/flag_markers/").size());
+			for (size_t p = 0; (p = name.find("~1", p)) != std::string::npos; p++) {
+				name.replace(p, 2, "/");
+			}
+			for (size_t p = 0; (p = name.find("~0", p)) != std::string::npos; p++) {
+				name.replace(p, 2, "~");
+			}
+			if (auto it = markers_.of_flag.find(name); it != markers_.of_flag.end() && it->second) {
+				cur = marker_json(*it->second);
+			}
 		}
 		json next = cur.is_object() ? cur : json::object();
 		if (r.choice == "marker") {
 			std::vector<std::string> shapes{"none"};
 			shapes.insert(shapes.end(), marker_shapes().begin(), marker_shapes().end());
-			const std::string s = cycle(shapes, next.value("shape", "none"));
-			if (s == "none") {
-				next = json();
+			const std::string sh = cycle(shapes, next.value("shape", "none"));
+			if (sh == "none") {
+				next = of_flag ? json("none") : json(); // (a flag's none is kept: its default would come back)
 			} else {
-				next["shape"] = s;
+				next["shape"] = sh;
 				if (!next.contains("color")) {
 					next["color"] = marker_colors().front().first;
 				}
@@ -1815,6 +1878,32 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		} else {
 			run({{"op", "set"}, {"name", f.element}, {"key", f.key}, {"value", next}});
 		}
+		return;
+	}
+	if (r.choice == "sync_marker") { // Stage 179: off keeps what it showed as its own marker; on shows the flag's again
+		const json::json_pointer ptr(f.key);
+		if (!doc_.contains(ptr) || !doc_[ptr].is_object()) {
+			return;
+		}
+		json o = doc_[ptr];
+		if (r.value == "true") {
+			o["sync_marker"] = false;
+			std::optional<Marker> shown;
+			const std::string eh = "/elements/", dh = "/detectors/";
+			if (f.key.rfind(eh, 0) == 0 && std::stoul(f.key.substr(eh.size())) < markers_.element.size()) {
+				shown = markers_.element[std::stoul(f.key.substr(eh.size()))];
+			} else if (f.key.rfind(dh, 0) == 0 && std::stoul(f.key.substr(dh.size())) < markers_.detector.size()) {
+				shown = markers_.detector[std::stoul(f.key.substr(dh.size()))];
+			}
+			if (shown) {
+				o["marker"] = marker_json(*shown);
+			} else {
+				o.erase("marker");
+			}
+		} else {
+			o.erase("sync_marker");
+		}
+		run({{"op", "set"}, {"path", f.key}, {"value", o}});
 		return;
 	}
 	if (r.choice == "options" && !r.options.empty()) {
@@ -2038,15 +2127,18 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			region(doc_["objective"].value("goal", json()), GOAL, "goal", lit("goal"));
 		}
 		if (doc_.contains("detectors") && doc_["detectors"].is_array()) {
-			for (const json &d : doc_["detectors"]) {
+			for (size_t di = 0; di < doc_["detectors"].size(); di++) {
+				const json &d = doc_["detectors"][di];
 				if (!d.is_object()) {
 					continue;
 				}
 				const std::string name = d.value("name", "");
 				const bool picked = lit("detector:" + name);
-				std::optional<Marker> mk; // Stage 179: its marker (drawn at its middle, as in the game)
+				std::optional<Marker> mk; // Stage 179: its marker (drawn at its middle, as in the game; the flag's when it shows that)
 				try {
-					if (d.contains("marker")) {
+					if (di < markers_.detector.size()) {
+						mk = markers_.detector[di];
+					} else if (d.contains("marker")) {
 						mk = marker_of(d["marker"], "");
 					}
 				} catch (const LevelError &) {
@@ -2239,8 +2331,10 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			if (right != left || shown_side(b, false) != nullptr) {
 				calls.push_back(line(sm, V2::of(double(sm.x) - n.x * 9, double(sm.y) - n.y * 9), right, 2.0));
 			}
-			if (b.marker) { // Stage 179: the designer's marker, as the game draws it
-				render::marker(calls, b.marker->shape, b.marker->color, to_screen(marker_point(b.seg)), std::max(3.0, 7.0 * zoom_));
+			// Stage 179: the designer's marker, as the game draws it (the flag's, when it shows that)
+			const std::optional<Marker> &mk = i < markers_.element.size() ? markers_.element[i] : b.marker;
+			if (mk) {
+				render::marker(calls, mk->shape, mk->color, to_screen(marker_point(b.seg)), std::max(3.0, 7.0 * zoom_));
 			}
 		}
 		for (const rc::arc::SegGeom &s : drawn_[i].broken) {

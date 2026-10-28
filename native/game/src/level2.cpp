@@ -8,6 +8,7 @@
 #include <algorithm>
 #include <array>
 #include <cmath>
+#include <functional>
 #include <map>
 #include <set>
 
@@ -305,7 +306,8 @@ Lowered lower_level(const json &v2) {
 			fail(P, "'" + k + "' is reserved for a later stage of rc-level/2");
 		}
 		const bool known = k == "schema" || k == "flags" || k == "templates" || k == "elements" || k == "objective" || k == "detectors"
-				|| k == "objects" || k == "carriers" || k == "cycle" || k == "spread" || k == "edges" || std::find(META.begin(), META.end(), k) != META.end();
+				|| k == "objects" || k == "carriers" || k == "cycle" || k == "spread" || k == "edges" || k == "flag_markers"
+				|| std::find(META.begin(), META.end(), k) != META.end();
 		if (!known) {
 			fail(P, "unknown key '" + k + "'");
 		}
@@ -787,6 +789,161 @@ json migrate_level(const json &v1) {
 	const json lowered = lower_level(out).level;
 	if (text(lowered) != text(v1)) {
 		throw LevelError("migrate: the migrated level does not lower to the original (" + first_difference(lowered, v1) + ")");
+	}
+	return out;
+}
+
+// Stage 179: the markers the flags give
+json marker_json(const Marker &m) {
+	json c = json::array({m.color[0], m.color[1], m.color[2], m.color[3]});
+	for (const auto &[name, rgba] : marker_colors()) {
+		if (rgba == m.color) {
+			c = name;
+		}
+	}
+	return {{"shape", m.shape}, {"color", c}};
+}
+
+FlagMarkers flag_markers(const json &v2, const Lowered &low) {
+	FlagMarkers out;
+	const json es = v2.value("elements", json::array());
+	const json ds = v2.value("detectors", json::array());
+	// what each element (its lowered surfaces) and each detector connects to
+	auto names_of = [](const std::string &key, std::vector<std::string> &into) {
+		std::vector<std::string> ns{key};
+		try {
+			if (const std::shared_ptr<const rc::FlagExpr> e = rc::FlagExpr::compile(key)) {
+				ns = e->names();
+			}
+		} catch (const std::invalid_argument &) {
+		}
+		for (const std::string &n : ns) {
+			const bool system = n.rfind("shot:", 0) == 0 || n.rfind("chan:", 0) == 0 || n == "ghost" || n == "true" || n == "false";
+			if (!system && std::find(into.begin(), into.end(), n) == into.end()) {
+				into.push_back(n);
+			}
+		}
+	};
+	std::function<void(const json &, std::vector<std::string> &)> walk = [&](const json &j, std::vector<std::string> &into) {
+		if (j.is_object()) {
+			for (auto it = j.begin(); it != j.end(); ++it) {
+				if (it.key() == "key" && it.value().is_string()) {
+					names_of(it.value().get<std::string>(), into);
+				} else {
+					walk(it.value(), into);
+				}
+			}
+		} else if (j.is_array()) {
+			for (const json &v : j) {
+				walk(v, into);
+			}
+		}
+	};
+	const json &ss = low.level["surfaces"];
+	std::vector<std::vector<std::string>> uses(es.size()), duses(ds.size());
+	for (size_t i = 0; i < es.size(); i++) {
+		const std::string prefix = "level.elements[" + std::to_string(i) + "] ";
+		for (size_t k = 0; k < low.origins.size() && k < ss.size(); k++) {
+			if (low.origins[k].rfind(prefix, 0) == 0) {
+				walk(ss[k], uses[i]);
+			}
+		}
+	}
+	for (size_t i = 0; i < ds.size(); i++) {
+		if (ds[i].is_object()) {
+			const json f = ds[i].value("flag", json());
+			names_of(f.is_string() ? f.get<std::string>() : "det:" + ds[i].value("name", ""), duses[i]);
+		}
+	}
+	std::map<std::string, int> users;
+	std::vector<std::string> order;
+	for (const auto *all : {&uses, &duses}) {
+		for (const std::vector<std::string> &u : *all) {
+			for (const std::string &f : u) {
+				if (users[f]++ == 0) {
+					order.push_back(f);
+				}
+			}
+		}
+	}
+	for (const std::string &f : order) {
+		if (users[f] >= 2) {
+			out.active.push_back(f);
+		}
+	}
+	// each active flag's marker: the level's, else a default -- its name's pick among the shapes and colours, the
+	// next free one when that is taken
+	const json fm = v2.value("flag_markers", json::object());
+	if (!fm.is_object()) {
+		throw LevelError("level.flag_markers: {flag: marker | \"none\"} expected");
+	}
+	const std::vector<std::string> &shapes = marker_shapes();
+	const auto &colors = marker_colors();
+	const size_t combos = shapes.size() * colors.size();
+	std::vector<bool> taken(combos, false);
+	auto combo_of = [&](const Marker &m) -> std::optional<size_t> {
+		for (size_t s = 0; s < shapes.size(); s++) {
+			for (size_t c = 0; c < colors.size(); c++) {
+				if (shapes[s] == m.shape && colors[c].second == m.color) {
+					return c * shapes.size() + s;
+				}
+			}
+		}
+		return std::nullopt;
+	};
+	for (auto it = fm.begin(); it != fm.end(); ++it) {
+		const std::string p = "level.flag_markers." + it.key();
+		if (it.value() == "none") {
+			out.of_flag[it.key()] = std::nullopt;
+			continue;
+		}
+		const Marker m = marker_of(it.value(), p);
+		out.of_flag[it.key()] = m;
+		if (const std::optional<size_t> c = combo_of(m)) {
+			taken[*c] = true;
+		}
+	}
+	for (const std::string &f : out.active) {
+		if (out.of_flag.count(f)) {
+			continue;
+		}
+		uint64_t h = 1469598103934665603ull; // FNV-1a
+		for (const char ch : f) {
+			h = (h ^ uint64_t(static_cast<unsigned char>(ch))) * 1099511628211ull;
+		}
+		size_t c = size_t(h % combos);
+		for (size_t probe = 0; probe < combos && taken[c]; probe++) {
+			c = (c + 1) % combos;
+		}
+		taken[c] = true;
+		out.of_flag[f] = Marker{shapes[c % shapes.size()], colors[c / shapes.size()].second};
+	}
+	// what each shows
+	auto resolve = [&](const json &owner, const std::vector<std::string> &used, const std::string &path, std::vector<std::string> &mine) {
+		for (const std::string &f : used) {
+			if (users[f] >= 2) {
+				mine.push_back(f);
+			}
+		}
+		bool sync = true;
+		if (owner.is_object() && owner.contains("sync_marker")) {
+			if (!owner["sync_marker"].is_boolean()) {
+				throw LevelError(path + ".sync_marker: true or false expected");
+			}
+			sync = owner["sync_marker"].get<bool>();
+		}
+		if (sync && mine.size() == 1) {
+			return out.of_flag[mine[0]];
+		}
+		return owner.is_object() && owner.contains("marker") ? std::optional<Marker>(marker_of(owner["marker"], path + ".marker")) : std::nullopt;
+	};
+	out.element_flags.resize(es.size());
+	out.detector_flags.resize(ds.size());
+	for (size_t i = 0; i < es.size(); i++) {
+		out.element.push_back(resolve(es[i], uses[i], "level.elements[" + std::to_string(i) + "]", out.element_flags[i]));
+	}
+	for (size_t i = 0; i < ds.size(); i++) {
+		out.detector.push_back(resolve(ds[i], duses[i], "level.detectors[" + std::to_string(i) + "]", out.detector_flags[i]));
 	}
 	return out;
 }

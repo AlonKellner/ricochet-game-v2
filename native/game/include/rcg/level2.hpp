@@ -11,6 +11,8 @@
 
 #include <nlohmann/json.hpp>
 
+#include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -50,6 +52,21 @@ bool frost_bearing(const std::string &effect_type);
 
 // The lowering of an rc-level/2 document. Throws LevelError naming the element.
 Lowered lower_level(const nlohmann::json &v2);
+
+// Stage 179 (the user): the markers the flags give. An active flag is one two or more elements or detectors
+// connect to (read -- presence, a resolver's key, a condition, through a flag expression too -- or write; the
+// per-shot and channel flags aside). Each has a marker: the level's `flag_markers` entry ("none": none), else its
+// own default, a shape and colour picked from its name (distinct ones while they last). An element or a detector
+// whose one active flag is F shows F's marker unless its `sync_marker` is false; otherwise its own `marker`.
+struct FlagMarkers {
+	std::vector<std::string> active;                       // in first use order (the elements', then the detectors')
+	std::map<std::string, std::optional<Marker>> of_flag;  // each active flag's
+	std::vector<std::vector<std::string>> element_flags, detector_flags; // each one's active flags
+	std::vector<std::optional<Marker>> element, detector;  // what each shows
+};
+FlagMarkers flag_markers(const nlohmann::json &v2, const Lowered &low);
+// a marker as a document spells it ({"shape", "color"}: a palette colour by its name)
+nlohmann::json marker_json(const Marker &m);
 
 // The rc-level/2 document whose lowering is the rc-level/1 document `v1`, byte
 // for byte (the room and the edge walls implicit where they are the generated
