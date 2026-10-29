@@ -615,6 +615,25 @@ TEST_CASE("feel: it accelerates to its speed (slowly in the air) and slows to a 
 	CHECK(o.vel.y == doctest::Approx(980.0 / 60.0));
 }
 
+TEST_CASE("feel: the air's control -- held against the motion it stops in 5 ticks and reverses in 15; released it stops in 10 (Stage 184)") {
+	const std::vector<k::Collider> floor{wall(-5000, 1000, 5000, 1000)};
+	auto air = [&](float side, int n) { // high in the air at full speed right, `side` held for n ticks: the horizontal speed
+		k::Body b{V2{0, -20000}, V2{float(k::SPEED), 0}, false};
+		for (int i = 0; i < n; i++) {
+			k::step(b, k::Input{side, 0, false}, G, floor);
+		}
+		return b.vel.x;
+	};
+	CHECK(air(-1, 1) == doctest::Approx(k::SPEED - k::AIR_TURN * k::STEP));
+	CHECK(air(-1, 4) > 0.0f);
+	CHECK(air(-1, 5) == 0.0f);
+	CHECK(air(-1, 14) > -float(k::SPEED));
+	CHECK(air(-1, 15) == -float(k::SPEED));
+	CHECK(air(0, 9) > 0.0f);
+	CHECK(air(0, 10) == 0.0f);
+	CHECK(air(1, 10) == float(k::SPEED)); // (held with the motion: kept)
+}
+
 TEST_CASE("climbing kills the horizontal momentum in 3 ticks: up held on a rope, running, it goes up; held sideways it shuffles slowly (Stage 183)") {
 	// a vertical rope at x = 500 (a steep platform), the floor at 1000; the player touching it, running right at full speed
 	const std::vector<k::Collider> cs{wall(-5000, 1000, 5000, 1000), platform(500, 700, 500, 1000)};

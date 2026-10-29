@@ -2511,8 +2511,9 @@ a floor stays on it).
 - Default speed: **200 units/sec**. Gravity applies vertically as configured in `LevelData.gravity` — the player can fall and needs platforms when gravity is non-zero. Configurable per level. Without gravity the movement is the input direction, normalized, times the speed, at once.
 - **The feel under gravity** (Stage 182, the user: platformer practice, restrictive -- the arrow, the pull and the grapple
   should move the player better than walking). Global constants (`rcg/kinematics.hpp`); objects keep the plain motion.
-  - Acceleration: toward the input's speed at **1800 units/s²** on a floor (**2400** slowing or turning), **900** in
-    the air (**300** slowing): a standing jump carries less far than a running one.
+  - Acceleration: toward the input's speed at **1800 units/s²** on a floor (**2400** slowing or turning), **1200** in
+    the air (**1200** released, **2400** held against the motion -- Stage 184, the user: more control in the air;
+    a reverse in 15 ticks, a stop in 10): a standing jump carries less far than a running one.
   - Jump: **395 units/sec upward**, single (no double jump). A press is taken on a floor, or up to **5 ticks**
     (coyote time) after walking off one; a press in the air waits up to **6 ticks** for a floor (the jump buffer).
   - Variable height: releasing up while rising keeps **0.4** of the rising speed (a tap hops about 23 units).
@@ -3111,4 +3112,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.85.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.85.2.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

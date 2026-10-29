@@ -38,6 +38,10 @@
 // up to MAX_FALL. A full held jump keeps the old reach: 85 px up, 167 px across
 // at full speed on the level, in 50 ticks. Objects keep the plain motion.
 //
+// Stage 184 (the user: the momentum too hard to stop in the air): the air's
+// control -- held against the motion it slows at AIR_TURN (the ground's), released
+// at AIR_DECEL; a reverse in 15 ticks (was 54), a stop in 10 (was 40).
+//
 // Deterministic: float64 inside a step, the position and velocity kept as the
 // game's float32 vectors between steps.
 #pragma once
@@ -67,8 +71,9 @@ constexpr double CLIMB_GRIP = 4000.0;                // ... reached at this rate
 constexpr double FEEL_JUMP_VELOCITY = 395.0; // (the apex hang and the faster fall: the old arc's height and reach)
 constexpr double GROUND_ACCEL = 1800.0;      // px/s^2 toward the input's speed on a floor (full speed in ~0.11 s)
 constexpr double GROUND_DECEL = 2400.0;      // ... to a stop, or turning
-constexpr double AIR_ACCEL = 900.0;          // ... in the air
-constexpr double AIR_DECEL = 300.0;
+constexpr double AIR_ACCEL = 1200.0;         // ... in the air (Stage 184: from 900; full speed in 10 ticks)
+constexpr double AIR_DECEL = 1200.0;         // ... released (Stage 184: from 300; a stop in 10 ticks, a 15 px drift)
+constexpr double AIR_TURN = 2400.0;          // ... held against the motion (Stage 184: the ground's; a stop in 5 ticks)
 constexpr double FALL_GRAVITY = 1.6;         // gravity's factor falling
 constexpr double APEX_GRAVITY = 0.5;         // ... near the apex of a jump, up held
 constexpr double APEX_SPEED = 80.0;          // near the apex: slower than this
