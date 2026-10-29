@@ -160,7 +160,7 @@
   },
   {
    "circle": null,
-   "end": [950.0, 550.0],
+   "end": [1000.0, 550.0],
    "full": false,
    "id": 9,
    "is_target": false,
@@ -175,7 +175,7 @@
     "type": "terminal"
    },
    "start": [350.0, 550.0],
-   "via": [650.0, 550.0]
+   "via": [675.0, 550.0]
   },
   {
    "circle": null,
@@ -193,8 +193,8 @@
     "interactive": false,
     "type": "terminal"
    },
-   "start": [1400.0, 900.0],
-   "via": [750.0, 900.0]
+   "start": [1450.0, 900.0],
+   "via": [775.0, 900.0]
   },
   {
    "circle": null,
@@ -217,7 +217,7 @@
   },
   {
    "circle": null,
-   "end": [1400.0, 300.0],
+   "end": [1600.0, 300.0],
    "full": false,
    "id": 12,
    "is_target": false,
@@ -232,7 +232,7 @@
     "type": "terminal"
    },
    "start": [100.0, 300.0],
-   "via": [750.0, 300.0]
+   "via": [850.0, 300.0]
   },
   {
    "circle": null,
