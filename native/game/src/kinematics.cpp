@@ -327,7 +327,8 @@ V2 felt_velocity(Body &body, const Input &in, const V2 &gravity) {
 	// toward the input's speed: accelerating, or slowing (to a stop, or turning first)
 	const double target = double(in.axis_x) * SPEED;
 	const bool speeding = target != 0.0 && vx * target >= 0.0 && std::abs(target) > std::abs(vx);
-	const double rate = body.on_floor ? (speeding ? GROUND_ACCEL : GROUND_DECEL) : (speeding ? AIR_ACCEL : AIR_DECEL);
+	const bool turning = target * vx < 0.0; // (Stage 184: held against the motion)
+	const double rate = body.on_floor ? (speeding ? GROUND_ACCEL : GROUND_DECEL) : (speeding ? AIR_ACCEL : turning ? AIR_TURN : AIR_DECEL);
 	vx = vx < target ? std::min(vx + rate * STEP, target) : std::max(vx - rate * STEP, target);
 	if (!body.on_floor) {
 		// (gravity's y: the input sets x, as the plain motion's)
