@@ -24,7 +24,7 @@
   },
   {
    "circle": null,
-   "end": [350.0, 650.0],
+   "end": [250.0, 650.0],
    "full": false,
    "id": 2,
    "is_target": false,
@@ -40,8 +40,8 @@
     "landing": true,
     "type": "terminal"
    },
-   "start": [350.0, 550.0],
-   "via": [350.0, 600.0]
+   "start": [250.0, 550.0],
+   "via": [250.0, 600.0]
   },
   {
    "circle": null,
@@ -122,7 +122,7 @@
   },
   {
    "circle": null,
-   "end": [1300.0, 650.0],
+   "end": [1250.0, 650.0],
    "full": false,
    "id": 7,
    "is_target": false,
@@ -136,12 +136,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [1300.0, 450.0],
-   "via": [1300.0, 550.0]
+   "start": [1250.0, 450.0],
+   "via": [1250.0, 550.0]
   },
   {
    "circle": null,
-   "end": [950.0, 650.0],
+   "end": [800.0, 650.0],
    "full": false,
    "id": 8,
    "is_target": false,
@@ -155,12 +155,12 @@
     "interactive": false,
     "type": "terminal"
    },
-   "start": [350.0, 650.0],
-   "via": [650.0, 650.0]
+   "start": [250.0, 650.0],
+   "via": [525.0, 650.0]
   },
   {
    "circle": null,
-   "end": [1000.0, 550.0],
+   "end": [850.0, 550.0],
    "full": false,
    "id": 9,
    "is_target": false,
@@ -174,8 +174,8 @@
     "interactive": false,
     "type": "terminal"
    },
-   "start": [350.0, 550.0],
-   "via": [675.0, 550.0]
+   "start": [250.0, 550.0],
+   "via": [550.0, 550.0]
   },
   {
    "circle": null,
@@ -217,7 +217,7 @@
   },
   {
    "circle": null,
-   "end": [1600.0, 300.0],
+   "end": [1750.0, 300.0],
    "full": false,
    "id": 12,
    "is_target": false,
@@ -232,31 +232,30 @@
     "type": "terminal"
    },
    "start": [100.0, 300.0],
-   "via": [850.0, 300.0]
+   "via": [925.0, 300.0]
   },
   {
    "circle": null,
-   "end": [350.0, 600.0],
+   "end": [1350.0, 650.0],
    "full": false,
    "id": 13,
    "is_target": false,
    "left": {
     "interactive": false,
-    "type": "pass"
+    "type": "terminal"
    },
    "line": true,
-   "platform": true,
-   "player_solid": false,
+   "player_solid": true,
    "right": {
     "interactive": false,
-    "type": "pass"
+    "type": "terminal"
    },
-   "start": [300.0, 600.0],
-   "via": [325.0, 600.0]
+   "start": [1150.0, 650.0],
+   "via": [1250.0, 650.0]
   },
   {
    "circle": null,
-   "end": [1400.0, 650.0],
+   "end": [1150.0, 700.0],
    "full": false,
    "id": 14,
    "is_target": false,
@@ -270,12 +269,12 @@
     "interactive": false,
     "type": "terminal"
    },
-   "start": [1200.0, 650.0],
-   "via": [1300.0, 650.0]
+   "start": [1150.0, 650.0],
+   "via": [1150.0, 675.0]
   },
   {
    "circle": null,
-   "end": [1200.0, 700.0],
+   "end": [1350.0, 700.0],
    "full": false,
    "id": 15,
    "is_target": false,
@@ -289,12 +288,12 @@
     "interactive": false,
     "type": "terminal"
    },
-   "start": [1200.0, 650.0],
-   "via": [1200.0, 675.0]
+   "start": [1150.0, 700.0],
+   "via": [1250.0, 700.0]
   },
   {
    "circle": null,
-   "end": [1400.0, 700.0],
+   "end": [1350.0, 650.0],
    "full": false,
    "id": 16,
    "is_target": false,
@@ -308,31 +307,32 @@
     "interactive": false,
     "type": "terminal"
    },
-   "start": [1200.0, 700.0],
-   "via": [1300.0, 700.0]
+   "start": [1350.0, 700.0],
+   "via": [1350.0, 675.0]
   },
   {
    "circle": null,
-   "end": [1400.0, 650.0],
+   "end": [250.0, 650.0],
    "full": false,
    "id": 17,
    "is_target": false,
    "left": {
     "interactive": false,
-    "type": "terminal"
+    "type": "pass"
    },
    "line": true,
-   "player_solid": true,
+   "platform": true,
+   "player_solid": false,
    "right": {
     "interactive": false,
-    "type": "terminal"
+    "type": "pass"
    },
-   "start": [1400.0, 700.0],
-   "via": [1400.0, 675.0]
+   "start": [200.0, 650.0],
+   "via": [225.0, 650.0]
   },
   {
    "circle": null,
-   "end": [350.0, 650.0],
+   "end": [250.0, 550.0],
    "full": false,
    "id": 18,
    "is_target": false,
@@ -347,12 +347,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [300.0, 650.0],
-   "via": [325.0, 650.0]
+   "start": [200.0, 550.0],
+   "via": [225.0, 550.0]
   },
   {
    "circle": null,
-   "end": [350.0, 550.0],
+   "end": [220.0, 650.0],
    "full": false,
    "id": 19,
    "is_target": false,
@@ -367,12 +367,12 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [300.0, 550.0],
-   "via": [325.0, 550.0]
+   "start": [220.0, 550.0],
+   "via": [220.0, 600.0]
   },
   {
    "circle": null,
-   "end": [300.0, 550.0],
+   "end": [230.0, 650.0],
    "full": false,
    "id": 20,
    "is_target": false,
@@ -387,8 +387,8 @@
     "interactive": false,
     "type": "pass"
    },
-   "start": [300.0, 650.0],
-   "via": [300.0, 600.0]
+   "start": [230.0, 550.0],
+   "via": [230.0, 600.0]
   },
   {
    "circle": null,
