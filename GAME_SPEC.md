@@ -244,7 +244,7 @@ Movement and aiming are independent and simultaneous. *(Principle 16.)*
 | **Clear plan** | C / dedicated button | Clears the plan without resetting the level or respawning the player. |
 | **Undo last shot** | Z / dedicated button | Reverts to the checkpoint saved before the most recent shot. |
 | **Full reset** | R / dedicated button | Reverts to the level's initial state (all surfaces restored, player at spawn). |
-| **Jump (with gravity)** | W / Up / left-stick-up | Standard platformer jump. No effect when gravity is zero. With the feet in a platform it moves the player up it, as every direction does (§25.1, Stages 185, 187). |
+| **Jump (with gravity)** | W / Up / left-stick-up | Standard platformer jump. No effect when gravity is zero. Overlapping a platform it moves the player up it, as every direction does (§25.1, Stages 185, 187). |
 | **Pause** | Escape / start | Opens pause menu. |
 
 **Cursor coordinate space:** the cursor position is in **world space**, not screen space. The visual layer converts mouse screen position to world position using the camera's inverse transform (`get_global_mouse_position()` in Godot). The initial ray (§12.1) uses the world-space cursor directly.
@@ -2497,19 +2497,24 @@ back into its circle). The player and objects **pass each other** (§25.5). It c
    player pass both ways (moving down holds down). The arrow passes a platform (its sides are passes), and so do
    visibility and planning.
 
-   **Engaging** (Stage 185, the user; it replaces Stage 176's climbing): with gravity, a player the **bottom of
-   whose feet** overlaps a platform -- some point of it inside the lower half of the feet's circle, an end
-   counting (Stage 187); a head or a body through a platform is nothing, and standing on one, a skin away, no
-   overlap -- passes it as it would until it **moves in any direction**. Then it is **engaged**: its movement is
-   the gravity-free one (the input direction, normalized, times **200 units/s**, at once, no momentum kept;
-   released, it **hangs** where it is), no platform holds it, and walls still stop it. It stays engaged as long as
-   its feet overlap any platform, and at the first tick they overlap none it is back under gravity with the speed
-   it had: out of the bottom it falls, out of the top it lands on the top (a bare rope's top: it hops there while
-   up is held), out of the side it falls. **Dropping** (Stage 187, the user): down pressed while **standing on** a
-   platform is no such move: the player falls under gravity, through that platform even if down is released, and
-   while down stays held through any others, not engaging. A second press of down, or any other direction (held
-   already or not), engages what the feet overlap. A jump pressed while engaged is only the move up; no coyote time
-   or jump press outlives it. A checkpoint keeps the engagement: undoing a shot fired hanging leaves the player
+   **Engaging** (Stage 185, the user; it replaces Stage 176's climbing). With gravity, an engaged player's movement
+   is the gravity-free one (the input direction, normalized, times **200 units/s**, at once, no momentum kept;
+   nothing held, it hangs where it is), no platform holds it, and walls still stop it. The rule (Stage 187, the user):
+   - **Active:** moving in any direction, it is engaged while **any part** of it overlaps a platform (one of its
+     circles closer than its radius; an end counts).
+   - **Passive:** not moving, it stays engaged only while **the feet's line** is on a platform: a horizontal line at
+     their very bottom, as wide as the feet. So it hangs on a rope, a ladder or a slope, and never with its feet below
+     a level platform: released there, it falls (with the line inside the feet's circle, its centre above the
+     platform, it is put on top). Not moving and not engaged, it passes a platform as it would.
+   - **Standing** on a platform, a skin above it, is no overlap: a different interaction. Walking along it and jumping
+     off it engage nothing.
+
+   Out of the bottom it falls, out of the top it lands on the top (a bare rope's top: it hops there while up is held),
+   out of the side it falls, all with the speed it had. **Dropping** (Stage 187, the user): down pressed while standing
+   on a platform, for as little as one tick, is no such move: the player falls under gravity, through that platform even
+   if down is released, and while down stays held through any others, not engaging. A second press of down, or any other
+   direction (held already or not), engages what it overlaps. A jump pressed while engaged is only the move up; no coyote
+   time or jump press outlives it. A checkpoint keeps the engagement: undoing a shot fired hanging leaves the player
    hanging. Objects never engage.
 
 A **floor** is a contact whose normal is within 45° of up `(0, -1)`. With gravity, a player that stood on a
@@ -2536,7 +2541,7 @@ a floor stays on it).
     capped at **900 units/s**. A full held jump keeps the former reach: 85 units up, 167 across at full speed on
     the level, 50 ticks aloft.
 - Drop: down held lets the player through platforms (§25.1, Stage 172).
-- Engage: moving in any direction while the bottom of the feet overlaps a platform (a ladder and a rope are steep ones) swaps the movement for the gravity-free one until they overlap none (§25.1, Stages 185, 187).
+- Engage: moving in any direction while any part overlaps a platform (a ladder and a rope are steep ones) swaps the movement for the gravity-free one; nothing held, it holds only while the feet's line is on one (§25.1, Stages 185, 187).
 - **The arrow is never affected by gravity** — it follows pure geometric ray tracing regardless of the level's gravity setting.
 - The player can move while aiming. *(Principle 16.)*
 
@@ -3127,4 +3132,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.88.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.88.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

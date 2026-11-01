@@ -298,56 +298,44 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 
 namespace {
 
-// Stage 187 (the user): does a collider overlap the bottom of the feet -- the lower half of a circle at (x, y)?
-// The lowest of its points inside the circle is an end, a crossing of the circle, or an arc's lowest point.
-bool overlaps_bottom(const Collider &c, double x, double y, double r) {
-	auto in = [&](double px, double py) { return py >= y && std::hypot(px - x, py - y) < r; };
-	if (!c.arc) {
-		if (in(c.ax, c.ay) || in(c.bx, c.by)) {
-			return true;
-		}
-		const double ex = c.bx - c.ax, ey = c.by - c.ay, l2 = ex * ex + ey * ey;
-		if (l2 == 0.0) {
-			return false;
-		}
-		const double u = ((x - c.ax) * ex + (y - c.ay) * ey) / l2;
-		const double fx = c.ax + ex * u - x, fy = c.ay + ey * u - y, half2 = r * r - fx * fx - fy * fy;
-		if (half2 <= 0.0) {
-			return false;
-		}
-		const double du = std::sqrt(half2 / l2);
-		for (const double t : {u - du, u + du}) {
-			if (t >= 0.0 && t <= 1.0 && c.ay + ey * t >= y) {
-				return true;
-			}
-		}
-		return false;
-	}
-	if (!c.full && (in(c.ax, c.ay) || in(c.bx, c.by))) {
-		return true;
-	}
-	if (on_arc(c, 0.0, 1.0) && in(c.cx, c.cy + c.r)) {
-		return true;
-	}
-	const double dx = x - c.cx, dy = y - c.cy, d = std::hypot(dx, dy);
-	if (d == 0.0 || d >= c.r + r || d <= std::abs(c.r - r)) {
-		return false;
-	}
-	const double along = (d * d + c.r * c.r - r * r) / (2.0 * d), across = std::sqrt(std::max(c.r * c.r - along * along, 0.0));
-	for (const double side : {-1.0, 1.0}) {
-		const double ux = (dx * along - dy * across * side) / (d * c.r), uy = (dy * along + dx * across * side) / (d * c.r);
-		if (c.cy + c.r * uy >= y && on_arc(c, ux, uy)) {
+// Stage 185: does a platform overlap the body -- one of its circles closer than its radius? (Standing on one, a skin away, is no overlap.)
+bool overlaps_platform(const std::vector<Collider> &colliders, const Shape &shape, const V2 &pos) {
+	for (const Collider &c : colliders) {
+		double nx, ny;
+		if (c.platform && distance(c, shape, pos.x, pos.y, nx, ny) < shape.radius) {
 			return true;
 		}
 	}
 	return false;
 }
 
-// Stage 185: does a platform overlap the body -- Stage 187: the bottom of its feet? (Standing on one, a skin away, it does not.)
-bool overlaps_platform(const std::vector<Collider> &colliders, const Shape &shape, const V2 &pos) {
+// Stage 187 (the user): does a platform cross the feet's line -- horizontal, the width of the feet, at their very
+// bottom? (Standing on a level one, a skin above it, it does not; nor one the feet are above or below.)
+bool feet_line_on_platform(const std::vector<Collider> &colliders, const Shape &shape, const V2 &pos) {
+	const double x = pos.x, y = double(pos.y) + shape.feet() + shape.radius, r = shape.radius;
 	for (const Collider &c : colliders) {
-		if (c.platform && overlaps_bottom(c, pos.x, double(pos.y) + shape.feet(), shape.radius)) {
-			return true;
+		if (!c.platform) {
+			continue;
+		}
+		if (c.arc) {
+			const double dy = y - c.cy, half2 = c.r * c.r - dy * dy;
+			if (half2 >= 0.0) {
+				for (const double side : {-1.0, 1.0}) {
+					const double dx = side * std::sqrt(half2);
+					if (std::abs(c.cx + dx - x) <= r && on_arc(c, dx / c.r, dy / c.r)) {
+						return true;
+					}
+				}
+			}
+		} else if (c.ay == c.by) {
+			if (c.ay == y && std::max(c.ax, c.bx) >= x - r && std::min(c.ax, c.bx) <= x + r) {
+				return true;
+			}
+		} else {
+			const double t = (y - c.ay) / (c.by - c.ay);
+			if (t >= 0.0 && t <= 1.0 && std::abs(c.ax + (c.bx - c.ax) * t - x) <= r) {
+				return true;
+			}
 		}
 	}
 	return false;
@@ -410,15 +398,16 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 	const bool has_gravity = gravity.length_squared() > 0.0f;
 	if (has_gravity && feel) {
 		// Stage 187: down pressed standing on a platform drops: through it (released or not), down's hold no move
-		const bool down = in.axis_y > 0.0f, pressed = down && !body.down, feet_in = overlaps_platform(colliders, shape, body.pos);
-		const bool standing = body.on_floor && !body.engaged && stands_on_platform(colliders, shape, body.pos);
+		const bool down = in.axis_y > 0.0f, pressed = down && !body.down, overlap = overlaps_platform(colliders, shape, body.pos);
+		const bool near = stands_on_platform(colliders, shape, body.pos), standing = body.on_floor && !body.engaged && near;
 		body.down = down;
 		body.dropping = down && (body.dropping || standing);
-		body.through = body.dropping || (body.through && (feet_in || standing));
-		// Stage 185: moving while they overlap a platform engages it, and it stays engaged while they overlap any
+		body.through = body.dropping || (body.through && (overlap || near));
 		// (a press of down in the air, or a second one in the drop, a move as any)
 		const bool moving = in.axis_x != 0.0f || in.axis_y < 0.0f || (down && (!body.dropping || (pressed && !standing)));
-		body.engaged = (body.engaged || moving) && feet_in;
+		// Stage 187, the rule (the user): active -- moving, any part overlapping a platform; passive -- not moving,
+		// engaged already, the feet's line on one (a platform the feet are below or above lets it go)
+		body.engaged = moving ? overlap : body.engaged && !down && feet_line_on_platform(colliders, shape, body.pos);
 	} else {
 		body.engaged = false;
 	}
