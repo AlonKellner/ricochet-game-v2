@@ -165,18 +165,18 @@ TEST_CASE("editor: commands edit the document, undo and redo restore it") {
 TEST_CASE("editor: the pointer places elements on the grid and on other points exactly") {
 	rcg::Editor ed;
 	ed.resize(1920, 1080);
-	ok(ed, {{"op", "kind"}, {"kind", "mirror"}});
+	ok(ed, {{"op", "kind"}, {"kind", "one_sided_mirror"}});
 	ed.key('L', 0, true);
 	click(ed, 700, 300);
 	click(ed, 702, 698); // the grid: (700, 700)
 	REQUIRE(ed.document()["elements"].size() == 1);
 	const json m = ed.document()["elements"][0];
-	CHECK(m["kind"] == "mirror");
+	CHECK(m["kind"] == "one_sided_mirror");
 	CHECK(m["start"] == json::array({700.0, 300.0}));
 	CHECK(m["end"] == json::array({700.0, 700.0}));
 	CHECK_FALSE(m.contains("via")); // a line: its middle
 	// an arc: start, end, via
-	ok(ed, {{"op", "kind"}, {"kind", "two_sided_mirror"}});
+	ok(ed, {{"op", "kind"}, {"kind", "mirror"}});
 	ed.key('A', 0, true);
 	click(ed, 900, 300);
 	click(ed, 900, 500);
@@ -219,7 +219,7 @@ TEST_CASE("editor: the pointer places elements on the grid and on other points e
 TEST_CASE("editor: dragging handles and bodies") {
 	rcg::Editor ed(&CLASSIC); // (the blank level before Stage 180)
 	ed.resize(1920, 1080);
-	ok(ed, {{"op", "add"}, {"element", {{"kind", "two_sided_mirror"}, {"name", "m"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "mirror"}, {"name", "m"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
 	ok(ed, {{"op", "select"}, {"name", "m"}});
 	const size_t undo0 = ok(ed, {{"op", "state"}})["undo"];
 	// the middle handle of a line: dragging it bends the line into an arc
@@ -311,7 +311,7 @@ TEST_CASE("editor: problems are named, drawn and block a play-test") {
 TEST_CASE("editor: the panel edits the selected element and the level") {
 	rcg::Editor ed(&CLASSIC); // (the blank level before Stage 180)
 	ed.resize(1920, 1080);
-	ok(ed, {{"op", "add"}, {"element", {{"kind", "mirror"}, {"name", "m"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "one_sided_mirror"}, {"name", "m"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
 	ok(ed, {{"op", "select"}, {"name", "m"}});
 	click_row(ed, "back"); // an enum cycles
 	CHECK(element(ed, "m")["back"] == "block");
@@ -328,7 +328,7 @@ TEST_CASE("editor: the panel edits the selected element and the level") {
 	}
 	ed.text("front");
 	ed.key(rcg::Editor::KeyEnter, 0, true);
-	CHECK(element(ed, "front")["kind"] == "mirror");
+	CHECK(element(ed, "front")["kind"] == "one_sided_mirror");
 	click_row(ed, "end");
 	ed.key(rcg::Editor::KeyEscape, 0, true); // Esc cancels the field
 	CHECK(element(ed, "front")["end"] == json::array({700.0, 700.0}));
@@ -545,7 +545,7 @@ TEST_CASE("editor: carriers -- placed, built on, dragged, renamed, deleted (Stag
 	click(ed, 1000, 400);
 	REQUIRE(ed.document()["carriers"].size() == 1);
 	CHECK(ed.document()["carriers"][0]["circle"] == json::parse(R"({"center": [900.0, 400.0], "radius": 100.0})"));
-	ok(ed, {{"op", "kind"}, {"kind", "mirror"}});
+	ok(ed, {{"op", "kind"}, {"kind", "one_sided_mirror"}});
 	ed.key('A', 0, true);
 	click(ed, 1000, 402);
 	click(ed, 900, 302);
@@ -941,7 +941,7 @@ TEST_CASE("editor: the level's edges -- a panel field, drawn as their kind, thei
 		return n;
 	};
 	CHECK(faces() == 0); // (passes: the dashed bounds alone)
-	ok(ed, {{"op", "set"}, {"path", "/edges"}, {"value", "mirror"}});
+	ok(ed, {{"op", "set"}, {"path", "/edges"}, {"value", "one_sided_mirror"}});
 	CHECK(ed.errors().empty());
 	CHECK(faces() == 4);
 	ok(ed, {{"op", "set"}, {"path", "/edges"}, {"value", {{"right", "wall"}}}});

@@ -41,8 +41,8 @@
   },
   {
    "end": [800.0, 780.0],
-   "kind": "mirror",
-   "name": "mirror_1",
+   "kind": "one_sided_mirror",
+   "name": "one_sided_mirror_1",
    "start": [800.0, 300.0],
    "via": [800.0, 540.0]
   }

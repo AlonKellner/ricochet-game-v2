@@ -65,21 +65,21 @@ TEST_CASE("edges: by default the arrow passes the edges -- an arrow wrapping in 
 }
 
 TEST_CASE("edges: a kind for all four -- mirrors turn the arrow back onto the button, walls stop it") {
+	CHECK(pressed("one_sided_mirror"));
 	CHECK(pressed("mirror"));
-	CHECK(pressed("two_sided_mirror"));
-	CHECK(pressed(json{{"kind", "mirror"}, {"back", "pass"}})); // (with its params)
+	CHECK(pressed(json{{"kind", "one_sided_mirror"}, {"back", "pass"}})); // (with its params)
 	CHECK_FALSE(pressed("wall"));
 	CHECK_FALSE(pressed("shield"));
-	CHECK(pressed(json{{"right", "mirror"}})); // one edge; the others pass
-	CHECK_FALSE(pressed(json{{"left", "mirror"}}));
+	CHECK(pressed(json{{"right", "one_sided_mirror"}})); // one edge; the others pass
+	CHECK_FALSE(pressed(json{{"left", "one_sided_mirror"}}));
 }
 
 TEST_CASE("edges: the faces are inward, drawn and plannable as their kind's") {
-	const rcg::Level lv = level_of("mirror");
+	const rcg::Level lv = level_of("one_sided_mirror");
 	const std::vector<rcg::BuiltSurface> ss = rcg::build_level(lv);
 	int edges = 0;
 	for (const rcg::BuiltSurface &b : ss) {
-		if (b.label != std::optional<std::string>("Mirror")) {
+		if (b.label != std::optional<std::string>("OneSidedMirror")) {
 			continue;
 		}
 		edges++;
@@ -109,7 +109,7 @@ TEST_CASE("edges: wrap -- opposite edges a portal pair: the arrow leaves the rig
 TEST_CASE("edges: the ∞ band lies only along the edges that pass") {
 	CHECK(infinity_hovered(nullptr, 1915, 540));
 	CHECK_FALSE(infinity_hovered("shield", 1915, 540));
-	CHECK_FALSE(infinity_hovered("mirror", 1915, 540)); // (the mirror is hovered)
+	CHECK_FALSE(infinity_hovered("one_sided_mirror", 1915, 540)); // (the mirror is hovered)
 	CHECK_FALSE(infinity_hovered("wrap", 1915, 540));
 	CHECK(infinity_hovered(json{{"right", "shield"}}, 960, 5)); // the top edge still passes
 	CHECK_FALSE(infinity_hovered(json{{"right", "shield"}}, 1915, 540));
@@ -126,14 +126,14 @@ TEST_CASE("edges: the errors") {
 	};
 	CHECK(err(json{{"middle", "wall"}}).find("unknown key 'middle'") != std::string::npos);
 	CHECK(err(json{{"left", "wrap"}}).find("both wrap or neither") != std::string::npos);
-	CHECK(err(json{{"kind", "mirror"}, {"start", {0, 0}}}).find("follow the bounds") != std::string::npos);
+	CHECK(err(json{{"kind", "one_sided_mirror"}, {"start", {0, 0}}}).find("follow the bounds") != std::string::npos);
 	CHECK(err("lava").find("unknown element kind 'lava'") != std::string::npos);
 	CHECK(err(3).find("expected") != std::string::npos);
 }
 
 TEST_CASE("edges: migrate reads them back from the lowering") {
-	for (const json &edges : {json("mirror"), json("wrap"), json{{"top", "mirror"}, {"right", "shield"}}, json{{"left", "wrap"}, {"right", "wrap"}, {"top", "wall"}},
-			 json{{"kind", "mirror"}, {"back", "pass"}}}) {
+	for (const json &edges : {json("one_sided_mirror"), json("wrap"), json{{"top", "one_sided_mirror"}, {"right", "shield"}}, json{{"left", "wrap"}, {"right", "wrap"}, {"top", "wall"}},
+			 json{{"kind", "one_sided_mirror"}, {"back", "pass"}}}) {
 		CAPTURE(edges.dump());
 		json lv = json::parse(R"({"schema": "rc-level/2", "room": {"rect": [560, 240, 800, 600], "built": false},
 			"elements": [{"kind": "wall", "name": "w", "start": [50, 400], "end": [50, 700]}]})");

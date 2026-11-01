@@ -40,10 +40,10 @@ func test_the_editor_is_painted_as_layers() -> void:
 	assert_eq(_editor.document(), FileAccess.get_file_as_string(LEVEL), "the level as it is on disk")
 
 func test_commands_edit_the_document() -> void:
-	var r := _command({"op": "add", "element": {"kind": "mirror", "start": [700, 300], "end": [700, 600]}})
+	var r := _command({"op": "add", "element": {"kind": "one_sided_mirror", "start": [700, 300], "end": [700, 600]}})
 	assert_true(r["ok"])
-	assert_eq(r["name"], "mirror_1")
-	assert_true(_editor.document().contains("\"mirror_1\""))
+	assert_eq(r["name"], "one_sided_mirror_1")
+	assert_true(_editor.document().contains("\"one_sided_mirror_1\""))
 	var before := _editor.layer_count()
 	_command({"op": "add", "element": {"kind": "wall", "start": [600, 300], "end": [600, 400]}})
 	await wait_process_frames(1)

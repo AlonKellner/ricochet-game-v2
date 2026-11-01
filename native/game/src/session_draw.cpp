@@ -65,6 +65,8 @@ const Color PLATFORM_COLOR = rgba(0.62, 0.42, 0.22); // Stage 172: wood brown
 const Color SHIELD_COLOR = rgba(0.45, 1.0, 0.85);    // Stage 186: a shield's core (turquoise: a portal is pure cyan)
 const Color SHIELD_BAND = rgba(0.45, 1.0, 0.85, 0.22); // ... and the band around it
 const double SHIELD_BAND_WIDTH = 10.0;
+const Color DOOR_COLOR = rgba(1.0, 0.72, 0.25);      // Stage 190: a door's posts and core (amber)
+const double DOOR_POST = 8.0, DOOR_POST_WIDTH = 3.0, DOOR_CORE_WIDTH = 1.0;
 const double DESIGNER_MARKER_SIZE = 7.0;               // Stage 179: a designer's marker's radius
 const double ABSENT_MARKER_ALPHA = 0.4;                // ... on an absent surface
 const Color BODY_COLOR = rgba(0.8, 0.8, 0.8);        // Stage 173: the tall player's body under its triangle
@@ -455,6 +457,19 @@ struct SurfacePainter {
 
 	// Stage 179: the designer's marker, on the surface's middle (a circle's top), once (on its first piece); faded
 	// while the surface is absent (an open door still shows what opened it)
+	// Stage 190: a door's posts, at the ends of the surface this piece has
+	void door_posts(double alpha) {
+		if (!is_door(surface) || seg.full) {
+			return;
+		}
+		for (const V2 &end : {seg.s, seg.e}) {
+			if (end == surface.seg.s || end == surface.seg.e) {
+				const auto [a, b] = door_post(seg, end, DOOR_POST);
+				out.push_back(line(a, b, render::with_alpha(DOOR_COLOR, alpha), DOOR_POST_WIDTH));
+			}
+		}
+	}
+
 	void designer_marker(double alpha) {
 		if (!surface.marker || piece_index > 0) {
 			return;
@@ -470,6 +485,7 @@ struct SurfacePainter {
 		}
 		if (!present(surface, flags)) {
 			dashed(out, seg, ABSENT_COLOR, 1.5);
+			door_posts(0.5); // (an open door's frame)
 			designer_marker(ABSENT_MARKER_ALPHA);
 			return;
 		}
@@ -511,6 +527,10 @@ struct SurfacePainter {
 				out.push_back(line(seg.s + lo, seg.e + lo, render::with_alpha(lc, la), LINE_WIDTH * 0.5));
 				out.push_back(line(seg.s + ro, seg.e + ro, render::with_alpha(rc_, ra), LINE_WIDTH * 0.5));
 			}
+		}
+		if (is_door(surface)) { // Stage 190 (the user): unlike the wall beside it, whatever its face
+			outline_seg(out, seg, DOOR_COLOR, DOOR_CORE_WIDTH, false);
+			door_posts(1.0);
 		}
 		std::vector<int> hover_sides;
 		for (const Overlay &o : hover) {

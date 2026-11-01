@@ -174,14 +174,14 @@ TEST_CASE("rc-level/2: every builtin template expands to surfaces that build") {
 
 TEST_CASE("rc-level/2: the expansions") {
 	SUBCASE("a mirror: its left reflects, its back passes or blocks; flip faces it right") {
-		auto ss = element_surfaces(level_of({seg({{"kind", "mirror"}, {"name", "m"}})}));
+		auto ss = element_surfaces(level_of({seg({{"kind", "one_sided_mirror"}, {"name", "m"}})}));
 		REQUIRE(ss.size() == 1);
-		CHECK(ss[0]["label"] == "Mirror");
+		CHECK(ss[0]["label"] == "OneSidedMirror");
 		CHECK(ss[0]["left"]["effect"]["type"] == "reflection");
 		CHECK(ss[0]["left"]["interactive"] == true);
 		CHECK(ss[0]["right"]["effect"]["type"] == "pass");
 		CHECK(ss[0]["via"] == json::array({700.0, 500.0})); // via omitted: the middle point (a line)
-		ss = element_surfaces(level_of({seg({{"kind", "mirror"}, {"back", "block"}, {"flip", true}})}));
+		ss = element_surfaces(level_of({seg({{"kind", "one_sided_mirror"}, {"back", "block"}, {"flip", true}})}));
 		CHECK(ss[0]["left"]["effect"]["type"] == "terminal");
 		CHECK(ss[0]["right"]["effect"]["type"] == "reflection");
 	}
@@ -242,14 +242,14 @@ TEST_CASE("rc-level/2: the expansions") {
 		rcg::build_level(rcg::parse_level_json(lv));
 	}
 	SUBCASE("migration names what it recognises and keeps the rest raw") {
-		json v1 = rcg::lower_level(level_of({seg({{"kind", "mirror"}, {"name", "m"}}), seg({{"kind", "wall"}}, 900, 300, 900, 400)})).level;
+		json v1 = rcg::lower_level(level_of({seg({{"kind", "one_sided_mirror"}, {"name", "m"}}), seg({{"kind", "wall"}}, 900, 300, 900, 400)})).level;
 		json odd = v1["surfaces"][5];
 		odd["left"]["interactive"] = true; // a wall whose side is plannable: no template
 		v1["surfaces"][5] = odd;
 		const json v2 = rcg::migrate_level(v1);
 		REQUIRE(v2["elements"].size() == 2);
-		CHECK(v2["elements"][0]["kind"] == "mirror");
-		CHECK(v2["elements"][0]["name"] == "mirror_1");
+		CHECK(v2["elements"][0]["kind"] == "one_sided_mirror");
+		CHECK(v2["elements"][0]["name"] == "one_sided_mirror_1");
 		CHECK(v2["elements"][1]["kind"] == "raw");
 		CHECK(rcg::canonical(rcg::lower_level(v2).level) == rcg::canonical(v1));
 		json gap = v1;
@@ -270,8 +270,8 @@ TEST_CASE("rc-level/2: the schema is strict, and names the element") {
 	CHECK(err(level_of({}, {{"colour", 1}})).find("unknown key 'colour'") != std::string::npos);
 	CHECK(err(level_of({}, {{"carriers", nullptr}})).find("an array of carriers expected") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "crystal"}})})).find("level.elements[0].kind: unknown element kind 'crystal'") != std::string::npos);
-	CHECK(err(level_of({seg({{"kind", "mirror"}, {"shiny", true}})})).find("unknown key 'shiny' (parameters: back, solid)") != std::string::npos);
-	CHECK(err(level_of({seg({{"kind", "mirror"}, {"back", "maybe"}})})).find("level.elements[0] (mirror_1).back: one of pass, block expected")
+	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"shiny", true}})})).find("unknown key 'shiny' (parameters: back, solid)") != std::string::npos);
+	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"back", "maybe"}})})).find("level.elements[0] (one_sided_mirror_1).back: one of pass, block expected")
 			!= std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "portal"}})})).find("'d' required") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "button"}})})).find("'flag' required") != std::string::npos);
@@ -311,8 +311,8 @@ TEST_CASE("rc-level/2: carriers -- elements on a line or a circle, projected ont
 		"elements": [
 			{"kind": "wall", "name": "w1", "carrier": "floor", "from": [600, 480], "to": [800, 520]},
 			{"kind": "door", "name": "d", "carrier": "floor", "from": [800, 520], "to": [900, 490]},
-			{"kind": "mirror", "name": "arc1", "carrier": "ring", "from": [1000, 400], "to": [900, 300]},
-			{"kind": "two_sided_mirror", "name": "arc2", "carrier": "ring", "from": [900, 300], "to": [800, 400], "via": [820, 330]},
+			{"kind": "one_sided_mirror", "name": "arc1", "carrier": "ring", "from": [1000, 400], "to": [900, 300]},
+			{"kind": "mirror", "name": "arc2", "carrier": "ring", "from": [900, 300], "to": [800, 400], "via": [820, 330]},
 			{"kind": "inversion", "name": "whole", "carrier": "ring"}]})");
 	const json low = rcg::lower_level(lv).level;
 	std::map<std::string, json> by_label_id;

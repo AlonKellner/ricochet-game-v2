@@ -783,7 +783,7 @@ them). By default each is a pass on both sides, not plannable and not drawn: the
 through infinity (§6.3), and the ∞ entry is clicked in a band inside them (§4.2). The level key `edges` makes them
 anything else:
 
-- **A kind** (`"wall"`, `"mirror"`, `"two_sided_mirror"`, `"shield"`, `"target"`, a level's own template...)
+- **A kind** (`"wall"`, `"mirror"`, `"one_sided_mirror"`, `"shield"`, `"target"`, a level's own template...)
   or `{"kind", ...params}`: every edge an element of that kind, placed on the edge with its left side (a face)
   toward the level. It is drawn, plannable, and hit like that element anywhere else (a mirror edge reflects the
   arrow back in, a wall stops it), tags and all.
@@ -2313,6 +2313,7 @@ For arc steps in the visual frame, the tangent direction is perpendicular to the
 | Pass-through | Gray |
 | Platform (§25.1; its pass sides) | Wood brown |
 | Shield (a block the player passes, nothing else on its side; Stage 186) | Turquoise, in a translucent band |
+| Door, charged door (Stage 190) | Its face's colour with an amber core, and amber posts across both ends (an open door: its posts, faint) |
 | Target | Gold |
 
 Target surfaces display their effect color on each side plus a **gold outline** or gold endpoint markers to indicate target status.
@@ -3132,4 +3133,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.88.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.89.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -34,7 +34,7 @@
   {
    "carrier": "ring",
    "from": [948.7, 379.0],
-   "kind": "two_sided_mirror",
+   "kind": "mirror",
    "name": "crown",
    "to": [1141.0, 571.3]
   },

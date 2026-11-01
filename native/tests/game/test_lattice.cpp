@@ -62,7 +62,7 @@ rcg::Level exact_level(const std::string &elements, bool exact = true) {
 
 const char *RING = R"([
 	{"kind": "wall", "name": "a", "carrier": "ring", "from": [860, 570], "to": [950, 380]},
-	{"kind": "mirror", "name": "b", "carrier": "ring", "from": [950, 380], "to": [1140, 570]},
+	{"kind": "one_sided_mirror", "name": "b", "carrier": "ring", "from": [950, 380], "to": [1140, 570]},
 	{"kind": "inversion", "name": "c", "carrier": "ring", "from": [1140, 570], "to": [950, 660]},
 	{"kind": "door", "name": "d", "carrier": "ring", "from": [950, 660], "to": [860, 570]},
 	{"kind": "wall", "name": "w1", "carrier": "rail", "from": [600, 300], "to": [900, 500]},

@@ -13,6 +13,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 namespace rcg {
@@ -58,6 +59,21 @@ struct BuiltSurface {
 	std::vector<const BuiltSide *> all_sides() const;
 	bool is_target() const;
 };
+
+// Stage 190: a door -- its posts across its ends show where it stops, beside a wall in line with it
+inline bool is_door(const BuiltSurface &s) { return s.label == "Door" || s.label == "ChargedDoor"; }
+// A post's ends, half long either way across the surface at its end `at` (radial on an arc).
+inline std::pair<V2, V2> door_post(const rc::arc::SegGeom &seg, const V2 &at, double half) {
+	V2 across;
+	if (seg.is_line()) {
+		const V2 dir = (seg.e - seg.s).normalized();
+		across = V2{-dir.y, dir.x};
+	} else {
+		across = (at - rc::arc::center_of(seg.get_carrier())).normalized();
+	}
+	return {V2::of(double(at.x) - double(across.x) * half, double(at.y) - double(across.y) * half),
+		V2::of(double(at.x) + double(across.x) * half, double(at.y) + double(across.y) * half)};
+}
 
 // Stage 186: does this side make the surface a shield -- stopping the arrow but not the player, and nothing else?
 inline bool shields(const BuiltSurface &s, const BuiltSide *side) {

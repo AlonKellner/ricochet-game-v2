@@ -9,9 +9,9 @@
  "elements": [
   {
    "end": [760.0, 540.0],
-   "kind": "two_sided_mirror",
+   "kind": "mirror",
    "label": "ReflArc",
-   "name": "two_sided_mirror_1",
+   "name": "mirror_1",
    "start": [1160.0, 540.0],
    "via": [960.0, 340.0]
   }

@@ -58,7 +58,7 @@ TEST_CASE("motion: a moving wall follows its keys; a scroll pauses the cycle, id
 
 TEST_CASE("motion: a rotation about the pivot; a portal moves with its image; undo restores the phase") {
 	rcg::Session s(level_of(R"({"cycle": {"period": 4}, "elements": [
-		{"kind": "two_sided_mirror", "name": "m", "start": [900, 400], "end": [900, 600],
+		{"kind": "mirror", "name": "m", "start": [900, 400], "end": [900, 600],
 		 "motion": {"keys": [[0, 0, 0, 0], [0.5, 0, 0, 1.5707963267948966]], "pivot": [900, 500]}},
 		{"kind": "portal", "name": "p", "d": [200, 0], "start": [700, 300], "end": [700, 400],
 		 "motion": {"keys": [[0, 0, 0, 0], [0.5, 0, 100, 0]]}}]})"));

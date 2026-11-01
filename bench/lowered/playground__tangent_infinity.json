@@ -111,7 +111,7 @@
   {
    "end": [1300.0, 800.0],
    "ids": [5],
-   "label": "Mirror",
+   "label": "OneSidedMirror",
    "left": {
     "effect": {
      "type": "reflection"
@@ -131,7 +131,7 @@
   {
    "end": [960.0, 700.0],
    "ids": [6],
-   "label": "MirrorB",
+   "label": "Mirror",
    "left": {
     "effect": {
      "type": "reflection"
@@ -151,7 +151,7 @@
   {
    "end": [1110.0, 580.0],
    "ids": [7],
-   "label": "MirrorB",
+   "label": "Mirror",
    "left": {
     "effect": {
      "type": "reflection"

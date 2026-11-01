@@ -70,7 +70,7 @@ TEST_CASE("kit: the per-shot flags are gone when the arrow lands") {
 TEST_CASE("kit: a breakable mirror reflects once, then is gone for the shot, back after it") {
 	// the arrow reflects off it, off a mirror behind the player, then passes where it was
 	rcg::Session s(level_of(R"([{"kind": "breakable", "name": "glass", "face": "mirror", "start": [900, 300], "end": [900, 780]},
-		{"kind": "two_sided_mirror", "start": [620, 300], "end": [620, 780]}])"));
+		{"kind": "mirror", "start": [620, 300], "end": [620, 780]}])"));
 	const std::vector<float> xs = fired_xs(s, 900, 540);
 	REQUIRE(xs.size() >= 3);
 	CHECK(xs[0] == 900); // the breakable mirror

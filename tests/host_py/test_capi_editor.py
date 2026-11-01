@@ -43,7 +43,7 @@ def test_commands_and_undo():
 def test_the_pointer_places_a_line_and_the_draw_list_shows_it():
     ed = rc_host.Editor()
     ed.resize(1600, 900)
-    ed.command({"op": "kind", "kind": "mirror"})
+    ed.command({"op": "kind", "kind": "one_sided_mirror"})
     ed.key(ord("L"))
     ed.key(ord("L"), down=False)
     for x in (300, 420):
@@ -51,12 +51,12 @@ def test_the_pointer_places_a_line_and_the_draw_list_shows_it():
         ed.pointer(rc_host.PTR_DOWN, x, 300, rc_host.BTN_LEFT)
         ed.pointer(rc_host.PTR_UP, x, 300, rc_host.BTN_LEFT)
     doc = json.loads(ed.document())
-    assert len(doc["elements"]) == 1 and doc["elements"][0]["kind"] == "mirror"
+    assert len(doc["elements"]) == 1 and doc["elements"][0]["kind"] == "one_sided_mirror"
     nodes = ed.draw_list()
     assert all(key[0] == "editor" for key, *_ in nodes)
     assert ["editor", 3, 0] in [key for key, *_ in nodes]  # the mirror's node
     texts = [c["text"] for *_, cmds in nodes for c in cmds if c["kind"] == "text"]
-    assert "Ricochet level editor" in texts and "mirror_1" in texts
+    assert "Ricochet level editor" in texts and "one_sided_mirror_1" in texts
     first = ed.draw_list(changes=True)
     again = ed.draw_list(changes=True)
     assert all(unchanged for _, _, unchanged, *_ in again) and len(first) == len(again)
@@ -64,7 +64,7 @@ def test_the_pointer_places_a_line_and_the_draw_list_shows_it():
 
 def test_a_play_test_plays_the_document():
     ed = rc_host.Editor((ROOT / "data" / "levels" / "main.json").read_text())
-    ed.command({"op": "add", "element": {"kind": "two_sided_mirror", "start": [1300, 300], "end": [1300, 600]}})
+    ed.command({"op": "add", "element": {"kind": "mirror", "start": [1300, 300], "end": [1300, 600]}})
     r = ed.command({"op": "play"})
     assert r["ok"] and ed.status().mode == rc_host.EDITOR_PLAY
     assert ed.draw_list() == []  # the host shows the game

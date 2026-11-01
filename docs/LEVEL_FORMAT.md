@@ -4,7 +4,7 @@ A level is a JSON file under `data/levels/<dir>/<name>.json`. It is the source o
 (Stage 115, docs/TDD_20_ENGINE_AGNOSTIC_DATA.md); every host reads it through the native reader
 (`rcg::parse_level`, `native/game/include/rcg/level.hpp`), never through an engine's own parser. The reader is
 strict: an unknown key, a missing required key or a value of the wrong type is an error that names its path
-(`level.elements[3] (mirror_2).back: one of pass, block expected`).
+(`level.elements[3] (one_sided_mirror_2).back: one of pass, block expected`).
 
 Since Stage 142 (docs/TDD_47_LEVEL_FORMAT_V2.md) levels are written in **`rc-level/2`**: a list of *elements*
 (a wall, a mirror, a door, a button, ...) with names and parameters, and the level's initial flags. The reader
