@@ -146,6 +146,13 @@ public:
 	// the physics ticks due (kinematics::STEP, accumulated) with the input --
 	// its jump on the first of them (kept until a tick runs) -- then settles.
 	bool start_fire();
+	// Stage 188 (the user): no shot while the player physically moves (walking into a wall is not moving, a free
+	// fall is): ready is 1 after it stayed still for READY_SETTLE ticks and READY_RISE more, and falls over
+	// READY_FALL ticks once it moves; a shot needs 1. The preview is drawn by it: from READY_MUTED to its full brightness.
+	static constexpr int READY_SETTLE = 6, READY_RISE = 9, READY_FALL = 6;
+	static constexpr double READY_MUTED = 0.35;
+	double ready() const { return ready_; }
+	bool can_fire() const { return ready_ >= 1.0; }
 	void speed_up();
 	void advance(double dt, const kinematics::Input &in);
 	// the arrow in flight, or (Stage 146) a journey under way: the game paused
@@ -417,6 +424,9 @@ private:
 	int touch_version_ = -1;                       // the world version the touches are of
 	std::vector<std::vector<bool>> touches_;       // per pair of tagged nodes (elements, then objects)
 	bool bodies_moving_ = false;
+	double ready_ = 1.0; // Stage 188 (see can_fire)
+	int still_ = READY_SETTLE; // ... ticks the player has not moved
+	void set_ready() { ready_ = 1.0; still_ = READY_SETTLE; }
 	void step_bodies();
 	void start_journey();             // at landing: the first fired grapple or pull of the shot
 	void advance_journey(double dt);

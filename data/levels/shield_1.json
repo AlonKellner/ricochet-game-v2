@@ -21,7 +21,7 @@
   },
   {
    "end": [750.0, 900.0],
-   "kind": "arrow_block",
+   "kind": "shield",
    "name": "arrow_block_1",
    "start": [750.0, 1080.0]
   },
@@ -69,7 +69,7 @@
   }
  ],
  "gravity": [0.0, 980.0],
- "name": "arrow_block_1",
+ "name": "shield_1",
  "objective": {
   "goal": {
    "rect": [1250.0, 950.0, 100.0, 130.0]

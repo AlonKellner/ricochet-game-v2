@@ -766,6 +766,11 @@ TEST_CASE("ported: test_stage32_checkpoint: test_stage32_undo_indistinguishable_
 		const json pre = game.record(json::object());
 		game.fire(-1, 1.0 / 60.0);
 		game.settle();
+		if (falling) { // (Stage 188: no shot while falling, so no checkpoint: the movement goes on untouched)
+			CHECK(game.record(json::object())["checkpoints"] == 0);
+			CHECK(game.hold({}, 10) == ref.hold({}, 10));
+			continue;
+		}
 		CHECK(game.record(json::object())["checkpoints"] == 1);
 		game.teleport(V2{999, 999});
 		game.key(rcg::Action::Undo);
@@ -779,13 +784,6 @@ TEST_CASE("ported: test_stage32_checkpoint: test_stage32_undo_indistinguishable_
 		// velocity restored: the same movement from here as the session that never shot
 		const std::vector<V2> want = ref.hold({}, 10);
 		const std::vector<V2> got = game.hold({}, 10);
-		if (falling) {
-			// (the check has teeth: a zeroed velocity moves otherwise)
-			rcg::Session still(level);
-			prepare(still);
-			still.teleport(still.player());
-			CHECK(still.hold({}, 10) != want);
-		}
 		CHECK(got == want);
 	}
 }

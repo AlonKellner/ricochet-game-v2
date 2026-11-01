@@ -236,15 +236,15 @@ Movement and aiming are independent and simultaneous. *(Principle 16.)*
 |--------|-------|----------|
 | **Move (zero gravity)** | WASD / left stick | 4-directional movement. W = up, S = down, A = left, D = right. |
 | **Move (with gravity)** | AD / left stick horizontal | Horizontal movement only. |
-| **Drop (with gravity)** | S / Down held | Platforms (§25.1) do not hold the player while it is held: standing on one, the player goes down through it; in the air, past them. No other effect with gravity (Stage 172). |
+| **Drop (with gravity)** | S / Down held | Platforms (§25.1) do not hold the player while it is held: pressed standing on one, the player falls through it under gravity, released or not (Stage 187); in the air, past them. No other effect with gravity (Stage 172). |
 | **Aim** | Mouse position / right stick | Updates cursor point continuously. Preview updates every frame. |
 | **Add to plan** | Left-click on a surface | Appends the clicked surface to the plan. Over nothing plannable, the left-click fires instead (below). |
 | **Remove / Clear plan** | Right-click | If cursor is over a **planned surface**: removes the **latest instance** of that surface from the plan. If cursor is over an unplanned surface or empty space: **clears the entire plan**. |
-| **Fire** | Spacebar / trigger; a left-click over nothing plannable (Stage 177) | Locks the plan, freezes game time, runs physical trace, animates arrow. No-op if cursor is at the player position (zero-length Direction — see §8.3). The player can **skip** the animation by pressing any key during flight. |
+| **Fire** | Spacebar / trigger; a left-click over nothing plannable (Stage 177); only standing still (§21.0, Stage 188) | Locks the plan, freezes game time, runs physical trace, animates arrow. No-op if cursor is at the player position (zero-length Direction — see §8.3). The player can **skip** the animation by pressing any key during flight. |
 | **Clear plan** | C / dedicated button | Clears the plan without resetting the level or respawning the player. |
 | **Undo last shot** | Z / dedicated button | Reverts to the checkpoint saved before the most recent shot. |
 | **Full reset** | R / dedicated button | Reverts to the level's initial state (all surfaces restored, player at spawn). |
-| **Jump (with gravity)** | W / Up / left-stick-up | Standard platformer jump. No effect when gravity is zero. Overlapping a platform it moves the player up it, as every direction does (§25.1, Stage 185). |
+| **Jump (with gravity)** | W / Up / left-stick-up | Standard platformer jump. No effect when gravity is zero. Overlapping a platform it moves the player up it, as every direction does (§25.1, Stages 185, 187). |
 | **Pause** | Escape / start | Opens pause menu. |
 
 **Cursor coordinate space:** the cursor position is in **world space**, not screen space. The visual layer converts mouse screen position to world position using the camera's inverse transform (`get_global_mouse_position()` in Godot). The initial ray (§12.1) uses the world-space cursor directly.
@@ -783,7 +783,7 @@ them). By default each is a pass on both sides, not plannable and not drawn: the
 through infinity (§6.3), and the ∞ entry is clicked in a band inside them (§4.2). The level key `edges` makes them
 anything else:
 
-- **A kind** (`"wall"`, `"mirror"`, `"two_sided_mirror"`, `"arrow_block"`, `"target"`, a level's own template...)
+- **A kind** (`"wall"`, `"mirror"`, `"two_sided_mirror"`, `"shield"`, `"target"`, a level's own template...)
   or `{"kind", ...params}`: every edge an element of that kind, placed on the edge with its left side (a face)
   toward the level. It is drawn, plannable, and hit like that element anywhere else (a mirror edge reflects the
   arrow back in, a wall stops it), tags and all.
@@ -2237,6 +2237,15 @@ Within the step tree preview, draw order (back to front): DIVERGED_PLANNED → D
 
 ## 21. Arrow flight and animation
 
+### 21.0 No shot while moving
+
+**Stage 188 (the user):** the player fires only standing still. Movement is **physical**, what the player did and not
+what was held: a free fall moves, a journey moves, walking into a wall does not, and neither does hanging on a platform.
+From the first tick the player moves, the fire action and a left-click over nothing are refused (plan edits are not).
+It may fire again after staying still for **6 ticks** and brightening for **9** (0.25 s in all). The preview is always
+drawn: its path, spawn preview and consequences fall to **35%** brightness over 6 ticks of moving, and rise to full with
+the readiness. A shot that moves nothing leaves the next one ready, and an undo restores the readiness.
+
 ### 21.1 Time freeze
 
 When the player fires, **game time freezes**. All physics, surface movement, and timers stop. The shot is logically instant — the full physical trace is computed before animation begins.
@@ -2303,6 +2312,7 @@ For arc steps in the visual frame, the tangent direction is perpendicular to the
 | Block | Red |
 | Pass-through | Gray |
 | Platform (§25.1; its pass sides) | Wood brown |
+| Shield (a block the player passes, nothing else on its side; Stage 186) | Turquoise, in a translucent band |
 | Target | Gold |
 
 Target surfaces display their effect color on each side plus a **gold outline** or gold endpoint markers to indicate target status.
@@ -2487,16 +2497,24 @@ back into its circle). The player and objects **pass each other** (§25.5). It c
    player pass both ways (moving down holds down). The arrow passes a platform (its sides are passes), and so do
    visibility and planning.
 
-   **Engaging** (Stage 185, the user; it replaces Stage 176's climbing): with gravity, a player that overlaps a
-   platform -- one of its circles closer to it than its radius, an end counting; standing on one, a skin away, is
-   no overlap -- passes it as it would (falling as if it were not there) until it **moves in any direction**. Then
-   it is **engaged**: its movement is the gravity-free one (the input direction, normalized, times **200
-   units/s**, at once, no momentum kept; released, it **hangs** where it is), no platform holds it, and walls
-   still stop it. It stays engaged as long as it overlaps any platform, and at the first tick it overlaps none it
-   is back under gravity with the speed it had: out of the bottom it falls, out of the top it lands on the top
-   (up held on a stack of platforms 50 apart, a small hop takes it into the next; a bare rope's top: it hops
-   there while up is held), out of the side it falls. A jump pressed while engaged is only the move up; no
-   coyote time or jump press outlives it. A checkpoint keeps it: undoing a shot fired hanging leaves the player
+   **Engaging** (Stage 185, the user; it replaces Stage 176's climbing). With gravity, an engaged player's movement
+   is the gravity-free one (the input direction, normalized, times **200 units/s**, at once, no momentum kept;
+   nothing held, it hangs where it is), no platform holds it, and walls still stop it. The rule (Stage 187, the user):
+   - **Active:** moving in any direction, it is engaged while **any part** of it overlaps a platform (one of its
+     circles closer than its radius; an end counts).
+   - **Passive:** not moving, it stays engaged only while **the feet's line** is on a platform: a horizontal line at
+     their very bottom, as wide as the feet. So it hangs on a rope, a ladder or a slope, and never with its feet below
+     a level platform: released there, it falls (with the line inside the feet's circle, its centre above the
+     platform, it is put on top). Not moving and not engaged, it passes a platform as it would.
+   - **Standing** on a platform, a skin above it, is no overlap: a different interaction. Walking along it and jumping
+     off it engage nothing.
+
+   Out of the bottom it falls, out of the top it lands on the top (a bare rope's top: it hops there while up is held),
+   out of the side it falls, all with the speed it had. **Dropping** (Stage 187, the user): down pressed while standing
+   on a platform, for as little as one tick, is no such move: the player falls under gravity, through that platform even
+   if down is released, and while down stays held through any others, not engaging. A second press of down, or any other
+   direction (held already or not), engages what it overlaps. A jump pressed while engaged is only the move up; no coyote
+   time or jump press outlives it. A checkpoint keeps the engagement: undoing a shot fired hanging leaves the player
    hanging. Objects never engage.
 
 A **floor** is a contact whose normal is within 45° of up `(0, -1)`. With gravity, a player that stood on a
@@ -2523,7 +2541,7 @@ a floor stays on it).
     capped at **900 units/s**. A full held jump keeps the former reach: 85 units up, 167 across at full speed on
     the level, 50 ticks aloft.
 - Drop: down held lets the player through platforms (§25.1, Stage 172).
-- Engage: moving in any direction while overlapping a platform (a ladder and a rope are steep ones) swaps the movement for the gravity-free one until the player overlaps none (§25.1, Stage 185).
+- Engage: moving in any direction while any part overlaps a platform (a ladder and a rope are steep ones) swaps the movement for the gravity-free one; nothing held, it holds only while the feet's line is on one (§25.1, Stages 185, 187).
 - **The arrow is never affected by gravity** — it follows pure geometric ray tracing regardless of the level's gravity setting.
 - The player can move while aiming. *(Principle 16.)*
 
@@ -2569,7 +2587,7 @@ physical path:
 The traveller moves at 900 px/s, swept against what it collides with: present player-solid surfaces and
 colliders (a pulled object passes the player, Stage 173; a grappled player is its whole tall shape). It stops at
 the first contact or at the path's end. A fence (an
-arrow-pass barrier) stops it; an arrow-block barrier is not solid and does not. **A platform does not stop it**
+arrow-pass barrier) stops it; a shield is not solid and does not. **A platform does not stop it**
 (Stage 172): a pulled object or a grappled player passes through platforms. Where the journey ends, a traveller
 half through a platform is settled by its centre (§25.1): above it, it is put on top and stands; below it, it
 stays and falls on. The preview's trip ends where the shot's settles (§14.12), drawn as the traveller (Stage
@@ -3114,4 +3132,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.86.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.88.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

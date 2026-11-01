@@ -273,7 +273,7 @@ TEST_CASE("editor: keys") {
 	ed.key(rcg::Editor::KeyTab, rcg::Editor::ModShift, true);
 	CHECK(ok(ed, {{"op", "state"}})["kind"] == kind0);
 	ed.key('2', 0, true);
-	CHECK(ok(ed, {{"op", "state"}})["kind"] == "arrow_block");
+	CHECK(ok(ed, {{"op", "state"}})["kind"] == "shield");
 	ed.key('G', 0, true);
 	CHECK(ok(ed, {{"op", "state"}})["grid"] == false);
 	ed.key('S', rcg::Editor::ModCtrl, true);
@@ -561,7 +561,7 @@ TEST_CASE("editor: an element's kind picked from the palette") {
 	ed.resize(1920, 1080);
 	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"name", "w"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
 	click_row(ed, "kind");
-	// the palette's first row holds wall, arrow_block, fence: the third column is fence; it comes after the place row
+	// the palette's first row holds wall, shield, fence: the third column is fence; it comes after the place row
 	const json panel = ok(ed, {{"op", "panel"}});
 	float y = -1;
 	bool next = false;

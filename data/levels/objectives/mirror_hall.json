@@ -20,9 +20,9 @@
   }
  ],
  "edges": {
-  "bottom": "arrow_block",
-  "left": "arrow_block",
-  "right": "arrow_block",
+  "bottom": "shield",
+  "left": "shield",
+  "right": "shield",
   "top": "mirror"
  },
  "elements": [

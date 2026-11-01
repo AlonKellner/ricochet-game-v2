@@ -298,11 +298,55 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 
 namespace {
 
-// Stage 185: does the body overlap a platform -- one of its circles closer than its radius? (Standing on one, a skin away, is no overlap.)
+// Stage 185: does a platform overlap the body -- one of its circles closer than its radius? (Standing on one, a skin away, is no overlap.)
 bool overlaps_platform(const std::vector<Collider> &colliders, const Shape &shape, const V2 &pos) {
 	for (const Collider &c : colliders) {
 		double nx, ny;
 		if (c.platform && distance(c, shape, pos.x, pos.y, nx, ny) < shape.radius) {
+			return true;
+		}
+	}
+	return false;
+}
+
+// Stage 187 (the user): does a platform cross the feet's line -- horizontal, the width of the feet, at their very
+// bottom? (Standing on a level one, a skin above it, it does not; nor one the feet are above or below.)
+bool feet_line_on_platform(const std::vector<Collider> &colliders, const Shape &shape, const V2 &pos) {
+	const double x = pos.x, y = double(pos.y) + shape.feet() + shape.radius, r = shape.radius;
+	for (const Collider &c : colliders) {
+		if (!c.platform) {
+			continue;
+		}
+		if (c.arc) {
+			const double dy = y - c.cy, half2 = c.r * c.r - dy * dy;
+			if (half2 >= 0.0) {
+				for (const double side : {-1.0, 1.0}) {
+					const double dx = side * std::sqrt(half2);
+					if (std::abs(c.cx + dx - x) <= r && on_arc(c, dx / c.r, dy / c.r)) {
+						return true;
+					}
+				}
+			}
+		} else if (c.ay == c.by) {
+			if (c.ay == y && std::max(c.ax, c.bx) >= x - r && std::min(c.ax, c.bx) <= x + r) {
+				return true;
+			}
+		} else {
+			const double t = (y - c.ay) / (c.by - c.ay);
+			if (t >= 0.0 && t <= 1.0 && std::abs(c.ax + (c.bx - c.ax) * t - x) <= r) {
+				return true;
+			}
+		}
+	}
+	return false;
+}
+
+// Stage 187: do its feet rest on a platform -- above one, within the floor snap of it?
+bool stands_on_platform(const std::vector<Collider> &colliders, const Shape &shape, const V2 &pos) {
+	const double feet = double(pos.y) + shape.feet();
+	for (const Collider &c : colliders) {
+		double nx, ny;
+		if (c.platform && above(c, pos.x, feet) && distance(c, pos.x, feet, nx, ny) <= shape.radius + SKIN + FLOOR_SNAP) {
 			return true;
 		}
 	}
@@ -352,13 +396,26 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 	// the velocity (player.gd), float32 as the engine keeps it
 	V2 v = body.vel;
 	const bool has_gravity = gravity.length_squared() > 0.0f;
-	// Stage 185: moving while overlapping a platform engages it, and it stays engaged while overlapping any
-	const bool moving = in.axis_x != 0.0f || in.axis_y != 0.0f;
-	body.engaged = has_gravity && feel && (body.engaged || moving) && overlaps_platform(colliders, shape, body.pos);
+	if (has_gravity && feel) {
+		// Stage 187: down pressed standing on a platform drops: through it (released or not), down's hold no move
+		const bool down = in.axis_y > 0.0f, pressed = down && !body.down, overlap = overlaps_platform(colliders, shape, body.pos);
+		const bool near = stands_on_platform(colliders, shape, body.pos), standing = body.on_floor && !body.engaged && near;
+		body.down = down;
+		body.dropping = down && (body.dropping || standing);
+		body.through = body.dropping || (body.through && (overlap || near));
+		// (a press of down in the air, or a second one in the drop, a move as any)
+		const bool moving = in.axis_x != 0.0f || in.axis_y < 0.0f || (down && (!body.dropping || (pressed && !standing)));
+		// Stage 187, the rule (the user): active -- moving, any part overlapping a platform; passive -- not moving,
+		// engaged already, the feet's line on one (a platform the feet are below or above lets it go)
+		body.engaged = moving ? overlap : body.engaged && !down && feet_line_on_platform(colliders, shape, body.pos);
+	} else {
+		body.engaged = false;
+	}
 	if (body.engaged) { // the gravity-free movement below; no jump waits and no coyote time outlive it
 		body.air = LONG_AIR;
 		body.buffer = 0;
 		body.jumped = false;
+		body.dropping = body.through = false;
 	}
 	if (has_gravity && feel && !body.engaged) {
 		v = felt_velocity(body, in, gravity);
@@ -385,7 +442,7 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 	const bool drop = in.axis_y > 0.0f;
 	std::vector<char> off(colliders.size(), 0);
 	for (size_t i = 0; i < colliders.size(); i++) {
-		off[i] = colliders[i].platform && (body.engaged || drop || !above(colliders[i], body.pos.x, body.pos.y + shape.feet()));
+		off[i] = colliders[i].platform && (body.engaged || body.through || drop || !above(colliders[i], body.pos.x, body.pos.y + shape.feet()));
 	}
 	// the move: swept, sliding along what it meets
 	double px = body.pos.x, py = body.pos.y;
