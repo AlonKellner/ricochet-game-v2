@@ -240,7 +240,7 @@ Movement and aiming are independent and simultaneous. *(Principle 16.)*
 | **Aim** | Mouse position / right stick | Updates cursor point continuously. Preview updates every frame. |
 | **Add to plan** | Left-click on a surface | Appends the clicked surface to the plan. Over nothing plannable, the left-click fires instead (below). |
 | **Remove / Clear plan** | Right-click | If cursor is over a **planned surface**: removes the **latest instance** of that surface from the plan. If cursor is over an unplanned surface or empty space: **clears the entire plan**. |
-| **Fire** | Spacebar / trigger; a left-click over nothing plannable (Stage 177) | Locks the plan, freezes game time, runs physical trace, animates arrow. No-op if cursor is at the player position (zero-length Direction — see §8.3). The player can **skip** the animation by pressing any key during flight. |
+| **Fire** | Spacebar / trigger; a left-click over nothing plannable (Stage 177); only standing still (§21.0, Stage 188) | Locks the plan, freezes game time, runs physical trace, animates arrow. No-op if cursor is at the player position (zero-length Direction — see §8.3). The player can **skip** the animation by pressing any key during flight. |
 | **Clear plan** | C / dedicated button | Clears the plan without resetting the level or respawning the player. |
 | **Undo last shot** | Z / dedicated button | Reverts to the checkpoint saved before the most recent shot. |
 | **Full reset** | R / dedicated button | Reverts to the level's initial state (all surfaces restored, player at spawn). |
@@ -2237,6 +2237,15 @@ Within the step tree preview, draw order (back to front): DIVERGED_PLANNED → D
 
 ## 21. Arrow flight and animation
 
+### 21.0 No shot while moving
+
+**Stage 188 (the user):** the player fires only standing still. Movement is **physical**, what the player did and not
+what was held: a free fall moves, a journey moves, walking into a wall does not, and neither does hanging on a platform.
+From the first tick the player moves, the fire action and a left-click over nothing are refused (plan edits are not).
+It may fire again after staying still for **6 ticks** and brightening for **9** (0.25 s in all). The preview is always
+drawn: its path, spawn preview and consequences fall to **35%** brightness over 6 ticks of moving, and rise to full with
+the readiness. A shot that moves nothing leaves the next one ready, and an undo restores the readiness.
+
 ### 21.1 Time freeze
 
 When the player fires, **game time freezes**. All physics, surface movement, and timers stop. The shot is logically instant — the full physical trace is computed before animation begins.
@@ -3118,4 +3127,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.87.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.88.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

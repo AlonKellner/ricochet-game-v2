@@ -487,6 +487,154 @@ TEST_CASE("shields: drawn unlike a wall -- a turquoise core and band, a plain si
 	CHECK(reds >= 2); // the wall, the target
 }
 
+// Stage 188 (the user): no shot while the player physically moves; the preview muted, brightening once it is still
+
+namespace {
+float path_alpha(const rcg::Session &s) {
+	for (const rcg::render::Node &n : s.draw()) {
+		if (n.key == nlohmann::json::array({"path"})) {
+			return n.modulate[3];
+		}
+	}
+	FAIL("no path node");
+	return 0.0f;
+}
+const char *const FLOORED = R"({"gravity": [0, 980], "player": {"start": [900, 820]},
+	"elements": [{"kind": "wall", "start": [1000, 700], "end": [1000, 840]}]})";
+} // namespace
+
+TEST_CASE("firing: refused from the first tick of walking, allowed after standing still; the preview dims and brightens by ticks") {
+	rcg::Session s(level_of(FLOORED));
+	s.hold({}, 60);
+	s.set_cursor(rc::V2::of(600, 300));
+	s.settle();
+	REQUIRE(s.can_fire());
+	CHECK(path_alpha(s) == 1.0f);
+	// walking: at once no shot, and the preview falls to muted over READY_FALL ticks, still shown
+	s.hold({"move_left"}, 1);
+	CHECK_FALSE(s.can_fire());
+	CHECK_FALSE(s.start_fire());
+	CHECK_FALSE(s.click(false)); // (a click over nothing fires no more than the fire action)
+	CHECK_FALSE(s.flying());
+	s.settle();
+	float last = path_alpha(s);
+	CHECK(last < 1.0f);
+	CHECK(last > float(rcg::Session::READY_MUTED));
+	for (int i = 1; i < rcg::Session::READY_FALL; i++) {
+		s.hold({"move_left"}, 1);
+		s.settle();
+		CHECK(path_alpha(s) < last);
+		last = path_alpha(s);
+	}
+	CHECK(last == doctest::Approx(rcg::Session::READY_MUTED));
+	s.hold({"move_left"}, 30);
+	s.settle();
+	CHECK(path_alpha(s) == doctest::Approx(rcg::Session::READY_MUTED)); // always visible while moving
+	// a plan is still edited while moving; only the shot waits
+	CHECK_FALSE(s.can_fire());
+	// released: it slows to a stop (still moving), stays still a moment, then brightens, and only full is ready
+	int stop = 0;
+	rc::V2 at = s.player();
+	for (; stop < 60; stop++) {
+		s.hold({}, 1);
+		if (s.player() == at) {
+			break;
+		}
+		at = s.player();
+		CHECK_FALSE(s.can_fire());
+	}
+	REQUIRE(stop < 60);
+	for (int i = 1; i < rcg::Session::READY_SETTLE; i++) { // (the tick that broke the loop was the first still one)
+		s.hold({}, 1);
+		s.settle();
+		CHECK(path_alpha(s) == doctest::Approx(rcg::Session::READY_MUTED));
+	}
+	last = path_alpha(s);
+	for (int i = 0; i < rcg::Session::READY_RISE + 1 && !s.can_fire(); i++) {
+		CHECK_FALSE(s.start_fire());
+		s.hold({}, 1);
+		s.settle();
+		CHECK(path_alpha(s) > last);
+		last = path_alpha(s);
+	}
+	CHECK(s.can_fire());
+	CHECK(path_alpha(s) == 1.0f);
+	CHECK(s.start_fire());
+	CHECK(s.flying());
+}
+
+TEST_CASE("firing: movement is physical -- walking into a wall is still, a free fall moves, hanging on a platform is still") {
+	SUBCASE("a wall: right held against it, it may fire") {
+		rcg::Session s(level_of(FLOORED));
+		s.hold({"move_right"}, 120);
+		const rc::V2 at = s.player();
+		CHECK(at.x == doctest::Approx(1000 - 12 - 0.08).epsilon(1e-4));
+		s.hold({"move_right"}, 30);
+		CHECK(s.player() == at);
+		CHECK(s.can_fire());
+	}
+	SUBCASE("a free fall: nothing held, it moves; on landing it settles") {
+		rcg::Session s(level_of(R"({"gravity": [0, 980], "player": {"start": [900, 100]}})"));
+		s.hold({}, 2);
+		CHECK_FALSE(s.can_fire());
+		s.set_cursor(rc::V2::of(600, 300));
+		s.settle();
+		CHECK_FALSE(s.start_fire());
+		s.hold({}, 20);
+		CHECK_FALSE(s.can_fire());
+		s.hold({}, 120);
+		CHECK(s.can_fire());
+	}
+	SUBCASE("hanging on a rope, up released: it may fire") {
+		rcg::Session s(level_of(R"({"gravity": [0, 980], "player": {"start": [900, 820]},
+			"elements": [{"kind": "platform", "start": [900, 500], "end": [900, 840]}]})"));
+		s.hold({"move_up"}, 30);
+		CHECK_FALSE(s.can_fire());
+		s.hold({}, 20);
+		CHECK(s.can_fire());
+	}
+	SUBCASE("top-down: walking moves, standing does not") {
+		rcg::Session s(level_of(R"({"player": {"start": [900, 500]}})"));
+		CHECK(s.can_fire());
+		s.hold({"move_up"}, 2);
+		CHECK_FALSE(s.can_fire());
+		s.hold({}, 20);
+		CHECK(s.can_fire());
+	}
+	SUBCASE("a grapple's journey is movement: it settles after it") {
+		rcg::Session s(level_of(R"({"gravity": [0, 980], "player": {"start": [900, 820]},
+			"elements": [{"kind": "platform", "start": [800, 500], "end": [1000, 500]},
+				{"kind": "grapple", "start": [850, 300], "end": [950, 300]}]})"));
+		s.hold({}, 30);
+		shoot(s, 900, 300);
+		CHECK_FALSE(s.can_fire());
+		s.hold({}, 120);
+		CHECK(s.can_fire());
+	}
+	SUBCASE("a shot that moves nothing leaves it ready for the next; an undo too") {
+		rcg::Session s(level_of(FLOORED));
+		s.hold({}, 60);
+		shoot(s, 600, 300);
+		CHECK(s.can_fire());
+		s.key(rcg::Action::Undo);
+		s.settle();
+		CHECK(s.can_fire());
+	}
+}
+
+TEST_CASE("firing: on every level a player left alone comes to rest, exactly, and may fire") {
+	const std::filesystem::path root = RC_REPO_ROOT;
+	for (const auto &e : std::filesystem::recursive_directory_iterator(root / "data/levels")) {
+		if (e.path().extension() != ".json") {
+			continue;
+		}
+		rcg::Session s(rcg::load_level(e.path().string()));
+		s.hold({}, 900);
+		INFO(e.path().string());
+		CHECK(s.can_fire());
+	}
+}
+
 TEST_CASE("platforms: the demo level plays to its goal") {
 	const std::filesystem::path root = RC_REPO_ROOT;
 	rcg::Session s(rcg::load_level((root / "data/levels/objectives/platforms.json").string()));
@@ -505,6 +653,7 @@ TEST_CASE("platforms: the demo level plays to its goal") {
 	CHECK(s.flags().is_true("det:plate"));
 	CHECK_FALSE(s.won());
 	s.hold({"move_right"}, 170);
+	s.hold({}, 20); // (Stage 188: stopped, it may fire)
 	shoot(s, s.player().x, 300); // grappled up through the ledge to the hook
 	s.hold({}, 60); // and down onto the ledge, in the goal
 	CHECK(s.player().y == doctest::Approx(450 - 24 - 12 - 0.08).epsilon(1e-6));

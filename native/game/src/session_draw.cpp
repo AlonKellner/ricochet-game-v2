@@ -1653,7 +1653,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		const bool preview = !flying_ && display_mode_ == 0 && level_.features.preview && pv.predicted.has_value()
 			&& (pv.trip.has_value() || pv.predicted->canonical_key() != flags_.canonical_key());
 		if (!things.empty() || preview) {
-			cached(glow_draw_, {flags_version_, preview ? trace_version_ : -1, world_->version()}, NodeKind::Glow, 1, V2{}, WHITE,
+			cached(glow_draw_, {flags_version_, preview ? trace_version_ * (READY_RISE + READY_FALL + 1) + int(ready_ * (READY_RISE + READY_FALL)) : -1, world_->version()}, NodeKind::Glow, 1, V2{}, WHITE,
 					[&](std::vector<Call> &out) {
 						auto tagged = [&](const std::string &name, const char *tag) {
 							for (const Tagged &t : level_.tagged) {
@@ -1686,20 +1686,22 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 								if (charge) {
 									outline_seg(out, *g, rgba(0.85, 0.95, 1.0, 0.5), 5.0, false);
 								}
+								const double becoming = 0.9 * (READY_MUTED + (1.0 - READY_MUTED) * ready_); // (Stage 188)
 								if (becomes & 1) {
-									outline_seg(out, *g, rgba(1.0, 0.45, 0.1, 0.9), 4.0, true);
+									outline_seg(out, *g, rgba(1.0, 0.45, 0.1, becoming), 4.0, true);
 								}
 								if (becomes & 2) {
-									outline_seg(out, *g, rgba(0.85, 0.95, 1.0, 0.9), 3.0, true);
+									outline_seg(out, *g, rgba(0.85, 0.95, 1.0, becoming), 3.0, true);
 								}
 								if (becomes & 4) {
-									outline_seg(out, *g, rgba(0.5, 0.5, 0.55, 0.9), 3.0, true);
+									outline_seg(out, *g, rgba(0.5, 0.5, 0.55, becoming), 3.0, true);
 								}
 							}
 						}
 						if (!preview) {
 							return;
 						}
+						const size_t previewed = out.size(); // (Stage 188: what follows is muted with the path)
 						const rc::Flags &pred = *pv.predicted;
 						// surfaces: vanish (red), appear (green), change their sides (yellow); targets registered (cyan)
 						auto kinds = [&](const BuiltSurface &bs, const rc::Flags &f) {
@@ -1793,6 +1795,12 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 									pts.push_back(pts.front());
 									out.push_back(stroke(Kind::Polyline, std::move(pts), c, 2.0));
 								}
+							}
+						}
+						const float muted = float(READY_MUTED + (1.0 - READY_MUTED) * ready_);
+						for (size_t i = previewed; i < out.size(); i++) {
+							for (Color &k : out[i].colors) {
+								k[3] *= muted;
 							}
 						}
 					});
@@ -1935,10 +1943,12 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		});
 	}
 	const Color dim{1, 1, 1, flying_ ? 0.25f : 1.0f};
+	// Stage 188 (the user): the preview always shown, muted while the player may not fire
+	const Color previewing{1, 1, 1, flying_ ? 0.25f : float(READY_MUTED + (1.0 - READY_MUTED) * ready_)};
 	if (level_.features.preview) {
 		const Preview &pv = shown(); // (the provisional preview while its exact climb runs)
 		(void)pv;
-		cached(path_draw_, {trace_version_, display_mode_, provisional_version_}, NodeKind::Path, 20, V2{}, dim,
+		cached(path_draw_, {trace_version_, display_mode_, provisional_version_}, NodeKind::Path, 20, V2{}, previewing,
 			[&](std::vector<Call> &out) { paint_path(out, 0.0); });
 	}
 	if (level_.features.arrow && flying_) { // (the arrow's node is hidden between flights)
@@ -2070,7 +2080,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 	}
 	if (spawn_preview_) {
 		const int sv = spawn_inputs_ ? spawn_inputs_->trace : -1, sw = spawn_inputs_ ? spawn_inputs_->world : -1;
-		cached(spawn_draw_, {sv, sw, 0}, NodeKind::Spawn, 19, V2{}, dim, [&](std::vector<Call> &out) {
+		cached(spawn_draw_, {sv, sw, 0}, NodeKind::Spawn, 19, V2{}, previewing, [&](std::vector<Call> &out) {
 		for (const Placed &p : spawn_specs_) {
 			dashed(out, segment_of(p.spec), GHOST_SPAWN_COLOR, 2.0);
 			if (p.spec.is_portal()) {

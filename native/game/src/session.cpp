@@ -461,6 +461,7 @@ void Session::teleport(const V2 &p) {
 	tick_from_ = p;
 	velocity_ = V2{};
 	feel_ = kinematics::Body{};
+	set_ready(); // (Stage 188: placed, it did not move)
 	shadow(); // (Stage 168: the player's light)
 }
 
@@ -687,6 +688,7 @@ void Session::restore(const Checkpoint &c) {
 	velocity_ = c.velocity;
 	feel_ = kinematics::Body{};
 	feel_.engaged = c.engaged;
+	set_ready(); // (Stage 188: as when it fired)
 	set_flags(c.flags);
 	world_->restore(c.world ? *c.world : world_->initial_snapshot());
 	shadow(); // Stage 153: the restored flags' shadow
@@ -846,8 +848,8 @@ std::vector<std::pair<int, Overlay>> plan_overlays(const std::vector<PlanEntry> 
 }
 
 bool Session::start_fire() {
-	if (flying_ || journey_ || bodies_moving_ || player_ == cursor_) {
-		return false; // (Stage 146: nothing is fired while anything moves)
+	if (flying_ || journey_ || bodies_moving_ || player_ == cursor_ || !can_fire()) {
+		return false; // (Stage 146: nothing is fired while anything moves; Stage 188: the player above all)
 	}
 	checkpoints_.push_back(capture());
 	std::optional<rc::TracePair> pair;
@@ -965,6 +967,14 @@ void Session::tick(const kinematics::Input &in) {
 	velocity_ = body.vel;
 	on_floor_ = body.on_floor;
 	feel_ = body;
+	if (player_ != tick_from_) { // Stage 188: what it did, not what was held
+		still_ = 0;
+		ready_ = std::max(ready_ - 1.0 / READY_FALL, 0.0);
+	} else if (still_ >= READY_SETTLE) {
+		ready_ = std::min(ready_ + 1.0 / READY_RISE, 1.0);
+	} else {
+		still_++;
+	}
 	if (!world_->bodies().empty()) {
 		step_bodies();
 	}
@@ -1495,6 +1505,8 @@ void Session::advance_journey(double dt) {
 		tick_from_ = pos;
 		velocity_ = V2{};
 		feel_ = kinematics::Body{}; // (Stage 182: no coyote time after a journey)
+		ready_ = 0.0; // (Stage 188: it moved; it settles first)
+		still_ = 0;
 		if (floor) {
 			on_floor_ = true;
 		}
