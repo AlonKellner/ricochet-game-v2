@@ -3,9 +3,28 @@
  "surfaces": [
   {
    "circle": null,
-   "end": [0.0, 0.0],
+   "end": [850.0, 1080.0],
    "full": false,
    "id": 1,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [850.0, 700.0],
+   "via": [850.0, 890.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 0.0],
+   "full": false,
+   "id": 2,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -24,7 +43,7 @@
    "circle": null,
    "end": [1920.0, 0.0],
    "full": false,
-   "id": 2,
+   "id": 3,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -43,7 +62,7 @@
    "circle": null,
    "end": [1920.0, 1080.0],
    "full": false,
-   "id": 3,
+   "id": 4,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -62,7 +81,7 @@
    "circle": null,
    "end": [0.0, 1080.0],
    "full": false,
-   "id": 4,
+   "id": 5,
    "is_target": false,
    "left": {
     "interactive": false,

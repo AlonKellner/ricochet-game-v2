@@ -1,0 +1,21 @@
+{
+ "edges": "wall",
+ "elements": [
+  {
+   "end": [1050.0, 900.0],
+   "kind": "arrow_block",
+   "name": "arrow_block_1",
+   "start": [1050.0, 1080.0]
+  }
+ ],
+ "gravity": [0.0, 980.0],
+ "name": "arrow_block_1",
+ "player": {
+  "start": [960.0, 1040.0]
+ },
+ "room": {
+  "built": false,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}
