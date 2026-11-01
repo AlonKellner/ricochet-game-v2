@@ -2,7 +2,7 @@
  "gravity": [0.0, 980.0],
  "name": "arrow_block_1",
  "player": {
-  "start": [960.0, 1040.0]
+  "start": [550.0, 1050.0]
  },
  "room": {
   "built": false,
@@ -11,8 +11,34 @@
  "schema": "rc-level/1",
  "surfaces": [
   {
-   "end": [1050.0, 900.0],
+   "end": [1100.0, 900.0],
    "ids": [1],
+   "label": "Door",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "open",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1100.0, 1080.0],
+   "via": [1100.0, 990.0]
+  },
+  {
+   "end": [750.0, 900.0],
+   "ids": [2],
    "label": "ArrowBlock",
    "left": {
     "effect": {
@@ -27,12 +53,152 @@
     },
     "interactive": false
    },
-   "start": [1050.0, 1080.0],
-   "via": [1050.0, 990.0]
+   "start": [750.0, 1080.0],
+   "via": [750.0, 990.0]
+  },
+  {
+   "end": [1000.0, 650.0],
+   "ids": [3],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1000.0, 1080.0],
+   "via": [1000.0, 865.0]
+  },
+  {
+   "end": [1050.0, 650.0],
+   "ids": [4],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1000.0, 650.0],
+   "via": [1025.0, 650.0]
+  },
+  {
+   "end": [1050.0, 1080.0],
+   "ids": [5],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1050.0, 650.0],
+   "via": [1050.0, 865.0]
+  },
+  {
+   "end": [1020.0, 650.0],
+   "ids": [6],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1020.0, 1080.0],
+   "via": [1020.0, 865.0]
+  },
+  {
+   "end": [1030.0, 1080.0],
+   "ids": [7],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1030.0, 650.0],
+   "via": [1030.0, 865.0]
+  },
+  {
+   "end": [1040.0, 650.0],
+   "ids": [8],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1040.0, 1080.0],
+   "via": [1040.0, 865.0]
+  },
+  {
+   "end": [1010.0, 1080.0],
+   "ids": [9],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1010.0, 650.0],
+   "via": [1010.0, 865.0]
   },
   {
    "end": [0.0, 0.0],
-   "ids": [2],
+   "ids": [10],
    "label": "Surface",
    "left": {
     "effect": {
@@ -52,7 +218,7 @@
   },
   {
    "end": [1920.0, 0.0],
-   "ids": [3],
+   "ids": [11],
    "label": "Surface",
    "left": {
     "effect": {
@@ -72,7 +238,7 @@
   },
   {
    "end": [1920.0, 1080.0],
-   "ids": [4],
+   "ids": [12],
    "label": "Surface",
    "left": {
     "effect": {
@@ -92,7 +258,7 @@
   },
   {
    "end": [0.0, 1080.0],
-   "ids": [5],
+   "ids": [13],
    "label": "Surface",
    "left": {
     "effect": {

@@ -431,8 +431,68 @@
    "via": [230.0, 600.0]
   },
   {
-   "end": [0.0, 0.0],
+   "end": [240.0, 550.0],
    "ids": [21],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [240.0, 650.0],
+   "via": [240.0, 600.0]
+  },
+  {
+   "end": [210.0, 550.0],
+   "ids": [22],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [210.0, 650.0],
+   "via": [210.0, 600.0]
+  },
+  {
+   "end": [200.0, 650.0],
+   "ids": [23],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [200.0, 550.0],
+   "via": [200.0, 600.0]
+  },
+  {
+   "end": [0.0, 0.0],
+   "ids": [24],
    "label": "Surface",
    "left": {
     "effect": {
@@ -452,7 +512,7 @@
   },
   {
    "end": [1920.0, 0.0],
-   "ids": [22],
+   "ids": [25],
    "label": "Surface",
    "left": {
     "effect": {
@@ -472,7 +532,7 @@
   },
   {
    "end": [1920.0, 1080.0],
-   "ids": [23],
+   "ids": [26],
    "label": "Surface",
    "left": {
     "effect": {
@@ -492,7 +552,7 @@
   },
   {
    "end": [0.0, 1080.0],
-   "ids": [24],
+   "ids": [27],
    "label": "Surface",
    "left": {
     "effect": {
