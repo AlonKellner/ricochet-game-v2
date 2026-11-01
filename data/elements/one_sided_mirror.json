@@ -1,0 +1,44 @@
+{
+ "doc": "A one-sided mirror: its left side (left of the walk start -> via -> end) reflects and is plannable; its back passes or blocks. flip: the mirror faces right.",
+ "label": "Mirror",
+ "params": {
+  "back": {
+   "default": "pass",
+   "doc": "what the back side does",
+   "enum": ["pass", "block"]
+  },
+  "solid": {
+   "default": false,
+   "doc": "the player collides with it"
+  }
+ },
+ "priority": 20,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "player_solid": "$solid",
+   "right": {
+    "$switch": "back",
+    "cases": {
+     "block": {
+      "effect": {
+       "type": "terminal"
+      },
+      "interactive": false
+     },
+     "pass": {
+      "effect": {
+       "type": "pass"
+      },
+      "interactive": false
+     }
+    }
+   }
+  }
+ ]
+}
