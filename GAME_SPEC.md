@@ -783,7 +783,7 @@ them). By default each is a pass on both sides, not plannable and not drawn: the
 through infinity (§6.3), and the ∞ entry is clicked in a band inside them (§4.2). The level key `edges` makes them
 anything else:
 
-- **A kind** (`"wall"`, `"mirror"`, `"two_sided_mirror"`, `"arrow_block"`, `"target"`, a level's own template...)
+- **A kind** (`"wall"`, `"mirror"`, `"two_sided_mirror"`, `"shield"`, `"target"`, a level's own template...)
   or `{"kind", ...params}`: every edge an element of that kind, placed on the edge with its left side (a face)
   toward the level. It is drawn, plannable, and hit like that element anywhere else (a mirror edge reflects the
   arrow back in, a wall stops it), tags and all.
@@ -2303,6 +2303,7 @@ For arc steps in the visual frame, the tangent direction is perpendicular to the
 | Block | Red |
 | Pass-through | Gray |
 | Platform (§25.1; its pass sides) | Wood brown |
+| Shield (a block the player passes, nothing else on its side; Stage 186) | Turquoise, in a translucent band |
 | Target | Gold |
 
 Target surfaces display their effect color on each side plus a **gold outline** or gold endpoint markers to indicate target status.
@@ -2569,7 +2570,7 @@ physical path:
 The traveller moves at 900 px/s, swept against what it collides with: present player-solid surfaces and
 colliders (a pulled object passes the player, Stage 173; a grappled player is its whole tall shape). It stops at
 the first contact or at the path's end. A fence (an
-arrow-pass barrier) stops it; an arrow-block barrier is not solid and does not. **A platform does not stop it**
+arrow-pass barrier) stops it; a shield is not solid and does not. **A platform does not stop it**
 (Stage 172): a pulled object or a grappled player passes through platforms. Where the journey ends, a traveller
 half through a platform is settled by its centre (§25.1): above it, it is put on top and stands; below it, it
 stays and falls on. The preview's trip ends where the shot's settles (§14.12), drawn as the traveller (Stage
@@ -3114,4 +3115,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.86.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.87.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

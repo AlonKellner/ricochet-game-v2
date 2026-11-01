@@ -59,6 +59,11 @@ struct BuiltSurface {
 	bool is_target() const;
 };
 
+// Stage 186: does this side make the surface a shield -- stopping the arrow but not the player, and nothing else?
+inline bool shields(const BuiltSurface &s, const BuiltSide *side) {
+	return !s.player_solid && !s.platform && side != nullptr && side->effect.type == "terminal" && !side->interactive && side->hits.empty();
+}
+
 // Stage 179: where a surface's designer marker sits -- a line's middle, an arc's via, a full circle's top.
 V2 marker_point(const rc::arc::SegGeom &seg);
 

@@ -62,6 +62,9 @@ const Color FLAG_TOGGLER_COLOR = rgba(1.0, 0.85, 0.2);
 const Color PRE_TRANSFORM_COLOR = rgba(0.55, 0.45, 0.85, 0.35);
 const Color ABSENT_COLOR = rgba(0.6, 0.6, 0.6, 0.35);
 const Color PLATFORM_COLOR = rgba(0.62, 0.42, 0.22); // Stage 172: wood brown
+const Color SHIELD_COLOR = rgba(0.45, 1.0, 0.85);    // Stage 186: a shield's core (turquoise: a portal is pure cyan)
+const Color SHIELD_BAND = rgba(0.45, 1.0, 0.85, 0.22); // ... and the band around it
+const double SHIELD_BAND_WIDTH = 10.0;
 const double DESIGNER_MARKER_SIZE = 7.0;               // Stage 179: a designer's marker's radius
 const double ABSENT_MARKER_ALPHA = 0.4;                // ... on an absent surface
 const Color BODY_COLOR = rgba(0.8, 0.8, 0.8);        // Stage 173: the tall player's body under its triangle
@@ -477,8 +480,14 @@ struct SurfacePainter {
 			lc = lc == GRAY ? PLATFORM_COLOR : lc;
 			rc_ = rc_ == GRAY ? PLATFORM_COLOR : rc_;
 		}
+		const bool shield_l = shields(surface, left), shield_r = shields(surface, right); // Stage 186: unlike a wall
+		lc = shield_l ? SHIELD_COLOR : lc;
+		rc_ = shield_r ? SHIELD_COLOR : rc_;
 		const bool arcs = !seg.is_line();
 		const bool l_outer = left_outer();
+		if (shield_l && shield_r && !shaped()) {
+			outline_seg(out, seg, SHIELD_BAND, SHIELD_BAND_WIDTH, false);
+		}
 		if (shaped()) {
 			shape_stroke(l_outer || lc == rc_ ? lc : rc_, LINE_WIDTH);
 		} else if (lc == rc_) {

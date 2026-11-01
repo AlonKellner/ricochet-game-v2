@@ -3,7 +3,7 @@
  "elements": [
   {
    "end": [850.0, 1080.0],
-   "kind": "arrow_block",
+   "kind": "shield",
    "name": "arrow_block_1",
    "start": [850.0, 700.0]
   }

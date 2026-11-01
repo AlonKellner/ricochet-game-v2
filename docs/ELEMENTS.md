@@ -13,7 +13,7 @@ surface already does (GAME_SPEC 9-10).
 | Kind | What it is | Parameters (defaults) | Label |
 |---|---|---|---|
 | `wall` | A solid barrier: the arrow stops at either side (terminal) and the player collides with it. Walls and most everyday surroundings. | -- | `Surface` |
-| `arrow_block` | An arrow-block barrier (an energy field): stops the arrow at either side; the player passes. | -- | `ArrowBlock` |
+| `shield` | A shield (an energy field): stops the arrow at either side; the player and objects pass. Drawn as a turquoise band, unlike a wall. | -- | `Shield` |
 | `fence` | An arrow-pass barrier (an iron fence): the arrow passes, the player is blocked. | -- | `Fence` |
 | `passthrough` | A surface nothing collides with: the arrow passes (a step boundary, nothing else) and so does the player. A marker. | -- | `PassThrough` |
 | `platform` | A one-way platform (GAME_SPEC 25.1): the arrow passes; the player and objects stand on its top and pass it from below or the side; the player holding down drops through; moving in any direction while overlapping it, the player engages it: gravity-free movement until it overlaps none; a pulled object or a grappled player passes it (ending half through it, put on top when its centre is above, else falling through). Drawn wood brown. Unlike a `fence`, which blocks the player every way and stops a pull. | -- | `Platform` |

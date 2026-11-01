@@ -13,7 +13,7 @@
   {
    "end": [850.0, 1080.0],
    "ids": [1],
-   "label": "ArrowBlock",
+   "label": "Shield",
    "left": {
     "effect": {
      "type": "terminal"

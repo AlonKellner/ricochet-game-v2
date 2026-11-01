@@ -458,6 +458,35 @@ TEST_CASE("platforms: a session engages one, hangs, keeps hanging through a shot
 	CHECK(s.player().y == doctest::Approx(floor).epsilon(1e-4));
 }
 
+TEST_CASE("shields: drawn unlike a wall -- a turquoise core and band, a plain side of hit effects or the player's stop keeps its colour (Stage 186)") {
+	rcg::Session s(level_of(R"({"gravity": [0, 980], "elements": [
+		{"kind": "wall", "start": [200, 100], "end": [200, 300]},
+		{"kind": "shield", "start": [400, 100], "end": [400, 300]},
+		{"kind": "shield", "start": [600, 100], "via": [650, 200], "end": [600, 300]},
+		{"kind": "target", "face": "terminal", "start": [800, 100], "end": [800, 300]}]})"));
+	s.settle();
+	const rcg::render::Color core{0.45f, 1.0f, 0.85f, 1.0f}, band{0.45f, 1.0f, 0.85f, 0.22f}, red = rcg::render::hex(0xFF0000FF);
+	std::set<int> shields;
+	int cores = 0, bands = 0, reds = 0;
+	for (const rcg::render::Node &n : s.draw()) {
+		for (const rcg::render::Call &c : n.calls) {
+			if (c.kind != rcg::render::Kind::Line && c.kind != rcg::render::Kind::Arc) {
+				continue;
+			}
+			const rcg::render::Color k = c.colors.at(0);
+			if (k == core) {
+				shields.insert(n.key[1].get<int>()); // (an arc is drawn in pieces)
+			}
+			cores += k == core;
+			bands += k == band;
+			reds += k == red;
+		}
+	}
+	CHECK(shields.size() == 2); // not the wall, not the target
+	CHECK(bands == cores);
+	CHECK(reds >= 2); // the wall, the target
+}
+
 TEST_CASE("platforms: the demo level plays to its goal") {
 	const std::filesystem::path root = RC_REPO_ROOT;
 	rcg::Session s(rcg::load_level((root / "data/levels/objectives/platforms.json").string()));

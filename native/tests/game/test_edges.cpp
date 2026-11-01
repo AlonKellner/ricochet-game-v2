@@ -69,7 +69,7 @@ TEST_CASE("edges: a kind for all four -- mirrors turn the arrow back onto the bu
 	CHECK(pressed("two_sided_mirror"));
 	CHECK(pressed(json{{"kind", "mirror"}, {"back", "pass"}})); // (with its params)
 	CHECK_FALSE(pressed("wall"));
-	CHECK_FALSE(pressed("arrow_block"));
+	CHECK_FALSE(pressed("shield"));
 	CHECK(pressed(json{{"right", "mirror"}})); // one edge; the others pass
 	CHECK_FALSE(pressed(json{{"left", "mirror"}}));
 }
@@ -108,11 +108,11 @@ TEST_CASE("edges: wrap -- opposite edges a portal pair: the arrow leaves the rig
 
 TEST_CASE("edges: the ∞ band lies only along the edges that pass") {
 	CHECK(infinity_hovered(nullptr, 1915, 540));
-	CHECK_FALSE(infinity_hovered("arrow_block", 1915, 540));
+	CHECK_FALSE(infinity_hovered("shield", 1915, 540));
 	CHECK_FALSE(infinity_hovered("mirror", 1915, 540)); // (the mirror is hovered)
 	CHECK_FALSE(infinity_hovered("wrap", 1915, 540));
-	CHECK(infinity_hovered(json{{"right", "arrow_block"}}, 960, 5)); // the top edge still passes
-	CHECK_FALSE(infinity_hovered(json{{"right", "arrow_block"}}, 1915, 540));
+	CHECK(infinity_hovered(json{{"right", "shield"}}, 960, 5)); // the top edge still passes
+	CHECK_FALSE(infinity_hovered(json{{"right", "shield"}}, 1915, 540));
 }
 
 TEST_CASE("edges: the errors") {
@@ -132,7 +132,7 @@ TEST_CASE("edges: the errors") {
 }
 
 TEST_CASE("edges: migrate reads them back from the lowering") {
-	for (const json &edges : {json("mirror"), json("wrap"), json{{"top", "mirror"}, {"right", "arrow_block"}}, json{{"left", "wrap"}, {"right", "wrap"}, {"top", "wall"}},
+	for (const json &edges : {json("mirror"), json("wrap"), json{{"top", "mirror"}, {"right", "shield"}}, json{{"left", "wrap"}, {"right", "wrap"}, {"top", "wall"}},
 			 json{{"kind", "mirror"}, {"back", "pass"}}}) {
 		CAPTURE(edges.dump());
 		json lv = json::parse(R"({"schema": "rc-level/2", "room": {"rect": [560, 240, 800, 600], "built": false},

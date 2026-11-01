@@ -21,7 +21,7 @@
   },
   {
    "end": [750.0, 900.0],
-   "kind": "arrow_block",
+   "kind": "shield",
    "name": "arrow_block_1",
    "start": [750.0, 1080.0]
   },

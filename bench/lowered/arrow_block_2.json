@@ -2,7 +2,7 @@
  "gravity": [0.0, 980.0],
  "name": "arrow_block_2",
  "player": {
-  "start": [960.0, 1040.0]
+  "start": [910.0, 1040.0]
  },
  "room": {
   "built": false,
@@ -11,8 +11,94 @@
  "schema": "rc-level/1",
  "surfaces": [
   {
-   "end": [1250.0, 540.0],
+   "end": [1200.0, 900.0],
    "ids": [1],
+   "label": "Shield",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [950.0, 900.0],
+   "via": [1075.0, 900.0]
+  },
+  {
+   "end": [950.0, 1080.0],
+   "ids": [2],
+   "label": "Shield",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [950.0, 900.0],
+   "via": [950.0, 990.0]
+  },
+  {
+   "end": [1200.0, 1080.0],
+   "ids": [3],
+   "label": "Shield",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1200.0, 900.0],
+   "via": [1200.0, 990.0]
+  },
+  {
+   "end": [1450.0, 900.0],
+   "ids": [4],
+   "label": "Door",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "open",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1450.0, 1080.0],
+   "via": [1450.0, 990.0]
+  },
+  {
+   "end": [700.0, 600.0],
+   "ids": [5],
    "label": "Platform",
    "left": {
     "effect": {
@@ -27,72 +113,252 @@
     },
     "interactive": false
    },
-   "start": [1150.0, 540.0],
-   "via": [1200.0, 540.0]
+   "start": [700.0, 1080.0],
+   "via": [700.0, 840.0]
   },
   {
-   "end": [1600.0, 1100.0],
-   "ids": [2],
-   "label": "Fence",
+   "end": [720.0, 600.0],
+   "ids": [6],
+   "label": "Platform",
    "left": {
     "effect": {
      "type": "pass"
     },
     "interactive": false
    },
-   "player_solid": true,
+   "platform": true,
    "right": {
     "effect": {
      "type": "pass"
     },
     "interactive": false
    },
-   "start": [1100.0, 600.0],
-   "via": [1350.0, 850.0]
+   "start": [720.0, 1080.0],
+   "via": [720.0, 840.0]
   },
   {
-   "end": [500.0, 0.0],
-   "ids": [3],
-   "label": "Fence",
+   "end": [710.0, 600.0],
+   "ids": [7],
+   "label": "Platform",
    "left": {
     "effect": {
      "type": "pass"
     },
     "interactive": false
    },
-   "player_solid": true,
+   "platform": true,
    "right": {
     "effect": {
      "type": "pass"
     },
     "interactive": false
    },
-   "start": [1000.0, 500.0],
-   "via": [750.0, 250.0]
+   "start": [710.0, 1080.0],
+   "via": [710.0, 840.0]
   },
   {
-   "end": [1100.0, 600.0],
-   "ids": [4],
-   "label": "ArrowBlock",
+   "end": [730.0, 1080.0],
+   "ids": [8],
+   "label": "Platform",
    "left": {
     "effect": {
-     "type": "terminal"
+     "type": "pass"
     },
     "interactive": false
    },
-   "player_solid": false,
+   "platform": true,
    "right": {
     "effect": {
-     "type": "terminal"
+     "type": "pass"
     },
     "interactive": false
    },
-   "start": [1000.0, 500.0],
-   "via": [1050.0, 550.0]
+   "start": [730.0, 600.0],
+   "via": [730.0, 840.0]
+  },
+  {
+   "end": [740.0, 600.0],
+   "ids": [9],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [740.0, 1080.0],
+   "via": [740.0, 840.0]
+  },
+  {
+   "end": [750.0, 1080.0],
+   "ids": [10],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [750.0, 600.0],
+   "via": [750.0, 840.0]
+  },
+  {
+   "end": [1400.0, 600.0],
+   "ids": [11],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [700.0, 600.0],
+   "via": [1050.0, 600.0]
+  },
+  {
+   "end": [1350.0, 600.0],
+   "ids": [12],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1350.0, 1080.0],
+   "via": [1350.0, 840.0]
+  },
+  {
+   "end": [1370.0, 600.0],
+   "ids": [13],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1370.0, 1080.0],
+   "via": [1370.0, 840.0]
+  },
+  {
+   "end": [1360.0, 600.0],
+   "ids": [14],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1360.0, 1080.0],
+   "via": [1360.0, 840.0]
+  },
+  {
+   "end": [1380.0, 1080.0],
+   "ids": [15],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1380.0, 600.0],
+   "via": [1380.0, 840.0]
+  },
+  {
+   "end": [1390.0, 600.0],
+   "ids": [16],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1390.0, 1080.0],
+   "via": [1390.0, 840.0]
+  },
+  {
+   "end": [1400.0, 1080.0],
+   "ids": [17],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1400.0, 600.0],
+   "via": [1400.0, 840.0]
   },
   {
    "end": [0.0, 0.0],
-   "ids": [5],
+   "ids": [18],
    "label": "Surface",
    "left": {
     "effect": {
@@ -112,7 +378,7 @@
   },
   {
    "end": [1920.0, 0.0],
-   "ids": [6],
+   "ids": [19],
    "label": "Surface",
    "left": {
     "effect": {
@@ -132,7 +398,7 @@
   },
   {
    "end": [1920.0, 1080.0],
-   "ids": [7],
+   "ids": [20],
    "label": "Surface",
    "left": {
     "effect": {
@@ -152,7 +418,7 @@
   },
   {
    "end": [0.0, 1080.0],
-   "ids": [8],
+   "ids": [21],
    "label": "Surface",
    "left": {
     "effect": {

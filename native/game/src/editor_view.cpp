@@ -58,6 +58,8 @@ const Color OBJECT = rgba(0.95, 0.6, 0.3);
 const Color CARRIER = rgba(0.45, 0.7, 1.0, 0.45);
 const Color COLLIDER = rgba(0.6, 0.72, 0.85); // Stage 164: a player-only collider
 const Color PLATFORM = rgba(0.62, 0.42, 0.22);  // Stage 172: a platform (wood brown)
+const Color SHIELD = rgba(0.45, 1.0, 0.85);     // Stage 186: a shield (turquoise, a band around it)
+const Color SHIELD_BAND = rgba(0.45, 1.0, 0.85, 0.22);
 const Color CAMERA = rgba(0.85, 0.6, 1.0);
 
 // An element's layers (the draw nodes' keys: ["editor", layer, index])
@@ -240,10 +242,11 @@ const BuiltSide *shown_side(const BuiltSurface &b, bool left) {
 	return left ? (row->left ? &*row->left : nullptr) : (row->right ? &*row->right : nullptr);
 }
 
-// The colour a surface's side is shown in (Stage 172: a platform's plain sides in its own).
+// The colour a surface's side is shown in (Stage 172: a platform's plain sides in its own; Stage 186: a shield's).
 Color surface_color(const BuiltSurface &b, bool left) {
-	const Color c = side_color(shown_side(b, left));
-	return b.platform && c == GRAY ? PLATFORM : c;
+	const BuiltSide *side = shown_side(b, left);
+	const Color c = side_color(side);
+	return shields(b, side) ? SHIELD : b.platform && c == GRAY ? PLATFORM : c;
 }
 
 } // namespace
@@ -1620,7 +1623,7 @@ std::vector<Editor::Row> Editor::rows() const {
 		};
 		field("name", "/name", "the level's path under data/levels (a new name renames the level: saved under it, the old file removed; F2)");
 		field("bounds", "/bounds", "[x, y, w, h]: the level's edges (by default the arrow wraps there)");
-		field("edges", "/edges", "the edges' kind -- wall, mirror, two_sided_mirror, arrow_block, target, ... -- or {\"kind\", params}, \"wrap\" (opposite edges a portal pair), or {top, right, bottom, left} of those (none: they pass)");
+		field("edges", "/edges", "the edges' kind -- wall, mirror, two_sided_mirror, shield, target, ... -- or {\"kind\", params}, \"wrap\" (opposite edges a portal pair), or {top, right, bottom, left} of those (none: they pass)");
 		field("gravity", "/gravity", "[gx, gy] px/s^2 (the player's)");
 		field("room", "/room/rect", "[x, y, w, h]: the room's walls");
 		field("room built", "/room/built", "the room's walls are built", "bool");
@@ -2336,6 +2339,9 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			}
 			const Color left = surface_color(b, true), right = surface_color(b, false);
 			const bool gated = std::any_of(b.presence.begin(), b.presence.end(), [](const PresenceSpec &c) { return c.key.rfind("chan:", 0) != 0; });
+			if (shields(b, shown_side(b, true)) && shields(b, shown_side(b, false))) {
+				stroke(b.seg, SHIELD_BAND, 10.0, gated);
+			}
 			stroke(b.seg, left, 3.0, gated); // (dashed: present only under a flag; a spawner's channel is not drawn so)
 			V2 m, n;
 			frame_of(b.seg, m, n);

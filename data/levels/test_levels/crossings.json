@@ -20,7 +20,7 @@
   },
   {
    "end": [680.0, 330.0],
-   "kind": "arrow_block",
+   "kind": "shield",
    "label": "Spec",
    "name": "arrow_block_1",
    "start": [520.0, 330.0],
@@ -36,7 +36,7 @@
   },
   {
    "end": [550.0, 660.0],
-   "kind": "arrow_block",
+   "kind": "shield",
    "label": "Spec",
    "name": "arrow_block_2",
    "start": [550.0, 540.0],
@@ -44,7 +44,7 @@
   },
   {
    "end": [750.0, 660.0],
-   "kind": "arrow_block",
+   "kind": "shield",
    "label": "Spec",
    "name": "arrow_block_3",
    "start": [750.0, 540.0],
@@ -85,7 +85,7 @@
   },
   {
    "end": [1400.0, 420.0],
-   "kind": "arrow_block",
+   "kind": "shield",
    "label": "Spec",
    "name": "arrow_block_4",
    "start": [1400.0, 180.0],

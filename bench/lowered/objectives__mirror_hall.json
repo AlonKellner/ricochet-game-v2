@@ -116,7 +116,7 @@
   {
    "end": [1560.0, 200.0],
    "ids": [4],
-   "label": "ArrowBlock",
+   "label": "Shield",
    "left": {
     "effect": {
      "type": "terminal"
@@ -136,7 +136,7 @@
   {
    "end": [1560.0, 880.0],
    "ids": [5],
-   "label": "ArrowBlock",
+   "label": "Shield",
    "left": {
     "effect": {
      "type": "terminal"
@@ -156,7 +156,7 @@
   {
    "end": [360.0, 880.0],
    "ids": [6],
-   "label": "ArrowBlock",
+   "label": "Shield",
    "left": {
     "effect": {
      "type": "terminal"
