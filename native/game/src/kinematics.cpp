@@ -217,23 +217,6 @@ bool above(const Collider &c, double px, double py) {
 	return distance(c, px, py, nx, ny) > 0.0 && floor_like(nx, ny);
 }
 
-// Stage 176: does a circle (R0 at (px, py)) touch a collider along its length --
-// within R0 of it, nearest to a point between its ends (a rope's top end is no hold)?
-bool touches_along(const Collider &c, double px, double py, double R0) {
-	if (!c.arc) {
-		const double ex = c.bx - c.ax, ey = c.by - c.ay;
-		const double l2 = ex * ex + ey * ey;
-		if (l2 == 0.0) {
-			return false;
-		}
-		const double u = ((px - c.ax) * ex + (py - c.ay) * ey) / l2;
-		return u > 0.0 && u < 1.0 && std::abs((px - c.ax) * ey - (py - c.ay) * ex) <= R0 * std::sqrt(l2);
-	}
-	const double fx = px - c.cx, fy = py - c.cy;
-	const double n = std::sqrt(fx * fx + fy * fy);
-	return n > 0.0 && std::abs(n - c.r) <= R0 && on_arc(c, fx / n, fy / n);
-}
-
 // Out of one collider's overlap (a circle `drop` below (px, py)); a platform only
 // up onto its top. True: moved.
 bool push_out(const Collider &c, double &px, double &py, double drop, double R0, bool &on_floor) {
@@ -315,6 +298,17 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 
 namespace {
 
+// Stage 185: does the body overlap a platform -- one of its circles closer than its radius? (Standing on one, a skin away, is no overlap.)
+bool overlaps_platform(const std::vector<Collider> &colliders, const Shape &shape, const V2 &pos) {
+	for (const Collider &c : colliders) {
+		double nx, ny;
+		if (c.platform && distance(c, shape, pos.x, pos.y, nx, ny) < shape.radius) {
+			return true;
+		}
+	}
+	return false;
+}
+
 // Stage 182: the player's velocity under gravity with its feel (float64 math, kept as float32)
 V2 felt_velocity(Body &body, const Input &in, const V2 &gravity) {
 	const bool up = in.axis_y < 0.0f;
@@ -358,9 +352,17 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 	// the velocity (player.gd), float32 as the engine keeps it
 	V2 v = body.vel;
 	const bool has_gravity = gravity.length_squared() > 0.0f;
-	if (has_gravity && feel) {
+	// Stage 185: moving while overlapping a platform engages it, and it stays engaged while overlapping any
+	const bool moving = in.axis_x != 0.0f || in.axis_y != 0.0f;
+	body.engaged = has_gravity && feel && (body.engaged || moving) && overlaps_platform(colliders, shape, body.pos);
+	if (body.engaged) { // the gravity-free movement below; no jump waits and no coyote time outlive it
+		body.air = LONG_AIR;
+		body.buffer = 0;
+		body.jumped = false;
+	}
+	if (has_gravity && feel && !body.engaged) {
 		v = felt_velocity(body, in, gravity);
-	} else if (has_gravity) {
+	} else if (has_gravity && !body.engaged) {
 		if (!body.on_floor) {
 			v = v + gravity * float(STEP);
 		} else {
@@ -378,27 +380,12 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 		v = dir * float(SPEED);
 	}
 	// Stage 172: a platform takes part only while the centre (Stage 173: the feet's)
-	// is above it at the step's start and the body is not dropping (down held)
+	// is above it at the step's start and the body is not dropping (down held);
+	// Stage 185: and not while engaged
 	const bool drop = in.axis_y > 0.0f;
 	std::vector<char> off(colliders.size(), 0);
 	for (size_t i = 0; i < colliders.size(); i++) {
-		off[i] = colliders[i].platform && (drop || !above(colliders[i], body.pos.x, body.pos.y + shape.feet()));
-	}
-	// Stage 176: up held while touching one that does not hold the body climbs it (the hands: a circle REACH
-	// above the head, so a platform just over the head of one standing is in reach)
-	if (has_gravity && in.axis_y < 0.0f) {
-		bool climbing = false;
-		for (size_t i = 0; i < colliders.size() && !climbing; i++) {
-			for (int k = -1; k < shape.n && off[i] && !climbing; k++) {
-				climbing = touches_along(colliders[i], body.pos.x, body.pos.y + (k < 0 ? -REACH : shape.drop[k]), R0);
-			}
-		}
-		if (climbing) {
-			v.y = std::min(v.y, -float(CLIMB_SPEED));
-			// Stage 183 (the user): up means up -- the momentum gone in a few ticks (snappy, not a jump), to the input's slow shuffle
-			const double side = double(in.axis_x) * CLIMB_SIDE_SPEED, x = v.x;
-			v.x = float(x < side ? std::min(x + CLIMB_GRIP * STEP, side) : std::max(x - CLIMB_GRIP * STEP, side));
-		}
+		off[i] = colliders[i].platform && (body.engaged || drop || !above(colliders[i], body.pos.x, body.pos.y + shape.feet()));
 	}
 	// the move: swept, sliding along what it meets
 	double px = body.pos.x, py = body.pos.y;

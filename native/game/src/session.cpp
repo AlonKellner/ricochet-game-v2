@@ -678,7 +678,7 @@ bool Session::click(bool right) {
 }
 
 Session::Checkpoint Session::capture() const {
-	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot(), won_, inside_, phase_, cycle_auto_};
+	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot(), won_, inside_, phase_, cycle_auto_, feel_.engaged};
 }
 
 void Session::restore(const Checkpoint &c) {
@@ -686,6 +686,7 @@ void Session::restore(const Checkpoint &c) {
 	tick_from_ = c.player;
 	velocity_ = c.velocity;
 	feel_ = kinematics::Body{};
+	feel_.engaged = c.engaged;
 	set_flags(c.flags);
 	world_->restore(c.world ? *c.world : world_->initial_snapshot());
 	shadow(); // Stage 153: the restored flags' shadow
