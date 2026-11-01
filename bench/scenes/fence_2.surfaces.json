@@ -392,9 +392,69 @@
   },
   {
    "circle": null,
-   "end": [0.0, 0.0],
+   "end": [240.0, 550.0],
    "full": false,
    "id": 21,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "platform": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [240.0, 650.0],
+   "via": [240.0, 600.0]
+  },
+  {
+   "circle": null,
+   "end": [210.0, 550.0],
+   "full": false,
+   "id": 22,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "platform": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [210.0, 650.0],
+   "via": [210.0, 600.0]
+  },
+  {
+   "circle": null,
+   "end": [200.0, 650.0],
+   "full": false,
+   "id": 23,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "platform": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [200.0, 550.0],
+   "via": [200.0, 600.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 0.0],
+   "full": false,
+   "id": 24,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -413,7 +473,7 @@
    "circle": null,
    "end": [1920.0, 0.0],
    "full": false,
-   "id": 22,
+   "id": 25,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -432,7 +492,7 @@
    "circle": null,
    "end": [1920.0, 1080.0],
    "full": false,
-   "id": 23,
+   "id": 26,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -451,7 +511,7 @@
    "circle": null,
    "end": [0.0, 1080.0],
    "full": false,
-   "id": 24,
+   "id": 27,
    "is_target": false,
    "left": {
     "interactive": false,

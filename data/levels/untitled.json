@@ -1,6 +1,13 @@
 {
  "edges": "wall",
- "elements": [],
+ "elements": [
+  {
+   "end": [850.0, 1080.0],
+   "kind": "arrow_block",
+   "name": "arrow_block_1",
+   "start": [850.0, 700.0]
+  }
+ ],
  "gravity": [0.0, 980.0],
  "name": "untitled",
  "player": {

@@ -266,6 +266,7 @@ private:
 		std::vector<bool> inside; // ... the detectors the player is in
 		double phase = 0.0;       // Stage 151
 		bool cycle_auto = true;
+		bool engaged = false;     // Stage 185: hanging in a platform stays hanging
 	};
 	// PathRenderer's state: the last pair, its display paths and merge; the last
 	// ladder result and physical hits stay when there is no trace (as the node keeps them)

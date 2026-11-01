@@ -20,14 +20,12 @@
 // above, never from below or the side), and an overlap pushes the body up onto
 // its top -- not while rising: a jump through it carries on and lands on it.
 //
-// Stage 176, climbing (the user): up held, under gravity, while the body touches
-// a platform along its length that does not hold it (one it is below, or one
-// steeper than 45 degrees: a ladder, a rope) rises at least CLIMB_SPEED -- up
-// through a platform, up a ladder; past its top it lands on what is there. Its
-// hands reach REACH above its head: standing, it grabs a platform just over it.
-// Stage 183 (the user): climbing kills the horizontal momentum, snappily -- the
-// horizontal speed goes to the input's times CLIMB_SIDE_SPEED (a slow shuffle)
-// at CLIMB_GRIP: from full speed in 3 ticks.
+// Stage 185, engaging (the user; it replaces Stage 176's climbing and Stage 183's
+// grip): under gravity, the player moving in any direction while it overlaps a
+// platform (closer than its radius: standing on one, a skin away, is no overlap)
+// engages it: its movement is the gravity-free one (the input direction,
+// normalized, times SPEED, at once; released, it hangs) and no platform holds it,
+// until it overlaps none. Not moving, it passes as it would. Objects never engage.
 //
 // Stage 182, the player's feel (the user: platformer practice, restrictive -- the
 // arrow, the pull and the grapple should move it better than walking): under
@@ -63,10 +61,6 @@ constexpr int MAX_SLIDES = 4;
 constexpr double FLOOR_MIN_DOT = 0.7071067811865476; // cos 45 degrees
 constexpr double STEP = 1.0 / 60.0;                  // the physics tick
 constexpr double BODY = 24.0;                        // Stage 173: the player's feet below its head (the arrow origin)
-constexpr double CLIMB_SPEED = 150.0;                // Stage 176: the least upward speed while climbing a platform
-constexpr double REACH = RADIUS;                      // Stage 176: the hands above the head (a climb's reach)
-constexpr double CLIMB_SIDE_SPEED = 60.0;            // Stage 183: the horizontal speed while climbing (the input's; no momentum)
-constexpr double CLIMB_GRIP = 4000.0;                // ... reached at this rate, px/s^2 (from full speed in 3 ticks)
 // Stage 182: the player's feel (see above)
 constexpr double FEEL_JUMP_VELOCITY = 395.0; // (the apex hang and the faster fall: the old arc's height and reach)
 constexpr double GROUND_ACCEL = 1800.0;      // px/s^2 toward the input's speed on a floor (full speed in ~0.11 s)
@@ -124,6 +118,7 @@ struct Body {
 	int air = LONG_AIR;
 	int buffer = 0;
 	bool jumped = false;
+	bool engaged = false; // Stage 185: moving through a platform without gravity
 };
 
 struct Input {

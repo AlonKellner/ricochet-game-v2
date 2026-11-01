@@ -433,6 +433,31 @@ TEST_CASE("platforms: a pull ending half through one -- the centre above is put 
 	CHECK(pulled(505, 1300, 560).y == doctest::Approx(505).epsilon(1e-6));
 }
 
+TEST_CASE("platforms: a session engages one, hangs, keeps hanging through a shot and its undo (Stage 185)") {
+	// standing on the floor (the feet's at 840) with its head through the platform's line
+	rcg::Session s(level_of(R"({"gravity": [0, 980], "player": {"start": [900, 820]},
+		"elements": [{"kind": "platform", "start": [800, 800], "end": [1000, 800]}]})"));
+	const float floor = float(840 - 24 - 12 - 0.08);
+	s.hold({}, 30);
+	CHECK(s.player().y == doctest::Approx(floor).epsilon(1e-4)); // not moving: nothing
+	s.hold({"move_up"}, 3);
+	const rc::V2 hang = s.player();
+	CHECK(hang.y == doctest::Approx(floor - 10.0).epsilon(1e-3)); // the speed without gravity, not a jump
+	s.hold({}, 60);
+	CHECK(s.player() == hang);
+	shoot(s, 900, 100);
+	CHECK(s.player() == hang);
+	s.hold({}, 30);
+	CHECK(s.player() == hang);
+	s.key(rcg::Action::Undo);
+	s.settle();
+	CHECK(s.player() == hang);
+	s.hold({}, 60);
+	CHECK(s.player() == hang); // still engaged: no fall after the undo
+	s.hold({"move_down"}, 30);
+	CHECK(s.player().y == doctest::Approx(floor).epsilon(1e-4));
+}
+
 TEST_CASE("platforms: the demo level plays to its goal") {
 	const std::filesystem::path root = RC_REPO_ROOT;
 	rcg::Session s(rcg::load_level((root / "data/levels/objectives/platforms.json").string()));

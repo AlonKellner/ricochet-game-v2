@@ -11,8 +11,28 @@
  "schema": "rc-level/1",
  "surfaces": [
   {
-   "end": [0.0, 0.0],
+   "end": [850.0, 1080.0],
    "ids": [1],
+   "label": "ArrowBlock",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [850.0, 700.0],
+   "via": [850.0, 890.0]
+  },
+  {
+   "end": [0.0, 0.0],
+   "ids": [2],
    "label": "Surface",
    "left": {
     "effect": {
@@ -32,7 +52,7 @@
   },
   {
    "end": [1920.0, 0.0],
-   "ids": [2],
+   "ids": [3],
    "label": "Surface",
    "left": {
     "effect": {
@@ -52,7 +72,7 @@
   },
   {
    "end": [1920.0, 1080.0],
-   "ids": [3],
+   "ids": [4],
    "label": "Surface",
    "left": {
     "effect": {
@@ -72,7 +92,7 @@
   },
   {
    "end": [0.0, 1080.0],
-   "ids": [4],
+   "ids": [5],
    "label": "Surface",
    "left": {
     "effect": {
