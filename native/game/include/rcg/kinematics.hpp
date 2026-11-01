@@ -21,11 +21,16 @@
 // its top -- not while rising: a jump through it carries on and lands on it.
 //
 // Stage 185, engaging (the user; it replaces Stage 176's climbing and Stage 183's
-// grip): under gravity, the player moving in any direction while it overlaps a
-// platform (closer than its radius: standing on one, a skin away, is no overlap)
+// grip): under gravity, the player moving in any direction while the bottom of its
+// feet overlaps a platform (Stage 187: the lower half of its feet's circle; a head
+// through a platform is nothing, and standing on one, a skin away, no overlap)
 // engages it: its movement is the gravity-free one (the input direction,
 // normalized, times SPEED, at once; released, it hangs) and no platform holds it,
-// until it overlaps none. Not moving, it passes as it would. Objects never engage.
+// until its feet overlap none. Not moving, it passes as it would. Objects never engage.
+// Stage 187 (the user): down pressed while standing on a platform drops: under
+// gravity, through that platform even if released, and held through any others,
+// not engaging; a second press of down, or any other direction, engages what the
+// feet overlap.
 //
 // Stage 182, the player's feel (the user: platformer practice, restrictive -- the
 // arrow, the pull and the grapple should move it better than walking): under
@@ -119,6 +124,9 @@ struct Body {
 	int buffer = 0;
 	bool jumped = false;
 	bool engaged = false; // Stage 185: moving through a platform without gravity
+	bool dropping = false; // Stage 187: down held since it was pressed standing on a platform
+	bool through = false;  // ... the drop still in that platform (it does not hold the body)
+	bool down = false;     // ... down held last tick (a press)
 };
 
 struct Input {

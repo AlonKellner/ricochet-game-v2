@@ -434,9 +434,9 @@ TEST_CASE("platforms: a pull ending half through one -- the centre above is put 
 }
 
 TEST_CASE("platforms: a session engages one, hangs, keeps hanging through a shot and its undo (Stage 185)") {
-	// standing on the floor (the feet's at 840) with its head through the platform's line
+	// standing on the floor (the feet's at 840) with its feet at a rope
 	rcg::Session s(level_of(R"({"gravity": [0, 980], "player": {"start": [900, 820]},
-		"elements": [{"kind": "platform", "start": [800, 800], "end": [1000, 800]}]})"));
+		"elements": [{"kind": "platform", "start": [900, 500], "end": [900, 840]}]})"));
 	const float floor = float(840 - 24 - 12 - 0.08);
 	s.hold({}, 30);
 	CHECK(s.player().y == doctest::Approx(floor).epsilon(1e-4)); // not moving: nothing
@@ -445,7 +445,7 @@ TEST_CASE("platforms: a session engages one, hangs, keeps hanging through a shot
 	CHECK(hang.y == doctest::Approx(floor - 10.0).epsilon(1e-3)); // the speed without gravity, not a jump
 	s.hold({}, 60);
 	CHECK(s.player() == hang);
-	shoot(s, 900, 100);
+	shoot(s, 1200, 100);
 	CHECK(s.player() == hang);
 	s.hold({}, 30);
 	CHECK(s.player() == hang);

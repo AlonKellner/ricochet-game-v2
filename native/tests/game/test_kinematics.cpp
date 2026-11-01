@@ -317,7 +317,15 @@ TEST_CASE("platforms: a circle holds on its top and passes from below; a slope o
 
 // Stage 185 (the user): moving while overlapping a platform engages it -- gravity-free movement until it overlaps none
 
-TEST_CASE("engaging: not moving, a body overlapping a platform falls as it would without it") {
+namespace {
+void run_ticks(k::Body &b, const k::Input &in, const std::vector<k::Collider> &cs, int ticks) {
+	for (int i = 0; i < ticks; i++) {
+		k::step(b, in, G, cs);
+	}
+}
+} // namespace
+
+TEST_CASE("engaging: not moving, a body in a platform falls as it would without it; only the bottom of its feet engages") {
 	const std::vector<k::Collider> floor{wall(0, 1000, 1000, 1000)};
 	std::vector<k::Collider> cs = floor;
 	cs.push_back(platform(0, 500, 1000, 500));
@@ -329,6 +337,33 @@ TEST_CASE("engaging: not moving, a body overlapping a platform falls as it would
 		CHECK(with.pos.y == without.pos.y);
 		CHECK(with.vel.y == without.vel.y);
 	}
+	// the head and the body in it, moving: nothing either
+	for (const float y : {490.0f, 480.0f, 476.5f}) { // (the line at the head, at the body, just at the feet's centre)
+		k::Body b{V2{500, y}, V2{}, false};
+		k::step(b, k::Input{1, 0, false}, G, cs);
+		CHECK_FALSE(b.engaged);
+	}
+	// the line in the feet's lower half, and only there
+	for (const auto &[y, engaged] : std::vector<std::pair<float, bool>>{{475.9f, true}, {470.0f, true}, {464.5f, true}, {463.5f, false}}) {
+		CAPTURE(y);
+		k::Body b{V2{500, y}, V2{}, false};
+		k::step(b, k::Input{0, -1, false}, G, cs);
+		CHECK(b.engaged == engaged);
+	}
+	// a slope and an arc through it alike, the lowest point deciding; a side of a rope from either hand
+	const std::vector<k::Collider> rope{platform(500, 0, 500, 1000)};
+	for (const float x : {489.0f, 511.0f}) {
+		k::Body b{V2{x, 300}, V2{}, false};
+		k::step(b, k::Input{0, -1, false}, G, rope);
+		CHECK(b.engaged);
+	}
+	k::Collider ring = k::circle_collider(V2{500, 500}, 50);
+	ring.platform = true;
+	k::Body below{V2{500, float(550 - 24 - 5)}, V2{}, false}, above{V2{500, float(550 - 24 + 5)}, V2{}, false};
+	k::step(below, k::Input{1, 0, false}, G, {ring});
+	k::step(above, k::Input{1, 0, false}, G, {ring});
+	CHECK(below.engaged);
+	CHECK_FALSE(above.engaged);
 }
 
 TEST_CASE("engaging: any direction engages at once, at the speed without gravity, and released it hangs") {
@@ -340,7 +375,7 @@ TEST_CASE("engaging: any direction engages at once, at the speed without gravity
 				 {k::Input{0, -1, false}, 0.0f, -float(k::SPEED)},
 				 {k::Input{0, 1, false}, 0.0f, float(k::SPEED)},
 				 {k::Input{1, 1, false}, diagonal, diagonal}}) {
-		k::Body b{V2{500, 490}, V2{-50, 300}, false}; // falling, drifting: no momentum is kept
+		k::Body b{V2{500, 471}, V2{-50, 300}, false}; // falling, drifting, the line under the feet's centre: no momentum is kept
 		k::step(b, in, G, cs);
 		CHECK(b.engaged);
 		CHECK(b.vel.x == doctest::Approx(vx));
@@ -355,47 +390,38 @@ TEST_CASE("engaging: any direction engages at once, at the speed without gravity
 	}
 }
 
-TEST_CASE("engaging: it ends when it overlaps no platform -- out of the bottom it falls, out of the top it lands, out of the side it falls") {
+TEST_CASE("engaging: it ends when the feet overlap no platform -- out of the bottom it falls, out of the top it lands, out of the side it falls") {
 	const std::vector<k::Collider> cs{platform(400, 500, 600, 500), wall(0, 1000, 1000, 1000)};
 	const float on_floor = float(1000 - REST - k::BODY), on_top = float(500 - REST - k::BODY);
 	SUBCASE("down") {
-		k::Body b{V2{500, 490}, V2{}, false};
-		while (b.pos.y < 513.0f) { // the head's circle leaves the line 12 under it
-			k::step(b, k::Input{0, 1, false}, G, cs);
-			CHECK(b.vel.y == float(k::SPEED));
-		}
-		k::step(b, k::Input{}, G, cs);
+		k::Body b{V2{500, 471}, V2{}, false};
+		run_ticks(b, k::Input{0, 1, false}, cs, 2);
+		CHECK(b.engaged);
+		CHECK(b.vel.y == float(k::SPEED));
+		run_ticks(b, k::Input{}, cs, 1);
+		run_ticks(b, k::Input{0, 1, false}, cs, 3); // (the feet's centre past the line)
+		run_ticks(b, k::Input{}, cs, 1);
 		CHECK_FALSE(b.engaged);
 		CHECK(b.vel.y > float(k::SPEED)); // gravity again
-		for (int i = 0; i < 120; i++) {
-			k::step(b, k::Input{}, G, cs);
-		}
+		run_ticks(b, k::Input{}, cs, 120);
 		CHECK(b.pos.y == doctest::Approx(on_floor).epsilon(1e-6));
 	}
 	SUBCASE("up: past the top, held or not, it lands there and stands") {
 		for (const float held : {-1.0f, 0.0f}) {
-			k::Body b{V2{500, 490}, V2{}, false};
-			while (b.pos.y + k::BODY > 500.0f - k::RADIUS) { // the feet's circle leaves the line
-				k::step(b, k::Input{0, -1, false}, G, cs);
-			}
-			for (int i = 0; i < 120; i++) {
-				k::step(b, k::Input{0, held, false}, G, cs);
-			}
+			k::Body b{V2{500, 471}, V2{}, false};
+			run_ticks(b, k::Input{0, -1, false}, cs, 8);
+			run_ticks(b, k::Input{0, held, false}, cs, 120);
 			CHECK(b.on_floor);
 			CHECK_FALSE(b.engaged);
 			CHECK(b.pos.y == doctest::Approx(on_top).epsilon(1e-6));
 		}
 	}
 	SUBCASE("sideways: past its end, it falls") {
-		k::Body b{V2{500, 490}, V2{}, false};
-		for (int i = 0; i < 30; i++) {
-			k::step(b, k::Input{1, 0, false}, G, cs);
-		}
+		k::Body b{V2{500, 471}, V2{}, false};
+		run_ticks(b, k::Input{1, 0, false}, cs, 30);
 		CHECK(b.engaged);
-		CHECK(b.pos.y == 490.0f);
-		for (int i = 0; i < 20; i++) {
-			k::step(b, k::Input{1, 0, false}, G, cs);
-		}
+		CHECK(b.pos.y == 471.0f);
+		run_ticks(b, k::Input{1, 0, false}, cs, 20);
 		CHECK_FALSE(b.engaged);
 		CHECK(b.pos.x > 612.0f);
 		CHECK(b.vel.y > 0.0f);
@@ -423,82 +449,119 @@ TEST_CASE("engaging: standing on a platform, or landing on it moving, is no over
 	CHECK(b.pos.y == doctest::Approx(on_top).epsilon(1e-6));
 }
 
-TEST_CASE("engaging: down from the top goes through; released halfway it hangs, up from there it is back on top") {
-	const std::vector<k::Collider> cs{platform(0, 500, 1000, 500), wall(0, 1000, 1000, 1000)};
+TEST_CASE("dropping: down pressed standing on a platform falls under gravity, not engaging; a second press or another direction engages (Stage 187)") {
+	const std::vector<k::Collider> cs{platform(0, 500, 1000, 500), platform(0, 600, 1000, 600), wall(0, 1000, 1000, 1000)};
 	const float on_top = float(500 - REST - k::BODY), on_floor = float(1000 - REST - k::BODY);
+	const k::Input down{0, 1, false};
 	k::Body standing{V2{500, on_top}, V2{}, true};
 	k::step(standing, k::Input{}, G, cs);
 	REQUIRE(standing.on_floor);
-	k::Body b = standing;
-	for (int i = 0; i < 8; i++) {
-		k::step(b, k::Input{0, 1, false}, G, cs);
+	SUBCASE("held: gravity's fall through every platform, never engaged, down to the floor") {
+		k::Body b = standing;
+		float last = 0;
+		for (int i = 0; i < 120; i++) {
+			k::step(b, down, G, cs);
+			CHECK_FALSE(b.engaged);
+			if (!b.on_floor) {
+				CHECK(b.vel.y >= last); // never the engaged speed's constant stop
+			}
+			last = b.vel.y;
+		}
+		CHECK(last == 0.0f); // landed
+		CHECK(b.on_floor);
+		CHECK(b.pos.y == doctest::Approx(on_floor).epsilon(1e-6));
 	}
-	CHECK(b.engaged);
-	const float halfway = b.pos.y;
-	CHECK(halfway > on_top);
-	for (int i = 0; i < 60; i++) {
+	SUBCASE("a tap: it still falls through that platform, and lands on the next") {
+		k::Body b = standing;
+		run_ticks(b, down, cs, 2);
+		for (int i = 0; i < 90; i++) {
+			k::step(b, k::Input{}, G, cs);
+			CHECK_FALSE(b.engaged);
+		}
+		CHECK(b.on_floor);
+		CHECK(b.pos.y == doctest::Approx(600 - REST - k::BODY).epsilon(1e-6));
+	}
+	SUBCASE("a second press engages: the speed without gravity, released it hangs") {
+		k::Body b = standing;
+		run_ticks(b, down, cs, 3);
+		CHECK_FALSE(b.engaged);
 		k::step(b, k::Input{}, G, cs);
+		CHECK_FALSE(b.engaged);
+		k::step(b, down, G, cs);
+		CHECK(b.engaged);
+		CHECK(b.vel.y == float(k::SPEED));
+		const float y = b.pos.y;
+		run_ticks(b, k::Input{}, cs, 30);
+		CHECK(b.pos.y == y);
 	}
-	CHECK(b.pos.y == halfway);
-	k::Body up = b;
-	for (int i = 0; i < 120; i++) {
-		k::step(up, k::Input{0, -1, false}, G, cs);
+	SUBCASE("another direction engages, down still held or not; up too") {
+		for (const k::Input other : {k::Input{1, 1, false}, k::Input{-1, 0, false}, k::Input{0, -1, false}}) {
+			k::Body b = standing;
+			run_ticks(b, down, cs, 3);
+			k::step(b, other, G, cs);
+			CHECK(b.engaged);
+			CHECK_FALSE(b.dropping);
+		}
 	}
-	CHECK(up.on_floor);
-	CHECK(up.pos.y == doctest::Approx(on_top).epsilon(1e-6));
-	for (int i = 0; i < 120; i++) {
-		k::step(b, k::Input{0, 1, false}, G, cs);
+	SUBCASE("not standing: down with the feet in a platform engages at the first press") {
+		k::Body b{V2{500, 471}, V2{}, false};
+		k::step(b, down, G, cs);
+		CHECK(b.engaged);
 	}
-	CHECK(b.on_floor);
-	CHECK(b.pos.y == doctest::Approx(on_floor).epsilon(1e-6));
+	SUBCASE("standing on a floor, down is no drop") {
+		k::Body b{V2{500, on_floor}, V2{}, true};
+		k::step(b, down, G, cs);
+		CHECK_FALSE(b.dropping);
+		CHECK(b.pos.y == doctest::Approx(on_floor).epsilon(1e-6));
+	}
 }
 
-TEST_CASE("engaging: a stack, a rope to the platform at its top, a bare rope, a jump held up through one") {
-	auto run_player = [](k::Body &b, const k::Input &in, const std::vector<k::Collider> &cs, int ticks) {
-		for (int i = 0; i < ticks; i++) {
-			k::step(b, in, G, cs);
-		}
-	};
+TEST_CASE("engaging: a jump held to a platform, the next one a jump more, a rope to the platform at its top, a bare rope") {
 	const float on_floor = float(1000 - REST - k::BODY); // the head, the feet resting on y = 1000
-	SUBCASE("a jump, up held: engaged at the platform, the speed without gravity, on top") {
-		const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(400, 900, 600, 900)};
+	SUBCASE("a jump, up held: gravity until the feet reach it, then the speed without gravity, on top") {
+		const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(400, 950, 600, 950)};
 		k::Body b{V2{500, on_floor}, V2{}, true};
 		k::step(b, k::Input{0, -1, true}, G, cs);
 		CHECK(b.vel.y == -float(k::FEEL_JUMP_VELOCITY));
-		while (!b.engaged) {
+		bool engaged = false;
+		for (int i = 0; i < 120; i++) {
 			k::step(b, k::Input{0, -1, false}, G, cs);
+			if (b.engaged) {
+				engaged = true;
+				CHECK(b.vel.y == -float(k::SPEED));
+				CHECK(b.pos.y + k::BODY < 950.0f); // the feet at it, the head long past
+			}
 		}
-		CHECK(b.vel.y == -float(k::SPEED));
-		run_player(b, k::Input{0, -1, false}, cs, 120);
+		CHECK(engaged);
 		CHECK(b.on_floor);
-		CHECK(b.pos.y == doctest::Approx(900 - REST - k::BODY).epsilon(1e-6));
+		CHECK(b.pos.y == doctest::Approx(950 - REST - k::BODY).epsilon(1e-6));
 	}
-	SUBCASE("a stack, 50 apart (the body is 48 tall): a jump held climbs to the top one and stands there") {
-		std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000)};
-		for (int y = 950; y >= 700; y -= 50) {
-			cs.push_back(platform(400, y, 600, y));
-		}
+	SUBCASE("a platform beyond a jump's reach of the feet: the head goes through, it falls back") {
+		const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(400, 900, 600, 900)};
 		k::Body b{V2{500, on_floor}, V2{}, true};
 		k::step(b, k::Input{0, -1, true}, G, cs);
-		run_player(b, k::Input{0, -1, false}, cs, 300);
+		for (int i = 0; i < 120; i++) {
+			k::step(b, k::Input{0, -1, false}, G, cs);
+			CHECK_FALSE(b.engaged);
+		}
 		CHECK(b.on_floor);
-		CHECK(b.pos.y == doctest::Approx(700 - REST - k::BODY).epsilon(1e-6));
+		CHECK(b.pos.y == doctest::Approx(on_floor).epsilon(1e-6));
 	}
 	SUBCASE("a rope with a platform at its top: up held climbs from the floor, steps onto the top and stays") {
 		const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(500, 1000, 500, 500), platform(450, 500, 550, 500)};
 		k::Body b{V2{500, on_floor}, V2{}, true};
 		k::step(b, k::Input{0, -1, false}, G, cs);
 		CHECK(b.vel.y == -float(k::SPEED));
-		run_player(b, k::Input{0, -1, false}, cs, 300);
+		run_ticks(b, k::Input{0, -1, false}, cs, 300);
 		CHECK(b.on_floor);
 		CHECK(b.pos.y == doctest::Approx(500 - REST - k::BODY).epsilon(1e-6));
-		run_player(b, k::Input{0, -1, false}, cs, 60);
+		run_ticks(b, k::Input{0, -1, false}, cs, 60);
 		CHECK(b.pos.y == doctest::Approx(500 - REST - k::BODY).epsilon(1e-6)); // no bob at the top
 	}
 	SUBCASE("a bare rope: up held, the player keeps near its top; released on it, it hangs; off it, it falls") {
 		const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(500, 1000, 500, 500)};
 		k::Body b{V2{500, on_floor}, V2{}, true};
-		run_player(b, k::Input{0, -1, false}, cs, 300);
+		run_ticks(b, k::Input{0, -1, false}, cs, 300);
 		for (int i = 0; i < 60; i++) {
 			k::step(b, k::Input{0, -1, false}, G, cs);
 			CHECK(b.pos.y + k::BODY >= 500 - REST - 25); // the feet within a small hop of its top
@@ -507,11 +570,11 @@ TEST_CASE("engaging: a stack, a rope to the platform at its top, a bare rope, a 
 		k::Body hang{V2{500, 700}, V2{}, false};
 		k::step(hang, k::Input{0, -1, false}, G, cs);
 		const float y = hang.pos.y;
-		run_player(hang, k::Input{}, cs, 60);
+		run_ticks(hang, k::Input{}, cs, 60);
 		CHECK(hang.pos.y == y);
-		run_player(hang, k::Input{1, 0, false}, cs, 10); // off it sideways
+		run_ticks(hang, k::Input{1, 0, false}, cs, 10); // off it sideways
 		CHECK_FALSE(hang.engaged);
-		run_player(hang, k::Input{}, cs, 120);
+		run_ticks(hang, k::Input{}, cs, 120);
 		CHECK(hang.on_floor);
 		CHECK(hang.pos.y == doctest::Approx(on_floor).epsilon(1e-6));
 	}
@@ -529,9 +592,18 @@ TEST_CASE("engaging: a stack, a rope to the platform at its top, a bare rope, a 
 		CHECK_FALSE(b.engaged);
 		CHECK(b.on_floor);
 	}
+	SUBCASE("walking under a platform with the head through it: nothing, a jump is a jump") {
+		const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(400, 960, 600, 960)};
+		k::Body b{V2{500, on_floor}, V2{}, true};
+		k::step(b, k::Input{1, 0, false}, G, cs);
+		CHECK_FALSE(b.engaged);
+		k::step(b, k::Input{0, -1, true}, G, cs);
+		CHECK_FALSE(b.engaged);
+		CHECK(b.vel.y == -float(k::FEEL_JUMP_VELOCITY));
+	}
 	SUBCASE("a jump pressed while engaged is no jump after it") {
 		const std::vector<k::Collider> cs{wall(0, 1000, 1000, 1000), platform(400, 950, 600, 950)};
-		k::Body b{V2{500, 940}, V2{}, false};
+		k::Body b{V2{500, 921}, V2{}, false};
 		k::step(b, k::Input{0, -1, true}, G, cs);
 		CHECK(b.engaged);
 		CHECK(b.buffer == 0);
@@ -539,11 +611,11 @@ TEST_CASE("engaging: a stack, a rope to the platform at its top, a bare rope, a 
 	}
 	SUBCASE("a wall still stops it") {
 		const std::vector<k::Collider> cs{wall(600, 0, 600, 1000), platform(400, 500, 800, 500)};
-		k::Body b{V2{500, 490}, V2{}, false};
-		run_player(b, k::Input{1, 0, false}, cs, 60);
+		k::Body b{V2{500, 471}, V2{}, false};
+		run_ticks(b, k::Input{1, 0, false}, cs, 60);
 		CHECK(b.engaged);
 		CHECK(b.pos.x == doctest::Approx(600 - REST).epsilon(1e-6));
-		CHECK(b.pos.y == 490.0f);
+		CHECK(b.pos.y == 471.0f);
 	}
 	SUBCASE("without gravity nothing engages; an object never does") {
 		const std::vector<k::Collider> cs{platform(500, 1000, 500, 500)};
