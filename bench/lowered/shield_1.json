@@ -1,6 +1,6 @@
 {
  "gravity": [0.0, 980.0],
- "name": "arrow_block_1",
+ "name": "shield_1",
  "player": {
   "start": [550.0, 1050.0]
  },

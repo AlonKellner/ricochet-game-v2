@@ -129,7 +129,7 @@
   }
  ],
  "gravity": [0.0, 980.0],
- "name": "arrow_block_2",
+ "name": "shield_2",
  "objective": {
   "goal": {
    "rect": [1660.0, 960.0, 80.0, 80.0]
