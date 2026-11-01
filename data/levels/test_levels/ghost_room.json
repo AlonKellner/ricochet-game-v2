@@ -17,8 +17,8 @@
   },
   {
    "end": [780.0, 600.0],
-   "kind": "two_sided_mirror",
-   "name": "two_sided_mirror_1",
+   "kind": "mirror",
+   "name": "mirror_1",
    "start": [720.0, 480.0],
    "via": [750.0, 540.0]
   },

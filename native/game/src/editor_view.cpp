@@ -1623,7 +1623,7 @@ std::vector<Editor::Row> Editor::rows() const {
 		};
 		field("name", "/name", "the level's path under data/levels (a new name renames the level: saved under it, the old file removed; F2)");
 		field("bounds", "/bounds", "[x, y, w, h]: the level's edges (by default the arrow wraps there)");
-		field("edges", "/edges", "the edges' kind -- wall, mirror, two_sided_mirror, shield, target, ... -- or {\"kind\", params}, \"wrap\" (opposite edges a portal pair), or {top, right, bottom, left} of those (none: they pass)");
+		field("edges", "/edges", "the edges' kind -- wall, mirror, one_sided_mirror, shield, target, ... -- or {\"kind\", params}, \"wrap\" (opposite edges a portal pair), or {top, right, bottom, left} of those (none: they pass)");
 		field("gravity", "/gravity", "[gx, gy] px/s^2 (the player's)");
 		field("room", "/room/rect", "[x, y, w, h]: the room's walls");
 		field("room built", "/room/built", "the room's walls are built", "bool");

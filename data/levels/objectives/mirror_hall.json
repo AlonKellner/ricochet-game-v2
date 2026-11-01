@@ -23,7 +23,7 @@
   "bottom": "shield",
   "left": "shield",
   "right": "shield",
-  "top": "mirror"
+  "top": "one_sided_mirror"
  },
  "elements": [
   {

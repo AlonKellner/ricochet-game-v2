@@ -107,7 +107,7 @@
   {
    "end": [720.0, 780.0],
    "ids": [5],
-   "label": "MirrorB",
+   "label": "Mirror",
    "left": {
     "effect": {
      "type": "reflection"
@@ -127,7 +127,7 @@
   {
    "end": [1400.0, 680.0],
    "ids": [6],
-   "label": "MirrorB",
+   "label": "Mirror",
    "left": {
     "effect": {
      "type": "reflection"

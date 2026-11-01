@@ -1,6 +1,6 @@
 {
  "doc": "A mirror reflecting on both sides, both plannable.",
- "label": "MirrorB",
+ "label": "Mirror",
  "params": {
   "solid": {
    "default": false,

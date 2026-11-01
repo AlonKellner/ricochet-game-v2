@@ -9,8 +9,8 @@
  "elements": [
   {
    "end": [700.0, 680.0],
-   "kind": "mirror",
-   "name": "mirror_1",
+   "kind": "one_sided_mirror",
+   "name": "one_sided_mirror_1",
    "start": [700.0, 400.0],
    "via": [700.0, 540.0]
   },

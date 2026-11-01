@@ -9,15 +9,15 @@
  "elements": [
   {
    "end": [800.0, 840.0],
-   "kind": "mirror",
-   "name": "mirror_1",
+   "kind": "one_sided_mirror",
+   "name": "one_sided_mirror_1",
    "start": [800.0, 240.0],
    "via": [800.0, 540.0]
   },
   {
    "end": [1100.0, 840.0],
-   "kind": "mirror",
-   "name": "mirror_2",
+   "kind": "one_sided_mirror",
+   "name": "one_sided_mirror_2",
    "start": [1100.0, 240.0],
    "via": [1100.0, 540.0]
   }

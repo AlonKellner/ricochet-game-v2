@@ -1,6 +1,6 @@
 {
  "doc": "A one-sided mirror: its left side (left of the walk start -> via -> end) reflects and is plannable; its back passes or blocks. flip: the mirror faces right.",
- "label": "Mirror",
+ "label": "OneSidedMirror",
  "params": {
   "back": {
    "default": "pass",

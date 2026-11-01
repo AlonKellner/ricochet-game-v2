@@ -107,7 +107,7 @@
   {
    "end": [1600.0, 800.0],
    "ids": [5],
-   "label": "Mirror",
+   "label": "OneSidedMirror",
    "left": {
     "effect": {
      "type": "reflection"

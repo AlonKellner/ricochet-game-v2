@@ -267,7 +267,7 @@ TEST_CASE("present: a late region's change morphs for its duration, then shows t
 	CHECK_FALSE(p.animating());
 	// a planned mirror: no collapse, the area moves from one region's to the other's
 	const double before = mesh_area(*vis_node(s.draw_frame()));
-	plan_side(s, "Mirror", 0, 0);
+	plan_side(s, "OneSidedMirror", 0, 0);
 	REQUIRE(s.plan().size() == 1);
 	const double after = mesh_area(*vis_node(s.draw_frame()));
 	for (int k = 0; k < 7; k++) {

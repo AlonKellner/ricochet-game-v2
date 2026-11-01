@@ -9,7 +9,7 @@ Unreal's or a custom engine's FFI). docs/PORTING.md walks through it.
     for node in game.draw_list(): ...
 
     ed = Editor(open("data/levels/main.json").read())      # 1.8: the level editor
-    ed.command({"op": "add", "element": {"kind": "mirror", "start": [700, 300], "end": [700, 700]}})
+    ed.command({"op": "add", "element": {"kind": "one_sided_mirror", "start": [700, 300], "end": [700, 700]}})
     ed.pointer(PTR_DOWN, 300, 300, BTN_LEFT); ed.draw_list(); ed.document()
 
 The library: $RC_CAPI_LIB, else native/build-core/libricochet_capi.{dylib,so,dll}.

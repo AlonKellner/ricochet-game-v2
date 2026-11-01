@@ -99,20 +99,20 @@
   },
   {
    "end": [1500.0, 1080.0],
-   "kind": "two_sided_mirror",
-   "name": "two_sided_mirror_2",
+   "kind": "mirror",
+   "name": "mirror_2",
    "start": [1500.0, 50.0]
   },
   {
    "end": [400.0, 1080.0],
-   "kind": "two_sided_mirror",
-   "name": "two_sided_mirror_3",
+   "kind": "mirror",
+   "name": "mirror_3",
    "start": [400.0, 50.0]
   },
   {
    "end": [1500.0, 50.0],
-   "kind": "two_sided_mirror",
-   "name": "two_sided_mirror_4",
+   "kind": "mirror",
+   "name": "mirror_4",
    "start": [400.0, 50.0]
   }
  ],

@@ -166,7 +166,7 @@ TEST_CASE("arrow states: the preview marks each walk's fire over its own steps (
 		// an unplanned mirror turns the arrow down through a torch onto a flammable floor: the walks diverge at the
 		// mirror, so the fire begins after the divergence -- no marks, no consequence
 		rcg::Session s(level_of(R"({"elements": [
-			{"kind": "two_sided_mirror", "start": [760, 500], "end": [840, 580]},
+			{"kind": "mirror", "start": [760, 500], "end": [840, 580]},
 			{"kind": "torch", "start": [700, 700], "end": [900, 700]},
 			{"kind": "wall", "name": "floor", "tags": ["flammable"], "start": [700, 800], "end": [900, 800]}]})"));
 		const auto [marks, becomes] = preview_marks(s, 1000, 540);
