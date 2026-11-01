@@ -60,6 +60,7 @@ const Color COLLIDER = rgba(0.6, 0.72, 0.85); // Stage 164: a player-only collid
 const Color PLATFORM = rgba(0.62, 0.42, 0.22);  // Stage 172: a platform (wood brown)
 const Color SHIELD = rgba(0.45, 1.0, 0.85);     // Stage 186: a shield (turquoise, a band around it)
 const Color SHIELD_BAND = rgba(0.45, 1.0, 0.85, 0.22);
+const Color DOOR = rgba(1.0, 0.72, 0.25);       // Stage 190: a door's posts and core (amber)
 const Color CAMERA = rgba(0.85, 0.6, 1.0);
 
 // An element's layers (the draw nodes' keys: ["editor", layer, index])
@@ -2343,6 +2344,15 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				stroke(b.seg, SHIELD_BAND, 10.0, gated);
 			}
 			stroke(b.seg, left, 3.0, gated); // (dashed: present only under a flag; a spawner's channel is not drawn so)
+			if (is_door(b)) { // Stage 190: as the game draws it
+				stroke(b.seg, DOOR, 1.0, false);
+				if (!b.seg.full) {
+					for (const V2 &end : {b.seg.s, b.seg.e}) {
+						const auto [pa, pb] = door_post(b.seg, end, 8.0);
+						calls.push_back(line(to_screen(pa), to_screen(pb), DOOR, 3.0));
+					}
+				}
+			}
 			V2 m, n;
 			frame_of(b.seg, m, n);
 			const V2 sm = to_screen(m);

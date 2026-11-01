@@ -2313,6 +2313,7 @@ For arc steps in the visual frame, the tangent direction is perpendicular to the
 | Pass-through | Gray |
 | Platform (§25.1; its pass sides) | Wood brown |
 | Shield (a block the player passes, nothing else on its side; Stage 186) | Turquoise, in a translucent band |
+| Door, charged door (Stage 190) | Its face's colour with an amber core, and amber posts across both ends (an open door: its posts, faint) |
 | Target | Gold |
 
 Target surfaces display their effect color on each side plus a **gold outline** or gold endpoint markers to indicate target status.
@@ -3132,4 +3133,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.88.2.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.89.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

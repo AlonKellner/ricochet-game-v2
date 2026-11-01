@@ -487,6 +487,29 @@ TEST_CASE("shields: drawn unlike a wall -- a turquoise core and band, a plain si
 	CHECK(reds >= 2); // the wall, the target
 }
 
+TEST_CASE("doors: a door in line with a wall shows where it stops -- posts across its ends, a core; an open one keeps its posts (Stage 190)") {
+	const auto posts = [](bool open) { // the amber strokes across the line: {x, alpha}
+		const std::string level = std::string(R"({"gravity": [0, 980], "flags": {"open_it": )") + (open ? "true" : "false") + R"(}, "elements": [
+			{"kind": "wall", "start": [500, 300], "end": [800, 300]},
+			{"kind": "door", "name": "d", "flag": "open_it", "start": [800, 300], "end": [1000, 300]},
+			{"kind": "wall", "start": [1000, 300], "end": [1300, 300]}]})";
+		rcg::Session s(level_of(level.c_str()));
+		s.settle();
+		std::vector<std::pair<float, float>> out;
+		for (const rcg::render::Node &n : s.draw()) {
+			for (const rcg::render::Call &c : n.calls) {
+				if (c.kind == rcg::render::Kind::Line && c.colors.at(0)[0] == 1.0f && c.colors.at(0)[1] == 0.72f && c.pts[0].x == c.pts[1].x) {
+					out.push_back({c.pts[0].x, c.colors.at(0)[3]});
+				}
+			}
+		}
+		std::sort(out.begin(), out.end());
+		return out;
+	};
+	CHECK(posts(false) == std::vector<std::pair<float, float>>{{800.0f, 1.0f}, {1000.0f, 1.0f}});
+	CHECK(posts(true) == std::vector<std::pair<float, float>>{{800.0f, 0.5f}, {1000.0f, 0.5f}});
+}
+
 // Stage 188 (the user): no shot while the player physically moves; the preview muted, brightening once it is still
 
 namespace {
