@@ -234,7 +234,9 @@ tools, its inspector panel and its draw list. A host keeps no editor state:
 2. **Input**, in window pixels: `rc_editor_pointer(ed, RC_PTR_DOWN | RC_PTR_UP, x, y, button, mods)` for a
    press or a release (the button that changed), `RC_PTR_MOVE` for a move. `rc_editor_key(ed, code, mods,
    down)` for every key: letters and digits as their ASCII upper case, space 32, `RC_EDKEY_*` for the rest.
-   `rc_editor_text(ed, utf8, n)` with what a key types (the panel's text fields read it). `rc_editor_scroll(ed,
+   `rc_editor_text(ed, utf8, n)` with what a key types (the panel's text fields read it), and on Ctrl+V, after the
+   key, with the system clipboard (a field takes it, its lines joined; with no field open it is ignored and the key
+   pasted the editor's own elements). `rc_editor_scroll(ed,
    0, dy, mods)` for the wheel (`dy > 0`: down, zoom out). Map Command to `RC_MOD_CTRL` on a Mac.
 3. **Drawing**: `rc_editor_draw_list` / `rc_editor_draw_changes`, exactly as the game's list (the same
    commands, the same changes protocol), in window pixels. Paint it at identity: no camera, no scale. Nodes

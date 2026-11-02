@@ -228,6 +228,7 @@ private:
 	// the panel's text field
 	std::optional<Field> focus_;
 	std::string buffer_;
+	size_t caret_ = 0; // Stage 191: where a field's text is edited (a byte of buffer_, between characters)
 	std::string hint_;
 };
 

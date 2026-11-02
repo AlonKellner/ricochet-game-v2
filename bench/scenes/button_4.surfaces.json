@@ -1,0 +1,473 @@
+{
+ "scene": "res://scenes/button_4.tscn",
+ "surfaces": [
+  {
+   "circle": null,
+   "end": [800.0, 700.0],
+   "full": false,
+   "id": 1,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [700.0, 700.0],
+   "via": [750.0, 700.0]
+  },
+  {
+   "circle": null,
+   "end": [1250.0, 550.0],
+   "full": false,
+   "id": 2,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1250.0, 700.0],
+   "via": [1250.0, 625.0]
+  },
+  {
+   "circle": null,
+   "end": [1100.0, 450.0],
+   "full": false,
+   "id": 3,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "switch",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1100.0, 700.0],
+   "via": [1100.0, 575.0]
+  },
+  {
+   "circle": null,
+   "end": [1300.0, 400.0],
+   "full": false,
+   "id": 4,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "states": [
+     {
+      "key": "switch",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "states": [
+     {
+      "key": "switch",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "type": "terminal"
+   },
+   "start": [1150.0, 400.0],
+   "via": [1225.0, 400.0]
+  },
+  {
+   "circle": null,
+   "end": [800.0, 700.0],
+   "full": false,
+   "id": 5,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "switch",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1050.0, 700.0],
+   "via": [925.0, 700.0]
+  },
+  {
+   "circle": null,
+   "end": [550.0, 850.0],
+   "full": false,
+   "id": 6,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1450.0, 850.0],
+   "via": [1000.0, 850.0]
+  },
+  {
+   "circle": null,
+   "end": [550.0, 400.0],
+   "full": false,
+   "id": 7,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [550.0, 850.0],
+   "via": [550.0, 625.0]
+  },
+  {
+   "circle": null,
+   "end": [700.0, 550.0],
+   "full": false,
+   "id": 8,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [700.0, 700.0],
+   "via": [700.0, 625.0]
+  },
+  {
+   "circle": null,
+   "end": [700.0, 400.0],
+   "full": false,
+   "id": 9,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "platform": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [650.0, 400.0],
+   "via": [675.0, 400.0]
+  },
+  {
+   "circle": null,
+   "end": [690.0, 850.0],
+   "full": false,
+   "id": 10,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "platform": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [690.0, 400.0],
+   "via": [690.0, 625.0]
+  },
+  {
+   "circle": null,
+   "end": [680.0, 850.0],
+   "full": false,
+   "id": 11,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "platform": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [680.0, 400.0],
+   "via": [680.0, 625.0]
+  },
+  {
+   "circle": null,
+   "end": [670.0, 850.0],
+   "full": false,
+   "id": 12,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "platform": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [670.0, 400.0],
+   "via": [670.0, 625.0]
+  },
+  {
+   "circle": null,
+   "end": [660.0, 850.0],
+   "full": false,
+   "id": 13,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "line": true,
+   "platform": true,
+   "player_solid": false,
+   "right": {
+    "interactive": false,
+    "type": "pass"
+   },
+   "start": [660.0, 400.0],
+   "via": [660.0, 625.0]
+  },
+  {
+   "circle": null,
+   "end": [1250.0, 700.0],
+   "full": false,
+   "id": 14,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1100.0, 700.0],
+   "via": [1175.0, 700.0]
+  },
+  {
+   "circle": null,
+   "end": [1450.0, 700.0],
+   "full": false,
+   "id": 15,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1300.0, 700.0],
+   "via": [1375.0, 700.0]
+  },
+  {
+   "circle": null,
+   "end": [1450.0, 400.0],
+   "full": false,
+   "id": 16,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1450.0, 850.0],
+   "via": [1450.0, 625.0]
+  },
+  {
+   "circle": null,
+   "end": [1050.0, 750.0],
+   "full": false,
+   "id": 17,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1050.0, 700.0],
+   "via": [1050.0, 725.0]
+  },
+  {
+   "circle": null,
+   "end": [1300.0, 750.0],
+   "full": false,
+   "id": 18,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1050.0, 750.0],
+   "via": [1175.0, 750.0]
+  },
+  {
+   "circle": null,
+   "end": [1300.0, 700.0],
+   "full": false,
+   "id": 19,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1300.0, 750.0],
+   "via": [1300.0, 725.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 0.0],
+   "full": false,
+   "id": 20,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1920.0, 0.0],
+   "via": [960.0, 0.0]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 0.0],
+   "full": false,
+   "id": 21,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1920.0, 1080.0],
+   "via": [1920.0, 540.0]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 1080.0],
+   "full": false,
+   "id": 22,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [0.0, 1080.0],
+   "via": [960.0, 1080.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 1080.0],
+   "full": false,
+   "id": 23,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [0.0, 0.0],
+   "via": [0.0, 540.0]
+  }
+ ]
+}

@@ -17,11 +17,12 @@ func before_each() -> void:
 	add_child_autofree(_editor)
 	await wait_process_frames(2)
 
-func _key(code: Key, ctrl := false) -> void:
+func _key(code: Key, ctrl := false, unicode := 0) -> void:
 	var ev := InputEventKey.new()
 	ev.physical_keycode = code
 	ev.keycode = code
 	ev.ctrl_pressed = ctrl
+	ev.unicode = unicode
 	ev.pressed = true
 	Input.parse_input_event(ev)
 	Input.flush_buffered_events()
@@ -54,6 +55,15 @@ func test_keys_reach_the_editor() -> void:
 	assert_eq(_command({"op": "state"})["tool"], "line")
 	_key(KEY_TAB)
 	assert_ne(_command({"op": "state"})["kind"], "wall")
+
+func test_a_fields_text_is_edited_at_the_caret() -> void:
+	_key(KEY_N, true) # the new level's name prompt, prefilled, the caret at its end
+	_key(KEY_A, false, 97)
+	_key(KEY_B, false, 98)
+	_key(KEY_LEFT)
+	_key(KEY_C, false, 99)
+	_key(KEY_ENTER)
+	assert_true(JSON.parse_string(_editor.document())["name"].ends_with("acb"))
 
 func test_a_save_writes_the_document() -> void:
 	_command({"op": "add", "element": {"kind": "wall", "start": [600, 300], "end": [600, 400]}})
