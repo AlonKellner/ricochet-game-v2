@@ -827,6 +827,26 @@ TEST_CASE("redo: lasts while nothing in the game changes, and goes at the slight
 		s.key(rcg::Action::Redo);
 		CHECK(s.redo_depth() == 0);
 	}
+	SUBCASE("what moves by itself, a moving surface: no change, as the cursor's move is none") {
+		const std::filesystem::path root = RC_REPO_ROOT;
+		rcg::Session s(rcg::load_level((root / "data/levels/objectives/timing_gate.json").string()));
+		s.hold({}, 120); // (at rest)
+		s.settle();
+		shoot(s, 600, 300);
+		s.settle();
+		const nlohmann::json shot = s.record(nlohmann::json::object());
+		s.key(rcg::Action::Undo);
+		s.settle();
+		const std::string defs = s.record(nlohmann::json::object())["world"]["defs"];
+		s.hold({}, 45);
+		s.settle();
+		CHECK(s.record(nlohmann::json::object())["world"]["defs"] != defs); // the surfaces did move
+		REQUIRE(s.redo_depth() == 1);
+		s.key(rcg::Action::Redo);
+		s.settle();
+		CHECK(s.record(nlohmann::json::object())["world"]["defs"] == shot["world"]["defs"]); // back to the state after the shot, the phase with it
+		CHECK(s.record(nlohmann::json::object())["checkpoints"] == shot["checkpoints"]);
+	}
 	SUBCASE("one tick's walk") {
 		rcg::Session s = undone();
 		s.hold({"move_left"}, 1);

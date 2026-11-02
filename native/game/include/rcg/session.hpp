@@ -282,13 +282,14 @@ private:
 		bool on_floor = false;
 		V2 gravity;
 	};
-	// Stage 194: what a redo stands on -- it goes when any of this changes (the player, by a hair too)
+	// Stage 194: what a redo stands on -- it goes when any of this changes (the player, by a hair too). Not the
+	// moving surfaces' phase (the user: they move as the cursor may).
 	struct StateMark {
 		V2 player;
 		std::vector<PlanEntry> plan;
 		std::string flags;
-		int world = 0;
-		double phase = 0.0;
+		std::map<std::string, int> generations; // what was spawned
+		std::vector<V2> bodies;
 		V2 gravity;
 		bool operator==(const StateMark &) const = default;
 	};

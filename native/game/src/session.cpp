@@ -769,7 +769,11 @@ void Session::key(Action a) {
 
 // Stage 194: the state a redo stands on (see StateMark)
 Session::StateMark Session::state_mark() const {
-	return StateMark{player_, plan_, flags_.canonical_key(), world_->version(), phase_, gravity_};
+	StateMark m{player_, plan_, flags_.canonical_key(), world_->generations(), {}, gravity_};
+	for (const World::Body &b : world_->bodies()) {
+		m.bodies.push_back(b.pos);
+	}
+	return m;
 }
 
 void Session::check_redo() {

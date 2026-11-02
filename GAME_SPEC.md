@@ -162,7 +162,7 @@ The game maintains **automatic checkpoints** — snapshots of the scene state ta
 
 - **Undo**: reverts to just before the most recent shot or reset. All of the following are restored: player position and movement state, gravity, game state flags (full copy), the plan exactly as it was, and the set of targets hit so far.
 - **Full reset**: reverts to the level's initial state (all surfaces restored, player at spawn point). It is a checkpoint too (Stage 194, the user): an undo takes it back. A reset of a level in its initial state does nothing.
-- **Redo** (Stage 194, the user): brings back what the last undo took, exactly, one at a time. It lasts while **nothing in the game changes**: the slightest move of the player, a change of the plan, the flags, the world or gravity, a moving surface's phase, a shot or a reset ends it. The cursor, the display and time standing still do not.
+- **Redo** (Stage 194, the user): brings back what the last undo took, exactly, one at a time. It lasts while **nothing in the game changes**: the slightest move of the player or an object, a change of the plan, the flags, what was spawned or gravity, a shot or a reset ends it. The cursor, the display, time standing still and moving surfaces do not (a moving surface moves as the cursor may).
 - **Checkpoint stack**: checkpoints accumulate per shot and reset. The player can step back through them one at a time.
 
 **The plan after a shot** (Stage 194, the user). A shot that went as planned, no step of its preview diverged (§14), is done: its plan is **cleared** when it lands. A shot that diverged leaves its plan as it is, to try again. An undo brings a cleared plan back.
