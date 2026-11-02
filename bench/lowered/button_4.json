@@ -11,7 +11,7 @@
  "schema": "rc-level/1",
  "surfaces": [
   {
-   "end": [1050.0, 700.0],
+   "end": [700.0, 700.0],
    "ids": [1],
    "label": "Surface",
    "left": {
@@ -28,7 +28,7 @@
     "interactive": false
    },
    "start": [550.0, 700.0],
-   "via": [800.0, 700.0]
+   "via": [625.0, 700.0]
   },
   {
    "end": [1450.0, 550.0],
@@ -47,8 +47,8 @@
     },
     "interactive": false
    },
-   "start": [1450.0, 850.0],
-   "via": [1450.0, 700.0]
+   "start": [1450.0, 700.0],
+   "via": [1450.0, 625.0]
   },
   {
    "end": [1300.0, 550.0],
@@ -113,7 +113,7 @@
    "via": [1075.0, 400.0]
   },
   {
-   "end": [1050.0, 700.0],
+   "end": [700.0, 700.0],
    "ids": [5],
    "label": "Door",
    "left": {
@@ -135,11 +135,11 @@
     },
     "interactive": false
    },
-   "start": [1300.0, 700.0],
-   "via": [1175.0, 700.0]
+   "start": [950.0, 700.0],
+   "via": [825.0, 700.0]
   },
   {
-   "end": [1450.0, 700.0],
+   "end": [1100.0, 700.0],
    "ids": [6],
    "label": "Surface",
    "left": {
@@ -155,8 +155,8 @@
     },
     "interactive": false
    },
-   "start": [1300.0, 700.0],
-   "via": [1375.0, 700.0]
+   "start": [950.0, 700.0],
+   "via": [1025.0, 700.0]
   },
   {
    "end": [400.0, 850.0],
@@ -175,8 +175,8 @@
     },
     "interactive": false
    },
-   "start": [1450.0, 850.0],
-   "via": [925.0, 850.0]
+   "start": [950.0, 850.0],
+   "via": [675.0, 850.0]
   },
   {
    "end": [400.0, 550.0],
@@ -319,8 +319,134 @@
    "via": [510.0, 625.0]
   },
   {
-   "end": [0.0, 0.0],
+   "end": [950.0, 550.0],
    "ids": [15],
+   "label": "Door",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "switch",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1300.0, 550.0],
+   "via": [1125.0, 550.0]
+  },
+  {
+   "end": [950.0, 850.0],
+   "ids": [16],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [950.0, 700.0],
+   "via": [950.0, 775.0]
+  },
+  {
+   "end": [1450.0, 700.0],
+   "ids": [17],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1200.0, 700.0],
+   "via": [1325.0, 700.0]
+  },
+  {
+   "end": [1900.0, 750.0],
+   "ids": [18],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [950.0, 750.0],
+   "via": [1425.0, 750.0]
+  },
+  {
+   "end": [1900.0, 550.0],
+   "ids": [19],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1900.0, 750.0],
+   "via": [1900.0, 650.0]
+  },
+  {
+   "end": [1550.0, 700.0],
+   "ids": [20],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1900.0, 700.0],
+   "via": [1725.0, 700.0]
+  },
+  {
+   "end": [0.0, 0.0],
+   "ids": [21],
    "label": "Surface",
    "left": {
     "effect": {
@@ -340,7 +466,7 @@
   },
   {
    "end": [1920.0, 0.0],
-   "ids": [16],
+   "ids": [22],
    "label": "Surface",
    "left": {
     "effect": {
@@ -360,7 +486,7 @@
   },
   {
    "end": [1920.0, 1080.0],
-   "ids": [17],
+   "ids": [23],
    "label": "Surface",
    "left": {
     "effect": {
@@ -380,7 +506,7 @@
   },
   {
    "end": [0.0, 1080.0],
-   "ids": [18],
+   "ids": [24],
    "label": "Surface",
    "left": {
     "effect": {
