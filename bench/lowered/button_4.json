@@ -31,7 +31,7 @@
    "via": [625.0, 700.0]
   },
   {
-   "end": [1450.0, 550.0],
+   "end": [1250.0, 550.0],
    "ids": [2],
    "label": "Surface",
    "left": {
@@ -47,11 +47,11 @@
     },
     "interactive": false
    },
-   "start": [1450.0, 700.0],
-   "via": [1450.0, 625.0]
+   "start": [1250.0, 700.0],
+   "via": [1250.0, 625.0]
   },
   {
-   "end": [1300.0, 550.0],
+   "end": [1050.0, 400.0],
    "ids": [3],
    "label": "Door",
    "left": {
@@ -73,11 +73,11 @@
     },
     "interactive": false
    },
-   "start": [1300.0, 700.0],
-   "via": [1300.0, 625.0]
+   "start": [1050.0, 700.0],
+   "via": [1050.0, 550.0]
   },
   {
-   "end": [1150.0, 400.0],
+   "end": [1350.0, 400.0],
    "ids": [4],
    "label": "Button",
    "left": {
@@ -109,8 +109,8 @@
     ],
     "interactive": true
    },
-   "start": [1000.0, 400.0],
-   "via": [1075.0, 400.0]
+   "start": [1200.0, 400.0],
+   "via": [1275.0, 400.0]
   },
   {
    "end": [700.0, 700.0],
@@ -139,28 +139,8 @@
    "via": [825.0, 700.0]
   },
   {
-   "end": [1100.0, 700.0],
-   "ids": [6],
-   "label": "Surface",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [950.0, 700.0],
-   "via": [1025.0, 700.0]
-  },
-  {
    "end": [400.0, 850.0],
-   "ids": [7],
+   "ids": [6],
    "label": "Surface",
    "left": {
     "effect": {
@@ -180,7 +160,7 @@
   },
   {
    "end": [400.0, 550.0],
-   "ids": [8],
+   "ids": [7],
    "label": "Surface",
    "left": {
     "effect": {
@@ -200,7 +180,7 @@
   },
   {
    "end": [550.0, 550.0],
-   "ids": [9],
+   "ids": [8],
    "label": "Surface",
    "left": {
     "effect": {
@@ -220,7 +200,7 @@
   },
   {
    "end": [550.0, 400.0],
-   "ids": [10],
+   "ids": [9],
    "label": "Platform",
    "left": {
     "effect": {
@@ -240,7 +220,7 @@
   },
   {
    "end": [540.0, 850.0],
-   "ids": [11],
+   "ids": [10],
    "label": "Platform",
    "left": {
     "effect": {
@@ -260,7 +240,7 @@
   },
   {
    "end": [530.0, 850.0],
-   "ids": [12],
+   "ids": [11],
    "label": "Platform",
    "left": {
     "effect": {
@@ -280,7 +260,7 @@
   },
   {
    "end": [520.0, 850.0],
-   "ids": [13],
+   "ids": [12],
    "label": "Platform",
    "left": {
     "effect": {
@@ -300,7 +280,7 @@
   },
   {
    "end": [510.0, 850.0],
-   "ids": [14],
+   "ids": [13],
    "label": "Platform",
    "left": {
     "effect": {
@@ -319,34 +299,8 @@
    "via": [510.0, 625.0]
   },
   {
-   "end": [950.0, 550.0],
-   "ids": [15],
-   "label": "Door",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "presence": [
-    {
-     "key": "switch",
-     "values": ["DEFAULT", "false"]
-    }
-   ],
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [1300.0, 550.0],
-   "via": [1125.0, 550.0]
-  },
-  {
    "end": [950.0, 850.0],
-   "ids": [16],
+   "ids": [14],
    "label": "Surface",
    "left": {
     "effect": {
@@ -365,8 +319,8 @@
    "via": [950.0, 775.0]
   },
   {
-   "end": [1450.0, 700.0],
-   "ids": [17],
+   "end": [1250.0, 700.0],
+   "ids": [15],
    "label": "Surface",
    "left": {
     "effect": {
@@ -381,12 +335,12 @@
     },
     "interactive": false
    },
-   "start": [1200.0, 700.0],
-   "via": [1325.0, 700.0]
+   "start": [1050.0, 700.0],
+   "via": [1150.0, 700.0]
   },
   {
-   "end": [1900.0, 750.0],
-   "ids": [18],
+   "end": [1350.0, 750.0],
+   "ids": [16],
    "label": "Surface",
    "left": {
     "effect": {
@@ -402,11 +356,11 @@
     "interactive": false
    },
    "start": [950.0, 750.0],
-   "via": [1425.0, 750.0]
+   "via": [1150.0, 750.0]
   },
   {
-   "end": [1900.0, 550.0],
-   "ids": [19],
+   "end": [1350.0, 550.0],
+   "ids": [17],
    "label": "Surface",
    "left": {
     "effect": {
@@ -421,32 +375,12 @@
     },
     "interactive": false
    },
-   "start": [1900.0, 750.0],
-   "via": [1900.0, 650.0]
-  },
-  {
-   "end": [1550.0, 700.0],
-   "ids": [20],
-   "label": "Surface",
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "start": [1900.0, 700.0],
-   "via": [1725.0, 700.0]
+   "start": [1350.0, 750.0],
+   "via": [1350.0, 650.0]
   },
   {
    "end": [0.0, 0.0],
-   "ids": [21],
+   "ids": [18],
    "label": "Surface",
    "left": {
     "effect": {
@@ -466,7 +400,7 @@
   },
   {
    "end": [1920.0, 0.0],
-   "ids": [22],
+   "ids": [19],
    "label": "Surface",
    "left": {
     "effect": {
@@ -486,7 +420,7 @@
   },
   {
    "end": [1920.0, 1080.0],
-   "ids": [23],
+   "ids": [20],
    "label": "Surface",
    "left": {
     "effect": {
@@ -506,7 +440,7 @@
   },
   {
    "end": [0.0, 1080.0],
-   "ids": [24],
+   "ids": [21],
    "label": "Surface",
    "left": {
     "effect": {
