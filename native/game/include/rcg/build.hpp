@@ -116,7 +116,8 @@ nlohmann::json describe_level(const std::vector<BuiltSurface> &surfaces);
 // The solver's input (rc::SurfaceDef) of the surfaces: what the game hands
 // BeamScene through SceneDefs, built directly (a resolver keeps its level
 // order: the first-row fallback depends on it, a JSON object would sort it).
-std::vector<rc::SurfaceDef> defs_of(const std::vector<BuiltSurface> &surfaces);
+// Stage 193: skip_inert, the scene a game gives its solver -- without what the arrow never meets (is_inert).
+std::vector<rc::SurfaceDef> defs_of(const std::vector<BuiltSurface> &surfaces, bool skip_inert = false);
 
 // SceneDefs.describe_config: a side config as scene defs (nullptr: null).
 nlohmann::json describe_side(const BuiltSide *cfg, int host_id);

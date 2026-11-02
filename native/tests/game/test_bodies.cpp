@@ -509,6 +509,24 @@ TEST_CASE("crossings: by what an element does -- a door or a switchable that can
 	CHECK(cuts(R"({"kind": "button", "opens": "x", "start": [800, 500], "end": [1000, 500]})") == 1);
 }
 
+TEST_CASE("inert surfaces: the session's solver is not told of them, and a mirror's end on a platform is a plain graze (Stage 193)") {
+	const auto preview = [](bool with_platform) {
+		const std::string text = std::string(R"({"player": {"start": [700, 500]}, "elements": [
+			{"kind": "mirror", "name": "m", "start": [900, 300], "end": [900, 500]})") +
+			(with_platform ? R"(, {"kind": "platform", "start": [900, 500], "end": [1100, 500]})" : "") + "]}";
+		rcg::Session s(level_of(text.c_str()));
+		s.set_cursor(rc::V2::of(1000, 500)); // straight through the mirror's end
+		s.settle();
+		size_t inert = 0;
+		for (const rcg::BuiltSurface &b : s.world().surfaces()) {
+			inert += rcg::is_inert(b);
+		}
+		CHECK(s.world().defs().size() == s.world().surfaces().size() - inert);
+		return s.record(nlohmann::json::object())["preview"];
+	};
+	CHECK(preview(true) == preview(false));
+}
+
 TEST_CASE("doors: a door in line with a wall shows where it stops -- posts across its ends, a core; an open one keeps its posts (Stage 190)") {
 	const auto posts = [](bool open) { // the amber strokes across the line: {x, alpha}
 		const std::string level = std::string(R"({"gravity": [0, 980], "flags": {"open_it": )") + (open ? "true" : "false") + R"(}, "elements": [

@@ -293,9 +293,12 @@ std::optional<rc::SideDef> side_def(const std::optional<BuiltSide> &cfg, int hos
 
 } // namespace
 
-std::vector<rc::SurfaceDef> defs_of(const std::vector<BuiltSurface> &surfaces) {
+std::vector<rc::SurfaceDef> defs_of(const std::vector<BuiltSurface> &surfaces, bool skip_inert) {
 	std::vector<rc::SurfaceDef> out;
 	for (const BuiltSurface &s : surfaces) {
+		if (skip_inert && is_inert(s)) {
+			continue;
+		}
 		const rc::arc::GeneralizedCircle &g = s.seg.get_carrier();
 		rc::SurfaceDef d;
 		d.id = s.id;

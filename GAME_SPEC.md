@@ -684,7 +684,7 @@ PresenceCond:
     values: Array[String]   # flag_key spellings; "DEFAULT" = the key is missing
 ```
 
-Presence differs from a pass. A pass side is still hit: it produces events and step boundaries, and fires its hit effects. An **absent** surface does not exist for the solver:
+Presence differs from a pass. A pass side with something to do is still hit: it produces events and step boundaries, and fires its hit effects (a surface with nothing to do in any state is inert, §9.7). An **absent** surface does not exist for the solver:
 - It has no candidates.
 - It plays no part in endpoint blocking (§11).
 - It cannot be clicked into a plan.
@@ -742,6 +742,8 @@ So the solver traces whole design surfaces, and pieces live where they matter.
 **Everything else is the design surface's:** hit effects (one target, `target:<id>`), presence, the resolver, consumption of a spawn host. **Splitting ignores presence**, so the pieces never change within a shot.
 
 **Inert surfaces take no part** (Stage 192, the user: intersections only for what can matter). A surface is inert when, in every state, both its sides are passes, not plannable and without hit effects: a platform, a fence, a plain pass-through. The arrow and the plan never meet it, so it neither cuts nor is cut, shows no crossing mark, is reported crossing no portal, and neither trims nor is trimmed by a spawned surface. What it does to the player is its own (§25.1).
+
+**The solver's scene is without them** (Stage 193, the user). A walk already never computed such a surface (candidates, §12.1) and a region spared its points (Stage 140), so the game gives the solver only the surfaces that are not inert: what the arrow does and the region's fill are bit for bit the same, and a level full of them costs about what the rest costs (regions, one thread, ×0.36 on `button_1`, 61 of its 70 surfaces inert; ×0.52 on `platforms_1`; ×0.87 on `main`, 4 of its 13). The solver itself keeps its rules for a scene that has one. One corner follows from it: a surface's end that only an inert surface shares is a lone endpoint, a graze (§11.1), not a shared point.
 
 **Not split (v1).** Portal pairs and pre-transform circles. A design surface crossing a portal is reported by level validation.
 
@@ -877,7 +879,7 @@ Effect objects are **descriptions**: kind, parameters, display name and colour. 
 
 **Planned effects:** `CompoundTransformativeEffect` (§10.3).
 
-A surface side's effect is an `Effect` instance, or `null` (pass-through). A surface with `null` on both sides and `interactive = false` on both sides has no gameplay effect and is not clickable for plan construction. However, it still participates in ray tracing as a pass-through — the ray passes through it, producing a step. If `is_target = true`, the pass-through still registers a target hit.
+A surface side's effect is an `Effect` instance, or `null` (pass-through). A surface with `null` on both sides and `interactive = false` on both sides has no gameplay effect and is not clickable for plan construction: unless it has hit effects (a target, a state change), it is **inert** and the game's solver is not told of it (§9.7, Stage 193). The ray goes on as if it were not there.
 
 ### 10.2 Transformative effects
 
@@ -3135,4 +3137,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.89.2.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.89.3.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

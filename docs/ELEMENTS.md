@@ -15,7 +15,7 @@ surface already does (GAME_SPEC 9-10).
 | `wall` | A solid barrier: the arrow stops at either side (terminal) and the player collides with it. Walls and most everyday surroundings. | -- | `Surface` |
 | `shield` | A shield (an energy field): stops the arrow at either side; the player and objects pass. Drawn as a turquoise band, unlike a wall. | -- | `Shield` |
 | `fence` | An arrow-pass barrier (an iron fence): the arrow passes, the player is blocked. | -- | `Fence` |
-| `passthrough` | A surface nothing collides with: the arrow passes (a step boundary, nothing else) and so does the player. A marker. | -- | `PassThrough` |
+| `passthrough` | A surface nothing collides with: the arrow passes as if it were not there (inert, GAME_SPEC 9.7) and so does the player. A marker. | -- | `PassThrough` |
 | `platform` | A one-way platform (GAME_SPEC 25.1): the arrow passes; the player and objects stand on its top and pass it from below or the side; the player holding down drops through; moving in any direction while overlapping it, the player engages it: gravity-free movement; nothing held, it hangs only while the feet's line is on it; a pulled object or a grappled player passes it (ending half through it, put on top when its centre is above, else falling through). Drawn wood brown. Unlike a `fence`, which blocks the player every way and stops a pull. | -- | `Platform` |
 | `mirror` | A mirror reflecting on both sides, both plannable. | `solid`=false | `Mirror` |
 | `one_sided_mirror` | A one-sided mirror: its left side (left of the walk start -> via -> end) reflects and is plannable; its back passes or blocks. `flip`: the mirror faces right. | `back`="pass" (or "block"), `solid`=false | `OneSidedMirror` |
