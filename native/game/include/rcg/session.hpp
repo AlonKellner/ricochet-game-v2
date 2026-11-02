@@ -70,7 +70,7 @@ std::vector<std::pair<int, Overlay>> plan_overlays(const std::vector<PlanEntry> 
 		const std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> &hits, const World &world, const rc::Flags &flags,
 		const std::vector<bool> &frosted = {}); // (Stage 158: per entry, frost turned it)
 
-enum class Action { Undo, Reset, ClearPlan, CycleDisplay, ToggleGravity, ToggleVisibility, Any, Fire, Redo };
+enum class Action { Undo, Reset, ClearPlan, CycleDisplay, ToggleGravity, ToggleVisibility, Any, Fire, Redo, ToggleFullPreview };
 // the session scripts' names (undo, reset, clear_plan, cycle_display, toggle_gravity, toggle_visibility, any)
 std::optional<Action> action_of(const std::string &name);
 
@@ -86,7 +86,8 @@ struct SessionConfig {
 	// Stage 122 (async): how long a frame waits for the work it started (seconds;
 	// 0: never): what finishes in time shows this frame, exact and on time
 	double budget = 0.0;
-	// Stage 195 (the user): the whole preview drawn, not only to the cursor and a fade past it (a tool's: the violation viewer)
+	// Stage 195 (the user): start with the whole preview drawn, not only to the cursor and a fade past it (the violation
+	// viewer's; in the game a key toggles it)
 	bool full_preview = false;
 };
 

@@ -364,6 +364,7 @@ void RicochetGame::_input(const Ref<InputEvent> &ev) {
 			case KEY_TAB: event(RC_EVENT_CYCLE_DISPLAY); get_viewport()->set_input_as_handled(); return;
 			case KEY_G: event(RC_EVENT_TOGGLE_GRAVITY); return;
 			case KEY_V: event(RC_EVENT_TOGGLE_VISIBILITY); return;
+			case KEY_F: if (!key->is_echo()) { event(RC_EVENT_TOGGLE_FULL_PREVIEW); } return;
 			case KEY_Z: event(key->is_shift_pressed() ? RC_EVENT_REDO : RC_EVENT_UNDO); return;
 			case KEY_Y: event(RC_EVENT_REDO); return;
 			case KEY_R: event(RC_EVENT_RESET); return;

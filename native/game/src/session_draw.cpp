@@ -2155,7 +2155,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 	if (level_.features.preview) {
 		const Preview &pv = shown(); // (the provisional preview while its exact climb runs)
 		(void)pv;
-		cached(path_draw_, {trace_version_, display_mode_, provisional_version_}, NodeKind::Path, 20, V2{}, previewing,
+		cached(path_draw_, {trace_version_, display_mode_ + (full_preview_ ? 3 : 0), provisional_version_}, NodeKind::Path, 20, V2{}, previewing,
 			[&](std::vector<Call> &out) { paint_path(out, 0.0); });
 	}
 	if (level_.features.arrow && flying_) { // (the arrow's node is hidden between flights)

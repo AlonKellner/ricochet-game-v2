@@ -223,7 +223,7 @@ void rc_game_destroy(rc_game *game) { delete game; }
 
 rc_status rc_game_event(rc_game *game, int32_t event) {
 	return guarded([&]() -> rc_status {
-		if (game == nullptr || event < RC_EVENT_PLAN_ADD || event > RC_EVENT_REDO) {
+		if (game == nullptr || event < RC_EVENT_PLAN_ADD || event > RC_EVENT_TOGGLE_FULL_PREVIEW) {
 			return fail(RC_E_ARGUMENT, "rc_game_event: null game or unknown event");
 		}
 		rcg::Session &s = *game->session;
@@ -240,6 +240,7 @@ rc_status rc_game_event(rc_game *game, int32_t event) {
 			case RC_EVENT_FIRE: s.start_fire(); break;
 			case RC_EVENT_UNDO: s.key(rcg::Action::Undo); break;
 			case RC_EVENT_REDO: s.key(rcg::Action::Redo); break;
+			case RC_EVENT_TOGGLE_FULL_PREVIEW: s.key(rcg::Action::ToggleFullPreview); break;
 			case RC_EVENT_RESET: s.key(rcg::Action::Reset); break;
 			case RC_EVENT_CLEAR_PLAN: s.key(rcg::Action::ClearPlan); break;
 			case RC_EVENT_CYCLE_DISPLAY: s.key(rcg::Action::CycleDisplay); break;

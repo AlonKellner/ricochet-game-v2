@@ -171,6 +171,7 @@ std::optional<Action> action_of(const std::string &name) {
 	if (name == "any") return Action::Any;
 	if (name == "fire") return Action::Fire;
 	if (name == "redo") return Action::Redo;
+	if (name == "toggle_full_preview") return Action::ToggleFullPreview;
 	return std::nullopt;
 }
 
@@ -726,6 +727,9 @@ void Session::key(Action a) {
 			break;
 		case Action::ToggleVisibility:
 			visibility_override_ = !visibility_on();
+			break;
+		case Action::ToggleFullPreview: // Stage 195 (the user): a display's change, as the two above: no change to the game
+			full_preview_ = !full_preview_;
 			break;
 		case Action::Undo:
 			check_redo();

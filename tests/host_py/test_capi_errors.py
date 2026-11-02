@@ -36,7 +36,7 @@ def test_null_arguments():
 
 def test_bad_calls_on_a_game():
     game = rc_host.Game(rc_host.Level(MAIN))
-    for bad in (0, 12, -1):
+    for bad in (0, 13, -1):
         with pytest.raises(rc_host.RcError):
             game.event(bad)
     for dt in (-0.5, float("inf"), float("nan")):

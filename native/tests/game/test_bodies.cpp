@@ -981,6 +981,43 @@ TEST_CASE("preview: shown to the cursor, fading out a tenth of the level's diago
 	}
 }
 
+TEST_CASE("preview: a key toggles the whole preview, in the draw list at once; no change to the game, so no redo goes") {
+	rcg::Session s(level_of(R"({"player": {"start": [400, 500]}})"));
+	s.set_cursor(rc::V2::of(700, 500));
+	s.settle();
+	const auto furthest = [&]() {
+		float x = 0;
+		for (const DrawnPoint &p : path_points(s)) {
+			x = std::max(x, p.at.x);
+		}
+		return x;
+	};
+	CHECK(furthest() <= 700 + REACH + 1);
+	const nlohmann::json before = s.record(nlohmann::json::object());
+	s.key(rcg::Action::ToggleFullPreview);
+	s.settle();
+	CHECK(furthest() > 700 + REACH + 100);
+	nlohmann::json whole = s.record(nlohmann::json::object());
+	CHECK(whole["preview"] == before["preview"]);
+	CHECK(whole["draw"] != before["draw"]);
+	s.key(rcg::Action::ToggleFullPreview);
+	s.settle();
+	CHECK(furthest() <= 700 + REACH + 1);
+	CHECK(s.record(nlohmann::json::object()) == before);
+	// a redo lasts through it, and an undo leaves it as it is
+	shoot(s, 700, 500);
+	s.settle();
+	s.key(rcg::Action::Undo);
+	s.settle();
+	REQUIRE(s.redo_depth() == 1);
+	s.key(rcg::Action::ToggleFullPreview);
+	s.settle();
+	CHECK(s.redo_depth() == 1);
+	s.key(rcg::Action::Redo);
+	s.settle();
+	CHECK(furthest() > 700 + REACH + 100); // still on
+}
+
 TEST_CASE("preview: a mark past the fade is not drawn; one within it fades with its step") {
 	// a mirror within the fade's reach, then what the reflection meets far past it
 	const char *level = R"({"player": {"start": [400, 500]}, "elements": [{"kind": "mirror", "start": [800, 300], "end": [800, 700]}]})";

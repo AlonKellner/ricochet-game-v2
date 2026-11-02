@@ -49,6 +49,7 @@ int32_t event_of(const std::string &action) {
 	if (action == "toggle_gravity") return RC_EVENT_TOGGLE_GRAVITY;
 	if (action == "toggle_visibility") return RC_EVENT_TOGGLE_VISIBILITY;
 	if (action == "redo") return RC_EVENT_REDO;
+	if (action == "toggle_full_preview") return RC_EVENT_TOGGLE_FULL_PREVIEW;
 	if (action == "any") return RC_EVENT_ANY_KEY;
 	if (action == "fire") return RC_EVENT_FIRE;
 	throw std::runtime_error("unknown action " + action);
