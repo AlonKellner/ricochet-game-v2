@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 12
+#define RC_API_VERSION_MINOR 13
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -95,6 +95,9 @@ typedef struct rc_game_config {
 	 * faster is drawn as it arrives. 0 or less (the default, and an older host's
 	 * config): 1000 / 30. */
 	float late_ms;
+	/* 1.13 (Stage 195): 1 -- the whole preview is drawn, for a tool. 0 (the default, and an older
+	 * host's config): to the cursor, then fading out over a tenth of the level's diagonal. */
+	int32_t full_preview;
 } rc_game_config;
 
 /* A game on a level (config may be null: the defaults). The game keeps its

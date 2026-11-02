@@ -86,6 +86,8 @@ struct SessionConfig {
 	// Stage 122 (async): how long a frame waits for the work it started (seconds;
 	// 0: never): what finishes in time shows this frame, exact and on time
 	double budget = 0.0;
+	// Stage 195 (the user): the whole preview drawn, not only to the cursor and a fade past it (a tool's: the violation viewer)
+	bool full_preview = false;
 };
 
 struct Flight {
@@ -442,6 +444,8 @@ private:
 	int touch_version_ = -1;                       // the world version the touches are of
 	std::vector<std::vector<bool>> touches_;       // per pair of tagged nodes (elements, then objects)
 	bool bodies_moving_ = false;
+	bool full_preview_ = false; // Stage 195
+	double preview_reach() const;
 	double ready_ = 1.0; // Stage 188 (see can_fire)
 	int still_ = READY_SETTLE; // ... ticks the player has not moved
 	void set_ready() { ready_ = 1.0; still_ = READY_SETTLE; }

@@ -699,6 +699,79 @@ bool clip_line(V2 &from, V2 &to, const rc::Rect2f &rect) {
 	return true;
 }
 
+// Stage 195 (the user): the preview past the cursor (or a divergence) fades out over this many bands of its reach
+constexpr int FADE_BANDS = 16;
+
+// The calls from `from` on, at this much of their alpha (none: gone).
+void fade_calls(std::vector<Call> &out, size_t from, double alpha) {
+	if (alpha >= 1.0) {
+		return;
+	}
+	if (alpha <= 0.0) {
+		out.erase(out.begin() + long(from), out.end());
+		return;
+	}
+	for (size_t i = from; i < out.size(); i++) {
+		for (Color &c : out[i].colors) {
+			c[3] = float(double(c[3]) * alpha);
+		}
+	}
+}
+struct FadedCalls { // (the marks of one step, however it leaves)
+	std::vector<Call> &out;
+	size_t from;
+	double alpha;
+	~FadedCalls() { fade_calls(out, from, alpha); }
+};
+
+// The part of a step between two distances along it (`length` long as drawn).
+rc::TraceStep part_of(const rc::TraceStep &st, double length, double d0, double d1) {
+	rc::TraceStep part = st;
+	const double f0 = d0 / length, f1 = d1 / length;
+	if (st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end)) {
+		const rc::arc::ArcParams p = rc::arc::arc_params(st.start, st.via, st.end);
+		auto at = [&](double f) {
+			const double a = p.start_angle + (p.end_angle - p.start_angle) * f;
+			return V2::of(double(p.center.x) + p.radius * std::cos(a), double(p.center.y) + p.radius * std::sin(a));
+		};
+		part.start = at(f0);
+		part.end = at(f1);
+		part.via = at((f0 + f1) / 2.0);
+	} else {
+		const V2 d = st.end - st.start;
+		part.start = st.start + d * float(f0);
+		part.end = st.start + d * float(f1);
+		part.via = (part.start + part.end) / 2.0f;
+	}
+	return part;
+}
+
+// A step as the fade shows it: paint(part, its distance into the step, its alpha) for what can be seen. `fade`: where the
+// fade begins, from the step's start (at or before it: already fading); it is over `reach` on.
+template <class Paint>
+void paint_parts(const rc::TraceStep &st, double length, std::optional<double> fade, double reach, const Paint &paint) {
+	if (!fade || length <= 0.0) {
+		paint(st, 0.0, !fade || *fade >= length ? 1.0 : std::clamp(1.0 + *fade / reach, 0.0, 1.0));
+		return;
+	}
+	if (*fade >= length) {
+		paint(st, 0.0, 1.0);
+		return;
+	}
+	if (*fade > 0.0) {
+		paint(part_of(st, length, 0.0, *fade), 0.0, 1.0);
+	}
+	const double band = reach / FADE_BANDS;
+	for (int k = 0; k < FADE_BANDS; k++) {
+		const double d0 = std::max(*fade + k * band, 0.0), d1 = std::min(*fade + (k + 1) * band, length);
+		if (d1 > d0) {
+			paint(part_of(st, length, d0, d1), d0, 1.0 - (k + 0.5) / FADE_BANDS);
+		}
+	}
+}
+
+double drawn_length(const rc::TraceStep &st, const Shift &sh);
+
 struct PathPainter {
 	const rc::Rect2f bounds; // the draw bounds: the level's, grown by 50
 	std::vector<Call> &out;
@@ -898,8 +971,11 @@ struct PathPainter {
 	// Stage 134 (the user): with `dots` (the merge's), the non-significant events
 	// of both walks are dots coloured by the walk that computed them -- yellow the
 	// physical, red the planned, green both (for debugging)
+	// Stage 195: `seen`, how much of a mark at a distance along a step shows (none: all of it)
 	void event_marks(const std::vector<rc::TraceStep> &steps, const std::vector<Shift> &shifts, const rc::Rect2f &level,
-			const std::vector<rc::sweep::EventDot> *dots = nullptr) {
+			const std::vector<rc::sweep::EventDot> *dots = nullptr, const std::function<double(size_t, double)> &seen = {}) {
+		auto seen_at = [&](size_t i, double d) { return seen ? seen(i, d) : 1.0; };
+		auto seen_end = [&](size_t i) { return seen_at(i, std::numeric_limits<double>::infinity()); };
 		// a point at the end of step i as the step is drawn (side by side)
 		auto shifted = [&](size_t i, const V2 &end) {
 			const rc::TraceStep &st = steps[i];
@@ -923,8 +999,11 @@ struct PathPainter {
 				if (steps[size_t(d.step)].ghost) {
 					col = ghost_color(col);
 				}
-				col[3] = 0.8f;
-				out.push_back(circle(at, 2.0, col));
+				const std::optional<double> f = rc::sweep::fraction_on(steps[size_t(d.step)], d.at);
+				col[3] = float(0.8 * (f ? seen_at(size_t(d.step), *f * drawn_length(steps[size_t(d.step)], shifts[size_t(d.step)])) : seen_end(size_t(d.step))));
+				if (col[3] > 0.0f) {
+					out.push_back(circle(at, 2.0, col));
+				}
 			}
 		}
 		for (size_t i = 0; i < steps.size(); i++) {
@@ -933,6 +1012,7 @@ struct PathPainter {
 				continue;
 			}
 			const V2 at = shifted(i, st.end);
+			const FadedCalls faded{out, out.size(), seen_end(i)}; // (Stage 195: a mark fades as its step does)
 			// a portal: at its exit, the half facing the way out -- along the pair's
 			// normal (the user)
 			if (st.after_portal && bounds.has_point(st.start)) {
@@ -944,7 +1024,11 @@ struct PathPainter {
 						face = shape->normal.dot(w) >= 0.0f ? shape->normal : -shape->normal;
 					}
 				}
+				// (this one at the step's start: seen as far as the start is, whatever the end's fade does to it)
+				const size_t first = out.size();
 				half_ring(st.start + shifts[i].by, face, st, shape);
+				const double end_alpha = seen_end(i);
+				fade_calls(out, first, end_alpha > 0.0 ? seen_at(i, 0.0) / end_alpha : (seen_at(i, 0.0) > 0.0 ? 1.0 : 0.0));
 			}
 			// a passage of infinity off the level (the user: on screen): the step that
 			// reaches it, and the step after it, lie off the level -- the outgoing half
@@ -1022,32 +1106,41 @@ struct PathPainter {
 		out.push_back(line(at + V2{-0.5f, 0.0f} * 7.0f, at + V2{0.5f, 0.0f} * 7.0f, col, 2.0));
 	}
 
-	void raw(const rc::TracePath &path, const Color &base, const std::string &prefix) {
+	// Stage 195: `fade_at`, the distance along the path its fade begins (none: all of it shows), over `reach`
+	void raw(const rc::TracePath &path, const Color &base, const std::string &prefix, std::optional<double> fade_at = std::nullopt, double reach = 1.0) {
 		if (path.steps.empty()) {
 			return;
 		}
 		const size_t ci = path.cursor_index >= 0 ? size_t(path.cursor_index) : path.steps.size();
+		auto seen = [&](double d) { return !fade_at ? 1.0 : std::clamp(1.0 - (d - *fade_at) / reach, 0.0, 1.0); };
+		double along = 0.0;
 		for (size_t i = 0; i < path.steps.size(); i++) {
 			const rc::TraceStep &st = path.steps[i];
-			if (st.start == st.end) {
-				continue;
+			const double length = drawn_length(st, Shift{});
+			if (st.start != st.end) {
+				Color col = base;
+				if (i >= ci) {
+					col = render::with_alpha(base, 0.35);
+				}
+				if (st.ghost) {
+					col = ghost_color(col);
+				}
+				const std::optional<double> fade = fade_at ? std::optional<double>(*fade_at - along) : std::nullopt;
+				paint_parts(st, length, fade, reach, [&](const rc::TraceStep &part, double, double alpha) {
+					const size_t first = out.size();
+					step(part, col, !st.hit.has_value());
+					fade_calls(out, first, alpha);
+				});
 			}
-			Color col = base;
-			if (i >= ci) {
-				col = render::with_alpha(base, 0.35);
+			{
+				const FadedCalls faded{out, out.size(), seen(along + length)};
+				endpoint_circles({st}, false, base);
+				const V2 mid = (st.start + st.end) / 2.0f + V2{0, -10};
+				if (bounds.has_point(mid)) {
+					out.push_back(text(mid, prefix + std::to_string(i) + (st.hit ? "" : "*"), 1, 11, render::with_alpha(base, 0.4)));
+				}
 			}
-			if (st.ghost) {
-				col = ghost_color(col);
-			}
-			step(st, col, !st.hit.has_value());
-		}
-		endpoint_circles(path.steps, false, base);
-		for (size_t i = 0; i < path.steps.size(); i++) {
-			const rc::TraceStep &st = path.steps[i];
-			const V2 mid = (st.start + st.end) / 2.0f + V2{0, -10};
-			if (bounds.has_point(mid)) {
-				out.push_back(text(mid, prefix + std::to_string(i) + (st.hit ? "" : "*"), 1, 11, render::with_alpha(base, 0.4)));
-			}
+			along += length;
 		}
 	}
 };
@@ -1423,6 +1516,56 @@ std::vector<double> walk_lengths(const std::vector<rc::TraceStep> &steps, const 
 	return out;
 }
 
+// Stage 195 (the user): how much of the preview shows -- to the cursor all of it, a planned path that diverged too;
+// past the cursor it fades over `reach`, the physical path past a divergence from the divergence.
+struct PathReveal {
+	std::vector<double> along;
+	std::vector<double> lengths;
+	std::vector<std::optional<double>> fade; // per step: where along its walk its fade begins (none: it shows whole)
+	double reach = 1.0;
+	double seen(size_t i, double d) const { // at a distance along step i (past its end: at its end)
+		if (!fade[i]) {
+			return 1.0;
+		}
+		return std::clamp(1.0 - (along[i] + std::min(d, lengths[i]) - *fade[i]) / reach, 0.0, 1.0);
+	}
+};
+
+PathReveal reveal_of(const std::vector<rc::TraceStep> &steps, const std::vector<Shift> &shifts, double reach, bool full) {
+	PathReveal r;
+	r.reach = reach;
+	r.along = walk_lengths(steps, shifts);
+	r.fade.assign(steps.size(), std::nullopt);
+	for (size_t i = 0; i < steps.size(); i++) {
+		r.lengths.push_back(drawn_length(steps[i], shifts[i]));
+	}
+	if (full) {
+		return r;
+	}
+	std::optional<double> past_cursor, planned_past, physical;
+	for (size_t i = 0; i < steps.size(); i++) {
+		const rc::StepType t = steps[i].type;
+		if (t == rc::StepType::AlignedPostPlanned && !past_cursor) {
+			past_cursor = r.along[i];
+		} else if (t == rc::StepType::DivergedPostPlanned && !planned_past) {
+			planned_past = r.along[i];
+		} else if (t == rc::StepType::DivergedPhysical && !physical) {
+			physical = r.along[i];
+		}
+	}
+	for (size_t i = 0; i < steps.size(); i++) {
+		const rc::StepType t = steps[i].type;
+		if (t == rc::StepType::AlignedPostPlanned) {
+			r.fade[i] = past_cursor;
+		} else if (t == rc::StepType::DivergedPostPlanned) {
+			r.fade[i] = past_cursor ? past_cursor : planned_past;
+		} else if (t == rc::StepType::DivergedPhysical) {
+			r.fade[i] = past_cursor ? past_cursor : physical;
+		}
+	}
+	return r;
+}
+
 } // namespace
 
 std::vector<double> dash_offsets(const std::vector<rc::TraceStep> &steps) { return walk_lengths(steps, side_by_side(steps)); }
@@ -1472,27 +1615,36 @@ void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<C
 		return out;
 	};
 	const std::vector<Shift> shifts = side_by_side(steps);
-	const std::vector<double> along = walk_lengths(steps, shifts);
+	const PathReveal reveal = reveal_of(steps, shifts, preview_reach(), full_preview_);
+	const std::vector<double> &along = reveal.along;
 	for (size_t i = 0; i < steps.size(); i++) {
 		const rc::TraceStep &ms = steps[i];
 		if (ms.start == ms.end) {
 			continue;
 		}
 		auto tint = [&](const Color &c) { return ms.ghost ? ghost_color(c) : c; };
-		// (Stage 136, the user: the dashes run on across the steps, by the walk's length)
-		const double phase = dash_phase - along[i];
-		if (is_solid(ms.type)) {
-			pp.step(ms, tint(solid_under(ms.type)), false, 0.0, shifts[i]);
-			pp.step(ms, tint(dashes_over(ms.type)), true, phase, shifts[i]);
-		} else {
-			pp.step(ms, tint(step_color(ms.type)), true, phase, shifts[i]);
-		}
-		if (marks != nullptr && marks->size() == steps.size() && (*marks)[i] != 0) {
-			arrow_marks(out, ms, (*marks)[i], phase, shifts[i], bounds().grow(50.0f)); // Stage 157
-		}
+		const std::optional<double> fade = reveal.fade[i] ? std::optional<double>(*reveal.fade[i] - along[i]) : std::nullopt;
+		paint_parts(ms, reveal.lengths[i], fade, reveal.reach, [&](const rc::TraceStep &part, double into, double alpha) {
+			const size_t first = out.size();
+			// (Stage 136, the user: the dashes run on across the steps, by the walk's length)
+			const double phase = dash_phase - along[i] - into;
+			if (is_solid(ms.type)) {
+				pp.step(part, tint(solid_under(ms.type)), false, 0.0, shifts[i]);
+				pp.step(part, tint(dashes_over(ms.type)), true, phase, shifts[i]);
+			} else {
+				pp.step(part, tint(step_color(ms.type)), true, phase, shifts[i]);
+			}
+			if (marks != nullptr && marks->size() == steps.size() && (*marks)[i] != 0) {
+				arrow_marks(out, part, (*marks)[i], phase, shifts[i], bounds().grow(50.0f)); // Stage 157
+			}
+			fade_calls(out, first, alpha); // Stage 195
+		});
 	}
-	pp.event_marks(steps, shifts, bounds(), dots);
+	pp.event_marks(steps, shifts, bounds(), dots, [&](size_t i, double d) { return reveal.seen(i, d); });
 }
+
+// Stage 195 (the user): how far past the cursor the preview fades out: a tenth of the level's diagonal
+double Session::preview_reach() const { return std::hypot(double(level_.bounds.w), double(level_.bounds.h)) / 10.0; }
 
 // The path node's calls (Stage 130: the presenter repaints it as its dashes run)
 void Session::paint_path(std::vector<Call> &out, double dash_phase) const {
@@ -1502,15 +1654,50 @@ void Session::paint_path(std::vector<Call> &out, double dash_phase) const {
 		if (display_mode_ == 0) {
 			if (!pv.merged.empty()) {
 				paint_steps(pv.merged, out, dash_phase, &pv.dots, &pv.marks);
+				const PathReveal reveal = reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), full_preview_);
 				for (const auto &[pt, col] : truncation_markers(pv)) {
+					// (Stage 195: a stop past where the path fades out is not shown)
+					double seen = 1.0;
+					for (size_t i = 0; i < pv.merged.size(); i++) {
+						if (pv.merged[i].end == pt) {
+							seen = reveal.seen(i, reveal.lengths[i]);
+						}
+					}
+					const size_t first = out.size();
 					pp.stop_marker(pt, col);
+					fade_calls(out, first, seen);
 				}
 			}
 		} else if (pv.has_paths) {
+			// Stage 195: each walk alone shows as it does in the merge: to its cursor, the physical one to a divergence
+			auto cursor_along = [](const rc::TracePath &path) -> std::optional<double> {
+				if (path.cursor_index < 0) {
+					return std::nullopt;
+				}
+				double d = 0.0;
+				for (int i = 0; i < path.cursor_index && size_t(i) < path.steps.size(); i++) {
+					d += drawn_length(path.steps[size_t(i)], Shift{});
+				}
+				return d;
+			};
+			std::optional<double> fade_at = cursor_along(display_mode_ == 1 ? pv.physical : pv.planned);
 			if (display_mode_ == 1) {
-				pp.raw(pv.physical, CYAN, "P");
+				const std::vector<Shift> shifts = side_by_side(pv.merged);
+				const std::vector<double> along = walk_lengths(pv.merged, shifts);
+				for (size_t i = 0; i < pv.merged.size(); i++) {
+					if (pv.merged[i].type == rc::StepType::DivergedPhysical) {
+						fade_at = fade_at ? std::min(*fade_at, along[i]) : along[i];
+						break;
+					}
+				}
+			}
+			if (full_preview_) {
+				fade_at.reset();
+			}
+			if (display_mode_ == 1) {
+				pp.raw(pv.physical, CYAN, "P", fade_at, preview_reach());
 			} else {
-				pp.raw(pv.planned, MAGENTA, "L");
+				pp.raw(pv.planned, MAGENTA, "L", fade_at, preview_reach());
 			}
 		}
 	}

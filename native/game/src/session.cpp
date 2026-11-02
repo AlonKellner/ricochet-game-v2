@@ -176,6 +176,7 @@ std::optional<Action> action_of(const std::string &name) {
 
 Session::Session(const Level &level, const SessionConfig &config)
 	: level_(level), visibility_override_(config.visibility), async_(config.async), budget_(config.budget) {
+	full_preview_ = config.full_preview;
 	world_ = std::make_unique<World>(build_level(level_), level_.objects);
 	edge_open_ = open_edges(world_->surfaces(), level_.bounds);
 	if (!level_.motions.empty()) { // Stage 151: the moving surfaces, from their base specs

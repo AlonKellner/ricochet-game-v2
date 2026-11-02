@@ -205,7 +205,7 @@ bool RicochetGame::start_text(const String &level_text, const String &what) {
 		report(what.utf8().get_data());
 		return false;
 	}
-	const rc_game_config cfg{sizeof(rc_game_config), -1, visibility_, asynchronous_ ? 1 : 0, animate_ ? 1 : 0, float(solve_budget_ms_), 0.0f};
+	const rc_game_config cfg{sizeof(rc_game_config), -1, visibility_, asynchronous_ ? 1 : 0, animate_ ? 1 : 0, float(solve_budget_ms_), 0.0f, violations_path_.is_empty() ? 0 : 1};
 	const rc_status s = rc_game_create(level, &cfg, &game_);
 	rc_level_release(level);
 	if (s != RC_OK) {

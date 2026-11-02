@@ -284,6 +284,8 @@ The preview draws the step tree (§14). Each step has one of five types, each wi
 | **DIVERGED_PLANNED** | Red | Solid | Where the plan says the arrow should go, but the physical arrow diverged. |
 | **DIVERGED_POST_PLANNED** | Red | Dashed | Post-cursor continuation of the planned path, after divergence. |
 
+**How far the preview shows** (Stage 195, the user). The preview is not drawn whole: a shot's full course is for the player to find out. Everything up to the cursor is drawn at full strength, a solid red planned path included. Past the cursor each path **fades out** along its next steps over a tenth of the level's bounds' diagonal, and nothing is drawn beyond that. After a divergence the physical path fades from the **divergence point**, and the planned path from the cursor, as it continues; if the walks diverge only past the cursor, both go on fading from the cursor. A step's event marks and arrow-state marks fade with it. The display modes (Tab) show each walk by the same rule. A tool can ask for all of it (`rc_game_config.full_preview`, C API 1.13: the violation viewer). The consequences the preview shows (§14.11: what will vanish, appear, register; a journey's trail and end) are not cut by the fade.
+
 **The look** (Stage 130, the user, 2026-10-22):
 - A **solid** step is a slightly dark stroke (green `#00B300`, red `#B30000`) with a slightly bright dashed stroke over it (`#80FF80`, `#FF8080`).
 - **Dashes run** along the way the arrow flies (start to end of each step), about 30 px per second. They are presentation only: a replay draws them still. The pattern is the walk's, not each step's (Stage 136, the user): it stands at the distance from the player along the walk, through every hit point, so the dashes run on from one step to the next; each branch past a divergence goes on from the common part's length.
@@ -3141,4 +3143,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.90.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.91.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
