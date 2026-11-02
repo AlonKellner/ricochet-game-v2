@@ -698,6 +698,202 @@ TEST_CASE("firing: on every level a player left alone comes to rest, exactly, an
 	}
 }
 
+// Stage 194 (the user): a shot that went as planned clears its plan; an undo brings it back, a reset can be undone, a redo lasts until anything changes
+
+namespace {
+// floating at (900, 500), a mirror ahead: `half` tall either way of y = 500, planned at its middle
+rcg::Session planned_at_mirror(double half) {
+	const std::string text = R"({"player": {"start": [900, 500]}, "elements": [{"kind": "mirror", "name": "m", "start": [1100, )" + std::to_string(500 - half) +
+		R"(], "end": [1100, )" + std::to_string(500 + half) + R"(]}]})";
+	rcg::Session s(level_of(text.c_str()));
+	s.set_cursor(rc::V2::of(1098, 500));
+	s.settle();
+	s.click(false);
+	s.settle();
+	REQUIRE(s.plan().size() == 1);
+	return s;
+}
+} // namespace
+
+TEST_CASE("a shot's plan: cleared when it went as planned, kept when it diverged") {
+	SUBCASE("as planned: the reflection lands on the mirror, the plan is done") {
+		rcg::Session s = planned_at_mirror(200);
+		shoot(s, 1000, 400);
+		s.settle();
+		CHECK(s.plan().empty());
+	}
+	SUBCASE("diverged: the hit its cursor needs is off the short mirror, the plan stays") {
+		rcg::Session s = planned_at_mirror(20);
+		const std::vector<rcg::PlanEntry> before = s.plan();
+		shoot(s, 1000, 100);
+		s.settle();
+		CHECK(s.plan() == before);
+	}
+	SUBCASE("no plan: nothing to clear, and no trouble") {
+		rcg::Session s(level_of(R"({"player": {"start": [900, 500]}})"));
+		shoot(s, 1000, 400);
+		s.settle();
+		CHECK(s.plan().empty());
+	}
+}
+
+TEST_CASE("undo and redo: exactly the state before the shot, with its plan; exactly the state after it") {
+	rcg::Session s = planned_at_mirror(200);
+	s.set_cursor(rc::V2::of(1000, 400));
+	s.settle();
+	const nlohmann::json before = s.record(nlohmann::json::object());
+	const std::vector<rcg::PlanEntry> plan = s.plan();
+	shoot(s, 1000, 400);
+	s.settle();
+	const nlohmann::json after = s.record(nlohmann::json::object());
+	REQUIRE(s.plan().empty());
+	for (int round = 0; round < 2; round++) { // (there and back, twice)
+		s.key(rcg::Action::Undo);
+		s.settle();
+		CHECK(s.plan() == plan);
+		CHECK(s.record(nlohmann::json::object()) == before);
+		CHECK(s.redo_depth() == 1);
+		s.key(rcg::Action::Redo);
+		s.settle();
+		CHECK(s.record(nlohmann::json::object()) == after);
+		CHECK(s.redo_depth() == 0);
+	}
+	s.key(rcg::Action::Redo); // (nothing more to redo)
+	s.settle();
+	CHECK(s.record(nlohmann::json::object()) == after);
+}
+
+TEST_CASE("undo: a reset is undone like a shot; a reset of nothing is nothing to undo") {
+	rcg::Session s(level_of(FLOORED));
+	s.hold({}, 60);
+	s.key(rcg::Action::Reset); // the fall from the start was a change
+	s.hold({}, 60);
+	const rc::V2 rest = s.player();
+	s.hold({"move_left"}, 30);
+	s.hold({}, 30);
+	const rc::V2 walked = s.player();
+	REQUIRE(walked.x < rest.x);
+	s.set_cursor(rc::V2::of(600, 300));
+	s.settle();
+	s.click(false); // (a shot from there)
+	s.fly(-1, 1.0 / 60.0);
+	s.settle();
+	const nlohmann::json shot = s.record(nlohmann::json::object());
+	const int depth = shot["checkpoints"].get<int>();
+	s.key(rcg::Action::Reset);
+	s.settle();
+	CHECK(s.player() != walked);
+	CHECK(s.record(nlohmann::json::object())["checkpoints"] == depth + 1);
+	const nlohmann::json reset = s.record(nlohmann::json::object());
+	s.key(rcg::Action::Undo);
+	s.settle();
+	CHECK(s.record(nlohmann::json::object()) == shot); // back to before the reset
+	s.key(rcg::Action::Redo);
+	s.settle();
+	CHECK(s.record(nlohmann::json::object()) == reset); // and the reset again
+	s.key(rcg::Action::Undo);
+	s.key(rcg::Action::Undo); // and on, to before the shot
+	s.settle();
+	CHECK(s.player() == walked);
+	// a reset of an untouched level
+	rcg::Session fresh(level_of(R"({"player": {"start": [900, 500]}})"));
+	fresh.settle();
+	const nlohmann::json start = fresh.record(nlohmann::json::object());
+	fresh.key(rcg::Action::Reset);
+	fresh.settle();
+	CHECK(fresh.record(nlohmann::json::object())["checkpoints"] == start["checkpoints"]);
+}
+
+TEST_CASE("redo: lasts while nothing in the game changes, and goes at the slightest change") {
+	const auto undone = [] {
+		rcg::Session s(level_of(FLOORED));
+		s.hold({}, 60);
+		shoot(s, 600, 300);
+		s.key(rcg::Action::Undo);
+		s.settle();
+		REQUIRE(s.redo_depth() == 1);
+		return s;
+	};
+	SUBCASE("what changes nothing: time standing still, the cursor, the display, walking into nothing's way") {
+		rcg::Session s = undone();
+		s.hold({}, 120);
+		s.set_cursor(rc::V2::of(700, 200));
+		s.settle();
+		s.key(rcg::Action::CycleDisplay);
+		s.key(rcg::Action::ToggleVisibility);
+		s.key(rcg::Action::ClearPlan); // (no plan to clear)
+		s.hold({}, 10);
+		CHECK(s.redo_depth() == 1);
+		s.key(rcg::Action::Redo);
+		CHECK(s.redo_depth() == 0);
+	}
+	SUBCASE("what moves by itself, a moving surface: no change, as the cursor's move is none") {
+		const std::filesystem::path root = RC_REPO_ROOT;
+		rcg::Session s(rcg::load_level((root / "data/levels/objectives/timing_gate.json").string()));
+		s.hold({}, 120); // (at rest)
+		s.settle();
+		shoot(s, 600, 300);
+		s.settle();
+		const nlohmann::json shot = s.record(nlohmann::json::object());
+		s.key(rcg::Action::Undo);
+		s.settle();
+		const std::string defs = s.record(nlohmann::json::object())["world"]["defs"];
+		s.hold({}, 45);
+		s.settle();
+		CHECK(s.record(nlohmann::json::object())["world"]["defs"] != defs); // the surfaces did move
+		REQUIRE(s.redo_depth() == 1);
+		s.key(rcg::Action::Redo);
+		s.settle();
+		CHECK(s.record(nlohmann::json::object())["world"]["defs"] == shot["world"]["defs"]); // back to the state after the shot, the phase with it
+		CHECK(s.record(nlohmann::json::object())["checkpoints"] == shot["checkpoints"]);
+	}
+	SUBCASE("one tick's walk") {
+		rcg::Session s = undone();
+		s.hold({"move_left"}, 1);
+		CHECK(s.redo_depth() == 0);
+	}
+	SUBCASE("a plan's change") {
+		rcg::Session s(level_of(R"({"player": {"start": [900, 500]}, "elements": [{"kind": "mirror", "start": [1100, 300], "end": [1100, 700]}]})"));
+		s.settle();
+		shoot(s, 1000, 200);
+		s.key(rcg::Action::Undo);
+		s.settle();
+		REQUIRE(s.redo_depth() == 1);
+		s.set_cursor(rc::V2::of(1098, 500));
+		s.settle();
+		s.click(false);
+		s.settle();
+		const rc::V2 at = s.player();
+		s.key(rcg::Action::Redo);
+		s.settle();
+		CHECK(s.redo_depth() == 0);
+		CHECK(s.plan().size() == 1); // (no redo happened)
+		CHECK(s.player() == at);
+	}
+	SUBCASE("a new shot") {
+		rcg::Session s = undone();
+		shoot(s, 600, 300);
+		CHECK(s.redo_depth() == 0);
+	}
+	SUBCASE("a reset") {
+		rcg::Session s = undone();
+		s.key(rcg::Action::Reset);
+		CHECK(s.redo_depth() == 0);
+	}
+	SUBCASE("gravity toggled, and an undo restores it") {
+		rcg::Session s(level_of(FLOORED));
+		s.hold({}, 60);
+		shoot(s, 600, 300);
+		const rc::V2 at = s.player();
+		s.key(rcg::Action::ToggleGravity);
+		s.key(rcg::Action::Undo);
+		s.settle();
+		CHECK(s.player() == at);
+		s.hold({}, 30);
+		CHECK(s.player() == at); // standing, as it was: not floating or folded
+	}
+}
+
 TEST_CASE("platforms: the demo level plays to its goal") {
 	const std::filesystem::path root = RC_REPO_ROOT;
 	rcg::Session s(rcg::load_level((root / "data/levels/objectives/platforms.json").string()));

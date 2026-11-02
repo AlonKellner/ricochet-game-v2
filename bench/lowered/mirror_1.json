@@ -1,0 +1,2356 @@
+{
+ "gravity": [0.0, 980.0],
+ "name": "mirror_1",
+ "player": {
+  "start": [750.0, 650.0]
+ },
+ "room": {
+  "built": false,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/1",
+ "surfaces": [
+  {
+   "end": [1450.0, 700.0],
+   "ids": [1],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [700.0, 700.0],
+   "via": [1075.0, 700.0]
+  },
+  {
+   "end": [700.0, 350.0],
+   "ids": [2],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [700.0, 700.0],
+   "via": [700.0, 525.0]
+  },
+  {
+   "end": [1100.0, 450.0],
+   "ids": [3],
+   "label": "Door",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "switch",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1100.0, 700.0],
+   "via": [1100.0, 575.0]
+  },
+  {
+   "end": [1200.0, 600.0],
+   "ids": [4],
+   "label": "Button",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "hits": [
+     {
+      "key": "switch",
+      "kind": "state",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "hits": [
+     {
+      "key": "switch",
+      "kind": "state",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "interactive": true
+   },
+   "start": [1350.0, 450.0],
+   "via": [1275.0, 525.0]
+  },
+  {
+   "end": [1060.0, 310.0],
+   "ids": [5],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1080.0, 330.0],
+   "via": [1070.0, 320.0]
+  },
+  {
+   "end": [1060.0, 240.0],
+   "ids": [6],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1060.0, 310.0],
+   "via": [1060.0, 275.0]
+  },
+  {
+   "end": [1080.0, 220.0],
+   "ids": [7],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1060.0, 240.0],
+   "via": [1070.0, 230.0]
+  },
+  {
+   "end": [1120.0, 220.0],
+   "ids": [8],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1080.0, 220.0],
+   "via": [1100.0, 220.0]
+  },
+  {
+   "end": [1140.0, 240.0],
+   "ids": [9],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1120.0, 220.0],
+   "via": [1130.0, 230.0]
+  },
+  {
+   "end": [1140.0, 310.0],
+   "ids": [10],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1140.0, 240.0],
+   "via": [1140.0, 275.0]
+  },
+  {
+   "end": [1120.0, 330.0],
+   "ids": [11],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1140.0, 310.0],
+   "via": [1130.0, 320.0]
+  },
+  {
+   "end": [1080.0, 330.0],
+   "ids": [12],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1120.0, 330.0],
+   "via": [1100.0, 330.0]
+  },
+  {
+   "end": [1140.0, 280.0],
+   "ids": [13],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1060.0, 280.0],
+   "via": [1100.0, 280.0]
+  },
+  {
+   "end": [1080.0, 230.0],
+   "ids": [14],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1070.0, 240.0],
+   "via": [1075.0, 235.0]
+  },
+  {
+   "end": [1090.0, 230.0],
+   "ids": [15],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1070.0, 250.0],
+   "via": [1080.0, 240.0]
+  },
+  {
+   "end": [1090.0, 240.0],
+   "ids": [16],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1070.0, 260.0],
+   "via": [1080.0, 250.0]
+  },
+  {
+   "end": [1090.0, 250.0],
+   "ids": [17],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1070.0, 270.0],
+   "via": [1080.0, 260.0]
+  },
+  {
+   "end": [1090.0, 260.0],
+   "ids": [18],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1080.0, 270.0],
+   "via": [1085.0, 265.0]
+  },
+  {
+   "end": [1100.0, 220.0],
+   "ids": [19],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1100.0, 280.0],
+   "via": [1100.0, 250.0]
+  },
+  {
+   "end": [1080.0, 210.0],
+   "ids": [20],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1080.0, 170.0],
+   "via": [1080.0, 190.0]
+  },
+  {
+   "end": [1070.0, 200.0],
+   "ids": [21],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1080.0, 210.0],
+   "via": [1075.0, 205.0]
+  },
+  {
+   "end": [1090.0, 200.0],
+   "ids": [22],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1080.0, 210.0],
+   "via": [1085.0, 205.0]
+  },
+  {
+   "end": [850.0, 660.0],
+   "ids": [23],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [820.0, 630.0],
+   "via": [835.0, 645.0]
+  },
+  {
+   "end": [870.0, 610.0],
+   "ids": [24],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [850.0, 660.0],
+   "via": [860.0, 635.0]
+  },
+  {
+   "end": [820.0, 630.0],
+   "ids": [25],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [870.0, 610.0],
+   "via": [845.0, 620.0]
+  },
+  {
+   "end": [900.0, 580.0],
+   "ids": [26],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [880.0, 600.0],
+   "via": [890.0, 590.0]
+  },
+  {
+   "end": [940.0, 540.0],
+   "ids": [27],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [920.0, 560.0],
+   "via": [930.0, 550.0]
+  },
+  {
+   "end": [980.0, 500.0],
+   "ids": [28],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [960.0, 520.0],
+   "via": [970.0, 510.0]
+  },
+  {
+   "end": [1030.0, 440.0],
+   "ids": [29],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1040.0, 440.0],
+   "via": [1035.0, 440.0]
+  },
+  {
+   "end": [1040.0, 450.0],
+   "ids": [30],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1040.0, 440.0],
+   "via": [1040.0, 445.0]
+  },
+  {
+   "end": [1080.0, 400.0],
+   "ids": [31],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1040.0, 440.0],
+   "via": [1060.0, 420.0]
+  },
+  {
+   "end": [1060.0, 400.0],
+   "ids": [32],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1080.0, 400.0],
+   "via": [1070.0, 400.0]
+  },
+  {
+   "end": [1080.0, 420.0],
+   "ids": [33],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1080.0, 400.0],
+   "via": [1080.0, 410.0]
+  },
+  {
+   "end": [1030.0, 450.0],
+   "ids": [34],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1040.0, 440.0],
+   "via": [1035.0, 445.0]
+  },
+  {
+   "end": [830.0, 690.0],
+   "ids": [35],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [830.0, 640.0],
+   "via": [830.0, 665.0]
+  },
+  {
+   "end": [860.0, 690.0],
+   "ids": [36],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [830.0, 690.0],
+   "via": [845.0, 690.0]
+  },
+  {
+   "end": [860.0, 640.0],
+   "ids": [37],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [860.0, 690.0],
+   "via": [860.0, 665.0]
+  },
+  {
+   "end": [1200.0, 350.0],
+   "ids": [38],
+   "label": "Mirror",
+   "left": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "start": [1000.0, 350.0],
+   "via": [1100.0, 350.0]
+  },
+  {
+   "end": [1090.0, 360.0],
+   "ids": [39],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1100.0, 390.0],
+   "via": [1095.0, 375.0]
+  },
+  {
+   "end": [1120.0, 370.0],
+   "ids": [40],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1090.0, 360.0],
+   "via": [1105.0, 365.0]
+  },
+  {
+   "end": [1120.0, 370.0],
+   "ids": [41],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1100.0, 390.0],
+   "via": [1110.0, 380.0]
+  },
+  {
+   "end": [1120.0, 390.0],
+   "ids": [42],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1110.0, 380.0],
+   "via": [1115.0, 385.0]
+  },
+  {
+   "end": [1010.0, 380.0],
+   "ids": [43],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1010.0, 360.0],
+   "via": [1010.0, 370.0]
+  },
+  {
+   "end": [1020.0, 380.0],
+   "ids": [44],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1020.0, 360.0],
+   "via": [1020.0, 370.0]
+  },
+  {
+   "end": [1030.0, 380.0],
+   "ids": [45],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1030.0, 360.0],
+   "via": [1030.0, 370.0]
+  },
+  {
+   "end": [1040.0, 380.0],
+   "ids": [46],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1040.0, 360.0],
+   "via": [1040.0, 370.0]
+  },
+  {
+   "end": [1050.0, 380.0],
+   "ids": [47],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1050.0, 360.0],
+   "via": [1050.0, 370.0]
+  },
+  {
+   "end": [1060.0, 380.0],
+   "ids": [48],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1060.0, 360.0],
+   "via": [1060.0, 370.0]
+  },
+  {
+   "end": [1070.0, 380.0],
+   "ids": [49],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1070.0, 360.0],
+   "via": [1070.0, 370.0]
+  },
+  {
+   "end": [1080.0, 380.0],
+   "ids": [50],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1080.0, 360.0],
+   "via": [1080.0, 370.0]
+  },
+  {
+   "end": [1130.0, 380.0],
+   "ids": [51],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1130.0, 360.0],
+   "via": [1130.0, 370.0]
+  },
+  {
+   "end": [1140.0, 380.0],
+   "ids": [52],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1140.0, 360.0],
+   "via": [1140.0, 370.0]
+  },
+  {
+   "end": [1150.0, 380.0],
+   "ids": [53],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1150.0, 360.0],
+   "via": [1150.0, 370.0]
+  },
+  {
+   "end": [1160.0, 380.0],
+   "ids": [54],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1160.0, 360.0],
+   "via": [1160.0, 370.0]
+  },
+  {
+   "end": [1170.0, 380.0],
+   "ids": [55],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1170.0, 360.0],
+   "via": [1170.0, 370.0]
+  },
+  {
+   "end": [1180.0, 380.0],
+   "ids": [56],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1180.0, 360.0],
+   "via": [1180.0, 370.0]
+  },
+  {
+   "end": [1190.0, 380.0],
+   "ids": [57],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1190.0, 360.0],
+   "via": [1190.0, 370.0]
+  },
+  {
+   "end": [1150.0, 390.0],
+   "ids": [58],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1130.0, 390.0],
+   "via": [1140.0, 390.0]
+  },
+  {
+   "end": [1140.0, 400.0],
+   "ids": [59],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1130.0, 410.0],
+   "via": [1135.0, 405.0]
+  },
+  {
+   "end": [1140.0, 430.0],
+   "ids": [60],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1140.0, 400.0],
+   "via": [1140.0, 415.0]
+  },
+  {
+   "end": [1160.0, 400.0],
+   "ids": [61],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1150.0, 390.0],
+   "via": [1155.0, 395.0]
+  },
+  {
+   "end": [1120.0, 400.0],
+   "ids": [62],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1130.0, 390.0],
+   "via": [1125.0, 395.0]
+  },
+  {
+   "end": [1120.0, 430.0],
+   "ids": [63],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1120.0, 400.0],
+   "via": [1120.0, 415.0]
+  },
+  {
+   "end": [1130.0, 440.0],
+   "ids": [64],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1120.0, 430.0],
+   "via": [1125.0, 435.0]
+  },
+  {
+   "end": [1150.0, 440.0],
+   "ids": [65],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1130.0, 440.0],
+   "via": [1140.0, 440.0]
+  },
+  {
+   "end": [1160.0, 430.0],
+   "ids": [66],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1150.0, 440.0],
+   "via": [1155.0, 435.0]
+  },
+  {
+   "end": [1160.0, 400.0],
+   "ids": [67],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1160.0, 430.0],
+   "via": [1160.0, 415.0]
+  },
+  {
+   "end": [1210.0, 460.0],
+   "ids": [68],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1190.0, 460.0],
+   "via": [1200.0, 460.0]
+  },
+  {
+   "end": [1200.0, 470.0],
+   "ids": [69],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1190.0, 480.0],
+   "via": [1195.0, 475.0]
+  },
+  {
+   "end": [1210.0, 480.0],
+   "ids": [70],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1200.0, 470.0],
+   "via": [1205.0, 475.0]
+  },
+  {
+   "end": [1220.0, 470.0],
+   "ids": [71],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1210.0, 460.0],
+   "via": [1215.0, 465.0]
+  },
+  {
+   "end": [1180.0, 470.0],
+   "ids": [72],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1190.0, 460.0],
+   "via": [1185.0, 465.0]
+  },
+  {
+   "end": [1180.0, 500.0],
+   "ids": [73],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1180.0, 470.0],
+   "via": [1180.0, 485.0]
+  },
+  {
+   "end": [1190.0, 510.0],
+   "ids": [74],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1180.0, 500.0],
+   "via": [1185.0, 505.0]
+  },
+  {
+   "end": [1210.0, 510.0],
+   "ids": [75],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1190.0, 510.0],
+   "via": [1200.0, 510.0]
+  },
+  {
+   "end": [1220.0, 500.0],
+   "ids": [76],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1210.0, 510.0],
+   "via": [1215.0, 505.0]
+  },
+  {
+   "end": [1220.0, 470.0],
+   "ids": [77],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1220.0, 500.0],
+   "via": [1220.0, 485.0]
+  },
+  {
+   "end": [1190.0, 500.0],
+   "ids": [78],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1210.0, 480.0],
+   "via": [1200.0, 490.0]
+  },
+  {
+   "end": [1210.0, 500.0],
+   "ids": [79],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1190.0, 500.0],
+   "via": [1200.0, 500.0]
+  },
+  {
+   "end": [1250.0, 490.0],
+   "ids": [80],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1260.0, 520.0],
+   "via": [1255.0, 505.0]
+  },
+  {
+   "end": [1230.0, 510.0],
+   "ids": [81],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1260.0, 520.0],
+   "via": [1245.0, 515.0]
+  },
+  {
+   "end": [1250.0, 490.0],
+   "ids": [82],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1230.0, 510.0],
+   "via": [1240.0, 500.0]
+  },
+  {
+   "end": [1230.0, 490.0],
+   "ids": [83],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1240.0, 500.0],
+   "via": [1235.0, 495.0]
+  },
+  {
+   "end": [1250.0, 590.0],
+   "ids": [84],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1250.0, 560.0],
+   "via": [1250.0, 575.0]
+  },
+  {
+   "end": [1260.0, 580.0],
+   "ids": [85],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1250.0, 590.0],
+   "via": [1255.0, 585.0]
+  },
+  {
+   "end": [1260.0, 550.0],
+   "ids": [86],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1250.0, 560.0],
+   "via": [1255.0, 555.0]
+  },
+  {
+   "end": [1260.0, 580.0],
+   "ids": [87],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1260.0, 550.0],
+   "via": [1260.0, 565.0]
+  },
+  {
+   "end": [1390.0, 590.0],
+   "ids": [88],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1250.0, 590.0],
+   "via": [1320.0, 590.0]
+  },
+  {
+   "end": [1380.0, 580.0],
+   "ids": [89],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1390.0, 590.0],
+   "via": [1385.0, 585.0]
+  },
+  {
+   "end": [1260.0, 580.0],
+   "ids": [90],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1380.0, 580.0],
+   "via": [1320.0, 580.0]
+  },
+  {
+   "end": [1380.0, 550.0],
+   "ids": [91],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1380.0, 580.0],
+   "via": [1380.0, 565.0]
+  },
+  {
+   "end": [1390.0, 560.0],
+   "ids": [92],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1380.0, 550.0],
+   "via": [1385.0, 555.0]
+  },
+  {
+   "end": [1390.0, 590.0],
+   "ids": [93],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1390.0, 560.0],
+   "via": [1390.0, 575.0]
+  },
+  {
+   "end": [1260.0, 550.0],
+   "ids": [94],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1380.0, 550.0],
+   "via": [1320.0, 550.0]
+  },
+  {
+   "end": [1280.0, 560.0],
+   "ids": [95],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1270.0, 570.0],
+   "via": [1275.0, 565.0]
+  },
+  {
+   "end": [1290.0, 560.0],
+   "ids": [96],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1280.0, 570.0],
+   "via": [1285.0, 565.0]
+  },
+  {
+   "end": [1300.0, 560.0],
+   "ids": [97],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1290.0, 570.0],
+   "via": [1295.0, 565.0]
+  },
+  {
+   "end": [1310.0, 560.0],
+   "ids": [98],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1300.0, 570.0],
+   "via": [1305.0, 565.0]
+  },
+  {
+   "end": [1320.0, 560.0],
+   "ids": [99],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1310.0, 570.0],
+   "via": [1315.0, 565.0]
+  },
+  {
+   "end": [1330.0, 560.0],
+   "ids": [100],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1320.0, 570.0],
+   "via": [1325.0, 565.0]
+  },
+  {
+   "end": [1340.0, 560.0],
+   "ids": [101],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1330.0, 570.0],
+   "via": [1335.0, 565.0]
+  },
+  {
+   "end": [1350.0, 560.0],
+   "ids": [102],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1340.0, 570.0],
+   "via": [1345.0, 565.0]
+  },
+  {
+   "end": [1360.0, 560.0],
+   "ids": [103],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1350.0, 570.0],
+   "via": [1355.0, 565.0]
+  },
+  {
+   "end": [1370.0, 560.0],
+   "ids": [104],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1360.0, 570.0],
+   "via": [1365.0, 565.0]
+  },
+  {
+   "end": [1320.0, 540.0],
+   "ids": [105],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1320.0, 500.0],
+   "via": [1320.0, 520.0]
+  },
+  {
+   "end": [1320.0, 540.0],
+   "ids": [106],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1310.0, 530.0],
+   "via": [1315.0, 535.0]
+  },
+  {
+   "end": [1330.0, 530.0],
+   "ids": [107],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1320.0, 540.0],
+   "via": [1325.0, 535.0]
+  },
+  {
+   "end": [1450.0, 350.0],
+   "ids": [108],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1450.0, 700.0],
+   "via": [1450.0, 525.0]
+  },
+  {
+   "end": [1020.0, 460.0],
+   "ids": [109],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1000.0, 480.0],
+   "via": [1010.0, 470.0]
+  },
+  {
+   "end": [1190.0, 420.0],
+   "ids": [110],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1170.0, 400.0],
+   "via": [1180.0, 410.0]
+  },
+  {
+   "end": [1230.0, 460.0],
+   "ids": [111],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1210.0, 440.0],
+   "via": [1220.0, 450.0]
+  },
+  {
+   "end": [1270.0, 500.0],
+   "ids": [112],
+   "label": "PassThrough",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [1250.0, 480.0],
+   "via": [1260.0, 490.0]
+  },
+  {
+   "end": [0.0, 0.0],
+   "ids": [113],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1920.0, 0.0],
+   "via": [960.0, 0.0]
+  },
+  {
+   "end": [1920.0, 0.0],
+   "ids": [114],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1920.0, 1080.0],
+   "via": [1920.0, 540.0]
+  },
+  {
+   "end": [1920.0, 1080.0],
+   "ids": [115],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [0.0, 1080.0],
+   "via": [960.0, 1080.0]
+  },
+  {
+   "end": [0.0, 1080.0],
+   "ids": [116],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [0.0, 0.0],
+   "via": [0.0, 540.0]
+  }
+ ]
+}

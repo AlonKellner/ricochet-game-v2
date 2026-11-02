@@ -1,0 +1,90 @@
+{
+ "schema": "rc-session/1",
+ "level": "main",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    700.0,
+    400.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    502.0,
+    400.0
+   ]
+  },
+  {
+   "op": "click",
+   "button": "left"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    600.0,
+    300.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "redo"
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 30
+  },
+  {
+   "op": "cursor",
+   "at": [
+    620.0,
+    280.0
+   ]
+  },
+  {
+   "op": "key",
+   "action": "redo"
+  },
+  {
+   "op": "key",
+   "action": "reset"
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "key",
+   "action": "redo"
+  },
+  {
+   "op": "key",
+   "action": "undo"
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_left"
+   ],
+   "ticks": 1
+  },
+  {
+   "op": "key",
+   "action": "redo"
+  }
+ ]
+}

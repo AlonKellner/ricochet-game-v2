@@ -46,6 +46,7 @@ struct PlanEntry {
 	V2 click = V2::inf();
 	int piece = -1;
 	std::optional<std::array<double, 6>> span;
+	bool operator==(const PlanEntry &) const = default;
 };
 
 // A chevron overlay (ChevronOverlay): float32 colours as [r, g, b, a].
@@ -69,7 +70,7 @@ std::vector<std::pair<int, Overlay>> plan_overlays(const std::vector<PlanEntry> 
 		const std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> &hits, const World &world, const rc::Flags &flags,
 		const std::vector<bool> &frosted = {}); // (Stage 158: per entry, frost turned it)
 
-enum class Action { Undo, Reset, ClearPlan, CycleDisplay, ToggleGravity, ToggleVisibility, Any, Fire };
+enum class Action { Undo, Reset, ClearPlan, CycleDisplay, ToggleGravity, ToggleVisibility, Any, Fire, Redo };
 // the session scripts' names (undo, reset, clear_plan, cycle_display, toggle_gravity, toggle_visibility, any)
 std::optional<Action> action_of(const std::string &name);
 
@@ -152,6 +153,8 @@ public:
 	static constexpr int READY_SETTLE = 6, READY_RISE = 9, READY_FALL = 6;
 	static constexpr double READY_MUTED = 0.35;
 	double ready() const { return ready_; }
+	// Stage 194 (the user): what a redo can bring back (none once anything in the game changed)
+	size_t redo_depth() const { return redo_.size(); }
 	bool can_fire() const { return ready_ >= 1.0; }
 	void speed_up();
 	void advance(double dt, const kinematics::Input &in);
@@ -273,7 +276,22 @@ private:
 		std::vector<bool> inside; // ... the detectors the player is in
 		double phase = 0.0;       // Stage 151
 		bool cycle_auto = true;
-		bool engaged = false;     // Stage 185: hanging in a platform stays hanging
+		// Stage 194: all of what moves it, so an undo and a redo restore the state exactly
+		// (Stage 185: hanging on a platform stays hanging)
+		kinematics::Body feel;
+		bool on_floor = false;
+		V2 gravity;
+	};
+	// Stage 194: what a redo stands on -- it goes when any of this changes (the player, by a hair too). Not the
+	// moving surfaces' phase (the user: they move as the cursor may).
+	struct StateMark {
+		V2 player;
+		std::vector<PlanEntry> plan;
+		std::string flags;
+		std::map<std::string, int> generations; // what was spawned
+		std::vector<V2> bodies;
+		V2 gravity;
+		bool operator==(const StateMark &) const = default;
 	};
 	// PathRenderer's state: the last pair, its display paths and merge; the last
 	// ladder result and physical hits stay when there is no trace (as the node keeps them)
@@ -427,6 +445,13 @@ private:
 	double ready_ = 1.0; // Stage 188 (see can_fire)
 	int still_ = READY_SETTLE; // ... ticks the player has not moved
 	void set_ready() { ready_ = 1.0; still_ = READY_SETTLE; }
+	std::vector<Checkpoint> redo_; // Stage 194: what the undos took back, the latest last
+	StateMark redo_mark_;          // ... the state they left
+	StateMark initial_mark_;       // ... the state a reset left (a reset from it is nothing to undo)
+	bool clear_plan_on_landing_ = false; // ... the shot flying did what its plan said
+	StateMark state_mark() const;
+	void check_redo(); // (the redos go if the state changed since the last undo or redo)
+	bool went_as_planned(const rc::TracePair &pair) const;
 	void step_bodies();
 	void start_journey();             // at landing: the first fired grapple or pull of the shot
 	void advance_journey(double dt);

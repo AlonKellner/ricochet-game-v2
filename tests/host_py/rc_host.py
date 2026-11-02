@@ -27,7 +27,7 @@ API_MAJOR = 1
 OK, E_ARGUMENT, E_LEVEL, E_INTERNAL = 0, 1, 2, 3
 
 (EVENT_PLAN_ADD, EVENT_PLAN_REMOVE, EVENT_FIRE, EVENT_UNDO, EVENT_RESET, EVENT_CLEAR_PLAN, EVENT_CYCLE_DISPLAY,
- EVENT_TOGGLE_GRAVITY, EVENT_TOGGLE_VISIBILITY, EVENT_ANY_KEY) = range(1, 11)
+ EVENT_TOGGLE_GRAVITY, EVENT_TOGGLE_VISIBILITY, EVENT_ANY_KEY, EVENT_REDO) = range(1, 12)
 KEY_LEFT, KEY_RIGHT, KEY_UP, KEY_DOWN = 1, 2, 4, 8
 RECORD_DRAW_LIST = 1
 # 1.8: the level editor's input
@@ -361,7 +361,7 @@ class Editor:
 # ---------------------------------------------------------------- the session replay (rc_tool replay's)
 
 FRAME = 1.0 / 60.0
-ACTIONS = {"undo": EVENT_UNDO, "reset": EVENT_RESET, "clear_plan": EVENT_CLEAR_PLAN,
+ACTIONS = {"undo": EVENT_UNDO, "redo": EVENT_REDO, "reset": EVENT_RESET, "clear_plan": EVENT_CLEAR_PLAN,
            "cycle_display": EVENT_CYCLE_DISPLAY, "toggle_gravity": EVENT_TOGGLE_GRAVITY,
            "toggle_visibility": EVENT_TOGGLE_VISIBILITY, "any": EVENT_ANY_KEY, "fire": EVENT_FIRE}
 MOVES = {"move_left": KEY_LEFT, "move_right": KEY_RIGHT, "move_up": KEY_UP, "move_down": KEY_DOWN}

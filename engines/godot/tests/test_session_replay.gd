@@ -10,7 +10,7 @@ extends GutTest
 
 const STEP_FIELDS := ["i", "op", "action", "flight", "trajectory"]
 const KEYS := {"undo": KEY_Z, "reset": KEY_R, "clear_plan": KEY_C, "cycle_display": KEY_TAB,
-	"toggle_gravity": KEY_G, "toggle_visibility": KEY_V, "any": KEY_X, "fire": KEY_SPACE}
+	"redo": KEY_Y, "toggle_gravity": KEY_G, "toggle_visibility": KEY_V, "any": KEY_X, "fire": KEY_SPACE}
 
 func _sessions() -> Array[String]:
 	var out: Array[String] = []
