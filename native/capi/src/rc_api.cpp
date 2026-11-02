@@ -191,7 +191,7 @@ rc_status rc_game_create(const rc_level *level, const rc_game_config *config, rc
 			return fail(RC_E_ARGUMENT, "rc_game_create: null argument or unsized config");
 		}
 		*out = nullptr;
-		rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0, 0, 0.0f, 0.0f};
+		rc_game_config cfg{sizeof(rc_game_config), -1, -1, 0, 0, 0.0f, 0.0f, 0};
 		if (config != nullptr) {
 			std::memcpy(&cfg, config, std::min<size_t>(config->size, sizeof(rc_game_config)));
 		}
@@ -201,6 +201,7 @@ rc_status rc_game_create(const rc_level *level, const rc_game_config *config, rc
 			sc.visibility = cfg.visibility != 0;
 		}
 		sc.async = cfg.async != 0;
+		sc.full_preview = cfg.full_preview != 0;
 		sc.budget = cfg.budget_ms > 0.0f && std::isfinite(cfg.budget_ms) ? double(cfg.budget_ms) / 1000.0 : 0.0;
 		auto game = std::make_unique<rc_game>();
 		game->level = level->level;
@@ -222,7 +223,7 @@ void rc_game_destroy(rc_game *game) { delete game; }
 
 rc_status rc_game_event(rc_game *game, int32_t event) {
 	return guarded([&]() -> rc_status {
-		if (game == nullptr || event < RC_EVENT_PLAN_ADD || event > RC_EVENT_REDO) {
+		if (game == nullptr || event < RC_EVENT_PLAN_ADD || event > RC_EVENT_TOGGLE_FULL_PREVIEW) {
 			return fail(RC_E_ARGUMENT, "rc_game_event: null game or unknown event");
 		}
 		rcg::Session &s = *game->session;
@@ -239,6 +240,7 @@ rc_status rc_game_event(rc_game *game, int32_t event) {
 			case RC_EVENT_FIRE: s.start_fire(); break;
 			case RC_EVENT_UNDO: s.key(rcg::Action::Undo); break;
 			case RC_EVENT_REDO: s.key(rcg::Action::Redo); break;
+			case RC_EVENT_TOGGLE_FULL_PREVIEW: s.key(rcg::Action::ToggleFullPreview); break;
 			case RC_EVENT_RESET: s.key(rcg::Action::Reset); break;
 			case RC_EVENT_CLEAR_PLAN: s.key(rcg::Action::ClearPlan); break;
 			case RC_EVENT_CYCLE_DISPLAY: s.key(rcg::Action::CycleDisplay); break;

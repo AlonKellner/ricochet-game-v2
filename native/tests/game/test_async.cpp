@@ -66,14 +66,18 @@ TEST_CASE("async: the region stops when cancelled") {
 }
 
 TEST_CASE("async: without cancellation the running computation finishes and is kept") {
+	std::atomic<bool> running{false};
 	rcg::LatestJob<int, int> job(
 		[&](const int &in, const std::atomic<bool> &) {
+			running = true;
 			std::this_thread::sleep_for(std::chrono::milliseconds(20));
 			return in * 10;
 		},
 		false);
 	job.submit(1, 1);
-	std::this_thread::sleep_for(std::chrono::milliseconds(5)); // 1 runs
+	while (!running) { // 1 runs
+		std::this_thread::sleep_for(std::chrono::milliseconds(1));
+	}
 	job.submit(2, 2);
 	job.submit(3, 3); // replaces 2
 	std::optional<std::pair<long long, int>> first;

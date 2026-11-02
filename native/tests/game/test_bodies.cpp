@@ -11,6 +11,7 @@
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <cmath>
 #include <filesystem>
 #include <string>
@@ -892,6 +893,191 @@ TEST_CASE("redo: lasts while nothing in the game changes, and goes at the slight
 		s.hold({}, 30);
 		CHECK(s.player() == at); // standing, as it was: not floating or folded
 	}
+}
+
+// Stage 195 (the user): the preview to the cursor, a fade past it; past a divergence the physical path fades from there
+
+namespace {
+// The path node's strokes: every point with its colour's alpha.
+struct DrawnPoint {
+	rc::V2 at;
+	rcg::render::Color color;
+};
+std::vector<DrawnPoint> path_points(const rcg::Session &s) {
+	std::vector<DrawnPoint> out;
+	for (const rcg::render::Node &n : s.draw()) {
+		if (n.key != nlohmann::json::array({"path"})) {
+			continue;
+		}
+		for (const rcg::render::Call &c : n.calls) {
+			if (c.colors.empty() || (c.kind != rcg::render::Kind::Line && c.kind != rcg::render::Kind::Multiline)) {
+				continue;
+			}
+			for (const rc::V2 &p : c.pts) {
+				out.push_back({p, c.colors[0]});
+			}
+		}
+	}
+	return out;
+}
+constexpr double REACH = 220.2725; // a tenth of the default level's diagonal (1920 x 1080)
+} // namespace
+
+TEST_CASE("preview: shown to the cursor, fading out a tenth of the level's diagonal past it; nothing further") {
+	const char *level = R"({"player": {"start": [400, 500]}, "elements": [{"kind": "wall", "start": [1500, 300], "end": [1500, 700]}]})";
+	auto aimed = [&](rcg::SessionConfig cfg) {
+		rcg::Session s(level_of(level), cfg);
+		s.set_cursor(rc::V2::of(700, 500));
+		s.settle();
+		return s;
+	};
+	SUBCASE("by default") {
+		const rcg::Session s = aimed({});
+		float max_x = 0, before = 1, at_half = -1;
+		for (const DrawnPoint &p : path_points(s)) {
+			max_x = std::max(max_x, p.at.x);
+			if (p.at.x < 690) {
+				before = std::min(before, p.color[3]);
+			}
+			if (std::abs(double(p.at.x) - (700 + REACH / 2)) < 8) {
+				at_half = p.color[3];
+			}
+		}
+		CHECK(before == 1.0f); // whole to the cursor
+		CHECK(at_half == doctest::Approx(0.5).epsilon(0.1)); // half way out
+		CHECK(max_x >= 700 + REACH - 20); // it does reach out
+		CHECK(max_x <= 700 + REACH + 1); // and no further: the wall at 1500 is not drawn to
+	}
+	SUBCASE("alpha only falls along the way out") {
+		const rcg::Session s = aimed({});
+		std::vector<DrawnPoint> past;
+		for (const DrawnPoint &p : path_points(s)) {
+			if (p.at.x > 700) {
+				past.push_back(p);
+			}
+		}
+		REQUIRE(past.size() > 8);
+		std::sort(past.begin(), past.end(), [](const DrawnPoint &a, const DrawnPoint &b) { return a.at.x < b.at.x; });
+		for (size_t i = 1; i < past.size(); i++) {
+			CHECK(past[i].color[3] <= past[i - 1].color[3] + 1e-6f);
+		}
+	}
+	SUBCASE("a tool's whole preview") {
+		rcg::SessionConfig cfg;
+		cfg.full_preview = true;
+		const rcg::Session s = aimed(cfg);
+		float max_x = 0;
+		for (const DrawnPoint &p : path_points(s)) {
+			max_x = std::max(max_x, p.at.x);
+			CHECK(p.color[3] >= 0.99f);
+		}
+		CHECK(max_x >= 1340); // on to the room's wall, far past the fade's reach
+	}
+	SUBCASE("the paths' data is the whole of them: only the drawing fades") {
+		rcg::SessionConfig cfg;
+		cfg.full_preview = true;
+		rcg::Session a = aimed({}), b = aimed(cfg);
+		CHECK(a.record(nlohmann::json::object())["preview"] == b.record(nlohmann::json::object())["preview"]);
+	}
+}
+
+TEST_CASE("preview: a key toggles the whole preview, in the draw list at once; no change to the game, so no redo goes") {
+	rcg::Session s(level_of(R"({"player": {"start": [400, 500]}})"));
+	s.set_cursor(rc::V2::of(700, 500));
+	s.settle();
+	const auto furthest = [&]() {
+		float x = 0;
+		for (const DrawnPoint &p : path_points(s)) {
+			x = std::max(x, p.at.x);
+		}
+		return x;
+	};
+	CHECK(furthest() <= 700 + REACH + 1);
+	const nlohmann::json before = s.record(nlohmann::json::object());
+	s.key(rcg::Action::ToggleFullPreview);
+	s.settle();
+	CHECK(furthest() > 700 + REACH + 100);
+	nlohmann::json whole = s.record(nlohmann::json::object());
+	CHECK(whole["preview"] == before["preview"]);
+	s.key(rcg::Action::ToggleFullPreview);
+	s.settle();
+	CHECK(furthest() <= 700 + REACH + 1);
+	CHECK(s.record(nlohmann::json::object()) == before);
+	// a redo lasts through it, and an undo leaves it as it is
+	shoot(s, 700, 500);
+	s.settle();
+	s.key(rcg::Action::Undo);
+	s.settle();
+	REQUIRE(s.redo_depth() == 1);
+	s.key(rcg::Action::ToggleFullPreview);
+	s.settle();
+	CHECK(s.redo_depth() == 1);
+	s.key(rcg::Action::Redo);
+	s.settle();
+	CHECK(furthest() > 700 + REACH + 100); // still on
+}
+
+TEST_CASE("preview: a mark past the fade is not drawn; one within it fades with its step") {
+	// a mirror within the fade's reach, then what the reflection meets far past it
+	const char *level = R"({"player": {"start": [400, 500]}, "elements": [{"kind": "mirror", "start": [800, 300], "end": [800, 700]}]})";
+	const auto marks = [&](bool whole) {
+		rcg::SessionConfig cfg;
+		cfg.full_preview = whole;
+		rcg::Session s(level_of(level), cfg);
+		s.set_cursor(rc::V2::of(700, 500));
+		s.settle();
+		std::vector<float> alphas;
+		for (const rcg::render::Node &n : s.draw()) {
+			if (n.key != nlohmann::json::array({"path"})) {
+				continue;
+			}
+			for (const rcg::render::Call &c : n.calls) {
+				if (c.kind != rcg::render::Kind::Line && c.kind != rcg::render::Kind::Multiline && !c.colors.empty()) {
+					alphas.push_back(c.colors[0][3]);
+				}
+			}
+		}
+		return alphas;
+	};
+	const std::vector<float> faded = marks(false), whole = marks(true);
+	CHECK_FALSE(faded.empty());         // (the mirror's, 100 past the cursor, is there)
+	CHECK(faded.size() < whole.size()); // (the ones further on are gone)
+	CHECK(*std::min_element(faded.begin(), faded.end()) > 0.0f); // (nothing invisible left in the list)
+	CHECK(std::any_of(faded.begin(), faded.end(), [](float a) { return a < 0.75f; })); // (the mirror's mark, part way out, is faded)
+	CHECK(std::none_of(whole.begin(), whole.end(), [](float a) { return a < 0.75f && a > 0.55f; })); // (a whole preview's are not)
+}
+
+TEST_CASE("preview: a divergence -- the solid red reaches the cursor whole, then fades; the physical path fades from the divergence") {
+	// the plan's short mirror at x = 1100 (y 480-520): the cursor's reflection needs a hit far off it
+	rcg::Session s = planned_at_mirror(20);
+	const rc::V2 cursor = rc::V2::of(1000, 300);
+	const rc::V2 divergence = rc::V2::of(1100, 366.6667); // where the walks part: the reflection's hit on the mirror's carrier
+	s.set_cursor(cursor);
+	s.settle();
+	const rcg::render::Color red_under = rcg::render::hex(0xB30000FF), yellow = rcg::render::hex(0xFFFF00FF);
+	bool red_at_cursor = false;
+	float furthest_yellow = 0.0f;
+	std::vector<DrawnPoint> yellows;
+	for (const DrawnPoint &p : path_points(s)) {
+		const bool red = p.color[0] == red_under[0] && p.color[1] == red_under[1] && p.color[2] == red_under[2];
+		if (red && p.at.distance_to(cursor) < 1.0f) {
+			red_at_cursor = true;
+			CHECK(p.color[3] == 1.0f);
+		}
+		if (p.color[0] == yellow[0] && p.color[1] == yellow[1] && p.color[2] == yellow[2]) {
+			yellows.push_back(p);
+		}
+	}
+	CHECK(red_at_cursor);
+	REQUIRE_FALSE(yellows.empty());
+	// the physical path, past the mirror it misses: from the divergence a reach out, no further, and on the way out it fades
+	for (const DrawnPoint &p : yellows) {
+		const double out = double(p.at.distance_to(divergence));
+		furthest_yellow = std::max(furthest_yellow, float(out));
+		CHECK(double(p.color[3]) == doctest::Approx(1.0 - out / REACH).epsilon(0.08));
+	}
+	CHECK(furthest_yellow > REACH - 30);
+	CHECK(furthest_yellow <= REACH + 1);
 }
 
 TEST_CASE("platforms: the demo level plays to its goal") {

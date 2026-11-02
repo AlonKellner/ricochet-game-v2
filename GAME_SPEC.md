@@ -245,6 +245,7 @@ Movement and aiming are independent and simultaneous. *(Principle 16.)*
 | **Remove / Clear plan** | Right-click | If cursor is over a **planned surface**: removes the **latest instance** of that surface from the plan. If cursor is over an unplanned surface or empty space: **clears the entire plan**. |
 | **Fire** | Spacebar / trigger; a left-click over nothing plannable (Stage 177); only standing still (§21.0, Stage 188) | Locks the plan, freezes game time, runs physical trace, animates arrow. No-op if cursor is at the player position (zero-length Direction — see §8.3). The player can **skip** the animation by pressing any key during flight. |
 | **Clear plan** | C / dedicated button | Clears the plan without resetting the level or respawning the player. |
+| **Full preview** | F | Toggles the whole preview, or to the cursor and a fade past it, the default (§4.3, Stage 195). |
 | **Undo** | Z / dedicated button | Reverts to the checkpoint saved before the most recent shot or reset, plan included. |
 | **Redo** | Y or Shift+Z / dedicated button | Brings back what an undo took, while nothing in the game has changed since (§3.3, Stage 194). |
 | **Full reset** | R / dedicated button | Reverts to the level's initial state (all surfaces restored, player at spawn). An undo takes it back. |
@@ -283,6 +284,8 @@ The preview draws the step tree (§14). Each step has one of five types, each wi
 | **DIVERGED_PHYSICAL** | Yellow | Dashed | Where the physical arrow actually goes after divergence. |
 | **DIVERGED_PLANNED** | Red | Solid | Where the plan says the arrow should go, but the physical arrow diverged. |
 | **DIVERGED_POST_PLANNED** | Red | Dashed | Post-cursor continuation of the planned path, after divergence. |
+
+**How far the preview shows** (Stage 195, the user). The preview is not drawn whole: a shot's full course is for the player to find out. Everything up to the cursor is drawn at full strength, a solid red planned path included. Past the cursor each path **fades out** along its next steps over a tenth of the level's bounds' diagonal, and nothing is drawn beyond that. After a divergence the physical path fades from the **divergence point**, and the planned path from the cursor, as it continues; if the walks diverge only past the cursor, both go on fading from the cursor. A step's event marks and arrow-state marks fade with it. The display modes (Tab) show each walk by the same rule. **F** toggles the whole preview in play (`RC_EVENT_TOGGLE_FULL_PREVIEW`, C API 1.13), a change of the display like Tab, so it ends no redo; a tool can start with it on (`rc_game_config.full_preview`: the violation viewer). The consequences the preview shows (§14.11: what will vanish, appear, register; a journey's trail and end) are not cut by the fade.
 
 **The look** (Stage 130, the user, 2026-10-22):
 - A **solid** step is a slightly dark stroke (green `#00B300`, red `#B30000`) with a slightly bright dashed stroke over it (`#80FF80`, `#FF8080`).
@@ -3141,4 +3144,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.90.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.91.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -1,0 +1,36 @@
+{
+ "schema": "rc-session/1",
+ "level": "main",
+ "kind": "teleport",
+ "steps": [
+  {
+   "op": "teleport",
+   "at": [
+    700.0,
+    400.0
+   ]
+  },
+  {
+   "op": "cursor",
+   "at": [
+    800.0,
+    400.0
+   ]
+  },
+  {
+   "op": "key",
+   "action": "toggle_full_preview"
+  },
+  {
+   "op": "cursor",
+   "at": [
+    820.0,
+    420.0
+   ]
+  },
+  {
+   "op": "key",
+   "action": "toggle_full_preview"
+  }
+ ]
+}

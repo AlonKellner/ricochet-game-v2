@@ -171,11 +171,13 @@ std::optional<Action> action_of(const std::string &name) {
 	if (name == "any") return Action::Any;
 	if (name == "fire") return Action::Fire;
 	if (name == "redo") return Action::Redo;
+	if (name == "toggle_full_preview") return Action::ToggleFullPreview;
 	return std::nullopt;
 }
 
 Session::Session(const Level &level, const SessionConfig &config)
 	: level_(level), visibility_override_(config.visibility), async_(config.async), budget_(config.budget) {
+	full_preview_ = config.full_preview;
 	world_ = std::make_unique<World>(build_level(level_), level_.objects);
 	edge_open_ = open_edges(world_->surfaces(), level_.bounds);
 	if (!level_.motions.empty()) { // Stage 151: the moving surfaces, from their base specs
@@ -725,6 +727,9 @@ void Session::key(Action a) {
 			break;
 		case Action::ToggleVisibility:
 			visibility_override_ = !visibility_on();
+			break;
+		case Action::ToggleFullPreview: // Stage 195 (the user): a display's change, as the two above: no change to the game
+			full_preview_ = !full_preview_;
 			break;
 		case Action::Undo:
 			check_redo();

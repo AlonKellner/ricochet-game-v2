@@ -205,7 +205,7 @@ bool RicochetGame::start_text(const String &level_text, const String &what) {
 		report(what.utf8().get_data());
 		return false;
 	}
-	const rc_game_config cfg{sizeof(rc_game_config), -1, visibility_, asynchronous_ ? 1 : 0, animate_ ? 1 : 0, float(solve_budget_ms_), 0.0f};
+	const rc_game_config cfg{sizeof(rc_game_config), -1, visibility_, asynchronous_ ? 1 : 0, animate_ ? 1 : 0, float(solve_budget_ms_), 0.0f, violations_path_.is_empty() ? 0 : 1};
 	const rc_status s = rc_game_create(level, &cfg, &game_);
 	rc_level_release(level);
 	if (s != RC_OK) {
@@ -364,6 +364,7 @@ void RicochetGame::_input(const Ref<InputEvent> &ev) {
 			case KEY_TAB: event(RC_EVENT_CYCLE_DISPLAY); get_viewport()->set_input_as_handled(); return;
 			case KEY_G: event(RC_EVENT_TOGGLE_GRAVITY); return;
 			case KEY_V: event(RC_EVENT_TOGGLE_VISIBILITY); return;
+			case KEY_F: if (!key->is_echo()) { event(RC_EVENT_TOGGLE_FULL_PREVIEW); } return;
 			case KEY_Z: event(key->is_shift_pressed() ? RC_EVENT_REDO : RC_EVENT_UNDO); return;
 			case KEY_Y: event(RC_EVENT_REDO); return;
 			case KEY_R: event(RC_EVENT_RESET); return;

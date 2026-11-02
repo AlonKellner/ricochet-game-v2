@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 12
+#define RC_API_VERSION_MINOR 13
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -95,6 +95,10 @@ typedef struct rc_game_config {
 	 * faster is drawn as it arrives. 0 or less (the default, and an older host's
 	 * config): 1000 / 30. */
 	float late_ms;
+	/* 1.13 (Stage 195): 1 -- the game starts with the whole preview drawn. 0 (the default, and an older
+	 * host's config): to the cursor, then fading out over a tenth of the level's diagonal, until
+	 * RC_EVENT_TOGGLE_FULL_PREVIEW. */
+	int32_t full_preview;
 } rc_game_config;
 
 /* A game on a level (config may be null: the defaults). The game keeps its
@@ -115,7 +119,8 @@ enum {
 	RC_EVENT_TOGGLE_GRAVITY = 8,
 	RC_EVENT_TOGGLE_VISIBILITY = 9,
 	RC_EVENT_ANY_KEY = 10,         /* any other key (speeds a flight up) */
-	RC_EVENT_REDO = 11             /* 1.12: back what an undo took, while nothing in the game has changed since */
+	RC_EVENT_REDO = 11,            /* 1.12: back what an undo took, while nothing in the game has changed since */
+	RC_EVENT_TOGGLE_FULL_PREVIEW = 12 /* 1.13: the whole preview, or to the cursor and a fade past it */
 };
 RC_API rc_status rc_game_event(rc_game *game, int32_t event);
 

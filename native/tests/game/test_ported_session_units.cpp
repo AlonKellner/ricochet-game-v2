@@ -583,7 +583,9 @@ TEST_CASE("ported: test_stage110_truncation: test_a_path_cut_by_the_limit_is_tru
 // an octagon of radius 7 and a bar through its centre, in the colour of the step ending there.
 TEST_CASE("ported: test_stage110_truncation: test_the_preview_marks_the_cut") {
 	const rcg::Level lv = level_of(trapped_mirrors());
-	rcg::Session s(lv);
+	rcg::SessionConfig whole; // (Stage 195: the cut is far past where the game's preview fades out)
+	whole.full_preview = true;
+	rcg::Session s(lv, whole);
 	s.teleport(v(50, 300));
 	s.set_cursor(v(90, 300));
 	s.settle();
