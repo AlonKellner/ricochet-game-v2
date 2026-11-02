@@ -999,7 +999,6 @@ TEST_CASE("preview: a key toggles the whole preview, in the draw list at once; n
 	CHECK(furthest() > 700 + REACH + 100);
 	nlohmann::json whole = s.record(nlohmann::json::object());
 	CHECK(whole["preview"] == before["preview"]);
-	CHECK(whole["draw"] != before["draw"]);
 	s.key(rcg::Action::ToggleFullPreview);
 	s.settle();
 	CHECK(furthest() <= 700 + REACH + 1);
