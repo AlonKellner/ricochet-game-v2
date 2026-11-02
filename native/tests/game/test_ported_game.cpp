@@ -188,7 +188,7 @@ TEST_CASE("ported: test_invariant_combos: test_no_piece_crossings") {
 			const rcg::Pieces pieces = rcg::build_pieces(surfaces);
 			std::vector<std::pair<int, const rcg::SegGeom *>> segs;
 			for (const rcg::BuiltSurface &s : surfaces) {
-				if (s.pre_transform) {
+				if (s.pre_transform || rcg::is_inert(s)) { // (Stage 192: what the arrow never meets may cross)
 					continue;
 				}
 				for (const rcg::Piece &p : pieces.of(s.id)) {
@@ -656,6 +656,63 @@ TEST_CASE("ported: test_stage108_pieces: test_stage108_portals_and_pre_transform
 	CHECK(p.of(surfaces[0].id).size() == 1);
 	CHECK(p.of(surfaces[1].id).size() == 1);
 	CHECK(p.portal_crossings.size() == 1); // reported for level validation
+}
+
+// Stage 192 (the user): crossings only for what can matter to the arrow or the plan
+
+TEST_CASE("crossings: an inert surface neither cuts nor is cut; what the arrow meets does") {
+	const json mirror_side = side("reflection", true);
+	const json mirror = line(V2{0, -100}, V2{0, 100}, mirror_side, mirror_side);
+	const json pass = side("pass");
+	const auto crossing = [](const json &left, const json &right) { return line(V2{-50, 0}, V2{50, 0}, left, right); };
+	auto pieces_of_mirror = [&](json other) {
+		std::vector<rcg::BuiltSurface> surfaces{built(mirror, 1), built(std::move(other), 2)};
+		const rcg::Pieces p = rcg::build_pieces(surfaces);
+		CHECK(p.crossings.size() == p.of(1).size() - 1);
+		return p.of(1).size();
+	};
+	SUBCASE("inert: a plain pass, a fence (it stops the player), a platform, no sides at all") {
+		json fence = crossing(pass, pass);
+		fence["player_solid"] = true;
+		json platform = crossing(pass, pass);
+		platform["platform"] = true;
+		json bare = line(V2{-50, 0}, V2{50, 0}, json(nullptr), json(nullptr));
+		CHECK(rcg::is_inert(built(fence, 2)));
+		CHECK(rcg::is_inert(built(platform, 2)));
+		CHECK(pieces_of_mirror(crossing(pass, pass)) == 1);
+		CHECK(pieces_of_mirror(fence) == 1);
+		CHECK(pieces_of_mirror(platform) == 1);
+		CHECK(pieces_of_mirror(bare) == 1);
+	}
+	SUBCASE("not inert: one side blocking or reflecting, plannable, or a hit effect, even on a pass") {
+		const json hit = side("pass", false, json::object(), json::array({{{"kind", "state"}, {"key", "k"}, {"value", true}}}));
+		CHECK(pieces_of_mirror(crossing(side("terminal"), pass)) == 2);
+		CHECK(pieces_of_mirror(crossing(pass, mirror_side)) == 2);
+		CHECK(pieces_of_mirror(crossing(side("pass", true), pass)) == 2);
+		CHECK(pieces_of_mirror(crossing(pass, hit)) == 2);
+	}
+	SUBCASE("an inert surface crossing a portal is no problem to report") {
+		const json pl = side("portal", true, {{"theta", 0.0}, {"d", {300.0, 0.0}}});
+		std::vector<rcg::BuiltSurface> surfaces =
+			rcg::build_level(level_of({arc(V2{0, -50}, V2{0, 50}, V2{0, 0}, pl, pl), line(V2{-20, 0}, V2{20, 0}, pass, pass)}));
+		surfaces.erase(surfaces.begin() + 1);
+		CHECK(rcg::build_pieces(surfaces).portal_crossings.empty());
+	}
+}
+
+TEST_CASE("crossings: a spawned surface is not trimmed by an inert one, and an inert spawn is neither trimmed nor trims") {
+	const json pass = side("pass");
+	const rcg::BuiltSurface host = trim_host(100, "c", across(), 1);
+	const rcg::BuiltSurface fence = built(line(V2{0, 40}, V2{200, 40}, pass, pass), 2);
+	const rcg::Landing r = rcg::fold({hit_at(host, 10)}, {host, fence}, flags({{"chan:c", std::string("pending")}}), {});
+	REQUIRE(r.placed.size() == 1);
+	CHECK(r.placed[0].spec.end == V2{100, 70}); // whole
+	const json inert_template = template_of(line(V2{-60, 0}, V2{60, 0}, pass, pass), "BEAM_NORMAL");
+	const rcg::BuiltSurface host2 = trim_host(100, "c", inert_template, 1);
+	const rcg::BuiltSurface wall = trim_wall(V2{0, 40}, V2{200, 40}, 2);
+	const rcg::Landing r2 = rcg::fold({hit_at(host2, 10)}, {host2, wall}, flags({{"chan:c", std::string("pending")}}), {});
+	REQUIRE(r2.placed.size() == 1);
+	CHECK(r2.placed[0].spec.end == V2{100, 70});
 }
 
 // ================================================================ test_stage108_trim.gd

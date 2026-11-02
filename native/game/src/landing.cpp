@@ -131,6 +131,17 @@ SurfaceSpec place(const SpawnTemplateSpec &t, const BuiltSurface &host, const rc
 	return mapped(*t.surface, frame * rc::Xf2::rotation(0.0f, t.offset));
 }
 
+namespace {
+// Stage 192: is_inert (build.hpp), of a surface not built yet
+bool inert_spec(const SurfaceSpec &spec) {
+	const auto inert_side = [](const std::optional<SideSpec> &side) {
+		return !side || (side->effect.type == "pass" && !side->interactive && side->hits.empty());
+	};
+	return !spec.pre_transform && inert_side(spec.left) && inert_side(spec.right)
+		&& std::all_of(spec.resolver.begin(), spec.resolver.end(), [&](const ResolverRow &r) { return inert_side(r.left) && inert_side(r.right); });
+}
+} // namespace
+
 SurfaceSpec trim(const SurfaceSpec &spec, const std::vector<SegGeom> &cutters) {
 	if (spec.is_portal()) {
 		return spec; // a portal pair is not split (GAME_SPEC 9.7)
@@ -226,18 +237,21 @@ Landing fold(const std::vector<rc::HitRecord> &hits, const std::vector<BuiltSurf
 	// trimming cuts against what is present once the shot has landed, then the groups placed before
 	std::vector<SegGeom> cutters;
 	for (const BuiltSurface &s : world) {
-		if (!s.pre_transform && present(s, flags)) {
+		if (!s.pre_transform && !is_inert(s) && present(s, flags)) {
 			cutters.push_back(s.seg);
 		}
 	}
 	for (const std::string &ch : landing) {
 		const Spawn &rec = spawns.at(ch);
 		SurfaceSpec spec = place(*rec.eff->spawn_template, *rec.host, *rec.hit);
-		if (rec.eff->spawn_template->trim) {
+		const bool inert = inert_spec(spec); // (Stage 192: neither trimmed nor a cutter)
+		if (rec.eff->spawn_template->trim && !inert) {
 			spec = trim(spec, cutters);
 		}
 		spec.presence.push_back({"chan:" + ch, {"g" + std::to_string(out.generations[ch])}});
-		cutters.push_back(segment_of(spec));
+		if (!inert) {
+			cutters.push_back(segment_of(spec));
+		}
 		out.placed.push_back({ch, out.generations[ch], std::move(spec)});
 	}
 	out.flags = std::move(flags);
