@@ -118,6 +118,15 @@ std::vector<sm::Shape> walk(rcg::Session &s, rc::V2 step, int n) {
 
 } // namespace
 
+namespace {
+// (Stage 195: these look at marks and dashes far along a path, past where the game's preview fades out)
+rcg::SessionConfig whole_preview() {
+	rcg::SessionConfig c;
+	c.full_preview = true;
+	return c;
+}
+} // namespace
+
 TEST_CASE("present: a region's outline is its fill") {
 	for (const char *name : {"test_levels/crossings.json", "test_levels/hit_effects.json", "main.json", "playground/portals.json"}) {
 		CAPTURE(name);
@@ -759,7 +768,7 @@ TEST_CASE("present: steps on one carrier with different ends are set side by sid
 // Stage 131 (the user): a significant event is marked apart -- a ringed dot (a
 // white disc under one in the step's colour); any other crossing a small dot
 TEST_CASE("present: significant events are ringed dots, other crossings small dots") {
-	rcg::Session s(level("test_levels/crossings.json"));
+	rcg::Session s(level("test_levels/crossings.json"), whole_preview());
 	rc::TraceStep a;
 	a.start = rc::V2{100, 100};
 	a.end = rc::V2{300, 100};
@@ -811,7 +820,7 @@ TEST_CASE("present: a wrap and a portal are marked by two half rings") {
 	// path leaves the level at the right edge two steps before the passage of
 	// infinity, and enters again at the left edge a step after it
 	{
-		rcg::Session s(level("test_levels/crossings.json")); // (bounds 0..1920 x 0..1080)
+		rcg::Session s(level("test_levels/crossings.json"), whole_preview()); // (bounds 0..1920 x 0..1080)
 		rc::TraceStep a = step(rc::V2{1420, 840}, rc::V2{1920, 1006.67f});
 		rc::TraceStep b = step(rc::V2{1920, 1006.67f}, rc::V2{2140, 1080});
 		rc::TraceStep c = step(rc::V2{2140, 1080}, rc::V2{2234.87f, 1111.62f});
@@ -837,7 +846,7 @@ TEST_CASE("present: a wrap and a portal are marked by two half rings") {
 	// a portal: the halves normal to the portal (the user), not along the way --
 	// portals x = 550 (10) and x = 1350 (11), a beam in at a slant
 	{
-		rcg::Session s(level("playground/portals.json"));
+		rcg::Session s(level("playground/portals.json"), whole_preview());
 		rc::TraceStep to_portal = step(rc::V2{350, 600}, rc::V2{550, 700});
 		to_portal.surface_id = 10;
 		to_portal.significant = true;
@@ -872,7 +881,7 @@ TEST_CASE("present: a wrap and a portal are marked by two half rings") {
 	// (centre (1576.6, 675), r 146.6) and 13 (centre (476.6, 675)), a beam from the
 	// west into 12 at its westmost point, out of 13 at its westmost point, inward
 	{
-		rcg::Session s(level("playground/portals.json"));
+		rcg::Session s(level("playground/portals.json"), whole_preview());
 		rc::TraceStep to_portal = step(rc::V2{1200, 675}, rc::V2{1430, 675});
 		to_portal.surface_id = 12;
 		to_portal.significant = true;
@@ -946,7 +955,7 @@ TEST_CASE("present: side by side by passes -- one lane per pass, packed, centred
 TEST_CASE("present: a wrap whose way back crosses far off the level -- half rings and the arrow's re-entry") {
 	for (const rc::V2 cur : {rc::V2::of(0x1.70222ap+10, 0x1.d3dddp+8), rc::V2::of(0x1.71628p+10, 0x1.d1dcdcp+8)}) {
 		CAPTURE(cur.x);
-		rcg::Session s(level("open_room_playable.json"));
+		rcg::Session s(level("open_room_playable.json"), whole_preview());
 		s.teleport(rc::V2::of(0x1.704f62p+10, 0x1.6be93cp+9));
 		s.set_cursor(cur);
 		s.settle();
@@ -978,7 +987,7 @@ TEST_CASE("present: a wrap whose way back crosses far off the level -- half ring
 // each step's own start (they jumped at every step). A branch past the divergence
 // goes on from the common part's length.
 TEST_CASE("present: the dashes run on across the steps, by the walk's length from the player") {
-	rcg::Session s(level("test_levels/crossings.json"));
+	rcg::Session s(level("test_levels/crossings.json"), whole_preview());
 	auto st = [](rc::V2 a, rc::V2 b, rc::StepType t) {
 		rc::TraceStep x;
 		x.start = a;

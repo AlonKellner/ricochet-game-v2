@@ -981,6 +981,36 @@ TEST_CASE("preview: shown to the cursor, fading out a tenth of the level's diago
 	}
 }
 
+TEST_CASE("preview: a mark past the fade is not drawn; one within it fades with its step") {
+	// a mirror within the fade's reach, then what the reflection meets far past it
+	const char *level = R"({"player": {"start": [400, 500]}, "elements": [{"kind": "mirror", "start": [800, 300], "end": [800, 700]}]})";
+	const auto marks = [&](bool whole) {
+		rcg::SessionConfig cfg;
+		cfg.full_preview = whole;
+		rcg::Session s(level_of(level), cfg);
+		s.set_cursor(rc::V2::of(700, 500));
+		s.settle();
+		std::vector<float> alphas;
+		for (const rcg::render::Node &n : s.draw()) {
+			if (n.key != nlohmann::json::array({"path"})) {
+				continue;
+			}
+			for (const rcg::render::Call &c : n.calls) {
+				if (c.kind != rcg::render::Kind::Line && c.kind != rcg::render::Kind::Multiline && !c.colors.empty()) {
+					alphas.push_back(c.colors[0][3]);
+				}
+			}
+		}
+		return alphas;
+	};
+	const std::vector<float> faded = marks(false), whole = marks(true);
+	CHECK_FALSE(faded.empty());         // (the mirror's, 100 past the cursor, is there)
+	CHECK(faded.size() < whole.size()); // (the ones further on are gone)
+	CHECK(*std::min_element(faded.begin(), faded.end()) > 0.0f); // (nothing invisible left in the list)
+	CHECK(std::any_of(faded.begin(), faded.end(), [](float a) { return a < 0.75f; })); // (the mirror's mark, part way out, is faded)
+	CHECK(std::none_of(whole.begin(), whole.end(), [](float a) { return a < 0.75f && a > 0.55f; })); // (a whole preview's are not)
+}
+
 TEST_CASE("preview: a divergence -- the solid red reaches the cursor whole, then fades; the physical path fades from the divergence") {
 	// the plan's short mirror at x = 1100 (y 480-520): the cursor's reflection needs a hit far off it
 	rcg::Session s = planned_at_mirror(20);
