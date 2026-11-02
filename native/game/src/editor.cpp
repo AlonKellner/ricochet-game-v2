@@ -493,6 +493,7 @@ json Editor::op(const json &cmd) {
 		if (level_menu_) { // Stage 167: the search has the focus, empty
 			focus_ = Field{"", "#level_search"};
 			buffer_.clear();
+			caret_ = 0;
 		} else if (focus_ && focus_->key == "#level_search") {
 			focus_.reset();
 		}

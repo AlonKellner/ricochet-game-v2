@@ -309,6 +309,11 @@ def main(argv):
         code = key_code(e.keysym)
         if code is not None:
             editor.key(code, mods_of(e.state), down)
+        if down and code == ord("V") and mods_of(e.state) & rc_host.MOD_CTRL:
+            try:  # Stage 191: the clipboard to the panel's field (no field open: it is ignored)
+                editor.text(e.widget.clipboard_get())
+            except tk.TclError:  # (nothing text on the clipboard)
+                pass
         if down and e.char and len(e.char) == 1 and ord(e.char) >= 32 and not (mods_of(e.state) & rc_host.MOD_CTRL):
             editor.text(e.char)
         schedule()

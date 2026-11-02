@@ -1100,6 +1100,24 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 	}
 }
 
+namespace {
+// Stage 191: the byte a whole UTF-8 character before, or after, a caret (the text's end stays there)
+size_t char_before(const std::string &s, size_t at) {
+	while (at > 0 && (static_cast<unsigned char>(s[--at]) & 0xC0) == 0x80) {
+	}
+	return at;
+}
+size_t char_after(const std::string &s, size_t at) {
+	if (at < s.size()) {
+		at++;
+	}
+	while (at < s.size() && (static_cast<unsigned char>(s[at]) & 0xC0) == 0x80) {
+		at++;
+	}
+	return at;
+}
+} // namespace
+
 void Editor::key(int code, unsigned mods, bool down) {
 	if (code == 32 && !down) {
 		space_ = false;
@@ -1134,6 +1152,7 @@ void Editor::key(int code, unsigned mods, bool down) {
 		} else if (code == KeyEscape) {
 			if (search && !buffer_.empty()) {
 				buffer_.clear(); // (the first Esc clears the search, the next closes the list)
+				caret_ = 0;
 				level_pick_ = 0;
 				return;
 			}
@@ -1148,12 +1167,15 @@ void Editor::key(int code, unsigned mods, bool down) {
 				rename_prompt_ = false; // Stage 170: no rename
 			}
 			focus_.reset();
-		} else if (code == KeyBackspace && !buffer_.empty()) {
-			size_t n = buffer_.size() - 1;
-			while (n > 0 && (static_cast<unsigned char>(buffer_[n]) & 0xC0) == 0x80) {
-				n--; // a whole UTF-8 character
-			}
-			buffer_.erase(n);
+		} else if (code == KeyLeft || code == KeyRight) { // Stage 191: the caret (with Ctrl: to the text's start or end)
+			caret_ = (mods & ModCtrl) ? (code == KeyLeft ? 0 : buffer_.size()) : code == KeyLeft ? char_before(buffer_, caret_) : char_after(buffer_, caret_);
+		} else if (code == KeyBackspace && caret_ > 0) {
+			const size_t n = char_before(buffer_, caret_);
+			buffer_.erase(n, caret_ - n);
+			caret_ = n;
+			level_pick_ = 0;
+		} else if (code == KeyDelete && caret_ < buffer_.size()) {
+			buffer_.erase(caret_, char_after(buffer_, caret_) - caret_);
 			level_pick_ = 0;
 		}
 		return;
@@ -1280,11 +1302,26 @@ void Editor::text(const std::string &utf8) {
 	if (!focus_ || mode_ == Mode::Play) {
 		return;
 	}
-	for (const char c : utf8) {
-		if (static_cast<unsigned char>(c) >= 32 && c != 127) {
-			buffer_ += c;
+	// Stage 191: more than a key types is a host's paste -- its white space around dropped, its lines joined
+	size_t from = 0, to = utf8.size();
+	const auto blank = [](char c) { return c == ' ' || c == '\t' || c == '\r' || c == '\n'; };
+	while (utf8.size() > 1 && from < to && blank(utf8[from])) {
+		from++;
+	}
+	while (utf8.size() > 1 && to > from && blank(utf8[to - 1])) {
+		to--;
+	}
+	std::string typed;
+	for (size_t i = from; i < to; i++) {
+		const char c = utf8[i];
+		if (c == '\n' || c == '\t') {
+			typed += ' ';
+		} else if (static_cast<unsigned char>(c) >= 32 && c != 127) {
+			typed += c;
 		}
 	}
+	buffer_.insert(caret_, typed);
+	caret_ += typed.size();
 	level_pick_ = 0; // (Stage 167: a new query picks its best match)
 }
 
@@ -1301,6 +1338,7 @@ void Editor::start_new_prompt(const std::string &from) {
 	}
 	focus_ = Field{"", "#new_level"};
 	buffer_ = name;
+	caret_ = buffer_.size();
 }
 
 // Stage 170: the rename's prompt, in the level menu (the level's name to edit)
@@ -1311,6 +1349,7 @@ void Editor::start_rename_prompt() {
 	panel_scroll_ = 0;
 	focus_ = Field{"", "#rename_level"};
 	buffer_ = level_name_.empty() ? doc_.value("name", std::string("untitled")) : level_name_;
+	caret_ = buffer_.size();
 }
 
 void Editor::commit_field() {
@@ -1953,6 +1992,7 @@ void Editor::click_row(const Row &r, unsigned mods) {
 	}
 	focus_ = f;
 	buffer_ = r.value.size() >= 2 && r.value.front() == '(' && r.value.back() == ')' ? "" : r.value;
+	caret_ = buffer_.size();
 }
 
 // ---------------------------------------------------------------- drawing
@@ -2660,10 +2700,24 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					p.push_back(rect(V2{x0 + 4, r.y + 1}, V2{PANEL_WIDTH - 8, ROW - 2}, rgba(1, 1, 1, 0.06)));
 				}
 				p.push_back(text_at(V2{x0 + 14, base}, r.label, DIM, FONT - 1));
-				std::string v = focused ? buffer_ + "|" : r.value;
 				const size_t room = WRAP - 14;
-				if (v.size() > room) {
-					v = focused ? "..." + v.substr(v.size() - room + 3) : v.substr(0, room - 3) + "...";
+				std::string v = r.value;
+				if (focused) { // Stage 191: the caret in the text, the part around it when it is long
+					v = buffer_.substr(0, caret_) + "|" + buffer_.substr(caret_);
+					if (v.size() > room) {
+						const size_t shown = room - 6;
+						size_t start = std::min(caret_ > shown / 2 ? caret_ - shown / 2 : 0, v.size() - shown);
+						while (start > 0 && (static_cast<unsigned char>(v[start]) & 0xC0) == 0x80) {
+							start--; // (a whole UTF-8 character)
+						}
+						size_t end = std::min(start + shown, v.size());
+						while (end < v.size() && (static_cast<unsigned char>(v[end]) & 0xC0) == 0x80) {
+							end++;
+						}
+						v = (start > 0 ? "..." : "") + v.substr(start, end - start) + (end < v.size() ? "..." : "");
+					}
+				} else if (v.size() > room) {
+					v = v.substr(0, room - 3) + "...";
 				}
 				const bool dflt = !focused && v.size() >= 2 && v.front() == '(';
 				p.push_back(text_at(V2{x0 + VALUE_X, base}, v, dflt ? DIM : r.choice.empty() ? TEXT : ACCENT, FONT - 1));

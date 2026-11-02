@@ -90,6 +90,102 @@ void click_row(rcg::Editor &ed, const std::string &label, unsigned mods = 0) {
 
 } // namespace
 
+TEST_CASE("editor: a field's text -- a paste joins its lines, the caret edits its middle (Stage 191)") {
+	rcg::Editor ed;
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"name", "w"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
+	ok(ed, {{"op", "select"}, {"name", "w"}});
+	const auto type = [&](const std::string &t) { ed.text(t); };
+	const auto press = [&](int code, unsigned mods = 0) { ed.key(code, mods, true); };
+	const auto label = [&]() { return element(ed, "w").value("label", std::string()); };
+	const auto done = [&]() {
+		press(rcg::Editor::KeyEnter);
+		return label();
+	};
+	const int L = rcg::Editor::KeyLeft, R = rcg::Editor::KeyRight, BS = rcg::Editor::KeyBackspace, DEL = rcg::Editor::KeyDelete;
+	click_row(ed, "label");
+	type("abc");
+	press(L);
+	press(L);
+	type("X");
+	CHECK(done() == "aXbc");
+	// a field opens with the caret at its end; Backspace and Delete on either side of it
+	click_row(ed, "label");
+	press(L);
+	press(L);
+	press(BS); // aX|bc -> a|bc
+	CHECK(done() == "abc");
+	click_row(ed, "label");
+	press(L);
+	press(L);
+	press(DEL); // a|bc -> a|c
+	CHECK(done() == "ac");
+	// at the ends nothing moves or goes
+	click_row(ed, "label");
+	press(R);
+	press(DEL);
+	type("d");
+	press(rcg::Editor::KeyLeft, rcg::Editor::ModCtrl); // Ctrl: to the start
+	press(L);
+	press(BS);
+	type("^");
+	press(R, rcg::Editor::ModCtrl); // ... to the end
+	type("$");
+	CHECK(done() == "^acd$");
+	// a whole UTF-8 character at a time
+	click_row(ed, "label");
+	press(BS);
+	press(BS);
+	press(BS);
+	press(BS);
+	press(BS);
+	type("x\xC3\xA9y");
+	press(L);
+	press(L);
+	type("-");
+	press(R);
+	press(BS);
+	CHECK(done() == "x-y");
+	// a paste goes in at the caret; a typed space stays, a paste's around it does not
+	click_row(ed, "label");
+	press(L);
+	type("  a\nb\t\r\n");
+	type(" ");
+	CHECK(done() == "x-a b y");
+	// a long text shows the part around the caret
+	click_row(ed, "label");
+	press(R, rcg::Editor::ModCtrl);
+	type(std::string(300, 'k') + "MIDDLE" + std::string(300, 'k'));
+	for (int i = 0; i < 300; i++) {
+		press(L);
+	}
+	const auto drawn = [&]() {
+		for (const auto &n : ed.draw()) {
+			for (const auto &c : *n.calls) {
+				if (c.text.find('|') != std::string::npos && c.text.find("MIDDLE") != std::string::npos) {
+					return c.text;
+				}
+			}
+		}
+		return std::string();
+	};
+	const std::string shown = drawn();
+	CHECK(shown.find("MIDDLE|") != std::string::npos);
+	CHECK(shown.rfind("...", 0) == 0);
+	CHECK(shown.substr(shown.size() - 3) == "...");
+	press(rcg::Editor::KeyEscape);
+	// the level search starts empty, its caret with it (a long text before it or not)
+	click_row(ed, "label");
+	press(R, rcg::Editor::ModCtrl);
+	press(rcg::Editor::KeyEscape);
+	press('O', rcg::Editor::ModCtrl);
+	type("q");
+	press(L);
+	type("p");
+	CHECK(ok(ed, {{"op", "state"}})["focus"] == "#level_search");
+	press(rcg::Editor::KeyEscape);
+	press(rcg::Editor::KeyEscape);
+}
+
 TEST_CASE("editor: every level loads and saves byte for byte") {
 	int n = 0;
 	for (const auto &e : fs::recursive_directory_iterator(ROOT / "data" / "levels")) {
@@ -340,6 +436,18 @@ TEST_CASE("editor: the panel edits the selected element and the level") {
 	ed.text("[0, 980]");
 	ed.key(rcg::Editor::KeyEnter, 0, true);
 	CHECK(ed.document()["gravity"] == json::array({0, 980}));
+	// Stage 191: a paste into a field -- several lines, white space around; no element pasted by its Ctrl+V
+	const json elements_before = ed.document()["elements"];
+	click_row(ed, "flags");
+	ed.key('V', rcg::Editor::ModCtrl, true);
+	ed.text("  {\"door:gate\":\n\ttrue}\r\n");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(ed.document()["flags"] == json{{"door:gate", true}});
+	CHECK(ed.document()["elements"] == elements_before);
+	click_row(ed, "flags"); // (no field open: a paste is ignored)
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	ed.text("not a field\n");
+	CHECK(ed.document()["flags"] == json{{"door:gate", true}});
 	// the place row cycles what the tools place
 	const std::string kind0 = ok(ed, {{"op", "state"}})["kind"];
 	click_row(ed, "place");

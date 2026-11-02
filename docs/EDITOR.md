@@ -153,7 +153,9 @@ Click a field to edit it:
   Esc: no change). The element keeps its parameters, and the problems show what the new kind does not accept.
 - **Any other field** takes typed text: type, then Enter to apply or Esc to cancel. The text is read as JSON
   (`[700, 300]`, `true`, `{"door:gate": true}`), and a bare word is a string (`gate`). Empty text removes the
-  field: a parameter returns to its default, a label to the kind's.
+  field: a parameter returns to its default, a label to the kind's. The left and right arrows move the caret, with
+  Ctrl (Command on a Mac) to the text's start or end; typing, Backspace and Delete work at the caret. Ctrl+V pastes the
+  system clipboard at the caret: its lines joined, the white space around it dropped (Stage 191).
 
 A parameter left at its default shows the default in parentheses. Renaming an element carries the buttons that
 open it (their `opens`). With nothing selected, the panel edits the level: its name, bounds, gravity, room,

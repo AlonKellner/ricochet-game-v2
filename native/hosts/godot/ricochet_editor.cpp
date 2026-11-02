@@ -1,6 +1,7 @@
 #include "ricochet_editor.hpp"
 
 #include <godot_cpp/classes/dir_access.hpp>
+#include <godot_cpp/classes/display_server.hpp>
 #include <godot_cpp/classes/engine.hpp>
 #include <godot_cpp/classes/file_access.hpp>
 #include <godot_cpp/classes/input_event_key.hpp>
@@ -239,6 +240,11 @@ void RicochetEditor::_input(const Ref<InputEvent> &ev) {
 		const uint32_t mods = mods_of(key);
 		if (code >= 0 && !(key->is_echo() && code >= RC_EDKEY_F1)) {
 			rc_editor_key(editor_, code, mods, key->is_pressed() ? 1 : 0);
+		}
+		if (key->is_pressed() && !key->is_echo() && (mods & RC_MOD_CTRL) && k == KEY_V && DisplayServer::get_singleton()->has_feature(DisplayServer::FEATURE_CLIPBOARD)) {
+			// Stage 191: the clipboard to the panel's field (no field open: the key pasted elements, the text is ignored)
+			const CharString clip = DisplayServer::get_singleton()->clipboard_get().utf8();
+			rc_editor_text(editor_, clip.get_data(), size_t(clip.length()));
 		}
 		const char32_t ch = char32_t(key->get_unicode());
 		if (key->is_pressed() && ch >= 32 && ch != 127 && !(mods & RC_MOD_CTRL)) {
