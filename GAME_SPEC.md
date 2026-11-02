@@ -160,9 +160,12 @@ A **puzzle** is a level: a scene containing surfaces, a player spawn point, and 
 
 The game maintains **automatic checkpoints** — snapshots of the scene state taken just before each shot. The player can revert to a previous checkpoint at any time:
 
-- **Undo last shot**: reverts to just before the most recent shot. All of the following are restored: player position, game state flags (full copy), current plan, and the set of targets hit so far.
-- **Full reset**: reverts to the level's initial state (all surfaces restored, player at spawn point, checkpoint stack cleared).
-- **Checkpoint stack**: checkpoints accumulate per shot. The player can step back through them one at a time.
+- **Undo**: reverts to just before the most recent shot or reset. All of the following are restored: player position and movement state, gravity, game state flags (full copy), the plan exactly as it was, and the set of targets hit so far.
+- **Full reset**: reverts to the level's initial state (all surfaces restored, player at spawn point). It is a checkpoint too (Stage 194, the user): an undo takes it back. A reset of a level in its initial state does nothing.
+- **Redo** (Stage 194, the user): brings back what the last undo took, exactly, one at a time. It lasts while **nothing in the game changes**: the slightest move of the player, a change of the plan, the flags, the world or gravity, a moving surface's phase, a shot or a reset ends it. The cursor, the display and time standing still do not.
+- **Checkpoint stack**: checkpoints accumulate per shot and reset. The player can step back through them one at a time.
+
+**The plan after a shot** (Stage 194, the user). A shot that went as planned, no step of its preview diverged (§14), is done: its plan is **cleared** when it lands. A shot that diverged leaves its plan as it is, to try again. An undo brings a cleared plan back.
 
 ```
 CheckpointData:
@@ -191,14 +194,14 @@ Main Menu
             │   │   ├─ Physical trace computed instantly
             │   │   ├─ Arrow flight animated step-by-step (visual only)
             │   │   ├─ State changes promoted (game state updated)
-            │   │   ├─ Plan is RETAINED (the same list of {surface_id, side} entries, which may now resolve to different effects if the game state changed)
+            │   │   ├─ The plan: CLEARED if the shot went as planned (no step of it diverged), else RETAINED (the same list of {surface_id, side} entries, which may now resolve to different effects if the game state changed)
             │   │   ├─ Game time UNFREEZES
             │   │   ├─ Evaluate: have all targets been hit (across all shots)?
             │   │   │   ├─ YES → Level Complete → return to Level Select (or next level)
             │   │   │   └─ NO  → remain in play phase, player can continue
             │   ├─ Player can clear the plan (without resetting level or respawning)
-            │   ├─ Player can undo last shot (revert to previous checkpoint)
-            │   └─ Player can full-reset (revert to initial level state)
+            │   ├─ Player can undo (revert to previous checkpoint: the last shot or reset), and redo while nothing changed
+            │   └─ Player can full-reset (revert to initial level state; an undo takes it back)
             └─ Pause Menu → Resume / Quit to Level Select
 ```
 
@@ -242,8 +245,9 @@ Movement and aiming are independent and simultaneous. *(Principle 16.)*
 | **Remove / Clear plan** | Right-click | If cursor is over a **planned surface**: removes the **latest instance** of that surface from the plan. If cursor is over an unplanned surface or empty space: **clears the entire plan**. |
 | **Fire** | Spacebar / trigger; a left-click over nothing plannable (Stage 177); only standing still (§21.0, Stage 188) | Locks the plan, freezes game time, runs physical trace, animates arrow. No-op if cursor is at the player position (zero-length Direction — see §8.3). The player can **skip** the animation by pressing any key during flight. |
 | **Clear plan** | C / dedicated button | Clears the plan without resetting the level or respawning the player. |
-| **Undo last shot** | Z / dedicated button | Reverts to the checkpoint saved before the most recent shot. |
-| **Full reset** | R / dedicated button | Reverts to the level's initial state (all surfaces restored, player at spawn). |
+| **Undo** | Z / dedicated button | Reverts to the checkpoint saved before the most recent shot or reset, plan included. |
+| **Redo** | Y or Shift+Z / dedicated button | Brings back what an undo took, while nothing in the game has changed since (§3.3, Stage 194). |
+| **Full reset** | R / dedicated button | Reverts to the level's initial state (all surfaces restored, player at spawn). An undo takes it back. |
 | **Jump (with gravity)** | W / Up / left-stick-up | Standard platformer jump. No effect when gravity is zero. Overlapping a platform it moves the player up it, as every direction does (§25.1, Stages 185, 187). |
 | **Pause** | Escape / start | Opens pause menu. |
 
@@ -2553,9 +2557,9 @@ a floor stays on it).
 ### 25.3 Spawn, checkpoints, and reset
 
 - Player spawns at `scene.spawn_point`.
-- **Undo last shot** (Z): reverts to the checkpoint before the most recent shot — player position, game state, and plan are restored. Checkpoint stack allows stepping back through multiple shots.
+- **Undo** (Z): reverts to the checkpoint before the most recent shot or reset — player position, game state, and plan are restored. Checkpoint stack allows stepping back through them. **Redo** (Y or Shift+Z): §3.3.
 - **Clear plan** (C): clears the plan without affecting player position or game state.
-- **Full reset** (R): reverts to the level's initial state — player returns to spawn, all surfaces restored, all state reset, checkpoint stack cleared.
+- **Full reset** (R): reverts to the level's initial state — player returns to spawn, all surfaces restored, all state reset; an undo takes it back.
 
 ### 25.5 Objects
 
@@ -2834,7 +2838,7 @@ Invariants are split into two tiers: **user experience invariants** (observable 
 
 **UX4. Firing the same shot twice produces the same result.** Same position, cursor, plan, and game state → identical arrow path. *(Principle 17.)*
 
-**UX5. Undo fully restores.** After undoing a shot, the game is indistinguishable from just before that shot — same player position, surfaces, plan, and target progress. *(§3.3.)*
+**UX5. Undo fully restores.** After undoing a shot or a reset, the game is indistinguishable from just before it — same player position, surfaces, plan, and target progress; and a redo, from just after it. *(§3.3.)*
 
 **UX6. All targets reachable.** If the player has hit all targets (across one or more shots), the level is complete. No target is silently "unhit" despite being contacted. *(§24.2.)*
 
@@ -3137,4 +3141,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.89.3.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.90.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

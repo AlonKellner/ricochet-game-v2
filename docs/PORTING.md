@@ -69,6 +69,7 @@ Map your engine's input onto events. These are the Godot host's bindings (`proje
 | `RC_EVENT_PLAN_REMOVE` | right mouse button |
 | `RC_EVENT_FIRE` | Space |
 | `RC_EVENT_UNDO` / `RESET` / `CLEAR_PLAN` | Z / R / C |
+| `RC_EVENT_REDO` (C API 1.12, Stage 194) | Y, or Shift+Z |
 | `RC_EVENT_CYCLE_DISPLAY` | Tab |
 | `RC_EVENT_TOGGLE_GRAVITY` / `TOGGLE_VISIBILITY` | G / V |
 | `RC_EVENT_ANY_KEY` | any other key (speeds up a flight) |

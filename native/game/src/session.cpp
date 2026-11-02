@@ -170,6 +170,7 @@ std::optional<Action> action_of(const std::string &name) {
 	if (name == "toggle_visibility") return Action::ToggleVisibility;
 	if (name == "any") return Action::Any;
 	if (name == "fire") return Action::Fire;
+	if (name == "redo") return Action::Redo;
 	return std::nullopt;
 }
 
@@ -215,7 +216,8 @@ Session::Session(const Level &level, const SessionConfig &config)
 		shadow();
 	}
 	// the initial checkpoint: taken before the level built its world (GameManager._ready)
-	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt, false, {}, 0.0, true};
+	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt, false, {}, 0.0, true, kinematics::Body{}, false, gravity_};
+	initial_mark_ = state_mark(); // (Stage 194)
 	hud_ = hud_text(); // (Stage 145: a goal's line; "" without a goal and a plan)
 	for (const BuiltSurface &s : world_->surfaces()) {
 		for (const BuiltSide *side : s.all_sides()) {
@@ -679,15 +681,16 @@ bool Session::click(bool right) {
 }
 
 Session::Checkpoint Session::capture() const {
-	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot(), won_, inside_, phase_, cycle_auto_, feel_.engaged};
+	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot(), won_, inside_, phase_, cycle_auto_, feel_, on_floor_, gravity_};
 }
 
 void Session::restore(const Checkpoint &c) {
 	player_ = c.player;
 	tick_from_ = c.player;
 	velocity_ = c.velocity;
-	feel_ = kinematics::Body{};
-	feel_.engaged = c.engaged;
+	feel_ = c.feel;
+	on_floor_ = c.on_floor;
+	gravity_ = c.gravity;
 	set_ready(); // (Stage 188: as when it fired)
 	set_flags(c.flags);
 	world_->restore(c.world ? *c.world : world_->initial_snapshot());
@@ -724,25 +727,64 @@ void Session::key(Action a) {
 			visibility_override_ = !visibility_on();
 			break;
 		case Action::Undo:
+			check_redo();
 			if (!checkpoints_.empty()) {
 				const Checkpoint c = checkpoints_.back();
 				checkpoints_.pop_back();
+				redo_.push_back(capture());
 				restore(c);
+				redo_mark_ = state_mark();
 			}
 			break;
-		case Action::Reset:
-			checkpoints_.clear();
-			restore(initial_);
+		case Action::Redo: // Stage 194 (the user)
+			check_redo();
+			if (!redo_.empty()) {
+				const Checkpoint c = redo_.back();
+				redo_.pop_back();
+				checkpoints_.push_back(capture());
+				restore(c);
+				redo_mark_ = state_mark();
+			}
+			break;
+		case Action::Reset: // Stage 194 (the user): an undo takes it back, unless there was nothing to reset
+			if (state_mark() != initial_mark_) {
+				checkpoints_.push_back(capture());
+				redo_.clear();
+				restore(initial_);
+				initial_mark_ = state_mark();
+			}
 			break;
 		case Action::ClearPlan:
-			plan_.clear();
-			plan_changed();
-			refresh_ui();
+			if (!plan_.empty()) {
+				plan_.clear();
+				plan_changed();
+				refresh_ui();
+			}
 			break;
 		case Action::Any:
 		case Action::Fire:
 			break;
 	}
+}
+
+// Stage 194: the state a redo stands on (see StateMark)
+Session::StateMark Session::state_mark() const {
+	return StateMark{player_, plan_, flags_.canonical_key(), world_->version(), phase_, gravity_};
+}
+
+void Session::check_redo() {
+	if (!redo_.empty() && state_mark() != redo_mark_) {
+		redo_.clear();
+	}
+}
+
+// Stage 194 (the user): did the shot do what its plan said -- as its preview shows it, no step of it diverged?
+bool Session::went_as_planned(const rc::TracePair &pair) const {
+	Preview p;
+	make_preview(p, pair);
+	return std::none_of(p.merged.begin(), p.merged.end(), [](const rc::TraceStep &st) {
+		return st.type != rc::StepType::Aligned && st.type != rc::StepType::AlignedPostPlanned;
+	});
 }
 
 void Session::land() {
@@ -781,6 +823,11 @@ void Session::land() {
 	}
 	start_journey();
 	check_won();
+	if (clear_plan_on_landing_ && !plan_.empty()) { // Stage 194 (the user): it went as planned; an undo brings the plan back
+		plan_.clear();
+		plan_changed();
+	}
+	clear_plan_on_landing_ = false;
 	// Plan entries on surfaces no longer in the world, or absent, are dropped (the ∞ entry stays)
 	const size_t before = plan_.size();
 	plan_.erase(std::remove_if(plan_.begin(), plan_.end(),
@@ -873,6 +920,8 @@ bool Session::start_fire() {
 		checkpoints_.pop_back();
 		return false;
 	}
+	redo_.clear(); // (Stage 194: a shot is a change)
+	clear_plan_on_landing_ = went_as_planned(*pair);
 	pending_flags_ = pair->final_flags;
 	pending_path_ = pair->physical;
 	if (!level_.features.arrow) {
@@ -967,6 +1016,7 @@ void Session::tick(const kinematics::Input &in) {
 	velocity_ = body.vel;
 	on_floor_ = body.on_floor;
 	feel_ = body;
+	check_redo(); // Stage 194: even a slight move is a change
 	if (player_ != tick_from_) { // Stage 188: what it did, not what was held
 		still_ = 0;
 		ready_ = std::max(ready_ - 1.0 / READY_FALL, 0.0);

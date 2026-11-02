@@ -298,8 +298,8 @@ def main(argv):
                     state["held"] |= MOVES[k]
                 else:
                     state["held"] &= ~MOVES[k]
-            elif down and k in ("space", "z", "r", "c", "tab", "v", "g"):
-                ev = {"space": rc_host.EVENT_FIRE, "z": rc_host.EVENT_UNDO, "r": rc_host.EVENT_RESET,
+            elif down and k in ("space", "z", "y", "r", "c", "tab", "v", "g"):
+                ev = {"space": rc_host.EVENT_FIRE, "z": rc_host.EVENT_UNDO, "y": rc_host.EVENT_REDO, "r": rc_host.EVENT_RESET,
                       "c": rc_host.EVENT_CLEAR_PLAN, "tab": rc_host.EVENT_CYCLE_DISPLAY,
                       "v": rc_host.EVENT_TOGGLE_VISIBILITY, "g": rc_host.EVENT_TOGGLE_GRAVITY}[k]
                 state["game"].event(ev)

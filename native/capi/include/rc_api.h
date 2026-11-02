@@ -34,7 +34,7 @@ extern "C" {
 #endif
 
 #define RC_API_VERSION_MAJOR 1
-#define RC_API_VERSION_MINOR 11
+#define RC_API_VERSION_MINOR 12
 
 /* (major << 16) | minor. A host built against another major version must not
  * use the library. */
@@ -114,7 +114,8 @@ enum {
 	RC_EVENT_CYCLE_DISPLAY = 7,    /* the path display: merged, physical, planned */
 	RC_EVENT_TOGGLE_GRAVITY = 8,
 	RC_EVENT_TOGGLE_VISIBILITY = 9,
-	RC_EVENT_ANY_KEY = 10          /* any other key (speeds a flight up) */
+	RC_EVENT_ANY_KEY = 10,         /* any other key (speeds a flight up) */
+	RC_EVENT_REDO = 11             /* 1.12: back what an undo took, while nothing in the game has changed since */
 };
 RC_API rc_status rc_game_event(rc_game *game, int32_t event);
 

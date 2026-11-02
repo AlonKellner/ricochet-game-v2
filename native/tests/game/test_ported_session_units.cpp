@@ -702,7 +702,7 @@ TEST_CASE("plan: a left click over nothing plannable fires; over a plannable sid
 	const rcg::Flight f = s.fly(-1, FRAME);
 	CHECK(f.frames > 0);
 	CHECK_FALSE(s.flying());
-	CHECK(s.plan().size() == 1); // (the plan is kept after a shot)
+	CHECK(s.plan().empty()); // (Stage 194: it went as planned, so the plan is done)
 	s.set_cursor(v(700, 300)); // a wall: no plannable side -- fires
 	CHECK(s.click(false));
 	s.fly(-1, FRAME);
