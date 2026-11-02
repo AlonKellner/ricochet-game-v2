@@ -60,6 +60,18 @@ struct BuiltSurface {
 	bool is_target() const;
 };
 
+// Stage 192: does the arrow not care that it is there -- in every state, both sides a pass, not plannable, no hit
+// effects? (A platform, a fence, a plain pass-through: they may stop the player, but the arrow and the plan never
+// meet them.) Such a surface takes no part in the crossings: it cuts nothing and is not cut.
+inline bool is_inert(const BuiltSurface &s) {
+	for (const BuiltSide *side : s.all_sides()) {
+		if (side != nullptr && (side->effect.type != "pass" || side->interactive || !side->hits.empty())) { // (none: the pass)
+			return false;
+		}
+	}
+	return !s.pre_transform;
+}
+
 // Stage 190: a door -- its posts across its ends show where it stops, beside a wall in line with it
 inline bool is_door(const BuiltSurface &s) { return s.label == "Door" || s.label == "ChargedDoor"; }
 // A post's ends, half long either way across the surface at its end `at` (radial on an arc).

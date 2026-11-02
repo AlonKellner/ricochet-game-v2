@@ -487,6 +487,28 @@ TEST_CASE("shields: drawn unlike a wall -- a turquoise core and band, a plain si
 	CHECK(reds >= 2); // the wall, the target
 }
 
+TEST_CASE("crossings: by what an element does -- a door or a switchable that can stop the arrow cuts, a platform or a fence does not (Stage 192)") {
+	const auto cuts = [](const char *element) {
+		const std::string text = std::string(R"({"elements": [{"kind": "mirror", "name": "m", "start": [900, 300], "end": [900, 700]}, )") + element + "]}";
+		rcg::Session s(level_of(text.c_str()));
+		for (const rcg::BuiltSurface &b : s.world().surfaces()) {
+			if (b.label == "Mirror") {
+				return s.world().pieces().of(b.id).size() - 1;
+			}
+		}
+		FAIL("no mirror");
+		return size_t(0);
+	};
+	CHECK(cuts(R"({"kind": "platform", "start": [800, 500], "end": [1000, 500]})") == 0);
+	CHECK(cuts(R"({"kind": "fence", "start": [800, 500], "end": [1000, 500]})") == 0);
+	CHECK(cuts(R"({"kind": "passthrough", "start": [800, 500], "end": [1000, 500]})") == 0);
+	CHECK(cuts(R"({"kind": "switchable", "flag": "f", "on": "pass", "off": "pass", "start": [800, 500], "end": [1000, 500]})") == 0);
+	CHECK(cuts(R"({"kind": "switchable", "flag": "f", "on": "pass", "off": "wall", "start": [800, 500], "end": [1000, 500]})") == 1);
+	CHECK(cuts(R"({"kind": "door", "start": [800, 500], "end": [1000, 500]})") == 1);
+	CHECK(cuts(R"({"kind": "shield", "start": [800, 500], "end": [1000, 500]})") == 1);
+	CHECK(cuts(R"({"kind": "button", "opens": "x", "start": [800, 500], "end": [1000, 500]})") == 1);
+}
+
 TEST_CASE("doors: a door in line with a wall shows where it stops -- posts across its ends, a core; an open one keeps its posts (Stage 190)") {
 	const auto posts = [](bool open) { // the amber strokes across the line: {x, alpha}
 		const std::string level = std::string(R"({"gravity": [0, 980], "flags": {"open_it": )") + (open ? "true" : "false") + R"(}, "elements": [

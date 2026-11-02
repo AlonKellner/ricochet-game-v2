@@ -741,6 +741,8 @@ So the solver traces whole design surfaces, and pieces live where they matter.
 
 **Everything else is the design surface's:** hit effects (one target, `target:<id>`), presence, the resolver, consumption of a spawn host. **Splitting ignores presence**, so the pieces never change within a shot.
 
+**Inert surfaces take no part** (Stage 192, the user: intersections only for what can matter). A surface is inert when, in every state, both its sides are passes, not plannable and without hit effects: a platform, a fence, a plain pass-through. The arrow and the plan never meet it, so it neither cuts nor is cut, shows no crossing mark, is reported crossing no portal, and neither trims nor is trimmed by a spawned surface. What it does to the player is its own (§25.1).
+
 **Not split (v1).** Portal pairs and pre-transform circles. A design surface crossing a portal is reported by level validation.
 
 ### 9.9 Light and shadow
@@ -3133,4 +3135,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.89.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.89.2.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

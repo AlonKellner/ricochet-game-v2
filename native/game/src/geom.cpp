@@ -264,12 +264,12 @@ Pieces build_pieces(const std::vector<BuiltSurface> &surfaces) {
 	};
 	for (size_t i = 0; i < surfaces.size(); i++) {
 		const BuiltSurface &a = surfaces[i];
-		if (a.pre_transform) {
+		if (a.pre_transform || is_inert(a)) { // (Stage 192: what the arrow never meets crosses nothing)
 			continue;
 		}
 		for (size_t j = i + 1; j < surfaces.size(); j++) {
 			const BuiltSurface &b = surfaces[j];
-			if (b.pre_transform) {
+			if (b.pre_transform || is_inert(b)) {
 				continue;
 			}
 			const std::vector<Crossing> xs = crossings_of(a.seg, b.seg);
