@@ -95,7 +95,7 @@ const Pieces &World::pieces() const {
 
 const std::vector<rc::SurfaceDef> &World::defs() const {
 	if (defs_version_ != version_) {
-		defs_ = defs_of(surfaces_);
+		defs_ = defs_of(surfaces_, true); // (Stage 193: the solver is not told of what the arrow never meets)
 		defs_version_ = version_;
 	}
 	return defs_;

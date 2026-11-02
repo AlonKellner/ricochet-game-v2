@@ -715,6 +715,56 @@ TEST_CASE("crossings: a spawned surface is not trimmed by an inert one, and an i
 	CHECK(r2.placed[0].spec.end == V2{100, 70});
 }
 
+// Stage 193 (the user): the solver's scene is without what the arrow never meets -- the same fill, the same paths
+
+TEST_CASE("inert surfaces: the game's scene without them draws and decides the same, plans or none") {
+	for (const char *name : {"objectives/platforms", "objectives/lantern", "test_levels/room_with_passthroughs", "main"}) {
+		CAPTURE(name);
+		const rcg::Level level = rcg::load_level((ROOT / "data" / "levels" / (std::string(name) + ".json")).string());
+		const std::vector<rcg::BuiltSurface> surfaces = rcg::build_level(level);
+		const std::vector<rc::SurfaceDef> all = rcg::defs_of(surfaces), met = rcg::defs_of(surfaces, true);
+		CHECK(met.size() < all.size());
+		rc::Tracer ta, tb;
+		ta.set_defs(all);
+		tb.set_defs(met);
+		std::vector<std::vector<rc::PlanItem>> plans{{}};
+		for (const rc::SurfaceDef &d : met) {
+			for (const bool left : {true, false}) {
+				const std::optional<rc::SideDef> &side = left ? d.left : d.right;
+				if (!d.pre_transform && side && rc::is_transformative(side->type) && plans.size() < 6) {
+					plans.push_back({rc::PlanItem{d.id, left, std::nullopt, std::nullopt}});
+				}
+			}
+		}
+		const rc::vis::Rect vb{double(level.bounds.x), double(level.bounds.y), double(level.bounds.x) + double(level.bounds.w), double(level.bounds.y) + double(level.bounds.h)};
+		const rc::Flags flags;
+		for (const std::vector<rc::PlanItem> &plan : plans) {
+			for (const V2 &p : {V2{431, 317}, V2{1213, 643}}) {
+				CAPTURE(p.x);
+				const rc::vis::Fill fa = rc::vis::fill_of(rc::vis::union_outline(rc::vis::compute(ta, rc::vis::Pt{p.x, p.y}, plan, flags, vb)));
+				const rc::vis::Fill fb = rc::vis::fill_of(rc::vis::union_outline(rc::vis::compute(tb, rc::vis::Pt{p.x, p.y}, plan, flags, vb)));
+				REQUIRE(fa.points.size() == fb.points.size());
+				CHECK(fa.indices == fb.indices);
+				for (size_t i = 0; i < fa.points.size(); i++) {
+					CHECK(fa.points[i].x == fb.points[i].x);
+					CHECK(fa.points[i].y == fb.points[i].y);
+				}
+				const auto pa = ta.trace_pair(p, V2{977, 211}, plan, flags), pb = tb.trace_pair(p, V2{977, 211}, plan, flags);
+				REQUIRE(pa.has_value() == pb.has_value());
+				if (pa) {
+					for (const auto &[a, b] : {std::pair{&pa->physical, &pb->physical}, std::pair{&pa->planned, &pb->planned}}) {
+						REQUIRE(a->steps.size() == b->steps.size());
+						for (size_t i = 0; i < a->steps.size(); i++) {
+							CHECK(a->steps[i].end == b->steps[i].end);
+						}
+					}
+					CHECK(pa->final_flags.canonical_key() == pb->final_flags.canonical_key());
+				}
+			}
+		}
+	}
+}
+
 // ================================================================ test_stage108_trim.gd
 
 TEST_CASE("ported: test_stage108_trim: test_stage108_a_spawn_is_trimmed_by_a_present_wall") {

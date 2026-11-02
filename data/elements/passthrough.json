@@ -1,5 +1,5 @@
 {
- "doc": "A surface nothing collides with: the arrow passes (a step boundary, nothing else) and so does the player. A marker.",
+ "doc": "A surface nothing collides with: the arrow passes as if it were not there and so does the player. A marker.",
  "label": "PassThrough",
  "params": {},
  "priority": 13,
