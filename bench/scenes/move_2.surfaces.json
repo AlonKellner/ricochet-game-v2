@@ -1,0 +1,765 @@
+{
+ "scene": "res://scenes/move_2.tscn",
+ "surfaces": [
+  {
+   "circle": null,
+   "end": [150.0, 150.0],
+   "full": false,
+   "id": 1,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [50.0, 150.0],
+   "via": [100.0, 150.0]
+  },
+  {
+   "circle": null,
+   "end": [150.0, 300.0],
+   "full": false,
+   "id": 2,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [50.0, 300.0],
+   "via": [100.0, 300.0]
+  },
+  {
+   "circle": null,
+   "end": [150.0, 450.0],
+   "full": false,
+   "id": 3,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [50.0, 450.0],
+   "via": [100.0, 450.0]
+  },
+  {
+   "circle": null,
+   "end": [150.0, 600.0],
+   "full": false,
+   "id": 4,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [50.0, 600.0],
+   "via": [100.0, 600.0]
+  },
+  {
+   "circle": null,
+   "end": [150.0, 750.0],
+   "full": false,
+   "id": 5,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [50.0, 750.0],
+   "via": [100.0, 750.0]
+  },
+  {
+   "circle": null,
+   "end": [150.0, 900.0],
+   "full": false,
+   "id": 6,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [50.0, 900.0],
+   "via": [100.0, 900.0]
+  },
+  {
+   "circle": null,
+   "end": [300.0, 150.0],
+   "full": false,
+   "id": 7,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [200.0, 150.0],
+   "via": [250.0, 150.0]
+  },
+  {
+   "circle": null,
+   "end": [300.0, 300.0],
+   "full": false,
+   "id": 8,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [200.0, 300.0],
+   "via": [250.0, 300.0]
+  },
+  {
+   "circle": null,
+   "end": [300.0, 450.0],
+   "full": false,
+   "id": 9,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [200.0, 450.0],
+   "via": [250.0, 450.0]
+  },
+  {
+   "circle": null,
+   "end": [300.0, 600.0],
+   "full": false,
+   "id": 10,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [200.0, 600.0],
+   "via": [250.0, 600.0]
+  },
+  {
+   "circle": null,
+   "end": [300.0, 750.0],
+   "full": false,
+   "id": 11,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [200.0, 750.0],
+   "via": [250.0, 750.0]
+  },
+  {
+   "circle": null,
+   "end": [300.0, 900.0],
+   "full": false,
+   "id": 12,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [200.0, 900.0],
+   "via": [250.0, 900.0]
+  },
+  {
+   "circle": null,
+   "end": [500.0, 150.0],
+   "full": false,
+   "id": 13,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [400.0, 150.0],
+   "via": [450.0, 150.0]
+  },
+  {
+   "circle": null,
+   "end": [500.0, 300.0],
+   "full": false,
+   "id": 14,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [400.0, 300.0],
+   "via": [450.0, 300.0]
+  },
+  {
+   "circle": null,
+   "end": [500.0, 450.0],
+   "full": false,
+   "id": 15,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [400.0, 450.0],
+   "via": [450.0, 450.0]
+  },
+  {
+   "circle": null,
+   "end": [500.0, 600.0],
+   "full": false,
+   "id": 16,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [400.0, 600.0],
+   "via": [450.0, 600.0]
+  },
+  {
+   "circle": null,
+   "end": [500.0, 750.0],
+   "full": false,
+   "id": 17,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [400.0, 750.0],
+   "via": [450.0, 750.0]
+  },
+  {
+   "circle": null,
+   "end": [500.0, 900.0],
+   "full": false,
+   "id": 18,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [400.0, 900.0],
+   "via": [450.0, 900.0]
+  },
+  {
+   "circle": null,
+   "end": [750.0, 150.0],
+   "full": false,
+   "id": 19,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [650.0, 150.0],
+   "via": [700.0, 150.0]
+  },
+  {
+   "circle": null,
+   "end": [750.0, 300.0],
+   "full": false,
+   "id": 20,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [650.0, 300.0],
+   "via": [700.0, 300.0]
+  },
+  {
+   "circle": null,
+   "end": [750.0, 450.0],
+   "full": false,
+   "id": 21,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [650.0, 450.0],
+   "via": [700.0, 450.0]
+  },
+  {
+   "circle": null,
+   "end": [750.0, 600.0],
+   "full": false,
+   "id": 22,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [650.0, 600.0],
+   "via": [700.0, 600.0]
+  },
+  {
+   "circle": null,
+   "end": [750.0, 750.0],
+   "full": false,
+   "id": 23,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [650.0, 750.0],
+   "via": [700.0, 750.0]
+  },
+  {
+   "circle": null,
+   "end": [750.0, 900.0],
+   "full": false,
+   "id": 24,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [650.0, 900.0],
+   "via": [700.0, 900.0]
+  },
+  {
+   "circle": null,
+   "end": [1150.0, 150.0],
+   "full": false,
+   "id": 25,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1050.0, 150.0],
+   "via": [1100.0, 150.0]
+  },
+  {
+   "circle": null,
+   "end": [1150.0, 300.0],
+   "full": false,
+   "id": 26,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1050.0, 300.0],
+   "via": [1100.0, 300.0]
+  },
+  {
+   "circle": null,
+   "end": [1150.0, 450.0],
+   "full": false,
+   "id": 27,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1050.0, 450.0],
+   "via": [1100.0, 450.0]
+  },
+  {
+   "circle": null,
+   "end": [1150.0, 600.0],
+   "full": false,
+   "id": 28,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1050.0, 600.0],
+   "via": [1100.0, 600.0]
+  },
+  {
+   "circle": null,
+   "end": [1150.0, 750.0],
+   "full": false,
+   "id": 29,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1050.0, 750.0],
+   "via": [1100.0, 750.0]
+  },
+  {
+   "circle": null,
+   "end": [1150.0, 900.0],
+   "full": false,
+   "id": 30,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1050.0, 900.0],
+   "via": [1100.0, 900.0]
+  },
+  {
+   "circle": null,
+   "end": [1400.0, 150.0],
+   "full": false,
+   "id": 31,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1300.0, 150.0],
+   "via": [1350.0, 150.0]
+  },
+  {
+   "circle": null,
+   "end": [1400.0, 300.0],
+   "full": false,
+   "id": 32,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1300.0, 300.0],
+   "via": [1350.0, 300.0]
+  },
+  {
+   "circle": null,
+   "end": [1400.0, 450.0],
+   "full": false,
+   "id": 33,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1300.0, 450.0],
+   "via": [1350.0, 450.0]
+  },
+  {
+   "circle": null,
+   "end": [1400.0, 600.0],
+   "full": false,
+   "id": 34,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1300.0, 600.0],
+   "via": [1350.0, 600.0]
+  },
+  {
+   "circle": null,
+   "end": [1400.0, 750.0],
+   "full": false,
+   "id": 35,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1300.0, 750.0],
+   "via": [1350.0, 750.0]
+  },
+  {
+   "circle": null,
+   "end": [1400.0, 900.0],
+   "full": false,
+   "id": 36,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1300.0, 900.0],
+   "via": [1350.0, 900.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 0.0],
+   "full": false,
+   "id": 37,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1920.0, 0.0],
+   "via": [960.0, 0.0]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 0.0],
+   "full": false,
+   "id": 38,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1920.0, 1080.0],
+   "via": [1920.0, 540.0]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 1080.0],
+   "full": false,
+   "id": 39,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [0.0, 1080.0],
+   "via": [960.0, 1080.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 1080.0],
+   "full": false,
+   "id": 40,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [0.0, 0.0],
+   "via": [0.0, 540.0]
+  }
+ ]
+}
