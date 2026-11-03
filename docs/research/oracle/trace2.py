@@ -473,8 +473,15 @@ def surface_from_json(d):
                    bool(d.get("pre_transform")), presence)
 
 
-def scene_from_json(surfaces):
-    return [surface_from_json(d) for d in surfaces]
+class Scene(list):
+    """The surfaces, and the level's infinity_loop (Stage 199, GAME_SPEC 12.6)."""
+    infinity_loop = True
+
+
+def scene_from_json(surfaces, infinity_loop=True):
+    sc = Scene(surface_from_json(d) for d in surfaces)
+    sc.infinity_loop = infinity_loop
+    return sc
 
 
 def same_carrier(a: Surface, b: Surface):
@@ -725,6 +732,7 @@ class Walk:
     point: object = None
     max_hits: int = MAX_HITS   # the hit budget (Stage 111: the realization decides with a wider one)
     max_sig: int = MAX_SIGNIFICANT  # Stage 131: the significant hits' budget
+    infinity_ends: bool = False     # Stage 199: a passage of infinity uses max_sig up
     sig: int = 0               # Stage 131: significant events so far
 
 
@@ -1234,7 +1242,8 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     _append(walk, Event("max", INFINITY_ID, point=q_pt, t=t, beam=beam))
                     walk.done = True
                     return
-                walk.sig += 1               # (the passage of infinity is significant)
+                # (the passage of infinity is significant; Stage 199: infinity_loop off, it uses the budget up)
+                walk.sig = walk.max_sig if walk.infinity_ends else walk.sig + 1
                 consumed = walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index][0] == INFINITY_ID
                 if consumed:
                     walk.plan_index += 1
@@ -2085,6 +2094,8 @@ def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="
     walk = Walk(hittable(surfaces), list(plan), cursor, mode, PHYSICAL)
     walk.max_hits = max_hits
     walk.max_sig = max_sig
+    # (Stage 199: the realization's wide budget is geometry, no limit of the game)
+    walk.infinity_ends = not getattr(surfaces, "infinity_loop", True) and max_sig == MAX_SIGNIFICANT
     walk.plan_spans = spans
     walk.flags = dict(flags or {})
     walk.flags_before = walk.flags

@@ -519,7 +519,7 @@ void parse_goals(const json &j, Level &lv) {
 Level parse_v1(const json &j) {
 	const std::string P = "level";
 	only_keys(j, P, {"schema", "name", "bounds", "gravity", "room", "player", "camera", "background", "colliders", "features",
-			"surfaces"});
+			"infinity_loop", "surfaces"});
 	if (str(req(j, "schema", P), P + ".schema") != "rc-level/1") {
 		fail(P + ".schema", "rc-level/1 or rc-level/2 expected");
 	}
@@ -591,6 +591,9 @@ Level parse_v1(const json &j) {
 		flag("arrow", lv.features.arrow);
 		flag("hud", lv.features.hud);
 		flag("cursor", lv.features.cursor);
+	}
+	if (const json *v = opt(j, "infinity_loop")) {
+		lv.infinity_loop = boolean(*v, P + ".infinity_loop");
 	}
 	const json &ss = req(j, "surfaces", P);
 	if (!ss.is_array()) {

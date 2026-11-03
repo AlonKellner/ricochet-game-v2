@@ -23,6 +23,7 @@
   "preview": true
  },
  "gravity": [0.0, 0.0],
+ "infinity_loop": true,
  "name": "test_levels/two_sided_mirror",
  "player": {
   "start": [600.0, 540.0]

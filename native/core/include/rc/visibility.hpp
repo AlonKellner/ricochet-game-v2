@@ -661,7 +661,7 @@ class Builder {
 public:
 	Builder(Tracer &tracer, Pt player, std::vector<PlanItem> plan, Flags flags, Rect bounds, Half half = Half::Single)
 		: tracer_(tracer), plan_(std::move(plan)), flags_(std::move(flags)),
-		  scene_(Scene<F64>::from_defs(tracer.defs(), F64{1.0})), solver_(scene_, &cache_), half_(half) {
+		  scene_(Scene<F64>::from_defs(tracer.defs(), F64{1.0}, tracer.infinity_loop())), solver_(scene_, &cache_), half_(half) {
 		flags_.erase(GHOST);
 		res_.player = player;
 		res_.domain = bounds.grown(50.0);

@@ -46,9 +46,9 @@ def circle(sid, center, radius, left=None, right=None):
             "circle": {"center": [cx, cy], "radius": radius}, "left": left, "right": right}
 
 
-def fixture(name, surfs, player, plan=(), mode="physical", direction=None, cursor=None, flags=None, event_extra=None):
+def fixture(name, surfs, player, plan=(), mode="physical", direction=None, cursor=None, flags=None, event_extra=None, infinity_loop=True):
     """event_extra(o, e): adds fields to each event's record (later stages)."""
-    sc = T.scene_from_json(surfs)
+    sc = T.scene_from_json(surfs, infinity_loop)
     # plan entries: (surface id, side) or (surface id, side, click point)
     hints = {i: p[2] for i, p in enumerate(plan) if len(p) > 2}
     clicks = [list(p[2]) if len(p) > 2 else None for p in plan]
@@ -69,13 +69,16 @@ def fixture(name, surfs, player, plan=(), mode="physical", direction=None, curso
         if event_extra is not None:
             event_extra(o, e)
         expected.append(o)
-    return {"name": name, "surfaces": surfs, "player": list(player),
-            "direction": None if direction is None else list(direction),
-            "cursor": None if cursor is None else list(cursor),
-            "plan": [dict({"surface_id": a, "side": b}, **({"click": c} if c else {})) for (a, b), c in zip(plan, clicks)],
-            "mode": mode,
-            "flags": dict(flags or {}),
-            "expected": expected, "targets": sorted(w.targets)}
+    out = {"name": name, "surfaces": surfs, "player": list(player),
+           "direction": None if direction is None else list(direction),
+           "cursor": None if cursor is None else list(cursor),
+           "plan": [dict({"surface_id": a, "side": b}, **({"click": c} if c else {})) for (a, b), c in zip(plan, clicks)],
+           "mode": mode,
+           "flags": dict(flags or {}),
+           "expected": expected, "targets": sorted(w.targets)}
+    if not infinity_loop:
+        out["infinity_loop"] = False  # (Stage 199)
+    return out
 
 
 def kinds(f):

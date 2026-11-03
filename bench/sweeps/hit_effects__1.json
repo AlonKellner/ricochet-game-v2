@@ -763,6 +763,7 @@
   "chan:g": "armed",
   "chan:h": "armed"
  },
+ "infinity_loop": true,
  "infos": [
   {
    "carrier": {

@@ -145,7 +145,7 @@ std::vector<Row> run_level(const std::string &path, const Options &o) {
 		players.push_back(rc::vis::Pt{x, y});
 	}
 	rc::Tracer t;
-	t.set_defs(defs);
+	t.set_defs(defs, level.infinity_loop);
 	std::vector<Row> rows;
 	for (const std::vector<rc::PlanItem> &plan : plans_of(defs, o.pairs)) {
 		Row r;

@@ -68,6 +68,7 @@
   "preview": true
  },
  "gravity": [0.0, 980.0],
+ "infinity_loop": true,
  "name": "open_room_playable",
  "player": {
   "start": [960.0, 540.0]

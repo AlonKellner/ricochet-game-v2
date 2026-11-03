@@ -1680,6 +1680,7 @@ std::vector<Editor::Row> Editor::rows() const {
 		field("camera", "/camera", "{\"start\": [x, y], \"smoothing\", \"smoothing_speed\"}: the camera (its start drags)");
 		field("background", "/background", "{\"rect\": [x, y, w, h], \"color\": [r, g, b, a]}: what is painted behind");
 		field("features", "/features", "{game, preview, arrow, hud, cursor}: what the level shows");
+		field("infinity loop", "/infinity_loop", "a shot may go on round through infinity (off: its first passage uses up its significant events)", "bool");
 		field("templates", "/templates", "{kind: template}: the level's own element kinds (docs/ELEMENTS.md)");
 		field("carriers", "/carriers", "[{name, line | circle, exact?}]: what elements sit on (K, shift+K)");
 	}

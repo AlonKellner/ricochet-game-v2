@@ -538,6 +538,7 @@ struct Walk {
 	int count = 0;
 	int max_events = MAX_HITS;
 	int max_sig = MAX_SIGNIFICANT; // Stage 131
+	bool infinity_ends = false;    // Stage 199: a passage of infinity uses max_sig up (the level's infinity_loop off)
 	int sig = 0;                    // ... the significant events so far
 	// Workflow W2.0: a decision walk (realize, R2) needs the cursor event alone:
 	// it stops there (the events up to it are the same walk's)
@@ -2144,6 +2145,7 @@ private:
 		w.post_mode = Mode::Physical;
 		w.max_events = max_events;
 		w.max_sig = max_events == MAX_HITS ? MAX_SIGNIFICANT : (max_events / MAX_HITS) * MAX_SIGNIFICANT; // (the realization's wide budget: 8 x each)
+		w.infinity_ends = !scene_.infinity_loop && max_events == MAX_HITS; // (the realization's wide budget is geometry: no limit of the game)
 		w.spans = piece_spans(plan);
 		w.Q = effects::scene_pre_q(scene_);
 		w.record_poles = record_poles_;
@@ -3822,7 +3824,7 @@ private:
 					continue;
 				}
 				if (cand.inf) {
-					w.sig++; // (Stage 131: the passage of infinity is significant)
+					w.sig = w.infinity_ends ? w.max_sig : w.sig + 1; // (Stage 131: the passage of infinity is significant)
 					// the wrap through infinity (Stage 88): consumes the infinity
 					// entry when it is next in the plan, in both modes
 					bool consumed = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].is_infinity();

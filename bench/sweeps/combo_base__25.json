@@ -243,6 +243,7 @@
   }
  ],
  "flags": {},
+ "infinity_loop": true,
  "infos": [
   {
    "carrier": {

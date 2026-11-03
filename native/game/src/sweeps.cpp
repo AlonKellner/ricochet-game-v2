@@ -603,6 +603,7 @@ std::vector<std::pair<std::string, json>> manifests(const json &recipes, const s
 				{"skip_equal", g.value("skip_equal", true)},
 				{"visibility", g.value("visibility", false)},
 				{"carrier_cursors", g.value("carrier_cursors", false)},
+				{"infinity_loop", g.value("infinity_loop", t.level.infinity_loop)}, // Stage 199: as the level plays, or the group's
 			};
 			// Stage 129: the known findings this group's violations may hold (the sweep
 			// test names them instead of failing), and the shots that made its world

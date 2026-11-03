@@ -1580,3 +1580,91 @@ TEST_CASE("pull and grapple: the preview's end is drawn as what moves -- the pla
 		CHECK(std::string(e.what()).find("objects[0].shape: circle, square, triangle, diamond, star or cross expected") != std::string::npos);
 	}
 }
+
+namespace {
+
+const char *const OPEN_LEVEL = R"({"room": {"rect": [560, 240, 800, 600], "built": false}, "elements": [
+	{"kind": "mirror", "start": [1200, 800], "end": [1300, 900]}]%s})";
+
+rcg::Level open_level(const char *extra) {
+	char text[512];
+	std::snprintf(text, sizeof(text), OPEN_LEVEL, extra);
+	return level_of(text);
+}
+
+int infinities(const std::vector<rc::TraceStep> &steps) {
+	int n = 0;
+	for (const rc::TraceStep &st : steps) {
+		n += st.to_infinity ? 1 : 0;
+	}
+	return n;
+}
+
+} // namespace
+
+TEST_CASE("level: infinity_loop is off by default, read from the level, kept by the lowering (Stage 199)") {
+	CHECK_FALSE(open_level("").infinity_loop);
+	CHECK_FALSE(open_level(R"(, "infinity_loop": false)").infinity_loop);
+	CHECK(open_level(R"(, "infinity_loop": true)").infinity_loop);
+	CHECK_THROWS_WITH_AS(open_level(R"(, "infinity_loop": 1)"), doctest::Contains("infinity_loop"), rcg::LevelError);
+}
+
+TEST_CASE("session: off, a walk ends at its first passage of infinity; on, it goes round as before (Stage 199)") {
+	for (const bool async : {false, true}) {
+		CAPTURE(async);
+		rcg::SessionConfig cfg;
+		cfg.async = async;
+		const auto preview = [&](const char *extra) {
+			rcg::Session s(open_level(extra), cfg);
+			s.set_cursor(rc::V2::of(800, 300));
+			s.settle();
+			s.drain();
+			return infinities(s.preview_steps());
+		};
+		CHECK(preview("") == 1);
+		CHECK(preview(R"(, "infinity_loop": false)") == 1);
+		CHECK(preview(R"(, "infinity_loop": true)") == 5);
+	}
+}
+
+TEST_CASE("session: off, a shot that passes infinity ends, nothing past it fires (Stage 199)") {
+	// straight up from the player, round through the top edge: the way back meets the button below the player
+	const auto opened = [](bool loop) {
+		nlohmann::json j = nlohmann::json::parse(R"({"room": {"rect": [560, 240, 800, 600], "built": false}, "elements": [
+			{"kind": "button", "name": "b", "opens": "gate", "op": "set", "start": [600, 800], "end": [720, 800]},
+			{"kind": "door", "name": "gate", "start": [1700, 300], "end": [1700, 800]}]})");
+		if (loop) {
+			j["infinity_loop"] = true;
+		}
+		rcg::Session s(level_of(j.dump().c_str()));
+		s.set_cursor(rc::V2::of(660, 300));
+		s.settle();
+		s.fire(-1, 1.0 / 60.0);
+		return s.flags();
+	};
+	CHECK_FALSE(opened(true) == opened(false));
+}
+
+// the user's F12 dump (platforms_2, 2026-11-03): a planned object the aim misses: the planned walk never consumes its
+// entry, so it never reaches the cursor and went five times round through infinity, none of it past a cursor to fade
+TEST_CASE("session: off, a planned entry the aim misses goes no further than the first passage of infinity (Stage 199)") {
+	const auto steps = [](bool loop) {
+		nlohmann::json j = nlohmann::json::parse(R"({"room": {"rect": [560, 240, 800, 600], "built": false},
+			"objects": [{"name": "box", "circle": {"center": [1200, 300], "radius": 16}}]})");
+		if (loop) {
+			j["infinity_loop"] = true;
+		}
+		rcg::Session s(level_of(j.dump().c_str()));
+		s.set_cursor(rc::V2::of(1200, 284));
+		s.settle();
+		s.click(false);
+		s.settle();
+		REQUIRE(s.plan().size() == 1);
+		s.set_cursor(rc::V2::of(900, 800)); // (far from the box's way)
+		s.settle();
+		return s.preview_steps();
+	};
+	CHECK(infinities(steps(false)) == 1);
+	CHECK(infinities(steps(true)) > 1);
+	CHECK(steps(false).size() < steps(true).size());
+}

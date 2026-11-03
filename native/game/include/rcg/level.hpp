@@ -257,6 +257,7 @@ struct Level {
 	struct Features {
 		bool game = true, preview = true, arrow = true, hud = true, cursor = true;
 	} features;
+	bool infinity_loop = false; // Stage 199 (GAME_SPEC 12.6): a walk may go on round through infinity
 	std::vector<LevelSurface> surfaces;
 	// rc-level/2: the flags the level starts with (in key order; a number as a float64)
 	std::vector<std::pair<std::string, rc::FlagValue>> flags;

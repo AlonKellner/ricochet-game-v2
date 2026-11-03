@@ -348,8 +348,12 @@ struct Scene {
 		return it == by_id.end() ? nullptr : it->second;
 	}
 
+	// Stage 199 (GAME_SPEC 12.6, the user): the level's `infinity_loop`. Off, a passage of the frame's infinity uses
+	// up the walk's significant events; on, it counts one like any other.
+	bool infinity_loop = true;
+
 	// `like`: a value of the tier (its limb count for BigFloat).
-	static Scene from_defs(const std::vector<SurfaceDef> &defs, const N &like);
+	static Scene from_defs(const std::vector<SurfaceDef> &defs, const N &like, bool infinity_loop = true);
 };
 
 // True if every side config is one the beam solver implements.
@@ -361,8 +365,9 @@ template <Num N>
 bool same_carrier(const Surf<N> &a, const Surf<N> &b);
 
 template <Num N>
-Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like) {
+Scene<N> Scene<N>::from_defs(const std::vector<SurfaceDef> &defs, const N &like, bool infinity_loop) {
 	Scene sc;
+	sc.infinity_loop = infinity_loop;
 	for (const SurfaceDef &d : defs) {
 		auto s = std::make_shared<Surf<N>>();
 		s->id = d.id;

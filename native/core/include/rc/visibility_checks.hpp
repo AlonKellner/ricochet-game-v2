@@ -903,7 +903,7 @@ inline Violations check_visibility(const VisInput &in) {
 	if (in.tracer != nullptr) {
 		Flags flags = in.flags;
 		flags.erase(GHOST);
-		const Scene<F64> scene = Scene<F64>::from_defs(in.tracer->defs(), F64{1.0});
+		const Scene<F64> scene = Scene<F64>::from_defs(in.tracer->defs(), F64{1.0}, in.tracer->infinity_loop());
 		add(check_VIS_EDGE_ON_GEOMETRY(r, scene));
 		add(check_VIS_VERTEX_PROVENANCE(r, scene));
 		add(check_VIS_SHADOW_ANCHORED(r, scene));

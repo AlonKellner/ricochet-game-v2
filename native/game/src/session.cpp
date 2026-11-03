@@ -231,10 +231,10 @@ Session::Session(const Level &level, const SessionConfig &config)
 	sync_nodes();
 	if (async_) {
 		// each job keeps its own tracer (its caches, its helpers), its defs swapped when the world changes
-		auto tracer_for = [](rc::Tracer &t, int &held, int world, const std::vector<rc::SurfaceDef> &defs) {
+		auto tracer_for = [loop = level_.infinity_loop](rc::Tracer &t, int &held, int world, const std::vector<rc::SurfaceDef> &defs) {
 			if (held != world) {
 				t.set_pair_cache(false);
-				t.set_defs(defs);
+				t.set_defs(defs, loop);
 				held = world;
 			}
 		};
@@ -347,7 +347,7 @@ void Session::drain() {
 
 void Session::use_defs(rc::Tracer &t, int &held) {
 	if (held != world_->version()) {
-		t.set_defs(world_->defs());
+		t.set_defs(world_->defs(), level_.infinity_loop);
 		held = world_->version();
 	}
 }

@@ -235,18 +235,20 @@ public:
 	Tracer() = default;
 
 	// The scene's defs: a changed set rebuilds the solve context (the caches).
-	void set_defs(const std::vector<SurfaceDef> &defs) {
-		if (ctx_ && defs_ == defs) {
+	void set_defs(const std::vector<SurfaceDef> &defs, bool infinity_loop = true) {
+		if (ctx_ && defs_ == defs && infinity_loop_ == infinity_loop) {
 			return;
 		}
 		tie_memo_.clear();
 		realization_memo_.clear();
 		defs_ = defs;
+		infinity_loop_ = infinity_loop;
 		supported_ = scene_supported(defs_); // (B.4: asked per decision; a function of the defs)
-		ctx_ = std::make_unique<LadderContext>(defs);
+		ctx_ = std::make_unique<LadderContext>(defs, infinity_loop);
 		cache_valid_ = false;
 	}
 	const std::vector<SurfaceDef> &defs() const { return defs_; }
+	bool infinity_loop() const { return infinity_loop_; } // (Stage 199)
 
 
 	// Whether planning `surface_id`'s side after `plan` is refused: inside a
@@ -609,7 +611,7 @@ public:
 			helpers_.push_back(std::make_unique<Tracer>());
 		}
 		Tracer &h = *helpers_[i];
-		h.set_defs(defs_);
+		h.set_defs(defs_, infinity_loop_);
 		return h;
 	}
 
@@ -812,6 +814,7 @@ private:
 	};
 
 	std::vector<SurfaceDef> defs_;
+	bool infinity_loop_ = true;
 	std::unique_ptr<LadderContext> ctx_;
 	std::vector<std::unique_ptr<Tracer>> helpers_;
 	Ladder::Clock clock_ = Ladder::steady_usec;

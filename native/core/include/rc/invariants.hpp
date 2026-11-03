@@ -992,7 +992,7 @@ inline Violations check_DIRECTION_ONLY(const Input &in) {
 		return out;
 	}
 	// the reference: the physical ladder aimed at the image, with its float64 sensitivities
-	LadderContext ctx(*in.defs);
+	LadderContext ctx(*in.defs, in.scene == nullptr || in.scene->infinity_loop);
 	Ladder ladder(ctx);
 	const LadderResult ref = ladder.solve_physical(double(in.player.x), double(in.player.y), X->fx(), X->fy(), ref_plan, MAX_HITS, TRACE_TOL, in.flags);
 	// ErrorEstimate.physical_sensitivity's events (the float64 walk) and gains
