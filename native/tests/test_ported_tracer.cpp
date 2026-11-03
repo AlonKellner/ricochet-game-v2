@@ -735,6 +735,7 @@ TEST_CASE("ported: test_stage110_visibility: test_a_block_casts_a_shadow") {
 }
 
 TEST_CASE("ported: test_stage110_visibility: test_a_terminal_in_the_plan_keeps_only_off_segment_aims") {
+	// (Stage 201: every aim of the plan before it now: the cursor counts before a planned terminal; the name is the ledger's)
 	std::vector<GameSurf> ss = {block(1, V2{500, 250}, V2{500, 350})};
 	for (const GameSurf &r : room(2, 0, 0, 1000, 600)) {
 		ss.push_back(r);

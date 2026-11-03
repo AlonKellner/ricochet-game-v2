@@ -506,6 +506,16 @@ def carrier_groups(surfaces):
     return out
 
 
+def _plan_met_for_cursor(walk):
+    """Stage 201 (GAME_SPEC 13.5, the user): the plan's entries are consumed, or all
+    but a planned terminal: nothing can come after that one, and it need not be reached."""
+    if walk.plan_index >= len(walk.plan):
+        return True
+    sid, side = walk.plan[walk.plan_index][:2]
+    surf = next((s for s in walk.surfaces if s.id == sid), None)
+    return surf is not None and surf.effect(side, walk.flags) == "terminal"
+
+
 def hittable(surfaces):
     """The surfaces a beam can meet (the pre-transform's are not)."""
     return [s for s in surfaces if not s.pre_transform]
@@ -1067,7 +1077,7 @@ def _build_cands(walk: Walk, beam: Beam, depart, fresh, t0, by_id, shared=None):
     # the cursor is on the beam only on the planned path (its final
     # anchored beam passes through the cursor by construction); off it, a
     # cursor is never "reached" at its projection
-    if not walk.cursor_done and walk.plan_index >= len(walk.plan) and walk.plan_matched \
+    if not walk.cursor_done and _plan_met_for_cursor(walk) and walk.plan_matched \
             and walk.cursor is not None and walk.on_plan:
         tc = beam.param_of(walk.cursor)
         # the cursor exactly at the departure point is reached immediately
@@ -1450,7 +1460,7 @@ def _late_cursor(walk: Walk, beam, cands, ci, key, t0):
     resolves to a pass / state change, an unapplied projective, or the
     infinity entry): the cursor is on this same beam -- a candidate if it lies
     ahead (inserted in order among the remaining candidates)."""
-    if not walk.cursor_done and walk.cursor is not None and walk.plan_index >= len(walk.plan) and walk.on_plan \
+    if not walk.cursor_done and walk.cursor is not None and _plan_met_for_cursor(walk) and walk.on_plan \
             and walk.plan_matched and not (walk.point is not None and walk.point.pending) \
             and not any(c[1] == 0 for c in cands):
         tc = beam.param_of(walk.cursor)
@@ -2468,7 +2478,8 @@ def realization(surfaces, player, cursor, plan, flags=None, hints=None):
     Infinity entries are otherwise only matched by the walker."""
     fallback = "reversed" if via_infinity(surfaces, plan, flags) else "direct"
     j = first_entry(surfaces, plan, flags)
-    if j is None:
+    # (Stage 201: a terminal first fixes nothing: the cursor counts before it, and past it nothing is reached)
+    if j is None or plan_effects(surfaces, plan, flags)[j] == "terminal":
         return fallback
     d = exact_direction(surfaces, plan, player, cursor, flags, hints)
     if d is None:

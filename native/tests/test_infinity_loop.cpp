@@ -27,6 +27,23 @@ TEST_CASE("infinity loop: the Stage 199 fixtures match the oracle at f64, Dual a
 	CHECK(fixtures == 14);
 }
 
+TEST_CASE("terminal cursor: the Stage 201 fixtures match the oracle at f64, Dual and 4 limbs") {
+	const ojson fxs = load_json("bench/fixtures/stage201_terminal_cursor.json");
+	int fixtures = 0;
+	for (const ojson &fx : fxs["fixtures"]) {
+		const std::string name = fx["name"].get<std::string>();
+		const std::vector<SurfaceDef> defs = defs_from_json(fx["surfaces"]);
+		const auto r64 = walk_oracle_fixture<F64>(fx, defs, F64{1});
+		CHECK_MESSAGE(diff_against_oracle(r64, fx["expected"]) == "", (name + " f64: " + diff_against_oracle(r64, fx["expected"])));
+		const auto rd = walk_oracle_fixture<Dual>(fx, defs, Dual{1, 0});
+		CHECK_MESSAGE(diff_against_oracle(rd, fx["expected"]) == "", (name + " dual: " + diff_against_oracle(rd, fx["expected"])));
+		const auto rb = walk_oracle_fixture<BigFloat>(fx, defs, BigFloat::from_int(1, 4));
+		CHECK_MESSAGE(diff_against_oracle(rb, fx["expected"]) == "", (name + " big4: " + diff_against_oracle(rb, fx["expected"])));
+		fixtures++;
+	}
+	CHECK(fixtures == 13);
+}
+
 TEST_CASE("infinity loop: the tracer's walks read it, and a change of it rebuilds the solve") {
 	const std::vector<SurfaceDef> none;
 	const auto events = [](Tracer &t) { return t.trace_pair(V2::of(0, 0), V2::of(50, 0), {}, Flags())->physical.steps.size(); };

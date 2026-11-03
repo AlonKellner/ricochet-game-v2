@@ -280,6 +280,27 @@ std::vector<Plan> scene_plans(const std::vector<BuiltSurface> &s) {
 	return out;
 }
 
+// Stage 201: plans that end at a terminal: alone, and after a plan of the scene (two sides of each are enough)
+std::vector<Plan> terminal_plans(const std::vector<BuiltSurface> &s) {
+	std::vector<Plan> plans;
+	const std::vector<Plan> before = scene_plans(s);
+	int n = 0;
+	for (const Marked &t : sides_with(s, [](const BuiltEffect &e) { return e.type == "terminal"; })) {
+		if (n++ == 2) {
+			break;
+		}
+		const std::pair<int, Side> side{t.id, t.left ? Side::Left : Side::Right};
+		plans.push_back({side});
+		for (const Plan &p : before) {
+			if (p.size() == 1) {
+				plans.push_back({p[0], side});
+				break;
+			}
+		}
+	}
+	return plans;
+}
+
 std::vector<Plan> infinity_plans(const std::vector<BuiltSurface> &s) {
 	const std::pair<int, Side> inf{rc::INFINITY_ID, Side::Left};
 	std::vector<Plan> plans{{inf}, {inf, inf}};
@@ -335,6 +356,7 @@ std::vector<Plan> plans_of(const std::string &rule, const std::vector<BuiltSurfa
 		else if (part == "projective") more = projective_plans(s);
 		else if (part == "composition") more = composition_plans(s);
 		else if (part == "pieces") more = piece_plans(s);
+		else if (part == "terminal") more = terminal_plans(s);
 		else throw std::runtime_error("unknown plan rule '" + part + "'");
 		out.insert(out.end(), more.begin(), more.end());
 		at = plus + 1;

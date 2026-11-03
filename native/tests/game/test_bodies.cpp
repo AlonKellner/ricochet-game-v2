@@ -1175,12 +1175,12 @@ TEST_CASE("region: a plan that ends at a terminal draws the cones that reach it,
 		const DrawnRegion alone = settled();
 		REQUIRE(alone.triangles > 0);
 		CHECK(alone.color == WHITE_REGION);
-		CHECK_FALSE(s.region_before_terminal());
-		SUBCASE("planned first: the cones from the player; its own region stays what it is") {
+		CHECK_FALSE(s.region_reaches_terminal());
+		SUBCASE("planned first: the cones from the player; its region is the plan's before it (Stage 201)") {
 			plan_at(s, 1100, 540);
 			REQUIRE(s.plan().size() == 1);
 			const DrawnRegion green = settled();
-			CHECK(s.region_before_terminal());
+			CHECK(s.region_reaches_terminal());
 			CHECK(green.color == GREEN_REGION);
 			CHECK(green.holds(900, 600));      // on the way to the terminal
 			CHECK(alone.holds(700, 800));      // steeply down: it meets the room's floor, not the terminal
@@ -1188,10 +1188,10 @@ TEST_CASE("region: a plan that ends at a terminal draws the cones that reach it,
 			CHECK(alone.holds(600, 540));      // behind the player
 			CHECK_FALSE(green.holds(600, 540));
 			CHECK_FALSE(green.holds(900, 400)); // in the mirror's shadow
-			CHECK(s.record(nlohmann::json::object())["visibility"]["n"][1] == 0); // no area of its own
+			CHECK(s.record(nlohmann::json::object())["visibility"]["n"][1] > 0);
 			s.key(rcg::Action::ClearPlan);
 			const DrawnRegion back = settled();
-			CHECK_FALSE(s.region_before_terminal());
+			CHECK_FALSE(s.region_reaches_terminal());
 			CHECK(back.color == WHITE_REGION);
 			CHECK(back.pts == alone.pts);
 		}
@@ -1200,12 +1200,12 @@ TEST_CASE("region: a plan that ends at a terminal draws the cones that reach it,
 			REQUIRE(s.plan().size() == 1);
 			const DrawnRegion mirror = settled();
 			CHECK(mirror.color == WHITE_REGION);
-			CHECK_FALSE(s.region_before_terminal());
+			CHECK_FALSE(s.region_reaches_terminal());
 			REQUIRE(mirror.triangles > 0);
 			plan_at(s, 1100, 540);
 			REQUIRE(s.plan().size() == 2);
 			const DrawnRegion green = settled();
-			CHECK(s.region_before_terminal());
+			CHECK(s.region_reaches_terminal());
 			CHECK(green.triangles == 0);
 		}
 		SUBCASE("planned after a mirror that reaches it: the mirror's cones that do") {
@@ -1219,7 +1219,7 @@ TEST_CASE("region: a plan that ends at a terminal draws the cones that reach it,
 			plan_at(r, 603, 400);
 			REQUIRE(r.plan().size() == 2);
 			r.drain();
-			CHECK(r.region_before_terminal());
+			CHECK(r.region_reaches_terminal());
 			const DrawnRegion green = drawn_region(r);
 			CHECK(green.color == GREEN_REGION);
 			CHECK(green.holds(700, 420));
@@ -1245,7 +1245,7 @@ TEST_CASE("region: the green cones reach the planned side, within the planned pi
 		plan_at(s, 597, 400);
 		REQUIRE(s.plan().size() == 2);
 		REQUIRE(s.plan()[1].side != near);
-		CHECK(s.region_before_terminal());
+		CHECK(s.region_reaches_terminal());
 		CHECK(drawn_region(s).triangles == 0);
 	}
 	SUBCASE("a piece of the terminal: the cones to that piece") {
@@ -1274,7 +1274,7 @@ TEST_CASE("region: the green is where the plan works, cursor by cursor (Stage 19
 			plan_at(s, c[0], c[1]);
 		}
 		REQUIRE(s.plan().size() == clicks.size());
-		REQUIRE(s.region_before_terminal());
+		REQUIRE(s.region_reaches_terminal());
 		const DrawnRegion green = drawn_region(s);
 		const int terminal = s.plan().back().surface_id;
 		int inside = 0;
@@ -1310,17 +1310,17 @@ TEST_CASE("region: a plan that is not ended by a terminal stays white; no region
 		rcg::Session s(level_of(BEFORE_TERMINAL));
 		plan_at(s, 800, 400);
 		REQUIRE(s.plan().size() == 1);
-		CHECK_FALSE(s.region_before_terminal());
+		CHECK_FALSE(s.region_reaches_terminal());
 		CHECK(drawn_region(s).color == WHITE_REGION);
 	}
 	{
 		rcg::Session s(level_of(BEFORE_TERMINAL));
 		plan_at(s, 1100, 540);
 		REQUIRE(s.plan().size() == 1);
-		CHECK(s.region_before_terminal());
+		CHECK(s.region_reaches_terminal());
 		s.key(rcg::Action::ToggleVisibility);
 		s.settle();
-		CHECK_FALSE(s.region_before_terminal());
+		CHECK_FALSE(s.region_reaches_terminal());
 		CHECK(drawn_region(s).triangles == 0);
 	}
 }
@@ -1681,4 +1681,76 @@ TEST_CASE("session: off, a planned entry the aim misses goes no further than inf
 	CHECK(infinities(steps(false)) == 0);
 	CHECK(infinities(steps(true)) > 1);
 	CHECK(steps(false).size() < steps(true).size());
+}
+
+// Stage 201 (the user's F12 dumps): a planned terminal the aim misses: the cursor counts, and past it the path fades
+TEST_CASE("session: the cursor counts before a planned terminal, reached or not (Stage 201)") {
+	for (const bool loop : {false, true}) {
+		CAPTURE(loop);
+		nlohmann::json j = nlohmann::json::parse(R"({"room": {"rect": [560, 240, 800, 600], "built": false}, "elements": [
+			{"kind": "grapple", "start": [1200, 300], "end": [1200, 500]}]})");
+		j["infinity_loop"] = loop;
+		rcg::Session s(level_of(j.dump().c_str()));
+		plan_at(s, 1200, 400);
+		REQUIRE(s.plan().size() == 1);
+		const auto check = [&](double x, double y, bool on_terminal) {
+			CAPTURE(x);
+			CAPTURE(y);
+			s.set_cursor(rc::V2::of(x, y));
+			s.settle();
+			bool aligned_to_cursor = false, diverged = false, hit = false;
+			for (const rc::TraceStep &st : s.preview_steps()) {
+				aligned_to_cursor = aligned_to_cursor || st.type == rc::StepType::AlignedPostPlanned;
+				diverged = diverged || st.type == rc::StepType::DivergedPlanned || st.type == rc::StepType::DivergedPhysical;
+				hit = hit || (st.surface_id == s.plan()[0].surface_id && st.hit_on_segment);
+			}
+			CHECK(aligned_to_cursor); // (past the cursor, as past any cursor)
+			CHECK_FALSE(diverged);
+			CHECK(hit == on_terminal);
+			CHECK(s.debug_summary().find("cursor: preview visible, region inside") != std::string::npos);
+		};
+		check(900, 480, true);   // on the way to it
+		check(900, 700, false);  // the aim misses it: it is never reached
+		check(600, 540, false);  // the other way from it: no aim away from the cursor
+	}
+}
+
+TEST_CASE("session: past the terminal, on the way to it, no cursor is reached (Stage 201)") {
+	nlohmann::json j = nlohmann::json::parse(R"({"room": {"rect": [560, 240, 800, 600], "built": false}, "elements": [
+		{"kind": "grapple", "start": [1200, 300], "end": [1200, 500]}]})");
+	rcg::Session s(level_of(j.dump().c_str()));
+	plan_at(s, 1200, 400);
+	s.set_cursor(rc::V2::of(1300, 390));
+	s.settle();
+	CHECK(s.debug_summary().find("cursor: preview not visible, region outside") != std::string::npos);
+}
+
+// Stage 200 (the user): a planned walk that never reaches its cursor fades past its first unplanned event
+TEST_CASE("preview: a planned path that never reaches the cursor fades past its first unplanned event (Stage 200)") {
+	const auto faintest = [](bool whole) {
+		rcg::SessionConfig cfg;
+		cfg.full_preview = whole;
+		nlohmann::json j = nlohmann::json::parse(R"({"room": {"rect": [560, 240, 800, 600], "built": false}, "elements": [
+			{"kind": "mirror", "start": [1200, 300], "end": [1200, 500]}]})");
+		j["infinity_loop"] = true;
+		rcg::Session s(level_of(j.dump().c_str()), cfg);
+		plan_at(s, 1200, 400);
+		REQUIRE(s.plan().size() == 1);
+		s.set_cursor(rc::V2::of(800, 20)); // (the aim leaves through the top: the plan unmet, the walk round through infinity)
+		s.settle();
+		const std::vector<rc::TraceStep> &m = s.preview_steps();
+		REQUIRE(std::any_of(m.begin(), m.end(), [](const rc::TraceStep &st) { return st.type == rc::StepType::DivergedPlanned; }));
+		std::vector<rcg::render::Call> calls;
+		s.paint_steps(m, calls);
+		float least = 1.0f;
+		for (const rcg::render::Call &c : calls) {
+			for (const rcg::render::Color &col : c.colors) {
+				least = std::min(least, col[3]);
+			}
+		}
+		return std::pair<float, size_t>{least, calls.size()};
+	};
+	const auto faded = faintest(false), whole = faintest(true);
+	CHECK(faded.first < whole.first);
+	CHECK(faded.second < 2 * whole.second + 64); // (bands, not the whole walk over and over)
 }

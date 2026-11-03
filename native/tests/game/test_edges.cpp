@@ -24,6 +24,7 @@ rcg::Level level_of(const json &edges, const std::string &button = R"([100, 480]
 	if (!edges.is_null()) {
 		lv["edges"] = edges;
 	}
+	lv["infinity_loop"] = true; // (Stage 199: what passes an edge wraps)
 	return rcg::parse_level_json(lv);
 }
 

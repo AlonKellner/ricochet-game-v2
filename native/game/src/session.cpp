@@ -323,7 +323,7 @@ void Session::apply_region(long long ticket, VisJobOut &&out) {
 	outline_ = std::move(out.outline);
 	fill_ = std::move(out.fill);
 	whiskers_ = std::move(out.whiskers);
-	previous_region_ = std::move(out.previous);
+	reaching_region_ = std::move(out.reaching);
 	visibility_version_++;
 }
 
@@ -2389,7 +2389,7 @@ void Session::update_visibility() {
 	outline_ = rc::vis::Outline{};
 	fill_ = rc::vis::Fill{};
 	whiskers_.clear();
-	previous_region_.reset();
+	reaching_region_.reset();
 	if (!visibility_on()) {
 		return;
 	}
@@ -2399,7 +2399,7 @@ void Session::update_visibility() {
 	outline_ = std::move(out.outline);
 	fill_ = std::move(out.fill);
 	whiskers_ = std::move(out.whiskers);
-	previous_region_ = std::move(out.previous);
+	reaching_region_ = std::move(out.reaching);
 }
 
 Session::VisJobOut Session::run_visibility(rc::Tracer &t, const V2 &player, const std::vector<rc::PlanItem> &items, const rc::Flags &flags,
@@ -2418,37 +2418,31 @@ Session::VisJobOut Session::run_visibility(rc::Tracer &t, const V2 &player, cons
 	// crack or overlap; overlapping sheets merged)
 	out.outline = rc::vis::union_outline(*out.region);
 	out.fill = rc::vis::fill_of(out.outline);
-	for (const rc::vis::Edge &e : out.region->whiskers) {
-		std::vector<rc::vis::Pt> pts;
-		rc::vis::tessellate(e, pts);
-		pts.push_back(e.b);
-		std::vector<V2> line;
-		for (const rc::vis::Pt &p : pts) {
-			line.push_back(V2::of(p.x, p.y));
-		}
-		out.whiskers.push_back(line);
-	}
-	// Stage 197 (the user): a plan that ends at a terminal has no area (the arrow ends on its segment): where the
-	// cursor can be for it to work is the region of the plan without it, Stage 198: only its cones that reach the
-	// terminal. (A side turned terminal on the way has its whisker; one that is not hit from here, only its effect.)
-	if (out.fill.indices.empty() && !items.empty() && !items.back().is_infinity() && !items.back().is_origin()) {
-		const rc::Scene<rc::F64> scene = rc::Scene<rc::F64>::from_defs(t.defs(), rc::F64{1.0});
-		const rc::Surf<rc::F64> *s = scene.find(items.back().surface_id);
-		if (!out.whiskers.empty() || (s != nullptr && s->effect(items.back().left, flags) == rc::EffectType::Terminal)) {
-			const std::vector<rc::PlanItem> without(items.begin(), items.end() - 1);
-			auto previous = std::make_shared<VisJobOut>(run_visibility(t, player, without, flags, vb, cancel));
-			if (previous->region && previous->region->supported && !previous->region->cancelled) {
-				if (previous->previous) {
-					out.previous = previous->previous; // (terminals in a row: the arrow ends at the first)
-				} else {
-					rc::vis::keep_reaching(*previous->region, scene, items.back());
-					previous->outline = rc::vis::union_outline(*previous->region);
-					previous->fill = rc::vis::fill_of(previous->outline);
-					previous->whiskers.clear();
-					out.previous = previous;
-				}
+	const auto whiskers_of = [](const rc::vis::Result &r) {
+		std::vector<std::vector<V2>> lines;
+		for (const rc::vis::Edge &e : r.whiskers) {
+			std::vector<rc::vis::Pt> pts;
+			rc::vis::tessellate(e, pts);
+			pts.push_back(e.b);
+			std::vector<V2> line;
+			for (const rc::vis::Pt &p : pts) {
+				line.push_back(V2::of(p.x, p.y));
 			}
+			lines.push_back(line);
 		}
+		return lines;
+	};
+	out.whiskers = whiskers_of(*out.region);
+	// Stages 197, 198 (the user): a plan that ends at a terminal shows where the cursor can be for it to work: the
+	// part of the region whose cones reach the terminal, and the part of the terminal they reach
+	if (out.region->terminal) {
+		auto reaching = std::make_shared<VisJobOut>();
+		reaching->region = *out.region;
+		rc::vis::keep_reaching(*reaching->region, rc::Scene<rc::F64>::from_defs(t.defs(), rc::F64{1.0}, t.infinity_loop()), *out.region->terminal);
+		reaching->outline = rc::vis::union_outline(*reaching->region);
+		reaching->fill = rc::vis::fill_of(reaching->outline);
+		reaching->whiskers = whiskers_of(*reaching->region);
+		out.reaching = reaching;
 	}
 	return out;
 }

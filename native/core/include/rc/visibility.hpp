@@ -436,6 +436,8 @@ struct Result {
 	std::vector<Cell> cells;
 	std::vector<Loop> loops;
 	std::vector<Edge> whiskers; // carrier pieces of departure points only (no area)
+	std::optional<PlanItem> terminal; // Stage 201: the plan's first terminal: this is the region of the entries before it (GAME_SPEC 15.1)
+	size_t terminal_at = 0;           // ... its index
 	int casts = 0;
 	int refinements = 0;
 	std::vector<std::string> notes; // construction anomalies (reported by the checks)
@@ -5065,22 +5067,54 @@ inline std::vector<std::pair<int, int>> parts_of(const Result &r) {
 // The visibility region of the plan for the player (bounds: the level's).
 // cancel (Stage 121; may be null): a computation polled at every cast; once set, it
 // stops and returns a Result with `cancelled` (no region)
-// Stage 198 (the user, GAME_SPEC 15.1): only the cells whose walks stop at a plan
-// entry -- its side, within its piece: the cones that reach it. (Its ends are
-// members already: a piece's are crossings, and cells break at those.) What is
-// left is for drawing: no loops to classify by.
+// Stage 198 (the user, GAME_SPEC 15.1): whether a cell's walks stop at a plan entry
+// -- its side, within its piece: a cone that reaches it. (Its ends are members
+// already: a piece's are crossings, and cells break at those.)
+inline bool cell_reaches(const Cell &c, const PlanItem &entry, const std::optional<Seg<F64>> &span) {
+	const Cast &m = c.mid;
+	const bool stops = std::any_of(m.iv.begin(), m.iv.end(), [](const Interval &i) { return i.b.kind == End::Stop; });
+	return stops && m.end_hit && m.end_sid == entry.surface_id && m.end_left == entry.left && (!span || geom::on_segment(*span, cn_of(m.end_pt)));
+}
+
+// ... only those cells, and the part of the entry they reach. What is left is for drawing: no loops to classify by.
 inline void keep_reaching(Result &r, const Scene<F64> &scene, const PlanItem &entry) {
 	const std::optional<Seg<F64>> span = Solver<F64>(scene).plan_piece_spans({entry}).at(0);
-	std::erase_if(r.cells, [&](const Cell &c) {
-		const Cast &m = c.mid;
-		const bool stops = std::any_of(m.iv.begin(), m.iv.end(), [](const Interval &i) { return i.b.kind == End::Stop; });
-		return !(stops && m.end_hit && m.end_sid == entry.surface_id && m.end_left == entry.left && (!span || geom::on_segment(*span, cn_of(m.end_pt))));
-	});
+	std::erase_if(r.cells, [&](const Cell &c) { return !cell_reaches(c, entry, span); });
+	std::erase_if(r.whiskers, [&](const Edge &e) { return !(e.kind == EdgeKind::Carrier && e.surface == entry.surface_id && e.role == End::Stop); });
 	r.loops.clear();
 }
 
 inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanItem> &plan, const Flags &flags, const Rect &bounds,
 		const std::atomic<bool> *cancel = nullptr) {
+	// Stage 201 (GAME_SPEC 13.5, 15.1, the user): a cursor counts before a planned terminal, reached or not: the region
+	// is the one of the entries before it, and the part of the terminal its cones reach
+	if (!plan.empty()) {
+		const Scene<F64> scene = Scene<F64>::from_defs(tracer.defs(), F64{1.0}, tracer.infinity_loop());
+		Flags start = flags;
+		start.erase(GHOST);
+		const size_t k = Solver<F64>(scene).first_terminal(plan, start);
+		if (k < plan.size()) {
+			Result r = compute(tracer, player, std::vector<PlanItem>(plan.begin(), plan.begin() + long(k)), flags, bounds, cancel);
+			if (r.supported && !r.cancelled) {
+				const std::optional<Seg<F64>> span = Solver<F64>(scene).plan_piece_spans({plan[k]}).at(0);
+				for (const Cell &c : r.cells) {
+					if (!cell_reaches(c, plan[k], span)) {
+						continue;
+					}
+					for (const Edge &e : c.edges()) {
+						if (e.kind == EdgeKind::Carrier && e.surface == plan[k].surface_id && e.role == End::Stop) {
+							Edge w = e;
+							w.inclusive = w.incl_a = w.incl_b = true;
+							r.whiskers.push_back(w);
+						}
+					}
+				}
+				r.terminal = plan[k];
+				r.terminal_at = k;
+			}
+			return r;
+		}
+	}
 	const auto t0 = std::chrono::steady_clock::now();
 	// A.10: the whole build on this thread allocates through the compute threads'
 	// block cache (collect, cells, merge, the sequential casts; the batches did)
