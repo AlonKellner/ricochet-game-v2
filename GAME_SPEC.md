@@ -285,7 +285,7 @@ The preview draws the step tree (§14). Each step has one of five types, each wi
 | **DIVERGED_PLANNED** | Red | Solid | Where the plan says the arrow should go, but the physical arrow diverged. |
 | **DIVERGED_POST_PLANNED** | Red | Dashed | Post-cursor continuation of the planned path, after divergence. |
 
-**How far the preview shows** (Stage 195, the user). The preview is not drawn whole: a shot's full course is for the player to find out. Everything up to the cursor is drawn at full strength, a solid red planned path included. Past the cursor each path **fades out** along its next steps over a tenth of the level's bounds' diagonal, and nothing is drawn beyond that. After a divergence the physical path fades from the **divergence point**, and the planned path from the cursor, as it continues; if the walks diverge only past the cursor, both go on fading from the cursor. A step's event marks and arrow-state marks fade with it. The display modes (Tab) show each walk by the same rule. **F** toggles the whole preview in play (`RC_EVENT_TOGGLE_FULL_PREVIEW`, C API 1.13), a change of the display like Tab, so it ends no redo; a tool can start with it on (`rc_game_config.full_preview`: the violation viewer). The consequences the preview shows (§14.11: what will vanish, appear, register; a journey's trail and end) are not cut by the fade.
+**How far the preview shows** (Stage 195, the user). The preview is not drawn whole: a shot's full course is for the player to find out. Everything up to the cursor is drawn at full strength, a solid red planned path included. Past the cursor each path **fades out** along its next steps over a tenth of the level's bounds' diagonal, and nothing is drawn beyond that. After a divergence the physical path fades from the **divergence point**, and the planned path from the cursor, as it continues; if the walks diverge only past the cursor, both go on fading from the cursor. A step's event marks and arrow-state marks fade with it. The display modes (Tab) show each walk by the same rule. **F** toggles the whole preview in play (`RC_EVENT_TOGGLE_FULL_PREVIEW`, C API 1.13), a change of the display like Tab, so it ends no redo; a tool can start with it on (`rc_game_config.full_preview`: the violation viewer). The consequences the preview shows (§14.11: what will vanish, appear, register; a journey's trail and end) take the opacity of the marker of the event that makes them (Stage 196): whole before the fade, fading with it, gone where the marker is.
 
 **The look** (Stage 130, the user, 2026-10-22):
 - A **solid** step is a slightly dark stroke (green `#00B300`, red `#B30000`) with a slightly bright dashed stroke over it (`#80FF80`, `#FF8080`).
@@ -1669,17 +1669,20 @@ With an empty plan the plan is complete from the start, so the cursor is a candi
 
 > **Status: implemented (Stage 157, docs/TDD_62_ARROW_PREVIEW.md).** The user's rules (2026-10-25).
 
-- **Consequences only before the divergence.** The preview shows what the shot does to things (a surface catching
-  fire, a conductor charged or discharged) only when the change happens before the walks diverge (§14.2). The glow
-  node (`["glow"]`, over the surfaces) draws the change dashed: orange for fire, white for charge, grey for a
-  discharge. What things are now (on fire, charged, frosted) it draws solid.
+- **Consequences at their event's opacity (Stage 196, the user; until then only before the divergence).** The preview
+  shows what the shot does to things (a surface catching fire, a conductor charged or discharged) at the opacity of
+  the marker of the physical walk's event that does it: whole to the cursor, fading past the cursor or a divergence,
+  nothing once the path has faded out (§4.3). The planned walk's own events past a divergence have no consequences:
+  they will not happen. The glow node (`["glow"]`, over the surfaces) draws the change dashed: orange for fire, white
+  for charge, grey for a discharge. What things are now (on fire, charged, frosted) it draws solid.
 - **The arrow's states on its path (path effects; Stage 160, the user).** Each walk's own states are marked over its
   own steps -- the common ones, and after the divergence each walk's diverged ones, the planned walk's from its own
   hits -- always, wherever the state began. The marks move with the dashes: red crosses for fire, white chevrons
   (pointing the way it flies) for charge, pale blue stars for frost. World effects (things catching fire, surfaces,
-  targets, the goal, journeys: §14.12) show only before the divergence, so the two walks' worlds never conflict.
-- An unplanned state change is a divergence (§14.2, Stage 134), so a preview shows a consequence when every surface
-  that changes the arrow's state on the way is planned. A pass surface carrying a tag's writes is plannable.
+  targets, the goal, journeys: §14.12) are the physical walk's only, so the two walks' worlds never conflict.
+- An unplanned state change is a divergence (§14.2, Stage 134), so a consequence shows whole past it only with the
+  whole preview (F), or when every surface that changes the arrow's state on the way is planned. A pass surface
+  carrying a tag's writes is plannable.
 
 ### 14.12 Every change plannable, every change previewed (Stage 159)
 
@@ -1690,11 +1693,12 @@ With an empty plan the plan is complete from the start, so the cursor is a candi
 - **Plannable.** A side with any hit effect (a state write, a target, a reset, a spawn, a grapple, a pull, a tag's
   writes) is plannable, whatever its level says (the builder makes it interactive). A side frost would turn is
   plannable while the plan's frost is active (§10.6).
-- **Previewed.** The preview shows the shot's lasting changes up to the divergence (§14.11): from the flags there
-  (its per-shot flags gone), surfaces that would vanish (red, dashed), appear (green), or change their sides
-  (yellow), targets it would register (cyan), the goal it would open (green), lights or darks it would switch, and
-  objects a popped bubble would release (yellow). Things catching fire or changing charge glow (§14.11).
-- **Journeys.** A grapple or pull hit before the divergence previews its journey: the traveller's trail and a ring
+- **Previewed.** The preview shows the shot's lasting changes event by event, each at its event's opacity (§14.11):
+  from the flags before and after the event (their per-shot flags gone), surfaces that would vanish (red, dashed),
+  appear (green), or change their sides (yellow), targets it would register (cyan), the goal it would open (green),
+  lights or darks it would switch, and objects a popped bubble would release (yellow). Things catching fire or
+  changing charge glow (§14.11).
+- **Journeys.** A grapple or pull hit previews its journey, at the hit's opacity: the traveller's trail and a ring
   where it ends, simulated tick by tick exactly as the journey runs after the landing (the same motion, swept against
   what blocks the traveller under the shot's landed flags). A player- or object-blocking barrier that the arrow
   passes (a fence) stops it on the way: the ring is then orange.
@@ -3144,4 +3148,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.91.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.92.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
