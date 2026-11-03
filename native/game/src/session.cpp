@@ -573,7 +573,7 @@ Session::Hit Session::detect_click() {
 			}
 		}
 	}
-	{
+	if (level_.infinity_loop) { // (Stage 199: off, no walk goes through infinity: nothing to plan there)
 		const std::optional<V2> q = pole(plan_.size());
 		const rc::Rect2f b = bounds();
 		const bool on_screen = q && (!has_area(b) || b.has_point(*q));
@@ -2245,7 +2245,7 @@ void Session::update_hover() {
 	}
 	hovered_serial_ = partner_serial_ = 0;
 	edge_point_ = std::nullopt;
-	if (const std::optional<V2> q = pole(plan_.size()); q && bounds().has_point(*q)) {
+	if (const std::optional<V2> q = level_.infinity_loop ? pole(plan_.size()) : std::nullopt; q && bounds().has_point(*q)) {
 		edge_point_ = q;
 	}
 	edge_hovered_ = r.infinity;
@@ -2327,7 +2327,7 @@ void Session::update_overlays(bool force) {
 		edge_marks_.push_back(EdgeMark{int(i + 1), on_point ? *q : e.click, on_point, k <= wraps});
 	}
 	edge_point_ = std::nullopt;
-	if (const std::optional<V2> q = pole(plan_.size()); q && b.has_point(*q)) {
+	if (const std::optional<V2> q = level_.infinity_loop ? pole(plan_.size()) : std::nullopt; q && b.has_point(*q)) {
 		edge_point_ = q;
 	}
 	// Stage 132: the origin entries' marks (valid: met by the physical walk)

@@ -98,7 +98,7 @@ the generated ones (configured edges read back as the `edges` key), every run of
 | `background` | `{"rect": [x, y, w, h], "color": [r, g, b, a]}` or `null` | `null` |
 | `colliders` | `[{"a": [x, y], "b": [x, y]}]`: segments only the player collides with (floors) | `[]` |
 | `features` | `{"game", "preview", "arrow", "hud", "cursor"}`: which parts of the game the level runs (test levels leave some out: without `arrow` a shot lands at once) | all `true` |
-| `infinity_loop` | `true`: a walk goes on round through infinity until the event limits end it; `false`: its first passage of infinity uses up its significant events (GAME_SPEC 12.6, Stage 199) | `false` |
+| `infinity_loop` | `true`: a walk goes on round through infinity until the event limits end it; `false`: every walk is cut at infinity, and the ∞ entry cannot be planned (GAME_SPEC 12.6, Stage 199) | `false` |
 | `surfaces` | the surfaces in build order (below) | required |
 
 ### A surface

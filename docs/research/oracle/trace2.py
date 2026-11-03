@@ -732,7 +732,7 @@ class Walk:
     point: object = None
     max_hits: int = MAX_HITS   # the hit budget (Stage 111: the realization decides with a wider one)
     max_sig: int = MAX_SIGNIFICANT  # Stage 131: the significant hits' budget
-    infinity_ends: bool = False     # Stage 199: a passage of infinity uses max_sig up
+    infinity_ends: bool = False     # Stage 199: cut at the frame's infinity
     sig: int = 0               # Stage 131: significant events so far
 
 
@@ -1238,12 +1238,11 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 continue
             if sid == INFINITY_ID:
                 q_pt = snapped.get((INFINITY_ID, t))   # None: the real infinity
-                if walk.count > walk.max_hits or walk.sig + 1 > walk.max_sig:
+                if walk.count > walk.max_hits or walk.sig + 1 > walk.max_sig or walk.infinity_ends:  # (Stage 199)
                     _append(walk, Event("max", INFINITY_ID, point=q_pt, t=t, beam=beam))
                     walk.done = True
                     return
-                # (the passage of infinity is significant; Stage 199: infinity_loop off, it uses the budget up)
-                walk.sig = walk.max_sig if walk.infinity_ends else walk.sig + 1
+                walk.sig += 1               # (the passage of infinity is significant)
                 consumed = walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index][0] == INFINITY_ID
                 if consumed:
                     walk.plan_index += 1

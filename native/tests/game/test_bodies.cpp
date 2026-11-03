@@ -1609,7 +1609,7 @@ TEST_CASE("level: infinity_loop is off by default, read from the level, kept by 
 	CHECK_THROWS_WITH_AS(open_level(R"(, "infinity_loop": 1)"), doctest::Contains("infinity_loop"), rcg::LevelError);
 }
 
-TEST_CASE("session: off, a walk ends at its first passage of infinity; on, it goes round as before (Stage 199)") {
+TEST_CASE("session: off, a walk is cut at infinity and comes back from nowhere; on, it goes round as before (Stage 199)") {
 	for (const bool async : {false, true}) {
 		CAPTURE(async);
 		rcg::SessionConfig cfg;
@@ -1619,12 +1619,26 @@ TEST_CASE("session: off, a walk ends at its first passage of infinity; on, it go
 			s.set_cursor(rc::V2::of(800, 300));
 			s.settle();
 			s.drain();
-			return infinities(s.preview_steps());
+			return std::pair<int, size_t>{infinities(s.preview_steps()), s.preview_steps().size()};
 		};
-		CHECK(preview("") == 1);
-		CHECK(preview(R"(, "infinity_loop": false)") == 1);
-		CHECK(preview(R"(, "infinity_loop": true)") == 5);
+		const auto off = preview(R"(, "infinity_loop": false)");
+		CHECK(off == preview(""));
+		CHECK(off.first == 0);
+		CHECK(off.second <= 2); // (to the cursor, past it)
+		CHECK(preview(R"(, "infinity_loop": true)").first == 5);
 	}
+}
+
+TEST_CASE("session: off, the level's edge is no entry to plan; on, it is (Stage 199)") {
+	const auto planned = [](const char *extra) {
+		rcg::Session s(open_level(extra));
+		s.set_cursor(rc::V2::of(1920, 300));
+		s.settle();
+		s.click(false);
+		return s.plan().size();
+	};
+	CHECK(planned("") == 0);
+	CHECK(planned(R"(, "infinity_loop": true)") == 1);
 }
 
 TEST_CASE("session: off, a shot that passes infinity ends, nothing past it fires (Stage 199)") {
@@ -1647,7 +1661,7 @@ TEST_CASE("session: off, a shot that passes infinity ends, nothing past it fires
 
 // the user's F12 dump (platforms_2, 2026-11-03): a planned object the aim misses: the planned walk never consumes its
 // entry, so it never reaches the cursor and went five times round through infinity, none of it past a cursor to fade
-TEST_CASE("session: off, a planned entry the aim misses goes no further than the first passage of infinity (Stage 199)") {
+TEST_CASE("session: off, a planned entry the aim misses goes no further than infinity (Stage 199)") {
 	const auto steps = [](bool loop) {
 		nlohmann::json j = nlohmann::json::parse(R"({"room": {"rect": [560, 240, 800, 600], "built": false},
 			"objects": [{"name": "box", "circle": {"center": [1200, 300], "radius": 16}}]})");
@@ -1664,7 +1678,7 @@ TEST_CASE("session: off, a planned entry the aim misses goes no further than the
 		s.settle();
 		return s.preview_steps();
 	};
-	CHECK(infinities(steps(false)) == 1);
+	CHECK(infinities(steps(false)) == 0);
 	CHECK(infinities(steps(true)) > 1);
 	CHECK(steps(false).size() < steps(true).size());
 }

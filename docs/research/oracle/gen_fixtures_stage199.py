@@ -5,8 +5,7 @@ Usage:
 
 Writes bench/fixtures/stage199_infinity_loop.json: every walk twice. With
 infinity_loop true it is the walk without the option, event for event; false,
-its first passage of infinity uses up the significant events: it goes on only
-to its next significant event, which it does not make (a "max" there).
+it is cut at the frame's infinity: a "max" event there, nothing past it.
 """
 import json
 import os
@@ -38,13 +37,13 @@ def main():
     ring = circle(1, (200, 30), 100, INV, INV)
     cases = [
         # name, surfaces, walk, the kinds with the option off
-        ("nothing_on_the_beam", [off_ray], dict(direction=east), ["infinity", "max"]),
-        ("planned_entry_the_aim_misses", [missed], dict(plan=[(1, "LEFT")], mode="planned", direction=east), ["infinity", "max"]),
-        ("a_mirror_past_infinity", [behind], dict(direction=east), ["infinity", "max"]),
-        ("reflected_first", [ahead], dict(direction=east), ["hit", "infinity", "max"]),
-        ("planned_infinity_aimed_past", [off_ray], dict(plan=[(INF, "")], mode="planned", cursor=(-50.0, 0.0)), ["infinity", "cursor", "max"]),
-        ("an_entry_past_planned_infinity", [behind], dict(plan=[(INF, ""), (1, "RIGHT")], mode="planned", cursor=(-50.0, 0.0)), ["infinity", "max"]),
-        ("an_inversion_and_its_pop_first", [ring], dict(direction=east), ["hit", "hit", "infinity", "max"]),
+        ("nothing_on_the_beam", [off_ray], dict(direction=east), ["max"]),
+        ("planned_entry_the_aim_misses", [missed], dict(plan=[(1, "LEFT")], mode="planned", direction=east), ["max"]),
+        ("a_mirror_past_infinity", [behind], dict(direction=east), ["max"]),
+        ("reflected_first", [ahead], dict(direction=east), ["hit", "max"]),
+        ("planned_infinity_aimed_past", [off_ray], dict(plan=[(INF, "")], mode="planned", cursor=(-50.0, 0.0)), ["max"]),
+        ("an_entry_past_planned_infinity", [behind], dict(plan=[(INF, ""), (1, "RIGHT")], mode="planned", cursor=(-50.0, 0.0)), ["max"]),
+        ("an_inversion_and_its_pop_first", [ring], dict(direction=east), ["hit", "hit", "max"]),
     ]
     fx = []
     for name, surfs, walk, off in cases:
@@ -54,10 +53,7 @@ def main():
         f = fixture(name + "_off", surfs, (0.0, 0.0), infinity_loop=False, **walk)
         assert kinds(f) == off, (name, kinds(f))
         assert kinds(on) != kinds(f), name
-        assert kinds(f).count("infinity") == 1, name
-        # no event after the passage has an effect
-        k = kinds(f).index("infinity")
-        assert not any(e["applied"] for e in f["expected"][k + 1:]), name
+        assert f["expected"][-1]["surface_id"] == INF and "infinity" not in kinds(f), name
         fx += [on, f]
     path = os.path.join(ROOT, "bench", "fixtures", "stage199_infinity_loop.json")
     with open(path, "w") as out:

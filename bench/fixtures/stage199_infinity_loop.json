@@ -222,26 +222,13 @@
    "flags": {},
    "expected": [
     {
-     "kind": "infinity",
+     "kind": "max",
      "surface_id": -3,
      "side": "",
      "applied": false,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "state": false,
-     "flags": {}
-    },
-    {
-     "kind": "max",
-     "surface_id": -1,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "0.0",
-     "y": "0.0",
      "state": false,
      "flags": null
     }
@@ -492,26 +479,13 @@
    "flags": {},
    "expected": [
     {
-     "kind": "infinity",
+     "kind": "max",
      "surface_id": -3,
      "side": "",
      "applied": false,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "state": false,
-     "flags": {}
-    },
-    {
-     "kind": "max",
-     "surface_id": -1,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "0.0",
-     "y": "0.0",
      "state": false,
      "flags": null
     }
@@ -744,26 +718,13 @@
    "flags": {},
    "expected": [
     {
-     "kind": "infinity",
+     "kind": "max",
      "surface_id": -3,
      "side": "",
      "applied": false,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "state": false,
-     "flags": {}
-    },
-    {
-     "kind": "max",
-     "surface_id": -1,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "-100.0000000000000000000000000000000000000",
-     "y": "0.0",
      "state": false,
      "flags": null
     }
@@ -1009,26 +970,13 @@
      "flags": {}
     },
     {
-     "kind": "infinity",
+     "kind": "max",
      "surface_id": -3,
      "side": "",
      "applied": false,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "state": false,
-     "flags": {}
-    },
-    {
-     "kind": "max",
-     "surface_id": -1,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "200.0000000000000000000000000000000000000",
-     "y": "0.0",
      "state": false,
      "flags": null
     }
@@ -1280,39 +1228,13 @@
    "flags": {},
    "expected": [
     {
-     "kind": "infinity",
+     "kind": "max",
      "surface_id": -3,
      "side": "",
-     "applied": true,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "state": false,
-     "flags": {}
-    },
-    {
-     "kind": "cursor",
-     "surface_id": -1,
-     "side": "",
      "applied": false,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "x": "-50.00000000000000000000000000000000000000",
-     "y": "0.0",
-     "state": false,
-     "flags": null
-    },
-    {
-     "kind": "max",
-     "surface_id": -1,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "0.0",
-     "y": "0.0",
      "state": false,
      "flags": null
     }
@@ -1576,26 +1498,13 @@
    "flags": {},
    "expected": [
     {
-     "kind": "infinity",
-     "surface_id": -3,
-     "side": "",
-     "applied": true,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "state": false,
-     "flags": {}
-    },
-    {
      "kind": "max",
-     "surface_id": -1,
+     "surface_id": -3,
      "side": "",
      "applied": false,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "x": "-100.0000000000000000000000000000000000000",
-     "y": "0.0",
      "state": false,
      "flags": null
     }
@@ -1868,26 +1777,13 @@
      "flags": {}
     },
     {
-     "kind": "infinity",
+     "kind": "max",
      "surface_id": -3,
      "side": "",
      "applied": false,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
-     "state": false,
-     "flags": {}
-    },
-    {
-     "kind": "max",
-     "surface_id": -1,
-     "side": "",
-     "applied": false,
-     "terminal": false,
-     "on_segment": false,
-     "rehit": false,
-     "x": "0.0",
-     "y": "0.0",
      "state": false,
      "flags": null
     }

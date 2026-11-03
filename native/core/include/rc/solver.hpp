@@ -538,7 +538,7 @@ struct Walk {
 	int count = 0;
 	int max_events = MAX_HITS;
 	int max_sig = MAX_SIGNIFICANT; // Stage 131
-	bool infinity_ends = false;    // Stage 199: a passage of infinity uses max_sig up (the level's infinity_loop off)
+	bool infinity_ends = false;    // Stage 199: cut at the frame's infinity (the level's infinity_loop off)
 	int sig = 0;                    // ... the significant events so far
 	// Workflow W2.0: a decision walk (realize, R2) needs the cursor event alone:
 	// it stops there (the events up to it are the same walk's)
@@ -3790,7 +3790,7 @@ private:
 				if (!is_cursor) {
 					w.count++;
 				}
-				if (!is_cursor && (w.count > w.max_events || ((cand.inf || cand.origin) && w.sig + 1 > w.max_sig))) {
+				if (!is_cursor && (w.count > w.max_events || ((cand.inf || cand.origin) && w.sig + 1 > w.max_sig) || (cand.inf && w.infinity_ends))) {
 					// cut at the next crossing: drawn up to it, no effect (at the
 					// wrap: a max at infinity, no point)
 					Event<N> &me = emit(w, EventKind::Max, beam, t_prev, (cand.inf && !cand.pt) ? std::nullopt : std::optional<N>(t), INF_D);
@@ -3824,7 +3824,7 @@ private:
 					continue;
 				}
 				if (cand.inf) {
-					w.sig = w.infinity_ends ? w.max_sig : w.sig + 1; // (Stage 131: the passage of infinity is significant)
+					w.sig++; // (Stage 131: the passage of infinity is significant)
 					// the wrap through infinity (Stage 88): consumes the infinity
 					// entry when it is next in the plan, in both modes
 					bool consumed = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].is_infinity();

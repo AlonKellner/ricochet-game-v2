@@ -348,8 +348,8 @@ struct Scene {
 		return it == by_id.end() ? nullptr : it->second;
 	}
 
-	// Stage 199 (GAME_SPEC 12.6, the user): the level's `infinity_loop`. Off, a passage of the frame's infinity uses
-	// up the walk's significant events; on, it counts one like any other.
+	// Stage 199 (GAME_SPEC 12.6, the user): the level's `infinity_loop`. Off, a walk is cut at the frame's infinity:
+	// the passage uses up its significant events, and it does not go through; on, it counts one like any other.
 	bool infinity_loop = true;
 
 	// `like`: a value of the tier (its limb count for BigFloat).
