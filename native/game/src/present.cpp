@@ -960,13 +960,13 @@ std::vector<render::FrameNode> Presenter::frame(std::vector<render::FrameNode> n
 		if (version != region_version_) {
 			std::vector<sm::Carrier> carriers;
 			std::optional<sm::Pt> apex;
-			if (const auto &r = s.region(); r && r->supported) {
+			if (const auto &r = s.drawn_region(); r && r->supported) { // (Stage 197: as the session draws it)
 				carriers = sm::carriers_of(*r, &s.world());
 				if (!r->pk_none && std::hypot(r->pk.x - r->player.x, r->pk.y - r->player.y) < 1e-6) {
 					apex = r->player; // the region's rays leave the player: its shadows can follow it
 				}
 			}
-			sm::Shape next = s.region() ? sm::shape_of(s.region_outline(), std::move(carriers)) : sm::Shape{};
+			sm::Shape next = s.drawn_region() ? sm::shape_of(s.drawn_outline(), std::move(carriers)) : sm::Shape{};
 			if (apex) {
 				sm::mark_shadows(next, *apex);
 			}

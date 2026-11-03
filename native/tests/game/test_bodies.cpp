@@ -1109,6 +1109,222 @@ TEST_CASE("preview: a consequence past a divergence fades from the divergence, a
 	CHECK(door[0] < 0.95f);
 }
 
+namespace {
+
+struct DrawnRegion {
+	size_t triangles = 0;
+	rcg::render::Color color{};
+	std::vector<rc::V2> pts;
+	std::vector<int> indices;
+	bool holds(double x, double y) const {
+		const auto side = [&](const rc::V2 &u, const rc::V2 &v) { return (double(v.x) - u.x) * (y - u.y) - (double(v.y) - u.y) * (x - u.x); };
+		for (size_t i = 0; i + 2 < indices.size(); i += 3) {
+			const rc::V2 &p = pts.at(size_t(indices[i])), &q = pts.at(size_t(indices[i + 1])), &r = pts.at(size_t(indices[i + 2]));
+			const double d0 = side(p, q), d1 = side(q, r), d2 = side(r, p);
+			if ((d0 >= 0 && d1 >= 0 && d2 >= 0) || (d0 <= 0 && d1 <= 0 && d2 <= 0)) {
+				return true;
+			}
+		}
+		return false;
+	}
+};
+
+DrawnRegion drawn_region(const rcg::Session &s) {
+	DrawnRegion out;
+	for (const auto &node : s.draw_frame()) {
+		if (node.key.kind != rcg::render::NodeKind::Visibility) {
+			continue;
+		}
+		for (const rcg::render::Call &c : *node.calls) {
+			if (c.kind == rcg::render::Kind::Triangles) {
+				out.triangles = c.indices.size() / 3;
+				out.color = c.colors.at(0);
+				out.pts = c.pts;
+				out.indices = c.indices;
+			}
+		}
+	}
+	return out;
+}
+
+const rcg::render::Color WHITE_REGION{1.0f, 1.0f, 1.0f, 0.10f}, GREEN_REGION{0.55f, 1.0f, 0.6f, 0.14f};
+
+void plan_at(rcg::Session &s, double x, double y) {
+	s.set_cursor(rc::V2::of(x, y));
+	s.settle();
+	s.click(false);
+	s.settle();
+}
+
+const char *const BEFORE_TERMINAL = R"({"elements": [
+	{"kind": "mirror", "start": [800, 300], "end": [800, 500]},
+	{"kind": "grapple", "start": [1100, 300], "end": [1100, 800]}]})";
+
+} // namespace
+
+TEST_CASE("region: a plan that ends at a terminal draws the cones that reach it, light green (Stages 197, 198)") {
+	for (const bool async : {false, true}) {
+		CAPTURE(async);
+		rcg::SessionConfig cfg;
+		cfg.async = async;
+		rcg::Session s(level_of(BEFORE_TERMINAL), cfg);
+		const auto settled = [&]() {
+			s.drain();
+			return drawn_region(s);
+		};
+		const DrawnRegion alone = settled();
+		REQUIRE(alone.triangles > 0);
+		CHECK(alone.color == WHITE_REGION);
+		CHECK_FALSE(s.region_before_terminal());
+		SUBCASE("planned first: the cones from the player; its own region stays what it is") {
+			plan_at(s, 1100, 540);
+			REQUIRE(s.plan().size() == 1);
+			const DrawnRegion green = settled();
+			CHECK(s.region_before_terminal());
+			CHECK(green.color == GREEN_REGION);
+			CHECK(green.holds(900, 600));      // on the way to the terminal
+			CHECK(alone.holds(700, 800));      // steeply down: it meets the room's floor, not the terminal
+			CHECK_FALSE(green.holds(700, 800));
+			CHECK(alone.holds(600, 540));      // behind the player
+			CHECK_FALSE(green.holds(600, 540));
+			CHECK_FALSE(green.holds(900, 400)); // in the mirror's shadow
+			CHECK(s.record(nlohmann::json::object())["visibility"]["n"][1] == 0); // no area of its own
+			s.key(rcg::Action::ClearPlan);
+			const DrawnRegion back = settled();
+			CHECK_FALSE(s.region_before_terminal());
+			CHECK(back.color == WHITE_REGION);
+			CHECK(back.pts == alone.pts);
+		}
+		SUBCASE("planned after a mirror, out of the reflection's reach: no cone reaches it") {
+			plan_at(s, 800, 400);
+			REQUIRE(s.plan().size() == 1);
+			const DrawnRegion mirror = settled();
+			CHECK(mirror.color == WHITE_REGION);
+			CHECK_FALSE(s.region_before_terminal());
+			REQUIRE(mirror.triangles > 0);
+			plan_at(s, 1100, 540);
+			REQUIRE(s.plan().size() == 2);
+			const DrawnRegion green = settled();
+			CHECK(s.region_before_terminal());
+			CHECK(green.triangles == 0);
+		}
+		SUBCASE("planned after a mirror that reaches it: the mirror's cones that do") {
+			rcg::Session r(level_of(R"({"elements": [
+				{"kind": "mirror", "start": [800, 300], "end": [800, 500]},
+				{"kind": "grapple", "start": [600, 300], "end": [600, 800]}]})"), cfg);
+			plan_at(r, 800, 400);
+			REQUIRE(r.plan().size() == 1);
+			r.drain();
+			const DrawnRegion mirror = drawn_region(r);
+			plan_at(r, 603, 400);
+			REQUIRE(r.plan().size() == 2);
+			r.drain();
+			CHECK(r.region_before_terminal());
+			const DrawnRegion green = drawn_region(r);
+			CHECK(green.color == GREEN_REGION);
+			CHECK(green.holds(700, 420));
+			CHECK(mirror.holds(700, 320)); // past the mirror, but above the terminal's end
+			CHECK_FALSE(green.holds(700, 320));
+		}
+	}
+}
+
+TEST_CASE("region: the green cones reach the planned side, within the planned piece (Stage 198)") {
+	SUBCASE("the other side of the terminal: no cone reaches it") {
+		rcg::Session s(level_of(R"({"elements": [
+			{"kind": "mirror", "start": [800, 300], "end": [800, 500]},
+			{"kind": "grapple", "start": [600, 300], "end": [600, 800]}]})"));
+		plan_at(s, 800, 400);
+		plan_at(s, 603, 400);
+		REQUIRE(s.plan().size() == 2);
+		const rcg::Side near = s.plan()[1].side;
+		CHECK(drawn_region(s).triangles > 0);
+		s.key(rcg::Action::ClearPlan);
+		s.settle();
+		plan_at(s, 800, 400);
+		plan_at(s, 597, 400);
+		REQUIRE(s.plan().size() == 2);
+		REQUIRE(s.plan()[1].side != near);
+		CHECK(s.region_before_terminal());
+		CHECK(drawn_region(s).triangles == 0);
+	}
+	SUBCASE("a piece of the terminal: the cones to that piece") {
+		const char *crossed = R"({"elements": [
+			{"kind": "mirror", "start": [1050, 600], "end": [1150, 600]},
+			{"kind": "grapple", "start": [1100, 300], "end": [1100, 800]}]})";
+		rcg::Session upper(level_of(crossed)), lower(level_of(crossed));
+		plan_at(upper, 1100, 420);
+		plan_at(lower, 1100, 700);
+		REQUIRE(upper.plan().size() == 1);
+		REQUIRE(lower.plan().size() == 1);
+		REQUIRE(upper.plan()[0].span.has_value());
+		REQUIRE(lower.plan()[0].span.has_value());
+		const DrawnRegion up = drawn_region(upper), low = drawn_region(lower);
+		CHECK(up.holds(900, 480));
+		CHECK_FALSE(low.holds(900, 480));
+		CHECK(low.holds(900, 600));
+		CHECK_FALSE(up.holds(900, 600));
+	}
+}
+
+TEST_CASE("region: the green is where the plan works, cursor by cursor (Stage 198)") {
+	const auto check_plan = [](const char *level, const std::vector<std::array<double, 2>> &clicks, double x0, double x1) {
+		rcg::Session s(level_of(level));
+		for (const auto &c : clicks) {
+			plan_at(s, c[0], c[1]);
+		}
+		REQUIRE(s.plan().size() == clicks.size());
+		REQUIRE(s.region_before_terminal());
+		const DrawnRegion green = drawn_region(s);
+		const int terminal = s.plan().back().surface_id;
+		int inside = 0;
+		for (double x = x0 + 3.5; x < x1; x += 37.0) {
+			for (double y = 253.25; y < 830.0; y += 37.0) {
+				s.set_cursor(rc::V2::of(x, y));
+				s.settle();
+				bool diverged = false, hit = false;
+				for (const rc::TraceStep &st : s.preview_steps()) {
+					diverged = diverged || st.type == rc::StepType::DivergedPhysical;
+					hit = hit || (st.surface_id == terminal && st.hit_on_segment && !diverged);
+				}
+				CAPTURE(x);
+				CAPTURE(y);
+				CHECK(green.holds(x, y) == (hit && !diverged));
+				inside += green.holds(x, y) ? 1 : 0;
+			}
+		}
+		CHECK(inside > 0);
+	};
+	SUBCASE("first") {
+		check_plan(BEFORE_TERMINAL, {{1100, 540}}, 660, 1095);
+	}
+	SUBCASE("after a mirror") {
+		check_plan(R"({"elements": [
+			{"kind": "mirror", "start": [800, 300], "end": [800, 500]},
+			{"kind": "grapple", "start": [600, 300], "end": [600, 800]}]})", {{800, 400}, {603, 400}}, 604, 795);
+	}
+}
+
+TEST_CASE("region: a plan that is not ended by a terminal stays white; no region at all, none green (Stage 197)") {
+	{
+		rcg::Session s(level_of(BEFORE_TERMINAL));
+		plan_at(s, 800, 400);
+		REQUIRE(s.plan().size() == 1);
+		CHECK_FALSE(s.region_before_terminal());
+		CHECK(drawn_region(s).color == WHITE_REGION);
+	}
+	{
+		rcg::Session s(level_of(BEFORE_TERMINAL));
+		plan_at(s, 1100, 540);
+		REQUIRE(s.plan().size() == 1);
+		CHECK(s.region_before_terminal());
+		s.key(rcg::Action::ToggleVisibility);
+		s.settle();
+		CHECK_FALSE(s.region_before_terminal());
+		CHECK(drawn_region(s).triangles == 0);
+	}
+}
+
 TEST_CASE("preview: a mark past the fade is not drawn; one within it fades with its step") {
 	// a mirror within the fade's reach, then what the reflection meets far past it
 	const char *level = R"({"player": {"start": [400, 500]}, "elements": [{"kind": "mirror", "start": [800, 300], "end": [800, 700]}]})";

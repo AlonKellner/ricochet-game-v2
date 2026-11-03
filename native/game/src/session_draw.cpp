@@ -109,6 +109,7 @@ const Color POINT_COLOR = rgba(0.75, 0.85, 1.0, 0.9);
 const Color GHOST_SPAWN_COLOR = rgba(0.6, 0.95, 1.0, 0.8);
 const Color VANISH_COLOR = rgba(1.0, 0.35, 0.3, 0.7);
 const Color FILL = rgba(1.0, 1.0, 1.0, 0.10);
+const Color FILL_BEFORE_TERMINAL = rgba(0.55, 1.0, 0.6, 0.14); // Stage 197: the region of a plan without its last terminal
 // Stage 145: the goal and the detectors
 const Color GOAL_COLOR = rgba(0.3, 0.95, 0.45);
 const Color GOAL_WON_FILL = rgba(0.3, 0.95, 0.45, 0.25);
@@ -2278,19 +2279,21 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 	if (level_.features.preview) {
 		// the visibility region
 		cached(vis_draw_, {visibility_version_, 0, 0}, NodeKind::Visibility, 10, V2{}, dim, [&](std::vector<Call> &out) {
-		if (region_ && region_->supported && !fill_.indices.empty()) {
+		const rc::vis::Fill &fill = previous_region_ ? previous_region_->fill : fill_;
+		const Color &color = previous_region_ ? FILL_BEFORE_TERMINAL : FILL;
+		if (region_ && region_->supported && !fill.indices.empty()) {
 			Call k;
 			k.kind = Kind::Triangles;
-			for (const rc::vis::Pt &p : fill_.points) {
+			for (const rc::vis::Pt &p : fill.points) {
 				k.pts.push_back(V2::of(p.x, p.y));
 			}
-			for (uint32_t i : fill_.indices) {
+			for (uint32_t i : fill.indices) {
 				k.indices.push_back(int(i));
 			}
-			k.colors = {FILL};
+			k.colors = {color};
 			out.push_back(k);
 		}
-		const Color whisker{FILL[0] * 1.0f, FILL[1] * 1.0f, FILL[2] * 1.0f, FILL[3] * 3.0f};
+		const Color whisker{color[0] * 1.0f, color[1] * 1.0f, color[2] * 1.0f, color[3] * 3.0f};
 		for (const std::vector<V2> &l : whiskers_) {
 			out.push_back(stroke(Kind::Polyline, l, whisker, 1.5));
 		}
