@@ -1017,6 +1017,98 @@ TEST_CASE("preview: a key toggles the whole preview, in the draw list at once; n
 	CHECK(furthest() > 700 + REACH + 100); // still on
 }
 
+namespace {
+
+// the Glow node's strokes in a colour (its alpha aside): their alpha, the event's marker's times the highlight's own
+std::vector<float> consequence_alphas(const rcg::Session &s, float r, float g, float b) {
+	std::vector<float> out;
+	for (const auto &node : s.draw_frame()) {
+		if (node.key.kind != rcg::render::NodeKind::Glow) {
+			continue;
+		}
+		for (const rcg::render::Call &c : *node.calls) {
+			if (!c.colors.empty() && c.colors[0][0] == r && c.colors[0][1] == g && c.colors[0][2] == b) {
+				out.push_back(c.colors[0][3]);
+			}
+		}
+	}
+	return out;
+}
+
+} // namespace
+
+TEST_CASE("preview: a consequence takes the opacity of its event's marker: whole to the cursor, fading past it, gone past the fade (Stage 196)") {
+	// the door a button opens: it vanishes, red (0.95 at full strength)
+	const char *level = R"({"player": {"start": [100, 540]}, "room": {"rect": [0, 240, 1600, 600], "built": true}, "elements": [
+		{"kind": "button", "name": "b", "opens": "gate", "op": "set", "start": [1000, 400], "end": [1000, 700]},
+		{"kind": "door", "name": "gate", "start": [1200, 300], "end": [1200, 800]}]})";
+	const rcg::Level lv = level_of(level);
+	const double reach = std::hypot(double(lv.bounds.w), double(lv.bounds.h)) / 10.0;
+	rcg::Session s(lv);
+	auto alpha_at = [&](double x) {
+		s.set_cursor(rc::V2::of(x, 540));
+		s.settle();
+		const std::vector<float> a = consequence_alphas(s, 1.0f, 0.35f, 0.35f);
+		return a.empty() ? 0.0 : double(a[0]) / double(0.95f);
+	};
+	CHECK(alpha_at(1100) == doctest::Approx(1.0)); // past the button
+	CHECK(alpha_at(1000) == doctest::Approx(1.0)); // on it
+	CHECK(alpha_at(1000 - reach / 2) == doctest::Approx(0.5).epsilon(0.02));
+	CHECK(alpha_at(1000 - reach / 4) == doctest::Approx(0.75).epsilon(0.02));
+	CHECK(alpha_at(1000 - reach - 5) == 0.0); // past the fade: nothing
+	s.key(rcg::Action::ToggleFullPreview); // the whole preview: whole
+	s.settle();
+	CHECK(alpha_at(1000 - reach - 5) == doctest::Approx(1.0));
+	s.key(rcg::Action::ToggleFullPreview);
+	s.settle();
+	CHECK(alpha_at(1000 - reach - 5) == 0.0);
+}
+
+TEST_CASE("preview: each consequence by its own event: two buttons on the way fade apart; a journey fades too (Stage 196)") {
+	const char *level = R"({"player": {"start": [100, 540]}, "room": {"rect": [0, 240, 1600, 600], "built": true}, "elements": [
+		{"kind": "button", "name": "a", "opens": "near", "op": "set", "start": [800, 400], "end": [800, 700]},
+		{"kind": "door", "name": "near", "start": [1300, 300], "end": [1300, 400]},
+		{"kind": "button", "name": "b", "opens": "far", "op": "set", "start": [860, 400], "end": [860, 700]},
+		{"kind": "door", "name": "far", "start": [1400, 300], "end": [1400, 400]},
+		{"kind": "grapple", "start": [920, 300], "end": [920, 800]}]})";
+	rcg::Session s(level_of(level));
+	s.set_cursor(rc::V2::of(790, 540));
+	s.settle();
+	const std::vector<float> doors = consequence_alphas(s, 1.0f, 0.35f, 0.35f);
+	REQUIRE(doors.size() == 2);
+	CHECK(doors[0] > doors[1]); // the nearer button's door is the stronger
+	CHECK(doors[1] > 0.0f);
+	// the journey's end, past the two: fainter still
+	const std::vector<float> end = consequence_alphas(s, 0.6f, 1.0f, 0.7f);
+	REQUIRE(!end.empty());
+	CHECK(end[0] / 0.6f < doors[1] / 0.95f);
+	REQUIRE(s.preview_trip_end().has_value());
+	CHECK(end[0] > 0.0f);
+}
+
+TEST_CASE("preview: a consequence past a divergence fades from the divergence, as the physical walk's marker does (Stage 196)") {
+	// a mirror planned and missed: the arrow goes on past it and through the button
+	rcg::Session s(level_of(R"({"elements": [
+		{"kind": "mirror", "name": "m", "start": [800, 250], "end": [800, 400]},
+		{"kind": "button", "name": "b", "opens": "gate", "op": "set", "start": [1000, 400], "end": [1000, 700]},
+		{"kind": "door", "name": "gate", "start": [1200, 300], "end": [1200, 800]}]})"));
+	s.set_cursor(rc::V2::of(800, 300));
+	s.settle();
+	s.click(false);
+	REQUIRE(s.plan().size() == 1);
+	s.set_cursor(rc::V2::of(700, 540));
+	s.settle();
+	bool diverged = false;
+	for (const rc::TraceStep &st : s.preview_steps()) {
+		diverged = diverged || st.type == rc::StepType::DivergedPhysical;
+	}
+	REQUIRE(diverged);
+	const std::vector<float> door = consequence_alphas(s, 1.0f, 0.35f, 0.35f);
+	REQUIRE(door.size() == 1);
+	CHECK(door[0] > 0.0f);
+	CHECK(door[0] < 0.95f);
+}
+
 TEST_CASE("preview: a mark past the fade is not drawn; one within it fades with its step") {
 	// a mirror within the fade's reach, then what the reflection meets far past it
 	const char *level = R"({"player": {"start": [400, 500]}, "elements": [{"kind": "mirror", "start": [800, 300], "end": [800, 700]}]})";

@@ -210,7 +210,13 @@ public:
 	const std::vector<rc::TraceStep> &preview_steps() const { return shown().merged; }
 	// Stage 157: the preview's arrow-state marks per merged step, and its consequences (tests, hosts)
 	const std::vector<uint8_t> &preview_marks() const { return shown().marks; }
-	const std::vector<std::pair<std::string, int>> &preview_becomes() const { return shown().becomes; }
+	std::vector<std::pair<std::string, int>> preview_becomes() const {
+		std::vector<std::pair<std::string, int>> out;
+		for (const Preview::Becoming &b : shown().becomes) {
+			out.push_back({b.name, b.bits});
+		}
+		return out;
+	}
 	const std::optional<rc::Flags> &preview_predicted() const { return shown().predicted; } // Stage 159
 	std::optional<V2> preview_trip_end() const { return shown().trip ? std::optional<V2>(shown().trip->trail.back()) : std::nullopt; }
 	// Stage 147 (tests, tools): the preview's physical trace -- the path a shot now takes (none: no trace)
@@ -308,14 +314,27 @@ private:
 		std::optional<rc::LadderResult> last_result;
 		std::vector<std::pair<int, std::vector<rc::PhysicalHit>>> hits;
 		// Stage 157: per merged step, the arrow's states to mark on it (1 fire, 2 charge, 4 frost: each only when it
-		// began before the walks diverge); the things whose state changes before they diverge (name -> 1 catches
-		// fire, 2 is charged, 4 is discharged)
+		// began before the walks diverge)
 		std::vector<uint8_t> marks;
-		std::vector<std::pair<std::string, int>> becomes;
+		// Stage 196 (the user): the physical walk's events that change something lasting, each with the merged step it
+		// ends (its consequences take the opacity of that step's end, as its marker does)
+		struct Consequence {
+			size_t step = 0;
+			rc::Flags before, after; // (their per-shot flags gone)
+		};
+		std::vector<Consequence> consequences;
+		// the things whose state an event changes (bits: 1 catches fire, 2 is charged, 4 is discharged)
+		struct Becoming {
+			std::string name;
+			int bits = 0;
+			size_t step = 0;
+		};
+		std::vector<Becoming> becomes;
 		// Stage 159 (the user: every change the shot makes shows in the preview): the flags the shot leaves when its
-		// walk is followed to the divergence (its per-shot flags gone), and the journey a grapple or pull there makes
+		// walk is followed to its end (its per-shot flags gone), and the journey a grapple or pull on the way makes
 		std::optional<rc::Flags> predicted;
 		struct Trip {
+			size_t step = 0; // the merged step its hit ends
 			int body = -1; // -1: the player
 			std::vector<V2> trail;
 			std::vector<size_t> breaks; // Stage 166: where the trail jumps (a portal crossed)

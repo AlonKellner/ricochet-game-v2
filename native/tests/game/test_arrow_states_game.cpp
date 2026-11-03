@@ -142,13 +142,13 @@ std::pair<std::vector<uint8_t>, std::vector<std::pair<std::string, int>>> previe
 
 } // namespace
 
-TEST_CASE("arrow states: the preview marks each walk's fire over its own steps (Stage 160); what catches fire only before the walks diverge (Stage 157)") {
+TEST_CASE("arrow states: the preview marks each walk's fire over its own steps (Stage 160); what catches fire at the opacity of its event's marker (Stage 196)") {
 	{
 		rcg::Session s(level_of(R"({"elements": [
 			{"kind": "torch", "start": [800, 300], "end": [800, 780]},
 			{"kind": "wall", "name": "w", "tags": ["flammable"], "start": [1000, 300], "end": [1000, 780]}]})"));
-		// unplanned, the torch's change diverges the walks (GAME_SPEC 14.2): the wall's fire is after it
-		CHECK(preview_marks(s, 1000, 540).second.empty());
+		// unplanned, the torch's change diverges the walks (GAME_SPEC 14.2): the wall's fire is after it, past no fade yet
+		CHECK(preview_marks(s, 1000, 540).second == std::vector<std::pair<std::string, int>>{{"w", 1}});
 		s.set_cursor(rc::V2::of(800, 540)); // planned: the walks stay aligned to the wall
 		s.settle();
 		s.click(false);
@@ -164,13 +164,13 @@ TEST_CASE("arrow states: the preview marks each walk's fire over its own steps (
 	}
 	{
 		// an unplanned mirror turns the arrow down through a torch onto a flammable floor: the walks diverge at the
-		// mirror, so the fire begins after the divergence -- no marks, no consequence
+		// mirror, so the fire begins after the divergence: the physical walk's own, its consequence fading from there
 		rcg::Session s(level_of(R"({"elements": [
 			{"kind": "mirror", "start": [760, 500], "end": [840, 580]},
 			{"kind": "torch", "start": [700, 700], "end": [900, 700]},
 			{"kind": "wall", "name": "floor", "tags": ["flammable"], "start": [700, 800], "end": [900, 800]}]})"));
 		const auto [marks, becomes] = preview_marks(s, 1000, 540);
-		CHECK(becomes.empty()); // a world effect after the divergence: not shown
+		CHECK(becomes == std::vector<std::pair<std::string, int>>{{"floor", 1}});
 		// a path effect: each walk's own, over its own steps -- the physical walk burns after the torch, the planned one never
 		const auto &steps = s.preview_steps();
 		bool physical_fire = false, planned_fire = false;

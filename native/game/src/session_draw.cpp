@@ -1834,9 +1834,10 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		fresh(NodeKind::Detector, 0, V2{}, WHITE, std::move(dc), int(i));
 	}
 	// Stage 157: the things on fire, charged or frosted (a glow over them), and what the preview's walk does to them
-	// before it diverges (dashed): catches fire, is charged, is discharged. Stage 159 (the user: every change the
-	// shot makes shows in the preview): surfaces that vanish, appear or change, targets it registers, the goal it
-	// opens, lights it switches, objects it releases, and where a grapple or pull leaves the player or an object.
+	// (dashed): catches fire, is charged, is discharged. Stage 159 (the user: every change the shot makes shows in the
+	// preview): surfaces that vanish, appear or change, targets it registers, the goal it opens, lights it switches,
+	// objects it releases, and where a grapple or pull leaves the player or an object. Stage 196 (the user): each at
+	// the opacity of the marker of the event that makes it: nothing past where the path fades out.
 	{
 		std::vector<std::pair<std::string, std::vector<const SegGeom *>>> things;
 		for (const Tagged &t : level_.tagged) {
@@ -1858,10 +1859,12 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		const Preview &pv = shown();
 		// (only a preview that changes something lasting, or starts a journey, adds the node)
 		const bool preview = !flying_ && display_mode_ == 0 && level_.features.preview && pv.predicted.has_value()
-			&& (pv.trip.has_value() || pv.predicted->canonical_key() != flags_.canonical_key());
+			&& (pv.trip.has_value() || !pv.consequences.empty());
 		if (!things.empty() || preview) {
-			cached(glow_draw_, {flags_version_, preview ? trace_version_ * (READY_RISE + READY_FALL + 1) + int(ready_ * (READY_RISE + READY_FALL)) : -1, world_->version()}, NodeKind::Glow, 1, V2{}, WHITE,
+			cached(glow_draw_, {flags_version_, preview ? (trace_version_ * (READY_RISE + READY_FALL + 1) + int(ready_ * (READY_RISE + READY_FALL))) * 2 + (full_preview_ ? 1 : 0) : -1, world_->version()}, NodeKind::Glow, 1, V2{}, WHITE,
 					[&](std::vector<Call> &out) {
+						const PathReveal reveal = preview ? reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), full_preview_) : PathReveal{};
+						auto seen = [&](size_t step) { return reveal.seen(step, std::numeric_limits<double>::infinity()); };
 						auto tagged = [&](const std::string &name, const char *tag) {
 							for (const Tagged &t : level_.tagged) {
 								if (t.name == name) {
@@ -1877,12 +1880,6 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 						};
 						for (const auto &[name, segs] : things) {
 							const bool fire = flags_.is_true("el:" + name + ":fire"), charge = flags_.is_true("el:" + name + ":charge");
-							int becomes = 0;
-							if (preview) {
-								for (const auto &[n, bits] : pv.becomes) {
-									becomes = n == name ? bits : becomes;
-								}
-							}
 							for (const SegGeom *g : segs) {
 								if (tagged(name, "frosted")) {
 									outline_seg(out, *g, rgba(0.6, 0.85, 1.0, 0.35), 6.0, false);
@@ -1893,15 +1890,23 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 								if (charge) {
 									outline_seg(out, *g, rgba(0.85, 0.95, 1.0, 0.5), 5.0, false);
 								}
-								const double becoming = 0.9 * (READY_MUTED + (1.0 - READY_MUTED) * ready_); // (Stage 188)
-								if (becomes & 1) {
-									outline_seg(out, *g, rgba(1.0, 0.45, 0.1, becoming), 4.0, true);
+								if (!preview) {
+									continue;
 								}
-								if (becomes & 2) {
-									outline_seg(out, *g, rgba(0.85, 0.95, 1.0, becoming), 3.0, true);
-								}
-								if (becomes & 4) {
-									outline_seg(out, *g, rgba(0.5, 0.5, 0.55, becoming), 3.0, true);
+								for (const Preview::Becoming &b : pv.becomes) {
+									if (b.name != name || seen(b.step) <= 0.0) {
+										continue;
+									}
+									const double becoming = seen(b.step) * 0.9 * (READY_MUTED + (1.0 - READY_MUTED) * ready_); // (Stage 188)
+									if (b.bits & 1) {
+										outline_seg(out, *g, rgba(1.0, 0.45, 0.1, becoming), 4.0, true);
+									}
+									if (b.bits & 2) {
+										outline_seg(out, *g, rgba(0.85, 0.95, 1.0, becoming), 3.0, true);
+									}
+									if (b.bits & 4) {
+										outline_seg(out, *g, rgba(0.5, 0.5, 0.55, becoming), 3.0, true);
+									}
 								}
 							}
 						}
@@ -1909,67 +1914,72 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 							return;
 						}
 						const size_t previewed = out.size(); // (Stage 188: what follows is muted with the path)
-						const rc::Flags &pred = *pv.predicted;
-						// surfaces: vanish (red), appear (green), change their sides (yellow); targets registered (cyan)
-						auto kinds = [&](const BuiltSurface &bs, const rc::Flags &f) {
-							const BuiltSide *l = active_side(bs, Side::Left, f), *r = active_side(bs, Side::Right, f);
-							return std::make_pair(l ? l->effect.type : std::string("pass"), r ? r->effect.type : std::string("pass"));
-						};
-						for (const BuiltSurface &cur : world_->surfaces()) {
-							if (!cur.label || cur.pre_transform) {
-								continue;
-							}
-							const BuiltSurface &bs = *world_->undarkened(cur.id);
-							const bool now = present(bs, flags_), then = present(bs, pred);
-							if (now && !then) {
-								outline_seg(out, bs.seg, rgba(1.0, 0.35, 0.35, 0.95), 3.0, true);
-							} else if (!now && then) {
-								outline_seg(out, bs.seg, rgba(0.4, 1.0, 0.5, 0.95), 3.0, true);
-							} else if (now && kinds(bs, flags_) != kinds(bs, pred)) {
-								outline_seg(out, bs.seg, rgba(1.0, 0.85, 0.3, 0.95), 3.0, true);
-							}
-							const std::string target = "target:" + std::to_string(bs.id);
-							if (bs.is_target() && !flags_.is_true(target) && pred.is_true(target)) {
-								outline_seg(out, bs.seg, rgba(0.3, 0.9, 1.0, 0.95), 3.0, true);
-							}
-						}
-						// the goal opening
-						if (level_.objective) {
-							auto open = [&](const rc::Flags &f) {
-								std::vector<rc::FlagCond> conds;
-								for (const PresenceSpec &c : level_.objective->conditions) {
-									conds.push_back({c.key, c.values});
-								}
-								return f.holds(conds);
+						for (const Preview::Consequence &ev : pv.consequences) {
+							const size_t first = out.size();
+							const rc::Flags &was = ev.before, &pred = ev.after;
+							// surfaces: vanish (red), appear (green), change their sides (yellow); targets registered (cyan)
+							auto kinds = [&](const BuiltSurface &bs, const rc::Flags &f) {
+								const BuiltSide *l = active_side(bs, Side::Left, f), *r = active_side(bs, Side::Right, f);
+								return std::make_pair(l ? l->effect.type : std::string("pass"), r ? r->effect.type : std::string("pass"));
 							};
-							if (!open(flags_) && open(pred)) {
-								outline(out, level_.objective->goal, rgba(0.4, 1.0, 0.5, 0.95), 3.0, true);
-							}
-						}
-						// lights and darks switching
-						for (size_t k = 0; k < level_.shades.size(); k++) {
-							const Shade &sh = level_.shades[k];
-							if (sh.when.empty() || rc::key_true(sh.when, flags_) == rc::key_true(sh.when, pred)) {
-								continue;
-							}
-							const Color on = sh.dark ? rgba(0.65, 0.55, 1.0, 0.95) : rgba(1.0, 0.9, 0.4, 0.95);
-							outline_seg(out, segment_of(level_.surfaces[sh.surface].spec), rc::key_true(sh.when, pred) ? on : rgba(0.5, 0.5, 0.55, 0.95), 3.0, true);
-						}
-						// objects a popped bubble releases (they fall)
-						for (const World::Body &body : world_->bodies()) {
-							const std::string popped = "obj:" + body.object.name + ":popped";
-							if (body.object.carries.empty() || flags_.is_true(popped) || !pred.is_true(popped)) {
-								continue;
-							}
-							for (const World::Body &held : world_->bodies()) {
-								if (held.object.name == body.object.carries) {
-									outline_seg(out, held.built.seg, rgba(1.0, 0.85, 0.3, 0.95), 3.0, true);
+							for (const BuiltSurface &cur : world_->surfaces()) {
+								if (!cur.label || cur.pre_transform) {
+									continue;
+								}
+								const BuiltSurface &bs = *world_->undarkened(cur.id);
+								const bool now = present(bs, was), then = present(bs, pred);
+								if (now && !then) {
+									outline_seg(out, bs.seg, rgba(1.0, 0.35, 0.35, 0.95), 3.0, true);
+								} else if (!now && then) {
+									outline_seg(out, bs.seg, rgba(0.4, 1.0, 0.5, 0.95), 3.0, true);
+								} else if (now && kinds(bs, was) != kinds(bs, pred)) {
+									outline_seg(out, bs.seg, rgba(1.0, 0.85, 0.3, 0.95), 3.0, true);
+								}
+								const std::string target = "target:" + std::to_string(bs.id);
+								if (bs.is_target() && !was.is_true(target) && pred.is_true(target)) {
+									outline_seg(out, bs.seg, rgba(0.3, 0.9, 1.0, 0.95), 3.0, true);
 								}
 							}
+							// the goal opening
+							if (level_.objective) {
+								auto open = [&](const rc::Flags &f) {
+									std::vector<rc::FlagCond> conds;
+									for (const PresenceSpec &c : level_.objective->conditions) {
+										conds.push_back({c.key, c.values});
+									}
+									return f.holds(conds);
+								};
+								if (!open(was) && open(pred)) {
+									outline(out, level_.objective->goal, rgba(0.4, 1.0, 0.5, 0.95), 3.0, true);
+								}
+							}
+							// lights and darks switching
+							for (size_t k = 0; k < level_.shades.size(); k++) {
+								const Shade &sh = level_.shades[k];
+								if (sh.when.empty() || rc::key_true(sh.when, was) == rc::key_true(sh.when, pred)) {
+									continue;
+								}
+								const Color on = sh.dark ? rgba(0.65, 0.55, 1.0, 0.95) : rgba(1.0, 0.9, 0.4, 0.95);
+								outline_seg(out, segment_of(level_.surfaces[sh.surface].spec), rc::key_true(sh.when, pred) ? on : rgba(0.5, 0.5, 0.55, 0.95), 3.0, true);
+							}
+							// objects a popped bubble releases (they fall)
+							for (const World::Body &body : world_->bodies()) {
+								const std::string popped = "obj:" + body.object.name + ":popped";
+								if (body.object.carries.empty() || was.is_true(popped) || !pred.is_true(popped)) {
+									continue;
+								}
+								for (const World::Body &held : world_->bodies()) {
+									if (held.object.name == body.object.carries) {
+										outline_seg(out, held.built.seg, rgba(1.0, 0.85, 0.3, 0.95), 3.0, true);
+									}
+								}
+							}
+							fade_calls(out, first, seen(ev.step));
 						}
 						// the journey: its trail and where it ends (orange: stopped by a barrier on the way)
 						if (pv.trip && pv.trip->trail.size() >= 2) {
 							const Preview::Trip &t = *pv.trip;
+							const size_t first = out.size();
 							size_t from = 0;
 							std::vector<size_t> cuts = t.breaks;
 							cuts.push_back(t.trail.size());
@@ -2003,6 +2013,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 									out.push_back(stroke(Kind::Polyline, std::move(pts), c, 2.0));
 								}
 							}
+							fade_calls(out, first, seen(t.step));
 						}
 						const float muted = float(READY_MUTED + (1.0 - READY_MUTED) * ready_);
 						for (size_t i = previewed; i < out.size(); i++) {

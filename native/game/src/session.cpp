@@ -2029,6 +2029,7 @@ void Session::make_preview(Preview &p, std::optional<rc::TracePair> pair) const 
 		p.has_paths = false;
 		p.merged.clear();
 		p.dots.clear();
+		arrow_states(p); // (no consequences of steps that are gone)
 		return;
 	}
 	p.last_result = std::move(p.pair->result); // (nothing else reads the pair's)
@@ -2052,10 +2053,11 @@ void Session::make_preview(Preview &p, std::optional<rc::TracePair> pair) const 
 // physical walk's hits change the flags; each change is placed at the merged
 // step it ends (walk order, by point). A state (fire, charge, frost) is marked
 // on the arrow's steps while it holds, if it began before the walks diverge;
-// the things whose fire or charge changes before they diverge are the preview's
-// consequences.
+// each hit's lasting changes are the preview's consequences (Stage 196: at the
+// opacity of the hit's marker).
 void Session::arrow_states(Preview &p) const {
 	p.marks.assign(p.merged.size(), 0);
+	p.consequences.clear();
 	p.becomes.clear();
 	p.predicted.reset();
 	p.trip.reset();
@@ -2103,9 +2105,23 @@ void Session::arrow_states(Preview &p) const {
 	};
 	// Stage 160 (the user): the arrow's states are path effects -- each walk's own, marked over its own steps
 	// (the common ones and its diverged ones), before the divergence and after it. The physical walk:
-	rc::Flags cur = flags_, at_divergence = flags_;
+	// (a flags' lasting part: its per-shot flags gone)
+	auto lasting = [](rc::Flags f) {
+		std::vector<std::string> per_shot;
+		for (const auto &[k, v] : f.entries()) {
+			if (k.rfind("shot:", 0) == 0) {
+				per_shot.push_back(k);
+			}
+		}
+		for (const std::string &k : per_shot) {
+			f.erase(k);
+		}
+		f.erase("ghost");
+		return f;
+	};
+	rc::Flags cur = flags_;
 	bool diverged = false;
-	std::vector<bool> hit_aligned(changes.size(), false);
+	std::vector<int> hit_step(changes.size(), -1);
 	size_t c = 0;
 	for (size_t m = 0; m < p.merged.size(); m++) {
 		const rc::TraceStep &st = p.merged[m];
@@ -2113,14 +2129,16 @@ void Session::arrow_states(Preview &p) const {
 		if (!aligned && st.type != rc::StepType::DivergedPhysical) {
 			continue; // (the planned walk's own steps)
 		}
-		if (!aligned && !diverged) {
-			diverged = true;
-			at_divergence = cur;
-		}
+		diverged = diverged || !aligned;
 		p.marks[m] = mark_of(cur);
 		while (c < changes.size() && changes[c].at.distance_to(st.end) < 0.01f) {
+			// Stage 196 (the user): each event's lasting changes, drawn at the opacity of its marker
+			rc::Flags before = lasting(cur), after = lasting(changes[c].after);
+			if (before.canonical_key() != after.canonical_key()) {
+				p.consequences.push_back({m, std::move(before), std::move(after)});
+			}
 			cur = changes[c].after;
-			hit_aligned[c] = aligned;
+			hit_step[c] = int(m);
 			c++;
 		}
 	}
@@ -2144,25 +2162,13 @@ void Session::arrow_states(Preview &p) const {
 			}
 		}
 	}
-	if (!diverged) {
-		at_divergence = cur;
-	}
-	// Stage 159: the shot's lasting changes to the divergence, and the journey it starts there
+	// Stage 159: the flags the shot leaves, and the journey it starts
 	{
-		rc::Flags landed = at_divergence;
-		std::vector<std::string> per_shot;
-		for (const auto &[k, v] : landed.entries()) {
-			if (k.rfind("shot:", 0) == 0) {
-				per_shot.push_back(k);
-			}
-		}
-		for (const std::string &k : per_shot) {
-			landed.erase(k);
-		}
-		landed.erase("ghost");
+		rc::Flags landed = lasting(cur);
 		int hit = -1;
-		if (std::optional<Journey> j = journey_of(raw, &hit); j && hit >= 0 && size_t(hit) < hit_aligned.size() && hit_aligned[size_t(hit)]) {
+		if (std::optional<Journey> j = journey_of(raw, &hit); j && hit >= 0 && size_t(hit) < hit_step.size() && hit_step[size_t(hit)] >= 0) {
 			Preview::Trip trip;
+			trip.step = size_t(hit_step[size_t(hit)]);
 			trip.body = j->body;
 			const bool player = j->body < 0;
 			V2 pos = player ? player_ : world_->bodies()[size_t(j->body)].pos;
@@ -2197,27 +2203,29 @@ void Session::arrow_states(Preview &p) const {
 		}
 		p.predicted = std::move(landed);
 	}
-	auto consider = [&](const std::string &name) {
+	auto consider = [&](const std::string &name, const Preview::Consequence &k) {
 		int b = 0;
 		const std::string fire = "el:" + name + ":fire", charge = "el:" + name + ":charge";
-		if (!flags_.is_true(fire) && at_divergence.is_true(fire)) {
+		if (!k.before.is_true(fire) && k.after.is_true(fire)) {
 			b |= 1;
 		}
-		if (!flags_.is_true(charge) && at_divergence.is_true(charge)) {
+		if (!k.before.is_true(charge) && k.after.is_true(charge)) {
 			b |= 2;
-		} else if (flags_.is_true(charge) && !at_divergence.is_true(charge)) {
+		} else if (k.before.is_true(charge) && !k.after.is_true(charge)) {
 			b |= 4;
 		}
 		if (b != 0) {
-			p.becomes.push_back({name, b});
+			p.becomes.push_back({name, b, k.step});
 		}
 	};
-	for (const Tagged &t : level_.tagged) {
-		consider(t.name);
-	}
-	for (const World::Body &b : world_->bodies()) {
-		if (!b.object.tags.empty()) {
-			consider(b.object.name);
+	for (const Preview::Consequence &k : p.consequences) {
+		for (const Tagged &t : level_.tagged) {
+			consider(t.name, k);
+		}
+		for (const World::Body &b : world_->bodies()) {
+			if (!b.object.tags.empty()) {
+				consider(b.object.name, k);
+			}
 		}
 	}
 }
