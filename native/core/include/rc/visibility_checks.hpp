@@ -851,6 +851,9 @@ inline Violations check_VIS_REGULAR(const vis::Result &r, const Scene<F64> *scen
 			continue;
 		}
 		const Surf<F64> *s = scene->find(w.surface);
+		if (r.terminal && r.terminal->surface_id == w.surface && s != nullptr && geom::on_segment(s->seg, vis::cn_of(w.via))) {
+			continue; // (Stage 201: the part of the planned terminal the region's cones reach)
+		}
 		const bool last = !plan.empty() && !plan.back().is_infinity() && !plan.back().is_origin() && plan.back().surface_id == w.surface;
 		const bool terminal = last && s != nullptr && s->effect(plan.back().left, flags) == EffectType::Terminal;
 		if (!terminal || !geom::on_segment(s->seg, vis::cn_of(w.via))) {
@@ -879,12 +882,16 @@ inline Violations check_VIS_REGULAR(const vis::Result &r, const Scene<F64> *scen
 }
 
 // Every region check, in order.
-inline Violations check_visibility(const VisInput &in) {
+inline Violations check_visibility(const VisInput &given) {
 	Violations out;
-	if (in.region == nullptr || !in.region->supported) {
+	if (given.region == nullptr || !given.region->supported) {
 		return out;
 	}
-	const vis::Result &r = *in.region;
+	const vis::Result &r = *given.region;
+	VisInput in = given;
+	if (r.terminal) {
+		in.plan.resize(r.terminal_at); // (Stage 201: the region of the entries before the terminal, checked as theirs)
+	}
 	auto add = [&](Violations vs) { out.insert(out.end(), vs.begin(), vs.end()); };
 	add(check_VIS_CLOSED(r));
 	add(check_VIS_SIMPLE(r));
@@ -903,7 +910,7 @@ inline Violations check_visibility(const VisInput &in) {
 	if (in.tracer != nullptr) {
 		Flags flags = in.flags;
 		flags.erase(GHOST);
-		const Scene<F64> scene = Scene<F64>::from_defs(in.tracer->defs(), F64{1.0});
+		const Scene<F64> scene = Scene<F64>::from_defs(in.tracer->defs(), F64{1.0}, in.tracer->infinity_loop());
 		add(check_VIS_EDGE_ON_GEOMETRY(r, scene));
 		add(check_VIS_VERTEX_PROVENANCE(r, scene));
 		add(check_VIS_SHADOW_ANCHORED(r, scene));

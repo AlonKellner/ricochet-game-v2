@@ -14,6 +14,7 @@
   "preview": true
  },
  "gravity": [0.0, 0.0],
+ "infinity_loop": true,
  "name": "test_levels/three_mirrors",
  "player": {
   "start": [960.0, 540.0]

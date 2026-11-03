@@ -538,6 +538,7 @@ struct Walk {
 	int count = 0;
 	int max_events = MAX_HITS;
 	int max_sig = MAX_SIGNIFICANT; // Stage 131
+	bool infinity_ends = false;    // Stage 199: cut at the frame's infinity (the level's infinity_loop off)
 	int sig = 0;                    // ... the significant events so far
 	// Workflow W2.0: a decision walk (realize, R2) needs the cursor event alone:
 	// it stops there (the events up to it are the same walk's)
@@ -807,6 +808,18 @@ public:
 		return behind_origin(plan, n);
 	}
 
+	// Stage 201: the index of the plan's first entry that stops the walk as planned (none: the plan's size): what the
+	// cursor counts after, and the region's plan (GAME_SPEC 13.5, 15.1)
+	size_t first_terminal(const std::vector<PlanItem> &plan, const Flags &flags) const {
+		const std::vector<EffectType> effs = plan_effects(plan, flags);
+		for (size_t j = 0; j < plan.size(); j++) {
+			if (!plan[j].is_infinity() && !plan[j].is_origin() && effs[j] == EffectType::Terminal) {
+				return j;
+			}
+		}
+		return plan.size();
+	}
+
 	// Stage 111: the index of the first planned entry of the first epoch that
 	// names a present surface (infinity entries and absent surfaces skipped; a
 	// pass side, a terminal, a projective count: the planned walk fires only on
@@ -971,7 +984,8 @@ public:
 			const Beam<N> &b0, const std::shared_ptr<const AnchorChain<N>> &walks) {
 		const Realization fallback{via_infinity(plan, flags), RealizationKind::Alike};
 		const int j = first_entry(plan, flags);
-		if (j < 0) {
+		// (Stage 201: a terminal first fixes nothing: the cursor counts before it, and past it nothing is reached)
+		if (j < 0 || plan_effects(plan, flags)[size_t(j)] == EffectType::Terminal) {
 			return Realization{via_infinity(plan, flags), RealizationKind::NoEntry};
 		}
 		const Surf<N> &surf = *scene_.find(plan[size_t(j)].surface_id);
@@ -2144,6 +2158,7 @@ private:
 		w.post_mode = Mode::Physical;
 		w.max_events = max_events;
 		w.max_sig = max_events == MAX_HITS ? MAX_SIGNIFICANT : (max_events / MAX_HITS) * MAX_SIGNIFICANT; // (the realization's wide budget: 8 x each)
+		w.infinity_ends = !scene_.infinity_loop && max_events == MAX_HITS; // (the realization's wide budget is geometry: no limit of the game)
 		w.spans = piece_spans(plan);
 		w.Q = effects::scene_pre_q(scene_);
 		w.record_poles = record_poles_;
@@ -2885,7 +2900,7 @@ private:
 		}
 		bool cursor_now = false;
 		// the cursor is on the beam only on the planned path
-		if (!w.cursor_done && w.cursor && (keep_cursor || (w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan))) {
+		if (!w.cursor_done && w.cursor && (keep_cursor || (plan_met_for_cursor(w) && w.plan_matched && w.on_plan))) {
 			N tc = Backend<N>::param_of(beam, *w.cursor);
 			const int ki = known_index(w.known, *w.cursor);
 			// the cursor exactly at the departure point is reached immediately
@@ -3788,7 +3803,7 @@ private:
 				if (!is_cursor) {
 					w.count++;
 				}
-				if (!is_cursor && (w.count > w.max_events || ((cand.inf || cand.origin) && w.sig + 1 > w.max_sig))) {
+				if (!is_cursor && (w.count > w.max_events || ((cand.inf || cand.origin) && w.sig + 1 > w.max_sig) || (cand.inf && w.infinity_ends))) {
 					// cut at the next crossing: drawn up to it, no effect (at the
 					// wrap: a max at infinity, no point)
 					Event<N> &me = emit(w, EventKind::Max, beam, t_prev, (cand.inf && !cand.pt) ? std::nullopt : std::optional<N>(t), INF_D);
@@ -4180,13 +4195,27 @@ private:
 		return consumed;
 	}
 
+	// Stage 201 (GAME_SPEC 13.5, the user): the cursor counts once the plan's entries are consumed, or all but a planned
+	// terminal: nothing can come after that one, and it need not be reached.
+	static bool plan_met_for_cursor(const Walk<N> &w) {
+		if (w.plan_index >= int(w.plan.size())) {
+			return true;
+		}
+		const PlanItem &next = w.plan[size_t(w.plan_index)];
+		if (next.is_infinity() || next.is_origin()) {
+			return false;
+		}
+		const Surf<N> *s = w.scene->find(next.surface_id);
+		return s != nullptr && s->effect(next.left, w.flags) == EffectType::Terminal;
+	}
+
 	// The plan completed at the event at t (index ci) without a frame change
 	// (an entry that resolves to a pass / state change, an unapplied
 	// projective, or the infinity entry): the cursor is on this same beam -- a
 	// candidate if it lies ahead, inserted in order among the remaining ones.
 	static void late_cursor(Walk<N> &w, const Beam<N> &beam, std::vector<Candidate<N>> &cands, std::vector<double> &gp, std::vector<uint8_t> &gw,
 			size_t ci, const N &t, const N &t0) {
-		if (!w.cursor_done && w.cursor && w.plan_index >= int(w.plan.size()) && w.plan_matched && w.on_plan && !(w.point && w.point->pending)
+		if (!w.cursor_done && w.cursor && plan_met_for_cursor(w) && w.plan_matched && w.on_plan && !(w.point && w.point->pending)
 				&& std::none_of(cands.begin(), cands.end(), [](const Candidate<N> &c) { return c.surf == nullptr && !c.inf && !c.origin; })) {
 			const N tc = Backend<N>::param_of(beam, *w.cursor);
 			if (!before(tc, t, t0)) {

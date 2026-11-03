@@ -473,8 +473,15 @@ def surface_from_json(d):
                    bool(d.get("pre_transform")), presence)
 
 
-def scene_from_json(surfaces):
-    return [surface_from_json(d) for d in surfaces]
+class Scene(list):
+    """The surfaces, and the level's infinity_loop (Stage 199, GAME_SPEC 12.6)."""
+    infinity_loop = True
+
+
+def scene_from_json(surfaces, infinity_loop=True):
+    sc = Scene(surface_from_json(d) for d in surfaces)
+    sc.infinity_loop = infinity_loop
+    return sc
 
 
 def same_carrier(a: Surface, b: Surface):
@@ -497,6 +504,16 @@ def carrier_groups(surfaces):
     for i, s in enumerate(surfaces):
         out[s.id] = next((r.id for r in surfaces[:i] if same_carrier(r, s)), s.id)
     return out
+
+
+def _plan_met_for_cursor(walk):
+    """Stage 201 (GAME_SPEC 13.5, the user): the plan's entries are consumed, or all
+    but a planned terminal: nothing can come after that one, and it need not be reached."""
+    if walk.plan_index >= len(walk.plan):
+        return True
+    sid, side = walk.plan[walk.plan_index][:2]
+    surf = next((s for s in walk.surfaces if s.id == sid), None)
+    return surf is not None and surf.effect(side, walk.flags) == "terminal"
 
 
 def hittable(surfaces):
@@ -725,6 +742,7 @@ class Walk:
     point: object = None
     max_hits: int = MAX_HITS   # the hit budget (Stage 111: the realization decides with a wider one)
     max_sig: int = MAX_SIGNIFICANT  # Stage 131: the significant hits' budget
+    infinity_ends: bool = False     # Stage 199: cut at the frame's infinity
     sig: int = 0               # Stage 131: significant events so far
 
 
@@ -1059,7 +1077,7 @@ def _build_cands(walk: Walk, beam: Beam, depart, fresh, t0, by_id, shared=None):
     # the cursor is on the beam only on the planned path (its final
     # anchored beam passes through the cursor by construction); off it, a
     # cursor is never "reached" at its projection
-    if not walk.cursor_done and walk.plan_index >= len(walk.plan) and walk.plan_matched \
+    if not walk.cursor_done and _plan_met_for_cursor(walk) and walk.plan_matched \
             and walk.cursor is not None and walk.on_plan:
         tc = beam.param_of(walk.cursor)
         # the cursor exactly at the departure point is reached immediately
@@ -1230,7 +1248,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 continue
             if sid == INFINITY_ID:
                 q_pt = snapped.get((INFINITY_ID, t))   # None: the real infinity
-                if walk.count > walk.max_hits or walk.sig + 1 > walk.max_sig:
+                if walk.count > walk.max_hits or walk.sig + 1 > walk.max_sig or walk.infinity_ends:  # (Stage 199)
                     _append(walk, Event("max", INFINITY_ID, point=q_pt, t=t, beam=beam))
                     walk.done = True
                     return
@@ -1442,7 +1460,7 @@ def _late_cursor(walk: Walk, beam, cands, ci, key, t0):
     resolves to a pass / state change, an unapplied projective, or the
     infinity entry): the cursor is on this same beam -- a candidate if it lies
     ahead (inserted in order among the remaining candidates)."""
-    if not walk.cursor_done and walk.cursor is not None and walk.plan_index >= len(walk.plan) and walk.on_plan \
+    if not walk.cursor_done and walk.cursor is not None and _plan_met_for_cursor(walk) and walk.on_plan \
             and walk.plan_matched and not (walk.point is not None and walk.point.pending) \
             and not any(c[1] == 0 for c in cands):
         tc = beam.param_of(walk.cursor)
@@ -2085,6 +2103,8 @@ def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="
     walk = Walk(hittable(surfaces), list(plan), cursor, mode, PHYSICAL)
     walk.max_hits = max_hits
     walk.max_sig = max_sig
+    # (Stage 199: the realization's wide budget is geometry, no limit of the game)
+    walk.infinity_ends = not getattr(surfaces, "infinity_loop", True) and max_sig == MAX_SIGNIFICANT
     walk.plan_spans = spans
     walk.flags = dict(flags or {})
     walk.flags_before = walk.flags
@@ -2458,7 +2478,8 @@ def realization(surfaces, player, cursor, plan, flags=None, hints=None):
     Infinity entries are otherwise only matched by the walker."""
     fallback = "reversed" if via_infinity(surfaces, plan, flags) else "direct"
     j = first_entry(surfaces, plan, flags)
-    if j is None:
+    # (Stage 201: a terminal first fixes nothing: the cursor counts before it, and past it nothing is reached)
+    if j is None or plan_effects(surfaces, plan, flags)[j] == "terminal":
         return fallback
     d = exact_direction(surfaces, plan, player, cursor, flags, hints)
     if d is None:

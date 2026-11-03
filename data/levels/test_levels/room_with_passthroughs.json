@@ -33,6 +33,7 @@
   "preview": true
  },
  "gravity": [0.0, 0.0],
+ "infinity_loop": true,
  "name": "test_levels/room_with_passthroughs",
  "player": {
   "start": [960.0, 540.0]

@@ -453,11 +453,11 @@ inline std::vector<V2> carrier_extension_cursors(const std::vector<SurfaceDef> &
 
 inline std::vector<Combo> run(const std::vector<SurfaceDef> &defs, const std::vector<inv::SurfaceInfo> &surfaces, const std::vector<V2> &positions,
 		const std::vector<std::vector<PlanItem>> &plans, const Flags &flags, int shard_i, int shard_n, bool skip_equal, bool only_failures,
-		bool visibility = false, bool carrier_cursors = false) {
+		bool visibility = false, bool carrier_cursors = false, bool infinity_loop = true) {
 	std::vector<Combo> out;
 	Tracer tracer;
-	tracer.set_defs(defs);
-	Scene<F64> scene = Scene<F64>::from_defs(defs, F64{1.0});
+	tracer.set_defs(defs, infinity_loop);
+	Scene<F64> scene = Scene<F64>::from_defs(defs, F64{1.0}, infinity_loop);
 	const Rect2f bounds = Rect2f::of(0, 0, 1920, 1080);
 	for (size_t pli = 0; pli < plans.size(); pli++) {
 		std::vector<V2> cursors = positions;

@@ -24,6 +24,7 @@
   "preview": true
  },
  "gravity": [0.0, 0.0],
+ "infinity_loop": true,
  "name": "playground/plannable_inversion",
  "player": {
   "start": [800.0, 540.0]

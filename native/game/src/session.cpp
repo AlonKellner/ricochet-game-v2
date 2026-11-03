@@ -231,10 +231,10 @@ Session::Session(const Level &level, const SessionConfig &config)
 	sync_nodes();
 	if (async_) {
 		// each job keeps its own tracer (its caches, its helpers), its defs swapped when the world changes
-		auto tracer_for = [](rc::Tracer &t, int &held, int world, const std::vector<rc::SurfaceDef> &defs) {
+		auto tracer_for = [loop = level_.infinity_loop](rc::Tracer &t, int &held, int world, const std::vector<rc::SurfaceDef> &defs) {
 			if (held != world) {
 				t.set_pair_cache(false);
-				t.set_defs(defs);
+				t.set_defs(defs, loop);
 				held = world;
 			}
 		};
@@ -323,7 +323,7 @@ void Session::apply_region(long long ticket, VisJobOut &&out) {
 	outline_ = std::move(out.outline);
 	fill_ = std::move(out.fill);
 	whiskers_ = std::move(out.whiskers);
-	previous_region_ = std::move(out.previous);
+	reaching_region_ = std::move(out.reaching);
 	visibility_version_++;
 }
 
@@ -347,7 +347,7 @@ void Session::drain() {
 
 void Session::use_defs(rc::Tracer &t, int &held) {
 	if (held != world_->version()) {
-		t.set_defs(world_->defs());
+		t.set_defs(world_->defs(), level_.infinity_loop);
 		held = world_->version();
 	}
 }
@@ -573,7 +573,7 @@ Session::Hit Session::detect_click() {
 			}
 		}
 	}
-	{
+	if (level_.infinity_loop) { // (Stage 199: off, no walk goes through infinity: nothing to plan there)
 		const std::optional<V2> q = pole(plan_.size());
 		const rc::Rect2f b = bounds();
 		const bool on_screen = q && (!has_area(b) || b.has_point(*q));
@@ -2245,7 +2245,7 @@ void Session::update_hover() {
 	}
 	hovered_serial_ = partner_serial_ = 0;
 	edge_point_ = std::nullopt;
-	if (const std::optional<V2> q = pole(plan_.size()); q && bounds().has_point(*q)) {
+	if (const std::optional<V2> q = level_.infinity_loop ? pole(plan_.size()) : std::nullopt; q && bounds().has_point(*q)) {
 		edge_point_ = q;
 	}
 	edge_hovered_ = r.infinity;
@@ -2327,7 +2327,7 @@ void Session::update_overlays(bool force) {
 		edge_marks_.push_back(EdgeMark{int(i + 1), on_point ? *q : e.click, on_point, k <= wraps});
 	}
 	edge_point_ = std::nullopt;
-	if (const std::optional<V2> q = pole(plan_.size()); q && b.has_point(*q)) {
+	if (const std::optional<V2> q = level_.infinity_loop ? pole(plan_.size()) : std::nullopt; q && b.has_point(*q)) {
 		edge_point_ = q;
 	}
 	// Stage 132: the origin entries' marks (valid: met by the physical walk)
@@ -2389,7 +2389,7 @@ void Session::update_visibility() {
 	outline_ = rc::vis::Outline{};
 	fill_ = rc::vis::Fill{};
 	whiskers_.clear();
-	previous_region_.reset();
+	reaching_region_.reset();
 	if (!visibility_on()) {
 		return;
 	}
@@ -2399,7 +2399,7 @@ void Session::update_visibility() {
 	outline_ = std::move(out.outline);
 	fill_ = std::move(out.fill);
 	whiskers_ = std::move(out.whiskers);
-	previous_region_ = std::move(out.previous);
+	reaching_region_ = std::move(out.reaching);
 }
 
 Session::VisJobOut Session::run_visibility(rc::Tracer &t, const V2 &player, const std::vector<rc::PlanItem> &items, const rc::Flags &flags,
@@ -2418,37 +2418,31 @@ Session::VisJobOut Session::run_visibility(rc::Tracer &t, const V2 &player, cons
 	// crack or overlap; overlapping sheets merged)
 	out.outline = rc::vis::union_outline(*out.region);
 	out.fill = rc::vis::fill_of(out.outline);
-	for (const rc::vis::Edge &e : out.region->whiskers) {
-		std::vector<rc::vis::Pt> pts;
-		rc::vis::tessellate(e, pts);
-		pts.push_back(e.b);
-		std::vector<V2> line;
-		for (const rc::vis::Pt &p : pts) {
-			line.push_back(V2::of(p.x, p.y));
-		}
-		out.whiskers.push_back(line);
-	}
-	// Stage 197 (the user): a plan that ends at a terminal has no area (the arrow ends on its segment): where the
-	// cursor can be for it to work is the region of the plan without it, Stage 198: only its cones that reach the
-	// terminal. (A side turned terminal on the way has its whisker; one that is not hit from here, only its effect.)
-	if (out.fill.indices.empty() && !items.empty() && !items.back().is_infinity() && !items.back().is_origin()) {
-		const rc::Scene<rc::F64> scene = rc::Scene<rc::F64>::from_defs(t.defs(), rc::F64{1.0});
-		const rc::Surf<rc::F64> *s = scene.find(items.back().surface_id);
-		if (!out.whiskers.empty() || (s != nullptr && s->effect(items.back().left, flags) == rc::EffectType::Terminal)) {
-			const std::vector<rc::PlanItem> without(items.begin(), items.end() - 1);
-			auto previous = std::make_shared<VisJobOut>(run_visibility(t, player, without, flags, vb, cancel));
-			if (previous->region && previous->region->supported && !previous->region->cancelled) {
-				if (previous->previous) {
-					out.previous = previous->previous; // (terminals in a row: the arrow ends at the first)
-				} else {
-					rc::vis::keep_reaching(*previous->region, scene, items.back());
-					previous->outline = rc::vis::union_outline(*previous->region);
-					previous->fill = rc::vis::fill_of(previous->outline);
-					previous->whiskers.clear();
-					out.previous = previous;
-				}
+	const auto whiskers_of = [](const rc::vis::Result &r) {
+		std::vector<std::vector<V2>> lines;
+		for (const rc::vis::Edge &e : r.whiskers) {
+			std::vector<rc::vis::Pt> pts;
+			rc::vis::tessellate(e, pts);
+			pts.push_back(e.b);
+			std::vector<V2> line;
+			for (const rc::vis::Pt &p : pts) {
+				line.push_back(V2::of(p.x, p.y));
 			}
+			lines.push_back(line);
 		}
+		return lines;
+	};
+	out.whiskers = whiskers_of(*out.region);
+	// Stages 197, 198 (the user): a plan that ends at a terminal shows where the cursor can be for it to work: the
+	// part of the region whose cones reach the terminal, and the part of the terminal they reach
+	if (out.region->terminal) {
+		auto reaching = std::make_shared<VisJobOut>();
+		reaching->region = *out.region;
+		rc::vis::keep_reaching(*reaching->region, rc::Scene<rc::F64>::from_defs(t.defs(), rc::F64{1.0}, t.infinity_loop()), *out.region->terminal);
+		reaching->outline = rc::vis::union_outline(*reaching->region);
+		reaching->fill = rc::vis::fill_of(reaching->outline);
+		reaching->whiskers = whiskers_of(*reaching->region);
+		out.reaching = reaching;
 	}
 	return out;
 }

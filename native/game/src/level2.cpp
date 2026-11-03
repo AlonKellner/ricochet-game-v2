@@ -20,7 +20,7 @@ using json = nlohmann::json;
 [[noreturn]] void fail(const std::string &path, const std::string &what) { throw LevelError(path + ": " + what); }
 
 // The level keys rc-level/2 shares with rc-level/1 (copied to the lowering as they are).
-const std::vector<std::string> META = {"name", "bounds", "gravity", "room", "player", "camera", "background", "colliders", "features"};
+const std::vector<std::string> META = {"name", "bounds", "gravity", "room", "player", "camera", "background", "colliders", "features", "infinity_loop"};
 // Keys of the format's later stages (docs/LEVEL_FORMAT.md), refused until they exist.
 const std::vector<std::string> RESERVED = {};
 

@@ -14,6 +14,7 @@
   "preview": true
  },
  "gravity": [0.0, 0.0],
+ "infinity_loop": true,
  "name": "playground/inversion_grid",
  "player": {
   "start": [620.0, 540.0]

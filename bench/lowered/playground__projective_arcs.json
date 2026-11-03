@@ -14,6 +14,7 @@
   "preview": true
  },
  "gravity": [0.0, 0.0],
+ "infinity_loop": true,
  "name": "playground/projective_arcs",
  "player": {
   "start": [960.0, 540.0]

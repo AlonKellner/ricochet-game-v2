@@ -210,19 +210,19 @@ struct LadderStats {
 // The scenes of one solve at every tier, built on demand, plus the solve caches.
 class LadderContext {
 public:
-	explicit LadderContext(std::vector<SurfaceDef> defs) : defs_(std::move(defs)) {}
+	explicit LadderContext(std::vector<SurfaceDef> defs, bool infinity_loop = true) : defs_(std::move(defs)), infinity_loop_(infinity_loop) {}
 
 	const std::vector<SurfaceDef> &defs() const { return defs_; }
 	Scene<Dual> &dual_scene() {
 		if (!dual_) {
-			dual_ = std::make_unique<Scene<Dual>>(Scene<Dual>::from_defs(defs_, Dual{1.0, 0.0}));
+			dual_ = std::make_unique<Scene<Dual>>(Scene<Dual>::from_defs(defs_, Dual{1.0, 0.0}, infinity_loop_));
 		}
 		return *dual_;
 	}
 	Scene<BigFloat> &big_scene(int limbs) {
 		auto it = big_.find(limbs);
 		if (it == big_.end()) {
-			it = big_.emplace(limbs, std::make_unique<Scene<BigFloat>>(Scene<BigFloat>::from_defs(defs_, BigFloat::from_int(1, limbs)))).first;
+			it = big_.emplace(limbs, std::make_unique<Scene<BigFloat>>(Scene<BigFloat>::from_defs(defs_, BigFloat::from_int(1, limbs), infinity_loop_))).first;
 		}
 		return *it->second;
 	}
@@ -240,6 +240,7 @@ public:
 private:
 	LadderStats stats_;
 	std::vector<SurfaceDef> defs_;
+	bool infinity_loop_ = true;
 	std::unique_ptr<Scene<Dual>> dual_;
 	std::map<int, std::unique_ptr<Scene<BigFloat>>> big_;
 	SolveCache<Dual> dual_cache_;

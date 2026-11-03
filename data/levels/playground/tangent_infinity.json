@@ -57,6 +57,7 @@
   "preview": true
  },
  "gravity": [0.0, 0.0],
+ "infinity_loop": true,
  "name": "playground/tangent_infinity",
  "player": {
   "start": [760.0, 640.0]

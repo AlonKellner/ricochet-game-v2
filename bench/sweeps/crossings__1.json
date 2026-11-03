@@ -491,6 +491,7 @@
  "flags": {
   "chan:t": "g1"
  },
+ "infinity_loop": true,
  "infos": [
   {
    "carrier": {
