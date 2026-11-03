@@ -1724,6 +1724,7 @@ The visibility region highlights the **set of cursor positions that will not cau
 - A cursor on the player (no aim), on the player's image `P_K` or on the frame's infinity `Q_K` is **not classified**: the aim degenerates there (§11.4). After a projective the poles are the pencil's (§15.2): the image of a circle normal's centre (every exit line passes it) and the frame's infinity.
 - A cursor exactly where the last entry is crossed off its segment is **outside**: the planned walk applies the entry there and the physical one passes, so they leave the point in different frames (V3). Before B4 these departure points formed thin lines along the planned carrier.
 - The only 1D parts of the region are **whiskers**: along a member tangent at a frame's finite infinity point to a carrier through it (every other member crosses that carrier there and diverges, §11.4); on the last planned entry's segment when that side is a terminal (the arrow ends exactly at the cursor; since Stage 162 both walks end there, and a walk that ends at a terminal at the cursor's own point reaches it). (Stage 129's third kind, along a member whose walk met a planned piece exactly at an end where another surface cuts it, is gone with Stage 138: that end is a shared point, where the physical walk stops and the walks diverge.) A whisker's end at exact data (a segment endpoint) belongs to the region exactly when the preview reaches a cursor there: at a planned terminal's lone endpoint the hit does not fire physically, so the walks diverge and the endpoint is outside (K7).
+- **A plan that ends at a terminal** (Stage 197, the user) has a region of no area, but the player still needs to see where the cursor can be for the plan to work: it **draws the region of the plan without that entry, in light green** instead of white (terminals in a row: the region of the plan before them all). The region itself stays what this section defines: the record's `visibility`, the invariants and the classification read it; only the drawing, the draw list's `["visibility"]` node, shows the other one.
 
 ### 15.2 Members
 
@@ -3148,4 +3149,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.92.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.93.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

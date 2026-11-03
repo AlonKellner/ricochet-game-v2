@@ -1109,6 +1109,127 @@ TEST_CASE("preview: a consequence past a divergence fades from the divergence, a
 	CHECK(door[0] < 0.95f);
 }
 
+namespace {
+
+struct DrawnRegion {
+	size_t triangles = 0;
+	rcg::render::Color color{};
+	std::vector<rc::V2> pts;
+};
+
+DrawnRegion drawn_region(const rcg::Session &s) {
+	DrawnRegion out;
+	for (const auto &node : s.draw_frame()) {
+		if (node.key.kind != rcg::render::NodeKind::Visibility) {
+			continue;
+		}
+		for (const rcg::render::Call &c : *node.calls) {
+			if (c.kind == rcg::render::Kind::Triangles) {
+				out.triangles = c.indices.size() / 3;
+				out.color = c.colors.at(0);
+				out.pts = c.pts;
+			}
+		}
+	}
+	return out;
+}
+
+const rcg::render::Color WHITE_REGION{1.0f, 1.0f, 1.0f, 0.10f}, GREEN_REGION{0.55f, 1.0f, 0.6f, 0.14f};
+
+void plan_at(rcg::Session &s, double x, double y) {
+	s.set_cursor(rc::V2::of(x, y));
+	s.settle();
+	s.click(false);
+	s.settle();
+}
+
+const char *const BEFORE_TERMINAL = R"({"elements": [
+	{"kind": "mirror", "start": [800, 300], "end": [800, 500]},
+	{"kind": "grapple", "start": [1100, 300], "end": [1100, 800]}]})";
+
+} // namespace
+
+TEST_CASE("region: a plan that ends at a terminal draws the region of the plan without it, light green (Stage 197)") {
+	for (const bool async : {false, true}) {
+		CAPTURE(async);
+		rcg::SessionConfig cfg;
+		cfg.async = async;
+		rcg::Session s(level_of(BEFORE_TERMINAL), cfg);
+		const auto settled = [&]() {
+			s.drain();
+			return drawn_region(s);
+		};
+		const DrawnRegion alone = settled();
+		REQUIRE(alone.triangles > 0);
+		CHECK(alone.color == WHITE_REGION);
+		CHECK_FALSE(s.region_before_terminal());
+		SUBCASE("planned first: the whole region, green; its own region stays what it is") {
+			plan_at(s, 1100, 540);
+			REQUIRE(s.plan().size() == 1);
+			const DrawnRegion green = settled();
+			CHECK(s.region_before_terminal());
+			CHECK(green.color == GREEN_REGION);
+			CHECK(green.pts == alone.pts);
+			CHECK(s.record(nlohmann::json::object())["visibility"]["n"][1] == 0); // no area of its own
+			s.key(rcg::Action::ClearPlan);
+			const DrawnRegion back = settled();
+			CHECK_FALSE(s.region_before_terminal());
+			CHECK(back.color == WHITE_REGION);
+			CHECK(back.pts == alone.pts);
+		}
+		SUBCASE("planned after a mirror: the mirror's region") {
+			plan_at(s, 800, 400);
+			REQUIRE(s.plan().size() == 1);
+			const DrawnRegion mirror = settled();
+			CHECK(mirror.color == WHITE_REGION);
+			CHECK_FALSE(s.region_before_terminal());
+			REQUIRE(mirror.triangles > 0);
+			plan_at(s, 1100, 540); // (out of the reflection's reach: the region before it shows that)
+			REQUIRE(s.plan().size() == 2);
+			const DrawnRegion green = settled();
+			CHECK(s.region_before_terminal());
+			CHECK(green.color == GREEN_REGION);
+			CHECK(green.pts == mirror.pts);
+		}
+		SUBCASE("planned after a mirror that reaches it: the mirror's region") {
+			rcg::Session r(level_of(R"({"elements": [
+				{"kind": "mirror", "start": [800, 300], "end": [800, 500]},
+				{"kind": "grapple", "start": [600, 300], "end": [600, 800]}]})"), cfg);
+			plan_at(r, 800, 400);
+			REQUIRE(r.plan().size() == 1);
+			r.drain();
+			const DrawnRegion mirror = drawn_region(r);
+			plan_at(r, 603, 400);
+			REQUIRE(r.plan().size() == 2);
+			r.drain();
+			CHECK(r.region_before_terminal());
+			const DrawnRegion green = drawn_region(r);
+			CHECK(green.color == GREEN_REGION);
+			CHECK(green.pts == mirror.pts);
+		}
+	}
+}
+
+TEST_CASE("region: a plan that is not ended by a terminal stays white; no region at all, none green (Stage 197)") {
+	{
+		rcg::Session s(level_of(BEFORE_TERMINAL));
+		plan_at(s, 800, 400);
+		REQUIRE(s.plan().size() == 1);
+		CHECK_FALSE(s.region_before_terminal());
+		CHECK(drawn_region(s).color == WHITE_REGION);
+	}
+	{
+		rcg::Session s(level_of(BEFORE_TERMINAL));
+		plan_at(s, 1100, 540);
+		REQUIRE(s.plan().size() == 1);
+		CHECK(s.region_before_terminal());
+		s.key(rcg::Action::ToggleVisibility);
+		s.settle();
+		CHECK_FALSE(s.region_before_terminal());
+		CHECK(drawn_region(s).triangles == 0);
+	}
+}
+
 TEST_CASE("preview: a mark past the fade is not drawn; one within it fades with its step") {
 	// a mirror within the fade's reach, then what the reflection meets far past it
 	const char *level = R"({"player": {"start": [400, 500]}, "elements": [{"kind": "mirror", "start": [800, 300], "end": [800, 700]}]})";

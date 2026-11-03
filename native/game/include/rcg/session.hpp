@@ -191,6 +191,10 @@ public:
 	bool has_region() const { return region_.has_value(); }
 	const std::optional<rc::vis::Result> &region() const { return region_; } // the region shown (Stage 122: the presenter's)
 	const rc::vis::Outline &region_outline() const { return outline_; } // ... its outline: the union of its cells (Stage 123)
+	// Stage 197: the region as drawn: a plan's that ends at a terminal is the plan's without it (light green)
+	bool region_before_terminal() const { return previous_region_ != nullptr; }
+	const std::optional<rc::vis::Result> &drawn_region() const { return previous_region_ ? previous_region_->region : region_; }
+	const rc::vis::Outline &drawn_outline() const { return previous_region_ ? previous_region_->outline : outline_; }
 	const std::string &hud() const { return hud_; }
 	const Level &level() const { return level_; }
 	// the camera's target: the arrow in flight, else the player
@@ -579,7 +583,9 @@ private:
 		rc::vis::Outline outline; // Stage 123: the union of its cells (drawn, and morphed)
 		rc::vis::Fill fill;
 		std::vector<std::vector<V2>> whiskers;
+		std::shared_ptr<const VisJobOut> previous; // Stage 197: a plan that ends at a terminal: the plan's without it
 	};
+	std::shared_ptr<const VisJobOut> previous_region_;
 	struct PreviewJobIn {
 		std::shared_ptr<const std::vector<rc::SurfaceDef>> defs;
 		int world = 0;
