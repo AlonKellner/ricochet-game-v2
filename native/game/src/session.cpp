@@ -2429,8 +2429,8 @@ Session::VisJobOut Session::run_visibility(rc::Tracer &t, const V2 &player, cons
 		out.whiskers.push_back(line);
 	}
 	// Stage 197 (the user): a plan that ends at a terminal has no area (the arrow ends on its segment): where the
-	// cursor can be for it to work is the region of the plan without it. (A side turned terminal on the way has its
-	// whisker; one that is not hit from here, only its effect.)
+	// cursor can be for it to work is the region of the plan without it, Stage 198: only its cones that reach the
+	// terminal. (A side turned terminal on the way has its whisker; one that is not hit from here, only its effect.)
 	if (out.fill.indices.empty() && !items.empty() && !items.back().is_infinity() && !items.back().is_origin()) {
 		const rc::Scene<rc::F64> scene = rc::Scene<rc::F64>::from_defs(t.defs(), rc::F64{1.0});
 		const rc::Surf<rc::F64> *s = scene.find(items.back().surface_id);
@@ -2438,7 +2438,15 @@ Session::VisJobOut Session::run_visibility(rc::Tracer &t, const V2 &player, cons
 			const std::vector<rc::PlanItem> without(items.begin(), items.end() - 1);
 			auto previous = std::make_shared<VisJobOut>(run_visibility(t, player, without, flags, vb, cancel));
 			if (previous->region && previous->region->supported && !previous->region->cancelled) {
-				out.previous = previous->previous ? previous->previous : previous; // (terminals in a row: the one before them)
+				if (previous->previous) {
+					out.previous = previous->previous; // (terminals in a row: the arrow ends at the first)
+				} else {
+					rc::vis::keep_reaching(*previous->region, scene, items.back());
+					previous->outline = rc::vis::union_outline(*previous->region);
+					previous->fill = rc::vis::fill_of(previous->outline);
+					previous->whiskers.clear();
+					out.previous = previous;
+				}
 			}
 		}
 	}

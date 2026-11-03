@@ -228,6 +228,8 @@ struct Cast {
 	Pt near_pt;
 	End end_kind = End::Loop;
 	int end_sid = -1;
+	bool end_hit = false;  // Stage 198: End::Stop at a surface's hit (not a max event's carrier)
+	bool end_left = false; // ... on this side
 	Pt end_pt;
 	std::vector<Interval> iv; // the member's visible intervals (walk order)
 	Pt cursor;                // the cast's cursor
@@ -2664,6 +2666,8 @@ private:
 		} else if (stop_i >= 0 && (budget_i < 0 || stop_i <= budget_i)) {
 			r.end_kind = End::Stop;
 			r.end_sid = ph[size_t(stop_i)].sid;
+			r.end_hit = ph[size_t(stop_i)].kind == EventKind::Hit;
+			r.end_left = ph[size_t(stop_i)].left;
 			r.end_pt = ph[size_t(stop_i)].pt;
 		} else if (budget_i >= 0) {
 			const CastEvent &b = ph[size_t(budget_i)];
@@ -5061,6 +5065,20 @@ inline std::vector<std::pair<int, int>> parts_of(const Result &r) {
 // The visibility region of the plan for the player (bounds: the level's).
 // cancel (Stage 121; may be null): a computation polled at every cast; once set, it
 // stops and returns a Result with `cancelled` (no region)
+// Stage 198 (the user, GAME_SPEC 15.1): only the cells whose walks stop at a plan
+// entry -- its side, within its piece: the cones that reach it. (Its ends are
+// members already: a piece's are crossings, and cells break at those.) What is
+// left is for drawing: no loops to classify by.
+inline void keep_reaching(Result &r, const Scene<F64> &scene, const PlanItem &entry) {
+	const std::optional<Seg<F64>> span = Solver<F64>(scene).plan_piece_spans({entry}).at(0);
+	std::erase_if(r.cells, [&](const Cell &c) {
+		const Cast &m = c.mid;
+		const bool stops = std::any_of(m.iv.begin(), m.iv.end(), [](const Interval &i) { return i.b.kind == End::Stop; });
+		return !(stops && m.end_hit && m.end_sid == entry.surface_id && m.end_left == entry.left && (!span || geom::on_segment(*span, cn_of(m.end_pt))));
+	});
+	r.loops.clear();
+}
+
 inline Result compute(Tracer &tracer, const Pt &player, const std::vector<PlanItem> &plan, const Flags &flags, const Rect &bounds,
 		const std::atomic<bool> *cancel = nullptr) {
 	const auto t0 = std::chrono::steady_clock::now();

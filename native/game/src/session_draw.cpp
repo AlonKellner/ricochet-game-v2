@@ -2297,11 +2297,6 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		for (const std::vector<V2> &l : whiskers_) {
 			out.push_back(stroke(Kind::Polyline, l, whisker, 1.5));
 		}
-		if (previous_region_) {
-			for (const std::vector<V2> &l : previous_region_->whiskers) {
-				out.push_back(stroke(Kind::Polyline, l, whisker, 1.5));
-			}
-		}
 		});
 	}
 	if (spawn_preview_) {
