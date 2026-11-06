@@ -1755,9 +1755,9 @@ TEST_CASE("preview: a planned path that never reaches the cursor fades past its 
 	CHECK(faded.second < 2 * whole.second + 64); // (bands, not the whole walk over and over)
 }
 
-// Stage 205 (the user): a planned terminal reached, the walks aligned all the way, shows whole to it, the cursor before it
-// notwithstanding; an aim that misses it, or a divergence, fades as any plan does
-TEST_CASE("preview: aligned to a planned terminal, whole to it; missed or diverged, faded as before (Stage 205)") {
+// Stage 205 (the user): walks aligned as far as a planned terminal show whole to it -- its hit, or where they cross its
+// line off its segment -- the cursor before it notwithstanding, and fade past it; diverged before it, as any plan
+TEST_CASE("preview: aligned to a planned terminal, whole to its hit or its miss; diverged, faded as before (Stage 205)") {
 	const auto drawn = [](const char *elements, double cx, double cy, bool whole) {
 		rcg::SessionConfig cfg;
 		cfg.full_preview = whole;
@@ -1778,8 +1778,48 @@ TEST_CASE("preview: aligned to a planned terminal, whole to it; missed or diverg
 		CHECK(aligned[k].color[3] == aligned_whole[k].color[3]);
 	}
 	CHECK(std::any_of(aligned.begin(), aligned.end(), [](const DrawnPoint &p) { return p.at.x > 1190.0f; }));
-	// the aim misses it: past the cursor it fades, as before
-	CHECK(drawn(grapple, 900, 700, false).size() < drawn(grapple, 900, 700, true).size());
+	// the aim misses it, just above (the user's grapple_1 dump): whole to where it crosses the grapple's line off its
+	// segment (335 past the cursor), then fading on its way up, as past a cursor
+	const std::vector<DrawnPoint> missed = drawn(grapple, 900, 420, false), missed_whole = drawn(grapple, 900, 420, true);
+	CHECK(missed.size() < missed_whole.size());
+	std::vector<float> before, before_whole, after;
+	for (const DrawnPoint &p : missed) {
+		(p.at.x < 1199.0f ? before : after).push_back(p.color[3]);
+	}
+	for (const DrawnPoint &p : missed_whole) {
+		if (p.at.x < 1199.0f) {
+			before_whole.push_back(p.color[3]);
+		}
+	}
+	CHECK(before == before_whole);
+	CHECK(std::any_of(after.begin(), after.end(), [](float a) { return a < 0.9f; }));
+	// the user's dump (grapple_1, 2026-11-06): the grapple planned, the cursor before the aim crosses its line off its
+	// segment at (1132.8, 50): the path whole to there, fading on to the top edge
+	{
+		const std::filesystem::path root = RC_REPO_ROOT;
+		rcg::SessionConfig cfgs[2];
+		cfgs[1].full_preview = true;
+		std::vector<DrawnPoint> got[2];
+		for (int w = 0; w < 2; w++) {
+			rcg::Session s(rcg::load_level((root / "data/levels/grapple_1.json").string()), cfgs[w]);
+			s.teleport(rc::V2::of(914.0872802734375, 1043.9200439453125));
+			plan_at(s, 998.0951538085938, 62.85713195800781);
+			REQUIRE(s.plan().size() == 1);
+			s.set_cursor(rc::V2::of(1026.03173828125, 535.2380981445312));
+			s.settle();
+			got[w] = path_points(s);
+		}
+		std::vector<float> to[2];
+		for (int w = 0; w < 2; w++) {
+			for (const DrawnPoint &p : got[w]) {
+				if (p.at.y > 50.5f) {
+					to[w].push_back(p.color[3]);
+				}
+			}
+		}
+		CHECK_FALSE(to[0].empty());
+		CHECK(to[0] == to[1]); // (whole to the miss, 500 past the cursor)
+	}
 	// an unplanned mirror on the way: the walks part there, and both fade as for any plan
 	const char *mirrored = R"({"elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 500]},
 		{"kind": "mirror", "start": [1000, 420], "end": [1000, 500]}]})";

@@ -1534,8 +1534,7 @@ struct PathReveal {
 };
 
 // `never_reached`: the plan, when the planned walk never reaches its cursor: its path past its first unplanned event fades.
-// `plan`: the plan -- walks aligned all the way that end at its last entry (a planned terminal reached) show whole to
-// it (Stage 205)
+// `plan`: the plan -- walks aligned as far as its last entry show whole to it, a cursor before it notwithstanding (Stage 205)
 PathReveal reveal_of(const std::vector<rc::TraceStep> &steps, const std::vector<Shift> &shifts, double reach, bool full,
 		const std::vector<PlanEntry> *never_reached, const std::vector<PlanEntry> &plan) {
 	PathReveal r;
@@ -1574,32 +1573,34 @@ PathReveal reveal_of(const std::vector<rc::TraceStep> &steps, const std::vector<
 			physical = r.along[i];
 		}
 	}
-	// Stage 205 (the user): a planned terminal reached, the walks aligned all the way -- they meet the plan's entries in
-	// order, nothing unplanned between, and end at the last -- shows whole to it, whatever cursor came before. Diverged,
-	// it fades as any plan does (the planned path past the cursor, the physical one past the divergence).
-	std::optional<double> terminal;
-	if (!physical && !planned_past && !plan.empty()) {
+	// Stage 205 (the user): the plan's last entry is where its path is meant to go -- a cursor before it counts once
+	// only a planned terminal is left (Stage 201), but the drawing goes on to it: walks aligned that far, meeting the
+	// entries in order with nothing unplanned between, show whole to where they meet its carrier (its hit, or a crossing
+	// off its segment: a miss), and fade past that as past a cursor. Diverged before it, they fade as any plan does.
+	if (!plan.empty() && past_cursor) {
 		size_t next = 0;
-		bool aligned = true;
-		for (size_t i = 0; i < steps.size() && aligned; i++) {
-			aligned = steps[i].type == rc::StepType::Aligned || steps[i].type == rc::StepType::AlignedPostPlanned;
-			if (!aligned || !steps[i].significant) {
+		for (size_t i = 0; i < steps.size(); i++) {
+			if (steps[i].type != rc::StepType::Aligned && steps[i].type != rc::StepType::AlignedPostPlanned) {
+				break;
+			}
+			if (next + 1 == plan.size() && steps[i].surface_id == plan.back().surface_id) {
+				past_cursor = std::max(*past_cursor, r.along[i] + r.lengths[i]);
+				break;
+			}
+			if (!steps[i].significant) {
 				continue;
 			}
 			if (next < plan.size() && plan[next].surface_id == steps[i].surface_id) {
-				terminal = ++next == plan.size() && i + 1 == steps.size() ? std::optional<double>(r.along[i] + r.lengths[i]) : std::nullopt;
+				next++;
 			} else {
-				aligned = false; // (something unplanned on the way)
+				break; // (something unplanned on the way)
 			}
-		}
-		if (!aligned) {
-			terminal.reset();
 		}
 	}
 	for (size_t i = 0; i < steps.size(); i++) {
 		const rc::StepType t = steps[i].type;
 		if (t == rc::StepType::AlignedPostPlanned) {
-			r.fade[i] = terminal ? terminal : past_cursor;
+			r.fade[i] = past_cursor;
 		} else if (t == rc::StepType::DivergedPostPlanned) {
 			r.fade[i] = past_cursor ? past_cursor : planned_past;
 		} else if (t == rc::StepType::DivergedPlanned) {
