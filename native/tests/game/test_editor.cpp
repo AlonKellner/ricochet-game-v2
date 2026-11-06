@@ -88,6 +88,27 @@ void click_row(rcg::Editor &ed, const std::string &label, unsigned mods = 0) {
 	FAIL("no panel row " << label);
 }
 
+// Stage 203: a click on an actions row's option `label`
+void click_action(rcg::Editor &ed, const std::string &label) {
+	const json panel = ok(ed, {{"op", "panel"}});
+	for (const json &r : panel["rows"]) {
+		if (r["kind"] != "actions") {
+			continue;
+		}
+		const json &os = r["options"];
+		for (size_t c = 0; c < os.size(); c++) {
+			if (os[c] == label) {
+				const float w = rcg::Editor::PANEL_WIDTH - 20, x = r["x"].get<float>() - 10 + w * (float(c) + 0.5f) / float(os.size()), y = r["y"].get<float>() + 10;
+				ed.pointer(rcg::Editor::PtrMove, x, y, 0, 0);
+				ed.pointer(rcg::Editor::PtrDown, x, y, rcg::Editor::BtnLeft, 0);
+				ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
+				return;
+			}
+		}
+	}
+	FAIL("no action " << label);
+}
+
 } // namespace
 
 TEST_CASE("editor: a field's text -- a paste joins its lines, the caret edits its middle (Stage 191)") {
@@ -1322,4 +1343,67 @@ TEST_CASE("editor: a new level has gravity, no room walls and wall edges; the pl
 	s.hold({}, 60);
 	CHECK(s.player().y + rcg::kinematics::BODY == doctest::Approx(1080 - rcg::kinematics::RADIUS - rcg::kinematics::SKIN).epsilon(1e-6));
 	CHECK(s.player().x == 960.0f);
+}
+
+TEST_CASE("editor: an opening's steps and a motion's keys placed by two clicks, their points dragged (Stage 203)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "wall", "name": "w", "start": [700, 400], "end": [800, 400]})")}});
+	ok(ed, {{"op", "select"}, {"name", "w"}});
+	// a turn: its pivot (the start: it snaps there), then where start -> end will point (down)
+	click_action(ed, "+ turn");
+	CHECK(ok(ed, {{"op", "state"}})["step_placing"] == json::parse(R"({"name": "w", "index": -1, "part": "rotate"})"));
+	click(ed, 701, 401);
+	click(ed, 700, 600);
+	CHECK(element(ed, "w")["opening"]["steps"] == json::parse(R"([{"rotate": [[700, 400], [700, 600]]}])"));
+	CHECK(ed.errors().empty());
+	// a move after it: from and to (its difference: 100 right)
+	click_action(ed, "+ move");
+	click(ed, 900, 500);
+	click(ed, 1000, 500);
+	CHECK(element(ed, "w")["opening"]["steps"][1] == json::parse(R"({"translate": [[900, 500], [1000, 500]]})"));
+	// a step's point dragged: the move's end, 50 further
+	drag(ed, 1000, 500, 1050, 500);
+	CHECK(element(ed, "w")["opening"]["steps"][1]["translate"][1] == json::array({1050, 500}));
+	// a step given by numbers: its derived points drag too (it becomes points), its seconds kept
+	ok(ed, {{"op", "set"}, {"path", "/elements/0/opening/steps/0"}, {"value", json::parse(R"({"rotate": 1.5707963267948966, "seconds": 2})")}});
+	CHECK(ed.errors().empty());
+	drag(ed, 700, 500, 600, 400); // its aim (the start + the turned chord: [700, 500]) to the left: a half turn
+	CHECK(element(ed, "w")["opening"]["steps"][0] == json::parse(R"({"rotate": [[700, 400], [600, 400]], "seconds": 2})"));
+	// re-place a step; Esc cancels a placement; remove one
+	click_action(ed, "move 1");
+	click(ed, 0, 0);
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["step_placing"].is_null());
+	CHECK(element(ed, "w")["opening"]["steps"][0]["rotate"][1] == json::array({600, 400})); // (unchanged)
+	click_action(ed, "remove 2");
+	CHECK(element(ed, "w")["opening"]["steps"].size() == 1);
+	// moving the element carries its points
+	ok(ed, {{"op", "move"}, {"name", "w"}, {"handle", "body"}, {"by", json::array({10, 20})}});
+	CHECK(element(ed, "w")["opening"]["steps"][0]["rotate"] == json::parse("[[710, 420], [610, 420]]"));
+	click_action(ed, "remove 1");
+	CHECK_FALSE(element(ed, "w").contains("opening"));
+	// a motion: keys added, a key's move and turn by two clicks (a key by numbers becomes an object)
+	click_action(ed, "+ motion key");
+	CHECK(element(ed, "w")["motion"]["keys"] == json::parse(R"([[0.0, 0.0, 0.0, 0.0], {"phase": 0.5}])"));
+	click_action(ed, "move 2");
+	click(ed, 710, 420);
+	click(ed, 710, 220);
+	click_action(ed, "turn 2");
+	click(ed, 710, 420);
+	click(ed, 710, 620);
+	CHECK(element(ed, "w")["motion"]["keys"][1] == json::parse(R"({"phase": 0.5, "rotate": [[710, 420], [710, 620]], "translate": [[710, 420], [710, 220]]})"));
+	CHECK(ed.errors().empty());
+	click_action(ed, "+ key");
+	CHECK(element(ed, "w")["motion"]["keys"][2] == json::parse(R"({"phase": 0.75})"));
+	// a body drag carries the keys' points and the motion's pivot
+	ok(ed, {{"op", "set"}, {"name", "w"}, {"key", "motion"}, {"value", json::parse(R"({"keys": [[0, 0, 0, 0], {"phase": 0.5, "translate": [[0, 0], [0, 10]]}], "pivot": [750, 420]})")}});
+	drag(ed, 740, 420, 760, 440);
+	CHECK(element(ed, "w")["motion"]["pivot"] == json::array({770, 440}));
+	CHECK(element(ed, "w")["motion"]["keys"][1]["translate"] == json::parse("[[20, 20], [20, 30]]"));
+	// the command form, and its refusals
+	ok(ed, {{"op", "step"}, {"name", "w"}, {"index", 0}, {"part", "translate"}, {"points", json::parse("[[0, 0], [5, 5]]")}});
+	CHECK(element(ed, "w")["motion"]["keys"][0] == json::parse(R"({"phase": 0, "translate": [[0, 0], [5, 5]]})"));
+	CHECK_FALSE(ed.command({{"op", "step"}, {"name", "w"}, {"part", "rotate"}, {"points", json::parse("[[1, 1], [1, 1]]")}}).value("ok", true));
+	CHECK_FALSE(ed.command({{"op", "step"}, {"name", "w"}, {"part", "spin"}, {"points", json::parse("[[1, 1], [2, 1]]")}}).value("ok", true));
 }

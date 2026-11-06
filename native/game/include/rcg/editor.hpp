@@ -97,7 +97,7 @@ private:
 		std::string key;     // an element key, or a JSON pointer into the document (level fields)
 	};
 	struct Row {
-		enum Kind { Header, Text, Value, Error, Buttons, Chips, Nav, Level, Tools } kind = Text; // Tools (Stage 161): the tools, one row of them // Chips: the palette's kinds (options), one row of them
+		enum Kind { Header, Text, Value, Error, Buttons, Chips, Nav, Level, Tools, Actions } kind = Text; // Actions (Stage 203): options run their cmds // Tools (Stage 161): the tools, one row of them // Chips: the palette's kinds (options), one row of them
 		std::string label, value, hint;
 		std::optional<Field> field;
 		std::string choice; // a value that cycles ("enum", "bool", "kind", "tool", "place", "options", "shape") or "" (typed)
@@ -105,6 +105,7 @@ private:
 		float y = 0;
 		std::vector<std::string> options; // "options": the values it cycles through (strings)
 		std::vector<int> marks = {};      // Stage 167: a level row's characters the search matched
+		std::vector<nlohmann::json> cmds = {}; // Stage 203: an Actions row's commands, one per option
 	};
 
 	// the document
@@ -120,7 +121,14 @@ private:
 	void drag_item(const V2 &screen, unsigned mods);
 	std::vector<Row> item_rows() const;
 	nlohmann::json item_op(const std::string &op, const nlohmann::json &cmd);
-	void select_element(const std::string &name) { selected_ = name; item_.clear(); group_.clear(); }
+	void select_element(const std::string &name) {
+		selected_ = name;
+		item_.clear();
+		group_.clear();
+		if (step_place_ && step_place_->element != name) {
+			step_place_.reset(); // (Stage 203: a placement is the selected element's)
+		}
+	}
 	// Stage 175: the selection -- one element or item, or several (elements as "element:<name>", items as
 	// their names), picked by a marquee or ctrl+click, moved and scaled by their box, copied and pasted
 	struct Box {
@@ -205,7 +213,31 @@ private:
 	FlagMarkers markers_;       // Stage 179: the markers the flags give (the whole level's; none while it does not lower)
 	Drawn edges_drawn_;         // Stage 169: the configured edges (none: they pass)
 	std::vector<int> shade_of_;  // Stage 153: per element, 1 a dark shade, 2 a light one
-	std::vector<std::vector<rc::arc::SegGeom>> open_pose_; // Stage 202: per element, its opening's open pose (drawn faint)
+	// Stage 203: an element's opening steps or motion keys as the editor shows and edits them -- each part's two
+	// points (a translation's from and to, a rotation's pivot and aim; handles "step:<k>:<part>:<0|1>"), and the
+	// poses they lead to (an opening's after each step, the last its open pose; a motion's at each key), drawn faint
+	struct Moves {
+		struct Part {
+			size_t index = 0;   // the step's or the key's
+			bool rotate = false;
+			PointPair points{};
+		};
+		bool motion = false;
+		std::vector<Part> parts;
+		std::vector<std::vector<rc::arc::SegGeom>> poses;
+	};
+	std::vector<Moves> moves_; // per element
+	// ... a part being placed by two clicks (the element, its list's index: -1 a new step or key; its part)
+	struct StepPlace {
+		std::string element;
+		int index = -1;
+		bool rotate = false;
+	};
+	std::optional<StepPlace> step_place_;
+	static void put_step(nlohmann::json &e, int index, bool rotate, const nlohmann::json &points);
+	static void carry_moves(nlohmann::json &e, double dx, double dy); // (Stage 202: its pivots, Stage 203: its points too)
+	static double phase_of(const nlohmann::json &key);
+	std::string step_hint() const; // what the next click of a placement places
 	rc::vis::Fill shade_fill_;    // ... the shadow under the starting flags (world units)
 	// the view
 	float width_ = 1920, height_ = 1080;

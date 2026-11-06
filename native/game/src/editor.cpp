@@ -61,18 +61,6 @@ void translate(json &g, double dx, double dy) {
 	}
 }
 
-// Stage 202: an element's opening moves with it (its rotations' pivots)
-void translate_pivots(json &e, double dx, double dy) {
-	if (!e.contains("opening") || !e["opening"].is_object() || !e["opening"].value("steps", json()).is_array()) {
-		return;
-	}
-	for (json &st : e["opening"]["steps"]) {
-		if (st.is_object() && is_point(st.value("pivot", json()))) {
-			st["pivot"] = point(st["pivot"][0].get<double>() + dx, st["pivot"][1].get<double>() + dy);
-		}
-	}
-}
-
 // A key code from a command: an int, a one-character string, or a name.
 int key_code(const json &k) {
 	if (k.is_number_integer()) {
@@ -116,6 +104,99 @@ unsigned mods_of(const json &m) {
 }
 
 } // namespace
+
+// Stage 202, 203: an element's opening and motion move with it -- their pivots, their steps' and keys' points
+void Editor::carry_moves(json &e, double dx, double dy) {
+	auto shift = [&](json &p) {
+		if (is_point(p)) {
+			p = point(p[0].get<double>() + dx, p[1].get<double>() + dy);
+		}
+	};
+	auto parts = [&](json &st) {
+		if (!st.is_object()) {
+			return;
+		}
+		if (st.contains("pivot")) {
+			shift(st["pivot"]);
+		}
+		for (const char *k : {"rotate", "translate"}) {
+			if (st.contains(k) && st[k].is_array() && st[k].size() == 2 && is_point(st[k][0]) && is_point(st[k][1])) {
+				shift(st[k][0]);
+				shift(st[k][1]);
+			}
+		}
+	};
+	if (e.contains("opening") && e["opening"].is_object() && e["opening"].value("steps", json()).is_array()) {
+		for (json &st : e["opening"]["steps"]) {
+			parts(st);
+		}
+	}
+	if (e.contains("motion") && e["motion"].is_object()) {
+		if (e["motion"].contains("pivot")) {
+			shift(e["motion"]["pivot"]);
+		}
+		if (e["motion"].value("keys", json()).is_array()) {
+			for (json &k : e["motion"]["keys"]) {
+				parts(k);
+			}
+		}
+	}
+}
+
+// Stage 203: an opening step or a motion key's part set by its two points -- the element's motion's key `index`
+// (a key by numbers becomes an object, its numbers kept; -1 or past the end: a new key, its phase halfway from the
+// last to 1), else its opening's step `index` (its seconds kept; -1 or past the end: a new step, the opening
+// made when there is none)
+void Editor::put_step(json &e, int index, bool rotate, const json &pts) {
+	const char *part = rotate ? "rotate" : "translate";
+	if (e.contains("motion") && e["motion"].is_object()) {
+		json &keys = e["motion"]["keys"];
+		if (!keys.is_array()) {
+			keys = json::array();
+		}
+		if (index < 0 || size_t(index) >= keys.size()) {
+			keys.push_back({{"phase", keys.empty() ? 0.0 : (phase_of(keys.back()) + 1.0) / 2}});
+			index = int(keys.size()) - 1;
+		}
+		json &k = keys[size_t(index)];
+		if (k.is_array() && k.size() == 4 && k[1].is_number() && k[2].is_number() && k[3].is_number()) {
+			json o = {{"phase", k[0]}};
+			if (k[1].get<double>() != 0 || k[2].get<double>() != 0) {
+				o["translate"] = json::array({k[1], k[2]});
+			}
+			if (k[3].get<double>() != 0) {
+				o["rotate"] = k[3];
+			}
+			k = std::move(o);
+		}
+		if (!k.is_object()) {
+			k = json::object();
+		}
+		k[part] = pts;
+		return;
+	}
+	if (!e.contains("opening") || !e["opening"].is_object()) {
+		e["opening"] = json::object();
+	}
+	json &steps = e["opening"]["steps"];
+	if (!steps.is_array()) {
+		steps = json::array();
+	}
+	json st = {{part, pts}};
+	if (index >= 0 && size_t(index) < steps.size()) {
+		if (steps[size_t(index)].is_object() && steps[size_t(index)].contains("seconds")) {
+			st["seconds"] = steps[size_t(index)]["seconds"];
+		}
+		steps[size_t(index)] = std::move(st);
+	} else {
+		steps.push_back(std::move(st));
+	}
+}
+
+double Editor::phase_of(const json &k) {
+	const json &p = k.is_array() && !k.empty() ? k[0] : k.is_object() ? k.value("phase", json()) : json();
+	return p.is_number() ? p.get<double>() : 0.0;
+}
 
 Editor::Editor(const json *document) {
 	if (document != nullptr) {
@@ -208,6 +289,7 @@ void Editor::set_document(json doc, bool clean) {
 	set_selection({});
 	marquee_.reset();
 	clicks_.clear();
+	step_place_.reset();
 	drag_.reset();
 	focus_.reset();
 	refresh();
@@ -231,6 +313,7 @@ void Editor::refresh() {
 	errors_.clear();
 	const json &es = doc_["elements"];
 	drawn_.assign(es.size(), Drawn{});
+	moves_.assign(es.size(), Moves{});
 	json single = {{"schema", "rc-level/2"}, {"room", {{"rect", {0.0, 0.0, 1.0, 1.0}}, {"built", false}}}};
 	for (const char *k : {"bounds", "templates", "carriers"}) {
 		if (doc_.contains(k)) {
@@ -269,8 +352,10 @@ void Editor::refresh() {
 			errors_.push_back({int(i), name, m});
 		};
 		single["elements"] = json::array({e});
+		bool lowered = false;
 		try {
 			const Lowered low = lower_level(single);
+			lowered = true;
 			const Level lv = parse_level_json(low.level);
 			for (size_t k = 0; k < lv.surfaces.size(); k++) {
 				if (low.origins[k].rfind("level.elements[0]", 0) != 0) {
@@ -307,24 +392,60 @@ void Editor::refresh() {
 				drawn_[i].broken.push_back(rc::arc::SegGeom::make(s, en, v));
 			}
 		}
+		// Stage 202, 203: its opening's steps or its motion's keys -- their points, and the poses they lead to
+		if (lowered && drawn_[i].broken.empty() && e.is_object() && (e.contains("opening") || e.contains("motion"))) {
+			try {
+				const Level lv = parse_level_json(single);
+				Moves &mv = moves_[i];
+				auto pose = [&](const std::vector<size_t> &surfaces, const rc::Xf2 &xf) {
+					std::vector<rc::arc::SegGeom> out;
+					for (const size_t k : surfaces) {
+						for (const BuiltSurface &b : build_spec(mapped(lv.surfaces[k].spec, xf), 0, std::nullopt)) {
+							out.push_back(b.seg);
+						}
+					}
+					return out;
+				};
+				if (!lv.openings.empty()) {
+					const Opening &o = lv.openings.front();
+					double t = 0.0;
+					for (size_t k = 0; k < o.steps.size(); k++) {
+						mv.parts.push_back({k, o.steps[k].rotate, o.steps[k].points});
+						t += o.steps[k].seconds;
+						mv.poses.push_back(pose(o.surfaces, opening_pose(o, t)));
+					}
+				} else if (!lv.motions.empty()) {
+					const Motion &m = lv.motions.front();
+					mv.motion = true;
+					const V2 p = motion_pivot(m, lv.surfaces);
+					for (size_t k = 0; k < m.keys.size(); k++) {
+						if (m.points[k].translate) {
+							mv.parts.push_back({k, false, *m.points[k].translate});
+						}
+						if (m.points[k].rotate) {
+							mv.parts.push_back({k, true, *m.points[k].rotate});
+						}
+						// x -> R(a) (x - P) + P + d
+						const double a = m.keys[k][3], c = std::cos(a), sn = std::sin(a);
+						const double ox = p.x + m.keys[k][1] - (c * p.x - sn * p.y), oy = p.y + m.keys[k][2] - (sn * p.x + c * p.y);
+						const bool rest = m.keys[k][1] == 0 && m.keys[k][2] == 0 && a == 0;
+						mv.poses.push_back(rest ? std::vector<rc::arc::SegGeom>{} : pose(m.surfaces, rc::Xf2::of(V2::of(c, sn), V2::of(-sn, c), V2::of(ox, oy))));
+					}
+				}
+			} catch (const std::exception &ex) {
+				report(ex.what());
+			}
+		}
 	}
 	// what only the whole level shows (names, the level's own keys, ...)
 	shade_fill_ = {};
 	shade_of_.assign(es.size(), 0);
-	open_pose_.assign(es.size(), {});
 	markers_ = FlagMarkers{};
 	if (errors_.empty()) {
 		try {
 			markers_ = flag_markers(doc_, lower_level(doc_));
 			const Level lv = parse_level_json(doc_);
 			build_level(lv);
-			for (const Opening &o : lv.openings) { // Stage 202: where its opening takes it
-				for (const size_t k : o.surfaces) {
-					for (const BuiltSurface &b : build_spec(mapped(lv.surfaces[k].spec, opening_pose(o, o.total())), 0, std::nullopt)) {
-						open_pose_[o.element].push_back(b.seg);
-					}
-				}
-			}
 			// Stage 153: the shadow under the level's starting flags, and which elements are shades
 			if (!lv.shades.empty()) {
 				std::vector<shade::Region> regions;
@@ -720,7 +841,7 @@ json Editor::op(const json &cmd) {
 			if (h == "body") {
 				const json by = cmd.at("by");
 				translate(*g, by[0].get<double>(), by[1].get<double>());
-				translate_pivots(d["elements"][size_t(i)], by[0].get<double>(), by[1].get<double>());
+				carry_moves(d["elements"][size_t(i)], by[0].get<double>(), by[1].get<double>());
 			} else if (h == "start" || h == "end" || h == "via") {
 				(*g)[h] = cmd.at("to");
 			} else if (h == "center") {
@@ -733,6 +854,73 @@ json Editor::op(const json &cmd) {
 		});
 		return {};
 	}
+	// Stage 203: an opening's step or a motion key's part by two points; a step or key removed; a key added; a
+	// part placed by the next two clicks on the canvas
+	if (o == "step") {
+		editing();
+		const int i = element("name");
+		const json &pts = cmd.at("points");
+		if (!pts.is_array() || pts.size() != 2 || !is_point(pts[0]) || !is_point(pts[1])) {
+			refuse("points: [[x, y], [x, y]] expected");
+		}
+		const std::string part = cmd.value("part", "");
+		if (part != "rotate" && part != "translate") {
+			refuse("part: rotate or translate expected");
+		}
+		if (part == "rotate" && canonical(pts[0]) == canonical(pts[1])) {
+			refuse("a rotation's pivot and aim are two different points");
+		}
+		change([&](json &d) { put_step(d["elements"][size_t(i)], cmd.value("index", -1), part == "rotate", pts); });
+		return {};
+	}
+	if (o == "remove_step") {
+		editing();
+		const int i = element("name");
+		const size_t k = cmd.at("index").get<size_t>();
+		change([&](json &d) {
+			json &e = d["elements"][size_t(i)];
+			const char *list = e.contains("motion") ? "motion" : "opening";
+			json *xs = e.contains(list) && e[list].is_object() ? &e[list][list == std::string("motion") ? "keys" : "steps"] : nullptr;
+			if (xs == nullptr || !xs->is_array() || k >= xs->size()) {
+				refuse("no such step");
+			}
+			xs->erase(k);
+			if (xs->empty()) {
+				e.erase(list);
+			}
+		});
+		return {};
+	}
+	if (o == "add_key") {
+		editing();
+		const int i = element("name");
+		if (doc_["elements"][size_t(i)].contains("opening")) {
+			refuse("an element has a motion or an opening, not both");
+		}
+		change([&](json &d) {
+			json &e = d["elements"][size_t(i)];
+			if (!e.contains("motion") || !e["motion"].is_object() || !e["motion"].value("keys", json()).is_array()) {
+				e["motion"] = {{"keys", json::array({json::array({0.0, 0.0, 0.0, 0.0})})}};
+			}
+			json &keys = e["motion"]["keys"];
+			keys.push_back({{"phase", keys.empty() ? 0.0 : (phase_of(keys.back()) + 1.0) / 2}});
+		});
+		return {};
+	}
+	if (o == "place_step") {
+		editing();
+		const int i = element("name");
+		select_element(doc_["elements"][size_t(i)]["name"].get<std::string>());
+		const std::string part = cmd.value("part", "");
+		if (part != "rotate" && part != "translate") {
+			refuse("part: rotate or translate expected");
+		}
+		tool_ = Tool::Select;
+		clicks_.clear();
+		step_place_ = StepPlace{selected_, cmd.value("index", -1), part == "rotate"};
+		hint_ = step_hint();
+		return {};
+	}
 	if (o == "duplicate") {
 		editing();
 		const int i = element("name");
@@ -742,7 +930,7 @@ json Editor::op(const json &cmd) {
 		const json by = cmd.value("by", point(20.0, 20.0));
 		if (json *g = geometry_of(e)) {
 			translate(*g, by[0].get<double>(), by[1].get<double>());
-			translate_pivots(e, by[0].get<double>(), by[1].get<double>());
+			carry_moves(e, by[0].get<double>(), by[1].get<double>());
 		}
 		change([&](json &d) { d["elements"].insert(d["elements"].begin() + i + 1, e); });
 		select_element(name);
@@ -860,6 +1048,7 @@ json Editor::op(const json &cmd) {
 				{"item", item_.empty() ? json() : json(item_)}, {"selection", selection()},
 				{"mode", mode_ == Mode::Play ? "play" : "edit"}, {"dirty", dirty_}, {"errors", s.errors}, {"grid", grid_},
 				{"placing", clicks_.size()}, {"undo", undo_.size()}, {"redo", redo_.size()},
+				{"step_placing", step_place_ ? json{{"name", step_place_->element}, {"index", step_place_->index}, {"part", step_place_->rotate ? "rotate" : "translate"}} : json()},
 				{"view", {{"center", point(center_.x, center_.y)}, {"zoom", zoom_}}}, {"focus", focus_ ? json(focus_->key) : json()},
 				{"save_requested", save_requested_}, {"hint", hint_}, {"level", level_name_}, {"levels", levels_.size()},
 				{"level_menu", level_menu_}, {"open_requested", !open_request_.empty()},
@@ -869,9 +1058,12 @@ json Editor::op(const json &cmd) {
 	if (o == "panel") { // the panel's rows as drawn (tests, debugging): label, value, y
 		json rs = json::array();
 		for (const Row &r : rows()) {
-			static const char *const KINDS[] = {"header", "text", "value", "error", "buttons", "chips", "nav", "level", "tools"};
+			static const char *const KINDS[] = {"header", "text", "value", "error", "buttons", "chips", "nav", "level", "tools", "actions"};
 			rs.push_back({{"kind", KINDS[int(r.kind)]}, {"label", r.label}, {"value", r.value}, {"y", r.y},
 					{"x", width_ - PANEL_WIDTH + 20}});
+			if (r.kind == Row::Actions) {
+				rs.back()["options"] = r.options; // (Stage 203)
+			}
 		}
 		return {{"rows", rs}};
 	}

@@ -617,6 +617,9 @@ void Editor::set_selection(std::vector<std::string> entries) {
 	selected_.clear();
 	item_.clear();
 	group_.clear();
+	if (step_place_ && (once.size() != 1 || once[0] != "element:" + step_place_->element)) {
+		step_place_.reset(); // (Stage 203: a placement is the selected element's)
+	}
 	if (once.size() == 1) {
 		if (once[0].rfind("element:", 0) == 0) {
 			selected_ = once[0].substr(8);
@@ -635,7 +638,7 @@ bool Editor::exists(const std::string &entry) const {
 // Scales the entries' geometry in doc: every point about (ax, ay) by (sx, sy), then by (bx, by), onto the grid
 // (step; 0: float32 as it is). A rectangle stays one (its corners), a circle's radius scales by the mean factor
 // (to whole units), a portal's displacement and a motion's offsets by the factors (Stage 202: an opening's
-// translations too; its pivots are points).
+// translations too; its pivots are points; Stage 203: so are its steps' and keys' two points).
 void Editor::scale(json &doc, const std::vector<std::string> &entries, const Scale &t, double step) const {
 	auto snapped = [&](double v) { return step > 0 ? std::round(v / step) * step : double(float(v)); };
 	auto map = [&](json &p) {
@@ -693,6 +696,24 @@ void Editor::scale(json &doc, const std::vector<std::string> &entries, const Sca
 				const json d = e["d"];
 				e["d"] = jpoint(snapped(d[0].get<double>() * t.sx), snapped(d[1].get<double>() * t.sy));
 			}
+			// a step's or a key's parts: its points mapped (Stage 203: two points), a translation by numbers scaled
+			auto parts = [&](json &st) {
+				if (!st.is_object()) {
+					return;
+				}
+				if (st.contains("pivot")) {
+					map(st["pivot"]);
+				}
+				for (const char *k : {"rotate", "translate"}) {
+					if (st.contains(k) && st[k].is_array() && st[k].size() == 2 && is_point(st[k][0]) && is_point(st[k][1])) {
+						map(st[k][0]);
+						map(st[k][1]);
+					}
+				}
+				if (is_point(st.value("translate", json()))) {
+					st["translate"] = jpoint(double(float(st["translate"][0].get<double>() * t.sx)), double(float(st["translate"][1].get<double>() * t.sy)));
+				}
+			};
 			if (e.contains("motion") && e["motion"].is_object()) {
 				json &m = e["motion"];
 				if (m.contains("pivot")) {
@@ -704,17 +725,13 @@ void Editor::scale(json &doc, const std::vector<std::string> &entries, const Sca
 							k[1] = double(float(k[1].get<double>() * t.sx));
 							k[2] = double(float(k[2].get<double>() * t.sy));
 						}
+						parts(k);
 					}
 				}
 			}
 			if (e.contains("opening") && e["opening"].is_object() && e["opening"].value("steps", json()).is_array()) { // Stage 202
 				for (json &st : e["opening"]["steps"]) {
-					if (st.is_object() && st.contains("pivot")) {
-						map(st["pivot"]);
-					}
-					if (st.is_object() && is_point(st.value("translate", json()))) {
-						st["translate"] = jpoint(double(float(st["translate"][0].get<double>() * t.sx)), double(float(st["translate"][1].get<double>() * t.sy)));
-					}
+					parts(st);
 				}
 			}
 			continue;
