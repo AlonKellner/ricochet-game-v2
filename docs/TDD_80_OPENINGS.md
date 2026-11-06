@@ -17,7 +17,7 @@ docs/TDD_82_MOTION_MODE.md.)
 | 202.4 | The look: an opening's surface has the door's (amber core and posts; a platform keeps its own); a consequence that switches its flag draws the pose it goes to, dashed amber | Done |
 | 202.5 | The editor: the `opening` field, the open pose drawn faint, a body move or a duplicate carries its pivots, a scale its pivots and translations | Done |
 | 202.6 | The demo level `objectives/swing_gate` (a plate slides a shield away, a button swings the gate open), its session in the replay golden; tests; docs; `make gate` | Done |
-| 202.7 | The user's interactive sign-off | Open |
+| 202.7 | The user's interactive sign-off (2026-11-06) | Done |
 
 ## Decisions (the user's, 2026-11-06)
 

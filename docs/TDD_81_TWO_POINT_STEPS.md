@@ -15,7 +15,7 @@ for moving surfaces as well." The rules are GAME_SPEC 9.12 (openings) and 9.8 (m
 | 203.2 | The format: `{"rotate": [pivot, aim]}`, `{"translate": [from, to]}` in an opening's steps; `{"phase", "rotate", "translate"}` keys, lowered to `[phase, dx, dy, angle]` about the motion's pivot; each step's and key's points kept (`Opening::Step::points`, `Motion::points`; derived for numbers); `motion_pivot` shared by the parser, the session and the editor | Done |
 | 203.3 | The editor: the steps' and keys' rows and actions (`+ turn`, `+ move`, `+ key`, `turn n`, `move n`, `remove n`), two-click placement (Esc cancels), their points as handles, the poses after each step drawn faint; the commands `step`, `remove_step`, `add_key`, `place_step`; moves carry the points and the motion's pivot; a scale maps them | Done |
 | 203.4 | The demo `objectives/swing_gate` written by points (its session golden unchanged); tests; docs; `make gate` | Done |
-| 203.5 | The user's interactive sign-off (with Stage 202's) | Open |
+| 203.5 | The user's interactive sign-off (with Stage 202's, 2026-11-06) | Done |
 
 ## Decisions
 

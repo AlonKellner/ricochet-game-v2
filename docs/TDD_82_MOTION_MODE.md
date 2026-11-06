@@ -12,7 +12,7 @@ now. Can I set the \"opening\" flag in the editor? I want it to be possible." Th
 | 204.3 | The session: a motion played by steps placed at the cycle's phase (`opening_pose` at `played_time`); nothing else changes (the cycle's HUD, scroll, checkpoint and record are a motion's) | Done |
 | 204.4 | The editor: one `motion` row, the `motion_mode` row (a click switches it, the motion kept), an opening's `flag` row (typed) and its chips (the default, the detectors' flags, the level's active flags; the current one lit); steps and keys under `motion`; `+ key` refused in the opening mode or on steps | Done |
 | 204.5 | The demo `objectives/swing_gate` migrated (its session golden unchanged); tests; docs; `make gate` | Done |
-| 204.6 | The user's interactive sign-off (with Stages 202-203) | Open |
+| 204.6 | The user's interactive sign-off (with Stages 202-203, 2026-11-06) | Done |
 
 ## Decisions
 
