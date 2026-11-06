@@ -97,6 +97,11 @@ stays where it is (GAME_SPEC 19.2).
 drawn faint and dashed where each key puts it, and the level's `cycle` field sets the period. Play-test (F5) to
 see it move; the wheel sets the cycle there.
 
+**Opening.** An element's `opening` field takes its steps (`{"steps": [{"rotate": 1.5708}, {"translate": [0, -100]}]}`;
+a rotation's `pivot` defaults to the element's start, its hinge). The element is drawn faint, dashed amber, at its open
+pose; moving the element moves its pivots with it. Play-test (F5) and fire at its button (`opens`: its name) to see it
+swing.
+
 **Carriers.** A point placed near a carrier snaps onto it, a grid step along it. When both clicks of the line
 tool (or the three of the arc tool on a circle) land on one carrier, the element is placed on it (`carrier`,
 `from`, `to`), and its handles move along it. A carrier is selected by a click on its line or circle. Its handles
@@ -110,7 +115,7 @@ the level). They are lit, the panel lists them, and their box is drawn dashed wi
 - drag any of them: they all move, by whole grid steps, their shapes kept;
 - a corner: they scale about the opposite corner, uniformly (Shift: each axis free); a side's middle: they stretch
   from the opposite side. Every point lands on the grid (Alt: off it), a rectangle stays a rectangle, a circle's
-  radius scales by the mean factor (to whole units), a portal's displacement and a motion's offsets scale with them.
+  radius scales by the mean factor (to whole units), a portal's displacement, a motion's offsets and an opening's translations scale with them (its pivots are points).
   The box keeps at least a grid step;
 - Delete removes them, Ctrl+D duplicates them, the arrows move them, Esc deselects.
 
