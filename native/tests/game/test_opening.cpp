@@ -1,5 +1,6 @@
 // Stage 202 (GAME_SPEC 9.12, docs/TDD_80): openings. An element's opening plays
-// its steps (rotations about a carried pivot, translations) from its closed pose
+// its steps (rotations about a pivot, translations; Stage 203: by two points, given
+// where the step begins) from its closed pose
 // while its flag holds, and back while it does not; the shot sees the world as
 // fired, the swing plays once time runs, and no shot is fired mid-swing.
 #include "rcg/level.hpp"
@@ -112,9 +113,9 @@ TEST_CASE("opening: a flag that switches mid-swing turns it where it stands; und
 	CHECK(swinging(d).seg.s == rc::V2::of(1000, 400));
 }
 
-TEST_CASE("opening: steps in order -- a translation carries the next rotation's pivot; a level starts settled") {
+TEST_CASE("opening: steps in order -- a rotation's pivot is where its step begins; a level starts settled") {
 	const rcg::Level lv = level_of(R"({"elements": [{"kind": "wall", "name": "g", "start": [0, 0], "end": [100, 0],
-		"opening": {"steps": [{"translate": [100, 0]}, {"rotate": 1.5707963267948966, "pivot": [0, 0], "seconds": 1}]}}]})");
+		"opening": {"steps": [{"translate": [100, 0]}, {"rotate": 1.5707963267948966, "pivot": [100, 0], "seconds": 1}]}}]})");
 	REQUIRE(lv.openings.size() == 1);
 	const rcg::Opening &o = lv.openings[0];
 	CHECK(o.flag == "door:g");
@@ -122,7 +123,7 @@ TEST_CASE("opening: steps in order -- a translation carries the next rotation's 
 	CHECK(rcg::opening_pose(o, 0.0) == rc::Xf2::identity());
 	const rc::Xf2 half = rcg::opening_pose(o, 0.25), mid = rcg::opening_pose(o, 1.0), open = rcg::opening_pose(o, 1.5);
 	CHECK(half.xform(rc::V2::of(0, 0)).x == doctest::Approx(50));
-	CHECK(open.xform(rc::V2::of(0, 0)).x == doctest::Approx(100)); // the pivot, carried
+	CHECK(open.xform(rc::V2::of(0, 0)).x == doctest::Approx(100)); // the pivot, where the translation put the start
 	CHECK(open.xform(rc::V2::of(0, 0)).y == doctest::Approx(0).epsilon(1e-4));
 	CHECK(open.xform(rc::V2::of(100, 0)).x == doctest::Approx(100).epsilon(1e-4));
 	CHECK(open.xform(rc::V2::of(100, 0)).y == doctest::Approx(100));
@@ -135,6 +136,52 @@ TEST_CASE("opening: steps in order -- a translation carries the next rotation's 
 	CHECK_FALSE(s.swinging());
 	CHECK(swinging(s).seg.e.x == doctest::Approx(800).epsilon(1e-5));
 	CHECK(s.record(json::object())["openings"] == json::array({0.5}));
+	// (Stage 203) a step by numbers shows derived points: a rotation's pivot (default: the start where the step
+	// begins) and its aim (where the start -> end turns to), a translation's from (the start there) and to
+	const rcg::Opening::Step &t = o.steps[0], &r = o.steps[1];
+	CHECK(t.points == rcg::PointPair{{{0, 0}, {100, 0}}});
+	CHECK(r.points[0] == std::array<double, 2>{100, 0});
+	CHECK(r.points[1][0] == doctest::Approx(100));
+	CHECK(r.points[1][1] == doctest::Approx(100));
+}
+
+TEST_CASE("opening: steps by two points (Stage 203) -- a translation's from and to, a rotation's pivot and aim") {
+	// up 50, then about the start (where the translation put it) until start -> end points down
+	const rcg::Level lv = level_of(R"({"elements": [{"kind": "wall", "name": "g", "start": [0, 0], "end": [100, 0],
+		"opening": {"steps": [{"translate": [[30, 30], [30, -20]]}, {"rotate": [[0, -50], [0, 50]]}]}}]})");
+	const rcg::Opening &o = lv.openings[0];
+	CHECK(o.steps[0].dx == 0);
+	CHECK(o.steps[0].dy == -50);
+	CHECK(o.steps[1].angle == QUARTER); // (exactly: atan2 of the axes)
+	CHECK(o.steps[1].px == 0);
+	CHECK(o.steps[1].py == -50);
+	CHECK(o.steps[1].points == rcg::PointPair{{{0, -50}, {0, 50}}}); // (as written)
+	const rc::Xf2 open = rcg::opening_pose(o, o.total());
+	CHECK(open.xform(rc::V2::of(0, 0)).x == doctest::Approx(0).epsilon(1e-4));
+	CHECK(open.xform(rc::V2::of(0, 0)).y == doctest::Approx(-50));
+	CHECK(open.xform(rc::V2::of(100, 0)).x == doctest::Approx(0).epsilon(1e-4));
+	CHECK(open.xform(rc::V2::of(100, 0)).y == doctest::Approx(50));
+	// the shortest way: aimed up-left, it turns counter-clockwise; aimed straight back, half a turn clockwise; an aim
+	// sets the direction from the step's pose (after a quarter turn, back to the axis is a quarter turn back)
+	auto angles = [&](const char *steps) {
+		const rcg::Level l = level_of((std::string(R"({"elements": [{"kind": "wall", "name": "g", "start": [0, 0], "end": [100, 0], "opening": {"steps": )")
+				+ steps + "}}]}").c_str());
+		std::vector<double> out;
+		for (const rcg::Opening::Step &st : l.openings[0].steps) {
+			out.push_back(st.angle);
+		}
+		return out;
+	};
+	CHECK(angles(R"([{"rotate": [[0, 0], [-10, -10]]}])")[0] == doctest::Approx(-3 * QUARTER / 2));
+	CHECK(angles(R"([{"rotate": [[0, 0], [-10, 0]]}])")[0] == doctest::Approx(2 * QUARTER));
+	const std::vector<double> two = angles(R"([{"rotate": [[0, 0], [0, 10]]}, {"rotate": [[0, 0], [10, 0]]}])");
+	CHECK(two[0] == QUARTER);
+	CHECK(two[1] == doctest::Approx(-QUARTER));
+	// a circle: the pivot to its center sets its direction
+	const rcg::Level c = level_of(R"({"elements": [{"kind": "wall", "name": "c", "circle": {"center": [100, 0], "radius": 20},
+		"opening": {"steps": [{"rotate": [[0, 0], [0, 100]]}]}}]})");
+	CHECK(c.openings[0].steps[0].angle == QUARTER);
+	CHECK(rcg::opening_pose(c.openings[0], 0.5).xform(rc::V2::of(100, 0)).y == doctest::Approx(100));
 }
 
 TEST_CASE("opening: the demo level -- the plate slides the shield away, the button swings the gate open") {
@@ -208,6 +255,12 @@ TEST_CASE("opening: the schema") {
 			"a positive number of seconds"));
 	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"steps": [{"translate": [1, 0], "pivot": [0, 0]}]}}]})",
 			"pivot"));
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"steps": [{"rotate": [[1, 1], [1, 1]]}]}}]})",
+			"two different points expected"));
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"steps": [{"rotate": [[1, 1], [2, 1]], "pivot": [0, 0]}]}}]})",
+			"pivot"));
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"steps": [{"translate": [[1, 1], [2]]}]}}]})",
+			"translate[1]"));
 	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"flag": "a &&", "steps": [{"translate": [1, 0]}]}}]})",
 			"opening.flag"));
 	CHECK(has(R"({"cycle": {}, "elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion": {"keys": [[0, 0, 0, 0]]},

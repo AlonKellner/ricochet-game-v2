@@ -184,8 +184,7 @@ Session::Session(const Level &level, const SessionConfig &config)
 		std::vector<World::Moving> moving;
 		for (size_t m = 0; m < level_.motions.size(); m++) {
 			const Motion &mo = level_.motions[m];
-			const SurfaceSpec &first = level_.surfaces[mo.surfaces.front()].spec;
-			const V2 pivot = mo.pivot ? *mo.pivot : first.full_circle ? first.center : V2::of((double(first.start.x) + first.end.x) / 2, (double(first.start.y) + first.end.y) / 2);
+			const V2 pivot = motion_pivot(mo, level_.surfaces);
 			for (const size_t k : mo.surfaces) {
 				const LevelSurface &ls = level_.surfaces[k];
 				moving.push_back({ls.ids, ls.spec, ls.label});

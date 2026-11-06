@@ -201,26 +201,37 @@ struct SpreadRule {
 	std::vector<std::string> sources;
 };
 
+// Stage 203: two points -- a translation's from and to, a rotation's pivot and aim (level coordinates)
+using PointPair = std::array<std::array<double, 2>, 2>;
+
 // rc-level/2 (Stage 151): an element's motion over the level's cycle -- keys
 // (phase in [0, 1), an offset dx, dy, an angle in radians about the pivot),
 // interpolated linearly and looping; its surfaces (indices into
 // Level::surfaces) move together.
 struct Motion {
 	std::vector<size_t> surfaces;
-	std::vector<std::array<double, 4>> keys;
+	std::vector<std::array<double, 4>> keys; // (Stage 203: a key given by points, lowered to these about the pivot)
 	std::optional<V2> pivot; // default: the first surface's middle (a circle: its center)
+	// Stage 203: per key, its points as the editor shows them (as written, or derived from its numbers; none: no such part)
+	struct KeyPoints {
+		std::optional<PointPair> translate, rotate;
+	};
+	std::vector<KeyPoints> points;
 };
+// The motion's pivot (its own, else its first surface's middle; a circle: its center).
+V2 motion_pivot(const Motion &m, const std::vector<LevelSurface> &surfaces);
 // rc-level/2 (Stage 202, GAME_SPEC 9.12): an element's opening -- its steps (a rotation
-// about a pivot of the element, carried by the earlier steps, or a translation in the
-// level's axes), played from the closed pose while its flag holds and back while it
-// does not; its surfaces (indices into Level::surfaces) move together.
+// about a pivot, or a translation in the level's axes; Stage 203: given where the step
+// begins), played from the closed pose while its flag holds and back while it does not;
+// its surfaces (indices into Level::surfaces) move together.
 struct Opening {
 	struct Step {
 		bool rotate = false;
 		double angle = 0.0;      // a rotation: radians (clockwise on screen)
-		double px = 0, py = 0;   // ... about its pivot, in the closed pose
+		double px = 0, py = 0;   // ... about its pivot, where the step begins
 		double dx = 0, dy = 0;   // a translation
 		double seconds = 0.5;
+		PointPair points{};      // Stage 203: its pivot and aim, or its from and to (as written, or derived from its numbers)
 	};
 	size_t element = 0; // its index in the level's elements
 	std::vector<size_t> surfaces;

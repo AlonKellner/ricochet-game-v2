@@ -104,6 +104,65 @@ V2 vec(const json &j, const std::string &path) {
 	return V2::of(p[0], p[1]);
 }
 
+// Stage 203: two points (a translation's from and to, a rotation's pivot and aim) -- [[x, y], [x, y]]
+bool is_points(const json &j) { return j.is_array() && j.size() == 2 && j[0].is_array() && j[1].is_array(); }
+PointPair points(const json &j, const std::string &path) { return {pair(j[0], path + "[0]"), pair(j[1], path + "[1]")}; }
+
+constexpr double PI = 3.14159265358979323846;
+
+// an angle in (-pi, pi]: the shortest turn (half a turn: clockwise)
+double wrap_turn(double a) {
+	a = std::remainder(a, 2 * PI);
+	return a <= -PI ? a + 2 * PI : a;
+}
+
+// p -> R(theta) p + t in float64: where the earlier steps (or a key) put the element
+struct Pose {
+	double theta = 0.0, tx = 0.0, ty = 0.0;
+	std::array<double, 2> at(double x, double y) const {
+		const double c = std::cos(theta), s = std::sin(theta);
+		return {c * x - s * y + tx, s * x + c * y + ty};
+	}
+	void turn(double a, double px, double py) { // by a about (px, py)
+		const double c = std::cos(a), s = std::sin(a), rx = tx - px, ry = ty - py;
+		tx = c * rx - s * ry + px;
+		ty = s * rx + c * ry + py;
+		theta += a;
+	}
+};
+
+// Stage 203: where the element stands in a pose -- its start (a circle: its center), the default pivot and a
+// translation's from; and the direction a rotation's aim sets: its start to its end (a circle: the pivot to its
+// center; at its center, its radius along its x axis)
+std::array<double, 2> anchor(const SurfaceSpec &s, const Pose &p) {
+	return s.full_circle ? p.at(s.center.x, s.center.y) : p.at(s.start.x, s.start.y);
+}
+std::array<double, 2> reference(const SurfaceSpec &s, const Pose &p, const std::array<double, 2> &pivot) {
+	const double c = std::cos(p.theta), sn = std::sin(p.theta);
+	if (!s.full_circle) {
+		const double x = double(s.end.x) - s.start.x, y = double(s.end.y) - s.start.y;
+		return {c * x - sn * y, sn * x + c * y};
+	}
+	const std::array<double, 2> m = p.at(s.center.x, s.center.y);
+	if (m != pivot) {
+		return {m[0] - pivot[0], m[1] - pivot[1]};
+	}
+	return {c * s.radius, sn * s.radius};
+}
+// the turn that points the reference along pivot -> aim; and the aim a turn by `a` points it at
+double turn_to(const SurfaceSpec &s, const Pose &p, const PointPair &pa, const std::string &path) {
+	if (pa[0] == pa[1]) {
+		fail(path, "two different points expected: the pivot and the aim");
+	}
+	const std::array<double, 2> r = reference(s, p, pa[0]);
+	return wrap_turn(std::atan2(pa[1][1] - pa[0][1], pa[1][0] - pa[0][0]) - std::atan2(r[1], r[0]));
+}
+PointPair aimed(const SurfaceSpec &s, const Pose &p, const std::array<double, 2> &pivot, double a) {
+	const std::array<double, 2> r = reference(s, p, pivot);
+	const double c = std::cos(a), sn = std::sin(a);
+	return {pivot, {pivot[0] + c * r[0] - sn * r[1], pivot[1] + sn * r[0] + c * r[1]}};
+}
+
 Rect rect(const json &j, const std::string &path) {
 	if (!j.is_array() || j.size() != 4) {
 		fail(path, "[x, y, w, h] expected");
@@ -724,27 +783,6 @@ Level parse_level_json(const json &j) {
 		const json &m = es[i]["motion"];
 		only_keys(m, mp, {"keys", "pivot"});
 		Motion mo;
-		const json &keys = req(m, "keys", mp);
-		if (!keys.is_array() || keys.empty()) {
-			fail(mp + ".keys", "an array of [phase, dx, dy, angle] expected");
-		}
-		for (size_t k = 0; k < keys.size(); k++) {
-			const std::string kp = mp + ".keys[" + std::to_string(k) + "]";
-			if (!keys[k].is_array() || keys[k].size() != 4) {
-				fail(kp, "[phase, dx, dy, angle] expected");
-			}
-			std::array<double, 4> key{};
-			for (size_t q = 0; q < 4; q++) {
-				key[q] = num(keys[k][q], kp);
-			}
-			if (key[0] < 0 || key[0] >= 1 || (!mo.keys.empty() && key[0] <= mo.keys.back()[0])) {
-				fail(kp, "phases in [0, 1), increasing");
-			}
-			mo.keys.push_back(key);
-		}
-		if (const json *p = opt(m, "pivot")) {
-			mo.pivot = vec(*p, mp + ".pivot");
-		}
 		const std::string prefix = "level.elements[" + std::to_string(i) + "]";
 		for (size_t k = 0; k < low.origins.size(); k++) {
 			if (low.origins[k].rfind(prefix, 0) == 0 && (low.origins[k].size() == prefix.size() || low.origins[k][prefix.size()] != '[')) {
@@ -753,6 +791,78 @@ Level parse_level_json(const json &j) {
 		}
 		if (mo.surfaces.empty()) {
 			fail(mp, "the element has no surfaces to move");
+		}
+		if (const json *p = opt(m, "pivot")) {
+			mo.pivot = vec(*p, mp + ".pivot");
+		}
+		const json &keys = req(m, "keys", mp);
+		if (!keys.is_array() || keys.empty()) {
+			fail(mp + ".keys", "an array of [phase, dx, dy, angle] or {phase, translate, rotate} expected");
+		}
+		// Stage 203 (GAME_SPEC 9.8): a key by points, from the element as written -- turned about its pivot until its
+		// start -> end points along pivot -> aim (the turn nearest the previous key's), then moved by to - from;
+		// lowered to [phase, dx, dy, angle] about the motion's pivot. A key by numbers shows points derived from them.
+		const SurfaceSpec &first = lv.surfaces[mo.surfaces.front()].spec;
+		const V2 pv = motion_pivot(mo, lv.surfaces);
+		const std::array<double, 2> P{pv.x, pv.y};
+		const Pose rest;
+		for (size_t k = 0; k < keys.size(); k++) {
+			const std::string kp = mp + ".keys[" + std::to_string(k) + "]";
+			const json &kk = keys[k];
+			std::array<double, 4> key{};
+			Motion::KeyPoints pts;
+			if (kk.is_array() && kk.size() == 4) {
+				for (size_t q = 0; q < 4; q++) {
+					key[q] = num(kk[q], kp);
+				}
+				if (key[1] != 0 || key[2] != 0) {
+					pts.translate = PointPair{P, {P[0] + key[1], P[1] + key[2]}};
+				}
+				if (key[3] != 0) {
+					pts.rotate = aimed(first, rest, P, key[3]);
+				}
+			} else if (kk.is_object()) {
+				only_keys(kk, kp, {"phase", "translate", "rotate"});
+				key[0] = num(req(kk, "phase", kp), kp + ".phase");
+				std::array<double, 2> c = P; // the rotation's pivot
+				if (const json *r = opt(kk, "rotate")) {
+					if (is_points(*r)) {
+						pts.rotate = points(*r, kp + ".rotate");
+						c = (*pts.rotate)[0];
+						key[3] = turn_to(first, rest, *pts.rotate, kp + ".rotate");
+						if (!mo.keys.empty()) {
+							key[3] += 2 * PI * std::round((mo.keys.back()[3] - key[3]) / (2 * PI));
+						}
+					} else {
+						key[3] = num(*r, kp + ".rotate");
+						pts.rotate = aimed(first, rest, P, key[3]);
+					}
+				}
+				double dx = 0, dy = 0;
+				if (const json *t = opt(kk, "translate")) {
+					if (is_points(*t)) {
+						pts.translate = points(*t, kp + ".translate");
+						dx = (*pts.translate)[1][0] - (*pts.translate)[0][0];
+						dy = (*pts.translate)[1][1] - (*pts.translate)[0][1];
+					} else {
+						const auto d = pair(*t, kp + ".translate");
+						dx = d[0];
+						dy = d[1];
+						pts.translate = PointPair{P, {P[0] + dx, P[1] + dy}};
+					}
+				}
+				// x -> R(a) (x - c) + c + d, about P: R(a) (x - P) + P + R(a) (P - c) + c - P + d
+				const double ca = std::cos(key[3]), sa = std::sin(key[3]), rx = P[0] - c[0], ry = P[1] - c[1];
+				key[1] = ca * rx - sa * ry + c[0] - P[0] + dx;
+				key[2] = sa * rx + ca * ry + c[1] - P[1] + dy;
+			} else {
+				fail(kp, "[phase, dx, dy, angle] or {phase, translate, rotate} expected");
+			}
+			if (key[0] < 0 || key[0] >= 1 || (!mo.keys.empty() && key[0] <= mo.keys.back()[0])) {
+				fail(kp, "phases in [0, 1), increasing");
+			}
+			mo.keys.push_back(key);
+			mo.points.push_back(pts);
 		}
 		lv.motions.push_back(std::move(mo));
 	}
@@ -785,24 +895,44 @@ Level parse_level_json(const json &j) {
 		for (const size_t k : o.surfaces) {
 			lv.surfaces[k].spec.swings = true;
 		}
+		// Stage 203: a step's points are where the step begins (the earlier steps' pose): a rotation by its pivot and
+		// aim (its start -> end turned, the shortest way, along pivot -> aim) or by an angle about its pivot (default:
+		// its start there); a translation by its from and to, or by [dx, dy]
 		const SurfaceSpec &first = lv.surfaces[o.surfaces.front()].spec;
-		const V2 hinge = first.full_circle ? first.center : first.start; // (the default pivot)
+		Pose pose;
 		for (size_t k = 0; k < steps.size(); k++) {
 			const std::string sp = op + ".steps[" + std::to_string(k) + "]";
 			const json &st = steps[k];
 			Opening::Step s;
 			if (st.is_object() && st.contains("rotate")) {
-				only_keys(st, sp, {"rotate", "pivot", "seconds"});
 				s.rotate = true;
-				s.angle = num(st["rotate"], sp + ".rotate");
-				const V2 p = opt(st, "pivot") ? vec(st["pivot"], sp + ".pivot") : hinge;
-				s.px = p.x;
-				s.py = p.y;
+				if (is_points(st["rotate"])) {
+					only_keys(st, sp, {"rotate", "seconds"});
+					s.points = points(st["rotate"], sp + ".rotate");
+					s.angle = turn_to(first, pose, s.points, sp + ".rotate");
+				} else {
+					only_keys(st, sp, {"rotate", "pivot", "seconds"});
+					s.angle = num(st["rotate"], sp + ".rotate");
+					s.points = aimed(first, pose, opt(st, "pivot") ? pair(st["pivot"], sp + ".pivot") : anchor(first, pose), s.angle);
+				}
+				s.px = s.points[0][0];
+				s.py = s.points[0][1];
+				pose.turn(s.angle, s.px, s.py);
 			} else if (st.is_object() && st.contains("translate")) {
 				only_keys(st, sp, {"translate", "seconds"});
-				const auto d = pair(st["translate"], sp + ".translate");
-				s.dx = d[0];
-				s.dy = d[1];
+				if (is_points(st["translate"])) {
+					s.points = points(st["translate"], sp + ".translate");
+					s.dx = s.points[1][0] - s.points[0][0];
+					s.dy = s.points[1][1] - s.points[0][1];
+				} else {
+					const auto d = pair(st["translate"], sp + ".translate");
+					const std::array<double, 2> from = anchor(first, pose);
+					s.points = {from, {from[0] + d[0], from[1] + d[1]}};
+					s.dx = d[0];
+					s.dy = d[1];
+				}
+				pose.tx += s.dx;
+				pose.ty += s.dy;
 			} else {
 				fail(sp, "{rotate, pivot, seconds} or {translate, seconds} expected");
 			}
@@ -905,34 +1035,36 @@ double Opening::total() const {
 	return t;
 }
 
-// p -> R(theta) p + t, composed step by step in float64: a rotation by a about the
-// pivot q where the earlier steps put it (q' = R q + t) is t -> R(a) (t - q') + q'.
+// p -> R(theta) p + t, composed step by step in float64 (Stage 203: each rotation about
+// its pivot where the step begins: t -> R(a) (t - q) + q).
 rc::Xf2 opening_pose(const Opening &o, double s) {
 	if (s <= 0.0) {
 		return rc::Xf2::identity(); // (the closed pose: exactly the element as written)
 	}
-	double theta = 0.0, tx = 0.0, ty = 0.0;
+	Pose p;
 	for (const Opening::Step &st : o.steps) {
 		const double f = std::min(s / st.seconds, 1.0);
 		if (st.rotate) {
-			const double c = std::cos(theta), sn = std::sin(theta);
-			const double qx = c * st.px - sn * st.py + tx, qy = sn * st.px + c * st.py + ty;
-			const double a = st.angle * f, ca = std::cos(a), sa = std::sin(a);
-			const double rx = tx - qx, ry = ty - qy;
-			tx = ca * rx - sa * ry + qx;
-			ty = sa * rx + ca * ry + qy;
-			theta += a;
+			p.turn(st.angle * f, st.px, st.py);
 		} else {
-			tx += st.dx * f;
-			ty += st.dy * f;
+			p.tx += st.dx * f;
+			p.ty += st.dy * f;
 		}
 		s -= st.seconds;
 		if (s <= 0.0) {
 			break;
 		}
 	}
-	const double c = std::cos(theta), sn = std::sin(theta);
-	return rc::Xf2::of(V2::of(c, sn), V2::of(-sn, c), V2::of(tx, ty));
+	const double c = std::cos(p.theta), sn = std::sin(p.theta);
+	return rc::Xf2::of(V2::of(c, sn), V2::of(-sn, c), V2::of(p.tx, p.ty));
+}
+
+V2 motion_pivot(const Motion &m, const std::vector<LevelSurface> &surfaces) {
+	if (m.pivot) {
+		return *m.pivot;
+	}
+	const SurfaceSpec &first = surfaces[m.surfaces.front()].spec;
+	return first.full_circle ? first.center : V2::of((double(first.start.x) + first.end.x) / 2, (double(first.start.y) + first.end.y) / 2);
 }
 
 SurfaceSpec object_spec(const Object &o, const V2 &center) {
