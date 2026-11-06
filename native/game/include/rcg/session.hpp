@@ -158,7 +158,7 @@ public:
 	double ready() const { return ready_; }
 	// Stage 194 (the user): what a redo can bring back (none once anything in the game changed)
 	size_t redo_depth() const { return redo_.size(); }
-	bool can_fire() const { return ready_ >= 1.0; }
+	bool can_fire() const { return ready_ >= 1.0 && !swinging(); }
 	void speed_up();
 	void advance(double dt, const kinematics::Input &in);
 	// the arrow in flight, or (Stage 146) a journey under way: the game paused
@@ -171,6 +171,10 @@ public:
 	double phase() const { return phase_; }
 	bool cycle_auto() const { return cycle_auto_; }
 	void scroll(double delta);
+	// Stage 202 (GAME_SPEC 9.12): each opening's time in [0, total] (0: closed), and whether any is
+	// away from where its flag sends it (no shot then)
+	const std::vector<double> &openings() const { return opening_s_; }
+	bool swinging() const;
 	V2 player() const { return player_; }
 	// Stage 122: the player before the last physics tick, and how far the time
 	// not yet ticked is into the next (the presenter draws the player between)
@@ -294,6 +298,7 @@ private:
 		kinematics::Body feel;
 		bool on_floor = false;
 		V2 gravity;
+		std::vector<double> openings; // Stage 202 (empty: settled under the flags)
 	};
 	// Stage 194: what a redo stands on -- it goes when any of this changes (the player, by a hair too). Not the
 	// moving surfaces' phase (the user: they move as the cursor may).
@@ -449,7 +454,11 @@ private:
 	double idle_ = 0.0;                  // seconds without a scroll or a plan change while paused
 	std::vector<size_t> moving_motion_;  // per World::Moving: its motion's index
 	std::vector<V2> moving_pivot_;       // ... and pivot
-	void apply_phase();                  // the moving surfaces placed for phase_
+	void apply_phase();                  // the moving surfaces placed for phase_ (Stage 202: and the openings' times)
+	// Stage 202: the openings -- their times, and per World::Moving after the motions' its opening's index
+	std::vector<double> opening_s_;
+	std::vector<size_t> moving_opening_;
+	std::vector<double> settled_openings() const; // each where its flag sends it
 	// Stage 152: spreading -- the tagged elements' and objects' flags along what touches
 	void spread();
 	// Stage 153: light and shadow -- the boundary and the darkened surfaces under the flags (when they or the world changed)

@@ -180,17 +180,23 @@ Session::Session(const Level &level, const SessionConfig &config)
 	full_preview_ = config.full_preview;
 	world_ = std::make_unique<World>(build_level(level_), level_.objects);
 	edge_open_ = open_edges(world_->surfaces(), level_.bounds);
-	if (!level_.motions.empty()) { // Stage 151: the moving surfaces, from their base specs
+	if (!level_.motions.empty() || !level_.openings.empty()) { // Stage 151: the moving surfaces, from their base specs
 		std::vector<World::Moving> moving;
 		for (size_t m = 0; m < level_.motions.size(); m++) {
 			const Motion &mo = level_.motions[m];
-			const SurfaceSpec &first = level_.surfaces[mo.surfaces.front()].spec;
-			const V2 pivot = mo.pivot ? *mo.pivot : first.full_circle ? first.center : V2::of((double(first.start.x) + first.end.x) / 2, (double(first.start.y) + first.end.y) / 2);
+			const V2 pivot = motion_pivot(mo, level_.surfaces);
 			for (const size_t k : mo.surfaces) {
 				const LevelSurface &ls = level_.surfaces[k];
 				moving.push_back({ls.ids, ls.spec, ls.label});
 				moving_motion_.push_back(m);
 				moving_pivot_.push_back(pivot);
+			}
+		}
+		for (size_t o = 0; o < level_.openings.size(); o++) { // Stage 202: the openings' (after the motions')
+			for (const size_t k : level_.openings[o].surfaces) {
+				const LevelSurface &ls = level_.surfaces[k];
+				moving.push_back({ls.ids, ls.spec, ls.label});
+				moving_opening_.push_back(o);
 			}
 		}
 		world_->set_moving(std::move(moving));
@@ -208,6 +214,10 @@ Session::Session(const Level &level, const SessionConfig &config)
 		flags_.set(key, value);
 	}
 	spread(); // (Stage 152: a powered circuit is lit from the start)
+	if (!level_.openings.empty()) { // Stage 202: each opening settled under the starting flags
+		opening_s_ = settled_openings();
+		apply_phase();
+	}
 	if (!level_.shades.empty()) { // Stage 153: the shades' regions, their boundary's pieces (ids taken once)
 		for (const Shade &sh : level_.shades) {
 			shade_regions_.push_back(shade::region_of(segment_of(level_.surfaces[sh.surface].spec), sh.side, sh.dark));
@@ -218,7 +228,7 @@ Session::Session(const Level &level, const SessionConfig &config)
 		shadow();
 	}
 	// the initial checkpoint: taken before the level built its world (GameManager._ready)
-	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt, false, {}, 0.0, true, kinematics::Body{}, false, gravity_};
+	initial_ = Checkpoint{player_, V2{}, flags_, {}, {}, std::nullopt, false, {}, 0.0, true, kinematics::Body{}, false, gravity_, opening_s_};
 	initial_mark_ = state_mark(); // (Stage 194)
 	hud_ = hud_text(); // (Stage 145: a goal's line; "" without a goal and a plan)
 	for (const BuiltSurface &s : world_->surfaces()) {
@@ -684,7 +694,7 @@ bool Session::click(bool right) {
 }
 
 Session::Checkpoint Session::capture() const {
-	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot(), won_, inside_, phase_, cycle_auto_, feel_, on_floor_, gravity_};
+	return Checkpoint{player_, velocity_, flags_, plan_, targets_, world_->snapshot(), won_, inside_, phase_, cycle_auto_, feel_, on_floor_, gravity_, opening_s_};
 }
 
 void Session::restore(const Checkpoint &c) {
@@ -708,6 +718,10 @@ void Session::restore(const Checkpoint &c) {
 		phase_ = c.phase;
 		cycle_auto_ = c.cycle_auto;
 		idle_ = 0.0;
+		apply_phase();
+	}
+	if (!level_.openings.empty()) { // Stage 202
+		opening_s_ = c.openings.size() == level_.openings.size() ? c.openings : settled_openings();
 		apply_phase();
 	}
 	refresh_ui();
@@ -1016,6 +1030,19 @@ void Session::tick(const kinematics::Input &in) {
 		}
 		apply_phase();
 	}
+	bool swung = false;
+	if (!level_.openings.empty()) { // Stage 202 (GAME_SPEC 9.12): a tick on while the flag holds, back while not
+		for (size_t o = 0; o < level_.openings.size(); o++) {
+			const double total = level_.openings[o].total(), was = opening_s_[o];
+			// (a tick's sum is a hair off the end: within 1e-9 s it is there)
+			const double next = rc::key_true(level_.openings[o].flag, flags_) ? was + kinematics::STEP : was - kinematics::STEP;
+			opening_s_[o] = next >= total - 1e-9 ? total : next <= 1e-9 ? 0.0 : next;
+			swung = swung || opening_s_[o] != was;
+		}
+		if (swung) {
+			apply_phase();
+		}
+	}
 	tick_from_ = player_;
 	kinematics::Body body = feel_;
 	body.pos = player_;
@@ -1027,7 +1054,7 @@ void Session::tick(const kinematics::Input &in) {
 	on_floor_ = body.on_floor;
 	feel_ = body;
 	check_redo(); // Stage 194: even a slight move is a change
-	if (player_ != tick_from_) { // Stage 188: what it did, not what was held
+	if (player_ != tick_from_ || swung) { // Stage 188: what it did, not what was held (Stage 202: or a swing)
 		still_ = 0;
 		ready_ = std::max(ready_ - 1.0 / READY_FALL, 0.0);
 	} else if (still_ >= READY_SETTLE) {
@@ -1795,11 +1822,17 @@ void Session::scroll(double delta) {
 }
 
 // The moving surfaces where the cycle puts them: each motion's keys interpolated at
-// the phase -- an offset and a rotation about its pivot.
+// the phase -- an offset and a rotation about its pivot (Stage 204: or its steps played
+// there and back); then the openings' where their times put them.
 void Session::apply_phase() {
 	std::vector<rc::Xf2> xfs;
 	for (size_t i = 0; i < moving_motion_.size(); i++) {
-		const std::vector<std::array<double, 4>> &keys = level_.motions[moving_motion_[i]].keys;
+		const Motion &mo = level_.motions[moving_motion_[i]];
+		if (mo.played) { // Stage 204: its steps, forward over the cycle's first half and back over its second
+			xfs.push_back(opening_pose(*mo.played, played_time(*mo.played, phase_)));
+			continue;
+		}
+		const std::vector<std::array<double, 4>> &keys = mo.keys;
 		std::array<double, 3> v{keys.front()[1], keys.front()[2], keys.front()[3]};
 		if (keys.size() > 1) {
 			size_t k = keys.size() - 1;
@@ -1822,9 +1855,24 @@ void Session::apply_phase() {
 				V2::of(double(p.x) + v[0] - (c * p.x - s * p.y), double(p.y) + v[1] - (s * p.x + c * p.y)));
 		xfs.push_back(xf);
 	}
+	for (const size_t o : moving_opening_) { // Stage 202: the openings' (0 before they are settled)
+		xfs.push_back(opening_pose(level_.openings[o], o < opening_s_.size() ? opening_s_[o] : 0.0));
+	}
 	if (world_->place_moving(xfs)) {
 		sync_nodes();
 	}
+}
+
+bool Session::swinging() const {
+	return opening_s_ != settled_openings();
+}
+
+std::vector<double> Session::settled_openings() const {
+	std::vector<double> s;
+	for (const Opening &o : level_.openings) {
+		s.push_back(rc::key_true(o.flag, flags_) ? o.total() : 0.0);
+	}
+	return s;
 }
 
 bool Session::goal_open() const { return level_.objective && holds(level_.objective->conditions, flags_); }
@@ -2592,6 +2640,9 @@ json Session::record(const json &extra) const {
 	if (!level_.motions.empty()) {
 		r["phase"] = phase_; // Stage 151 (only a level with a cycle)
 		r["cycle_auto"] = cycle_auto_;
+	}
+	if (!level_.openings.empty()) {
+		r["openings"] = opening_s_; // Stage 202 (only a level with an opening)
 	}
 	r["checkpoints"] = int(checkpoints_.size());
 	const std::optional<V2> q = self.pole(plan_.size());

@@ -7,6 +7,7 @@
 
 #include "rc/flags.hpp"
 #include "rc/trace_types.hpp"
+#include "rc/xf2.hpp"
 
 #include <nlohmann/json.hpp>
 
@@ -118,6 +119,7 @@ struct SurfaceSpec {
 	bool platform = false; // Stage 172: one-way, stood on from above, dropped through (GAME_SPEC 25.1)
 	std::optional<Marker> marker; // Stage 179
 	std::string shape; // Stage 181: an object's look (marker_shapes(); none: its carrier) -- display only, it collides as its circle
+	bool swings = false; // Stage 202: an opening's (the door's look) -- display only
 
 	bool is_portal() const { return resolver.empty() && left && left->effect.type == "portal"; }
 };
@@ -199,15 +201,52 @@ struct SpreadRule {
 	std::vector<std::string> sources;
 };
 
+// Stage 203: two points -- a translation's from and to, a rotation's pivot and aim (level coordinates)
+using PointPair = std::array<std::array<double, 2>, 2>;
+
+// rc-level/2 (Stage 202, GAME_SPEC 9.12): an element's opening (Stage 204: its motion in the mode "opening") -- its
+// steps (a rotation about a pivot, or a translation in the level's axes; Stage 203: given where the step begins),
+// played from the closed pose while its flag holds and back while it does not; its surfaces (indices into
+// Level::surfaces) move together.
+struct Opening {
+	struct Step {
+		bool rotate = false;
+		double angle = 0.0;      // a rotation: radians (clockwise on screen)
+		double px = 0, py = 0;   // ... about its pivot, where the step begins
+		double dx = 0, dy = 0;   // a translation
+		double seconds = 0.5;
+		PointPair points{};      // Stage 203: its pivot and aim, or its from and to (as written, or derived from its numbers)
+	};
+	size_t element = 0; // its index in the level's elements
+	std::vector<size_t> surfaces;
+	std::string flag; // a key or an expression (default door:<name>)
+	std::vector<Step> steps;
+	double total() const; // the steps' seconds
+};
+// The opening's pose `s` seconds into it (0: the identity, the closed pose; total(): the open pose).
+rc::Xf2 opening_pose(const Opening &o, double s);
+
 // rc-level/2 (Stage 151): an element's motion over the level's cycle -- keys
 // (phase in [0, 1), an offset dx, dy, an angle in radians about the pivot),
 // interpolated linearly and looping; its surfaces (indices into
 // Level::surfaces) move together.
 struct Motion {
 	std::vector<size_t> surfaces;
-	std::vector<std::array<double, 4>> keys;
+	std::vector<std::array<double, 4>> keys; // (Stage 203: a key given by points, lowered to these about the pivot)
 	std::optional<V2> pivot; // default: the first surface's middle (a circle: its center)
+	// Stage 203: per key, its points as the editor shows them (as written, or derived from its numbers; none: no such part)
+	struct KeyPoints {
+		std::optional<PointPair> translate, rotate;
+	};
+	std::vector<KeyPoints> points;
+	// Stage 204: or steps (an opening's), played over the cycle -- forward over its first half, back over its second
+	std::optional<Opening> played;
 };
+// The motion's pivot (its own, else its first surface's middle; a circle: its center).
+V2 motion_pivot(const Motion &m, const std::vector<LevelSurface> &surfaces);
+// Stage 204: where a motion played by steps is at the cycle's phase (its steps' time: up to its total and back)
+double played_time(const Opening &o, double phase);
+
 struct Cycle {
 	double period = 4.0;       // seconds per cycle while it runs on its own
 	double resume_after = 10.0; // seconds of no scroll and no plan change before a paused cycle runs again
@@ -267,6 +306,7 @@ struct Level {
 	std::vector<Object> objects; // Stage 146
 	std::vector<Motion> motions; // Stage 151
 	Cycle cycle;
+	std::vector<Opening> openings; // Stage 202
 	std::vector<Tagged> tagged;     // Stage 152
 	std::vector<SpreadRule> spread; // ... (default: burnt through flammable; charge through conductive from powered)
 	std::vector<Shade> shades;      // Stage 153

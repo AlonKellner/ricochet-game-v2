@@ -88,6 +88,27 @@ void click_row(rcg::Editor &ed, const std::string &label, unsigned mods = 0) {
 	FAIL("no panel row " << label);
 }
 
+// Stage 203: a click on an actions row's option `label`
+void click_action(rcg::Editor &ed, const std::string &label) {
+	const json panel = ok(ed, {{"op", "panel"}});
+	for (const json &r : panel["rows"]) {
+		if (r["kind"] != "actions") {
+			continue;
+		}
+		const json &os = r["options"];
+		for (size_t c = 0; c < os.size(); c++) {
+			if (os[c] == label) {
+				const float w = rcg::Editor::PANEL_WIDTH - 20, x = r["x"].get<float>() - 10 + w * (float(c) + 0.5f) / float(os.size()), y = r["y"].get<float>() + 10;
+				ed.pointer(rcg::Editor::PtrMove, x, y, 0, 0);
+				ed.pointer(rcg::Editor::PtrDown, x, y, rcg::Editor::BtnLeft, 0);
+				ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
+				return;
+			}
+		}
+	}
+	FAIL("no action " << label);
+}
+
 } // namespace
 
 TEST_CASE("editor: a field's text -- a paste joins its lines, the caret edits its middle (Stage 191)") {
@@ -712,6 +733,33 @@ TEST_CASE("editor: a moving element shows its keys faint; its motion is a panel 
 	CHECK(after > before); // the key's faint copy
 }
 
+TEST_CASE("editor: an opening element shows its open pose faint; its opening is a panel field; a move carries its pivot (Stage 202)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "wall", "name": "w", "start": [700, 400], "end": [700, 600]})")}});
+	auto calls = [&]() {
+		size_t n = 0;
+		for (const auto &node : ed.draw()) {
+			if (node.key.a == 3) {
+				n = node.calls->size();
+			}
+		}
+		return n;
+	};
+	const size_t before = calls();
+	click_row(ed, "motion_mode"); // (Stage 204: an opening is a motion its flag plays)
+	CHECK(element(ed, "w")["motion_mode"] == "opening");
+	click_row(ed, "motion");
+	ed.text(R"({"steps": [{"rotate": 1.5707963267948966, "pivot": [700, 500]}, {"translate": [100, 0]}]})");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(ed.errors().empty());
+	CHECK(element(ed, "w")["motion"]["steps"][1]["translate"][0] == 100);
+	CHECK(calls() > before); // the open pose's faint copy
+	ok(ed, {{"op", "move"}, {"name", "w"}, {"handle", "body"}, {"by", json::array({10, 20})}});
+	CHECK(element(ed, "w")["motion"]["steps"][0]["pivot"] == json::array({710, 520}));
+	CHECK(element(ed, "w")["motion"]["steps"][1]["translate"] == json::array({100, 0})); // (an offset: not moved)
+}
+
 TEST_CASE("editor: an element's tags and the level's spread rules are panel fields (Stage 152)") {
 	rcg::Editor ed;
 	ed.resize(1920, 1080);
@@ -1297,4 +1345,113 @@ TEST_CASE("editor: a new level has gravity, no room walls and wall edges; the pl
 	s.hold({}, 60);
 	CHECK(s.player().y + rcg::kinematics::BODY == doctest::Approx(1080 - rcg::kinematics::RADIUS - rcg::kinematics::SKIN).epsilon(1e-6));
 	CHECK(s.player().x == 960.0f);
+}
+
+TEST_CASE("editor: an opening's steps and a motion's keys placed by two clicks, their points dragged (Stage 203)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "wall", "name": "w", "start": [700, 400], "end": [800, 400]})")}});
+	ok(ed, {{"op", "select"}, {"name", "w"}});
+	// a turn: its pivot (the start: it snaps there), then where start -> end will point (down)
+	click_action(ed, "+ turn");
+	CHECK(ok(ed, {{"op", "state"}})["step_placing"] == json::parse(R"({"name": "w", "index": -1, "part": "rotate"})"));
+	click(ed, 701, 401);
+	click(ed, 700, 600);
+	CHECK(element(ed, "w")["motion"]["steps"] == json::parse(R"([{"rotate": [[700, 400], [700, 600]]}])"));
+	CHECK(ed.errors().empty());
+	// a move after it: from and to (its difference: 100 right)
+	click_action(ed, "+ move");
+	click(ed, 900, 500);
+	click(ed, 1000, 500);
+	CHECK(element(ed, "w")["motion"]["steps"][1] == json::parse(R"({"translate": [[900, 500], [1000, 500]]})"));
+	// a step's point dragged: the move's end, 50 further
+	drag(ed, 1000, 500, 1050, 500);
+	CHECK(element(ed, "w")["motion"]["steps"][1]["translate"][1] == json::array({1050, 500}));
+	// a step given by numbers: its derived points drag too (it becomes points), its seconds kept
+	ok(ed, {{"op", "set"}, {"path", "/elements/0/motion/steps/0"}, {"value", json::parse(R"({"rotate": 1.5707963267948966, "seconds": 2})")}});
+	CHECK(ed.errors().empty());
+	drag(ed, 700, 500, 600, 400); // its aim (the start + the turned chord: [700, 500]) to the left: a half turn
+	CHECK(element(ed, "w")["motion"]["steps"][0] == json::parse(R"({"rotate": [[700, 400], [600, 400]], "seconds": 2})"));
+	// re-place a step; Esc cancels a placement; remove one
+	click_action(ed, "move 1");
+	click(ed, 0, 0);
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["step_placing"].is_null());
+	CHECK(element(ed, "w")["motion"]["steps"][0]["rotate"][1] == json::array({600, 400})); // (unchanged)
+	click_action(ed, "remove 2");
+	CHECK(element(ed, "w")["motion"]["steps"].size() == 1);
+	// moving the element carries its points
+	ok(ed, {{"op", "move"}, {"name", "w"}, {"handle", "body"}, {"by", json::array({10, 20})}});
+	CHECK(element(ed, "w")["motion"]["steps"][0]["rotate"] == json::parse("[[710, 420], [610, 420]]"));
+	click_action(ed, "remove 1");
+	CHECK_FALSE(element(ed, "w").contains("motion"));
+	// a motion: keys added, a key's move and turn by two clicks (a key by numbers becomes an object)
+	click_action(ed, "+ key");
+	CHECK(element(ed, "w")["motion"]["keys"] == json::parse(R"([[0.0, 0.0, 0.0, 0.0], {"phase": 0.5}])"));
+	click_action(ed, "move 2");
+	click(ed, 710, 420);
+	click(ed, 710, 220);
+	click_action(ed, "turn 2");
+	click(ed, 710, 420);
+	click(ed, 710, 620);
+	CHECK(element(ed, "w")["motion"]["keys"][1] == json::parse(R"({"phase": 0.5, "rotate": [[710, 420], [710, 620]], "translate": [[710, 420], [710, 220]]})"));
+	CHECK(ed.errors().empty());
+	click_action(ed, "+ key");
+	CHECK(element(ed, "w")["motion"]["keys"][2] == json::parse(R"({"phase": 0.75})"));
+	// a body drag carries the keys' points and the motion's pivot
+	ok(ed, {{"op", "set"}, {"name", "w"}, {"key", "motion"}, {"value", json::parse(R"({"keys": [[0, 0, 0, 0], {"phase": 0.5, "translate": [[0, 0], [0, 10]]}], "pivot": [750, 420]})")}});
+	drag(ed, 740, 420, 760, 440);
+	CHECK(element(ed, "w")["motion"]["pivot"] == json::array({770, 440}));
+	CHECK(element(ed, "w")["motion"]["keys"][1]["translate"] == json::parse("[[20, 20], [20, 30]]"));
+	// the command form, and its refusals
+	ok(ed, {{"op", "step"}, {"name", "w"}, {"index", 0}, {"part", "translate"}, {"points", json::parse("[[0, 0], [5, 5]]")}});
+	CHECK(element(ed, "w")["motion"]["keys"][0] == json::parse(R"({"phase": 0, "translate": [[0, 0], [5, 5]]})"));
+	CHECK_FALSE(ed.command({{"op", "step"}, {"name", "w"}, {"part", "rotate"}, {"points", json::parse("[[1, 1], [1, 1]]")}}).value("ok", true));
+	CHECK_FALSE(ed.command({{"op", "step"}, {"name", "w"}, {"part", "spin"}, {"points", json::parse("[[1, 1], [2, 1]]")}}).value("ok", true));
+}
+
+TEST_CASE("editor: one motion field, its motion_mode (cycle or opening) and an opening's flag (Stage 204)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "wall", "name": "w", "start": [700, 400], "end": [800, 400]})")}});
+	ok(ed, {{"op", "set"}, {"path", "/detectors"}, {"value", json::parse(R"([{"name": "plate", "region": {"rect": [600, 600, 100, 50]}}])")}});
+	ok(ed, {{"op", "select"}, {"name", "w"}});
+	auto row = [&](const std::string &label) {
+		const json panel = ok(ed, {{"op", "panel"}});
+		for (const json &r : panel["rows"]) {
+			if (r["label"] == label) {
+				return r["value"].get<std::string>();
+			}
+		}
+		return std::string("(no row)");
+	};
+	CHECK(row("motion_mode") == "(cycle)");
+	CHECK(row("  flag") == "(no row)"); // (the cycle's mode has no flag)
+	click_action(ed, "+ move"); // a step: the cycle plays it there and back
+	click(ed, 700, 500);
+	click(ed, 800, 500);
+	CHECK(element(ed, "w")["motion"] == json::parse(R"({"steps": [{"translate": [[700, 500], [800, 500]]}]})"));
+	CHECK(ed.errors().empty());
+	// the same motion, played by a flag: the default door:<name>, one of the level's flags, typed, or the default again
+	click_row(ed, "motion_mode");
+	CHECK(element(ed, "w")["motion_mode"] == "opening");
+	CHECK(ed.errors().empty());
+	CHECK(row("  flag") == "(door:w)");
+	click_action(ed, "det:plate");
+	CHECK(element(ed, "w")["motion"]["flag"] == "det:plate");
+	click_row(ed, "  flag");
+	for (int k = 0; k < 12; k++) {
+		ed.key(rcg::Editor::KeyBackspace, 0, true);
+	}
+	ed.text("det:plate && !locked");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(element(ed, "w")["motion"]["flag"] == "det:plate && !locked");
+	CHECK(ed.errors().empty());
+	click_action(ed, "door:w");
+	CHECK_FALSE(element(ed, "w")["motion"].contains("flag"));
+	// keys are the cycle's: none in the opening's mode
+	CHECK_FALSE(ed.command({{"op", "add_key"}, {"name", "w"}}).value("ok", true));
+	click_row(ed, "motion_mode"); // back to the cycle: the steps are kept
+	CHECK(element(ed, "w")["motion_mode"] == "cycle");
+	CHECK(element(ed, "w")["motion"]["steps"].size() == 1);
 }

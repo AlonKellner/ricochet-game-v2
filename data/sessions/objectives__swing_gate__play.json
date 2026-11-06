@@ -1,0 +1,70 @@
+{
+ "schema": "rc-session/1",
+ "level": "objectives/swing_gate",
+ "kind": "kinematic",
+ "steps": [
+  {
+   "op": "cursor",
+   "at": [
+    1250.0,
+    540.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_down"
+   ],
+   "ticks": 30
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 40
+  },
+  {
+   "op": "cursor",
+   "at": [
+    1250.0,
+    540.0
+   ]
+  },
+  {
+   "op": "fire"
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 20
+  },
+  {
+   "op": "hold",
+   "actions": [],
+   "ticks": 40
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_up"
+   ],
+   "ticks": 40
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_right"
+   ],
+   "ticks": 180
+  },
+  {
+   "op": "hold",
+   "actions": [
+    "move_down"
+   ],
+   "ticks": 120
+  }
+ ]
+}

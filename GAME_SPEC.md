@@ -703,11 +703,23 @@ Presence is orthogonal to the resolver. The resolver chooses *how* a present sur
 
 ### 9.8 Moving surfaces
 
-> **Status: implemented (Stage 151, docs/TDD_56_MOTION.md).**
+> **Status: implemented (Stage 151, docs/TDD_56_MOTION.md; two-point keys: Stage 203, docs/TDD_81_TWO_POINT_STEPS.md; its mode and steps: Stage 204, docs/TDD_82_MOTION_MODE.md).**
 
 An element may move over the level's **cycle**: its `motion` keys an offset and a rotation (about a pivot,
-default its first surface's middle) at phases in [0, 1), interpolated linearly and looping. All its surfaces
-move together; a portal's image moves with it. The cycle:
+default its first surface's middle) at phases in [0, 1), interpolated linearly and looping. A key is `[phase, dx, dy,
+angle]` or, by **two points** (Stage 203, the user; as in §9.12, from the element as written),
+`{"phase": p, "rotate": [pivot, aim], "translate": [from, to]}` (either may be left out, or given by numbers: an
+angle about the motion's pivot, `[dx, dy]`): the element turned about `pivot` until its start -> end points along
+pivot -> aim -- of the turns that do, the one nearest the previous key's angle -- then moved by `to - from`. Between
+keys it turns about the motion's pivot, as a key by numbers does. All its surfaces
+move together; a portal's image moves with it.
+
+**One motion, its mode** (Stage 204, the user). An element's `motion_mode` says what plays its `motion`: `cycle` (the
+default) or `opening` (§9.12: its flag). A motion is keys (`{"keys": [...], "pivot": [x, y]}`, the cycle's only) or
+**steps** (`{"steps": [...], "flag": key}`, §9.12's, in either mode). The cycle plays steps forward over its first half
+and back over its second, each step taking its share of the half by its seconds -- as an opening whose flag holds for
+half the cycle and then not; it never holds the shot. The `flag` is the opening mode's (kept, unread, in the cycle's), so
+switching the mode keeps the motion. The cycle:
 - runs on its own, a period per cycle (default 4 s), advanced per physics tick (so every host's frames agree);
 - the **mouse wheel** sets it: each notch moves it a fiftieth of a cycle and **pauses** it;
 - a paused cycle runs again after a **shot** lands, or after `resume_after` seconds (default 10) with no scroll and
@@ -836,6 +848,43 @@ name, never an expression.
 
 Expressions are evaluated under the walk's current flags like any flag (§9.6): a hit that writes one of an
 expression's flags switches it mid-shot, and the planned path reads them under the plan's simulated flags.
+
+### 9.12 Openings
+
+> **Status: implemented (Stage 202, docs/TDD_80_OPENINGS.md; two-point steps: Stage 203, docs/TDD_81_TWO_POINT_STEPS.md; a motion's mode: Stage 204, docs/TDD_82_MOTION_MODE.md).** The user's rules (2026-11-06).
+
+An element may have an **opening**: a rigid motion from its **closed pose** (its geometry as written) to its **open
+pose**, played when a flag holds and played back when it no longer does. A door that swings about a hinge, a gate that
+slides away, a platform that a button or a detector sends across the room. An opening is the element's `motion` (§9.8)
+with `"motion_mode": "opening"` (Stage 204, the user: one motion, its mode what plays it): `{"flag": key, "steps":
+[step, ...]}`, played in order. The same steps with the mode `cycle` are played by the level's cycle instead (§9.8). A step is given by **two points** (Stage 203, the user), in
+level coordinates where the element stands when the step begins (after the earlier steps):
+- `{"rotate": [pivot, aim], "seconds": s}`: a rotation about `pivot` until the element's start -> end (its first
+  surface's; a full circle: the pivot -> its center) points along pivot -> aim, the shortest way (at most half a
+  turn; exactly half: clockwise on screen, Y-down). Also `{"rotate": angle, "pivot": [x, y]}`: by `angle` radians
+  (positive: clockwise) about `pivot` (default: the element's start where the step begins, its hinge);
+- `{"translate": [from, to], "seconds": s}`: a translation by `to - from`. Also `{"translate": [dx, dy]}`.
+
+A step's `seconds` default to 0.5. The `flag` is a flag key or an expression (§9.11), by default `door:<name>` (so a
+button's `opens: <name>` opens it). All the element's surfaces move together, a portal's image with them, as in §9.8.
+
+- **The clock.** Each opening has its time `s` in `[0, total]`, the sum of its steps' seconds. Per physics tick, `s`
+  advances one tick while the flag holds and goes back one tick while it does not, so a flag that switches mid-swing
+  turns it around where it stands. Within a step the pose is linear in its angle or offset. A level starts with each
+  opening settled: open where its flag holds under the starting flags, else closed.
+- **The shot sees the world as fired.** Time is frozen in flight (§21.1), and a flag a hit writes does not move an
+  element mid-shot: the arrow meets the element where it stood when it was fired. The swing plays once the shot
+  lands and time runs again.
+- **No shot mid-swing.** While any opening is between its poses, the player cannot fire, as while moving (§21.0): the
+  readiness falls, and rises again once every opening has settled.
+- **Nothing rides.** A swinging element carries no player and no object; it pushes them out of its way as any moving
+  collider does (§25).
+- **The preview.** A consequence (§14) that switches an opening's flag draws the element, dashed amber, at the pose it
+  will move to.
+- **The checkpoint** holds each opening's time: an undo or a reset restores it.
+
+An opening plays steps, not keys (keys are the cycle's), and a shade or an edge has no motion. A level with an opening
+records each opening's time (`openings`).
 
 ## 10. Effect system
 
@@ -3154,4 +3203,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.97.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.100.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

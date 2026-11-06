@@ -1,0 +1,92 @@
+{
+ "background": {
+  "color": [0.10000000149011612, 0.10000000149011612, 0.10000000149011612, 1.0],
+  "rect": [0.0, 0.0, 1920.0, 1080.0]
+ },
+ "bounds": [0.0, 0.0, 1920.0, 1080.0],
+ "camera": null,
+ "colliders": [],
+ "detectors": [
+  {
+   "name": "plate",
+   "region": {
+    "rect": [600.0, 620.0, 120.0, 100.0]
+   }
+  }
+ ],
+ "elements": [
+  {
+   "end": [950.0, 630.0],
+   "kind": "shield",
+   "motion": {
+    "flag": "det:plate",
+    "steps": [
+     {
+      "translate": [
+       [950.0, 630.0],
+       [950.0, 430.0]
+      ]
+     }
+    ]
+   },
+   "motion_mode": "opening",
+   "name": "slider",
+   "start": [950.0, 450.0]
+  },
+  {
+   "end": [1250.0, 680.0],
+   "face": "terminal",
+   "kind": "button",
+   "name": "switch",
+   "op": "set",
+   "opens": "gate",
+   "start": [1250.0, 400.0]
+  },
+  {
+   "end": [1360.0, 740.0],
+   "kind": "wall",
+   "motion": {
+    "steps": [
+     {
+      "rotate": [
+       [1170.0, 740.0],
+       [1170.0, 540.0]
+      ],
+      "seconds": 0.75
+     }
+    ]
+   },
+   "motion_mode": "opening",
+   "name": "gate",
+   "start": [1150.0, 740.0]
+  },
+  {
+   "end": [1150.0, 840.0],
+   "kind": "wall",
+   "name": "pen",
+   "start": [1150.0, 740.0]
+  }
+ ],
+ "features": {
+  "arrow": true,
+  "cursor": true,
+  "game": true,
+  "hud": true,
+  "preview": true
+ },
+ "gravity": [0.0, 0.0],
+ "name": "objectives/swing_gate",
+ "objective": {
+  "goal": {
+   "rect": [1180.0, 750.0, 170.0, 80.0]
+  }
+ },
+ "player": {
+  "start": [660.0, 540.0]
+ },
+ "room": {
+  "built": true,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}
