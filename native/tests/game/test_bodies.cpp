@@ -1754,3 +1754,36 @@ TEST_CASE("preview: a planned path that never reaches the cursor fades past its 
 	CHECK(faded.first < whole.first);
 	CHECK(faded.second < 2 * whole.second + 64); // (bands, not the whole walk over and over)
 }
+
+// Stage 205 (the user): a planned terminal reached, the walks aligned all the way, shows whole to it, the cursor before it
+// notwithstanding; an aim that misses it, or a divergence, fades as any plan does
+TEST_CASE("preview: aligned to a planned terminal, whole to it; missed or diverged, faded as before (Stage 205)") {
+	const auto drawn = [](const char *elements, double cx, double cy, bool whole) {
+		rcg::SessionConfig cfg;
+		cfg.full_preview = whole;
+		nlohmann::json j = nlohmann::json::parse(elements);
+		j["room"] = nlohmann::json::parse(R"({"rect": [560, 240, 800, 600], "built": false})");
+		rcg::Session s(level_of(j.dump().c_str()), cfg);
+		plan_at(s, 1200, 400);
+		REQUIRE(s.plan().size() == 1);
+		s.set_cursor(rc::V2::of(cx, cy));
+		s.settle();
+		return path_points(s);
+	};
+	const char *grapple = R"({"elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 500]}]})";
+	// on the way to it: the cursor 309 short of the hit (past the fade's 220), yet the path reaches the grapple whole
+	const std::vector<DrawnPoint> aligned = drawn(grapple, 900, 480, false), aligned_whole = drawn(grapple, 900, 480, true);
+	REQUIRE(aligned.size() == aligned_whole.size());
+	for (size_t k = 0; k < aligned.size(); k++) {
+		CHECK(aligned[k].color[3] == aligned_whole[k].color[3]);
+	}
+	CHECK(std::any_of(aligned.begin(), aligned.end(), [](const DrawnPoint &p) { return p.at.x > 1190.0f; }));
+	// the aim misses it: past the cursor it fades, as before
+	CHECK(drawn(grapple, 900, 700, false).size() < drawn(grapple, 900, 700, true).size());
+	// an unplanned mirror on the way: the walks part there, and both fade as for any plan
+	const char *mirrored = R"({"elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 500]},
+		{"kind": "mirror", "start": [1000, 420], "end": [1000, 500]}]})";
+	const std::vector<DrawnPoint> diverged = drawn(mirrored, 900, 480, false), diverged_whole = drawn(mirrored, 900, 480, true);
+	CHECK(diverged.size() < diverged_whole.size());
+	CHECK(std::none_of(diverged.begin(), diverged.end(), [](const DrawnPoint &p) { return p.at.x > 1190.0f && p.color[3] > 0.99f; }));
+}
