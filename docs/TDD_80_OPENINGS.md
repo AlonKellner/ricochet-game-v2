@@ -4,6 +4,8 @@ Your request: "a new surface type ... similar to a door, but [with] a closed pos
 opening rigid motion transformation (a sequence of rotations and translations). When the flag fires, the surface
 should rigidly animate the opening transformation from the closed position to the open position" -- doors that
 swing about an axis when a button or a detector fires, platforms a button sends across. The rule is GAME_SPEC 9.12.
+(Stage 204 retires the `opening` key: an opening is the element's `motion` with `"motion_mode": "opening"`,
+docs/TDD_82_MOTION_MODE.md.)
 
 ## Phase table
 

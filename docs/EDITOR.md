@@ -93,22 +93,29 @@ With Alt held, the point stays exactly under the pointer.
 line when dragged), a circle's center and radius, and the player's start. When an endpoint moves, the via
 stays where it is (GAME_SPEC 19.2).
 
-**Motion.** An element's `motion` field takes its keys (`{"keys": [[phase, dx, dy, angle], ...]}`, or a key by two points,
-`{"phase": p, "translate": [from, to], "rotate": [pivot, aim]}`). The element is drawn faint and dashed where each key
-puts it, and the level's `cycle` field sets the period. Play-test (F5) to see it move; the wheel sets the cycle there.
+**Motion.** An element's `motion` field takes how it moves: steps (`{"steps": [{"rotate": [pivot, aim]}, {"translate":
+[from, to]}]}`, or by numbers: `{"rotate": 1.5708}`, its `pivot` by default the element's start, its hinge;
+`{"translate": [0, -100]}`) or keys (`{"keys": [[phase, dx, dy, angle], ...]}`, or a key by two points, `{"phase": p,
+"translate": [from, to], "rotate": [pivot, aim]}`). The element is drawn faint and dashed where it goes: after each step
+(the last the strongest) or at each key.
 
-**Opening.** An element's `opening` field takes its steps (`{"steps": [{"rotate": [pivot, aim]}, {"translate": [from, to]}]}`,
-or by numbers: `{"rotate": 1.5708}`, its `pivot` by default the element's start, its hinge; `{"translate": [0, -100]}`).
-The element is drawn faint, dashed amber, after each step, its open pose the strongest. Play-test (F5) and fire at its
-button (`opens`: its name) to see it swing.
+**Its mode** (Stage 204). The `motion_mode` row, under it, says what plays the motion; a click switches it, and the
+motion is kept:
+- `cycle` (the default, lavender): the level's cycle -- keys looping, steps forward over its first half and back over
+  its second. The level's `cycle` field sets the period. Play-test (F5) to see it move; the wheel sets the cycle there.
+- `opening` (amber): its flag -- the steps play while the flag holds and back when it does not (keys are refused). Its
+  `flag` row shows the flag (`(door:<name>)`: the default, which a button with `opens: <name>` sets). Click it to type
+  a key or an expression (`det:plate && !locked`; empty: the default), or click one of the chips under it: the
+  default, each detector's flag, and the flags the level's buttons and doors use (the one it has lit). Play-test (F5)
+  and fire at its button, or step on its detector, to see it open.
 
-**Steps and keys by two points** (Stage 203). The selected element's panel lists its opening's steps (or its motion's
+**Steps and keys by two points** (Stage 203). The selected element's panel lists its motion's steps (or its
 keys), each its JSON (click to type it) with a row of actions, then a row to add one:
 - `+ turn`: click the pivot, then where the element's start -> end will point -- it turns about the pivot, the shortest
   way, until it points there; `+ move`: click where the move starts, then where it ends (the move: the difference). The
-  points are where the element stands when the step begins: after the earlier steps, drawn faint. `+ motion key` (an
-  element without an opening) starts a motion instead: a key at rest and a key at phase 0.5.
-- On a step: `turn n` / `move n` place it anew, `remove n` removes it (the last one removes the opening).
+  points are where the element stands when the step begins: after the earlier steps, drawn faint. `+ key` (an element
+  without a motion, in the cycle's mode) starts keys instead: a key at rest and a key at phase 0.5.
+- On a step: `turn n` / `move n` place it anew, `remove n` removes it (the last one removes the motion; its mode stays).
 - On a key: `move n` / `turn n` place its move or its turn (a key's points are from the element as written; its turn
   is the one nearest the previous key's), `remove n` removes it; `+ key` adds one, halfway from the last to the cycle's
   end (type its phase in its row).
@@ -133,7 +140,7 @@ the level). They are lit, the panel lists them, and their box is drawn dashed wi
 - drag any of them: they all move, by whole grid steps, their shapes kept;
 - a corner: they scale about the opposite corner, uniformly (Shift: each axis free); a side's middle: they stretch
   from the opposite side. Every point lands on the grid (Alt: off it), a rectangle stays a rectangle, a circle's
-  radius scales by the mean factor (to whole units), a portal's displacement, a motion's offsets and an opening's translations scale with them (its pivots and its steps' and keys' two points are points).
+  radius scales by the mean factor (to whole units), a portal's displacement, a motion's offsets and its steps' translations scale with them (its pivots and its steps' and keys' two points are points).
   The box keeps at least a grid step;
 - Delete removes them, Ctrl+D duplicates them, the arrows move them, Esc deselects.
 

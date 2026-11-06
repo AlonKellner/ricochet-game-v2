@@ -4,7 +4,8 @@ Your request: "I want the sequence of opening to be visually editable. Specifica
 a translation by placing two arbitrary points, their difference is the translation. I also want to be able to
 configure rotation by placing two arbitrary points, the first one is the pivot and the angle between the points is
 the target angle for the start and end points of the surface ... Additionally, the same mechanism should be supported
-for moving surfaces as well." The rules are GAME_SPEC 9.12 (openings) and 9.8 (motion keys).
+for moving surfaces as well." The rules are GAME_SPEC 9.12 (openings) and 9.8 (motion keys). (Stage 204 folds the
+`opening` key into `motion` with `"motion_mode": "opening"`: docs/TDD_82_MOTION_MODE.md.)
 
 ## Phase table
 

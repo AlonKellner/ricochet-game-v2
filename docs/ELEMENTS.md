@@ -160,7 +160,7 @@ flag) and state writes on hits:
 | a state that comes back | two surfaces on one geometry, each present in one state, each writing the other | `toggle_surface` |
 
 What the kit cannot say needs a primitive. Moving surfaces have one: the level's `cycle` and an element's `motion`
-(GAME_SPEC 9.8, docs/TDD_56_MOTION.md); surfaces that move when a flag holds another: an element's `opening` (a door
+(GAME_SPEC 9.8, docs/TDD_56_MOTION.md); surfaces that move when a flag holds another: an opening, the same `motion` with `"motion_mode": "opening"` (a door
 that swings about a hinge, a gate that slides, a platform a button sends across; GAME_SPEC 9.12,
 docs/TDD_80_OPENINGS.md; a step or a key by two points, Stage 203). A `door` vanishes for the arrow that opens it; an opening moves once the shot lands. Spreading has one: tags and the level's `spread` rules (below). Light and
 shadow have one: a template's `shade` (below).
