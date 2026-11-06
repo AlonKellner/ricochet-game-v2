@@ -775,22 +775,117 @@ Level parse_level_json(const json &j) {
 		}
 	}
 	const json &es = j["elements"];
+	// Stage 151, 202, 204: the elements' motions -- `motion_mode` cycle (default: the level's cycle plays it, by keys
+	// or by steps) or opening (GAME_SPEC 9.12: its flag plays its steps)
 	for (size_t i = 0; i < es.size(); i++) {
-		if (!es[i].is_object() || !es[i].contains("motion")) {
+		if (!es[i].is_object()) {
 			continue;
 		}
-		const std::string mp = "level.elements[" + std::to_string(i) + "].motion";
+		const std::string prefix = "level.elements[" + std::to_string(i) + "]", mp = prefix + ".motion";
+		std::string mode = "cycle";
+		if (const json *v = opt(es[i], "motion_mode")) {
+			if (!v->is_string() || (*v != "cycle" && *v != "opening")) {
+				fail(prefix + ".motion_mode", "cycle or opening expected");
+			}
+			mode = v->get<std::string>();
+		}
+		if (!es[i].contains("motion")) {
+			continue;
+		}
 		const json &m = es[i]["motion"];
-		only_keys(m, mp, {"keys", "pivot"});
-		Motion mo;
-		const std::string prefix = "level.elements[" + std::to_string(i) + "]";
+		if (!m.is_object()) {
+			fail(mp, "{\"keys\": [...]} or {\"steps\": [...]} expected");
+		}
+		std::vector<size_t> surfaces;
 		for (size_t k = 0; k < low.origins.size(); k++) {
 			if (low.origins[k].rfind(prefix, 0) == 0 && (low.origins[k].size() == prefix.size() || low.origins[k][prefix.size()] != '[')) {
-				mo.surfaces.push_back(k);
+				surfaces.push_back(k);
 			}
 		}
-		if (mo.surfaces.empty()) {
+		if (surfaces.empty()) {
 			fail(mp, "the element has no surfaces to move");
+		}
+		const SurfaceSpec &first = lv.surfaces[surfaces.front()].spec;
+		// its steps (an opening's form, either mode)
+		auto read_steps = [&](Opening &o) {
+			const std::string op = mp;
+			const json &steps = req(m, "steps", mp);
+			if (!steps.is_array() || steps.empty()) {
+				fail(mp + ".steps", "an array of {rotate, pivot, seconds} or {translate, seconds} expected");
+			}
+			o.element = i;
+			o.surfaces = surfaces;
+			o.flag = opt(m, "flag") ? read_key(m["flag"], mp + ".flag") : "door:" + es[i].value("name", std::string());
+			Pose pose;
+			for (size_t k = 0; k < steps.size(); k++) {
+				const std::string sp = op + ".steps[" + std::to_string(k) + "]";
+				const json &st = steps[k];
+				Opening::Step s;
+				if (st.is_object() && st.contains("rotate")) {
+					s.rotate = true;
+					if (is_points(st["rotate"])) {
+						only_keys(st, sp, {"rotate", "seconds"});
+						s.points = points(st["rotate"], sp + ".rotate");
+						s.angle = turn_to(first, pose, s.points, sp + ".rotate");
+					} else {
+						only_keys(st, sp, {"rotate", "pivot", "seconds"});
+						s.angle = num(st["rotate"], sp + ".rotate");
+						s.points = aimed(first, pose, opt(st, "pivot") ? pair(st["pivot"], sp + ".pivot") : anchor(first, pose), s.angle);
+					}
+					s.px = s.points[0][0];
+					s.py = s.points[0][1];
+					pose.turn(s.angle, s.px, s.py);
+				} else if (st.is_object() && st.contains("translate")) {
+					only_keys(st, sp, {"translate", "seconds"});
+					if (is_points(st["translate"])) {
+						s.points = points(st["translate"], sp + ".translate");
+						s.dx = s.points[1][0] - s.points[0][0];
+						s.dy = s.points[1][1] - s.points[0][1];
+					} else {
+						const auto d = pair(st["translate"], sp + ".translate");
+						const std::array<double, 2> from = anchor(first, pose);
+						s.points = {from, {from[0] + d[0], from[1] + d[1]}};
+						s.dx = d[0];
+						s.dy = d[1];
+					}
+					pose.tx += s.dx;
+					pose.ty += s.dy;
+				} else {
+					fail(sp, "{rotate, pivot, seconds} or {translate, seconds} expected");
+				}
+				if (const json *v = opt(st, "seconds")) {
+					s.seconds = num(*v, sp + ".seconds");
+					if (!(s.seconds > 0)) {
+						fail(sp + ".seconds", "a positive number of seconds expected");
+					}
+				}
+				o.steps.push_back(s);
+			}
+		};
+		if (mode == "opening") {
+			if (m.contains("keys")) {
+				fail(mp + ".keys", "an opening plays steps (keys are the cycle's)");
+			}
+			only_keys(m, mp, {"flag", "steps"});
+			Opening o;
+			read_steps(o);
+			for (const size_t k : o.surfaces) {
+				lv.surfaces[k].spec.swings = true;
+			}
+			lv.openings.push_back(std::move(o));
+			continue;
+		}
+		only_keys(m, mp, {"keys", "pivot", "steps", "flag"}); // (a flag is the opening mode's: kept, unread, in the cycle's)
+		Motion mo;
+		mo.surfaces = surfaces;
+		if (m.contains("steps")) {
+			if (m.contains("keys") || m.contains("pivot")) {
+				fail(mp, "steps or keys, not both (a step has its own pivot)");
+			}
+			mo.played.emplace();
+			read_steps(*mo.played);
+			lv.motions.push_back(std::move(mo));
+			continue;
 		}
 		if (const json *p = opt(m, "pivot")) {
 			mo.pivot = vec(*p, mp + ".pivot");
@@ -802,7 +897,6 @@ Level parse_level_json(const json &j) {
 		// Stage 203 (GAME_SPEC 9.8): a key by points, from the element as written -- turned about its pivot until its
 		// start -> end points along pivot -> aim (the turn nearest the previous key's), then moved by to - from;
 		// lowered to [phase, dx, dy, angle] about the motion's pivot. A key by numbers shows points derived from them.
-		const SurfaceSpec &first = lv.surfaces[mo.surfaces.front()].spec;
 		const V2 pv = motion_pivot(mo, lv.surfaces);
 		const std::array<double, 2> P{pv.x, pv.y};
 		const Pose rest;
@@ -866,86 +960,6 @@ Level parse_level_json(const json &j) {
 		}
 		lv.motions.push_back(std::move(mo));
 	}
-	// Stage 202 (GAME_SPEC 9.12): the elements' openings
-	for (size_t i = 0; i < es.size(); i++) {
-		if (!es[i].is_object() || !es[i].contains("opening")) {
-			continue;
-		}
-		const std::string prefix = "level.elements[" + std::to_string(i) + "]", op = prefix + ".opening";
-		if (es[i].contains("motion")) {
-			fail(op, "an element has a motion or an opening, not both");
-		}
-		const json &m = es[i]["opening"];
-		only_keys(m, op, {"flag", "steps"});
-		Opening o;
-		o.element = i;
-		o.flag = opt(m, "flag") ? read_key(m["flag"], op + ".flag") : "door:" + es[i].value("name", std::string());
-		const json &steps = req(m, "steps", op);
-		if (!steps.is_array() || steps.empty()) {
-			fail(op + ".steps", "an array of {rotate, pivot, seconds} or {translate, seconds} expected");
-		}
-		for (size_t k = 0; k < low.origins.size(); k++) {
-			if (low.origins[k].rfind(prefix, 0) == 0 && (low.origins[k].size() == prefix.size() || low.origins[k][prefix.size()] != '[')) {
-				o.surfaces.push_back(k);
-			}
-		}
-		if (o.surfaces.empty()) {
-			fail(op, "the element has no surfaces to move");
-		}
-		for (const size_t k : o.surfaces) {
-			lv.surfaces[k].spec.swings = true;
-		}
-		// Stage 203: a step's points are where the step begins (the earlier steps' pose): a rotation by its pivot and
-		// aim (its start -> end turned, the shortest way, along pivot -> aim) or by an angle about its pivot (default:
-		// its start there); a translation by its from and to, or by [dx, dy]
-		const SurfaceSpec &first = lv.surfaces[o.surfaces.front()].spec;
-		Pose pose;
-		for (size_t k = 0; k < steps.size(); k++) {
-			const std::string sp = op + ".steps[" + std::to_string(k) + "]";
-			const json &st = steps[k];
-			Opening::Step s;
-			if (st.is_object() && st.contains("rotate")) {
-				s.rotate = true;
-				if (is_points(st["rotate"])) {
-					only_keys(st, sp, {"rotate", "seconds"});
-					s.points = points(st["rotate"], sp + ".rotate");
-					s.angle = turn_to(first, pose, s.points, sp + ".rotate");
-				} else {
-					only_keys(st, sp, {"rotate", "pivot", "seconds"});
-					s.angle = num(st["rotate"], sp + ".rotate");
-					s.points = aimed(first, pose, opt(st, "pivot") ? pair(st["pivot"], sp + ".pivot") : anchor(first, pose), s.angle);
-				}
-				s.px = s.points[0][0];
-				s.py = s.points[0][1];
-				pose.turn(s.angle, s.px, s.py);
-			} else if (st.is_object() && st.contains("translate")) {
-				only_keys(st, sp, {"translate", "seconds"});
-				if (is_points(st["translate"])) {
-					s.points = points(st["translate"], sp + ".translate");
-					s.dx = s.points[1][0] - s.points[0][0];
-					s.dy = s.points[1][1] - s.points[0][1];
-				} else {
-					const auto d = pair(st["translate"], sp + ".translate");
-					const std::array<double, 2> from = anchor(first, pose);
-					s.points = {from, {from[0] + d[0], from[1] + d[1]}};
-					s.dx = d[0];
-					s.dy = d[1];
-				}
-				pose.tx += s.dx;
-				pose.ty += s.dy;
-			} else {
-				fail(sp, "{rotate, pivot, seconds} or {translate, seconds} expected");
-			}
-			if (const json *v = opt(st, "seconds")) {
-				s.seconds = num(*v, sp + ".seconds");
-				if (!(s.seconds > 0)) {
-					fail(sp + ".seconds", "a positive number of seconds expected");
-				}
-			}
-			o.steps.push_back(s);
-		}
-		lv.openings.push_back(std::move(o));
-	}
 	// Stage 153: the shades (their regions' sides checked against their geometry; they do not move)
 	for (const Lowered::Shaded &sd : low.shaded) {
 		const std::string sp = sd.at + " (" + sd.name + ")";
@@ -992,7 +1006,7 @@ Level parse_level_json(const json &j) {
 		}
 		for (const Opening &o : lv.openings) {
 			if (std::find(o.surfaces.begin(), o.surfaces.end(), sh.surface) != o.surfaces.end()) {
-				fail(sp + ".opening", "a shade does not move (Stage 153)");
+				fail(sp + ".motion", "a shade does not move (Stage 153)");
 			}
 		}
 		lv.shades.push_back(std::move(sh));
@@ -1057,6 +1071,11 @@ rc::Xf2 opening_pose(const Opening &o, double s) {
 	}
 	const double c = std::cos(p.theta), sn = std::sin(p.theta);
 	return rc::Xf2::of(V2::of(c, sn), V2::of(-sn, c), V2::of(p.tx, p.ty));
+}
+
+double played_time(const Opening &o, double phase) {
+	const double total = o.total();
+	return phase < 0.5 ? 2.0 * phase * total : 2.0 * (1.0 - phase) * total;
 }
 
 V2 motion_pivot(const Motion &m, const std::vector<LevelSurface> &surfaces) {

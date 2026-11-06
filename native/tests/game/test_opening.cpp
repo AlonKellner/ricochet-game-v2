@@ -1,4 +1,4 @@
-// Stage 202 (GAME_SPEC 9.12, docs/TDD_80): openings. An element's opening plays
+// Stage 202 (GAME_SPEC 9.12, docs/TDD_80): openings (Stage 204: a motion in the mode "opening"). An element's opening plays
 // its steps (rotations about a pivot, translations; Stage 203: by two points, given
 // where the step begins) from its closed pose
 // while its flag holds, and back while it does not; the shot sees the world as
@@ -41,7 +41,7 @@ const rcg::BuiltSurface &swinging(const rcg::Session &s, size_t o = 0) {
 const char *const GATE = R"({"elements": [
 	{"kind": "button", "name": "b", "opens": "gate", "start": [900, 450], "end": [900, 630]},
 	{"kind": "wall", "name": "gate", "start": [1000, 400], "end": [1000, 600],
-	 "opening": {"steps": [{"rotate": 1.5707963267948966}]}}]})";
+	 "motion_mode": "opening", "motion": {"steps": [{"rotate": 1.5707963267948966}]}}]})";
 
 } // namespace
 
@@ -101,7 +101,7 @@ TEST_CASE("opening: a flag that switches mid-swing turns it where it stands; und
 	// a detector's flag (an expression): it opens while the player stands in it, and turns back on leaving
 	rcg::Session d(level_of(R"({"detectors": [{"name": "plate", "region": {"rect": [600, 500, 100, 80]}}],
 		"elements": [{"kind": "wall", "name": "w", "start": [1000, 400], "end": [1000, 600],
-		  "opening": {"flag": "det:plate && !locked", "steps": [{"translate": [0, -100], "seconds": 1}]}}]})"));
+		  "motion_mode": "opening", "motion": {"flag": "det:plate && !locked", "steps": [{"translate": [0, -100], "seconds": 1}]}}]})"));
 	d.hold({}, 10);
 	CHECK(d.flags().is_true("det:plate"));
 	CHECK(d.openings()[0] == doctest::Approx(9.0 / 60.0)); // (the detector writes after the tick's swing)
@@ -115,7 +115,7 @@ TEST_CASE("opening: a flag that switches mid-swing turns it where it stands; und
 
 TEST_CASE("opening: steps in order -- a rotation's pivot is where its step begins; a level starts settled") {
 	const rcg::Level lv = level_of(R"({"elements": [{"kind": "wall", "name": "g", "start": [0, 0], "end": [100, 0],
-		"opening": {"steps": [{"translate": [100, 0]}, {"rotate": 1.5707963267948966, "pivot": [100, 0], "seconds": 1}]}}]})");
+		"motion_mode": "opening", "motion": {"steps": [{"translate": [100, 0]}, {"rotate": 1.5707963267948966, "pivot": [100, 0], "seconds": 1}]}}]})");
 	REQUIRE(lv.openings.size() == 1);
 	const rcg::Opening &o = lv.openings[0];
 	CHECK(o.flag == "door:g");
@@ -131,7 +131,7 @@ TEST_CASE("opening: steps in order -- a rotation's pivot is where its step begin
 	CHECK(mid.xform(rc::V2::of(100, 0)).y == doctest::Approx(100 * std::sin(QUARTER / 2)));
 	// its flag set from the start: open from the start, and nothing swings
 	rcg::Session s(level_of(R"({"flags": {"door:gate": true}, "elements": [
-		{"kind": "wall", "name": "gate", "start": [1000, 400], "end": [1000, 600], "opening": {"steps": [{"rotate": 1.5707963267948966}]}}]})"));
+		{"kind": "wall", "name": "gate", "start": [1000, 400], "end": [1000, 600], "motion_mode": "opening", "motion": {"steps": [{"rotate": 1.5707963267948966}]}}]})"));
 	CHECK(s.openings()[0] == 0.5);
 	CHECK_FALSE(s.swinging());
 	CHECK(swinging(s).seg.e.x == doctest::Approx(800).epsilon(1e-5));
@@ -148,7 +148,7 @@ TEST_CASE("opening: steps in order -- a rotation's pivot is where its step begin
 TEST_CASE("opening: steps by two points (Stage 203) -- a translation's from and to, a rotation's pivot and aim") {
 	// up 50, then about the start (where the translation put it) until start -> end points down
 	const rcg::Level lv = level_of(R"({"elements": [{"kind": "wall", "name": "g", "start": [0, 0], "end": [100, 0],
-		"opening": {"steps": [{"translate": [[30, 30], [30, -20]]}, {"rotate": [[0, -50], [0, 50]]}]}}]})");
+		"motion_mode": "opening", "motion": {"steps": [{"translate": [[30, 30], [30, -20]]}, {"rotate": [[0, -50], [0, 50]]}]}}]})");
 	const rcg::Opening &o = lv.openings[0];
 	CHECK(o.steps[0].dx == 0);
 	CHECK(o.steps[0].dy == -50);
@@ -164,7 +164,7 @@ TEST_CASE("opening: steps by two points (Stage 203) -- a translation's from and 
 	// the shortest way: aimed up-left, it turns counter-clockwise; aimed straight back, half a turn clockwise; an aim
 	// sets the direction from the step's pose (after a quarter turn, back to the axis is a quarter turn back)
 	auto angles = [&](const char *steps) {
-		const rcg::Level l = level_of((std::string(R"({"elements": [{"kind": "wall", "name": "g", "start": [0, 0], "end": [100, 0], "opening": {"steps": )")
+		const rcg::Level l = level_of((std::string(R"({"elements": [{"kind": "wall", "name": "g", "start": [0, 0], "end": [100, 0], "motion_mode": "opening", "motion": {"steps": )")
 				+ steps + "}}]}").c_str());
 		std::vector<double> out;
 		for (const rcg::Opening::Step &st : l.openings[0].steps) {
@@ -179,7 +179,7 @@ TEST_CASE("opening: steps by two points (Stage 203) -- a translation's from and 
 	CHECK(two[1] == doctest::Approx(-QUARTER));
 	// a circle: the pivot to its center sets its direction
 	const rcg::Level c = level_of(R"({"elements": [{"kind": "wall", "name": "c", "circle": {"center": [100, 0], "radius": 20},
-		"opening": {"steps": [{"rotate": [[0, 0], [0, 100]]}]}}]})");
+		"motion_mode": "opening", "motion": {"steps": [{"rotate": [[0, 0], [0, 100]]}]}}]})");
 	CHECK(c.openings[0].steps[0].angle == QUARTER);
 	CHECK(rcg::opening_pose(c.openings[0], 0.5).xform(rc::V2::of(100, 0)).y == doctest::Approx(100));
 }
@@ -249,20 +249,55 @@ TEST_CASE("opening: the schema") {
 		return std::string("no error");
 	};
 	auto has = [&](const char *extra, const char *what) { return err(extra).find(what) != std::string::npos; };
-	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"steps": []}}]})", "an array of {rotate"));
-	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"steps": [{"spin": 1}]}}]})", "{translate, seconds} expected"));
-	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"steps": [{"translate": [1, 0], "seconds": 0}]}}]})",
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion_mode": "opening", "motion": {"steps": []}}]})", "an array of {rotate"));
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion_mode": "opening", "motion": {"steps": [{"spin": 1}]}}]})", "{translate, seconds} expected"));
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion_mode": "opening", "motion": {"steps": [{"translate": [1, 0], "seconds": 0}]}}]})",
 			"a positive number of seconds"));
-	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"steps": [{"translate": [1, 0], "pivot": [0, 0]}]}}]})",
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion_mode": "opening", "motion": {"steps": [{"translate": [1, 0], "pivot": [0, 0]}]}}]})",
 			"pivot"));
-	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"steps": [{"rotate": [[1, 1], [1, 1]]}]}}]})",
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion_mode": "opening", "motion": {"steps": [{"rotate": [[1, 1], [1, 1]]}]}}]})",
 			"two different points expected"));
-	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"steps": [{"rotate": [[1, 1], [2, 1]], "pivot": [0, 0]}]}}]})",
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion_mode": "opening", "motion": {"steps": [{"rotate": [[1, 1], [2, 1]], "pivot": [0, 0]}]}}]})",
 			"pivot"));
-	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"steps": [{"translate": [[1, 1], [2]]}]}}]})",
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion_mode": "opening", "motion": {"steps": [{"translate": [[1, 1], [2]]}]}}]})",
 			"translate[1]"));
-	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "opening": {"flag": "a &&", "steps": [{"translate": [1, 0]}]}}]})",
-			"opening.flag"));
-	CHECK(has(R"({"cycle": {}, "elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion": {"keys": [[0, 0, 0, 0]]},
-		"opening": {"steps": [{"translate": [1, 0]}]}}]})", "a motion or an opening, not both"));
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion_mode": "opening", "motion": {"flag": "a &&", "steps": [{"translate": [1, 0]}]}}]})",
+			"motion.flag"));
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion_mode": "opening", "motion": {"keys": [[0, 0, 0, 0]]}}]})",
+			"an opening plays steps"));
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion_mode": "door", "motion": {"steps": [{"translate": [1, 0]}]}}]})",
+			"cycle or opening expected"));
+	CHECK(has(R"({"elements": [{"kind": "wall", "start": [0, 0], "end": [9, 0], "motion": {"keys": [[0, 0, 0, 0]], "steps": [{"translate": [1, 0]}]}}]})",
+			"steps or keys, not both"));
+}
+
+TEST_CASE("motion: steps played by the cycle, there and back; the same steps an opening plays (Stage 204)") {
+	const char *const STEPS = R"("motion": {"steps": [{"translate": [[0, 0], [100, 0]]}, {"rotate": [[1100, 400], [1100, 500]]}], "flag": "det:x"})";
+	rcg::Session s(level_of((std::string(R"({"cycle": {"period": 4}, "elements": [{"kind": "wall", "name": "w", "start": [1000, 400], "end": [1100, 400], )")
+			+ STEPS + "}]}").c_str()));
+	REQUIRE(s.level().motions.size() == 1);
+	REQUIRE(s.level().motions[0].played);
+	CHECK(s.level().openings.empty()); // (the cycle plays it: no flag, no swing)
+	const rcg::Opening &pl = *s.level().motions[0].played;
+	CHECK(rcg::played_time(pl, 0.25) == 0.5); // the steps' second forward over half the cycle
+	CHECK(rcg::played_time(pl, 0.5) == 1.0);
+	CHECK(rcg::played_time(pl, 0.75) == 0.5); // ... and back
+	const int id = s.level().surfaces[s.level().motions[0].surfaces.front()].ids.front();
+	auto seg = [&]() { return s.world().by_id(id)->seg; };
+	s.hold({}, 60); // phase 0.25: the move done
+	CHECK(seg().s.x == doctest::Approx(1100).epsilon(1e-5));
+	CHECK(seg().e.x == doctest::Approx(1200).epsilon(1e-5));
+	s.hold({}, 60); // phase 0.5: the turn done (about the moved start, pointing down)
+	CHECK(seg().e.x == doctest::Approx(1100).epsilon(1e-5));
+	CHECK(seg().e.y == doctest::Approx(500).epsilon(1e-5));
+	CHECK(s.can_fire()); // (a cycle's motion never holds the shot)
+	s.hold({}, 120); // and back
+	CHECK(seg().s.x == doctest::Approx(1000).epsilon(1e-4));
+	CHECK(seg().e.y == doctest::Approx(400).epsilon(1e-4));
+	// the same element with motion_mode opening: its flag (kept in the cycle's mode) plays them
+	const rcg::Level op = level_of((std::string(R"({"elements": [{"kind": "wall", "name": "w", "start": [1000, 400], "end": [1100, 400], "motion_mode": "opening", )")
+			+ STEPS + "}]}").c_str());
+	REQUIRE(op.openings.size() == 1);
+	CHECK(op.openings[0].flag == "det:x");
+	CHECK(op.motions.empty());
 }

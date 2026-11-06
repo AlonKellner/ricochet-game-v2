@@ -703,7 +703,7 @@ Presence is orthogonal to the resolver. The resolver chooses *how* a present sur
 
 ### 9.8 Moving surfaces
 
-> **Status: implemented (Stage 151, docs/TDD_56_MOTION.md; two-point keys: Stage 203, docs/TDD_81_TWO_POINT_STEPS.md).**
+> **Status: implemented (Stage 151, docs/TDD_56_MOTION.md; two-point keys: Stage 203, docs/TDD_81_TWO_POINT_STEPS.md; its mode and steps: Stage 204, docs/TDD_82_MOTION_MODE.md).**
 
 An element may move over the level's **cycle**: its `motion` keys an offset and a rotation (about a pivot,
 default its first surface's middle) at phases in [0, 1), interpolated linearly and looping. A key is `[phase, dx, dy,
@@ -712,7 +712,14 @@ angle]` or, by **two points** (Stage 203, the user; as in §9.12, from the eleme
 angle about the motion's pivot, `[dx, dy]`): the element turned about `pivot` until its start -> end points along
 pivot -> aim -- of the turns that do, the one nearest the previous key's angle -- then moved by `to - from`. Between
 keys it turns about the motion's pivot, as a key by numbers does. All its surfaces
-move together; a portal's image moves with it. The cycle:
+move together; a portal's image moves with it.
+
+**One motion, its mode** (Stage 204, the user). An element's `motion_mode` says what plays its `motion`: `cycle` (the
+default) or `opening` (§9.12: its flag). A motion is keys (`{"keys": [...], "pivot": [x, y]}`, the cycle's only) or
+**steps** (`{"steps": [...], "flag": key}`, §9.12's, in either mode). The cycle plays steps forward over its first half
+and back over its second, each step taking its share of the half by its seconds -- as an opening whose flag holds for
+half the cycle and then not; it never holds the shot. The `flag` is the opening mode's (kept, unread, in the cycle's), so
+switching the mode keeps the motion. The cycle:
 - runs on its own, a period per cycle (default 4 s), advanced per physics tick (so every host's frames agree);
 - the **mouse wheel** sets it: each notch moves it a fiftieth of a cycle and **pauses** it;
 - a paused cycle runs again after a **shot** lands, or after `resume_after` seconds (default 10) with no scroll and
@@ -844,12 +851,13 @@ expression's flags switches it mid-shot, and the planned path reads them under t
 
 ### 9.12 Openings
 
-> **Status: implemented (Stage 202, docs/TDD_80_OPENINGS.md; two-point steps: Stage 203, docs/TDD_81_TWO_POINT_STEPS.md).** The user's rules (2026-11-06).
+> **Status: implemented (Stage 202, docs/TDD_80_OPENINGS.md; two-point steps: Stage 203, docs/TDD_81_TWO_POINT_STEPS.md; a motion's mode: Stage 204, docs/TDD_82_MOTION_MODE.md).** The user's rules (2026-11-06).
 
 An element may have an **opening**: a rigid motion from its **closed pose** (its geometry as written) to its **open
 pose**, played when a flag holds and played back when it no longer does. A door that swings about a hinge, a gate that
-slides away, a platform that a button or a detector sends across the room. The `opening` is
-`{"flag": key, "steps": [step, ...]}`, played in order. A step is given by **two points** (Stage 203, the user), in
+slides away, a platform that a button or a detector sends across the room. An opening is the element's `motion` (§9.8)
+with `"motion_mode": "opening"` (Stage 204, the user: one motion, its mode what plays it): `{"flag": key, "steps":
+[step, ...]}`, played in order. The same steps with the mode `cycle` are played by the level's cycle instead (§9.8). A step is given by **two points** (Stage 203, the user), in
 level coordinates where the element stands when the step begins (after the earlier steps):
 - `{"rotate": [pivot, aim], "seconds": s}`: a rotation about `pivot` until the element's start -> end (its first
   surface's; a full circle: the pivot -> its center) points along pivot -> aim, the shortest way (at most half a
@@ -875,7 +883,7 @@ button's `opens: <name>` opens it). All the element's surfaces move together, a 
   will move to.
 - **The checkpoint** holds each opening's time: an undo or a reset restores it.
 
-An element does not have both a `motion` and an `opening`, and a shade or an edge has neither. A level with an opening
+An opening plays steps, not keys (keys are the cycle's), and a shade or an edge has no motion. A level with an opening
 records each opening's time (`openings`).
 
 ## 10. Effect system
@@ -3195,4 +3203,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.99.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.100.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

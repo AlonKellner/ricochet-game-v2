@@ -1822,11 +1822,17 @@ void Session::scroll(double delta) {
 }
 
 // The moving surfaces where the cycle puts them: each motion's keys interpolated at
-// the phase -- an offset and a rotation about its pivot.
+// the phase -- an offset and a rotation about its pivot (Stage 204: or its steps played
+// there and back); then the openings' where their times put them.
 void Session::apply_phase() {
 	std::vector<rc::Xf2> xfs;
 	for (size_t i = 0; i < moving_motion_.size(); i++) {
-		const std::vector<std::array<double, 4>> &keys = level_.motions[moving_motion_[i]].keys;
+		const Motion &mo = level_.motions[moving_motion_[i]];
+		if (mo.played) { // Stage 204: its steps, forward over the cycle's first half and back over its second
+			xfs.push_back(opening_pose(*mo.played, played_time(*mo.played, phase_)));
+			continue;
+		}
+		const std::vector<std::array<double, 4>> &keys = mo.keys;
 		std::array<double, 3> v{keys.front()[1], keys.front()[2], keys.front()[3]};
 		if (keys.size() > 1) {
 			size_t k = keys.size() - 1;

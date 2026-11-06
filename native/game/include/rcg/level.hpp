@@ -204,26 +204,10 @@ struct SpreadRule {
 // Stage 203: two points -- a translation's from and to, a rotation's pivot and aim (level coordinates)
 using PointPair = std::array<std::array<double, 2>, 2>;
 
-// rc-level/2 (Stage 151): an element's motion over the level's cycle -- keys
-// (phase in [0, 1), an offset dx, dy, an angle in radians about the pivot),
-// interpolated linearly and looping; its surfaces (indices into
+// rc-level/2 (Stage 202, GAME_SPEC 9.12): an element's opening (Stage 204: its motion in the mode "opening") -- its
+// steps (a rotation about a pivot, or a translation in the level's axes; Stage 203: given where the step begins),
+// played from the closed pose while its flag holds and back while it does not; its surfaces (indices into
 // Level::surfaces) move together.
-struct Motion {
-	std::vector<size_t> surfaces;
-	std::vector<std::array<double, 4>> keys; // (Stage 203: a key given by points, lowered to these about the pivot)
-	std::optional<V2> pivot; // default: the first surface's middle (a circle: its center)
-	// Stage 203: per key, its points as the editor shows them (as written, or derived from its numbers; none: no such part)
-	struct KeyPoints {
-		std::optional<PointPair> translate, rotate;
-	};
-	std::vector<KeyPoints> points;
-};
-// The motion's pivot (its own, else its first surface's middle; a circle: its center).
-V2 motion_pivot(const Motion &m, const std::vector<LevelSurface> &surfaces);
-// rc-level/2 (Stage 202, GAME_SPEC 9.12): an element's opening -- its steps (a rotation
-// about a pivot, or a translation in the level's axes; Stage 203: given where the step
-// begins), played from the closed pose while its flag holds and back while it does not;
-// its surfaces (indices into Level::surfaces) move together.
 struct Opening {
 	struct Step {
 		bool rotate = false;
@@ -241,6 +225,27 @@ struct Opening {
 };
 // The opening's pose `s` seconds into it (0: the identity, the closed pose; total(): the open pose).
 rc::Xf2 opening_pose(const Opening &o, double s);
+
+// rc-level/2 (Stage 151): an element's motion over the level's cycle -- keys
+// (phase in [0, 1), an offset dx, dy, an angle in radians about the pivot),
+// interpolated linearly and looping; its surfaces (indices into
+// Level::surfaces) move together.
+struct Motion {
+	std::vector<size_t> surfaces;
+	std::vector<std::array<double, 4>> keys; // (Stage 203: a key given by points, lowered to these about the pivot)
+	std::optional<V2> pivot; // default: the first surface's middle (a circle: its center)
+	// Stage 203: per key, its points as the editor shows them (as written, or derived from its numbers; none: no such part)
+	struct KeyPoints {
+		std::optional<PointPair> translate, rotate;
+	};
+	std::vector<KeyPoints> points;
+	// Stage 204: or steps (an opening's), played over the cycle -- forward over its first half, back over its second
+	std::optional<Opening> played;
+};
+// The motion's pivot (its own, else its first surface's middle; a circle: its center).
+V2 motion_pivot(const Motion &m, const std::vector<LevelSurface> &surfaces);
+// Stage 204: where a motion played by steps is at the cycle's phase (its steps' time: up to its total and back)
+double played_time(const Opening &o, double phase);
 
 struct Cycle {
 	double period = 4.0;       // seconds per cycle while it runs on its own
