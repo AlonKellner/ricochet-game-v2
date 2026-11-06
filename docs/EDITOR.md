@@ -93,14 +93,32 @@ With Alt held, the point stays exactly under the pointer.
 line when dragged), a circle's center and radius, and the player's start. When an endpoint moves, the via
 stays where it is (GAME_SPEC 19.2).
 
-**Motion.** An element's `motion` field takes its keys (`{"keys": [[phase, dx, dy, angle], ...]}`). The element is
-drawn faint and dashed where each key puts it, and the level's `cycle` field sets the period. Play-test (F5) to
-see it move; the wheel sets the cycle there.
+**Motion.** An element's `motion` field takes its keys (`{"keys": [[phase, dx, dy, angle], ...]}`, or a key by two points,
+`{"phase": p, "translate": [from, to], "rotate": [pivot, aim]}`). The element is drawn faint and dashed where each key
+puts it, and the level's `cycle` field sets the period. Play-test (F5) to see it move; the wheel sets the cycle there.
 
-**Opening.** An element's `opening` field takes its steps (`{"steps": [{"rotate": 1.5708}, {"translate": [0, -100]}]}`;
-a rotation's `pivot` defaults to the element's start, its hinge). The element is drawn faint, dashed amber, at its open
-pose; moving the element moves its pivots with it. Play-test (F5) and fire at its button (`opens`: its name) to see it
-swing.
+**Opening.** An element's `opening` field takes its steps (`{"steps": [{"rotate": [pivot, aim]}, {"translate": [from, to]}]}`,
+or by numbers: `{"rotate": 1.5708}`, its `pivot` by default the element's start, its hinge; `{"translate": [0, -100]}`).
+The element is drawn faint, dashed amber, after each step, its open pose the strongest. Play-test (F5) and fire at its
+button (`opens`: its name) to see it swing.
+
+**Steps and keys by two points** (Stage 203). The selected element's panel lists its opening's steps (or its motion's
+keys), each its JSON (click to type it) with a row of actions, then a row to add one:
+- `+ turn`: click the pivot, then where the element's start -> end will point -- it turns about the pivot, the shortest
+  way, until it points there; `+ move`: click where the move starts, then where it ends (the move: the difference). The
+  points are where the element stands when the step begins: after the earlier steps, drawn faint. `+ motion key` (an
+  element without an opening) starts a motion instead: a key at rest and a key at phase 0.5.
+- On a step: `turn n` / `move n` place it anew, `remove n` removes it (the last one removes the opening).
+- On a key: `move n` / `turn n` place its move or its turn (a key's points are from the element as written; its turn
+  is the one nearest the previous key's), `remove n` removes it; `+ key` adds one, halfway from the last to the cycle's
+  end (type its phase in its row).
+- While placing, the chosen action is lit, the status bar says what the next click places; Esc or a right click
+  cancels.
+- Each step's or key's two points are handles: drag them (they snap like any point). A move is drawn as an arrow from ->
+  to, a turn as its pivot (a ring) -> aim, numbered. A step given by numbers shows the points they make (a turn's pivot
+  and where it points the element's end; a move from the element's start), and dragging one writes the step by points.
+- Moving the element (a drag, the arrows, a duplicate) moves its steps' and keys' points and its motion's pivot with it;
+  a scale maps them.
 
 **Carriers.** A point placed near a carrier snaps onto it, a grid step along it. When both clicks of the line
 tool (or the three of the arc tool on a circle) land on one carrier, the element is placed on it (`carrier`,
@@ -115,7 +133,7 @@ the level). They are lit, the panel lists them, and their box is drawn dashed wi
 - drag any of them: they all move, by whole grid steps, their shapes kept;
 - a corner: they scale about the opposite corner, uniformly (Shift: each axis free); a side's middle: they stretch
   from the opposite side. Every point lands on the grid (Alt: off it), a rectangle stays a rectangle, a circle's
-  radius scales by the mean factor (to whole units), a portal's displacement, a motion's offsets and an opening's translations scale with them (its pivots are points).
+  radius scales by the mean factor (to whole units), a portal's displacement, a motion's offsets and an opening's translations scale with them (its pivots and its steps' and keys' two points are points).
   The box keeps at least a grid step;
 - Delete removes them, Ctrl+D duplicates them, the arrows move them, Esc deselects.
 

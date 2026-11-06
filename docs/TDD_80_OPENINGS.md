@@ -36,7 +36,8 @@ swing about an axis when a button or a detector fires, platforms a button sends 
 
 - The time is in seconds, a tick at a time, snapped to the ends within 1e-9 s (a sum of ticks is a hair off), so a
   settled opening is exactly closed (the identity: the element bit for bit as written) or exactly open.
-- A rotation's pivot is a point of the element in its closed pose, carried by the earlier steps; a translation is in
+- A rotation's pivot was a point of the element in its closed pose, carried by the earlier steps; Stage 203
+  (docs/TDD_81_TWO_POINT_STEPS.md) gives every step's points where the step begins instead. A translation is in
   the level's axes. The default pivot is the first surface's start (a circle: its centre), the hinge of a door.
 - A flag that switches mid-swing turns the swing where it stands; a level starts settled under its starting flags.
 - The amber look is display only (`SurfaceSpec::swings`, copied by `build_spec` and `mapped`).
