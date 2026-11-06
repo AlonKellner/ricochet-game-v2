@@ -1621,6 +1621,10 @@ std::vector<Editor::Row> Editor::rows() const {
 			add({Row::Value, "motion", e.contains("motion") ? spell(e["motion"]) : "(none)",
 					"{\"keys\": [[phase, dx, dy, angle], ...], \"pivot\": [x, y]?}: it moves over the level's cycle (its keys drawn faint)",
 					Field{selected_, "motion"}, "", -1, 0, {}});
+			add({Row::Value, "opening", e.contains("opening") ? spell(e["opening"]) : "(none)",
+					"{\"flag\": key?, \"steps\": [{\"rotate\": radians, \"pivot\": [x, y]?, \"seconds\": s?} | {\"translate\": [dx, dy], \"seconds\": s?}, ...]}: "
+					"it plays its steps while its flag holds (default door:<name>; the pivot: its start), back when it does not (its open pose drawn faint)",
+					Field{selected_, "opening"}, "", -1, 0, {}});
 			add({Row::Value, "tags", e.contains("tags") ? spell(e["tags"]) : "(the kind's)",
 					"[tag, ...]: added to the kind's tags; the level's spread rules flow through them (flammable, conductive, powered)",
 					Field{selected_, "tags"}, "", -1, 0, {}});
@@ -2454,6 +2458,10 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 					stroke(g, rgba(0.75, 0.75, 0.85, 0.35), 1.0, true);
 				}
 			}
+		}
+		// Stage 202: an opening element, faint (amber) where it opens to
+		for (const rc::arc::SegGeom &g : i < open_pose_.size() ? open_pose_[i] : std::vector<rc::arc::SegGeom>{}) {
+			stroke(g, rgba(1.0, 0.72, 0.25, 0.35), 1.0, true);
 		}
 		// the name, by the element's first surface
 		const json &e = doc_["elements"][i];

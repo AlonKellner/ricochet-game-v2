@@ -5,6 +5,7 @@
 
 #include "rcg/canon.hpp"
 #include "rcg/elements.hpp"
+#include "rcg/landing.hpp"
 #include "rcg/level2.hpp"
 
 #include <algorithm>
@@ -57,6 +58,18 @@ void translate(json &g, double dx, double dy) {
 	if (g.contains("circle") && g["circle"].is_object() && is_point(g["circle"].value("center", json()))) {
 		const json &c = g["circle"]["center"];
 		g["circle"]["center"] = point(c[0].get<double>() + dx, c[1].get<double>() + dy);
+	}
+}
+
+// Stage 202: an element's opening moves with it (its rotations' pivots)
+void translate_pivots(json &e, double dx, double dy) {
+	if (!e.contains("opening") || !e["opening"].is_object() || !e["opening"].value("steps", json()).is_array()) {
+		return;
+	}
+	for (json &st : e["opening"]["steps"]) {
+		if (st.is_object() && is_point(st.value("pivot", json()))) {
+			st["pivot"] = point(st["pivot"][0].get<double>() + dx, st["pivot"][1].get<double>() + dy);
+		}
 	}
 }
 
@@ -298,12 +311,20 @@ void Editor::refresh() {
 	// what only the whole level shows (names, the level's own keys, ...)
 	shade_fill_ = {};
 	shade_of_.assign(es.size(), 0);
+	open_pose_.assign(es.size(), {});
 	markers_ = FlagMarkers{};
 	if (errors_.empty()) {
 		try {
 			markers_ = flag_markers(doc_, lower_level(doc_));
 			const Level lv = parse_level_json(doc_);
 			build_level(lv);
+			for (const Opening &o : lv.openings) { // Stage 202: where its opening takes it
+				for (const size_t k : o.surfaces) {
+					for (const BuiltSurface &b : build_spec(mapped(lv.surfaces[k].spec, opening_pose(o, o.total())), 0, std::nullopt)) {
+						open_pose_[o.element].push_back(b.seg);
+					}
+				}
+			}
 			// Stage 153: the shadow under the level's starting flags, and which elements are shades
 			if (!lv.shades.empty()) {
 				std::vector<shade::Region> regions;
@@ -699,6 +720,7 @@ json Editor::op(const json &cmd) {
 			if (h == "body") {
 				const json by = cmd.at("by");
 				translate(*g, by[0].get<double>(), by[1].get<double>());
+				translate_pivots(d["elements"][size_t(i)], by[0].get<double>(), by[1].get<double>());
 			} else if (h == "start" || h == "end" || h == "via") {
 				(*g)[h] = cmd.at("to");
 			} else if (h == "center") {
@@ -720,6 +742,7 @@ json Editor::op(const json &cmd) {
 		const json by = cmd.value("by", point(20.0, 20.0));
 		if (json *g = geometry_of(e)) {
 			translate(*g, by[0].get<double>(), by[1].get<double>());
+			translate_pivots(e, by[0].get<double>(), by[1].get<double>());
 		}
 		change([&](json &d) { d["elements"].insert(d["elements"].begin() + i + 1, e); });
 		select_element(name);

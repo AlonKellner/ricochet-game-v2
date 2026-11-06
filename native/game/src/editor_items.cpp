@@ -634,7 +634,8 @@ bool Editor::exists(const std::string &entry) const {
 
 // Scales the entries' geometry in doc: every point about (ax, ay) by (sx, sy), then by (bx, by), onto the grid
 // (step; 0: float32 as it is). A rectangle stays one (its corners), a circle's radius scales by the mean factor
-// (to whole units), a portal's displacement and a motion's offsets by the factors.
+// (to whole units), a portal's displacement and a motion's offsets by the factors (Stage 202: an opening's
+// translations too; its pivots are points).
 void Editor::scale(json &doc, const std::vector<std::string> &entries, const Scale &t, double step) const {
 	auto snapped = [&](double v) { return step > 0 ? std::round(v / step) * step : double(float(v)); };
 	auto map = [&](json &p) {
@@ -703,6 +704,16 @@ void Editor::scale(json &doc, const std::vector<std::string> &entries, const Sca
 							k[1] = double(float(k[1].get<double>() * t.sx));
 							k[2] = double(float(k[2].get<double>() * t.sy));
 						}
+					}
+				}
+			}
+			if (e.contains("opening") && e["opening"].is_object() && e["opening"].value("steps", json()).is_array()) { // Stage 202
+				for (json &st : e["opening"]["steps"]) {
+					if (st.is_object() && st.contains("pivot")) {
+						map(st["pivot"]);
+					}
+					if (st.is_object() && is_point(st.value("translate", json()))) {
+						st["translate"] = jpoint(double(float(st["translate"][0].get<double>() * t.sx)), double(float(st["translate"][1].get<double>() * t.sy)));
 					}
 				}
 			}

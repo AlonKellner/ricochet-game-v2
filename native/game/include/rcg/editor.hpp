@@ -205,6 +205,7 @@ private:
 	FlagMarkers markers_;       // Stage 179: the markers the flags give (the whole level's; none while it does not lower)
 	Drawn edges_drawn_;         // Stage 169: the configured edges (none: they pass)
 	std::vector<int> shade_of_;  // Stage 153: per element, 1 a dark shade, 2 a light one
+	std::vector<std::vector<rc::arc::SegGeom>> open_pose_; // Stage 202: per element, its opening's open pose (drawn faint)
 	rc::vis::Fill shade_fill_;    // ... the shadow under the starting flags (world units)
 	// the view
 	float width_ = 1920, height_ = 1080;

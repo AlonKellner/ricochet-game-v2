@@ -712,6 +712,31 @@ TEST_CASE("editor: a moving element shows its keys faint; its motion is a panel 
 	CHECK(after > before); // the key's faint copy
 }
 
+TEST_CASE("editor: an opening element shows its open pose faint; its opening is a panel field; a move carries its pivot (Stage 202)") {
+	rcg::Editor ed;
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", json::parse(R"({"kind": "wall", "name": "w", "start": [700, 400], "end": [700, 600]})")}});
+	auto calls = [&]() {
+		size_t n = 0;
+		for (const auto &node : ed.draw()) {
+			if (node.key.a == 3) {
+				n = node.calls->size();
+			}
+		}
+		return n;
+	};
+	const size_t before = calls();
+	click_row(ed, "opening");
+	ed.text(R"({"steps": [{"rotate": 1.5707963267948966, "pivot": [700, 500]}, {"translate": [100, 0]}]})");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(ed.errors().empty());
+	CHECK(element(ed, "w")["opening"]["steps"][1]["translate"][0] == 100);
+	CHECK(calls() > before); // the open pose's faint copy
+	ok(ed, {{"op", "move"}, {"name", "w"}, {"handle", "body"}, {"by", json::array({10, 20})}});
+	CHECK(element(ed, "w")["opening"]["steps"][0]["pivot"] == json::array({710, 520}));
+	CHECK(element(ed, "w")["opening"]["steps"][1]["translate"] == json::array({100, 0})); // (an offset: not moved)
+}
+
 TEST_CASE("editor: an element's tags and the level's spread rules are panel fields (Stage 152)") {
 	rcg::Editor ed;
 	ed.resize(1920, 1080);
