@@ -2,7 +2,8 @@
  "detectors": [
   {
    "flag": "open",
-   "mode": "enter",
+   "for": "any",
+   "mode": "while",
    "name": "detector_1",
    "region": {
     "rect": [610.0, 460.0, 130.0, 80.0]
