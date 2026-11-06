@@ -329,7 +329,7 @@ std::string Editor::step_hint() const {
 	if (!step_place_) {
 		return "";
 	}
-	const std::string what = step_place_->index < 0 ? "a new " : (index_of(step_place_->element) >= 0 && doc_["elements"][size_t(index_of(step_place_->element))].contains("motion") ? "key " : "step ") + std::to_string(step_place_->index + 1) + "'s ";
+	const std::string what = step_place_->index < 0 ? "a new " : (index_of(step_place_->element) >= 0 && doc_["elements"][size_t(index_of(step_place_->element))].value("motion", json::object()).contains("keys") ? "key " : "step ") + std::to_string(step_place_->index + 1) + "'s ";
 	if (step_place_->rotate) {
 		return clicks_.empty() ? what + "turn: click its pivot (Esc: cancel)" : what + "turn: click where its start -> end will point";
 	}
@@ -1707,30 +1707,69 @@ std::vector<Editor::Row> Editor::rows() const {
 			if (e.contains("circle")) {
 				add({Row::Value, "circle", spell(e["circle"]), "{\"center\": [x, y], \"radius\": r}", Field{selected_, "circle"}, "", -1, 0, {}});
 			}
-			add({Row::Value, "motion", e.contains("motion") ? spell(e["motion"]) : "(none)",
-					"{\"keys\": [[phase, dx, dy, angle], ...], \"pivot\": [x, y]?}: it moves over the level's cycle (its keys drawn faint)",
-					Field{selected_, "motion"}, "", -1, 0, {}});
-			add({Row::Value, "opening", e.contains("opening") ? spell(e["opening"]) : "(none)",
-					"{\"flag\": key?, \"steps\": [{\"rotate\": radians, \"pivot\": [x, y]?, \"seconds\": s?} | {\"translate\": [dx, dy], \"seconds\": s?}, ...]}: "
-					"it plays its steps while its flag holds (default door:<name>; the pivot: its start), back when it does not (its open pose drawn faint)",
-					Field{selected_, "opening"}, "", -1, 0, {}});
-			// Stage 203: its steps (or its keys), each its JSON and its actions, then new ones -- placed by two clicks
+			// Stage 204: its motion -- by keys or steps, played by the cycle or (an opening) by its flag
 			const std::string at = "/elements/" + std::to_string(i);
-			auto actions = [&](std::vector<std::string> labels, std::vector<json> cmds, const std::string &hint) {
+			const std::string mode = e.value("motion_mode", json("cycle")).is_string() ? e.value("motion_mode", std::string("cycle")) : "cycle";
+			const json &mj = e.contains("motion") && e["motion"].is_object() ? e["motion"] : json::object();
+			add({Row::Value, "motion", e.contains("motion") ? spell(e["motion"]) : "(none)",
+					"{\"steps\": [{\"rotate\": [pivot, aim]} | {\"translate\": [from, to]}, ...]} or {\"keys\": [...]}: how it moves (its steps or keys below; drawn faint)",
+					Field{selected_, "motion"}, "", -1, 0, {}});
+			add({Row::Value, "motion_mode", e.contains("motion_mode") ? spell(e["motion_mode"]) : "(cycle)",
+					"click: cycle (the level's cycle plays it, there and back) or opening (its flag plays it, back when it no longer holds)",
+					Field{"", at + "/motion_mode"}, "options", -1, 0, {"cycle", "opening"}});
+			auto actions = [&](std::vector<std::string> labels, std::vector<json> cmds, const std::string &hint, int lit = -1) {
 				Row r;
 				r.kind = Row::Actions;
 				r.hint = hint;
 				r.options = std::move(labels);
 				r.cmds = std::move(cmds);
+				r.lit = lit;
 				add(r);
 			};
+			if (mode == "opening") { // its flag: typed, or one of the level's
+				const std::string dflt = "door:" + selected_;
+				const std::string flag = mj.value("flag", json()).is_string() ? mj["flag"].get<std::string>() : dflt;
+				add({Row::Value, "  flag", mj.contains("flag") ? spell(mj["flag"]) : "(" + dflt + ")",
+						"the flag that opens it: a key or an expression (det:plate && !locked); default door:<name> (a button's opens: <name>); empty: the default",
+						Field{"", at + "/motion/flag"}, "", -1, 0, {}});
+				std::vector<std::string> flags{dflt};
+				if (doc_.contains("detectors") && doc_["detectors"].is_array()) {
+					for (const json &d : doc_["detectors"]) {
+						if (d.is_object() && d.value("name", json()).is_string()) {
+							flags.push_back(d.value("flag", json()).is_string() ? d["flag"].get<std::string>() : "det:" + d["name"].get<std::string>());
+						}
+					}
+				}
+				for (const std::string &f : markers_.active) {
+					flags.push_back(f);
+				}
+				std::vector<std::string> once;
+				for (const std::string &f : flags) {
+					if (std::find(once.begin(), once.end(), f) == once.end() && once.size() < 9) {
+						once.push_back(f);
+					}
+				}
+				for (size_t k = 0; k < once.size(); k += 3) {
+					std::vector<std::string> labels;
+					std::vector<json> cmds;
+					int lit = -1;
+					for (size_t q = k; q < std::min(k + 3, once.size()); q++) {
+						if (once[q] == flag) {
+							lit = int(q - k);
+						}
+						labels.push_back(once[q]);
+						cmds.push_back({{"op", "set"}, {"path", at + "/motion/flag"}, {"value", once[q] == dflt ? json() : json(once[q])}});
+					}
+					actions(labels, cmds, "the level's flags: click one to open it with that flag", lit);
+				}
+			}
+			// Stage 203: its steps (or its keys), each its JSON and its actions, then new ones -- placed by two clicks
 			auto place = [&](int k, bool rotate) { return json{{"op", "place_step"}, {"name", selected_}, {"index", k}, {"part", rotate ? "rotate" : "translate"}}; };
-			const bool moving = e.contains("motion") && e["motion"].is_object() && e["motion"].value("keys", json()).is_array();
-			const bool opening = !moving && e.contains("opening") && e["opening"].is_object() && e["opening"].value("steps", json()).is_array();
-			const json &list = moving ? e["motion"]["keys"] : opening ? e["opening"]["steps"] : json::array();
+			const bool keyed = mj.value("keys", json()).is_array();
+			const json &list = keyed ? mj["keys"] : mj.value("steps", json()).is_array() ? mj["steps"] : json::array();
 			for (size_t k = 0; k < list.size(); k++) {
 				const std::string n = std::to_string(k + 1);
-				if (moving) {
+				if (keyed) {
 					add({Row::Value, "  key " + n, spell(list[k]),
 							"[phase, dx, dy, angle] or {\"phase\": p, \"translate\": [from, to]?, \"rotate\": [pivot, aim]?}: where the element is at that phase (its points: drag them)",
 							Field{"", at + "/motion/keys/" + std::to_string(k)}, "", -1, 0, {}});
@@ -1739,22 +1778,22 @@ std::vector<Editor::Row> Editor::rows() const {
 				} else {
 					add({Row::Value, "  step " + n, spell(list[k]),
 							"{\"rotate\": [pivot, aim]} (its start -> end turned along pivot -> aim) or {\"translate\": [from, to]}, \"seconds\": s?; its points where the step begins (drag them)",
-							Field{"", at + "/opening/steps/" + std::to_string(k)}, "", -1, 0, {}});
+							Field{"", at + "/motion/steps/" + std::to_string(k)}, "", -1, 0, {}});
 					actions({"turn " + n, "move " + n, "remove " + n}, {place(int(k), true), place(int(k), false), {{"op", "remove_step"}, {"name", selected_}, {"index", k}}},
 							"this step anew -- turn: click the pivot, then where its start -> end points; move: click from and to; or remove it");
 				}
 			}
-			if (moving) {
+			if (keyed) {
 				actions({"+ key"}, {{{"op", "add_key"}, {"name", selected_}}}, "a new key (its phase halfway to the cycle's end): then move or turn it");
 			} else {
 				std::vector<std::string> labels{"+ turn", "+ move"};
 				std::vector<json> cmds{place(-1, true), place(-1, false)};
-				if (!opening) {
-					labels.push_back("+ motion key");
+				if (list.empty() && mode != "opening") {
+					labels.push_back("+ key");
 					cmds.push_back({{"op", "add_key"}, {"name", selected_}});
 				}
-				actions(labels, cmds, "an opening's next step -- turn: click the pivot, then where its start -> end points; move: click from and to"
-						+ std::string(opening ? "" : "; or a motion over the cycle (a key)"));
+				actions(labels, cmds, "its next step -- turn: click the pivot, then where its start -> end points; move: click from and to"
+						+ std::string(list.empty() && mode != "opening" ? "; or keys over the cycle instead" : ""));
 			}
 			add({Row::Value, "tags", e.contains("tags") ? spell(e["tags"]) : "(the kind's)",
 					"[tag, ...]: added to the kind's tags; the level's spread rules flow through them (flammable, conductive, powered)",
@@ -2565,19 +2604,20 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				stroke(b.seg, ERROR_TEXT, 1.5, true);
 			}
 		}
-		// Stage 151: a moving element, faint where its keys put it; Stage 202: an opening one, faint (amber) after each
-		// step, its open pose the strongest; Stage 203: selected, its steps' and keys' points (a move's arrow from -> to,
+		// Stage 151: a moving element, faint where its keys put it; Stage 202: by steps, faint after each step (an
+		// opening's amber), the last the strongest; Stage 203: selected, its steps' and keys' points (a move's arrow from -> to,
 		// a turn's pivot -> aim), numbered
 		if (i < moves_.size()) {
 			const Moves &mv = moves_[i];
 			for (size_t k = 0; k < mv.poses.size(); k++) {
 				const bool last = k + 1 == mv.poses.size();
 				for (const rc::arc::SegGeom &g : mv.poses[k]) {
-					stroke(g, mv.motion ? rgba(0.75, 0.75, 0.85, 0.35) : rgba(1.0, 0.72, 0.25, last ? 0.35 : 0.2), 1.0, true);
+					const float alpha = mv.keys || last ? 0.35f : 0.2f;
+					stroke(g, mv.cycle ? rgba(0.75, 0.75, 0.85, alpha) : rgba(1.0, 0.72, 0.25, alpha), 1.0, true);
 				}
 			}
 			if (picked && selected_ == doc_["elements"][i].value("name", "")) {
-				const Color c = mv.motion ? rgba(0.8, 0.8, 1.0, 0.85) : rgba(1.0, 0.72, 0.25, 0.85);
+				const Color c = mv.cycle ? rgba(0.8, 0.8, 1.0, 0.85) : rgba(1.0, 0.72, 0.25, 0.85);
 				for (const Moves::Part &m : mv.parts) {
 					const V2 a0 = to_screen(V2::of(m.points[0][0], m.points[0][1])), b0 = to_screen(V2::of(m.points[1][0], m.points[1][1]));
 					const double dx = double(b0.x) - a0.x, dy = double(b0.y) - a0.y, len = std::hypot(dx, dy);
@@ -2590,7 +2630,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 					if (m.rotate) { // a turn: a ring about its pivot
 						calls.push_back(arc(a0, 7.0, 0, TAU, c, 1.5));
 					}
-					calls.push_back(text_at(V2::of(double(b0.x) + 8, double(b0.y) - 6), (mv.motion ? "key " : "") + std::to_string(m.index + 1), c, 11));
+					calls.push_back(text_at(V2::of(double(b0.x) + 8, double(b0.y) - 6), (mv.keys ? "key " : "") + std::to_string(m.index + 1), c, 11));
 				}
 			}
 		}
@@ -2751,11 +2791,15 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 				for (size_t c = 0; c < r.options.size(); c++) {
 					const float cx = x0 + 10 + float(c) * cw;
 					const json &cmd = c < r.cmds.size() ? r.cmds[c] : json();
-					const bool cur = step_place_ && cmd.value("op", "") == "place_step" && cmd.value("index", -2) == step_place_->index
-							&& (cmd.value("part", "") == "rotate") == step_place_->rotate;
+					const bool cur = int(c) == r.lit || (step_place_ && cmd.value("op", "") == "place_step" && cmd.value("index", -2) == step_place_->index
+							&& (cmd.value("part", "") == "rotate") == step_place_->rotate);
 					const bool hot = over && mouse_.x >= cx && mouse_.x < cx + cw;
 					p.push_back(rect(V2{cx + 2, r.y + 2}, V2{cw - 4, ROW - 4}, cur ? rgba(1.0, 0.8, 0.3, 0.30) : hot ? rgba(1, 1, 1, 0.16) : rgba(1, 1, 1, 0.05)));
-					p.push_back(text_at(V2{cx + cw / 2, base}, r.options[c], cur ? ACCENT : TEXT, FONT - 3));
+					std::string label = r.options[c];
+					if (label.size() > 15) {
+						label = label.substr(0, 14) + ".";
+					}
+					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
 					p.back().alignment = 1;
 				}
 				break;

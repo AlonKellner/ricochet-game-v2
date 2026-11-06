@@ -106,6 +106,7 @@ private:
 		std::vector<std::string> options; // "options": the values it cycles through (strings)
 		std::vector<int> marks = {};      // Stage 167: a level row's characters the search matched
 		std::vector<nlohmann::json> cmds = {}; // Stage 203: an Actions row's commands, one per option
+		int lit = -1;                          // ... the option lit (Stage 204: the flag it has)
 	};
 
 	// the document
@@ -213,7 +214,7 @@ private:
 	FlagMarkers markers_;       // Stage 179: the markers the flags give (the whole level's; none while it does not lower)
 	Drawn edges_drawn_;         // Stage 169: the configured edges (none: they pass)
 	std::vector<int> shade_of_;  // Stage 153: per element, 1 a dark shade, 2 a light one
-	// Stage 203: an element's opening steps or motion keys as the editor shows and edits them -- each part's two
+	// Stage 203: an element's motion's steps or keys as the editor shows and edits them -- each part's two
 	// points (a translation's from and to, a rotation's pivot and aim; handles "step:<k>:<part>:<0|1>"), and the
 	// poses they lead to (an opening's after each step, the last its open pose; a motion's at each key), drawn faint
 	struct Moves {
@@ -222,7 +223,8 @@ private:
 			bool rotate = false;
 			PointPair points{};
 		};
-		bool motion = false;
+		bool cycle = false; // (Stage 204: the cycle plays it; else its flag, an opening)
+		bool keys = false;  // ... by keys (else by steps)
 		std::vector<Part> parts;
 		std::vector<std::vector<rc::arc::SegGeom>> poses;
 	};

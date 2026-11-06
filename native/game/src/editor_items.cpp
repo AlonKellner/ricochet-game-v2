@@ -637,7 +637,7 @@ bool Editor::exists(const std::string &entry) const {
 
 // Scales the entries' geometry in doc: every point about (ax, ay) by (sx, sy), then by (bx, by), onto the grid
 // (step; 0: float32 as it is). A rectangle stays one (its corners), a circle's radius scales by the mean factor
-// (to whole units), a portal's displacement and a motion's offsets by the factors (Stage 202: an opening's
+// (to whole units), a portal's displacement and a motion's offsets by the factors (Stage 202: its steps'
 // translations too; its pivots are points; Stage 203: so are its steps' and keys' two points).
 void Editor::scale(json &doc, const std::vector<std::string> &entries, const Scale &t, double step) const {
 	auto snapped = [&](double v) { return step > 0 ? std::round(v / step) * step : double(float(v)); };
@@ -728,10 +728,10 @@ void Editor::scale(json &doc, const std::vector<std::string> &entries, const Sca
 						parts(k);
 					}
 				}
-			}
-			if (e.contains("opening") && e["opening"].is_object() && e["opening"].value("steps", json()).is_array()) { // Stage 202
-				for (json &st : e["opening"]["steps"]) {
-					parts(st);
+				if (m.value("steps", json()).is_array()) { // Stage 202, 204
+					for (json &st : m["steps"]) {
+						parts(st);
+					}
 				}
 			}
 			continue;

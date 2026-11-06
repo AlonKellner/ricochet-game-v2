@@ -105,7 +105,7 @@ unsigned mods_of(const json &m) {
 
 } // namespace
 
-// Stage 202, 203: an element's opening and motion move with it -- their pivots, their steps' and keys' points
+// Stage 202, 203: an element's motion moves with it -- its pivots, its steps' and keys' points
 void Editor::carry_moves(json &e, double dx, double dy) {
 	auto shift = [&](json &p) {
 		if (is_point(p)) {
@@ -126,30 +126,26 @@ void Editor::carry_moves(json &e, double dx, double dy) {
 			}
 		}
 	};
-	if (e.contains("opening") && e["opening"].is_object() && e["opening"].value("steps", json()).is_array()) {
-		for (json &st : e["opening"]["steps"]) {
-			parts(st);
-		}
-	}
 	if (e.contains("motion") && e["motion"].is_object()) {
 		if (e["motion"].contains("pivot")) {
 			shift(e["motion"]["pivot"]);
 		}
-		if (e["motion"].value("keys", json()).is_array()) {
-			for (json &k : e["motion"]["keys"]) {
-				parts(k);
+		for (const char *list : {"keys", "steps"}) { // (Stage 204: an opening's steps are its motion's)
+			if (e["motion"].value(list, json()).is_array()) {
+				for (json &k : e["motion"][list]) {
+					parts(k);
+				}
 			}
 		}
 	}
 }
 
-// Stage 203: an opening step or a motion key's part set by its two points -- the element's motion's key `index`
-// (a key by numbers becomes an object, its numbers kept; -1 or past the end: a new key, its phase halfway from the
-// last to 1), else its opening's step `index` (its seconds kept; -1 or past the end: a new step, the opening
-// made when there is none)
+// Stage 203: a motion's step or key's part set by its two points -- its key `index` when it moves by keys (a key by
+// numbers becomes an object, its numbers kept; -1 or past the end: a new key, its phase halfway from the last to
+// 1), else its step `index` (its seconds kept; -1 or past the end: a new step, the motion made when there is none)
 void Editor::put_step(json &e, int index, bool rotate, const json &pts) {
 	const char *part = rotate ? "rotate" : "translate";
-	if (e.contains("motion") && e["motion"].is_object()) {
+	if (e.contains("motion") && e["motion"].is_object() && e["motion"].contains("keys")) {
 		json &keys = e["motion"]["keys"];
 		if (!keys.is_array()) {
 			keys = json::array();
@@ -175,10 +171,10 @@ void Editor::put_step(json &e, int index, bool rotate, const json &pts) {
 		k[part] = pts;
 		return;
 	}
-	if (!e.contains("opening") || !e["opening"].is_object()) {
-		e["opening"] = json::object();
+	if (!e.contains("motion") || !e["motion"].is_object()) {
+		e["motion"] = json::object();
 	}
-	json &steps = e["opening"]["steps"];
+	json &steps = e["motion"]["steps"];
 	if (!steps.is_array()) {
 		steps = json::array();
 	}
@@ -392,8 +388,8 @@ void Editor::refresh() {
 				drawn_[i].broken.push_back(rc::arc::SegGeom::make(s, en, v));
 			}
 		}
-		// Stage 202, 203: its opening's steps or its motion's keys -- their points, and the poses they lead to
-		if (lowered && drawn_[i].broken.empty() && e.is_object() && (e.contains("opening") || e.contains("motion"))) {
+		// Stage 202-204: its motion's steps or keys -- their points, and the poses they lead to
+		if (lowered && drawn_[i].broken.empty() && e.is_object() && e.contains("motion")) {
 			try {
 				const Level lv = parse_level_json(single);
 				Moves &mv = moves_[i];
@@ -406,17 +402,22 @@ void Editor::refresh() {
 					}
 					return out;
 				};
-				if (!lv.openings.empty()) {
-					const Opening &o = lv.openings.front();
+				auto steps = [&](const Opening &o) {
 					double t = 0.0;
 					for (size_t k = 0; k < o.steps.size(); k++) {
 						mv.parts.push_back({k, o.steps[k].rotate, o.steps[k].points});
 						t += o.steps[k].seconds;
 						mv.poses.push_back(pose(o.surfaces, opening_pose(o, t)));
 					}
+				};
+				if (!lv.openings.empty()) {
+					steps(lv.openings.front());
+				} else if (!lv.motions.empty() && lv.motions.front().played) {
+					mv.cycle = true;
+					steps(*lv.motions.front().played);
 				} else if (!lv.motions.empty()) {
 					const Motion &m = lv.motions.front();
-					mv.motion = true;
+					mv.cycle = mv.keys = true;
 					const V2 p = motion_pivot(m, lv.surfaces);
 					for (size_t k = 0; k < m.keys.size(); k++) {
 						if (m.points[k].translate) {
@@ -879,14 +880,14 @@ json Editor::op(const json &cmd) {
 		const size_t k = cmd.at("index").get<size_t>();
 		change([&](json &d) {
 			json &e = d["elements"][size_t(i)];
-			const char *list = e.contains("motion") ? "motion" : "opening";
-			json *xs = e.contains(list) && e[list].is_object() ? &e[list][list == std::string("motion") ? "keys" : "steps"] : nullptr;
+			json *m = e.contains("motion") && e["motion"].is_object() ? &e["motion"] : nullptr;
+			json *xs = m == nullptr ? nullptr : m->contains("keys") ? &(*m)["keys"] : &(*m)["steps"];
 			if (xs == nullptr || !xs->is_array() || k >= xs->size()) {
 				refuse("no such step");
 			}
 			xs->erase(k);
 			if (xs->empty()) {
-				e.erase(list);
+				e.erase("motion"); // (its motion_mode kept)
 			}
 		});
 		return {};
@@ -894,8 +895,12 @@ json Editor::op(const json &cmd) {
 	if (o == "add_key") {
 		editing();
 		const int i = element("name");
-		if (doc_["elements"][size_t(i)].contains("opening")) {
-			refuse("an element has a motion or an opening, not both");
+		const json &e0 = doc_["elements"][size_t(i)];
+		if (e0.value("motion_mode", "cycle") == "opening") {
+			refuse("an opening plays steps (keys are the cycle's)");
+		}
+		if (e0.contains("motion") && e0["motion"].is_object() && e0["motion"].contains("steps")) {
+			refuse("its motion plays steps: remove them for keys");
 		}
 		change([&](json &d) {
 			json &e = d["elements"][size_t(i)];
