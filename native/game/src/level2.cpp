@@ -526,7 +526,7 @@ Lowered lower_level(const json &v2) {
 			if (!e.is_object() || !e.contains("kind") || !e["kind"].is_string()) {
 				fail(ek, "a kind, {\"kind\", ...params}, \"pass\" or \"wrap\" expected");
 			}
-			for (const char *g : {"start", "end", "via", "circle", "carrier", "from", "to", "name", "motion"}) {
+			for (const char *g : {"start", "end", "via", "circle", "carrier", "from", "to", "name", "motion", "opening"}) {
 				if (e.contains(g)) {
 					fail(ek + "." + g, "an edge's geometry and name follow the bounds");
 				}

@@ -9,6 +9,7 @@
 
 #include "rcg/digest.hpp"
 #include "rcg/geom.hpp"
+#include "rcg/landing.hpp"
 #include "rcg/model.hpp"
 #include "rcg/render.hpp"
 
@@ -1983,6 +1984,20 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 								}
 								const Color on = sh.dark ? rgba(0.65, 0.55, 1.0, 0.95) : rgba(1.0, 0.9, 0.4, 0.95);
 								outline_seg(out, segment_of(level_.surfaces[sh.surface].spec), rc::key_true(sh.when, pred) ? on : rgba(0.5, 0.5, 0.55, 0.95), 3.0, true);
+							}
+							// Stage 202 (GAME_SPEC 9.12): openings sent the other way -- the element where it will stand
+							for (const Opening &o : level_.openings) {
+								const bool then = rc::key_true(o.flag, pred);
+								if (rc::key_true(o.flag, was) == then) {
+									continue;
+								}
+								const rc::Xf2 to = opening_pose(o, then ? o.total() : 0.0);
+								for (const size_t k : o.surfaces) {
+									const LevelSurface &ls = level_.surfaces[k];
+									for (const BuiltSurface &b : build_spec(mapped(ls.spec, to), ls.ids.empty() ? 0 : ls.ids.front(), ls.label)) {
+										outline_seg(out, b.seg, render::with_alpha(DOOR_COLOR, 0.95), 3.0, true);
+									}
+								}
 							}
 							// objects a popped bubble releases (they fall)
 							for (const World::Body &body : world_->bodies()) {

@@ -52,6 +52,7 @@ struct BuiltSurface {
 	bool platform = false; // Stage 172: a one-way platform (GAME_SPEC 25.1)
 	std::optional<Marker> marker; // Stage 179: a designer's marker (display only)
 	std::string shape;            // Stage 181: an object's look (none: its carrier; display only)
+	bool swings = false;          // Stage 202: an opening's (display only)
 	bool pre_transform = false;
 	int portal_pair = 0; // a portal: the id of the surface with the inverse motion (0: none)
 
@@ -73,7 +74,8 @@ inline bool is_inert(const BuiltSurface &s) {
 }
 
 // Stage 190: a door -- its posts across its ends show where it stops, beside a wall in line with it
-inline bool is_door(const BuiltSurface &s) { return s.label == "Door" || s.label == "ChargedDoor"; }
+// (Stage 202: and an opening's surface, a platform's aside)
+inline bool is_door(const BuiltSurface &s) { return s.label == "Door" || s.label == "ChargedDoor" || (s.swings && !s.platform); }
 // A post's ends, half long either way across the surface at its end `at` (radial on an arc).
 inline std::pair<V2, V2> door_post(const rc::arc::SegGeom &seg, const V2 &at, double half) {
 	V2 across;

@@ -433,6 +433,7 @@ std::vector<BuiltSurface> build_spec(const SurfaceSpec &s, int first_id, const s
 	b.platform = s.platform;
 	b.marker = s.marker;
 	b.shape = s.shape;
+	b.swings = s.swings;
 	if (s.pre_transform) {
 		// Surface.pre_transform_circle: an inversion on both sides, not plannable, not solid
 		BuiltEffect inv_eff;

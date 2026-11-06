@@ -837,6 +837,40 @@ name, never an expression.
 Expressions are evaluated under the walk's current flags like any flag (§9.6): a hit that writes one of an
 expression's flags switches it mid-shot, and the planned path reads them under the plan's simulated flags.
 
+### 9.12 Openings
+
+> **Status: implemented (Stage 202, docs/TDD_80_OPENINGS.md).** The user's rules (2026-11-06).
+
+An element may have an **opening**: a rigid motion from its **closed pose** (its geometry as written) to its **open
+pose**, played when a flag holds and played back when it no longer does. A door that swings about a hinge, a gate that
+slides away, a platform that a button or a detector sends across the room. The `opening` is
+`{"flag": key, "steps": [step, ...]}`, played in order:
+- `{"rotate": angle, "pivot": [x, y], "seconds": s}`: a rotation by `angle` radians (positive: clockwise on screen,
+  Y-down) about `pivot`, a point of the element given in the closed pose that moves with it through the earlier
+  steps (default: the first surface's start, its hinge);
+- `{"translate": [dx, dy], "seconds": s}`: a translation in the level's axes.
+
+A step's `seconds` default to 0.5. The `flag` is a flag key or an expression (§9.11), by default `door:<name>` (so a
+button's `opens: <name>` opens it). All the element's surfaces move together, a portal's image with them, as in §9.8.
+
+- **The clock.** Each opening has its time `s` in `[0, total]`, the sum of its steps' seconds. Per physics tick, `s`
+  advances one tick while the flag holds and goes back one tick while it does not, so a flag that switches mid-swing
+  turns it around where it stands. Within a step the pose is linear in its angle or offset. A level starts with each
+  opening settled: open where its flag holds under the starting flags, else closed.
+- **The shot sees the world as fired.** Time is frozen in flight (§21.1), and a flag a hit writes does not move an
+  element mid-shot: the arrow meets the element where it stood when it was fired. The swing plays once the shot
+  lands and time runs again.
+- **No shot mid-swing.** While any opening is between its poses, the player cannot fire, as while moving (§21.0): the
+  readiness falls, and rises again once every opening has settled.
+- **Nothing rides.** A swinging element carries no player and no object; it pushes them out of its way as any moving
+  collider does (§25).
+- **The preview.** A consequence (§14) that switches an opening's flag draws the element, dashed amber, at the pose it
+  will move to.
+- **The checkpoint** holds each opening's time: an undo or a reset restores it.
+
+An element does not have both a `motion` and an `opening`, and a shade or an edge has neither. A level with an opening
+records each opening's time (`openings`).
+
 ## 10. Effect system
 
 ### 10.1 Effect base class and hierarchy
@@ -3154,4 +3188,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.97.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.98.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

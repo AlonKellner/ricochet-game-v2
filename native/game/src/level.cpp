@@ -9,6 +9,7 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <cmath>
 #include <fstream>
 #include <initializer_list>
 #include <sstream>
@@ -755,6 +756,66 @@ Level parse_level_json(const json &j) {
 		}
 		lv.motions.push_back(std::move(mo));
 	}
+	// Stage 202 (GAME_SPEC 9.12): the elements' openings
+	for (size_t i = 0; i < es.size(); i++) {
+		if (!es[i].is_object() || !es[i].contains("opening")) {
+			continue;
+		}
+		const std::string prefix = "level.elements[" + std::to_string(i) + "]", op = prefix + ".opening";
+		if (es[i].contains("motion")) {
+			fail(op, "an element has a motion or an opening, not both");
+		}
+		const json &m = es[i]["opening"];
+		only_keys(m, op, {"flag", "steps"});
+		Opening o;
+		o.element = i;
+		o.flag = opt(m, "flag") ? read_key(m["flag"], op + ".flag") : "door:" + es[i].value("name", std::string());
+		const json &steps = req(m, "steps", op);
+		if (!steps.is_array() || steps.empty()) {
+			fail(op + ".steps", "an array of {rotate, pivot, seconds} or {translate, seconds} expected");
+		}
+		for (size_t k = 0; k < low.origins.size(); k++) {
+			if (low.origins[k].rfind(prefix, 0) == 0 && (low.origins[k].size() == prefix.size() || low.origins[k][prefix.size()] != '[')) {
+				o.surfaces.push_back(k);
+			}
+		}
+		if (o.surfaces.empty()) {
+			fail(op, "the element has no surfaces to move");
+		}
+		for (const size_t k : o.surfaces) {
+			lv.surfaces[k].spec.swings = true;
+		}
+		const SurfaceSpec &first = lv.surfaces[o.surfaces.front()].spec;
+		const V2 hinge = first.full_circle ? first.center : first.start; // (the default pivot)
+		for (size_t k = 0; k < steps.size(); k++) {
+			const std::string sp = op + ".steps[" + std::to_string(k) + "]";
+			const json &st = steps[k];
+			Opening::Step s;
+			if (st.is_object() && st.contains("rotate")) {
+				only_keys(st, sp, {"rotate", "pivot", "seconds"});
+				s.rotate = true;
+				s.angle = num(st["rotate"], sp + ".rotate");
+				const V2 p = opt(st, "pivot") ? vec(st["pivot"], sp + ".pivot") : hinge;
+				s.px = p.x;
+				s.py = p.y;
+			} else if (st.is_object() && st.contains("translate")) {
+				only_keys(st, sp, {"translate", "seconds"});
+				const auto d = pair(st["translate"], sp + ".translate");
+				s.dx = d[0];
+				s.dy = d[1];
+			} else {
+				fail(sp, "{rotate, pivot, seconds} or {translate, seconds} expected");
+			}
+			if (const json *v = opt(st, "seconds")) {
+				s.seconds = num(*v, sp + ".seconds");
+				if (!(s.seconds > 0)) {
+					fail(sp + ".seconds", "a positive number of seconds expected");
+				}
+			}
+			o.steps.push_back(s);
+		}
+		lv.openings.push_back(std::move(o));
+	}
 	// Stage 153: the shades (their regions' sides checked against their geometry; they do not move)
 	for (const Lowered::Shaded &sd : low.shaded) {
 		const std::string sp = sd.at + " (" + sd.name + ")";
@@ -799,6 +860,11 @@ Level parse_level_json(const json &j) {
 				fail(sp + ".motion", "a shade does not move (Stage 153)");
 			}
 		}
+		for (const Opening &o : lv.openings) {
+			if (std::find(o.surfaces.begin(), o.surfaces.end(), sh.surface) != o.surfaces.end()) {
+				fail(sp + ".opening", "a shade does not move (Stage 153)");
+			}
+		}
 		lv.shades.push_back(std::move(sh));
 	}
 	for (auto it = low.flags.begin(); it != low.flags.end(); ++it) {
@@ -829,6 +895,44 @@ Level parse_level(std::string_view json_text) {
 		throw LevelError(std::string("not JSON: ") + e.what());
 	}
 	return parse_level_json(j);
+}
+
+double Opening::total() const {
+	double t = 0.0;
+	for (const Step &s : steps) {
+		t += s.seconds;
+	}
+	return t;
+}
+
+// p -> R(theta) p + t, composed step by step in float64: a rotation by a about the
+// pivot q where the earlier steps put it (q' = R q + t) is t -> R(a) (t - q') + q'.
+rc::Xf2 opening_pose(const Opening &o, double s) {
+	if (s <= 0.0) {
+		return rc::Xf2::identity(); // (the closed pose: exactly the element as written)
+	}
+	double theta = 0.0, tx = 0.0, ty = 0.0;
+	for (const Opening::Step &st : o.steps) {
+		const double f = std::min(s / st.seconds, 1.0);
+		if (st.rotate) {
+			const double c = std::cos(theta), sn = std::sin(theta);
+			const double qx = c * st.px - sn * st.py + tx, qy = sn * st.px + c * st.py + ty;
+			const double a = st.angle * f, ca = std::cos(a), sa = std::sin(a);
+			const double rx = tx - qx, ry = ty - qy;
+			tx = ca * rx - sa * ry + qx;
+			ty = sa * rx + ca * ry + qy;
+			theta += a;
+		} else {
+			tx += st.dx * f;
+			ty += st.dy * f;
+		}
+		s -= st.seconds;
+		if (s <= 0.0) {
+			break;
+		}
+	}
+	const double c = std::cos(theta), sn = std::sin(theta);
+	return rc::Xf2::of(V2::of(c, sn), V2::of(-sn, c), V2::of(tx, ty));
 }
 
 SurfaceSpec object_spec(const Object &o, const V2 &center) {

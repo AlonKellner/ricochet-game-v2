@@ -23,7 +23,7 @@ namespace {
 
 [[noreturn]] void fail(const std::string &path, const std::string &what) { throw LevelError(path + ": " + what); }
 
-const std::set<std::string> COMMON = {"kind", "name", "start", "end", "via", "circle", "straight", "label", "flip", "carrier", "from", "to", "motion", "tags",
+const std::set<std::string> COMMON = {"kind", "name", "start", "end", "via", "circle", "straight", "label", "flip", "carrier", "from", "to", "motion", "opening", "tags",
 		"marker", "sync_marker"};
 // (Stage 179: a marker, like the geometry, is the element's and every one of its surfaces')
 const std::set<std::string> GEOMETRY = {"start", "end", "via", "circle", "straight", "marker"};
