@@ -23,8 +23,8 @@ The rules are GAME_SPEC 4.3 (how far the preview shows), 12.2 (the planned walk 
 | 205.3 | The merge (`sweep::merge_segments`): both paths' segments end at the cursor when both reach it | Done |
 | 205.4 | The drawing (`reveal_of`, session_draw.cpp): the planned walk to its planned terminal whole, the physical walk past the divergence and the planned walk's physical continuation fade; the display modes (Tab) fade each walk where the merge does | Done |
 | 205.5 | Tests: the user's two dumps; the fade's invariants over sweeps of plans and cursors | Done |
-| 205.6 | Goldens: `stage201_terminal_cursor.json` (3 planned walks), the session golden (13 draws): the user's approval | Open |
-| 205.7 | The user's interactive sign-off | Open |
+| 205.6 | Goldens: `stage201_terminal_cursor.json` (3 planned walks), the session golden (13 draws): the user's approval (2026-11-07) | Done |
+| 205.7 | The user's interactive sign-off (2026-11-07) | Done |
 
 ## Decisions
 
