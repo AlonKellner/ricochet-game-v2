@@ -1525,6 +1525,7 @@ struct PathReveal {
 	std::vector<double> lengths;
 	std::vector<std::optional<double>> fade; // per step: where along its walk its fade begins (none: it shows whole)
 	double reach = 1.0;
+	std::optional<double> plan_end; // Stage 205: where the planned walk met the planned terminal past its cursor
 	double seen(size_t i, double d) const { // at a distance along step i (past its end: at its end)
 		if (!fade[i]) {
 			return 1.0;
@@ -1534,9 +1535,9 @@ struct PathReveal {
 };
 
 // `never_reached`: the plan, when the planned walk never reaches its cursor: its path past its first unplanned event fades.
-// `plan`: the plan -- walks aligned as far as its last entry show whole to it, a cursor before it notwithstanding (Stage 205)
+// `to_terminal`: the planned walk went on past its cursor by the plan's rules to a planned terminal: whole to it (Stage 205)
 PathReveal reveal_of(const std::vector<rc::TraceStep> &steps, const std::vector<Shift> &shifts, double reach, bool full,
-		const std::vector<PlanEntry> *never_reached, const std::vector<PlanEntry> &plan) {
+		const std::vector<PlanEntry> *never_reached, bool to_terminal) {
 	PathReveal r;
 	r.reach = reach;
 	r.along = walk_lengths(steps, shifts);
@@ -1573,40 +1574,29 @@ PathReveal reveal_of(const std::vector<rc::TraceStep> &steps, const std::vector<
 			physical = r.along[i];
 		}
 	}
-	// Stage 205 (the user): the plan's last entry is where its path is meant to go -- a cursor before it counts once
-	// only a planned terminal is left (Stage 201), but the drawing goes on to it: walks aligned that far, meeting the
-	// entries in order with nothing unplanned between, show whole to where they meet its carrier (its hit, or a crossing
-	// off its segment: a miss), and fade past that as past a cursor. Diverged before it, they fade as any plan does.
-	if (!plan.empty() && past_cursor) {
-		size_t next = 0;
+	// Stage 205 (the user): only physical sections fade -- the planned path to its cursor shows whole always, and so
+	// does its way on to a planned terminal the cursor comes before (the walk goes on by the plan's rules to it, Stage
+	// 201): to its hit, or to its crossing of the carrier off the segment, a miss. The physical walk fades past the
+	// divergence, the planned walk's continuation past the end of the plan.
+	std::optional<double> plan_end;
+	if (to_terminal) {
 		for (size_t i = 0; i < steps.size(); i++) {
-			if (steps[i].type != rc::StepType::Aligned && steps[i].type != rc::StepType::AlignedPostPlanned) {
-				break;
-			}
-			if (next + 1 == plan.size() && steps[i].surface_id == plan.back().surface_id) {
-				past_cursor = std::max(*past_cursor, r.along[i] + r.lengths[i]);
-				break;
-			}
-			if (!steps[i].significant) {
-				continue;
-			}
-			if (next < plan.size() && plan[next].surface_id == steps[i].surface_id) {
-				next++;
-			} else {
-				break; // (something unplanned on the way)
+			if (steps[i].type != rc::StepType::DivergedPhysical) {
+				plan_end = r.along[i] + r.lengths[i]; // (the planned walk's last step: the terminal stopped it)
 			}
 		}
 	}
+	r.plan_end = plan_end;
 	for (size_t i = 0; i < steps.size(); i++) {
 		const rc::StepType t = steps[i].type;
 		if (t == rc::StepType::AlignedPostPlanned) {
-			r.fade[i] = past_cursor;
+			r.fade[i] = plan_end ? plan_end : past_cursor;
 		} else if (t == rc::StepType::DivergedPostPlanned) {
-			r.fade[i] = past_cursor ? past_cursor : planned_past;
+			r.fade[i] = plan_end ? plan_end : past_cursor ? past_cursor : planned_past;
 		} else if (t == rc::StepType::DivergedPlanned) {
 			r.fade[i] = unplanned;
 		} else if (t == rc::StepType::DivergedPhysical) {
-			r.fade[i] = past_cursor ? past_cursor : physical;
+			r.fade[i] = plan_end ? physical : past_cursor ? past_cursor : physical;
 		}
 	}
 	return r;
@@ -1661,7 +1651,7 @@ void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<C
 		return out;
 	};
 	const std::vector<Shift> shifts = side_by_side(steps);
-	const PathReveal reveal = reveal_of(steps, shifts, preview_reach(), full_preview_, plan_never_reached(shown()), plan_);
+	const PathReveal reveal = reveal_of(steps, shifts, preview_reach(), full_preview_, plan_never_reached(shown()), planned_to_terminal(shown()));
 	const std::vector<double> &along = reveal.along;
 	for (size_t i = 0; i < steps.size(); i++) {
 		const rc::TraceStep &ms = steps[i];
@@ -1691,8 +1681,36 @@ void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<C
 
 const std::vector<PlanEntry> *Session::plan_never_reached(const Preview &pv) const { return pv.pair && pv.pair->planned.cursor_index < 0 ? &plan_ : nullptr; }
 
+// Stage 205: the planned walk went on past its cursor by the plan's rules and stopped at the plan's last entry, its first
+// significant event there -- a planned terminal (an unplanned passage of infinity or the origin ends the plan's rules)
+bool Session::planned_to_terminal(const Preview &pv) const {
+	if (!pv.pair || plan_.empty() || pv.pair->planned.truncated) {
+		return false;
+	}
+	const rc::TracePath &p = pv.pair->planned;
+	if (p.cursor_index < 0 || size_t(p.cursor_index) >= p.steps.size()) {
+		return false;
+	}
+	for (size_t i = size_t(p.cursor_index); i < p.steps.size(); i++) {
+		if (p.steps[i].significant) {
+			return i + 1 == p.steps.size() && p.steps[i].surface_id == plan_.back().surface_id;
+		}
+	}
+	return false;
+}
+
 // Stage 195 (the user): how far past the cursor the preview fades out: a tenth of the level's diagonal
 double Session::preview_reach() const { return std::hypot(double(level_.bounds.w), double(level_.bounds.h)) / 10.0; }
+
+std::vector<std::array<double, 2>> Session::preview_seen() const {
+	const Preview &pv = shown();
+	const PathReveal r = reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), full_preview_, plan_never_reached(pv), planned_to_terminal(pv));
+	std::vector<std::array<double, 2>> out;
+	for (size_t i = 0; i < pv.merged.size(); i++) {
+		out.push_back({r.seen(i, 0.0), r.seen(i, r.lengths[i])});
+	}
+	return out;
+}
 
 // The path node's calls (Stage 130: the presenter repaints it as its dashes run)
 void Session::paint_path(std::vector<Call> &out, double dash_phase) const {
@@ -1702,7 +1720,7 @@ void Session::paint_path(std::vector<Call> &out, double dash_phase) const {
 		if (display_mode_ == 0) {
 			if (!pv.merged.empty()) {
 				paint_steps(pv.merged, out, dash_phase, &pv.dots, &pv.marks);
-				const PathReveal reveal = reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), full_preview_, plan_never_reached(pv), plan_);
+				const PathReveal reveal = reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), full_preview_, plan_never_reached(pv), planned_to_terminal(pv));
 				for (const auto &[pt, col] : truncation_markers(pv)) {
 					// (Stage 195: a stop past where the path fades out is not shown)
 					double seen = 1.0;
@@ -1718,25 +1736,16 @@ void Session::paint_path(std::vector<Call> &out, double dash_phase) const {
 			}
 		} else if (pv.has_paths) {
 			// Stage 195: each walk alone shows as it does in the merge: to its cursor, the physical one to a divergence
-			auto cursor_along = [](const rc::TracePath &path) -> std::optional<double> {
-				if (path.cursor_index < 0) {
-					return std::nullopt;
-				}
-				double d = 0.0;
-				for (int i = 0; i < path.cursor_index && size_t(i) < path.steps.size(); i++) {
-					d += drawn_length(path.steps[size_t(i)], Shift{});
-				}
-				return d;
-			};
-			std::optional<double> fade_at = cursor_along(display_mode_ == 1 ? pv.physical : pv.planned);
-			if (display_mode_ == 1) {
-				const std::vector<Shift> shifts = side_by_side(pv.merged);
-				const std::vector<double> along = walk_lengths(pv.merged, shifts);
-				for (size_t i = 0; i < pv.merged.size(); i++) {
-					if (pv.merged[i].type == rc::StepType::DivergedPhysical) {
-						fade_at = fade_at ? std::min(*fade_at, along[i]) : along[i];
-						break;
-					}
+			// (Stage 205: where its steps in the merge begin to fade -- a planned walk that never reaches its cursor
+			// past its first unplanned event, one that goes on to a planned terminal whole to it)
+			const PathReveal merged = reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), false, plan_never_reached(pv), planned_to_terminal(pv));
+			std::optional<double> fade_at;
+			for (size_t i = 0; i < pv.merged.size(); i++) {
+				const rc::StepType t = pv.merged[i].type;
+				const bool mine = t == rc::StepType::Aligned || t == rc::StepType::AlignedPostPlanned
+					|| (display_mode_ == 1 ? t == rc::StepType::DivergedPhysical : t == rc::StepType::DivergedPlanned || t == rc::StepType::DivergedPostPlanned);
+				if (mine && merged.fade[i] && *merged.fade[i] < merged.along[i] + merged.lengths[i]) { // (one that fades in it)
+					fade_at = fade_at ? std::min(*fade_at, *merged.fade[i]) : *merged.fade[i];
 				}
 			}
 			if (full_preview_) {
@@ -1911,7 +1920,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		if (!things.empty() || preview) {
 			cached(glow_draw_, {flags_version_, preview ? (trace_version_ * (READY_RISE + READY_FALL + 1) + int(ready_ * (READY_RISE + READY_FALL))) * 2 + (full_preview_ ? 1 : 0) : -1, world_->version()}, NodeKind::Glow, 1, V2{}, WHITE,
 					[&](std::vector<Call> &out) {
-						const PathReveal reveal = preview ? reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), full_preview_, plan_never_reached(pv), plan_) : PathReveal{};
+						const PathReveal reveal = preview ? reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), full_preview_, plan_never_reached(pv), planned_to_terminal(pv)) : PathReveal{};
 						auto seen = [&](size_t step) { return reveal.seen(step, std::numeric_limits<double>::infinity()); };
 						auto tagged = [&](const std::string &name, const char *tag) {
 							for (const Tagged &t : level_.tagged) {

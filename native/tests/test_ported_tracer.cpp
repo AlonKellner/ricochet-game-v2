@@ -359,7 +359,8 @@ bool preview_visible(const std::vector<SurfaceDef> &defs, V2 player, V2 cursor, 
 	if (ci < 0 || !pair->cursor_point_agrees) {
 		return false;
 	}
-	return inv::preview_visible(pair->planned, sweep::merge(pair->planned.steps, pair->physical.steps, ci), pair->cursor_point_agrees);
+	return inv::preview_visible(pair->planned, sweep::merge(pair->planned.steps, pair->physical.steps, ci, pair->physical.cursor_index),
+		pair->cursor_point_agrees);
 }
 
 // _assert_pinned: supported, the structure checks hold, an 11 x 7 cursor grid agrees with the preview

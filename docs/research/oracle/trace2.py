@@ -1232,7 +1232,10 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                 # the cursor is not a hit point (Stage 131): counted toward neither limit
                 _append(walk, Event("cursor", point=beam.at(t), t=t, beam=beam))
                 walk.cursor_done = True
-                walk.mode = walk.post_mode
+                # (Stage 205, the user: a planned terminal left is planned past the cursor too -- the planned
+                # walk goes on by its rules to it, and only then by PHYSICAL ones; it stops there, GAME_SPEC 12.2)
+                if walk.plan_index >= len(walk.plan) or walk.mode == PHYSICAL:
+                    walk.mode = walk.post_mode
                 walk.on_plan = False
                 continue
             walk.count += 1
@@ -1269,6 +1272,8 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                         walk.plan_matched = False
                         walk.on_plan = False
                         walk.events[-1].off_plan = True
+                elif not consumed and walk.cursor_done:
+                    walk.mode = walk.post_mode  # (Stage 205: an unplanned passage ends the plan's rules past the cursor)
                 if consumed:
                     _late_cursor(walk, beam, cands, ci, key, t0)
                 continue
@@ -1453,6 +1458,8 @@ def _origin_passage(walk: Walk, ev):
             walk.plan_matched = False
             walk.on_plan = False
             ev.off_plan = True
+    elif not consumed and walk.cursor_done:
+        walk.mode = walk.post_mode  # (Stage 205: an unplanned passage ends the plan's rules past the cursor)
 
 
 def _late_cursor(walk: Walk, beam, cands, ci, key, t0):

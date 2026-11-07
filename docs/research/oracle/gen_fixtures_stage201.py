@@ -6,7 +6,8 @@ Usage:
 Writes bench/fixtures/stage201_terminal_cursor.json: the cursor counts once the
 plan's entries are consumed, or all but a planned terminal, reached or not. Past
 the terminal it is not reached. And the cursor counts toward neither event limit:
-after all ten significant events it is still reached.
+after all ten significant events it is still reached. Stage 205: past the cursor the
+planned walk keeps the plan's rules to the terminal, until an unplanned passage.
 """
 import json
 import os
@@ -45,8 +46,10 @@ def main():
             ("line_missed", [term, wall], [(1, left)], (100.0, 40.0), None),
             # the aim misses a circle terminal
             ("circle_missed", [ring, wall], [(1, left)], (100.0, 0.0), None),
-            # the other way from it: no aim away from the cursor
-            ("the_other_way", [term, far], [(1, left)], (-50.0, 0.0), ["cursor", "hit"]),
+            # the other way from it: no aim away from the cursor (Stage 205: the planned walk keeps the plan's rules
+            # past the cursor, passing the far wall, until its unplanned passage of infinity; the terminal after it)
+            ("the_other_way", [term, far], [(1, left)], (-50.0, 0.0),
+             ["cursor", "infinity", "hit"] if mode == "planned" else ["cursor", "hit"]),
             # past it: not reached
             ("past_it", [term, wall], [(1, left)], (300.0, 0.0), ["hit"]),
         ]

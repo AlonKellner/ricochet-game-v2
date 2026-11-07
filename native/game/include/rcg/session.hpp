@@ -229,6 +229,9 @@ public:
 	std::optional<V2> preview_trip_end() const { return shown().trip ? std::optional<V2>(shown().trip->trail.back()) : std::nullopt; }
 	// Stage 147 (tests, tools): the preview's physical trace -- the path a shot now takes (none: no trace)
 	const rc::TracePath *physical_trace() const { return preview_.pair ? &preview_.pair->physical : nullptr; }
+	const rc::TracePath *planned_trace() const { return preview_.pair ? &preview_.pair->planned : nullptr; } // (Stage 205)
+	// Stage 205 (tests: the fade's invariants): per merged step, how much of it shows at its start and at its end
+	std::vector<std::array<double, 2>> preview_seen() const;
 	double preview_seconds() const { return provisional_ ? 0.0 : preview_climb_seconds_; }
 	void paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<render::Call> &out, double dash_phase = 0.0,
 		const std::vector<rc::sweep::EventDot> *dots = nullptr, const std::vector<uint8_t> *marks = nullptr) const;
@@ -478,7 +481,8 @@ private:
 	std::vector<std::vector<bool>> touches_;       // per pair of tagged nodes (elements, then objects)
 	bool bodies_moving_ = false;
 	bool full_preview_ = false; // Stage 195
-	const std::vector<PlanEntry> *plan_never_reached(const Preview &pv) const; // Stage 200
+	const std::vector<PlanEntry> *plan_never_reached(const Preview &pv) const;
+	bool planned_to_terminal(const Preview &pv) const; // Stage 205 // Stage 200
 	double preview_reach() const;
 	double ready_ = 1.0; // Stage 188 (see can_fire)
 	int still_ = READY_SETTLE; // ... ticks the player has not moved

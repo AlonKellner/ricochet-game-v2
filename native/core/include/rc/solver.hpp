@@ -531,6 +531,7 @@ struct Walk {
 	bool plan_matched = true;
 	bool left_plan = false; // Stage 129: a surface fired out of plan while entries remained (GAME_SPEC 14.2; sticky)
 	bool wrapped_off = false; // Stage 131: an unplanned passage of infinity or of the ray's origin before the cursor
+	bool plan_past_cursor = true; // Stage 205: Solver::planned_past_cursor
 	// Stage 133 (GAME_SPEC 9.7): the plan's pieces, per entry (nullopt: the whole
 	// surface) -- an end that is a crossing read as the crossing itself
 	std::vector<std::optional<Seg<N>>> spans;
@@ -1098,6 +1099,9 @@ public:
 
 	// Stage 111: the region casts a member in a forced orientation (nullopt: the plan's realization).
 	std::optional<bool> force_reversed;
+	// Stage 205 (GAME_SPEC 12.2): a planned terminal left, the planned walk keeps the plan's rules past the cursor (false:
+	// PHYSICAL ones from the cursor on, as before -- what the cursor's own point is decided by, V3)
+	bool planned_past_cursor = true;
 	// Stage 123: a region's cast along a member through exact data (a segment's
 	// endpoint; Stage 124: or an exact crossing, found after j plan entries): the
 	// walk's beam after those entries passes it by construction, so it is a known
@@ -2156,6 +2160,7 @@ private:
 		w.cursor = cursor;
 		w.mode = mode;
 		w.post_mode = Mode::Physical;
+		w.plan_past_cursor = planned_past_cursor;
 		w.max_events = max_events;
 		w.max_sig = max_events == MAX_HITS ? MAX_SIGNIFICANT : (max_events / MAX_HITS) * MAX_SIGNIFICANT; // (the realization's wide budget: 8 x each)
 		w.infinity_ends = !scene_.infinity_loop && max_events == MAX_HITS; // (the realization's wide budget is geometry: no limit of the game)
@@ -3866,6 +3871,8 @@ private:
 							w.on_plan = false;
 							w.events.back().off_plan = true;
 						}
+					} else if (!consumed && w.cursor_done) {
+						w.mode = w.post_mode; // (Stage 205: an unplanned passage ends the plan's rules past the cursor)
 					}
 					if (consumed) {
 						late_cursor(w, *beam, cands, gp, gw, ci, t, t0);
@@ -3891,7 +3898,11 @@ private:
 						w.done = true;
 						return;
 					}
-					w.mode = w.post_mode;
+					// (Stage 205, the user: a planned terminal left is planned past the cursor too -- the planned walk
+					// goes on by its rules to it, and only then by PHYSICAL ones; it stops there, GAME_SPEC 12.2)
+					if (w.plan_index >= int(w.plan.size()) || w.mode == Mode::Physical || !w.plan_past_cursor) {
+						w.mode = w.post_mode;
+					}
 					// the post-cursor continuation is the sensitive part
 					w.anchored = false;
 					if (!w.seeded) {
@@ -4191,6 +4202,8 @@ private:
 				w.on_plan = false;
 				w.events.back().off_plan = true;
 			}
+		} else if (!consumed && w.cursor_done) {
+			w.mode = w.post_mode; // (Stage 205: an unplanned passage ends the plan's rules past the cursor)
 		}
 		return consumed;
 	}
