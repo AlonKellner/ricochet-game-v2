@@ -1082,10 +1082,12 @@ struct PathPainter {
 			if (!bounds.has_point(at)) {
 				continue;
 			}
-			if (st.significant) {
+			if (st.significant && !st.counterpart) {
 				ring(at, st);
-			} else if (dots == nullptr) {
-				Color col = step_color(st.type);
+			} else if (dots == nullptr || st.counterpart) {
+				// (Stage 206: a counterpart marks no carrier -- the small dot, not a ring; the planned walk's alone, red,
+				// also where the step is the walks' common part to it)
+				Color col = step_color(st.counterpart ? rc::StepType::DivergedPlanned : st.type);
 				if (st.ghost) {
 					col = ghost_color(col);
 				}
@@ -1557,7 +1559,10 @@ PathReveal reveal_of(const std::vector<rc::TraceStep> &steps, const std::vector<
 			if (steps[i].type == rc::StepType::DivergedPhysical || !steps[i].significant) {
 				continue;
 			}
-			if (next < never_reached->size() && (*never_reached)[next].surface_id == steps[i].surface_id) {
+			if (steps[i].counterpart) {
+				// (Stage 206: the plan's miss -- it names the next entry's surface, but nothing was met)
+				unplanned = r.along[i] + r.lengths[i];
+			} else if (next < never_reached->size() && (*never_reached)[next].surface_id == steps[i].surface_id) {
 				next++;
 			} else {
 				unplanned = r.along[i] + r.lengths[i];
@@ -1725,7 +1730,7 @@ void Session::paint_path(std::vector<Call> &out, double dash_phase) const {
 					// (Stage 195: a stop past where the path fades out is not shown)
 					double seen = 1.0;
 					for (size_t i = 0; i < pv.merged.size(); i++) {
-						if (pv.merged[i].end == pt) {
+						if (rc::arc::near_pt(pv.merged[i].end, pt)) { // (the same drawn point as the merge pairs ends, Stage 206)
 							seen = reveal.seen(i, reveal.lengths[i]);
 						}
 					}

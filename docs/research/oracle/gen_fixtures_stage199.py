@@ -38,7 +38,8 @@ def main():
     cases = [
         # name, surfaces, walk, the kinds with the option off
         ("nothing_on_the_beam", [off_ray], dict(direction=east), ["max"]),
-        ("planned_entry_the_aim_misses", [missed], dict(plan=[(1, "LEFT")], mode="planned", direction=east), ["max"]),
+        # (Stage 206: the missed terminal's counterpart ends the planned walk, at the tangent length)
+        ("planned_entry_the_aim_misses", [missed], dict(plan=[(1, "LEFT")], mode="planned", direction=east), ["counterpart"]),
         ("a_mirror_past_infinity", [behind], dict(direction=east), ["max"]),
         ("reflected_first", [ahead], dict(direction=east), ["hit", "max"]),
         ("planned_infinity_aimed_past", [off_ray], dict(plan=[(INF, "")], mode="planned", cursor=(-50.0, 0.0)), ["max"]),
@@ -52,8 +53,8 @@ def main():
         assert on["expected"] == plain["expected"], name
         f = fixture(name + "_off", surfs, (0.0, 0.0), infinity_loop=False, **walk)
         assert kinds(f) == off, (name, kinds(f))
-        assert kinds(on) != kinds(f), name
-        assert f["expected"][-1]["surface_id"] == INF and "infinity" not in kinds(f), name
+        assert kinds(on) != kinds(f) or kinds(f) == ["counterpart"], name   # (Stage 206: a terminal's counterpart ends both)
+        assert "infinity" not in kinds(f) and (f["expected"][-1]["surface_id"] == INF or kinds(f) == ["counterpart"]), name
         fx += [on, f]
     path = os.path.join(ROOT, "bench", "fixtures", "stage199_infinity_loop.json")
     with open(path, "w") as out:

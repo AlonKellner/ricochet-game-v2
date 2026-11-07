@@ -200,12 +200,24 @@
    ],
    "plan": [
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 1,
      "side": "LEFT"
     },
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 2,
      "side": "RIGHT"
+    },
+    {
+     "surface_id": -3,
+     "side": ""
     },
     {
      "surface_id": 3,
@@ -219,7 +231,7 @@
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
-     "applied": false,
+     "applied": true,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
@@ -282,7 +294,7 @@
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
-     "applied": false,
+     "applied": true,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
@@ -319,7 +331,7 @@
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
-     "applied": false,
+     "applied": true,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
@@ -604,12 +616,24 @@
    ],
    "plan": [
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 1,
      "side": "LEFT"
     },
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 2,
      "side": "RIGHT"
+    },
+    {
+     "surface_id": -3,
+     "side": ""
     },
     {
      "surface_id": 3,
@@ -840,12 +864,24 @@
    ],
    "plan": [
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 1,
      "side": "LEFT"
     },
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 2,
      "side": "LEFT"
+    },
+    {
+     "surface_id": -3,
+     "side": ""
     },
     {
      "surface_id": 3,
@@ -859,7 +895,7 @@
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
-     "applied": false,
+     "applied": true,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
@@ -909,7 +945,7 @@
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
-     "applied": false,
+     "applied": true,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
@@ -959,7 +995,7 @@
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
-     "applied": false,
+     "applied": true,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
@@ -1237,12 +1273,24 @@
    ],
    "plan": [
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 1,
      "side": "LEFT"
     },
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 2,
      "side": "LEFT"
+    },
+    {
+     "surface_id": -3,
+     "side": ""
     },
     {
      "surface_id": 3,
@@ -1475,12 +1523,24 @@
    ],
    "plan": [
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 1,
      "side": "LEFT"
     },
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 2,
      "side": "RIGHT"
+    },
+    {
+     "surface_id": -3,
+     "side": ""
     },
     {
      "surface_id": 3,
@@ -1494,7 +1554,7 @@
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
-     "applied": false,
+     "applied": true,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
@@ -1557,7 +1617,7 @@
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
-     "applied": false,
+     "applied": true,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
@@ -1594,7 +1654,7 @@
      "kind": "infinity",
      "surface_id": -3,
      "side": "",
-     "applied": false,
+     "applied": true,
      "terminal": false,
      "on_segment": false,
      "rehit": false,
@@ -1887,12 +1947,24 @@
    ],
    "plan": [
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 1,
      "side": "LEFT"
     },
     {
+     "surface_id": -3,
+     "side": ""
+    },
+    {
      "surface_id": 2,
      "side": "RIGHT"
+    },
+    {
+     "surface_id": -3,
+     "side": ""
     },
     {
      "surface_id": 3,

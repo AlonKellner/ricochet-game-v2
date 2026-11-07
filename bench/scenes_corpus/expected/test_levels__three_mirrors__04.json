@@ -1,24 +1,24 @@
 {
  "planned": [
   {
-   "kind": "infinity",
-   "surface_id": -3,
-   "side": "",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false
-  },
-  {
-   "kind": "hit",
+   "kind": "counterpart",
    "surface_id": 5,
-   "side": "LEFT",
-   "applied": true,
+   "side": "",
+   "applied": false,
    "terminal": false,
-   "on_segment": true,
+   "on_segment": false,
    "rehit": false,
-   "x": "1200.000000000000000000000000000000000000",
-   "y": "627.6359377364634877211188366773916718453"
+   "x": "805.3382568359375000000000000000000000000",
+   "y": "530.3010739822865122788811633226083281547"
+  },
+  {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
   },
   {
    "kind": "origin",
@@ -28,7 +28,7 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "1397.330871582031250000000000000000000000",
+   "x": "1002.669128417968750000000000000000000000",
    "y": "578.9685058593750000000000000000000000000"
   },
   {
@@ -41,37 +41,24 @@
    "rehit": false
   },
   {
-   "kind": "cursor",
+   "kind": "origin",
    "surface_id": -1,
    "side": "",
    "applied": false,
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "972.4467163085937500000000000000000000000",
-   "y": "683.7570800781250000000000000000000000000"
+   "x": "1002.669128417968750000000000000000000000",
+   "y": "578.9685058593750000000000000000000000000"
   },
   {
-   "kind": "hit",
-   "surface_id": 6,
-   "side": "RIGHT",
-   "applied": true,
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
    "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1000.000000000000000000000000000000000000",
-   "y": "676.9616529546798501199919210515504139886"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 4,
-   "side": "LEFT",
-   "applied": true,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "800.0000000000000000000000000000000000000",
-   "y": "627.6359377364634877211188366773916718453"
+   "on_segment": false,
+   "rehit": false
   },
   {
    "kind": "origin",
@@ -81,41 +68,37 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "997.3308715820312500000000000000000000000",
+   "x": "1002.669128417968750000000000000000000000",
    "y": "578.9685058593750000000000000000000000000"
   },
   {
-   "kind": "hit",
-   "surface_id": 6,
-   "side": "RIGHT",
-   "applied": true,
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
    "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1000.000000000000000000000000000000000000",
-   "y": "578.3102225182471253222457523032329297019"
+   "on_segment": false,
+   "rehit": false
   },
   {
-   "kind": "hit",
-   "surface_id": 4,
-   "side": "LEFT",
-   "applied": true,
+   "kind": "origin",
+   "surface_id": -1,
+   "side": "",
+   "applied": false,
    "terminal": false,
-   "on_segment": true,
+   "on_segment": false,
    "rehit": false,
-   "x": "800.0000000000000000000000000000000000000",
-   "y": "528.9845073000307629233726679290741875586"
+   "x": "1002.669128417968750000000000000000000000",
+   "y": "578.9685058593750000000000000000000000000"
   },
   {
-   "kind": "hit",
-   "surface_id": 6,
-   "side": "RIGHT",
-   "applied": true,
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
    "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1000.000000000000000000000000000000000000",
-   "y": "479.6587920818144005244995835549154454152"
+   "on_segment": false,
+   "rehit": false
   },
   {
    "kind": "max",
@@ -125,8 +108,8 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "800.0000000000000000000000000000000000000",
-   "y": "430.3330768635980381256264991807567032719"
+   "x": "1002.669128417968750000000000000000000000",
+   "y": "578.9685058593750000000000000000000000000"
   }
  ],
  "physical": [

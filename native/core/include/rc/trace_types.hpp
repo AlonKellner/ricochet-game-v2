@@ -154,6 +154,7 @@ struct TraceStep {
 	bool after_infinity = false; // Stage 131: it starts at a passage of infinity (the incoming half of a wrap)
 	bool to_infinity = false;    // Stage 134: it ends at a passage of infinity (the outgoing half; kept by the display's clipping)
 	bool teleports = false;      // Stage 131: it ends at a portal's entry (the next drawn step is after_portal)
+	bool counterpart = false;    // Stage 206: it ends at a counterpart point (the planned walk's miss of its next entry: a dot, no ring)
 	double est_error = -1.0;
 	int precision_bits = 0;
 
@@ -189,6 +190,7 @@ struct TraceStep {
 		after_infinity = o.after_infinity;
 		to_infinity = o.to_infinity;
 		teleports = o.teleports;
+		counterpart = o.counterpart;
 	}
 };
 

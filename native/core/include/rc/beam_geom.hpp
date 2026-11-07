@@ -133,6 +133,57 @@ InlineVec<N, 4> hits(const Beam<N> &beam, const Seg<N> &seg, bool depart_on) {
 	return {big.div(c2.mul_pow2(1)), c0.mul_pow2(1).div(big)};
 }
 
+// Stage 206 (GAME_SPEC 12.1): the counterpart's carriers -- a full circle or a full
+// line as plain segments (nothing beyond what `hits` reads), and the inversion
+// about Q (R2 = its radius squared) of a point, a circle and a line.
+template <Num N>
+Seg<N> circle_seg(const CN<N> &c, const N &r) {
+	Seg<N> sg;
+	sg.id = -1;
+	sg.kind = SegKind::Circle;
+	sg.full = true;
+	sg.s = c.add(CN<N>{r, r.sub(r)});
+	sg.e = sg.s;
+	sg.circ = Circle<N>::make(-1, c, r);
+	return sg;
+}
+
+template <Num N>
+Seg<N> line_seg(const CN<N> &a, const CN<N> &b) {
+	Seg<N> sg;
+	sg.id = -1;
+	sg.kind = SegKind::Line;
+	sg.full = true;
+	sg.s = a;
+	sg.e = b;
+	return sg;
+}
+
+// the image of z (not Q)
+template <Num N>
+CN<N> invert_about(const CN<N> &z, const CN<N> &Q, const N &R2) {
+	const CN<N> u = z.sub(Q);
+	return Q.add(u.scale(R2).div_real(u.abs2()));
+}
+
+// the image of the circle (c, r2 = r^2) not through Q: (centre, radius^2)
+template <Num N>
+std::pair<CN<N>, N> invert_circle(const CN<N> &c, const N &r2, const CN<N> &Q, const N &R2) {
+	const CN<N> d = c.sub(Q);
+	const N k = R2.div(d.abs2().sub(r2));
+	return {Q.add(d.scale(k)), k.mul(k).mul(r2)};
+}
+
+// the image of the line a b not through Q: the circle through Q, (centre, radius^2)
+template <Num N>
+std::pair<CN<N>, N> invert_line_not_through(const CN<N> &a, const CN<N> &b, const CN<N> &Q, const N &R2) {
+	const CN<N> D = b.sub(a);
+	const CN<N> F = a.add(D.scale(CN<N>::dot(Q.sub(a), D).div(D.abs2()))); // the foot of Q on the line
+	const CN<N> w = F.sub(Q);
+	const N d2 = w.abs2();
+	return {Q.add(w.scale(R2.div(d2.mul_pow2(1)))), R2.mul(R2).div(d2.mul_pow2(2))};
+}
+
 // zA·wB - zB·wA with integer homogeneous weights (0 or 1)
 template <Num N>
 CN<N> hdet(const CN<N> &zA, int wA, const CN<N> &zB, int wB) {

@@ -641,6 +641,15 @@ inline bool cut_by_max_hits(const Input &in, const std::string &trace_name) {
 	return !ev.empty() && ev.back().kind == EventKind::Max;
 }
 
+// Stage 206: the planned walk ended at a planned terminal's counterpart (its miss: no carrier there)
+inline bool ends_at_counterpart(const Input &in, const std::string &trace_name) {
+	if (!in.has_result()) {
+		return false;
+	}
+	const std::vector<EvInfo> &ev = events_of(in, trace_name);
+	return !ev.empty() && ev.back().kind == EventKind::Counterpart;
+}
+
 inline Violations check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(const Input &in) {
 	Violations out;
 	if (!in.has_renderer || in.player == in.cursor) {
@@ -653,7 +662,7 @@ inline Violations check_TRACE_ENDS_AT_SURFACE_OR_BOUNDS(const Input &in) {
 			continue;
 		}
 		const V2 end_pos = path->steps.back().end;
-		bool valid = cut_by_max_hits(in, name);
+		bool valid = cut_by_max_hits(in, name) || ends_at_counterpart(in, name);
 		if (double(end_pos.distance_to(in.player)) < 2.0) {
 			valid = true;
 		}

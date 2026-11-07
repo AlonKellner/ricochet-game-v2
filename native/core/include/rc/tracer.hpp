@@ -406,14 +406,17 @@ public:
 	// cache; nullopt where trace_pair returns none. Stage 123: stops, what the
 	// cast reads (Ladder::solve's horizon); known, Solver::aim_known; reads_cursor
 	// (Stage 127), whether it reads the planned walk's cursor.
+	// Stage 206: counterparts, whether the planned walk meets a missed entry's counterpart (the region passes false:
+	// the regions are unchanged by them).
 	std::optional<LadderResult> solve(double px, double py, double cx, double cy, const std::vector<PlanItem> &plan, Flags flags,
 			std::optional<bool> force_reversed = std::nullopt, int stops = -1, const std::optional<AimKnown> &known = std::nullopt,
-			bool reads_cursor = true) {
+			bool reads_cursor = true, bool counterparts = true) {
 		if (!ctx_ || !supported_ || (px == cx && py == cy)) {
 			return std::nullopt;
 		}
 		flags.erase(GHOST);
 		Ladder ladder(*ctx_, clock_);
+		ladder.counterparts = counterparts;
 		LadderResult res = ladder.solve(px, py, cx, cy, plan, MAX_HITS, MAX_HITS, TRACE_TOL, false, flags, force_reversed, stops, known, reads_cursor);
 		if (res.planned.empty() || res.physical.empty() || !finite(res.planned) || !finite(res.physical)) {
 			return std::nullopt;
@@ -786,6 +789,17 @@ public:
 				last.hit_on_segment = true;
 				last.significant = true; // (Stage 131: a passage of infinity)
 				last.to_infinity = true;
+			}
+			if (e.kind == EventKind::Counterpart && !lean) {
+				// Stage 206: the planned walk's miss of its next entry -- a significant end off the
+				// surface's segment, no hit record (no carrier of the scene was met)
+				if (appended || (e.point && !path.steps.empty() && path.steps.back().end == V2::of(e.point->fx(), e.point->fy()))) {
+					TraceStep &last = path.steps.back();
+					last.significant = true;
+					last.counterpart = true;
+					last.surface_id = e.surface_id;
+					last.hit_on_segment = false;
+				}
 			}
 			if (e.kind == EventKind::Hit) {
 				if (!(e.flags == *keyed)) {

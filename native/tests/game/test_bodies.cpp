@@ -1684,6 +1684,150 @@ TEST_CASE("session: off, a planned entry the aim misses goes no further than inf
 	CHECK(infinities(steps(false)) == 0);
 	CHECK(infinities(steps(true)) > 1);
 	CHECK(steps(false).size() < steps(true).size());
+	// (Stage 206: the box is a terminal -- the cursor counts before it, Stage 201 -- and past the cursor the aim meets the
+	// box's counterpart, the tangent-length circle about the player, where the planned walk ends, in both modes)
+	for (const bool loop : {false, true}) {
+		CAPTURE(loop);
+		const std::vector<rc::TraceStep> m = steps(loop);
+		REQUIRE(m.size() >= 2);
+		CHECK(m[0].type == rc::StepType::Aligned);
+		CHECK(m[1].counterpart);
+	}
+}
+
+// Stage 206 (the user): counterpart surfaces -- a planned surface the aim cannot reach before the frame's infinity: the
+// planned path runs whole to the surface's counterpart (the circle about the ray's origin with the tangent length as
+// radius; a line's mirror image through the origin) and fades from there, so an aim a hair outside a planned circle's
+// tangent cone ends where a grazing aim hits; a red dot marks the point, no ring
+TEST_CASE("preview: a planned circle the aim misses runs whole to the tangent length and fades there, continuous across the cone's edge (Stage 206)") {
+	for (const bool loop : {false, true}) {
+		CAPTURE(loop);
+		nlohmann::json j = nlohmann::json::parse(R"({"room": {"rect": [560, 240, 800, 600], "built": false},
+			"objects": [{"name": "ball", "circle": {"center": [1200, 300], "radius": 16}, "face": "mirror", "kind": "static"}]})");
+		j["infinity_loop"] = loop;
+		rcg::Session s(level_of(j.dump().c_str()));
+		plan_at(s, 1200, 284);
+		REQUIRE(s.plan().size() == 1);
+		const rc::V2 P = s.player();
+		const rc::V2 C = rc::V2::of(1200, 300);
+		const double tlen = std::sqrt(dist(P, C) * dist(P, C) - 16.0 * 16.0);
+		// the aim's end: the box's counterpart (a miss) or its hit point; the merged step's index
+		struct End {
+			bool miss;
+			rc::V2 at;
+			size_t step;
+		};
+		const auto end_of = [&](const rc::V2 &cursor) -> std::optional<End> {
+			s.set_cursor(cursor);
+			s.settle();
+			const std::vector<rc::TraceStep> &m = s.preview_steps();
+			for (size_t i = 0; i < m.size(); i++) {
+				if (m[i].counterpart) {
+					return End{true, m[i].end, i};
+				}
+				if (m[i].surface_id == s.plan()[0].surface_id && m[i].hit_on_segment && m[i].significant) {
+					return End{false, m[i].end, i};
+				}
+			}
+			return std::nullopt;
+		};
+		// the cursor on a small circle about the box's centre: its aim image lies far out along the cursor's bearing
+		// from the centre, so the aim turns through the tangent cone's edge as the bearing leaves the player's
+		const double axis = std::atan2(double(P.y - C.y), double(P.x - C.x));
+		std::optional<End> prev;
+		int hits = 0, misses = 0;
+		for (int deg = 0; deg <= 70; deg += 1) {
+			const double a = axis + deg * std::acos(-1.0) / 180.0;
+			const std::optional<End> e = end_of(rc::V2::of(double(C.x) + 8.0 * std::cos(a), double(C.y) + 8.0 * std::sin(a)));
+			REQUIRE(e.has_value());
+			CAPTURE(deg);
+			if (e->miss) {
+				misses++;
+				CHECK(std::abs(dist(e->at, P) - tlen) < 0.05); // (at the tangent length from the ray's origin)
+				const std::vector<std::array<double, 2>> seen = s.preview_seen();
+				CHECK(seen[e->step][1] == 1.0); // (whole to the counterpart)
+				if (!loop) {
+					CHECK(infinities(s.preview_steps()) == 0);
+				}
+			} else {
+				hits++;
+				CHECK(std::abs(dist(e->at, C) - 16.0) < 0.05);
+			}
+			if (prev) {
+				CHECK(dist(prev->at, e->at) < 20.0); // (the end moves continuously, across the cone's edge too)
+			}
+			prev = e;
+		}
+		CHECK(hits > 5);
+		CHECK(misses > 5);
+	}
+}
+
+TEST_CASE("preview: a counterpart point gets the planned walk's dot, no ring (Stage 206)") {
+	nlohmann::json j = nlohmann::json::parse(R"({"room": {"rect": [560, 240, 800, 600], "built": false},
+		"objects": [{"name": "ball", "circle": {"center": [1200, 300], "radius": 16}, "face": "mirror", "kind": "static"}]})");
+	rcg::Session s(level_of(j.dump().c_str()));
+	plan_at(s, 1200, 284);
+	REQUIRE(s.plan().size() == 1);
+	// a cursor off the player's bearing from the ball's centre: the aim misses (the test above)
+	const rc::V2 C = rc::V2::of(1200, 300);
+	const double axis = std::atan2(double(s.player().y - C.y), double(s.player().x - C.x)) + 60.0 * std::acos(-1.0) / 180.0;
+	s.set_cursor(rc::V2::of(double(C.x) + 8.0 * std::cos(axis), double(C.y) + 8.0 * std::sin(axis)));
+	s.settle();
+	const std::vector<rc::TraceStep> &m = s.preview_steps();
+	std::optional<rc::V2> at;
+	for (const rc::TraceStep &st : m) {
+		if (st.counterpart) {
+			at = st.end;
+		}
+	}
+	REQUIRE(at.has_value());
+	std::vector<rcg::render::Call> calls;
+	s.paint_steps(m, calls);
+	bool dot = false, ring = false;
+	for (const rcg::render::Call &c : calls) {
+		if (c.kind != rcg::render::Kind::Circle || c.pts.empty() || dist(c.pts[0], *at) > 4.0) { // (the lanes shift the mark a little)
+			continue;
+		}
+		dot = dot || (c.radius == 2.0 && c.colors[0][0] > c.colors[0][1]); // (red: the planned walk alone)
+		ring = ring || c.radius > 3.0;
+	}
+	CHECK(dot);
+	CHECK_FALSE(ring);
+}
+
+// a planned terminal the aim faces away from (the cursor before it, Stage 201): the planned walk goes on past the cursor
+// to the terminal's counterpart -- the terminal's mirror image through the player -- and ends there, whole
+TEST_CASE("preview: a planned terminal behind the aim: whole to its counterpart, the mirror image through the player (Stage 206)") {
+	for (const bool loop : {false, true}) {
+		CAPTURE(loop);
+		nlohmann::json j = nlohmann::json::parse(R"({"room": {"rect": [560, 240, 800, 600], "built": false}, "elements": [
+			{"kind": "grapple", "start": [1200, 300], "end": [1200, 500]}]})");
+		j["infinity_loop"] = loop;
+		rcg::Session s(level_of(j.dump().c_str()));
+		plan_at(s, 1200, 400);
+		REQUIRE(s.plan().size() == 1);
+		s.set_cursor(rc::V2::of(600, 540)); // (the other way from it: the aim runs west, the grapple behind)
+		s.settle();
+		const rc::TracePath *planned = s.planned_trace();
+		REQUIRE(planned != nullptr);
+		REQUIRE(planned->cursor_index >= 0);
+		REQUIRE(!planned->steps.empty());
+		CHECK(planned->steps.back().counterpart);
+		CHECK(std::abs(double(planned->steps.back().end.x) - (2.0 * double(s.player().x) - 1200.0)) < 0.05);
+		CHECK(std::abs(double(planned->steps.back().end.y) - double(s.player().y)) < 0.05);
+		// whole to it: no planned step fades
+		const std::vector<rc::TraceStep> &m = s.preview_steps();
+		const std::vector<std::array<double, 2>> seen = s.preview_seen();
+		REQUIRE(seen.size() == m.size());
+		for (size_t i = 0; i < m.size(); i++) {
+			if (m[i].type != rc::StepType::DivergedPhysical) {
+				CAPTURE(i);
+				CHECK(seen[i][1] == 1.0);
+			}
+		}
+		CHECK(s.debug_summary().find("cursor: preview visible, region inside") != std::string::npos);
+	}
 }
 
 // Stage 201 (the user's F12 dumps): a planned terminal the aim misses: the cursor counts, and past it the path fades
@@ -1908,11 +2052,21 @@ void check_fade(rcg::Session &s, rcg::Session &whole, const std::string &where, 
 		}
 		to_terminal = first + 1 == planned->steps.size() && planned->steps.back().surface_id == s.plan().back().surface_id;
 	}
+	// Stage 206: a planned walk that misses its next entry runs whole to the entry's counterpart
+	std::optional<size_t> counterpart;
+	for (size_t i = 0; i < m.size() && !counterpart; i++) {
+		if (m[i].counterpart) {
+			counterpart = i;
+		}
+	}
 	for (size_t i = 0; i < m.size(); i++) {
 		const rc::StepType t = m[i].type;
 		INFO("step " << i << " type " << int(t) << " seen " << seen[i][0] << " -> " << seen[i][1]);
 		CHECK(seen[i][0] >= seen[i][1]); // (a step fades on, never back)
 		const bool shown = seen[i][0] == 1.0 && seen[i][1] == 1.0;
+		if (counterpart && i <= *counterpart && in_walk(t, Walk::Planned)) {
+			CHECK(shown);
+		}
 		// the planned path to the cursor is whole: the common part before it, and a diverged planned walk to it
 		if (t == rc::StepType::Aligned || (t == rc::StepType::DivergedPlanned && reached)) {
 			CHECK(shown);
@@ -2008,6 +2162,13 @@ TEST_CASE("preview: the fade's invariants over plans and cursors (Stage 205)") {
 			REQUIRE(s.plan().size() == clicks.size());
 		}, 580, 1340, 260, 820, 40, "room, " + name);
 	}
+	// Stage 206: a planned circle the aim misses from most places (the cone is narrow): the counterpart's fade
+	const char *ball = R"({"room": {"rect": [560, 240, 800, 600], "built": false},
+		"objects": [{"name": "ball", "circle": {"center": [1200, 300], "radius": 16}, "face": "mirror", "kind": "static"}]})";
+	sweep_fade([&] { return level_of(ball); }, [&](rcg::Session &s) {
+		plan_at(s, 1200, 284);
+		REQUIRE(s.plan().size() == 1);
+	}, 580, 1340, 260, 820, 40, "the mirror ball");
 	// the user's grapple_1 dumps (2026-11-06, 2026-11-07): the grapple planned from two places
 	const std::filesystem::path root = RC_REPO_ROOT;
 	const auto grapple_1 = [&] { return rcg::load_level((root / "data/levels/grapple_1.json").string()); };
@@ -2019,5 +2180,37 @@ TEST_CASE("preview: the fade's invariants over plans and cursors (Stage 205)") {
 			plan_at(s, d[2], d[3]);
 			REQUIRE(s.plan().size() == 1);
 		}, 20, 1900, 20, 1060, 60, "grapple_1 from (" + std::to_string(d[0]) + ", " + std::to_string(d[1]) + ")");
+	}
+}
+
+
+
+// Stage 206 (the user's dumps, pulling_1): a planned terminal missed, the cursor beyond its counterpart: the planned walk
+// runs to infinity and is clipped onto the level's edge, where the physical walk hits the edge wall -- the same drawn
+// point an ulp apart. The truncation marker there fades with the step (it matched the step's end by float32 equality
+// and flickered between white, whole, and the step's colour, faded, as the cursor moved)
+TEST_CASE("preview: a truncation marker at the same drawn point as a faded step's end fades with it (Stage 206)") {
+	const std::filesystem::path root = RC_REPO_ROOT;
+	for (const double cx : {736.507874, 735.238037}) {
+		CAPTURE(cx);
+		rcg::Session s(rcg::load_level((root / "data/levels/pulling_1.json").string()));
+		s.teleport(rc::V2::of(550, 1043.92004));
+		plan_at(s, 684.4443969726562, 1050.7935791015625);
+		REQUIRE(s.plan().size() == 1);
+		s.set_cursor(rc::V2::of(cx, 688.888855));
+		s.settle();
+		const std::vector<rc::TraceStep> &m = s.preview_steps();
+		REQUIRE(m.size() == 2);
+		REQUIRE(s.planned_trace()->truncated);
+		const rc::V2 at = m.back().end;
+		float strongest = 0.0f;
+		for (const rcg::render::FrameNode &n : s.draw_frame()) {
+			for (const rcg::render::Call &c : *n.calls) {
+				if (c.kind == rcg::render::Kind::Polyline && c.pts.size() == 9 && dist(c.pts[0], at) < 12.0) {
+					strongest = std::max(strongest, c.colors[0][3]);
+				}
+			}
+		}
+		CHECK(strongest < 0.01f); // (the stop marker sits where the step has faded out)
 	}
 }

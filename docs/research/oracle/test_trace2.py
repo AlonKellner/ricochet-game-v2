@@ -432,9 +432,11 @@ def test_cursor_event_only_on_the_planned_path():
     # the far click: aimed at its hit point H, the beam would meet the circle
     # earlier on the planned side and fire there, off the planned path. Stage
     # 111: the realization is the one whose planned walk reaches the cursor --
-    # the other way round, through infinity, H is the first crossing met: the
-    # cursor is reached, after an unplanned wrap; the near click reaches it at
-    # once. A cursor event is never at a projection of the cursor.
+    # the other way round, through infinity, H is the first crossing met. Stage
+    # 206: that wrap unplanned, the circle cannot be reached before infinity: the
+    # planned walk meets its counterpart and the plan is missed (no cursor);
+    # with the wrap planned the cursor is reached after it. The near click
+    # reaches it at once. A cursor event is never at a projection of the cursor.
     walls = [line(10 + i, a, b, TERM, TERM) for i, (a, b) in enumerate(
         [((-1000, -1000), (1000, -1000)), ((1000, -1000), (1000, 1000)),
          ((1000, 1000), (-1000, 1000)), ((-1000, 1000), (-1000, -1000))])]
@@ -444,8 +446,14 @@ def test_cursor_event_only_on_the_planned_path():
             w = T.planned(sc, (100.0, -300.0), (520.0, 30.0), [(1, T.LEFT)], hints={0: click})
             ks = kinds(w)
             cur = [e for e in w.events if e.kind == "cursor"]
-            assert cur, (click, ks)
-            assert ("infinity" in ks[:ks.index("cursor")]) == wrap, (click, ks)
+            if wrap:
+                assert not cur and ks[0] == "counterpart", (click, ks)
+                w = T.planned(sc, (100.0, -300.0), (520.0, 30.0), [(T.INFINITY_ID, ""), (1, T.LEFT)], hints={1: click})
+                ks = kinds(w)
+                cur = [e for e in w.events if e.kind == "cursor"]
+                assert cur and ks[0] == "infinity" and w.events[0].applied, (click, ks)
+            else:
+                assert cur and "infinity" not in ks[:ks.index("cursor")], (click, ks)
             for e in cur:
                 assert abs(e.point - P((520.0, 30.0))) < mp.mpf(10) ** -30
 
@@ -1450,14 +1458,20 @@ def test_mirror_seen_from_its_pass_side_is_reached_through_infinity_unplanned():
     # the player on the mirror's pass side: the only realization of [M L] goes
     # away from the mirror, wraps, and meets its reflective face; the wrap is
     # an unplanned passage, and [inf, M L] the same path with it consumed
+    # (Stage 206: unplanned, the wrap now misses the mirror at its counterpart -- its
+    # mirror image through the origin, x = -200 -- and the plan is dead; planned, as before)
     m = line(1, (200, -300), (200, 300), REFL, PASS)
     with emit_infinity():
         for cursor in ((600, 50), (-300, 20)):
             for plan in ([(1, T.LEFT)], [(T.INFINITY_ID, ""), (1, T.LEFT)]):
                 w = T.planned([m], (0, 0), cursor, plan)
                 ks = kinds(w)
+                if len(plan) == 1:
+                    assert ks[0] == "counterpart" and "cursor" not in ks and "hit" not in ks, (cursor, plan, ks)
+                    assert abs(w.events[0].point.real + 200) < mp.mpf(10) ** -30 and not w.events[0].applied
+                    continue
                 assert ks[:2] == ["infinity", "hit"] and "cursor" in ks, (cursor, plan, ks)
-                assert w.events[0].applied == (len(plan) == 2)
+                assert w.events[0].applied
                 assert w.events[1].applied and w.events[1].side == T.LEFT
                 # a cursor behind the player: a second wrap after the reflection
                 assert ("infinity" in ks[2:ks.index("cursor")]) == (cursor[0] < 0), (cursor, plan, ks)
@@ -1539,8 +1553,12 @@ def test_projective_exit_meets_no_parallel_wall_before_the_wrap():
         (circle(2, (250.0, 240.0), 40.0, *(proj("circle_normal_projection", False),) * 2), [(1, "LEFT"), (2, "LEFT"), (3, "RIGHT")]),
         (line(2, (0, 200), (380, 200), *(proj("line_directional_projection", False, (0.0, 1.0)),) * 2), [(1, "LEFT"), (2, "RIGHT"), (3, "RIGHT")]),
     ]
+    # (Stage 206: these chains pass infinity unplanned a leg at a time -- missed at a counterpart
+    # now; the wraps are planned, an infinity entry before each leg, as gen_fixtures_stage112 does)
+    INF = (T.INFINITY_ID, "")
     with emit_infinity():
         for p2, plan in cases:
+            plan = [INF, plan[0], INF, plan[1], INF, plan[2]]
             for dps in (40, 80, 160):
                 with mp.workdps(dps):
                     w = T.planned(T.scene_from_json(_k10_scene(p2)), (200, -200), (250, 300), plan)

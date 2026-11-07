@@ -1,35 +1,24 @@
 {
  "planned": [
   {
-   "kind": "infinity",
-   "surface_id": -3,
-   "side": "",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false
-  },
-  {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "LEFT",
-   "applied": false,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1400.000000000000000000000000000000000000",
-   "y": "283.5182174387610850042282542209371871884"
-  },
-  {
-   "kind": "hit",
+   "kind": "counterpart",
    "surface_id": 11,
-   "side": "LEFT",
-   "applied": true,
+   "side": "",
+   "applied": false,
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "1350.000000000000000000000000000000000000",
-   "y": "284.3678653491456175576693989081137486745"
+   "x": "-25.52233886718750000000000000000000000000",
+   "y": "307.7420589672606324423306010918862513255"
+  },
+  {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
   },
   {
    "kind": "origin",
@@ -39,7 +28,7 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "-137.7611694335937500000000000000000000000",
+   "x": "662.2388305664062500000000000000000000000",
    "y": "296.0549621582031250000000000000000000000"
   },
   {
@@ -52,17 +41,6 @@
    "rehit": false
   },
   {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "LEFT",
-   "applied": true,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "1400.000000000000000000000000000000000000",
-   "y": "269.9238508726085641491699392261122034111"
-  },
-  {
    "kind": "origin",
    "surface_id": -1,
    "side": "",
@@ -70,7 +48,7 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "2937.761169433593750000000000000000000000",
+   "x": "662.2388305664062500000000000000000000000",
    "y": "296.0549621582031250000000000000000000000"
   },
   {
@@ -83,48 +61,24 @@
    "rehit": false
   },
   {
-   "kind": "cursor",
+   "kind": "origin",
    "surface_id": -1,
    "side": "",
    "applied": false,
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "1121.395996093750000000000000000000000000",
-   "y": "265.1895446777343750000000000000000000000"
+   "x": "662.2388305664062500000000000000000000000",
+   "y": "296.0549621582031250000000000000000000000"
   },
   {
-   "kind": "hit",
-   "surface_id": 7,
-   "side": "RIGHT",
-   "applied": true,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": true,
-   "x": "1400.000000000000000000000000000000000000",
-   "y": "269.9238508726085641491699392261122034111"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 6,
-   "side": "LEFT",
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
    "applied": false,
    "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "960.0000000000000000000000000000000000000",
-   "y": "277.4007524839924506194520124732659444886"
-  },
-  {
-   "kind": "hit",
-   "surface_id": 5,
-   "side": "LEFT",
-   "applied": true,
-   "terminal": false,
-   "on_segment": true,
-   "rehit": false,
-   "x": "400.0000000000000000000000000000000000000",
-   "y": "286.9168090802992152179928329696434331327"
+   "on_segment": false,
+   "rehit": false
   },
   {
    "kind": "origin",
@@ -134,8 +88,17 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "937.7611694335937500000000000000000000000",
+   "x": "662.2388305664062500000000000000000000000",
    "y": "296.0549621582031250000000000000000000000"
+  },
+  {
+   "kind": "infinity",
+   "surface_id": -3,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false
   },
   {
    "kind": "max",
@@ -145,8 +108,8 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false,
-   "x": "960.0000000000000000000000000000000000000",
-   "y": "296.4328656766059798165336534660209217769"
+   "x": "662.2388305664062500000000000000000000000",
+   "y": "296.0549621582031250000000000000000000000"
   }
  ],
  "physical": [

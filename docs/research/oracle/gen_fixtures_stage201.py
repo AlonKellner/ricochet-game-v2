@@ -44,12 +44,14 @@ def main():
             ("on_the_way", [term, wall], [(1, left)], (100.0, 0.0), ["cursor", "hit"]),
             # the aim misses a line terminal: the cursor, then what the walk meets
             ("line_missed", [term, wall], [(1, left)], (100.0, 40.0), None),
-            # the aim misses a circle terminal
-            ("circle_missed", [ring, wall], [(1, left)], (100.0, 0.0), None),
+            # the aim misses a circle terminal (Stage 206: the planned walk ends at its counterpart)
+            ("circle_missed", [ring, wall], [(1, left)], (100.0, 0.0),
+             ["cursor", "counterpart"] if mode == "planned" else None),
             # the other way from it: no aim away from the cursor (Stage 205: the planned walk keeps the plan's rules
-            # past the cursor, passing the far wall, until its unplanned passage of infinity; the terminal after it)
+            # past the cursor; Stage 206: the terminal behind cannot be reached before infinity -- the walk ends at
+            # its counterpart, the terminal's mirror image through the origin, at x = -200)
             ("the_other_way", [term, far], [(1, left)], (-50.0, 0.0),
-             ["cursor", "infinity", "hit"] if mode == "planned" else ["cursor", "hit"]),
+             ["cursor", "counterpart"] if mode == "planned" else ["cursor", "hit"]),
             # past it: not reached
             ("past_it", [term, wall], [(1, left)], (300.0, 0.0), ["hit"]),
         ]

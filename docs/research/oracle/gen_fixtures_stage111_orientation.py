@@ -74,12 +74,17 @@ def main():
     # the mirror seen from its pass side: the only realization goes away,
     # wraps and meets the reflective face (the wrap unplanned, or consumed)
     m = line(1, (200, -300), (200, 300), REFL, PASS)
+    # (Stage 206, the user: the wrap unplanned, the mirror cannot be reached before infinity --
+    # the planned walk meets its counterpart, the mirror's image through the origin, and the plan
+    # is missed; planned, the wrap is consumed and the mirror met)
     for tag, plan in (("unplanned", [(1, "LEFT")]), ("planned", [INF, (1, "LEFT")])):
         for ctag, cursor in (("ahead", (600.0, 50.0)), ("behind", (-300.0, 20.0))):
-            p = pair(fx, "pass_side_mirror_%s_wrap_%s" % (tag, ctag), [m], (0.0, 0.0), cursor, plan)
+            p = pair(fx, "pass_side_mirror_%s_wrap_%s" % (tag, ctag), [m], (0.0, 0.0), cursor, plan, expect_reach=(tag == "planned"))
             ks = [e["kind"] for e in p["expected"]]
-            assert ks[:2] == ["infinity", "hit"] and p["expected"][1]["applied"], kinds(p)
-            assert p["expected"][0]["applied"] == (len(plan) == 2)
+            if tag == "planned":
+                assert ks[:2] == ["infinity", "hit"] and p["expected"][1]["applied"] and p["expected"][0]["applied"], kinds(p)
+            else:
+                assert ks[0] == "counterpart" and mp.mpf(p["expected"][0]["x"]) == -200, kinds(p)
     # --- R2: an inversion arc seen from outside, the cursor inside: both
     # orientations fire the entry; the aim is at the arc whether the cursor's
     # image lies ahead of the player or far behind; [inf, 5 L] the long way

@@ -118,7 +118,7 @@ def visible(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
     and the frames they leave in), (V3) and leave its point in one frame."""
     if P(player) == P(cursor):
         return None
-    pl = T.planned(surfaces, player, cursor, plan, flags, hints, spans)
+    pl = T.planned(surfaces, player, cursor, plan, flags, hints, spans, counterparts=False)   # (Stage 206: the region computes none)
     ph = T.physical(surfaces, player, cursor, plan, flags, hints, spans)
     ci = next((i for i, e in enumerate(pl.events) if e.kind == "cursor"), None)
     if ci is None:

@@ -24,7 +24,7 @@ NOT_TRACES = {
     "stage113_degenerate_directional.json",  # a kept scene dump (B9: its playground is rejected at load), read by test_stage113.py and test_visibility.cpp
 }
 FIXTURE_KEYS = {"name", "surfaces", "player", "direction", "cursor", "plan", "mode", "expected", "targets"}
-EVENT_KINDS = {"hit", "cursor", "origin", "escape", "max", "infinity"}
+EVENT_KINDS = {"hit", "cursor", "origin", "escape", "max", "infinity", "counterpart"}
 EVENT_KEYS = {"kind", "surface_id", "side", "applied", "terminal", "on_segment", "rehit"}
 
 
@@ -80,6 +80,9 @@ def test_trace_fixture_schema(name):
                 assert "x" not in e, where + ": an escape has no point"
             if e["kind"] == "cursor":
                 assert "x" in e, where
+            if e["kind"] == "counterpart":   # Stage 206: the planned walk's miss of its next entry
+                assert e["surface_id"] >= 0 and "x" in e, where
+                assert not e["applied"] and not e["terminal"] and not e["on_segment"] and not e["rehit"], where
 
 
 def test_visibility_labels_schema():
