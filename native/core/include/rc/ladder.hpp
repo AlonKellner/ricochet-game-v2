@@ -254,6 +254,7 @@ public:
 	// needed_climb; a walk accepted at float64 is the exact solve's, bit for bit.
 	bool provisional = false;
 	bool needed_climb = false;
+	bool planned_past_cursor = true; // Stage 205: the solvers' (Solver::planned_past_cursor)
 	// A clock for the usec fields (injectable: tests pass a constant one).
 	using Clock = std::function<long long()>;
 	static long long steady_usec() {
@@ -294,14 +295,14 @@ public:
 		// (Stage 134: when it computed nothing the planned walk would not -- before the
 		// cursor, only crossings of the remaining entries' surfaces and the passages)
 		if (!verify && !plan.empty() && ci >= 0 && cp.limbs == 0 && cp.f64_events[size_t(ci)].anchored && max_planned == max_physical
-				&& planned_computes(cp.f64_events, ci, plan)) {
+				&& planned_computes(cp.f64_events, ci, plan) && (!planned_past_cursor || spent_at(cp.f64_events, ci, plan))) {
 			r.planned = cp;
 			r.planned_from_physical = true;
 			r.usec = clock_() - t0;
 			return r;
 		}
 		if (!verify && !plan.empty() && ci >= 0 && cp.limbs > 0 && cp.big_events[size_t(ci)].anchored && max_planned == max_physical
-				&& planned_computes(cp.big_events, ci, plan)) {
+				&& planned_computes(cp.big_events, ci, plan) && (!planned_past_cursor || spent_at(cp.big_events, ci, plan))) {
 			r.planned = cp;
 			r.planned_from_physical = true;
 			r.usec = clock_() - t0;
@@ -309,6 +310,7 @@ public:
 		}
 		Solver<Dual> fast(ctx_.dual_scene(), &ctx_.dual_cache());
 		fast.force_reversed = force_;
+		fast.planned_past_cursor = planned_past_cursor;
 		fast.aim_known = known_;
 		const CN<Dual> P{Dual{px, 0.0}, Dual{py, 0.0}};
 		const CN<Dual> Cc{Dual{cx, 0.0}, Dual{cy, 0.0}};
@@ -327,12 +329,14 @@ public:
 		// the planned prefix must be reliable in float64 and the accepted physical
 		// trace must still agree with it through the cursor
 		const int cq_i = cursor_index_of(wq->events);
-		if (!verify && cq_i >= 0 && (sq.unreliable_from < 0 || sq.unreliable_from > cq_i) && same_structure(wq->events, cp, size_t(cq_i) + 1)) {
+		if (!verify && cq_i >= 0 && (sq.unreliable_from < 0 || sq.unreliable_from > cq_i) && same_structure(wq->events, cp, size_t(cq_i) + 1)
+				&& (!planned_past_cursor || spent_at(wq->events, cq_i, plan))) {
 			r.planned = cp;
 		} else {
 			auto planned_fn = [&](int limbs) -> std::vector<Event<BigFloat>> {
 				Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
 				big.force_reversed = force_;
+				big.planned_past_cursor = planned_past_cursor;
 				big.aim_known = known_;
 				big.read_horizon = stops_ >= 0 ? &read_planned_big_ : nullptr;
 				const BigFloat l = BigFloat::from_int(1, limbs);
@@ -419,6 +423,26 @@ public:
 			out.push_back(gd_maxf(res * 4.0, floor_err));
 		}
 		return out;
+	}
+
+	// Stage 205: whether the plan's entries are all consumed before the cursor (index ci) -- a planned terminal left, the
+	// planned walk keeps the plan's rules past the cursor (GAME_SPEC 12.2), so the physical walk's continuation is not
+	// the planned one's, and neither is a planned walk equal to it through the cursor
+	template <class Events>
+	static bool spent_at(const Events &events, int ci, const std::vector<PlanItem> &plan) {
+		size_t j = 0;
+		for (int i = 0; i < ci && j < plan.size(); i++) {
+			const auto &e = events[size_t(i)];
+			const PlanItem &item = plan[j];
+			const bool consumed = item.is_infinity() ? (e.kind == EventKind::Infinity && e.applied)
+				: item.is_origin()                   ? (e.kind == EventKind::Origin && e.applied)
+													 : (e.kind == EventKind::Hit && e.surface_id == item.surface_id && e.left == item.left);
+			j += consumed ? 1 : 0;
+		}
+		return j == plan.size();
+	}
+	static bool spent_at(const Climb &c, int ci, const std::vector<PlanItem> &plan) {
+		return c.limbs == 0 ? spent_at(c.f64_events, ci, plan) : spent_at(c.big_events, ci, plan);
 	}
 
 private:

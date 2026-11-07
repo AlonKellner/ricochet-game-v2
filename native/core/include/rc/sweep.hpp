@@ -121,11 +121,12 @@ struct Merged {
 
 // the segments of a path: [begin, end) step ranges, cut after a significant
 // step and where the frame changes
-inline std::vector<std::pair<size_t, size_t>> segments_of(const std::vector<TraceStep> &steps) {
+// (`cut`: a step index a segment also begins at -- the cursor's, Stage 205)
+inline std::vector<std::pair<size_t, size_t>> segments_of(const std::vector<TraceStep> &steps, size_t cut = SIZE_MAX) {
 	std::vector<std::pair<size_t, size_t>> out;
 	size_t begin = 0;
 	for (size_t i = 0; i < steps.size(); i++) {
-		if (steps[i].significant || i + 1 == steps.size() || steps[i + 1].frame_id != steps[i].frame_id) {
+		if (steps[i].significant || i + 1 == steps.size() || steps[i + 1].frame_id != steps[i].frame_id || i + 1 == cut) {
 			out.emplace_back(begin, i + 1);
 			begin = i + 1;
 		}
@@ -174,8 +175,11 @@ inline std::pair<TraceStep, TraceStep> split_step(const TraceStep &st, const V2 
 // when none)
 inline Merged merge_segments(const std::vector<TraceStep> &planned, const std::vector<TraceStep> &physical, int pl_ci, int ph_ci) {
 	Merged m;
-	const auto spl = segments_of(planned);
-	const auto sph = segments_of(physical);
+	// (Stage 205: both walks reaching the cursor, it bounds their segments -- GAME_SPEC 14.2: the planned path's cursor is
+	// a boundary; past it the planned walk can keep the plan's rules to a planned terminal, parting from the physical one)
+	const bool both = pl_ci >= 0 && size_t(pl_ci) < planned.size() && ph_ci >= 0 && size_t(ph_ci) < physical.size();
+	const auto spl = segments_of(planned, both ? size_t(pl_ci) : SIZE_MAX);
+	const auto sph = segments_of(physical, both ? size_t(ph_ci) : SIZE_MAX);
 	auto typed_pl = [&](const TraceStep &st, size_t idx, bool aligned) {
 		const bool past = int(idx) >= pl_ci;
 		return st.with_type(aligned ? (past ? StepType::AlignedPostPlanned : StepType::Aligned)

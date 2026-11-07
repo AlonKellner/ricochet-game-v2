@@ -352,7 +352,7 @@ private:
 		// Identical up to and including the cursor -> one trajectory: share it
 		const int ci = cursor_index(res.planned);
 		bool shared = res.planned_from_physical;
-		if (!shared && ci >= 0 && same_prefix(res.planned, res.physical, size_t(ci) + 1)) {
+		if (!shared && ci >= 0 && same_prefix(res.planned, res.physical, size_t(ci) + 1) && Ladder::spent_at(res.planned, ci, plan)) {
 			res.planned = res.physical;
 			shared = true;
 		}
@@ -375,8 +375,21 @@ private:
 		pair.shared = shared;
 		// Stage 134: the walks compared by their significant events (V1-V3)
 		const std::string flags0 = flags.canonical_key();
-		pair.cursor_point_agrees = shared || vis::walks_agree_at_cursor(vis::cast_events(res.planned, flags0), vis::cast_events(res.physical, flags0), flags0,
-			vis::Pt{double(cursor.x), double(cursor.y)});
+		if (shared || ci < 0 || Ladder::spent_at(res.planned, ci, plan)) {
+			pair.cursor_point_agrees = shared || vis::walks_agree_at_cursor(vis::cast_events(res.planned, flags0), vis::cast_events(res.physical, flags0),
+				flags0, vis::Pt{double(cursor.x), double(cursor.y)});
+		} else {
+			// (Stage 205: a planned terminal left, the planned walk keeps the plan's rules past the cursor; the cursor's own
+			// point is decided as in the region of the entries before the terminal (Stage 201): by the walk that leaves it
+			// by PHYSICAL rules, as before)
+			Ladder at_cursor(*ctx_, clock_);
+			at_cursor.provisional = exact != nullptr;
+			at_cursor.planned_past_cursor = false;
+			const LadderResult v3 = at_cursor.solve(player.x, player.y, cursor.x, cursor.y, plan, MAX_HITS, MAX_HITS, TRACE_TOL, false, flags);
+			pair.cursor_point_agrees = !v3.planned.empty() && !v3.physical.empty()
+				&& vis::walks_agree_at_cursor(vis::cast_events(v3.planned, flags0), vis::cast_events(v3.physical, flags0), flags0,
+					vis::Pt{double(cursor.x), double(cursor.y)});
+		}
 		pair.result = std::move(res);
 		if (pair_cache_ && exact == nullptr) {
 			cache_key_ = key;

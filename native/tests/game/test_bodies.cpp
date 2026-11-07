@@ -12,8 +12,11 @@
 #include <nlohmann/json.hpp>
 
 #include <algorithm>
+#include <array>
 #include <cmath>
 #include <filesystem>
+#include <functional>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -1701,7 +1704,8 @@ TEST_CASE("session: the cursor counts before a planned terminal, reached or not 
 			bool aligned_to_cursor = false, diverged = false, hit = false;
 			for (const rc::TraceStep &st : s.preview_steps()) {
 				aligned_to_cursor = aligned_to_cursor || st.type == rc::StepType::AlignedPostPlanned;
-				diverged = diverged || st.type == rc::StepType::DivergedPlanned || st.type == rc::StepType::DivergedPhysical;
+				// (diverged before the cursor; past it a miss parts the walks at the grapple's line: Stage 205)
+				diverged = diverged || st.type == rc::StepType::DivergedPlanned;
 				hit = hit || (st.surface_id == s.plan()[0].surface_id && st.hit_on_segment);
 			}
 			CHECK(aligned_to_cursor); // (past the cursor, as past any cursor)
@@ -1753,4 +1757,267 @@ TEST_CASE("preview: a planned path that never reaches the cursor fades past its 
 	const auto faded = faintest(false), whole = faintest(true);
 	CHECK(faded.first < whole.first);
 	CHECK(faded.second < 2 * whole.second + 64); // (bands, not the whole walk over and over)
+}
+
+// Stage 205 (the user): only physical sections fade -- the planned path to a planned terminal the cursor comes before
+// shows whole to it (its hit, or where it crosses its line off its segment), the physical walk to the divergence
+TEST_CASE("preview: planned to a planned terminal, whole to its hit or its miss; physical sections fade (Stage 205)") {
+	const auto drawn = [](const char *elements, double cx, double cy, bool whole) {
+		rcg::SessionConfig cfg;
+		cfg.full_preview = whole;
+		nlohmann::json j = nlohmann::json::parse(elements);
+		j["room"] = nlohmann::json::parse(R"({"rect": [560, 240, 800, 600], "built": false})");
+		rcg::Session s(level_of(j.dump().c_str()), cfg);
+		plan_at(s, 1200, 400);
+		REQUIRE(s.plan().size() == 1);
+		s.set_cursor(rc::V2::of(cx, cy));
+		s.settle();
+		return path_points(s);
+	};
+	const char *grapple = R"({"elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 500]}]})";
+	// on the way to it: the cursor 309 short of the hit (past the fade's 220), yet the path reaches the grapple whole
+	const std::vector<DrawnPoint> aligned = drawn(grapple, 900, 480, false), aligned_whole = drawn(grapple, 900, 480, true);
+	REQUIRE(aligned.size() == aligned_whole.size());
+	for (size_t k = 0; k < aligned.size(); k++) {
+		CHECK(aligned[k].color[3] == aligned_whole[k].color[3]);
+	}
+	CHECK(std::any_of(aligned.begin(), aligned.end(), [](const DrawnPoint &p) { return p.at.x > 1190.0f; }));
+	// the aim misses it, just above (the user's grapple_1 dump): whole to where it crosses the grapple's line off its
+	// segment (335 past the cursor), then fading on its way up, as past a cursor
+	const std::vector<DrawnPoint> missed = drawn(grapple, 900, 420, false), missed_whole = drawn(grapple, 900, 420, true);
+	CHECK(missed.size() < missed_whole.size());
+	std::vector<float> before, before_whole, after;
+	for (const DrawnPoint &p : missed) {
+		(p.at.x < 1199.0f ? before : after).push_back(p.color[3]);
+	}
+	for (const DrawnPoint &p : missed_whole) {
+		if (p.at.x < 1199.0f) {
+			before_whole.push_back(p.color[3]);
+		}
+	}
+	CHECK(before == before_whole);
+	CHECK(std::any_of(after.begin(), after.end(), [](float a) { return a < 0.9f; }));
+	// the user's dump (grapple_1, 2026-11-06): the grapple planned, the cursor before the aim crosses its line off its
+	// segment at (1132.8, 50): the path whole to there, fading on to the top edge
+	{
+		const std::filesystem::path root = RC_REPO_ROOT;
+		rcg::SessionConfig cfgs[2];
+		cfgs[1].full_preview = true;
+		std::vector<DrawnPoint> got[2];
+		for (int w = 0; w < 2; w++) {
+			rcg::Session s(rcg::load_level((root / "data/levels/grapple_1.json").string()), cfgs[w]);
+			s.teleport(rc::V2::of(914.0872802734375, 1043.9200439453125));
+			plan_at(s, 998.0951538085938, 62.85713195800781);
+			REQUIRE(s.plan().size() == 1);
+			s.set_cursor(rc::V2::of(1026.03173828125, 535.2380981445312));
+			s.settle();
+			got[w] = path_points(s);
+		}
+		std::vector<float> to[2];
+		for (int w = 0; w < 2; w++) {
+			for (const DrawnPoint &p : got[w]) {
+				if (p.at.y > 50.5f) {
+					to[w].push_back(p.color[3]);
+				}
+			}
+		}
+		CHECK_FALSE(to[0].empty());
+		CHECK(to[0] == to[1]); // (whole to the miss, 500 past the cursor)
+	}
+	// an unplanned mirror on the way: the walks part there -- the planned path goes on whole to the grapple, the physical
+	// one fades past the mirror
+	const char *mirrored = R"({"elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 500]},
+		{"kind": "mirror", "start": [1000, 420], "end": [1000, 500]}]})";
+	const std::vector<DrawnPoint> diverged = drawn(mirrored, 900, 480, false), diverged_whole = drawn(mirrored, 900, 480, true);
+	CHECK(diverged.size() < diverged_whole.size());
+	CHECK(std::any_of(diverged.begin(), diverged.end(), [](const DrawnPoint &p) { return p.at.x > 1190.0f && p.color[3] > 0.99f; }));
+	CHECK(std::any_of(diverged.begin(), diverged.end(), [](const DrawnPoint &p) { return p.at.x < 1000.0f && p.color[3] < 0.99f; }));
+	// the user's second dump (grapple_1, 2026-11-07): the aim meets an unplanned terminal wall before the planned grapple:
+	// the physical walk whole to the wall (the divergence), the planned one whole on to the grapple's line; nothing fades
+	{
+		const std::filesystem::path root = RC_REPO_ROOT;
+		rcg::SessionConfig cfgs[2];
+		cfgs[1].full_preview = true;
+		std::vector<DrawnPoint> got[2];
+		for (int w = 0; w < 2; w++) {
+			rcg::Session s(rcg::load_level((root / "data/levels/grapple_1.json").string()), cfgs[w]);
+			s.teleport(rc::V2::of(410.0, 563.9199829101562));
+			plan_at(s, 1005.7142333984375, 60.31745910644531);
+			REQUIRE(s.plan().size() == 1);
+			s.set_cursor(rc::V2::of(554.9205932617188, 437.4603271484375));
+			s.settle();
+			const std::vector<rc::TraceStep> &m = s.preview_steps();
+			if (w == 0) {
+				CHECK(std::any_of(m.begin(), m.end(), [](const rc::TraceStep &st) { return st.type == rc::StepType::DivergedPostPlanned; }));
+			}
+			got[w] = path_points(s);
+		}
+		REQUIRE(got[0].size() == got[1].size());
+		for (size_t k = 0; k < got[0].size(); k++) {
+			CHECK(got[0][k].color[3] == got[1][k].color[3]);
+		}
+		CHECK(std::any_of(got[0].begin(), got[0].end(), [](const DrawnPoint &p) { return p.at.x > 950.0f && p.at.y < 70.0f; }));
+	}
+}
+
+// Stage 205 (the user): the preview's fade as invariants, over sweeps of plans and cursors -- the planned path is whole
+// as far as the plan's rules take it (to its cursor; on to a planned terminal the cursor comes before), only physical
+// sections fade (the physical walk past the divergence, the planned walk's continuation by physical rules), each walk
+// fades once, from one point on, never brightening again, the full preview fades nothing, and the display modes (Tab)
+// show each walk alone as the merge does.
+namespace {
+
+enum class Walk { Physical, Planned };
+bool in_walk(rc::StepType t, Walk w) {
+	if (t == rc::StepType::Aligned || t == rc::StepType::AlignedPostPlanned) {
+		return true;
+	}
+	return w == Walk::Physical ? t == rc::StepType::DivergedPhysical : t == rc::StepType::DivergedPlanned || t == rc::StepType::DivergedPostPlanned;
+}
+
+// the alphas of the path node's points in each display mode (0 merged, 1 physical, 2 planned)
+std::array<std::vector<float>, 3> alphas_by_mode(rcg::Session &s) {
+	std::array<std::vector<float>, 3> out;
+	for (int m = 0; m < 3; m++) {
+		REQUIRE(s.display_mode() == m);
+		for (const DrawnPoint &p : path_points(s)) {
+			out[size_t(m)].push_back(p.color[3]);
+		}
+		s.key(rcg::Action::CycleDisplay);
+	}
+	return out;
+}
+
+void check_fade(rcg::Session &s, rcg::Session &whole, const std::string &where, bool modes) {
+	INFO(where);
+	const std::vector<rc::TraceStep> &m = s.preview_steps();
+	const std::vector<std::array<double, 2>> seen = s.preview_seen();
+	REQUIRE(seen.size() == m.size());
+	const rc::TracePath *planned = s.planned_trace();
+	const bool reached = planned != nullptr && planned->cursor_index >= 0;
+	// the planned walk went on past its cursor by the plan's rules and ended at the plan's last entry, its first significant
+	// event there: a planned terminal stopped it (an unplanned passage of infinity or the origin ends the plan's rules)
+	bool to_terminal = false;
+	if (reached && !s.plan().empty() && !planned->truncated && int(planned->steps.size()) > planned->cursor_index) {
+		size_t first = planned->steps.size() - 1;
+		for (size_t i = size_t(planned->cursor_index); i < planned->steps.size(); i++) {
+			if (planned->steps[i].significant) {
+				first = i;
+				break;
+			}
+		}
+		to_terminal = first + 1 == planned->steps.size() && planned->steps.back().surface_id == s.plan().back().surface_id;
+	}
+	for (size_t i = 0; i < m.size(); i++) {
+		const rc::StepType t = m[i].type;
+		INFO("step " << i << " type " << int(t) << " seen " << seen[i][0] << " -> " << seen[i][1]);
+		CHECK(seen[i][0] >= seen[i][1]); // (a step fades on, never back)
+		const bool shown = seen[i][0] == 1.0 && seen[i][1] == 1.0;
+		// the planned path to the cursor is whole: the common part before it, and a diverged planned walk to it
+		if (t == rc::StepType::Aligned || (t == rc::StepType::DivergedPlanned && reached)) {
+			CHECK(shown);
+		}
+		// on to a planned terminal the cursor comes before, whole too (its hit, or its miss off the segment)
+		if (to_terminal && in_walk(t, Walk::Planned)) {
+			CHECK(shown);
+		}
+		// only physical sections fade (and a planned walk that never reaches its cursor: Stage 200)
+		if (!shown) {
+			CHECK((t == rc::StepType::DivergedPhysical || t == rc::StepType::AlignedPostPlanned || t == rc::StepType::DivergedPostPlanned
+				|| (t == rc::StepType::DivergedPlanned && !reached)));
+		}
+	}
+	// past the cursor the planned path shows whole only on its way to a planned terminal: otherwise it fades
+	if (!to_terminal) {
+		bool post = false, fades = false;
+		for (size_t i = 0; i < m.size(); i++) {
+			if ((m[i].type == rc::StepType::AlignedPostPlanned || m[i].type == rc::StepType::DivergedPostPlanned) && !(m[i].start == m[i].end)) {
+				post = true;
+				fades = fades || seen[i][1] < 1.0;
+			}
+		}
+		CHECK((!post || fades));
+	}
+	// each walk fades continuously along its way: a step begins as faded as the one before it ended
+	for (Walk w : {Walk::Physical, Walk::Planned}) {
+		std::optional<size_t> prev;
+		for (size_t i = 0; i < m.size(); i++) {
+			if (!in_walk(m[i].type, w)) {
+				continue;
+			}
+			if (prev) {
+				INFO("walk " << int(w) << " steps " << *prev << " -> " << i);
+				CHECK(std::abs(seen[i][0] - seen[*prev][1]) < 1e-6);
+			}
+			prev = i;
+		}
+	}
+	// the full preview fades nothing, and draws the same steps
+	REQUIRE(whole.preview_steps().size() == m.size());
+	for (const std::array<double, 2> &a : whole.preview_seen()) {
+		CHECK((a[0] == 1.0 && a[1] == 1.0));
+	}
+	if (modes) {
+		// each walk alone (Tab) fades exactly when it does in the merge
+		const std::array<std::vector<float>, 3> faded = alphas_by_mode(s), full = alphas_by_mode(whole);
+		for (Walk w : {Walk::Physical, Walk::Planned}) {
+			bool walk_whole = true;
+			for (size_t i = 0; i < m.size(); i++) {
+				walk_whole = walk_whole && (!in_walk(m[i].type, w) || seen[i][1] > 0.999);
+			}
+			const size_t mode = w == Walk::Physical ? 1 : 2;
+			INFO("display mode " << mode);
+			CHECK((faded[mode] == full[mode]) == walk_whole);
+		}
+	}
+}
+
+void sweep_fade(const std::function<rcg::Level()> &level, const std::function<void(rcg::Session &)> &setup, double x0, double x1,
+		double y0, double y1, double step, const std::string &name) {
+	rcg::SessionConfig full;
+	full.full_preview = true;
+	rcg::Session s(level()), whole(level(), full);
+	setup(s);
+	setup(whole);
+	int k = 0;
+	for (double y = y0; y <= y1; y += step) {
+		for (double x = x0; x <= x1; x += step) {
+			for (rcg::Session *q : {&s, &whole}) {
+				q->set_cursor(rc::V2::of(x, y));
+				q->settle();
+			}
+			check_fade(s, whole, name + " cursor (" + std::to_string(x) + ", " + std::to_string(y) + ")", k++ % 5 == 0);
+		}
+	}
+}
+
+} // namespace
+
+TEST_CASE("preview: the fade's invariants over plans and cursors (Stage 205)") {
+	const char *elements = R"({"elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 500]},
+		{"kind": "mirror", "start": [1000, 600], "end": [1000, 800]}, {"kind": "wall", "start": [900, 260], "end": [900, 380]},
+		{"kind": "mirror", "start": [700, 600], "end": [700, 800]}]})";
+	const auto room = [&] { return level_of(elements); };
+	const std::vector<std::pair<std::string, std::vector<std::array<double, 2>>>> plans = {
+		{"no plan", {}}, {"the grapple", {{1200, 400}}}, {"the mirror", {{1000, 700}}}, {"the mirror, the grapple", {{1000, 700}, {1200, 400}}}};
+	for (const auto &[name, clicks] : plans) {
+		sweep_fade(room, [&](rcg::Session &s) {
+			for (const std::array<double, 2> &c : clicks) {
+				plan_at(s, c[0], c[1]);
+			}
+			REQUIRE(s.plan().size() == clicks.size());
+		}, 580, 1340, 260, 820, 40, "room, " + name);
+	}
+	// the user's grapple_1 dumps (2026-11-06, 2026-11-07): the grapple planned from two places
+	const std::filesystem::path root = RC_REPO_ROOT;
+	const auto grapple_1 = [&] { return rcg::load_level((root / "data/levels/grapple_1.json").string()); };
+	const std::vector<std::array<double, 4>> dumps = {{914.0872802734375, 1043.9200439453125, 998.0951538085938, 62.85713195800781},
+		{410.0, 563.9199829101562, 1005.7142333984375, 60.31745910644531}};
+	for (const std::array<double, 4> &d : dumps) {
+		sweep_fade(grapple_1, [&](rcg::Session &s) {
+			s.teleport(rc::V2::of(d[0], d[1]));
+			plan_at(s, d[2], d[3]);
+			REQUIRE(s.plan().size() == 1);
+		}, 20, 1900, 20, 1060, 60, "grapple_1 from (" + std::to_string(d[0]) + ", " + std::to_string(d[1]) + ")");
+	}
 }
