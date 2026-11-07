@@ -34,7 +34,7 @@ The rules are GAME_SPEC 12.1 (the counterpart: the construction, the event, the 
 | 206.4 | The drawing (`reveal_of`: a counterpart is the first unplanned event; `event_marks`: the planned walk's dot, red, no ring) | Done |
 | 206.5 | Tests: the fixtures at f64, Dual and 4 limbs; the region's and the wide budget's walks compute none; the preview's continuity across the tangent cone's edge, the dot, a planned terminal behind the aim; the fade's invariants swept over a mirror ball | Done |
 | 206.6 | Goldens: `sweeps.json` (40660 combos, all counterpart-inserted), `fixtures.json` (18 fields), `corpus.json` (490 fields: 485 counterpart-inserted, 5 cut-at-counterpart); the session golden (16 sessions: the preview and draw list alone); the GUT traces (37 rows, the planned walks alone; the ledger annotated); `regions.json` unchanged: the user's approval (2026-11-07) | Done |
-| 206.7 | The user's interactive sign-off | Pending |
+| 206.7 | The user's interactive sign-off (2026-11-07: "Works perfectly") | Done |
 
 ## Decisions
 
