@@ -1,6 +1,17 @@
 {
  "planned": [
   {
+   "kind": "counterpart",
+   "surface_id": 5,
+   "side": "",
+   "applied": false,
+   "terminal": false,
+   "on_segment": false,
+   "rehit": false,
+   "x": "1140.022225659203211311678260462478630512",
+   "y": "283.1120626357463254507724869935392615495"
+  },
+  {
    "kind": "infinity",
    "surface_id": -3,
    "side": "",
@@ -88,26 +99,17 @@
    "terminal": false,
    "on_segment": false,
    "rehit": false
-  },
-  {
-   "kind": "origin",
-   "surface_id": -1,
-   "side": "",
-   "applied": false,
-   "terminal": false,
-   "on_segment": false,
-   "rehit": false,
-   "x": "1005.575500488281250000000000000000000000",
-   "y": "302.5614318847656250000000000000000000000"
   },
   {
    "kind": "max",
-   "surface_id": -3,
+   "surface_id": -1,
    "side": "",
    "applied": false,
    "terminal": false,
    "on_segment": false,
-   "rehit": false
+   "rehit": false,
+   "x": "1005.575500488281250000000000000000000000",
+   "y": "302.5614318847656250000000000000000000000"
   }
  ],
  "physical": [

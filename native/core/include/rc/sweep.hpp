@@ -34,7 +34,8 @@ inline arc::StepGeom step_geom(const TraceStep &s) {
 	g.via = s.via;
 	g.is_arc_step = s.is_arc_step;
 	g.has_hit = s.hit.has_value();
-	g.surface_id = s.surface_id;
+	// (Stage 206: a counterpart point lies on no carrier of the scene -- the display snaps it onto none)
+	g.surface_id = s.counterpart ? -1 : s.surface_id;
 	if (s.ray) {
 		g.has_ray = true;
 		g.ray_dir = s.ray->to_normalized();
@@ -54,6 +55,7 @@ inline TraceStep piece_of(const TraceStep &step, const V2 &p_start, const V2 &p_
 	piece.to_infinity = step.to_infinity && (p_end == step.end || !std::isfinite(step.end.x));
 	piece.after_infinity = first ? step.after_infinity : false;
 	piece.teleports = step.teleports && p_end == step.end;
+	piece.counterpart = step.counterpart && p_end == step.end;
 	if (keep_hit && step.hit) {
 		piece.surface_id = step.surface_id;
 		piece.hit_side = step.hit_side;
@@ -162,6 +164,7 @@ inline std::pair<TraceStep, TraceStep> split_step(const TraceStep &st, const V2 
 	first.significant = false;
 	first.to_infinity = false;
 	first.teleports = false;
+	first.counterpart = false;
 	TraceStep second = TraceStep::make(p, st.end, st.frame_id, st.hit, st.ray, via1, curved);
 	second.type = st.type;
 	second.copy_meta_from(st);

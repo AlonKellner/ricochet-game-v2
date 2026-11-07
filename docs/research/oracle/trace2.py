@@ -46,6 +46,20 @@ Rules (TDD_09 "Target architecture" + "Legacy quirks"):
   too (B1, Stage 110): both walks reach the cursor together.
 - PLANNED: the next plan entry fires when id AND side match, even off-segment;
   everything else passes (terminals included).
+- Counterpart (Stage 206, the user, GAME_SPEC 12.1): on the planned walk, while
+  the next entry names a present surface S, each loop asks whether S's carrier
+  is crossed on the stretch from the current point to the next passage of the
+  frame's infinity (the exact filters count as not crossed). Where it is not,
+  the plan is missed (infinity unplanned is a divergence) and the walk computes
+  S's counterpart for this beam (_counterpart: in the frame where the beam is a
+  line -- the inversion I about Q through p -- the circle about p with the
+  tangent length to S' as radius, or the point reflection through p of a line
+  S', mapped back by I). Its crossings on the stretch are candidates (ties by
+  S's id); the first reached is a "counterpart" event: significant, surface S,
+  off its segment, nothing applied, consuming nothing; it marks the plan
+  missed -- no entry fires after it, no planned surface is a candidate, the
+  cursor never comes -- and a planned terminal's ends the walk. PHYSICAL walks,
+  the realization's wide-budget walks and the region's labels compute none.
 - Beams: reflection in a line: tau' = u^2 conj(tau_h), kappa' = -kappa;
   reflection on a circle carrier = inversion in it; inversion: beam.invert_beam.
 - Departure: after applying at h on S, the new beam departs S at h (t = 0).
@@ -509,6 +523,8 @@ def carrier_groups(surfaces):
 def _plan_met_for_cursor(walk):
     """Stage 201 (GAME_SPEC 13.5, the user): the plan's entries are consumed, or all
     but a planned terminal: nothing can come after that one, and it need not be reached."""
+    if walk.missed:
+        return False            # (Stage 206: the plan is missed -- the cursor never comes)
     if walk.plan_index >= len(walk.plan):
         return True
     sid, side = walk.plan[walk.plan_index][:2]
@@ -662,7 +678,7 @@ def sort_key(t, t0):
 
 @dataclass
 class Event:
-    kind: str                 # hit | cursor | origin | max | infinity
+    kind: str                 # hit | cursor | origin | max | infinity | counterpart (Stage 206)
     surface_id: int = -1
     side: str = ""
     applied: bool = False
@@ -744,6 +760,8 @@ class Walk:
     max_sig: int = MAX_SIGNIFICANT  # Stage 131: the significant hits' budget
     infinity_ends: bool = False     # Stage 199: cut at the frame's infinity
     sig: int = 0               # Stage 131: significant events so far
+    counterparts: bool = True  # Stage 206: the planned walk computes its missed entry's counterpart
+    missed: bool = False       # Stage 206: a counterpart event: the plan is dead (sticky)
 
 
 @dataclass
@@ -846,7 +864,12 @@ def _line_coeffs(seg):
     return a, b, a * S[0] + b * S[1]
 
 
-def _concurrent_ties(walk: Walk, cands):
+def _is_cp(c, cps):
+    """Stage 206: a counterpart's crossing (no carrier of the scene: no tie, no snap)."""
+    return (c[2], c[3]) in cps
+
+
+def _concurrent_ties(walk: Walk, cands, cps=frozenset()):
     """On an exact line, adjacent crossings of two line carriers that meet the
     line at the same point (exact concurrency) share one parameter: the id
     rule orders them, never rounding."""
@@ -856,7 +879,8 @@ def _concurrent_ties(walk: Walk, cands):
     i = 0
     while i + 1 < len(out):
         x, y = out[i], out[i + 1]
-        if x[1] == 1 and y[1] == 1 and by_id[x[2]].seg.kind == "line" and by_id[y[2]].seg.kind == "line":
+        if x[1] == 1 and y[1] == 1 and not _is_cp(x, cps) and not _is_cp(y, cps) \
+                and by_id[x[2]].seg.kind == "line" and by_id[y[2]].seg.kind == "line":
             a1, b1, c1 = _line_coeffs(by_id[x[2]].seg)
             a2, b2, c2 = _line_coeffs(by_id[y[2]].seg)
             det = a * (b1 * c2 - b2 * c1) - b * (a1 * c2 - a2 * c1) + c * (a1 * b2 - a2 * b1)
@@ -927,7 +951,7 @@ def gc_at(g, X):
     return A * (X[0] * X[0] + X[1] * X[1]) + B * X[0] + C * X[1] + D
 
 
-def _concurrent_ties_gc(walk: Walk, beam, cands):
+def _concurrent_ties_gc(walk: Walk, beam, cands, cps=frozenset()):
     """Perf P2b: on a circular beam with an exact circle, adjacent crossings of
     two line carriers at their common point, which the beam passes exactly,
     share one parameter: the id rule orders them, never rounding (as on an
@@ -939,7 +963,8 @@ def _concurrent_ties_gc(walk: Walk, beam, cands):
     i = 0
     while i + 1 < len(out):
         x, y = out[i], out[i + 1]
-        if x[1] == 1 and y[1] == 1 and not x[4] and not y[4] and by_id[x[2]].seg.kind == "line" and by_id[y[2]].seg.kind == "line":
+        if x[1] == 1 and y[1] == 1 and not x[4] and not y[4] and not _is_cp(x, cps) and not _is_cp(y, cps) \
+                and by_id[x[2]].seg.kind == "line" and by_id[y[2]].seg.kind == "line":
             a1, b1, c1 = _line_coeffs(by_id[x[2]].seg)
             a2, b2, c2 = _line_coeffs(by_id[y[2]].seg)
             det = a1 * b2 - a2 * b1
@@ -1005,7 +1030,7 @@ def _candidate(walk: Walk, s: Surface):
     (the planned walk past its cursor too) also a present surface with a side
     whose effect is not a pass or which changes the state, and a target. A pure
     pass-through (in ghost mode, what the ghost passes) is never computed."""
-    if any(sid == s.id for sid, _ in walk.plan[walk.plan_index:]):
+    if _planned_surface(walk, s):
         return True
     if walk.mode != PHYSICAL:
         return False
@@ -1021,13 +1046,14 @@ def _candidate(walk: Walk, s: Surface):
 
 def _planned_surface(walk: Walk, s: Surface):
     """A remaining plan entry names s (Stage 139: its crossings are events on or
-    off its segment -- the bookkeeping, the quiet entries and the shadow read them)."""
-    return any(sid == s.id for sid, _ in walk.plan[walk.plan_index:])
+    off its segment -- the bookkeeping, the quiet entries and the shadow read them).
+    Stage 206: none once the plan is missed."""
+    return not walk.missed and any(sid == s.id for sid, _ in walk.plan[walk.plan_index:])
 
 
 def _cand_state(walk: Walk):
     """What the candidates depend on: rebuilt where it changes (Stage 134)."""
-    return walk.mode, walk.plan_index, tuple(sorted((k, repr(v)) for k, v in walk.flags.items()))
+    return walk.mode, walk.plan_index, walk.missed, tuple(sorted((k, repr(v)) for k, v in walk.flags.items()))
 
 
 def _build_cands(walk: Walk, beam: Beam, depart, fresh, t0, by_id, shared=None):
@@ -1146,6 +1172,43 @@ def _build_cands(walk: Walk, beam: Beam, depart, fresh, t0, by_id, shared=None):
                 cands[best] = (sort_key(tq, t0), 1, s.id, tq, False)
                 snapped[(s.id, tq)] = walk.Q
                 pinned.add((s.id, tq))
+    # Stage 206 (the user): the next entry's surface not crossed before the frame's
+    # infinity -- the plan is missed: its counterpart's crossings are candidates
+    # (after the snaps and the pins: a counterpart is no carrier of the scene)
+    cps = set()
+    if walk.mode == PLANNED and walk.counterparts and not walk.missed and not walk.depart_q \
+            and walk.plan_index < len(walk.plan):
+        nsid = walk.plan[walk.plan_index][0]
+        S = by_id.get(nsid)
+        # (the departure point on S's carrier -- the beam departs it, or the player stands on it, or a
+        # junction with it (a known point, exact): a tangent length of zero, no counterpart)
+        on_carrier = S is not None and (dep_key == groups[S.id] or any(
+            kt == t0 and (depart is None or skip == depart) and any(groups[k.id] == groups[S.id] and incident(kp, k) for k in walk.surfaces)
+            for kp, kt, skip in walk.known))
+        if S is not None and S.present(walk.flags) and not on_carrier:
+            rs = shared.get(groups[S.id], [])
+            if walk.Q is None:
+                key_inf = (0, mp.inf) if beam.kappa == 0 else None
+            else:
+                key_inf = sort_key(beam.param_of(walk.Q), t0)
+            # (a root tied with Q is the pinned crossing, before the cut: a hit)
+            if not any(key_inf is None or sort_key(t, t0) <= key_inf for t in rs):
+                cp_key = ("cp", S.id)
+                if cp_key not in shared:
+                    seg = _counterpart(walk, beam, S, beam.p if fresh else beam.at(t0))
+                    # (its own roots, or -- coinciding exactly with a carrier of the scene -- that
+                    # carrier's, shared: the crossings there tie exactly, the id orders them)
+                    rep = None if seg is None else _counterpart_rep(walk, beam, S, depart, fresh, by_id, groups)
+                    if rep is not None:
+                        if rep not in shared:
+                            shared[rep] = roots(beam, by_id.get(rep, S), False)
+                        shared[cp_key] = shared[rep]
+                    else:
+                        shared[cp_key] = [] if seg is None else (line_hits(beam, seg) if seg.kind == "line"
+                                                                  else circle_hits(beam, circle_of(seg), False))
+                for t in shared[cp_key]:
+                    cands.append((sort_key(t, t0), 1, S.id, t, False))
+                    cps.add((S.id, t))
     if True:   # (Stage 136: infinity is always on -- the switch is gone)
         if walk.Q is None:
             if beam.kappa == 0:
@@ -1161,12 +1224,12 @@ def _build_cands(walk: Walk, beam: Beam, depart, fresh, t0, by_id, shared=None):
                 snapped[(INFINITY_ID, tq)] = walk.Q
     cands.sort(key=lambda c: (c[0], c[1], c[2]))
     if walk.line is not None:
-        cands = _concurrent_ties(walk, cands)
+        cands = _concurrent_ties(walk, cands, cps)
     elif walk.gc is not None:
-        cands = _concurrent_ties_gc(walk, beam, cands)
+        cands = _concurrent_ties_gc(walk, beam, cands, cps)
     if depart is not None and depart in by_id and _candidate(walk, by_id[depart]):
         cands.append(((2, 0), 2, depart, t0, True))      # departure re-hit, last
-    return cands, snapped, pinned
+    return cands, snapped, pinned, cps
 
 
 def walk_from(walk: Walk, beam: Beam, depart, t0=None):
@@ -1181,7 +1244,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
         if POLE_HOOK is not None:
             POLE_HOOK(walk, beam)       # tests: the record beside each beam
         shared = {}
-        cands, snapped, pinned = _build_cands(walk, beam, depart, fresh, t0, by_id, shared)
+        cands, snapped, pinned, cps = _build_cands(walk, beam, depart, fresh, t0, by_id, shared)
         applied = False
         fired_state = False
         ci = 0
@@ -1193,11 +1256,12 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
             now = _cand_state(walk)
             if now != seen and ci > 0:
                 prev = cands[ci - 1][:3]
-                new, snapped2, pinned2 = _build_cands(walk, beam, depart, fresh, t0, by_id, shared)
+                new, snapped2, pinned2, cps2 = _build_cands(walk, beam, depart, fresh, t0, by_id, shared)
                 # (the cursor at the current point too: it is reached there, as _late_cursor)
                 cands = cands[:ci] + [c for c in new if c[:3] > prev or (c[2] == -1 and c[0] >= prev[0])]
                 snapped.update(snapped2)
                 pinned |= pinned2
+                cps |= cps2
             seen = now
             if ci >= len(cands):
                 break
@@ -1218,6 +1282,30 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     if _point_sync(walk):
                         _late_cursor(walk, beam, cands, ci, key, t0)
                 continue        # absent under the current flags (Stage 107): no crossing at all
+            if (sid, t) in cps:
+                # Stage 206 (the user): the counterpart of the next entry's surface, which
+                # the beam cannot reach before the frame's infinity -- the plan is missed
+                # there: a significant event that consumes nothing; a planned terminal's
+                # ends the walk (GAME_SPEC 12.1, 13.5)
+                # (a cursor before a planned terminal comes first, Stage 201: a crossing of the
+                # terminal's counterpart before the cursor is passed, one after it fires)
+                if walk.missed or (walk.cursor is not None and not walk.cursor_done and _plan_met_for_cursor(walk)):
+                    continue                # (or its other crossing: the plan is dead already)
+                walk.count += 1
+                if walk.count > walk.max_hits or walk.sig + 1 > walk.max_sig:
+                    _append(walk, Event("max", point=beam.at(t), t=t, beam=beam))
+                    walk.done = True
+                    return
+                walk.sig += 1
+                walk.flags_before = walk.flags
+                side = walk.plan[walk.plan_index][1]
+                _append(walk, Event("counterpart", sid, "", False, False, False, beam.at(t), t, beam, False,
+                                    False, walk.flags, False))
+                walk.missed = True
+                if by_id[sid].effect(side, walk.flags) == "terminal":
+                    walk.done = True
+                    return
+                continue
             # Stage 139 (the user): a crossing off its segment on a surface no remaining
             # plan entry names is not an event -- not counted, not drawn; the walk's
             # goal is the sequence of significant hit points, and such a crossing is a
@@ -1344,7 +1432,7 @@ def walk_from(walk: Walk, beam: Beam, depart, t0=None):
                     # pass side, a terminal crossed off its segment, a write of the
                     # current value): so does the physical one, at the same event
                     walk.plan_index += 1
-            elif walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side):
+            elif not walk.missed and walk.plan_index < len(walk.plan) and walk.plan[walk.plan_index] == (sid, side):
                 # a planned piece (Stage 108): a hit outside its span is off its segment
                 on_seg = on_seg and in_planned_span(walk, walk.plan_index, pt)
                 walk.plan_index += 1
@@ -1755,6 +1843,133 @@ def _tangent(line, seg):
     return d * d == rr * (a * a + b * b)
 
 
+def _passes_q(walk: Walk, seg: Seg, Q):
+    """Stage 206: whether seg's carrier passes the frame's infinity point: exact
+    through the pole record where there is one, else the tier's value (as R1's
+    sign falls back; no epsilon)."""
+    if walk.pole is not None:
+        return _pole_on(walk.pole, seg)
+    if seg.kind == "line":
+        return cross(seg.E - seg.S, Q - seg.S) == 0
+    return abs(Q - seg.c) ** 2 == seg.R2
+
+
+def _invert_circle(c, r2, Q, R2):
+    """The inversion about Q (radius^2 R2) of the circle (c, r^2 = r2) not through Q: (c', r'^2)."""
+    d = c - Q
+    k = R2 / (abs(d) ** 2 - r2)
+    return Q + k * d, k * k * r2
+
+
+def _invert_line_not_through(S, E, Q, R2):
+    """The inversion about Q of the line S E not through Q: the circle (c', r'^2) through Q."""
+    D = E - S
+    u = D / abs(D)
+    F = S + u * dot(Q - S, u)   # the foot of Q on the line
+    w = F - Q
+    d2 = abs(w) ** 2
+    return Q + w * (R2 / (2 * d2)), R2 * R2 / (4 * d2)
+
+
+def _counterpart(walk: Walk, beam: Beam, S: Surface, p):
+    """Stage 206 (the user, GAME_SPEC 12.1): the counterpart of S's carrier for the
+    beam at p, or None. In the frame where the beam is a straight line (I: the
+    inversion about Q through p; the identity when Q is infinity), S' = I(S): a
+    circle -> the circle K' about p with the tangent length as radius, mapped
+    back; a line (S passes Q) -> its point reflection through p, mapped back."""
+    seg = S.seg
+    Q = walk.Q
+    if Q is None:
+        if seg.kind == "line":
+            if walk.line is not None and _parallel(walk.line, seg):
+                return None     # (K10: an exact line never meets a parallel carrier)
+            return Seg.line(-1, 2 * p - seg.S, 2 * p - seg.E, full=True)
+        t2 = abs(p - seg.c) ** 2 - seg.R2
+        if t2 <= 0:
+            return None
+        return Seg.full_circle(-1, p, mp.sqrt(t2))
+    R2 = abs(p - Q) ** 2
+    if R2 == 0:
+        return None
+    if _passes_q(walk, seg, Q):
+        # S' is a line: its two data points
+        if seg.kind == "line":
+            if walk.pole is not None and _pole_tangent(walk.pole, seg):
+                return None     # (parallel to the beam's line in the frame: no crossing)
+            A, B = seg.S, seg.E
+            if A == Q:
+                A = 2 * B - Q
+            if B == Q:
+                B = 2 * A - Q
+        else:
+            A = 2 * seg.c - Q
+            B = seg.c + 1j * (Q - seg.c)
+        ia = Q + (A - Q) * (R2 / abs(A - Q) ** 2)
+        ib = Q + (B - Q) * (R2 / abs(B - Q) ** 2)
+        ra, rb = 2 * p - ia, 2 * p - ib   # L*': the point reflection through p
+        if cross(rb - ra, Q - ra) == 0:
+            return Seg.line(-1, ra, rb, full=True)      # (through Q: its own image)
+        c2, rr2 = _invert_line_not_through(ra, rb, Q, R2)
+        return Seg.full_circle(-1, c2, mp.sqrt(rr2))
+    if seg.kind == "line":
+        c1, rr1 = _invert_line_not_through(seg.S, seg.E, Q, R2)
+    else:
+        c1, rr1 = _invert_circle(seg.c, seg.R2, Q, R2)
+    t2 = abs(p - c1) ** 2 - rr1
+    if t2 <= 0:
+        return None
+    if t2 == R2:
+        # K' passes Q: its image is the line through the midpoint of Q and p, normal to p - Q
+        M = (Q + p) / 2
+        return Seg.line(-1, M, M + 1j * (p - Q), full=True)
+    c2, rr2 = _invert_circle(p, t2, Q, R2)
+    return Seg.full_circle(-1, c2, mp.sqrt(rr2))
+
+
+def _counterpart_rep(walk: Walk, beam: Beam, S: Surface, depart, fresh, by_id, groups):
+    """Stage 206: a counterpart that coincides exactly with a carrier of the scene is
+    that carrier -- it shares the carrier's roots (K6), so the crossings there tie
+    exactly and the id orders them (the symmetric mirrors: the far mirror's image
+    through a hit on the middle one is the near one). Decided on exact data where
+    the departure point p is exact: the identity frame, the beam on an exact line,
+    p the player (a fresh first beam) or the line's crossing of a line departed
+    from. Else no claim. The carrier group's key, or None."""
+    if walk.Q is not None or walk.line is None:
+        return None
+    a, b, c = walk.line
+    if depart is None and fresh:
+        P = FC(beam.p)
+    elif depart is not None and by_id[depart].seg.kind == "line":
+        a2, b2, c2 = _line_coeffs(by_id[depart].seg)
+        det = a * b2 - a2 * b
+        if det == 0:
+            return None
+        P = ((c * b2 - c2 * b) / det, (a * c2 - a2 * c) / det)
+    else:
+        return None
+    for k in walk.surfaces:
+        if k.seg.kind != S.seg.kind or groups[k.id] == groups[S.id]:
+            continue
+        if S.seg.kind == "line":
+            # parallel, and p on the mid-line of S and k
+            sa, sb, sc = _line_coeffs(S.seg)
+            ka, kb, kc = _line_coeffs(k.seg)
+            if sa * kb - sb * ka != 0:
+                continue
+            lam = ka / sa if sa != 0 else kb / sb
+            if 2 * lam * (sa * P[0] + sb * P[1]) == kc + lam * sc:
+                return groups[k.id]
+        else:
+            # p the centre of k, and the tangent length squared k's radius squared
+            nx, ny, w, rr = _center_h(k.seg)
+            if (nx / w, ny / w) != P:
+                continue
+            snx, sny, sw, srr = _center_h(S.seg)
+            if (P[0] - snx / sw) ** 2 + (P[1] - sny / sw) ** 2 - srr == rr:
+                return groups[k.id]
+    return None
+
+
 def _exact_point(F2):
     """The exact rational point as a float64 data point (mpc), or None if it
     is not exactly representable."""
@@ -2102,7 +2317,7 @@ def trace_physical_direction(surfaces, player, direction, plan=(), cursor=None, 
 
 def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="direction", flags=None,
                          extra_known=(), proj_hits=None, beam=None, exact_aim=None, spans=None, max_hits=MAX_HITS,
-                         max_sig=MAX_SIGNIFICANT):
+                         max_sig=MAX_SIGNIFICANT, counterparts=True):
     """line: the initial beam's exact implicit line; "direction": `direction`
     is exact data; None: not exact. beam: the initial beam itself (a scene
     with a pre-transform: the circle through Q0); else the straight beam
@@ -2112,6 +2327,8 @@ def trace_mode_direction(surfaces, player, direction, plan, cursor, mode, line="
     walk.max_sig = max_sig
     # (Stage 199: the realization's wide budget is geometry, no limit of the game)
     walk.infinity_ends = not getattr(surfaces, "infinity_loop", True) and max_sig == MAX_SIGNIFICANT
+    # (Stage 206: so is a counterpart -- the preview's planned walk alone; the region's labels pass False)
+    walk.counterparts = counterparts and max_sig == MAX_SIGNIFICANT
     walk.plan_spans = spans
     walk.flags = dict(flags or {})
     walk.flags_before = walk.flags
@@ -2669,13 +2886,14 @@ def plan_spans_of(spans, surfaces=None, plan=None):
     return out
 
 
-def planned(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):
+def planned(surfaces, player, cursor, plan, flags=None, hints=None, spans=None, counterparts=True):
     """Planned trace = forward PLANNED-mode walk of the exact aim direction.
     hints: plan entry index -> the point the player clicked (settles forks)."""
     d, line, known, beam, xe = _aim(surfaces, player, cursor, plan, flags, hints)
     return trace_mode_direction(surfaces, player, d, plan, P(cursor), PLANNED, line=line, flags=flags,
                                 extra_known=known, proj_hits=projective_hits(surfaces, plan, cursor, flags, hints),
-                                beam=beam, exact_aim=xe, spans=plan_spans_of(spans, surfaces, plan))
+                                beam=beam, exact_aim=xe, spans=plan_spans_of(spans, surfaces, plan),
+                                counterparts=counterparts)
 
 
 def physical(surfaces, player, cursor, plan, flags=None, hints=None, spans=None):

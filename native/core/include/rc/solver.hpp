@@ -50,7 +50,7 @@ constexpr double INF_D = std::numeric_limits<double>::infinity();
 
 enum class Mode { Physical = 0, Planned = 1 };
 
-enum class EventKind { Hit, Cursor, Origin, Max, Infinity };
+enum class EventKind { Hit, Cursor, Origin, Max, Infinity, Counterpart }; // (Counterpart: Stage 206, the planned walk's miss of its next entry)
 inline const char *event_kind_name(EventKind k) {
 	switch (k) {
 		case EventKind::Hit: return "hit";
@@ -58,6 +58,7 @@ inline const char *event_kind_name(EventKind k) {
 		case EventKind::Origin: return "origin";
 		case EventKind::Max: return "max";
 		case EventKind::Infinity: return "infinity";
+		case EventKind::Counterpart: return "counterpart";
 	}
 	return "";
 }
@@ -400,6 +401,8 @@ struct Candidate {
 	bool inf = false;              // the wrap through t = infinity of a straight beam (Stage 88)
 	bool at_q = false;             // pinned at the frame's infinity point (Stage 105)
 	bool origin = false;           // Stage 131: the passage of the ray's origin (surf nullptr, pt the origin)
+	bool counterpart = false;      // Stage 206: a crossing of surf's counterpart (no carrier of the scene: no snap, no tie)
+	int cp_rep = -1;               // Stage 206: the scene carrier the counterpart coincides with exactly (its roots shared, K6), or -1
 };
 
 // Anchored beams B_0..B_K of a plan (flat: beams[j] is the beam after j
@@ -492,6 +495,7 @@ struct StepScratch {
 	std::vector<double> gaps;
 	std::vector<uint8_t> why; // (Stage 123: the margins' classes, the instrument)
 	std::vector<std::pair<int, InlineVec<N, 4>>> shared;
+	std::map<int, int> cp_reps; // Stage 206: a counterpart's surface -> the carrier it coincides with (-1 none), this loop's
 	std::vector<std::pair<double, double>> pts;
 	std::vector<int> dbl;
 };
@@ -540,6 +544,8 @@ struct Walk {
 	int max_events = MAX_HITS;
 	int max_sig = MAX_SIGNIFICANT; // Stage 131
 	bool infinity_ends = false;    // Stage 199: cut at the frame's infinity (the level's infinity_loop off)
+	bool counterparts = true;      // Stage 206: the planned walk meets its missed entry's counterpart (Solver::counterparts, the game's budget)
+	bool missed = false;           // Stage 206: a counterpart event: the plan is dead (sticky; no entry fires, the cursor never comes)
 	int sig = 0;                    // ... the significant events so far
 	// Workflow W2.0: a decision walk (realize, R2) needs the cursor event alone:
 	// it stops there (the events up to it are the same walk's)
@@ -1102,6 +1108,9 @@ public:
 	// Stage 205 (GAME_SPEC 12.2): a planned terminal left, the planned walk keeps the plan's rules past the cursor (false:
 	// PHYSICAL ones from the cursor on, as before -- what the cursor's own point is decided by, V3)
 	bool planned_past_cursor = true;
+	// Stage 206 (GAME_SPEC 12.1): the planned walk meets the counterpart of a next entry the beam cannot reach before the
+	// frame's infinity (false: the region's casts -- the regions are unchanged by counterparts)
+	bool counterparts = true;
 	// Stage 123: a region's cast along a member through exact data (a segment's
 	// endpoint; Stage 124: or an exact crossing, found after j plan entries): the
 	// walk's beam after those entries passes it by construction, so it is a known
@@ -2164,6 +2173,7 @@ private:
 		w.max_events = max_events;
 		w.max_sig = max_events == MAX_HITS ? MAX_SIGNIFICANT : (max_events / MAX_HITS) * MAX_SIGNIFICANT; // (the realization's wide budget: 8 x each)
 		w.infinity_ends = !scene_.infinity_loop && max_events == MAX_HITS; // (the realization's wide budget is geometry: no limit of the game)
+		w.counterparts = counterparts && max_events == MAX_HITS;           // (Stage 206: so is a counterpart -- the preview's planned walk alone)
 		w.spans = piece_spans(plan);
 		w.Q = effects::scene_pre_q(scene_);
 		w.record_poles = record_poles_;
@@ -2621,6 +2631,159 @@ private:
 		return r;
 	}
 
+	// Stage 206 (the user, GAME_SPEC 12.1): the counterpart of S's carrier for the beam at
+	// p, or nullopt. In the frame where the beam is a straight line (I: the inversion
+	// about Q through p; the identity when Q is infinity), S' = I(S): a circle -> the
+	// circle about p with the tangent length as radius, mapped back by I; a line (S
+	// passes Q) -> its point reflection through p, mapped back. Whether S passes Q is
+	// exact through the pole record where there is one, else the tier's value (as R1's
+	// sign falls back). Degenerate (p at Q, a tangent length of zero): none.
+	// (Oracle: trace2._counterpart.)
+	static std::optional<Seg<N>> counterpart(Walk<N> &w, const Surf<N> &S, const CN<N> &p) {
+		if (!w.Q) {
+			if (S.line) {
+				if (w.line && parallel(w, S)) {
+					return std::nullopt; // (K10: an exact line never meets a parallel carrier)
+				}
+				return geom::line_seg(p.add(p).sub(S.seg.s), p.add(p).sub(S.seg.e));
+			}
+			const N t2 = p.sub(S.seg.c()).abs2().sub(S.seg.circ->r2);
+			if (t2.is_negative() || t2.is_zero()) {
+				return std::nullopt;
+			}
+			return geom::circle_seg(p, t2.sqrt_val());
+		}
+		const CN<N> &Q = *w.Q;
+		const N R2 = p.sub(Q).abs2();
+		if (R2.is_zero()) {
+			return std::nullopt;
+		}
+		bool through_q;
+		if (w.pole) {
+			through_q = pole_on(w, S);
+			if (through_q && pole_tangent(w, S)) {
+				return std::nullopt; // (parallel to the beam's line in the frame: no crossing)
+			}
+		} else if (S.line) {
+			through_q = CN<N>::cross(S.seg.e.sub(S.seg.s), Q.sub(S.seg.s)).is_zero();
+		} else {
+			through_q = Q.sub(S.seg.c()).abs2().sub(S.seg.circ->r2).is_zero();
+		}
+		if (through_q) {
+			// S' is a line: two of S's points away from Q, their images, the reflection through p
+			CN<N> A = S.seg.s;
+			CN<N> B = S.seg.e;
+			if (!S.line) {
+				const CN<N> &c = S.seg.c();
+				A = c.add(c).sub(Q);
+				B = c.add(Q.sub(c).mul_i());
+			} else {
+				if (A.sub(Q).is_zero()) {
+					A = B.add(B).sub(Q);
+				}
+				if (B.sub(Q).is_zero()) {
+					B = A.add(A).sub(Q);
+				}
+			}
+			const CN<N> ra = p.add(p).sub(geom::invert_about(A, Q, R2));
+			const CN<N> rb = p.add(p).sub(geom::invert_about(B, Q, R2));
+			if (CN<N>::cross(rb.sub(ra), Q.sub(ra)).is_zero()) {
+				return geom::line_seg(ra, rb); // (through Q: its own image)
+			}
+			const std::pair<CN<N>, N> cr = geom::invert_line_not_through(ra, rb, Q, R2);
+			return geom::circle_seg(cr.first, cr.second.sqrt_val());
+		}
+		const std::pair<CN<N>, N> s1 = S.line ? geom::invert_line_not_through(S.seg.s, S.seg.e, Q, R2)
+												: geom::invert_circle(S.seg.c(), S.seg.circ->r2, Q, R2);
+		const N t2 = p.sub(s1.first).abs2().sub(s1.second);
+		if (t2.is_negative() || t2.is_zero()) {
+			return std::nullopt;
+		}
+		if (t2.cmp(R2) == 0) {
+			// K' passes Q: its image is the line through the midpoint of Q and p, normal to p - Q
+			const CN<N> M = p.add(Q).div_real(R2.one_like().mul_pow2(1));
+			return geom::line_seg(M, M.add(p.sub(Q).mul_i()));
+		}
+		const std::pair<CN<N>, N> k = geom::invert_circle(p, t2, Q, R2);
+		return geom::circle_seg(k.first, k.second.sqrt_val());
+	}
+
+	// Stage 206: a counterpart that coincides exactly with a carrier of the scene is that
+	// carrier -- it shares the carrier's roots (K6), so the crossings there tie exactly and
+	// the id orders them (the symmetric mirrors: the far mirror's image through a hit on the
+	// middle one is the near one). Decided on exact data where the departure point p is
+	// exact: the identity frame, the beam on an exact line, p the player (a fresh first
+	// beam) or the line's crossing of a line departed from. Else no claim. The carrier's
+	// representative, or -1. (Oracle: trace2._counterpart_rep.)
+	static int counterpart_rep(const Walk<N> &w, const Beam<N> &beam, const Surf<N> &S, const Seg<N> &cp, int depart, bool fresh) {
+		if (w.Q || !w.line) {
+			return -1;
+		}
+		const std::optional<exact::Line3> L = w.line->exact();
+		if (!L) {
+			return -1;
+		}
+		exact::Point3 P;
+		if (depart < 0 && fresh) {
+			P = {exact::of(beam.p.fx()), exact::of(beam.p.fy()), exact::of(1.0)};
+		} else if (depart >= 0) {
+			const Surf<N> *d = w.scene->find(depart);
+			if (d == nullptr || !d->line) {
+				return -1;
+			}
+			const exact::Line3 &D = d->exact_line();
+			// the crossing of a x + b y = c and a' x + b' y = c': [c b' - c' b, a c' - a' c, a b' - a' b]
+			P = {exact::sub(exact::mul((*L)[2], D[1]), exact::mul(D[2], (*L)[1])), exact::sub(exact::mul((*L)[0], D[2]), exact::mul(D[0], (*L)[2])),
+				exact::sub(exact::mul((*L)[0], D[1]), exact::mul(D[0], (*L)[1]))};
+			if (P[2].is_zero()) {
+				return -1;
+			}
+		} else {
+			return -1;
+		}
+		for (const auto &sp : w.scene->surfaces) {
+			const Surf<N> &k = *sp;
+			if (k.line != S.line || k.carrier_rep == S.carrier_rep) {
+				continue;
+			}
+			if (S.line) {
+				// parallel, and p on the mid-line of S and k: 2 lam (a X + b Y) = (c' + lam c) W with lam = a'/a (or b'/b)
+				const exact::Line3 &A = S.exact_line();
+				const exact::Line3 &B = k.exact_line();
+				if (!exact::sub(exact::mul(A[0], B[1]), exact::mul(A[1], B[0])).is_zero()) {
+					continue;
+				}
+				const bool use_a = !A[0].is_zero();
+				const BigFloat &num = use_a ? B[0] : B[1]; // lam = num / den
+				const BigFloat &den = use_a ? A[0] : A[1];
+				const BigFloat lhs = exact::mul(exact::mul(num, exact::add(exact::mul(A[0], P[0]), exact::mul(A[1], P[1]))), exact::of(2.0));
+				const BigFloat rhs = exact::mul(exact::add(exact::mul(B[2], den), exact::mul(num, A[2])), P[2]);
+				if (exact::sub(lhs, rhs).is_zero()) {
+					return k.carrier_rep;
+				}
+			} else {
+				// p the centre of k, and the tangent length squared k's radius squared
+				const auto &K = k.exact_circle();
+				if (!exact::sub(exact::mul(P[0], K.C[2]), exact::mul(K.C[0], P[2])).is_zero()
+						|| !exact::sub(exact::mul(P[1], K.C[2]), exact::mul(K.C[1], P[2])).is_zero()) {
+					continue;
+				}
+				const auto &C = S.exact_circle();
+				const BigFloat dx = exact::sub(exact::mul(K.C[0], C.C[2]), exact::mul(C.C[0], K.C[2]));
+				const BigFloat dy = exact::sub(exact::mul(K.C[1], C.C[2]), exact::mul(C.C[1], K.C[2]));
+				const BigFloat kw2 = exact::mul(K.C[2], K.C[2]);
+				const BigFloat sw2 = exact::mul(C.C[2], C.C[2]);
+				// |c_k - c_S|^2 - r_S^2 == r_k^2:  (dx^2 + dy^2) - rw2_S kw2 == rw2_k sw2
+				const BigFloat lhs = exact::sub(exact::add(exact::mul(dx, dx), exact::mul(dy, dy)), exact::mul(C.rw2, kw2));
+				if (exact::sub(lhs, exact::mul(K.rw2, sw2)).is_zero()) {
+					return k.carrier_rep;
+				}
+			}
+		}
+		(void)cp;
+		return -1;
+	}
+
 	// Exact: surf's carrier passes the frame's infinity point and is tangent
 	// there to the beam (cached per record).
 	static bool pole_tangent(Walk<N> &w, const Surf<N> &surf) {
@@ -2754,6 +2917,9 @@ private:
 	// Stage 139: a remaining plan entry names s (its crossings are events on or off
 	// its segment: the bookkeeping, the quiet entries and the planned shadow read them)
 	static bool planned_surface(const Walk<N> &w, const Surf<N> &s) {
+		if (w.missed) {
+			return false; // (Stage 206: the plan is missed -- no entry fires, no planned surface is a candidate)
+		}
 		for (size_t i = size_t(std::max(w.plan_index, 0)); i < w.plan.size(); i++) {
 			if (w.plan[i].surface_id == s.id) {
 				return true;
@@ -2817,6 +2983,7 @@ private:
 		std::vector<std::pair<int, InlineVec<N, 4>>> &shared = w.scratch->shared; // K6: carrier rep -> its roots this loop
 		if (!keep_shared) {
 			shared.clear();
+			w.scratch->cp_reps.clear();
 		}
 		const Surf<N> *dep_surf = depart >= 0 ? w.scene->find(depart) : nullptr;
 		const int dep_rep = dep_surf != nullptr ? dep_surf->carrier_rep : -1;
@@ -2987,7 +3154,7 @@ private:
 					int best = -1;
 					double best_d = INF_D;
 					for (size_t i = 0; i < cands.size(); i++) {
-						if (cands[i].surf != sp.get() || cands[i].inf) {
+						if (cands[i].surf != sp.get() || cands[i].inf || cands[i].counterpart) {
 							continue;
 						}
 						const double d = beam.at(cands[i].t).sub(*w.Q).abs2().to_float();
@@ -2998,6 +3165,91 @@ private:
 					}
 					if (best >= 0) {
 						cands[size_t(best)] = Candidate<N>{tq, sp.get(), false, w.Q, -1, false, true};
+					}
+				}
+			}
+		}
+		// Stage 206 (the user, GAME_SPEC 12.1): the next entry's surface not crossed before the
+		// frame's infinity -- the plan is missed: its counterpart's crossings are candidates
+		// (after the snaps and the pins: a counterpart is no carrier of the scene)
+		if (w.mode == Mode::Planned && w.counterparts && !w.missed && !w.depart_q && w.plan_index < int(w.plan.size())) {
+			const PlanItem &next = w.plan[size_t(w.plan_index)];
+			const Surf<N> *S = (!next.is_infinity() && !next.is_origin()) ? w.scene->find(next.surface_id) : nullptr;
+			// (the departure point on S's carrier -- the beam departs it, or the player stands on it, or a junction
+			// with it (a known point, exact): a tangent length of zero, no counterpart)
+			bool on_carrier = S != nullptr && S->carrier_rep == dep_rep;
+			if (S != nullptr && !on_carrier) {
+				for (Known<N> &kp : w.known) {
+					if (kp.t.cmp(t0) != 0 || (depart >= 0 && kp.skip != depart)) {
+						continue;
+					}
+					if (!kp.incident) {
+						kp.incident = incident_list(w, kp.p);
+					}
+					for (const Surf<N> *k : *kp.incident) {
+						on_carrier = on_carrier || k->carrier_rep == S->carrier_rep;
+					}
+				}
+			}
+			if (S != nullptr && S->present(w.flags) && !on_carrier) {
+				bool crossed = false;
+				auto fs = std::find_if(shared.begin(), shared.end(), [&](const auto &e) { return e.first == S->carrier_rep; });
+				if (fs != shared.end()) {
+					// the stretch ahead ends at the infinity candidate: the wrap of a straight beam, or Q (a
+					// root tied with Q is the pinned crossing, before the cut: a hit); a beam with no
+					// infinity candidate: the whole loop. (The exact filters leave no roots: not crossed.)
+					std::optional<N> tq;
+					if (!w.Q) {
+						if (beam.kappa.is_zero()) {
+							tq = t0.like(INF_D);
+						}
+					} else {
+						tq = Backend<N>::param_of(beam, *w.Q);
+					}
+					for (const N &r : fs->second) {
+						if (!tq || before(r, *tq, t0) || r.cmp(*tq) == 0) {
+							crossed = true;
+							break;
+						}
+					}
+				}
+				if (!crossed) {
+					// the counterpart's roots: its own, or -- where it coincides exactly with a carrier of the
+					// scene (counterpart_rep: the symmetric mirrors) -- that carrier's, shared (K6), so the
+					// crossings there tie exactly and the id orders them
+					int key = -16 - S->id; // (a synthetic shared key: no carrier's, not infinity's or the origin's id)
+					int rep = -1;
+					std::optional<Seg<N>> cp;
+					auto found = std::find_if(shared.begin(), shared.end(), [&](const auto &e) { return e.first == key; });
+					if (found == shared.end()) {
+						cp = counterpart(w, *S, fresh ? beam.p : beam.at(t0));
+						if (cp) {
+							rep = counterpart_rep(w, beam, *S, *cp, depart, fresh);
+						}
+					} else {
+						rep = w.scratch->cp_reps.count(S->id) ? w.scratch->cp_reps.at(S->id) : -1;
+					}
+					if (rep >= 0) {
+						key = rep;
+						found = std::find_if(shared.begin(), shared.end(), [&](const auto &e) { return e.first == key; });
+						if (found == shared.end()) {
+							shared.emplace_back(key, geom::hits(beam, w.scene->find(rep)->seg, false));
+							found = shared.end() - 1;
+						}
+					} else if (found == shared.end()) {
+						InlineVec<N, 4> rs;
+						if (cp) {
+							rs = geom::hits(beam, *cp, false);
+						}
+						shared.emplace_back(key, std::move(rs));
+						found = shared.end() - 1;
+					}
+					w.scratch->cp_reps[S->id] = rep;
+					for (const N &t : found->second) {
+						Candidate<N> c{t, S, false, std::nullopt, -1};
+						c.counterpart = true;
+						c.cp_rep = rep;
+						cands.push_back(c);
 					}
 				}
 			}
@@ -3050,7 +3302,7 @@ private:
 		for (size_t i = 0; i + 1 < cands.size(); i++) {
 			Candidate<N> &x = cands[i];
 			Candidate<N> &y = cands[i + 1];
-			if (x.surf == nullptr || y.surf == nullptr || x.rehit || y.rehit || !x.surf->line || !y.surf->line) {
+			if (x.surf == nullptr || y.surf == nullptr || x.rehit || y.rehit || x.counterpart || y.counterpart || !x.surf->line || !y.surf->line) {
 				continue;
 			}
 			const Surf<N> *p = x.surf;
@@ -3087,7 +3339,8 @@ private:
 		for (size_t i = 0; i + 1 < cands.size(); i++) {
 			Candidate<N> &x = cands[i];
 			Candidate<N> &y = cands[i + 1];
-			if (x.surf == nullptr || y.surf == nullptr || x.rehit || y.rehit || !x.surf->line || !y.surf->line || x.tie >= 0 || y.tie >= 0) {
+			if (x.surf == nullptr || y.surf == nullptr || x.rehit || y.rehit || x.counterpart || y.counterpart || !x.surf->line || !y.surf->line
+					|| x.tie >= 0 || y.tie >= 0) {
 				continue;
 			}
 			double xx, xy, yx, yy;
@@ -3150,7 +3403,7 @@ private:
 			int best = -1;
 			double best_d = INF_D;
 			for (size_t i = 0; i < cands.size(); i++) {
-				if (cands[i].surf != s) {
+				if (cands[i].surf != s || cands[i].counterpart) {
 					continue;
 				}
 				const double d = beam.at(cands[i].t).sub(rec.p).abs2().to_float();
@@ -3229,14 +3482,14 @@ private:
 		dbl.assign(cands.size(), -1);
 		for (size_t i = 0; i < cands.size(); i++) {
 			const Surf<N> *s = cands[i].surf;
-			if (s == nullptr || cands[i].rehit) {
+			if (s == nullptr || cands[i].rehit || cands[i].counterpart) {
 				continue;
 			}
 			size_t j = i + 1;
 			while (j < cands.size() && cands[j].surf == nullptr) {
 				j++;
 			}
-			if (j >= cands.size() || cands[j].surf != s || cands[j].rehit) {
+			if (j >= cands.size() || cands[j].surf != s || cands[j].rehit || cands[j].counterpart) {
 				continue;
 			}
 			const double d = d64(pts[i].first, pts[i].second, pts[j].first, pts[j].second);
@@ -3252,8 +3505,11 @@ private:
 		auto shared_root = [&](size_t i, long k) {
 			const Candidate<N> &a = cands[i];
 			const Candidate<N> &b = cands[size_t(k)];
-			return a.surf != nullptr && b.surf != nullptr && a.surf != b.surf && !a.rehit && !b.rehit && !a.inf && !b.inf
-				&& a.surf->carrier_rep == b.surf->carrier_rep && a.t.cmp(b.t) == 0;
+			// (Stage 206: a counterpart coinciding with a carrier shares its roots, cp_rep)
+			const int ra = a.counterpart ? a.cp_rep : a.surf == nullptr ? -1 : a.surf->carrier_rep;
+			const int rb = b.counterpart ? b.cp_rep : b.surf == nullptr ? -1 : b.surf->carrier_rep;
+			return a.surf != nullptr && b.surf != nullptr && (a.surf != b.surf || a.counterpart != b.counterpart) && !a.rehit && !b.rehit && !a.inf
+				&& !b.inf && ra >= 0 && ra == rb && a.t.cmp(b.t) == 0;
 		};
 		// (the instrument) an endpoint of `s` at (x, y) that another surface shares
 		auto shared_end = [&](const Surf<N> *s, double x, double y, const Surf<N> *with) {
@@ -3732,12 +3988,13 @@ private:
 			}
 			Mode seen_mode = w.mode;
 			int seen_index = w.plan_index;
+			bool seen_missed = w.missed;
 			Flags seen_flags = w.flags;
 			while (true) {
 				// Stage 134: where the walk's state changed (its flags, an entry consumed,
-				// the cursor), the candidates are rebuilt for the rest of the loop (after
-				// its last candidate too: the cursor last in PLANNED mode)
-				if (ci > 0 && (w.mode != seen_mode || w.plan_index != seen_index || !(w.flags == seen_flags))) {
+				// the cursor; Stage 206: the plan missed), the candidates are rebuilt for the
+				// rest of the loop (after its last candidate too: the cursor last in PLANNED mode)
+				if (ci > 0 && (w.mode != seen_mode || w.plan_index != seen_index || w.missed != seen_missed || !(w.flags == seen_flags))) {
 					const Candidate<N> prev = cands[ci - 1];
 					std::vector<Candidate<N>> rebuilt;
 					candidates(w, *beam, depart, fresh, t0, false, rebuilt, true);
@@ -3753,6 +4010,7 @@ private:
 				}
 				seen_mode = w.mode;
 				seen_index = w.plan_index;
+				seen_missed = w.missed;
 				seen_flags = w.flags;
 				if (ci >= cands.size()) {
 					break;
@@ -3767,6 +4025,40 @@ private:
 				const N t = cand.t;
 				const Surf<N> *surf = cand.surf;
 				const bool rehit = cand.rehit;
+				if (cand.counterpart) {
+					// Stage 206 (the user, GAME_SPEC 12.1, 13.5): the counterpart of the next entry's
+					// surface, which the beam cannot reach before the frame's infinity -- the plan is
+					// missed there: a significant event that consumes nothing (no entry fires after it,
+					// the cursor never comes); a planned terminal's ends the walk
+					// (a cursor before a planned terminal comes first, Stage 201: a crossing of the
+					// terminal's counterpart before the cursor is passed, one after it fires)
+					if (w.missed || (w.cursor && !w.cursor_done && plan_met_for_cursor(w))) {
+						ci++; // (or its other crossing: the plan is dead already)
+						continue;
+					}
+					w.count++;
+					if (w.count > w.max_events || w.sig + 1 > w.max_sig) {
+						emit(w, EventKind::Max, beam, t_prev, t, INF_D);
+						w.done = true;
+						return;
+					}
+					w.sig++;
+					const auto [cm, cy] = fold(ci);
+					Event<N> &ce = emit(w, EventKind::Counterpart, beam, t_prev, t, cm);
+					ce.why = cy;
+					ce.surface_id = surf->id;
+					ce.left = w.plan[size_t(w.plan_index)].left;
+					ce.flags = w.flags;
+					t_prev = t;
+					w.missed = true;
+					w.cand_valid = false; // (no planned surface is a candidate any more)
+					if (surf->effect(ce.left, w.flags) == EffectType::Terminal) {
+						w.done = true;
+						return;
+					}
+					ci++;
+					continue;
+				}
 				if (w.mode == Mode::Physical) {
 					// B5: the point this candidate is at
 					const bool wrap = cand.inf && !cand.pt;
@@ -3987,7 +4279,7 @@ private:
 				const EffectType eff = surf->effect(left, w.flags);
 				const std::vector<StateChangeDef> &changes = surf->state_changes(left, w.flags);
 				const bool has_change = !changes.empty();
-				const bool plan_hit = w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].surface_id == surf->id
+				const bool plan_hit = !w.missed && w.plan_index < int(w.plan.size()) && w.plan[size_t(w.plan_index)].surface_id == surf->id
 					&& w.plan[size_t(w.plan_index)].left == left;
 				// Stage 108: a planned piece -- physically, only a hit inside its span is
 				// the planned one; on the planned path the entry is consumed as before
@@ -4211,6 +4503,9 @@ private:
 	// Stage 201 (GAME_SPEC 13.5, the user): the cursor counts once the plan's entries are consumed, or all but a planned
 	// terminal: nothing can come after that one, and it need not be reached.
 	static bool plan_met_for_cursor(const Walk<N> &w) {
+		if (w.missed) {
+			return false; // (Stage 206: the plan is missed -- the cursor never comes)
+		}
 		if (w.plan_index >= int(w.plan.size())) {
 			return true;
 		}

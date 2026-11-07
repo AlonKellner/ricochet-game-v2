@@ -255,6 +255,7 @@ public:
 	bool provisional = false;
 	bool needed_climb = false;
 	bool planned_past_cursor = true; // Stage 205: the solvers' (Solver::planned_past_cursor)
+	bool counterparts = true;        // Stage 206: the solvers' (Solver::counterparts; false: the region's casts)
 	// A clock for the usec fields (injectable: tests pass a constant one).
 	using Clock = std::function<long long()>;
 	static long long steady_usec() {
@@ -311,6 +312,7 @@ public:
 		Solver<Dual> fast(ctx_.dual_scene(), &ctx_.dual_cache());
 		fast.force_reversed = force_;
 		fast.planned_past_cursor = planned_past_cursor;
+		fast.counterparts = counterparts;
 		fast.aim_known = known_;
 		const CN<Dual> P{Dual{px, 0.0}, Dual{py, 0.0}};
 		const CN<Dual> Cc{Dual{cx, 0.0}, Dual{cy, 0.0}};
@@ -337,6 +339,7 @@ public:
 				Solver<BigFloat> big(ctx_.big_scene(limbs), &ctx_.big_cache(limbs));
 				big.force_reversed = force_;
 				big.planned_past_cursor = planned_past_cursor;
+				big.counterparts = counterparts;
 				big.aim_known = known_;
 				big.read_horizon = stops_ >= 0 ? &read_planned_big_ : nullptr;
 				const BigFloat l = BigFloat::from_int(1, limbs);

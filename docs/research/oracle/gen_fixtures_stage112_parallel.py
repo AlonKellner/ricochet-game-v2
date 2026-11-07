@@ -51,6 +51,22 @@ def main():
     plan_of = {"line_normal": [(1, "LEFT"), (2, "RIGHT"), (3, "RIGHT")],
                "circle_normal": [(1, "LEFT"), (2, "LEFT"), (3, "RIGHT")],  # the circle's outside
                "directional": [(1, "LEFT"), (2, "RIGHT"), (3, "RIGHT")]}
+
+    def with_wraps(surfs, plan):
+        """Stage 206: these chains are realized the other way round, a leg or more through infinity.
+        Unplanned, a wrap now misses the entry at its counterpart; the wraps are planned here (an
+        infinity entry before each leg that passes one), so the chain is walked as before, K10 included."""
+        w = T.planned(T.scene_from_json(surfs), player, cursor, plan, counterparts=False)
+        out, j = [], 0
+        for e in w.events:
+            if e.kind == "cursor" or j >= len(plan):
+                break
+            if e.kind == "infinity" and not e.applied:
+                out.append((T.INFINITY_ID, ""))
+            elif e.kind == "hit" and e.applied and e.surface_id == plan[j][0]:
+                out.append(plan[j])
+                j += 1
+        return out + plan[j:]
     # the K10 case: a line normal projective (the foot of the cursor's image)
     ln = line(2, (0, 200), (380, 200), *(proj("line_normal_projection", False),) * 2)
     # a circle normal projective: the full circle centred (250, 240), radius
@@ -60,7 +76,7 @@ def main():
     # a directional projective along (0, 1): the exit is the given direction
     dr = line(2, (0, 200), (380, 200), *(proj("line_directional_projection", False, (0.0, 1.0)),) * 2)
     for tag, p2 in (("line_normal", ln), ("circle_normal", cn), ("directional", dr)):
-        plan = plan_of[tag]
+        plan = with_wraps(scene(p2), plan_of[tag])
         f = pair(fx, "k10_" + tag, scene(p2), player, cursor, plan)
         ks = [(e["kind"], e["surface_id"], e["applied"]) for e in f["expected"]]
         assert ("hit", 2, True) in ks and ("hit", 3, True) in ks, (tag, ks)

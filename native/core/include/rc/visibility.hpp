@@ -2401,7 +2401,7 @@ private:
 		const Pt P = res_.player;
 		const std::optional<AimKnown> &kp = known;
 		if (memo_ == nullptr) {
-			return std::make_shared<const std::optional<LadderResult>>(tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K), kp, cursor));
+			return std::make_shared<const std::optional<LadderResult>>(tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K), kp, cursor, /*counterparts*/ false));
 		}
 		const SolveMemo::Key key = SolveMemo::key(c, force, known, cursor);
 		if (SolvePtr hit; memo_->solves.find(key, hit)) {
@@ -2409,7 +2409,7 @@ private:
 			return hit;
 		}
 		const auto t0 = memo_->timed ? std::chrono::steady_clock::now() : std::chrono::steady_clock::time_point{};
-		SolvePtr lr = std::make_shared<const std::optional<LadderResult>>(tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K), kp, cursor));
+		SolvePtr lr = std::make_shared<const std::optional<LadderResult>>(tracer.solve(P.x, P.y, c.x, c.y, plan_, flags_, force, int(K), kp, cursor, /*counterparts*/ false));
 		memo_->solves.put(key, lr);
 		if (memo_->timed) {
 			memo_->count(memo_->solve_ms, memo_->solve_n, t0);

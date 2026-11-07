@@ -2585,12 +2585,15 @@ std::vector<std::pair<V2, Color>> Session::truncation_markers(const Preview &pv)
 			continue;
 		}
 		const V2 end = path->steps.back().end;
-		if (std::any_of(out.begin(), out.end(), [&](const auto &m) { return m.first == end; })) {
+		// (Stage 206, the user's dump: the same drawn point as the merge pairs ends -- near_pt, not float32 equality:
+		// a planned walk cut at infinity is clipped onto the level's edge, where the physical walk's hit on the
+		// edge wall lands an ulp away, and the marker flickered between white and the step's colour)
+		if (std::any_of(out.begin(), out.end(), [&](const auto &m) { return rc::arc::near_pt(m.first, end); })) {
 			continue;
 		}
 		Color col = WHITE;
 		for (const rc::TraceStep &ms : pv.merged) {
-			if (ms.end == end) {
+			if (rc::arc::near_pt(ms.end, end)) {
 				col = step_color(ms.type);
 			}
 		}
