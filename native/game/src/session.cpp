@@ -1,6 +1,7 @@
 #include "rcg/session.hpp"
 
 #include "rcg/digest.hpp"
+#include "rcg/style.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -16,10 +17,10 @@ using Color = std::array<float, 4>;
 constexpr float CLICK_TOLERANCE = 24.0f;
 constexpr double SNAP_PX = 8.0;
 constexpr double ARROW_SPEED = 1600.0;
-const Color HOVER_COLOR{1.0f, 1.0f, 1.0f, 0.3f};
-const Color PLAN_VALID_COLOR{1.0f, 1.0f, 1.0f, 0.15f};
-const Color PLAN_INVALID_COLOR{1.0f, 0.0f, 0.0f, 0.15f};
-const Color WHITE{1, 1, 1, 1};
+using style::HOVER_COLOR; // (Stage 208: rcg/style.hpp)
+using style::PLAN_INVALID_COLOR;
+using style::PLAN_VALID_COLOR;
+using style::WHITE;
 
 json color_json(const Color &c) { return json::array({double(c[0]), double(c[1]), double(c[2]), double(c[3])}); }
 

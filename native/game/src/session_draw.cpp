@@ -12,6 +12,7 @@
 #include "rcg/landing.hpp"
 #include "rcg/model.hpp"
 #include "rcg/render.hpp"
+#include "rcg/style.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -26,53 +27,11 @@ using render::Color;
 using render::Kind;
 using render::Node;
 
-constexpr double LINE_WIDTH = 3.0;
-constexpr double SIDE_OFFSET = 2.0;
-constexpr double HOVER_WIDTH = 24.0; // ClickDetector.CLICK_TOLERANCE
-constexpr int GRADIENT_STRIPS = 6;
-constexpr double CHEVRON_SIZE = 8.0;
-constexpr double INNER_CHEVRON_DIST = 2.0;
-constexpr double OUTER_CHEVRON_DIST = 18.0;
-constexpr double MARKER_SIZE = 5.0;
-constexpr double MARKER_SPACING = 14.0;
-constexpr double CROSSING_DOT = 2.5;
-constexpr double DASH = 8.0;
+using namespace style; // (Stage 208: the shared style, rcg/style.hpp)
+
 constexpr int MAX_DASHES = 256;
 constexpr double PI = 3.141592653589793;
 
-const Color WHITE{1, 1, 1, 1};
-const Color GRAY = render::hex(0xBEBEBEFF);
-const Color BLUE = render::hex(0x0000FFFF);
-const Color PURPLE = render::hex(0xA020F0FF);
-const Color RED = render::hex(0xFF0000FF);
-const Color CYAN = render::hex(0x00FFFFFF);
-const Color MAGENTA = render::hex(0xFF00FFFF);
-const Color GREEN = render::hex(0x00FF00FF);
-const Color YELLOW = render::hex(0xFFFF00FF);
-// Stage 130 (the user, 2026-10-22): a solid preview step is a slightly dark
-// stroke with a slightly bright dashed stroke over it
-const Color GREEN_DARK = render::hex(0x00B300FF);
-const Color GREEN_BRIGHT = render::hex(0x80FF80FF);
-const Color RED_DARK = render::hex(0xB30000FF);
-const Color RED_BRIGHT = render::hex(0xFF8080FF);
-
-Color rgba(double r, double g, double b, double a = 1.0) { return {float(r), float(g), float(b), float(a)}; }
-
-const Color GHOST_TOGGLER_COLOR = rgba(0.75, 0.95, 1.0);
-const Color FLAG_TOGGLER_COLOR = rgba(1.0, 0.85, 0.2);
-const Color PRE_TRANSFORM_COLOR = rgba(0.55, 0.45, 0.85, 0.35);
-const Color ABSENT_COLOR = rgba(0.6, 0.6, 0.6, 0.35);
-const Color PLATFORM_COLOR = rgba(0.62, 0.42, 0.22); // Stage 172: wood brown
-const Color SHIELD_COLOR = rgba(0.45, 1.0, 0.85);    // Stage 186: a shield's core (turquoise: a portal is pure cyan)
-const Color SHIELD_BAND = rgba(0.45, 1.0, 0.85, 0.22); // ... and the band around it
-const double SHIELD_BAND_WIDTH = 10.0;
-const Color STEEL_BAND = rgba(0.6, 0.72, 0.85, 0.3); // Stage 207: blocking, not stopping (a collider's steel)
-const Color DOOR_COLOR = rgba(1.0, 0.72, 0.25);      // Stage 190: a door's posts and core (amber)
-const double DOOR_POST = 8.0, DOOR_POST_WIDTH = 3.0, DOOR_CORE_WIDTH = 1.0;
-const double DESIGNER_MARKER_SIZE = 7.0;               // Stage 179: a designer's marker's radius
-const double ABSENT_MARKER_ALPHA = 0.4;                // ... on an absent surface
-const Color BODY_COLOR = rgba(0.8, 0.8, 0.8);        // Stage 173: the tall player's body under its triangle
-const double SHAPE_HITBOX_ALPHA = 0.3;                 // Stage 181: a shaped object's circle under its outline
 // the player's triangle (about its origin, turned by its facing) and, Stage 173 (the user): under gravity a
 // rectangle from the triangle down to the feet (it does not turn)
 const std::vector<V2> PLAYER_HEAD = {V2{24, 0}, V2{-14.4f, -16.8f}, V2{-14.4f, 16.8f}};
@@ -96,28 +55,6 @@ std::vector<std::vector<V2>> player_outline(const V2 &at, double facing, bool ta
 	out.push_back(std::move(head));
 	return out;
 }
-// Stage 153: the shadow, a dark shade's edge, a light one's
-const Color SHADOW_FILL = rgba(0.02, 0.02, 0.05, 0.82);
-const Color SHADE_DARK = rgba(0.55, 0.45, 0.95);
-const Color SHADE_LIGHT = rgba(1.0, 0.85, 0.35);
-const Color CROSSING_COLOR = rgba(1.0, 1.0, 1.0, 0.6);
-const Color TARGET_COLOR = rgba(1.0, 0.85, 0.3);
-const Color SPAWN_COLOR = rgba(0.6, 0.95, 1.0);
-const Color RESET_COLOR = rgba(1.0, 0.55, 0.85);
-const Color HOVER_COLOR = rgba(1.0, 1.0, 1.0, 0.3);
-const Color PLAN_VALID_COLOR = rgba(1.0, 1.0, 1.0, 0.15);
-const Color PLAN_INVALID_COLOR = rgba(1.0, 0.0, 0.0, 0.15);
-const Color POINT_COLOR = rgba(0.75, 0.85, 1.0, 0.9);
-const Color GHOST_SPAWN_COLOR = rgba(0.6, 0.95, 1.0, 0.8);
-const Color VANISH_COLOR = rgba(1.0, 0.35, 0.3, 0.7);
-const Color FILL = rgba(1.0, 1.0, 1.0, 0.10);
-const Color FILL_BEFORE_TERMINAL = rgba(0.55, 1.0, 0.6, 0.14); // Stage 197: the region of a plan without its last terminal
-// Stage 145: the goal and the detectors
-const Color GOAL_COLOR = rgba(0.3, 0.95, 0.45);
-const Color GOAL_WON_FILL = rgba(0.3, 0.95, 0.45, 0.25);
-const Color DETECTOR_COLOR = rgba(1.0, 0.8, 0.25, 0.8);
-const Color DETECTOR_FILL = rgba(1.0, 0.8, 0.25, 0.18);
-
 V2 vs(const V2 &v, double s) { return v * float(s); } // Vector2 * float (the scalar rounded first)
 V2 rot90(const V2 &v) { return V2{-v.y, v.x}; }
 
@@ -276,7 +213,7 @@ Color config_color(const BuiltSide *cfg) {
 	if (e.type == "reflection") return BLUE;
 	if (e.type == "inversion") return PURPLE;
 	if (e.type == "portal") return CYAN;
-	return e.back ? rgba(1.0, 0.4, 0.1) : rgba(1.0, 0.8, 0.2);
+	return e.back ? PROJ_BACK : PROJ_FWD;
 }
 
 // One surface node's _draw (a piece of a surface).
@@ -430,7 +367,7 @@ struct SurfacePainter {
 			out.push_back(k);
 		}
 		if (h.deferred) {
-			out.push_back(circle(at, 2.0, rgba(0.1, 0.1, 0.1)));
+			out.push_back(circle(at, 2.0, DEFERRED_DOT));
 		}
 	}
 
@@ -505,9 +442,9 @@ struct SurfacePainter {
 		const bool arcs = !seg.is_line();
 		const bool l_outer = left_outer();
 		if (shield_l && shield_r && !shaped()) {
-			outline_seg(out, seg, SHIELD_BAND, SHIELD_BAND_WIDTH, false);
+			outline_seg(out, seg, SHIELD_BAND, BAND_WIDTH, false);
 		} else if (steel_band(surface, left, right) && !shaped()) {
-			outline_seg(out, seg, STEEL_BAND, SHIELD_BAND_WIDTH, false);
+			outline_seg(out, seg, STEEL_BAND, BAND_WIDTH, false);
 		}
 		if (shaped()) {
 			shape_stroke(l_outer || lc == rc_ ? lc : rc_, LINE_WIDTH);
@@ -1443,9 +1380,6 @@ double drawn_length(const rc::TraceStep &st, const Shift &sh) {
 // Stage 157: the arrow's states along a step, moving with its dashes (every MARK_PERIOD px of the walk): fire a
 // red cross, charge a white chevron pointing the way it flies, frost a pale blue star
 constexpr double MARK_PERIOD = 45.0;
-const Color MARK_FIRE = rgba(1.0, 0.3, 0.15);
-const Color MARK_CHARGE = rgba(1.0, 1.0, 1.0);
-const Color MARK_FROST = rgba(0.6, 0.85, 1.0);
 void arrow_marks(std::vector<Call> &out, const rc::TraceStep &st, uint8_t mask, double phase, const Shift &sh, const rc::Rect2f &draw) {
 	const bool arcs = st.is_arc_step && rc::arc::is_arc(st.start, st.via, st.end);
 	double len = 0.0;
@@ -1821,7 +1755,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 	if (!level_.colliders.empty()) {
 		cached(collider_draw_, {0, 0, 0}, NodeKind::Colliders, 0, V2{}, WHITE, [&](std::vector<Call> &out) {
 			for (const Collider &k : level_.colliders) {
-				out.push_back(line(k.a, k.b, rgba(0.55, 0.62, 0.72, 0.9), 3.0));
+				out.push_back(line(k.a, k.b, COLLIDER, 3.0));
 			}
 		});
 	}
@@ -1947,13 +1881,13 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 							const bool fire = flags_.is_true("el:" + name + ":fire"), charge = flags_.is_true("el:" + name + ":charge");
 							for (const SegGeom *g : segs) {
 								if (tagged(name, "frosted")) {
-									outline_seg(out, *g, rgba(0.6, 0.85, 1.0, 0.35), 6.0, false);
+									outline_seg(out, *g, GLOW_FROSTED, 6.0, false);
 								}
 								if (fire) {
-									outline_seg(out, *g, rgba(1.0, 0.45, 0.1, 0.55), 8.0, false);
+									outline_seg(out, *g, GLOW_FIRE, 8.0, false);
 								}
 								if (charge) {
-									outline_seg(out, *g, rgba(0.85, 0.95, 1.0, 0.5), 5.0, false);
+									outline_seg(out, *g, GLOW_CHARGE, 5.0, false);
 								}
 								if (!preview) {
 									continue;
@@ -1964,13 +1898,13 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 									}
 									const double becoming = seen(b.step) * 0.9 * (READY_MUTED + (1.0 - READY_MUTED) * ready_); // (Stage 188)
 									if (b.bits & 1) {
-										outline_seg(out, *g, rgba(1.0, 0.45, 0.1, becoming), 4.0, true);
+										outline_seg(out, *g, render::with_alpha(BECOMES_FIRE, becoming), 4.0, true);
 									}
 									if (b.bits & 2) {
-										outline_seg(out, *g, rgba(0.85, 0.95, 1.0, becoming), 3.0, true);
+										outline_seg(out, *g, render::with_alpha(BECOMES_CHARGE, becoming), 3.0, true);
 									}
 									if (b.bits & 4) {
-										outline_seg(out, *g, rgba(0.5, 0.5, 0.55, becoming), 3.0, true);
+										outline_seg(out, *g, render::with_alpha(BECOMES_PLAIN, becoming), 3.0, true);
 									}
 								}
 							}
@@ -1994,15 +1928,15 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 								const BuiltSurface &bs = *world_->undarkened(cur.id);
 								const bool now = present(bs, was), then = present(bs, pred);
 								if (now && !then) {
-									outline_seg(out, bs.seg, rgba(1.0, 0.35, 0.35, 0.95), 3.0, true);
+									outline_seg(out, bs.seg, CONSEQUENCE_VANISH, 3.0, true);
 								} else if (!now && then) {
-									outline_seg(out, bs.seg, rgba(0.4, 1.0, 0.5, 0.95), 3.0, true);
+									outline_seg(out, bs.seg, CONSEQUENCE_APPEAR, 3.0, true);
 								} else if (now && kinds(bs, was) != kinds(bs, pred)) {
-									outline_seg(out, bs.seg, rgba(1.0, 0.85, 0.3, 0.95), 3.0, true);
+									outline_seg(out, bs.seg, CONSEQUENCE_CHANGE, 3.0, true);
 								}
 								const std::string target = "target:" + std::to_string(bs.id);
 								if (bs.is_target() && !was.is_true(target) && pred.is_true(target)) {
-									outline_seg(out, bs.seg, rgba(0.3, 0.9, 1.0, 0.95), 3.0, true);
+									outline_seg(out, bs.seg, CONSEQUENCE_TARGET, 3.0, true);
 								}
 							}
 							// the goal opening
@@ -2015,7 +1949,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 									return f.holds(conds);
 								};
 								if (!open(was) && open(pred)) {
-									outline(out, level_.objective->goal, rgba(0.4, 1.0, 0.5, 0.95), 3.0, true);
+									outline(out, level_.objective->goal, CONSEQUENCE_APPEAR, 3.0, true);
 								}
 							}
 							// lights and darks switching
@@ -2024,8 +1958,8 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 								if (sh.when.empty() || rc::key_true(sh.when, was) == rc::key_true(sh.when, pred)) {
 									continue;
 								}
-								const Color on = sh.dark ? rgba(0.65, 0.55, 1.0, 0.95) : rgba(1.0, 0.9, 0.4, 0.95);
-								outline_seg(out, segment_of(level_.surfaces[sh.surface].spec), rc::key_true(sh.when, pred) ? on : rgba(0.5, 0.5, 0.55, 0.95), 3.0, true);
+								const Color on = sh.dark ? CONSEQUENCE_DARK_ON : CONSEQUENCE_LIGHT_ON;
+								outline_seg(out, segment_of(level_.surfaces[sh.surface].spec), rc::key_true(sh.when, pred) ? on : CONSEQUENCE_SHADE_OFF, 3.0, true);
 							}
 							// Stage 202 (GAME_SPEC 9.12): openings sent the other way -- the element where it will stand
 							for (const Opening &o : level_.openings) {
@@ -2049,7 +1983,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 								}
 								for (const World::Body &held : world_->bodies()) {
 									if (held.object.name == body.object.carries) {
-										outline_seg(out, held.built.seg, rgba(1.0, 0.85, 0.3, 0.95), 3.0, true);
+										outline_seg(out, held.built.seg, CONSEQUENCE_CHANGE, 3.0, true);
 									}
 								}
 							}
@@ -2067,7 +2001,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 									Call k;
 									k.kind = Kind::Polyline;
 									k.pts.assign(t.trail.begin() + long(from), t.trail.begin() + long(to));
-									k.colors = {rgba(0.6, 1.0, 0.7, 0.6)};
+									k.colors = {JOURNEY_TRAIL};
 									k.width = 2.0;
 									out.push_back(k);
 								}
@@ -2075,7 +2009,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 							}
 							// Stage 181 (the user): where it ends drawn as what moves -- the player's triangle (facing the cursor
 							// from there) and body, or the object's shape
-							const Color c = t.blocked ? rgba(1.0, 0.6, 0.2, 0.95) : rgba(0.6, 1.0, 0.7, 0.95);
+							const Color c = t.blocked ? JOURNEY_BLOCKED : JOURNEY_END;
 							const V2 end = t.trail.back();
 							if (t.body < 0) {
 								for (std::vector<V2> &pts : player_outline(end, double((cursor_ - end).angle()), tall())) {
@@ -2179,7 +2113,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 			std::vector<V2> near_pts, far_pts;
 			auto flush = [&](std::vector<V2> &pts) {
 				if (pts.size() >= 2) {
-					calls.push_back(stroke(Kind::Polyline, pts, rgba(0.95, 0.6, 0.3), 2.5));
+					calls.push_back(stroke(Kind::Polyline, pts, CROSSING_BODY, 2.5));
 				}
 				pts.clear();
 			};
