@@ -1455,3 +1455,37 @@ TEST_CASE("editor: one motion field, its motion_mode (cycle or opening) and an o
 	CHECK(element(ed, "w")["motion_mode"] == "cycle");
 	CHECK(element(ed, "w")["motion"]["steps"].size() == 1);
 }
+
+TEST_CASE("editor: a surface element's rows -- its face, back, body, and the features it has (Stage 207)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "button"}, {"name", "b"}, {"flag", "lamp"}, {"start", {700.0, 300.0}}, {"end", {800.0, 300.0}}}}});
+	ok(ed, {{"op", "select"}, {"name", "b"}});
+	auto labels = [&] {
+		const json panel = ok(ed, {{"op", "panel"}});
+		std::vector<std::string> out;
+		for (const json &r : panel["rows"]) {
+			if (r["kind"] == "value") {
+				out.push_back(r["label"].get<std::string>());
+			}
+		}
+		return out;
+	};
+	auto has = [&](const std::string &l) {
+		const std::vector<std::string> ls = labels();
+		return std::find(ls.begin(), ls.end(), l) != ls.end();
+	};
+	for (const char *l : {"face", "back", "body", "plannable", "flag", "opens", "op", "value", "deferred"}) {
+		CHECK_MESSAGE(has(l), l);
+	}
+	CHECK_FALSE(has("spawn")); // a feature it does not have
+	CHECK_FALSE(has("open"));
+	click_row(ed, "body"); // the user's request: a button that blocks
+	CHECK(element(ed, "b")["body"] == "block");
+	click_row(ed, "back"); // unset, it is the face's: the next after pass
+	CHECK(element(ed, "b")["back"] == "mirror");
+	// a feature set by hand shows its rows
+	ok(ed, {{"op", "set"}, {"name", "b"}, {"key", "open"}, {"value", "det:plate"}});
+	CHECK(has("open"));
+	CHECK(ed.errors().empty());
+}

@@ -5,6 +5,7 @@
 #include "rcg/elements.hpp"
 #include "rcg/kinematics.hpp"
 #include "rcg/level2.hpp"
+#include "rcg/surface_element.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -1802,17 +1803,42 @@ std::vector<Editor::Row> Editor::rows() const {
 				add(std::move(r));
 			}
 			const json params = ks.contains(kind) ? ks[kind].value("params", json::object()) : json::object();
-			for (auto it = params.begin(); it != params.end(); ++it) {
-				const json &spec = it.value();
-				const bool set = e.contains(it.key());
-				std::string value = set ? spell(e[it.key()]) : spec.contains("default") ? "(" + spell(spec["default"]) + ")" : "(required)";
+			std::vector<std::string> keys; // the rows: a template's parameters; a preset's sides, body and features on (Stage 207)
+			if (ks.contains(kind) && ks[kind].value("preset", false)) {
+				keys = {"face", "back", "body", "plannable"};
+				const json own = ks[kind].value("features", json::array());
+				auto on = [&](const std::string &p) {
+					const json v = e.contains(p) ? e[p] : params[p].value("default", json());
+					return !v.is_null() && v != json(false);
+				};
+				for (const surface_element::Feature &f : surface_element::features()) {
+					if (std::find(own.begin(), own.end(), json(f.name)) != own.end() || on(f.key) || (f.name == "button" && on("opens"))) {
+						for (const std::string &p : f.params) {
+							if (std::find(keys.begin(), keys.end(), p) == keys.end()) {
+								keys.push_back(p);
+							}
+						}
+					}
+				}
+			} else {
+				for (auto it = params.begin(); it != params.end(); ++it) {
+					keys.push_back(it.key());
+				}
+			}
+			for (const std::string &key : keys) {
+				const json &spec = params[key];
+				const bool set = e.contains(key);
+				std::string value = set ? spell(e[key])
+						: key == "back" && spec.value("default", json()).is_null() ? "(the face)"
+						: spec.contains("default") ? "(" + spell(spec["default"]) + ")"
+						: "(required)";
 				std::string choice;
 				if (spec.contains("enum")) {
 					choice = "enum";
 				} else if (spec.value("default", json()).is_boolean() || spec.value("type", "") == "bool") {
 					choice = "bool";
 				}
-				add({Row::Value, it.key(), value, spec.value("doc", ""), Field{selected_, it.key()}, choice, -1, 0, {}});
+				add({Row::Value, key, value, spec.value("doc", ""), Field{selected_, key}, choice, -1, 0, {}});
 			}
 		}
 	} else if (!group_.empty()) { // Stage 175: several selected
@@ -2168,7 +2194,10 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		for (const json &v : spec["enum"]) {
 			opts.push_back(spell(v));
 		}
-		const std::string cur = e.contains(f.key) ? spell(e[f.key]) : spell(spec.value("default", json()));
+		std::string cur = e.contains(f.key) ? spell(e[f.key]) : spell(spec.value("default", json()));
+		if (f.key == "back" && !e.contains("back") && spec.value("default", json()).is_null()) { // (Stage 207: unset, the face's)
+			cur = e.contains("face") ? spell(e["face"]) : spell(ks[e.value("kind", "")]["params"]["face"].value("default", json()));
+		}
 		const std::string next = cycle(opts, cur);
 		for (const json &v : spec["enum"]) {
 			if (spell(v) == next) {
