@@ -2394,6 +2394,12 @@ When game time unfreezes, if a surface the player was standing on has been broke
 
 ## 22. Visual language
 
+> **Stage 208 (docs/TDD_86_VISUAL_STYLE.md).** One style table (`rcg/style.hpp`) names every colour, width and size
+> the game draws with, grouped by meaning; one surface painter (`rcg/surface_paint.hpp`) draws a surface in the game
+> and in the level editor alike (the editor adds only its own overlays: selection, names, side ticks, errors, motion
+> poses). Within one z the surfaces come before the player, the cursor and the HUD, so a platform or a shield the
+> player stands in is drawn under the player.
+
 ### 22.1 Wireframe aesthetic
 
 V1 uses a wireframe/debug aesthetic. No art assets required.
@@ -3245,4 +3251,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.103.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.104.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
