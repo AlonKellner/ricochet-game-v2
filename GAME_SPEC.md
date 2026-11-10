@@ -2493,6 +2493,24 @@ shows **F's marker**, so a button and its door, a pad and the door it shuts, are
 
 ---
 
+
+### 22.6 What a surface does: marks (Stage 209)
+
+> **Status: implemented (Stage 209, docs/TDD_87_SURFACE_MARKS.md).** The user's option B (2026-11-10): the effect drawn
+> on the surface, in the colour of what it does, rather than an icon beside it.
+
+- **A grapple** has barbs along its whole length on each side that grapples: short strokes (7 units, leaning back along
+  it) every 18 units, in the journey's mint (the colour the preview draws a grapple's or a pull's trip in), following
+  an arc.
+- **An object** is filled within its circle (what it collides as): a pullable one in the journey's mint at 22% with four
+  short handles outside it (at 45, 135, 225 and 315 degrees), a static one faint gray. Its outline is its face's colour
+  (or its shape's, §25.5).
+- **Every other feature has a mark of its own**, in a row by the surface's marker point (§22.5: a line's middle, an
+  arc's via, a full circle's top), 13 units off it on each side that has it, the row following an arc: a button (a
+  flag written on a side that does not pass: a pass side says it by its colour) a gold diamond; a target a ring; a
+  spawn a plus; a reset a cross; a break a crack; a pop a burst of six rays; fire, charge and frost the arrow's own
+  glyphs (§22.2's arrow states). A mark whose writes wait for the landing has a dark centre. A full circle whose sides
+  mark alike shows them once, outside.
 ## 23. Constraints and limits
 
 | Constraint | Value | Rationale |
@@ -3251,4 +3269,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.104.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.105.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
