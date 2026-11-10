@@ -4,6 +4,7 @@
 
 #include "rcg/canon.hpp"
 #include "rcg/elements.hpp"
+#include "rcg/surface_element.hpp"
 
 #include <algorithm>
 #include <array>
@@ -345,12 +346,7 @@ Lowered lower_level(const json &v2) {
 			if (it.key() == "raw" || it.key() == "edges") {
 				fail(P + ".templates." + it.key(), "a builtin kind of the format, not a template");
 			}
-			elements::check_template(it.value(), P + ".templates." + it.key());
-			json tmpl = it.value();
-			if (!tmpl.contains("params")) {
-				tmpl["params"] = json::object();
-			}
-			kinds[it.key()] = std::move(tmpl);
+			kinds[it.key()] = elements::prepare(it.value(), P + ".templates." + it.key());
 		}
 	}
 	if (!v2.contains("elements") || !v2["elements"].is_array()) {
@@ -604,6 +600,28 @@ Lowered lower_level(const json &v2) {
 	return out;
 }
 
+namespace {
+
+// Stage 207: the parameters a matched element writes beyond its kind's own features (a preset's), for
+// choosing among the kinds that say a run
+size_t written(const json &tmpl, const json &element) {
+	std::set<std::string> own;
+	for (const json &f : tmpl.value("features", json::array())) {
+		for (const auto &feature : surface_element::features()) {
+			if (feature.name == f.get<std::string>()) {
+				own.insert(feature.params.begin(), feature.params.end());
+			}
+		}
+	}
+	size_t n = 0;
+	for (auto it = element.begin(); it != element.end(); ++it) {
+		n += tmpl["params"].contains(it.key()) && !own.count(it.key());
+	}
+	return n;
+}
+
+} // namespace
+
 json migrate_level(const json &v1) {
 	if (!v1.is_object() || v1.value("schema", json()) != "rc-level/1" || !v1.contains("surfaces") || !v1["surfaces"].is_array()) {
 		throw LevelError("migrate: an rc-level/1 document expected");
@@ -684,19 +702,33 @@ json migrate_level(const json &v1) {
 					continue;
 				}
 			}
-			for (const auto &[kind, tmpl] : kinds) {
-				std::set<std::string> scratch;
-				const auto e = j < rest.size() ? elements::match(kind, *tmpl, rest, j, "edge", scratch) : std::nullopt;
-				if (!e || (*e).value("start", json()) != wall["end"] || (*e).value("end", json()) != wall["start"]) {
-					continue;
+			for (const bool relabel : {false, true}) { // (Stage 207: as the elements below)
+				size_t take = 0, per_score = 0;
+				for (const auto &[kind, tmpl] : kinds) {
+					std::set<std::string> scratch;
+					const auto e = j < rest.size() ? elements::match(kind, *tmpl, rest, j, "edge", scratch, relabel) : std::nullopt;
+					if (!e || (*e).value("start", json()) != wall["end"] || (*e).value("end", json()) != wall["start"]) {
+						continue;
+					}
+					json spec = *e;
+					for (const char *g : {"start", "end", "via", "name"}) {
+						spec.erase(g);
+					}
+					const json value = spec.size() == 1 ? spec["kind"] : spec;
+					const size_t score = written(*tmpl, *e);
+					if (per[k].is_null() || score < per_score) {
+						per[k] = value;
+						per_score = score;
+						take = (*tmpl)["surfaces"].size();
+					}
+					if (!relabel) {
+						break;
+					}
 				}
-				json spec = *e;
-				for (const char *g : {"start", "end", "via", "name"}) {
-					spec.erase(g);
+				if (!per[k].is_null()) {
+					j += take;
+					break;
 				}
-				per[k] = spec.size() == 1 ? spec["kind"] : spec;
-				j += (*tmpl)["surfaces"].size();
-				break;
 			}
 			if (per[k].is_null() && (k == 0 || (k == 3 && per[1] == "wrap"))) {
 				per[k] = "wrap"; // (an image edge: nothing of its own; checked against its opposite below)
@@ -765,15 +797,33 @@ json migrate_level(const json &v1) {
 			continue;
 		}
 		bool matched = false;
-		for (const auto &[kind, tmpl] : kinds) {
-			if (i < *edges_at && i + (*tmpl)["surfaces"].size() > *edges_at) {
-				continue; // a run never takes in the edge walls
+		// Stage 207: a kind of the run's label first, by priority; else (the label written) the kind writing the
+		// fewest parameters beyond its own features, by priority among those -- the presets say every surface
+		for (const bool relabel : {false, true}) {
+			std::optional<std::pair<json, size_t>> best;
+			std::string best_kind;
+			size_t best_score = 0;
+			for (const auto &[kind, tmpl] : kinds) {
+				if (i < *edges_at && i + (*tmpl)["surfaces"].size() > *edges_at) {
+					continue; // a run never takes in the edge walls
+				}
+				const std::string name = fallback(kind);
+				if (auto e = elements::match(kind, *tmpl, rest, i, name, taken, relabel)) {
+					const size_t score = written(*tmpl, *e);
+					if (!best || score < best_score) {
+						best_score = score;
+						best = std::make_pair(std::move(*e), (*tmpl)["surfaces"].size());
+						best_kind = kind;
+					}
+					if (!relabel) {
+						break;
+					}
+				}
 			}
-			const std::string name = fallback(kind);
-			if (auto e = elements::match(kind, *tmpl, rest, i, name, taken)) {
-				use(kind, (*e)["name"].get<std::string>());
-				elems.push_back(*e);
-				i += (*tmpl)["surfaces"].size();
+			if (best) {
+				use(best_kind, best->first["name"].get<std::string>());
+				elems.push_back(best->first);
+				i += best->second;
 				matched = true;
 				break;
 			}

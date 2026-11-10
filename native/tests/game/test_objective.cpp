@@ -170,7 +170,7 @@ TEST_CASE("objective: the schema") {
 TEST_CASE("flag logic: a door closed while the player stands on a plate (\"!det:plate\"), a goal on an expression (Stage 171)") {
 	const auto lv = [] {
 		return level_of(json::parse(R"J({"gravity": [0, 0],
-			"elements": [{"kind": "door", "name": "gate", "start": [960, 240], "end": [960, 840], "flag": "!det:plate"}],
+			"elements": [{"kind": "door", "name": "gate", "start": [960, 240], "end": [960, 840], "open": "!det:plate"}],
 			"detectors": [{"name": "plate", "region": {"rect": [880, 640, 160, 120]}}],
 			"objective": {"goal": {"circle": {"center": [1200, 540], "radius": 70}},
 				"requires": [{"key": "!det:plate && (det:a ^ det:b)", "values": ["true"]}]},
@@ -200,7 +200,7 @@ TEST_CASE("flag logic: the schema -- a flag read may be an expression (it must p
 	CHECK(err(json::parse(R"J({"detectors": [{"name": "p", "region": {"rect": [0, 0, 10, 10]}, "flag": "a && b"}]})J")).find("level.detectors[0].flag: a flag written is a name") != std::string::npos);
 	CHECK(err(json::parse(R"J({"flags": {"a || b": true}})J")).find("a flag set is a name") != std::string::npos);
 	CHECK(err(json::parse(R"J({"objective": {"goal": {"rect": [0, 0, 10, 10]}, "requires": [{"key": "a &&", "values": ["true"]}]}})J")).find("flag expression 'a &&'") != std::string::npos);
-	CHECK(err(json::parse(R"J({"elements": [{"kind": "door", "name": "d", "start": [0, 0], "end": [0, 10], "flag": "(a || b"}]})J")).find("not closed") != std::string::npos);
+	CHECK(err(json::parse(R"J({"elements": [{"kind": "door", "name": "d", "start": [0, 0], "end": [0, 10], "open": "(a || b"}]})J")).find("not closed") != std::string::npos);
 	CHECK(err(json::parse(R"J({"elements": [{"kind": "button", "name": "b", "start": [0, 0], "end": [0, 10], "opens": "d", "flag": "!x"}]})J")).find("a flag written is a name") != std::string::npos);
 	CHECK(err(json::parse(R"J({"elements": [{"kind": "switchable", "name": "s", "start": [0, 0], "end": [0, 10], "flag": "x ^ y"}]})J")) == "no error");
 }

@@ -157,8 +157,8 @@ struct Object {
 	V2 center;
 	double radius = 16.0;
 	bool pullable = true;
-	bool solid = true;          // the player collides with it
-	std::string face = "wall";  // its sides: wall (terminal) | mirror (reflection) | pass
+	bool solid = true;          // body block: the player collides with it (body pass: not)
+	std::string face = "stop";  // its sides: stop (terminal) | mirror (reflection) | pass
 	std::string label = "Object";
 	// Stage 150: bubbles -- its own gravity (a factor of the level's: negative floats up), popped by the
 	// arrow (gone for good: the flag obj:<name>:popped), carrying another object until it pops

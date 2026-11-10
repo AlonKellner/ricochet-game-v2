@@ -3,7 +3,7 @@
  "elements": [
   {
    "end": [1250.0, 950.0],
-   "face": "terminal",
+   "face": "stop",
    "flag": "switch",
    "kind": "button",
    "motion": {

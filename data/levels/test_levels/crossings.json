@@ -92,14 +92,14 @@
    "via": [1400.0, 300.0]
   },
   {
+   "body": "pass",
    "circle": {
     "center": [1350.0, 650.0],
     "radius": 80.0
    },
    "kind": "inversion",
    "label": "Spec",
-   "name": "inversion_1",
-   "solid": false
+   "name": "inversion_1"
   },
   {
    "circle": {
@@ -117,8 +117,7 @@
    "label": "Spec",
    "name": "spawner_1",
    "orientation": "BEAM_NORMAL",
-   "start": [450.0, 700.0],
-   "surface": {
+   "spawn": {
     "end": [150.0, 0.0],
     "left": {
      "effect": {
@@ -136,6 +135,7 @@
     "start": [-150.0, 0.0],
     "via": [0.0, 0.0]
    },
+   "start": [450.0, 700.0],
    "via": [450.0, 780.0]
   },
   {

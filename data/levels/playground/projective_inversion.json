@@ -23,18 +23,18 @@
    "name": "inversion_1"
   },
   {
-   "back": true,
    "end": [700.0, 700.0],
    "kind": "projection",
    "name": "projection_1",
+   "reverse": true,
    "start": [700.0, 300.0],
    "via": [700.0, 500.0]
   },
   {
-   "back": true,
    "end": [1000.0, 450.0],
    "kind": "projection",
    "name": "projection_2",
+   "reverse": true,
    "start": [1000.0, 310.0],
    "type": "circle_normal_projection",
    "via": [1070.0, 380.0]

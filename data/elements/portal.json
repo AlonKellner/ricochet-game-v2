@@ -5,13 +5,14 @@
  },
  "label": "Portal",
  "params": {
+  "body": {
+   "default": "pass",
+   "doc": "what the player and objects do: pass, or block (collide with it)",
+   "enum": ["pass", "block"]
+  },
   "d": {
    "doc": "the displacement of the image",
    "type": "point"
-  },
-  "solid": {
-   "default": false,
-   "doc": "the player collides with it"
   },
   "theta": {
    "default": 0.0,
@@ -29,7 +30,13 @@
     },
     "interactive": true
    },
-   "player_solid": "$solid",
+   "player_solid": {
+    "$switch": "body",
+    "cases": {
+     "block": true,
+     "pass": false
+    }
+   },
    "right": {
     "effect": {
      "d": "$d",

@@ -14,9 +14,9 @@
  "elements": [
   {
    "end": [1100.0, 900.0],
-   "flag": "open",
    "kind": "door",
    "name": "door_1",
+   "open": "open",
    "start": [1100.0, 1080.0]
   }
  ],

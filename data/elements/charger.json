@@ -2,6 +2,11 @@
  "doc": "A charger: an arrow passing it is charged for the rest of the shot (flag shot:charge, or `charge`); an insulator (water with fire=shot:charge) discharges it.",
  "label": "Charger",
  "params": {
+  "body": {
+   "default": "pass",
+   "doc": "what the player and objects do: pass, or block (collide with it)",
+   "enum": ["pass", "block"]
+  },
   "charge": {
    "default": "shot:charge",
    "doc": "the charge's flag"
@@ -24,7 +29,13 @@
     ],
     "interactive": true
    },
-   "player_solid": false,
+   "player_solid": {
+    "$switch": "body",
+    "cases": {
+     "block": true,
+     "pass": false
+    }
+   },
    "right": {
     "effect": {
      "type": "pass"

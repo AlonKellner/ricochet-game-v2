@@ -3,14 +3,14 @@
  "elements": [
   {
    "end": [1650.0, 750.0],
-   "flag": "switch",
    "kind": "door",
    "name": "door_1",
+   "open": "switch",
    "start": [1650.0, 1080.0]
   },
   {
    "end": [1750.0, 750.0],
-   "face": "terminal",
+   "face": "stop",
    "flag": "switch",
    "kind": "button",
    "name": "button_1",

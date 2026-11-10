@@ -499,7 +499,7 @@ void parse_goals(const json &j, Level &lv) {
 		for (size_t i = 0; i < os->size(); i++) {
 			const json &o = (*os)[i];
 			const std::string op = P + ".objects[" + std::to_string(i) + "]";
-			only_keys(o, op, {"name", "circle", "kind", "solid", "face", "label", "gravity", "pops", "carries", "tags", "shape"});
+			only_keys(o, op, {"name", "circle", "kind", "body", "face", "label", "gravity", "pops", "carries", "tags", "shape"});
 			Object ob;
 			ob.name = str(req(o, "name", op), op + ".name");
 			for (const Object &other : lv.objects) {
@@ -523,13 +523,17 @@ void parse_goals(const json &j, Level &lv) {
 				}
 				ob.pullable = k == "pullable";
 			}
-			if (const json *v = opt(o, "solid")) {
-				ob.solid = boolean(*v, op + ".solid");
+			if (const json *v = opt(o, "body")) { // Stage 207: the surface element's words
+				const std::string b = str(*v, op + ".body");
+				if (b != "pass" && b != "block") {
+					fail(op + ".body", "pass or block expected");
+				}
+				ob.solid = b == "block";
 			}
 			if (const json *v = opt(o, "face")) {
 				ob.face = str(*v, op + ".face");
-				if (ob.face != "wall" && ob.face != "mirror" && ob.face != "pass") {
-					fail(op + ".face", "wall, mirror or pass expected");
+				if (ob.face != "stop" && ob.face != "mirror" && ob.face != "pass") {
+					fail(op + ".face", "stop, mirror or pass expected");
 				}
 			}
 			if (const json *v = opt(o, "label")) {
@@ -553,7 +557,7 @@ void parse_goals(const json &j, Level &lv) {
 			}
 			if (const json *v = opt(o, "tags")) {
 				ob.tags = strings(*v, op + ".tags");
-				if (std::find(ob.tags.begin(), ob.tags.end(), "frosted") != ob.tags.end() && !frost_bearing(ob.face == "mirror" ? "reflection" : ob.face)) {
+				if (std::find(ob.tags.begin(), ob.tags.end(), "frosted") != ob.tags.end() && !frost_bearing(ob.face == "mirror" ? "reflection" : ob.face == "stop" ? "terminal" : ob.face)) {
 					fail(op + ".tags", "frosted: its face must pass or reflect (a wall cannot bear frost)");
 				}
 			}

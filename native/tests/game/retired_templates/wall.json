@@ -1,0 +1,23 @@
+{
+ "doc": "A solid barrier: the arrow stops at either side (terminal) and the player collides with it. Walls and most everyday surroundings.",
+ "label": "Surface",
+ "params": {},
+ "priority": 10,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   }
+  }
+ ]
+}

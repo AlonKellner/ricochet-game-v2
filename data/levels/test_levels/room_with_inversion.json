@@ -8,10 +8,10 @@
  "colliders": [],
  "elements": [
   {
+   "back": "pass",
    "end": [1000.0, 740.0],
    "kind": "inversion",
    "name": "inversion_1",
-   "sides": "left",
    "start": [1000.0, 340.0],
    "via": [1130.0, 540.0]
   }

@@ -1,28 +1,10 @@
 {
- "doc": "A mirror reflecting on both sides, both plannable.",
- "label": "Mirror",
- "params": {
-  "solid": {
-   "default": false,
-   "doc": "the player collides with it"
-  }
+ "defaults": {
+  "body": "pass",
+  "face": "mirror"
  },
- "priority": 21,
- "surfaces": [
-  {
-   "left": {
-    "effect": {
-     "type": "reflection"
-    },
-    "interactive": true
-   },
-   "player_solid": "$solid",
-   "right": {
-    "effect": {
-     "type": "reflection"
-    },
-    "interactive": true
-   }
-  }
- ]
+ "doc": "A mirror reflecting on both sides, both plannable (face mirror; body pass unless set).",
+ "extends": "surface",
+ "label": "Mirror",
+ "priority": 21
 }

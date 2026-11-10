@@ -307,9 +307,9 @@
   },
   {
    "end": [1700.0, 800.0],
-   "flag": "det:detector_1",
    "kind": "door",
    "name": "door_1",
+   "open": "det:detector_1",
    "start": [1700.0, 300.0]
   },
   {

@@ -74,12 +74,12 @@
  },
  "objects": [
   {
+   "body": "pass",
    "circle": {
     "center": [760.0, 600.0],
     "radius": 20.0
    },
-   "name": "box",
-   "solid": false
+   "name": "box"
   }
  ],
  "player": {

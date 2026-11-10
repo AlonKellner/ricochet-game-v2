@@ -245,10 +245,10 @@ TEST_CASE("editor: commands edit the document, undo and redo restore it") {
 	ok(ed, {{"op", "rename"}, {"name", "door_1"}, {"to", "gate"}});
 	CHECK(element(ed, "button_1")["opens"] == "gate");
 	CHECK(ed.command({{"op", "rename"}, {"name", "gate"}, {"to", "button_1"}})["ok"] == false);
-	ok(ed, {{"op", "set"}, {"name", "gate"}, {"key", "closed"}, {"value", "mirror"}});
-	CHECK(element(ed, "gate")["closed"] == "mirror");
-	ok(ed, {{"op", "set"}, {"name", "gate"}, {"key", "closed"}, {"value", nullptr}});
-	CHECK_FALSE(element(ed, "gate").contains("closed"));
+	ok(ed, {{"op", "set"}, {"name", "gate"}, {"key", "face"}, {"value", "mirror"}});
+	CHECK(element(ed, "gate")["face"] == "mirror");
+	ok(ed, {{"op", "set"}, {"name", "gate"}, {"key", "face"}, {"value", nullptr}});
+	CHECK_FALSE(element(ed, "gate").contains("face"));
 	ok(ed, {{"op", "set"}, {"path", "/flags"}, {"value", {{"door:gate", true}}}});
 	CHECK(ed.document()["flags"]["door:gate"] == true);
 	ok(ed, {{"op", "move"}, {"name", "gate"}, {"handle", "body"}, {"by", {10.0, 0.0}}});
@@ -431,7 +431,7 @@ TEST_CASE("editor: the panel edits the selected element and the level") {
 	ok(ed, {{"op", "add"}, {"element", {{"kind", "one_sided_mirror"}, {"name", "m"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
 	ok(ed, {{"op", "select"}, {"name", "m"}});
 	click_row(ed, "back"); // an enum cycles
-	CHECK(element(ed, "m")["back"] == "block");
+	CHECK(element(ed, "m")["back"] == "mirror");
 	click_row(ed, "flip"); // a bool toggles
 	CHECK(element(ed, "m")["flip"] == true);
 	click_row(ed, "label"); // a typed field: focus, text, Enter

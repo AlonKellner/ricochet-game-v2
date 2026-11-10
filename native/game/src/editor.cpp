@@ -219,12 +219,7 @@ json Editor::kinds() const {
 	if (doc_.contains("templates") && doc_["templates"].is_object()) {
 		for (auto it = doc_["templates"].begin(); it != doc_["templates"].end(); ++it) {
 			try {
-				elements::check_template(it.value(), "level.templates." + it.key());
-				json t = it.value();
-				if (!t.contains("params")) {
-					t["params"] = json::object();
-				}
-				out[it.key()] = std::move(t);
+				out[it.key()] = elements::prepare(it.value(), "level.templates." + it.key());
 			} catch (const LevelError &) {
 				// reported by refresh()
 			}

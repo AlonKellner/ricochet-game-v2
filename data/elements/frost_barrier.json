@@ -1,6 +1,13 @@
 {
  "doc": "A frost barrier (tag frosted): an arrow passing it is frosted (shot:frost). A frosted arrow that would be stopped is reflected off a line or inverted off a circle instead, once (GAME_SPEC 10.6).",
  "label": "Frost",
+ "params": {
+  "body": {
+   "default": "pass",
+   "doc": "what the player and objects do: pass, or block (collide with it)",
+   "enum": ["pass", "block"]
+  }
+ },
  "priority": 52,
  "surfaces": [
   {
@@ -10,7 +17,13 @@
     },
     "interactive": true
    },
-   "player_solid": false,
+   "player_solid": {
+    "$switch": "body",
+    "cases": {
+     "block": true,
+     "pass": false
+    }
+   },
    "right": {
     "effect": {
      "type": "pass"

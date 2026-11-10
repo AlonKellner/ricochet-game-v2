@@ -1,0 +1,130 @@
+{
+ "doc": "A spawner (GAME_SPEC 10.6.1): when hit it places 'surface' (a surface in a local frame, centred on the origin) at the hit when the arrow lands; it is gone until a resetter re-arms its channel.",
+ "example": {
+  "surface": {
+   "end": [40.0, 0.0],
+   "left": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "start": [-40.0, 0.0],
+   "via": [0.0, 0.0]
+  }
+ },
+ "label": "Spawner",
+ "params": {
+  "channel": {
+   "default": "${name}",
+   "doc": "the channel (a resetter names it)",
+   "type": "string"
+  },
+  "deferred": {
+   "default": false,
+   "doc": "consume the spawner at landing instead of in the shot"
+  },
+  "face": {
+   "default": "pass",
+   "doc": "the path effect of both sides",
+   "enum": ["pass", "terminal", "reflection"]
+  },
+  "mirror_with_side": {
+   "default": false,
+   "doc": "mirror the frame on a right-side hit"
+  },
+  "offset": {
+   "default": [0.0, 0.0],
+   "doc": "the placement offset in the frame",
+   "type": "point"
+  },
+  "orientation": {
+   "default": "CARRIER_TANGENT",
+   "doc": "the local frame's first axis",
+   "enum": ["BEAM_TANGENT", "BEAM_NORMAL", "CARRIER_TANGENT", "CARRIER_NORMAL", "BEAM_REFLECTED", "WORLD"]
+  },
+  "surface": {
+   "doc": "the surface placed (rc-level/1 surface form, local frame)",
+   "type": "object"
+  },
+  "trim": {
+   "default": true,
+   "doc": "trim the placed surface at its crossings"
+  }
+ },
+ "priority": 40,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "pass": {
+       "type": "pass"
+      },
+      "reflection": {
+       "type": "reflection"
+      },
+      "terminal": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": [
+     {
+      "channel": "$channel",
+      "deferred": "$deferred",
+      "kind": "spawn",
+      "template": {
+       "mirror_with_side": "$mirror_with_side",
+       "offset": "$offset",
+       "orientation": "$orientation",
+       "surface": "$surface",
+       "trim": "$trim"
+      }
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "pass": {
+       "type": "pass"
+      },
+      "reflection": {
+       "type": "reflection"
+      },
+      "terminal": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": [
+     {
+      "channel": "$channel",
+      "deferred": "$deferred",
+      "kind": "spawn",
+      "template": {
+       "mirror_with_side": "$mirror_with_side",
+       "offset": "$offset",
+       "orientation": "$orientation",
+       "surface": "$surface",
+       "trim": "$trim"
+      }
+     }
+    ],
+    "interactive": true
+   }
+  }
+ ]
+}

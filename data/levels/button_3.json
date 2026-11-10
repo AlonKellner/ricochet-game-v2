@@ -15,7 +15,7 @@
   },
   {
    "end": [1150.0, 400.0],
-   "face": "terminal",
+   "face": "stop",
    "flag": "switch",
    "kind": "button",
    "name": "button_1",
@@ -23,9 +23,9 @@
   },
   {
    "end": [900.0, 700.0],
-   "flag": "switch",
    "kind": "door",
    "name": "door_2",
+   "open": "switch",
    "start": [1150.0, 700.0]
   },
   {
@@ -90,9 +90,9 @@
   },
   {
    "end": [950.0, 550.0],
-   "flag": "switch",
    "kind": "door",
    "name": "door_3",
+   "open": "switch",
    "start": [1450.0, 550.0]
   }
  ],

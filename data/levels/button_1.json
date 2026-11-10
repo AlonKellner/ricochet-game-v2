@@ -21,14 +21,14 @@
   },
   {
    "end": [1300.0, 400.0],
-   "flag": "switch",
    "kind": "door",
    "name": "door_1",
+   "open": "switch",
    "start": [1300.0, 700.0]
   },
   {
    "end": [1150.0, 400.0],
-   "face": "terminal",
+   "face": "stop",
    "flag": "switch",
    "kind": "button",
    "name": "button_1",

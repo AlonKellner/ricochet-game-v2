@@ -2,6 +2,11 @@
  "doc": "Water: an arrow passing it is put out (its fire flag unset to false); the player passes it too.",
  "label": "Water",
  "params": {
+  "body": {
+   "default": "pass",
+   "doc": "what the player and objects do: pass, or block (collide with it)",
+   "enum": ["pass", "block"]
+  },
   "fire": {
    "default": "shot:fire",
    "doc": "the fire's flag"
@@ -24,7 +29,13 @@
     ],
     "interactive": true
    },
-   "player_solid": false,
+   "player_solid": {
+    "$switch": "body",
+    "cases": {
+     "block": true,
+     "pass": false
+    }
+   },
    "right": {
     "effect": {
      "type": "pass"

@@ -2,16 +2,23 @@
  "doc": "A burnable barrier (tag flammable): solid, but an arrow on fire burns through it -- it catches fire (el:<name>:fire) and is gone from then on. A burnt barrier no longer stops anything.",
  "label": "Burnable",
  "params": {
-  "solid": {
-   "default": true,
-   "doc": "the player collides with it until it burns"
+  "body": {
+   "default": "block",
+   "doc": "what the player and objects do: pass, or block (collide with it)",
+   "enum": ["pass", "block"]
   }
  },
  "priority": 56,
  "surfaces": [
   {
    "left": null,
-   "player_solid": "$solid",
+   "player_solid": {
+    "$switch": "body",
+    "cases": {
+     "block": true,
+     "pass": false
+    }
+   },
    "presence": [
     {
      "key": "el:${name}:fire",

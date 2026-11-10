@@ -1,0 +1,77 @@
+{
+ "doc": "A breakable surface: hit, it does what its face does (a wall stops the arrow, a mirror reflects it), then it is gone for the rest of the shot; it is back when the arrow lands. Flag shot:<name>:broken.",
+ "label": "Breakable",
+ "params": {
+  "face": {
+   "default": "wall",
+   "doc": "its sides' path effect",
+   "enum": ["wall", "mirror", "pass"]
+  },
+  "solid": {
+   "default": true,
+   "doc": "the player collides with it"
+  }
+ },
+ "priority": 50,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "mirror": {
+       "type": "reflection"
+      },
+      "pass": {
+       "type": "pass"
+      },
+      "wall": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": [
+     {
+      "key": "shot:${name}:broken",
+      "kind": "state",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": "$solid",
+   "presence": [
+    {
+     "key": "shot:${name}:broken",
+     "values": ["DEFAULT"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "$switch": "face",
+     "cases": {
+      "mirror": {
+       "type": "reflection"
+      },
+      "pass": {
+       "type": "pass"
+      },
+      "wall": {
+       "type": "terminal"
+      }
+     }
+    },
+    "hits": [
+     {
+      "key": "shot:${name}:broken",
+      "kind": "state",
+      "op": "set",
+      "value": true
+     }
+    ],
+    "interactive": true
+   }
+  }
+ ]
+}
