@@ -61,6 +61,7 @@ const Color COLLIDER = rgba(0.6, 0.72, 0.85); // Stage 164: a player-only collid
 const Color PLATFORM = rgba(0.62, 0.42, 0.22);  // Stage 172: a platform (wood brown)
 const Color SHIELD = rgba(0.45, 1.0, 0.85);     // Stage 186: a shield (turquoise, a band around it)
 const Color SHIELD_BAND = rgba(0.45, 1.0, 0.85, 0.22);
+const Color STEEL_BAND = rgba(0.6, 0.72, 0.85, 0.3); // Stage 207: blocking, not stopping (as the game draws it)
 const Color DOOR = rgba(1.0, 0.72, 0.25);       // Stage 190: a door's posts and core (amber)
 const Color CAMERA = rgba(0.85, 0.6, 1.0);
 
@@ -2598,6 +2599,8 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			const bool gated = std::any_of(b.presence.begin(), b.presence.end(), [](const PresenceSpec &c) { return c.key.rfind("chan:", 0) != 0; });
 			if (shields(b, shown_side(b, true)) && shields(b, shown_side(b, false))) {
 				stroke(b.seg, SHIELD_BAND, 10.0, gated);
+			} else if (steel_band(b, shown_side(b, true), shown_side(b, false))) {
+				stroke(b.seg, STEEL_BAND, 10.0, gated);
 			}
 			stroke(b.seg, left, 3.0, gated); // (dashed: present only under a flag; a spawner's channel is not drawn so)
 			if (is_door(b)) { // Stage 190: as the game draws it

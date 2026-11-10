@@ -66,6 +66,7 @@ const Color PLATFORM_COLOR = rgba(0.62, 0.42, 0.22); // Stage 172: wood brown
 const Color SHIELD_COLOR = rgba(0.45, 1.0, 0.85);    // Stage 186: a shield's core (turquoise: a portal is pure cyan)
 const Color SHIELD_BAND = rgba(0.45, 1.0, 0.85, 0.22); // ... and the band around it
 const double SHIELD_BAND_WIDTH = 10.0;
+const Color STEEL_BAND = rgba(0.6, 0.72, 0.85, 0.3); // Stage 207: blocking, not stopping (a collider's steel)
 const Color DOOR_COLOR = rgba(1.0, 0.72, 0.25);      // Stage 190: a door's posts and core (amber)
 const double DOOR_POST = 8.0, DOOR_POST_WIDTH = 3.0, DOOR_CORE_WIDTH = 1.0;
 const double DESIGNER_MARKER_SIZE = 7.0;               // Stage 179: a designer's marker's radius
@@ -505,6 +506,8 @@ struct SurfacePainter {
 		const bool l_outer = left_outer();
 		if (shield_l && shield_r && !shaped()) {
 			outline_seg(out, seg, SHIELD_BAND, SHIELD_BAND_WIDTH, false);
+		} else if (steel_band(surface, left, right) && !shaped()) {
+			outline_seg(out, seg, STEEL_BAND, SHIELD_BAND_WIDTH, false);
 		}
 		if (shaped()) {
 			shape_stroke(l_outer || lc == rc_ ? lc : rc_, LINE_WIDTH);
