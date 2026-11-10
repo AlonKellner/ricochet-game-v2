@@ -491,6 +491,29 @@ TEST_CASE("shields: drawn unlike a wall -- a turquoise core and band, a plain si
 	CHECK(reds >= 2); // the wall, the target
 }
 
+TEST_CASE("steel bands: a surface that blocks while a side does not stop the arrow -- a fence, a solid mirror, a blocking button; not a wall, a shield, a platform (Stage 207)") {
+	rcg::Session s(level_of(R"({"gravity": [0, 980], "elements": [
+		{"kind": "wall", "name": "wall", "start": [200, 100], "end": [200, 300]},
+		{"kind": "shield", "name": "shield", "start": [300, 100], "end": [300, 300]},
+		{"kind": "platform", "name": "platform", "start": [350, 400], "end": [450, 400]},
+		{"kind": "passthrough", "name": "pass", "start": [500, 100], "end": [500, 300]},
+		{"kind": "fence", "name": "fence", "start": [600, 100], "end": [600, 300]},
+		{"kind": "mirror", "name": "solid_mirror", "body": "block", "start": [700, 100], "end": [700, 300]},
+		{"kind": "button", "name": "button", "flag": "f", "body": "block", "start": [800, 100], "end": [800, 300]},
+		{"kind": "one_sided_mirror", "name": "osm", "back": "stop", "body": "block", "start": [900, 100], "end": [900, 300]}]})"));
+	s.settle();
+	const rcg::render::Color steel{0.6f, 0.72f, 0.85f, 0.3f};
+	std::set<float> banded; // by x
+	for (const rcg::render::Node &n : s.draw()) {
+		for (const rcg::render::Call &c : n.calls) {
+			if (c.kind == rcg::render::Kind::Line && c.colors.at(0) == steel) {
+				banded.insert(c.pts[0].x + n.position.x);
+			}
+		}
+	}
+	CHECK(banded == std::set<float>{600.0f, 700.0f, 800.0f, 900.0f});
+}
+
 TEST_CASE("crossings: by what an element does -- a door or a switchable that can stop the arrow cuts, a platform or a fence does not (Stage 192)") {
 	const auto cuts = [](const char *element) {
 		const std::string text = std::string(R"({"elements": [{"kind": "mirror", "name": "m", "start": [900, 300], "end": [900, 700]}, )") + element + "]}";
