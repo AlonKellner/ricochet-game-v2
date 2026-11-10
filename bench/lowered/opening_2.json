@@ -28,7 +28,7 @@
     ],
     "interactive": true
    },
-   "player_solid": false,
+   "player_solid": true,
    "right": {
     "effect": {
      "type": "terminal"
@@ -67,7 +67,7 @@
    "via": [750.0, 650.0]
   },
   {
-   "end": [600.0, 450.0],
+   "end": [450.0, 450.0],
    "ids": [3],
    "label": "Surface",
    "left": {
@@ -83,8 +83,8 @@
     },
     "interactive": false
    },
-   "start": [600.0, 650.0],
-   "via": [600.0, 550.0]
+   "start": [450.0, 800.0],
+   "via": [450.0, 625.0]
   },
   {
    "end": [1300.0, 450.0],
@@ -103,12 +103,152 @@
     },
     "interactive": false
    },
-   "start": [1300.0, 650.0],
-   "via": [1300.0, 550.0]
+   "start": [1300.0, 800.0],
+   "via": [1300.0, 625.0]
+  },
+  {
+   "end": [1300.0, 650.0],
+   "ids": [5],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1100.0, 650.0],
+   "via": [1200.0, 650.0]
+  },
+  {
+   "end": [1300.0, 800.0],
+   "ids": [6],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [450.0, 800.0],
+   "via": [875.0, 800.0]
+  },
+  {
+   "end": [560.0, 650.0],
+   "ids": [7],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [560.0, 800.0],
+   "via": [560.0, 725.0]
+  },
+  {
+   "end": [600.0, 650.0],
+   "ids": [8],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [550.0, 650.0],
+   "via": [575.0, 650.0]
+  },
+  {
+   "end": [570.0, 650.0],
+   "ids": [9],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [570.0, 800.0],
+   "via": [570.0, 725.0]
+  },
+  {
+   "end": [580.0, 650.0],
+   "ids": [10],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [580.0, 800.0],
+   "via": [580.0, 725.0]
+  },
+  {
+   "end": [590.0, 650.0],
+   "ids": [11],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [590.0, 800.0],
+   "via": [590.0, 725.0]
   },
   {
    "end": [0.0, 0.0],
-   "ids": [5],
+   "ids": [12],
    "label": "Surface",
    "left": {
     "effect": {
@@ -128,7 +268,7 @@
   },
   {
    "end": [1920.0, 0.0],
-   "ids": [6],
+   "ids": [13],
    "label": "Surface",
    "left": {
     "effect": {
@@ -148,7 +288,7 @@
   },
   {
    "end": [1920.0, 1080.0],
-   "ids": [7],
+   "ids": [14],
    "label": "Surface",
    "left": {
     "effect": {
@@ -168,7 +308,7 @@
   },
   {
    "end": [0.0, 1080.0],
-   "ids": [8],
+   "ids": [15],
    "label": "Surface",
    "left": {
     "effect": {
