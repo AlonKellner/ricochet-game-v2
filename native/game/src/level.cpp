@@ -1097,6 +1097,7 @@ SurfaceSpec object_spec(const Object &o, const V2 &center) {
 	s.radius = o.radius;
 	s.player_solid = o.solid;
 	s.shape = o.shape;
+	s.object = true;
 	SideSpec side;
 	side.effect.type = o.face == "mirror" ? "reflection" : o.face == "pass" ? "pass" : "terminal";
 	side.effect.raw = {{"type", side.effect.type}};

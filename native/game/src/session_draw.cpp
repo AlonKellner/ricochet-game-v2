@@ -966,23 +966,7 @@ void arrow_marks(std::vector<Call> &out, const rc::TraceStep &st, uint8_t mask, 
 			if (p.x < draw.position.x || p.y < draw.position.y || p.x > draw.position.x + draw.size.x || p.y > draw.position.y + draw.size.y) {
 				continue;
 			}
-			const double s = 5.0;
-			const V2 n = V2::of(-double(d.y), double(d.x));
-			auto seg = [&](double ax, double ay, double bx, double by, const Color &c) {
-				out.push_back(line(V2::of(double(p.x) + ax, double(p.y) + ay), V2::of(double(p.x) + bx, double(p.y) + by), c, 2.0));
-			};
-			if (k == 0) {
-				seg(-s, -s, s, s, MARK_FIRE);
-				seg(-s, s, s, -s, MARK_FIRE);
-			} else if (k == 1) {
-				seg(-d.x * s + n.x * s, -d.y * s + n.y * s, 0, 0, MARK_CHARGE);
-				seg(-d.x * s - n.x * s, -d.y * s - n.y * s, 0, 0, MARK_CHARGE);
-			} else {
-				for (int q = 0; q < 3; q++) {
-					const double a = 3.14159265358979 * q / 3.0;
-					seg(-std::cos(a) * s, -std::sin(a) * s, std::cos(a) * s, std::sin(a) * s, MARK_FROST);
-				}
-			}
+			state_glyph(out, k == 0 ? Glyph::Fire : k == 1 ? Glyph::Charge : Glyph::Frost, p, d, 5.0);
 		}
 	}
 }

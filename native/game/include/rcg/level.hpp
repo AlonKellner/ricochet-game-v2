@@ -120,6 +120,7 @@ struct SurfaceSpec {
 	std::optional<Marker> marker; // Stage 179
 	std::string shape; // Stage 181: an object's look (marker_shapes(); none: its carrier) -- display only, it collides as its circle
 	bool swings = false; // Stage 202: an opening's (the door's look) -- display only
+	bool object = false; // Stage 209: an object's (filled, its handles if pullable) -- display only
 
 	bool is_portal() const { return resolver.empty() && left && left->effect.type == "portal"; }
 };

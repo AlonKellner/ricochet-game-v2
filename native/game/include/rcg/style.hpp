@@ -30,6 +30,9 @@ constexpr double DOOR_POST = 8.0, DOOR_POST_WIDTH = 3.0, DOOR_CORE_WIDTH = 1.0;
 constexpr double DESIGNER_MARKER_SIZE = 7.0; // Stage 179: a designer's marker's radius
 constexpr double ABSENT_MARKER_ALPHA = 0.4;  // ... on an absent surface
 constexpr double SHAPE_HITBOX_ALPHA = 0.3;   // Stage 181: a shaped object's circle under its outline
+constexpr double MARK_OFFSET = 13.0;         // Stage 209: a row of marks off its surface (clear of the designer's marker)
+constexpr double BARB_SPACING = 18.0, BARB_LENGTH = 7.0; // Stage 209: a grapple's barbs along it
+constexpr double HANDLE_LENGTH = 7.0;        // Stage 209: a pullable object's four handles
 
 // ---------------------------------------------------------------- the base colours
 inline const Color WHITE{1, 1, 1, 1};
@@ -66,6 +69,8 @@ inline const Color DOOR_COLOR = rgba(1.0, 0.72, 0.25);        // Stage 190: a do
 inline const Color DETECTOR_COLOR = rgba(1.0, 0.8, 0.25, 0.8); // Stage 145
 inline const Color DETECTOR_FILL = rgba(1.0, 0.8, 0.25, 0.18);
 inline const Color DEFERRED_DOT = rgba(0.1, 0.1, 0.1);        // a mark whose writes wait for the landing
+inline const Color BREAK_COLOR = rgba(0.95, 0.95, 0.95);      // Stage 209: a breakable's crack
+inline const Color POP_COLOR = rgba(0.85, 0.95, 1.0);         // Stage 209: a bubble's burst
 
 // ---------------------------------------------------------------- targets, spawns, the goal
 inline const Color TARGET_COLOR = rgba(1.0, 0.85, 0.3);
@@ -81,6 +86,8 @@ inline const Color JOURNEY = rgba(0.6, 1.0, 0.7);                  // the journe
 inline const Color JOURNEY_TRAIL = render::with_alpha(JOURNEY, 0.6);       // Stage 166: the trip's path
 inline const Color JOURNEY_END = render::with_alpha(JOURNEY, 0.95);        // Stage 181: the traveller where it ends
 inline const Color JOURNEY_BLOCKED = rgba(1.0, 0.6, 0.2, 0.95);   // ... stopped short
+inline const Color OBJECT_PULL_FILL = render::with_alpha(JOURNEY, 0.22); // Stage 209: a pullable object's fill
+inline const Color OBJECT_FILL = rgba(0.75, 0.75, 0.75, 0.10);          // ... a static one's
 
 // ---------------------------------------------------------------- the preview
 // Stage 130 (the user, 2026-10-22): a solid preview step is a slightly dark stroke with a slightly bright dashed

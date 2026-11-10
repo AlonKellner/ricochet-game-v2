@@ -514,6 +514,74 @@ TEST_CASE("steel bands: a surface that blocks while a side does not stop the arr
 	CHECK(banded == std::set<float>{600.0f, 700.0f, 800.0f, 900.0f});
 }
 
+namespace {
+// the calls of a session's draw list, by colour (Stage 209)
+std::vector<rcg::render::Call> calls_in(const rcg::Session &s, const rcg::render::Color &c) {
+	std::vector<rcg::render::Call> out;
+	for (const rcg::render::Node &n : s.draw()) {
+		for (const rcg::render::Call &k : n.calls) {
+			if (!k.colors.empty() && k.colors[0] == c) {
+				out.push_back(k);
+			}
+		}
+	}
+	return out;
+}
+} // namespace
+
+TEST_CASE("marks: a grapple's barbs along it, an object's fill and handles, a mark per feature at the marker's point (Stage 209)") {
+	const rcg::render::Color journey{0.6f, 1.0f, 0.7f, 1.0f}, pull_fill{0.6f, 1.0f, 0.7f, 0.22f}, static_fill{0.75f, 0.75f, 0.75f, 0.10f},
+			flag{1.0f, 0.85f, 0.2f, 1.0f}, target{1.0f, 0.85f, 0.3f, 1.0f};
+	SUBCASE("a grapple: barbs on both sides, every 18 units; on an arc they root by its carrier") {
+		rcg::Session s(level_of(R"({"elements": [{"kind": "grapple", "start": [800, 300], "end": [800, 660]}]})"));
+		s.settle();
+		const auto barbs = calls_in(s, journey);
+		CHECK(barbs.size() == 2 * 20); // (360 / 18 per side)
+		CHECK(calls_in(s, flag).empty()); // no diamond
+		rcg::Session a(level_of(R"({"elements": [{"kind": "grapple", "start": [800, 300], "via": [900, 400], "end": [800, 500]}]})"));
+		a.settle();
+		const auto arc_barbs = calls_in(a, journey);
+		REQUIRE(!arc_barbs.empty());
+		for (const auto &k : arc_barbs) { // the circle through the three points: centre (800, 400), radius 100
+			const double d = std::hypot(double(k.pts[0].x) - 800.0, double(k.pts[0].y) - 400.0);
+			CHECK(std::abs(std::abs(d - 100.0) - 3.0) < 0.01);
+		}
+	}
+	SUBCASE("objects: a pullable one filled mint with four handles, a static one faint gray; no diamonds") {
+		rcg::Session s(level_of(R"({"gravity": [0, 980], "objects": [{"name": "box", "circle": {"center": [900, 500], "radius": 16}},
+			{"name": "rock", "kind": "static", "circle": {"center": [1100, 500], "radius": 24}}]})"));
+		s.settle();
+		CHECK(calls_in(s, pull_fill).size() == 1);
+		CHECK(calls_in(s, static_fill).size() == 1);
+		CHECK(calls_in(s, journey).size() == 4);
+		CHECK(calls_in(s, flag).empty());
+	}
+	SUBCASE("a mark per feature: a break's crack, a tag's glyph, a flag's diamond; a full circle's at its top, once") {
+		rcg::Session s(level_of(R"({"elements": [{"kind": "breakable", "start": [600, 300], "end": [600, 500]},
+			{"kind": "charger", "start": [700, 300], "end": [700, 500]},
+			{"kind": "button", "flag": "f", "face": "stop", "start": [800, 300], "end": [800, 500]},
+			{"kind": "target", "circle": {"center": [1100, 600], "radius": 60}}]})"));
+		s.settle();
+		CHECK(calls_in(s, rcg::render::Color{0.95f, 0.95f, 0.95f, 1.0f}).size() == 2); // the cracks, a side each
+		CHECK(calls_in(s, rcg::render::Color{1.0f, 1.0f, 1.0f, 1.0f}).size() >= 4);     // the charge chevrons (2 strokes, a side each)
+		int diamonds = 0;
+		for (const auto &k : calls_in(s, flag)) {
+			diamonds += k.kind == rcg::render::Kind::ColoredPolygon;
+		}
+		CHECK(diamonds == 2); // the button's (the charger's pass sides are drawn in the flag's colour)
+		const auto rings = calls_in(s, target);
+		std::vector<rcg::render::Call> ring_arcs;
+		for (const auto &k : rings) {
+			if (k.kind == rcg::render::Kind::Arc) {
+				ring_arcs.push_back(k);
+			}
+		}
+		REQUIRE(ring_arcs.size() == 1); // outside only
+		CHECK(ring_arcs[0].pts[0].x == doctest::Approx(1100.0));
+		CHECK(ring_arcs[0].pts[0].y == doctest::Approx(600.0 - 60.0 - 13.0)); // at its top, MARK_OFFSET out
+	}
+}
+
 TEST_CASE("draw order: the surfaces before the player, the cursor and the HUD, which share their z (Stage 208)") {
 	rcg::Session s(level_of(R"({"gravity": [0, 980], "elements": [{"kind": "platform", "start": [800, 900], "end": [1100, 900]}]})"));
 	s.settle();
