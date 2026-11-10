@@ -471,28 +471,8 @@
    "via": [210.0, 600.0]
   },
   {
-   "end": [200.0, 650.0],
-   "ids": [23],
-   "label": "Platform",
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "platform": true,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "start": [200.0, 550.0],
-   "via": [200.0, 600.0]
-  },
-  {
    "end": [0.0, 0.0],
-   "ids": [24],
+   "ids": [23],
    "label": "Surface",
    "left": {
     "effect": {
@@ -512,7 +492,7 @@
   },
   {
    "end": [1920.0, 0.0],
-   "ids": [25],
+   "ids": [24],
    "label": "Surface",
    "left": {
     "effect": {
@@ -532,7 +512,7 @@
   },
   {
    "end": [1920.0, 1080.0],
-   "ids": [26],
+   "ids": [25],
    "label": "Surface",
    "left": {
     "effect": {
@@ -552,7 +532,7 @@
   },
   {
    "end": [0.0, 1080.0],
-   "ids": [27],
+   "ids": [26],
    "label": "Surface",
    "left": {
     "effect": {
