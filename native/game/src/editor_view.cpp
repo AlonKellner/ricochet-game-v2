@@ -5,7 +5,10 @@
 #include "rcg/elements.hpp"
 #include "rcg/kinematics.hpp"
 #include "rcg/level2.hpp"
+#include "rcg/model.hpp"
+#include "rcg/style.hpp"
 #include "rcg/surface_element.hpp"
+#include "rcg/surface_paint.hpp"
 
 #include <algorithm>
 #include <cmath>
@@ -18,7 +21,6 @@ using render::Call;
 using render::Color;
 using render::Kind;
 
-constexpr double TAU = 6.283185307179586;
 constexpr float HANDLE = 5.0f;       // a handle's half size (px)
 constexpr float PICK = 8.0f;         // how near a click picks (px)
 constexpr float ROW = 21.0f;         // a panel row
@@ -28,20 +30,13 @@ constexpr size_t WRAP = 42;          // the panel's text width (characters)
 
 Color rgba(double r, double g, double b, double a = 1.0) { return {float(r), float(g), float(b), float(a)}; }
 
-// The game's colours (session_draw.cpp: SurfaceNode.config_color and its neighbours)
-const Color WHITE{1, 1, 1, 1};
-const Color GRAY = render::hex(0xBEBEBEFF);
-const Color BLUE = rgba(0.25, 0.45, 1.0); // the game's blue, lifted for the dark canvas
-const Color PURPLE = render::hex(0xA020F0FF);
-const Color RED = render::hex(0xFF0000FF);
-const Color CYAN = render::hex(0x00FFFFFF);
-const Color GREEN = rgba(0.3, 0.9, 0.4);
-const Color GHOST_TOGGLER = rgba(0.75, 0.95, 1.0);
-const Color FLAG_TOGGLER = rgba(1.0, 0.85, 0.2);
-const Color TARGET = rgba(1.0, 0.85, 0.3);
-const Color SPAWN = rgba(0.6, 0.95, 1.0);
-const Color RESET = rgba(1.0, 0.55, 0.85);
-const Color PRE_TRANSFORM = rgba(0.55, 0.45, 0.85, 0.5);
+// The game's colours (Stage 208: the shared style, rcg/style.hpp), and the editor's own below
+using style::BLUE;
+using style::GRAY;
+using style::PURPLE;
+using style::RED;
+using style::WHITE;
+const Color GREEN = rgba(0.3, 0.9, 0.4); // the player's start
 const Color CANVAS = rgba(0.07, 0.07, 0.09);
 const Color GRID_FINE = rgba(1, 1, 1, 0.04);
 const Color GRID_COARSE = rgba(1, 1, 1, 0.09);
@@ -53,17 +48,9 @@ const Color ACCENT = rgba(1.0, 0.8, 0.3);
 const Color ERROR_TEXT = rgba(1.0, 0.45, 0.4);
 const Color SELECT = rgba(1, 1, 1, 0.35);
 const Color HOVER = rgba(1, 1, 1, 0.15);
-const Color GOAL = rgba(0.3, 0.95, 0.45);
-const Color DETECTOR = rgba(1.0, 0.8, 0.25, 0.85);
-const Color OBJECT = rgba(0.95, 0.6, 0.3);
 const Color CARRIER = rgba(0.45, 0.7, 1.0, 0.45);
-const Color COLLIDER = rgba(0.6, 0.72, 0.85); // Stage 164: a player-only collider
-const Color PLATFORM = rgba(0.62, 0.42, 0.22);  // Stage 172: a platform (wood brown)
-const Color SHIELD = rgba(0.45, 1.0, 0.85);     // Stage 186: a shield (turquoise, a band around it)
-const Color SHIELD_BAND = rgba(0.45, 1.0, 0.85, 0.22);
-const Color STEEL_BAND = rgba(0.6, 0.72, 0.85, 0.3); // Stage 207: blocking, not stopping (as the game draws it)
-const Color DOOR = rgba(1.0, 0.72, 0.25);       // Stage 190: a door's posts and core (amber)
 const Color CAMERA = rgba(0.85, 0.6, 1.0);
+const Color GATED = rgba(1.0, 1.0, 1.0, 0.45); // Stage 208: the hint on a surface present only under a flag
 
 // An element's layers (the draw nodes' keys: ["editor", layer, index])
 enum Layer { L_CANVAS, L_GRID, L_ROOM, L_ELEMENT, L_PLAYER, L_PREVIEW, L_HANDLES, L_PANEL, L_STATUS, L_GOALS, L_CARRIERS, L_SHADOW };
@@ -221,55 +208,10 @@ std::vector<std::string> wrap(const std::string &s, size_t width) {
 	return out;
 }
 
-// The colour of a side, as the game colours it (SurfaceNode.config_color).
-Color side_color(const BuiltSide *s) {
-	if (s == nullptr) {
-		return GRAY;
-	}
-	const std::string &t = s->effect.type;
-	if (t == "pass") {
-		for (const HitSpec &h : s->hits) {
-			if (h.kind == "state" && h.key == "ghost") {
-				return GHOST_TOGGLER;
-			}
-			if (h.kind == "target") {
-				return TARGET;
-			}
-			if (h.kind == "spawn") {
-				return SPAWN;
-			}
-			if (h.kind == "reset") {
-				return RESET;
-			}
-		}
-		return s->hits.empty() ? GRAY : FLAG_TOGGLER;
-	}
-	if (t == "terminal") return RED;
-	if (t == "reflection") return BLUE;
-	if (t == "inversion") return PURPLE;
-	if (t == "portal") return CYAN;
-	return s->effect.back ? rgba(1.0, 0.4, 0.1) : rgba(1.0, 0.8, 0.2);
-}
-
-// A surface's side config as the editor shows it: fixed, or a resolver's default row.
-const BuiltSide *shown_side(const BuiltSurface &b, bool left) {
-	if (b.resolver.empty()) {
-		return left ? (b.left ? &*b.left : nullptr) : (b.right ? &*b.right : nullptr);
-	}
-	const BuiltRow *row = &b.resolver.front();
-	for (const BuiltRow &r : b.resolver) {
-		if (r.value == "DEFAULT") {
-			row = &r;
-		}
-	}
-	return left ? (row->left ? &*row->left : nullptr) : (row->right ? &*row->right : nullptr);
-}
-
-// The colour a surface's side is shown in (Stage 172: a platform's plain sides in its own; Stage 186: a shield's).
-Color surface_color(const BuiltSurface &b, bool left) {
-	const BuiltSide *side = shown_side(b, left);
-	const Color c = side_color(side);
-	return shields(b, side) ? SHIELD : b.platform && c == GRAY ? PLATFORM : c;
+// Stage 208: the colour a side shows in, as the game's painter colours it (a platform's plain sides, a shield's)
+Color side_look(const BuiltSurface &b, const BuiltSide *side) {
+	const Color c = paint::config_color(side);
+	return shields(b, side) ? style::SHIELD_COLOR : b.platform && c == GRAY ? style::PLATFORM_COLOR : c;
 }
 
 } // namespace
@@ -2293,9 +2235,11 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			if (!b.seg.is_line() || b.label == std::nullopt) {
 				continue; // (a pass is not drawn)
 			}
-			const Color c = surface_color(b, true);
-			const V2 a = to_screen(b.seg.s), e = to_screen(b.seg.e);
-			r.push_back(line(a, e, c, 3.0));
+			const Color c = side_look(b, active_side(b, Side::Left, start_flags_));
+			std::vector<Call> look; // (Stage 208: as the game draws it)
+			paint::surface(look, b, b.seg, -1, start_flags_);
+			render::transform(look, [&](const V2 &w) { return to_screen(w); }, zoom_);
+			r.insert(r.end(), look.begin(), look.end());
 			const double dx = double(b.seg.e.x) - b.seg.s.x, dy = double(b.seg.e.y) - b.seg.s.y, len = std::hypot(dx, dy);
 			const V2 m = V2::of((double(b.seg.s.x) + b.seg.e.x) / 2, (double(b.seg.s.y) + b.seg.e.y) / 2);
 			V2 n = len > 0 ? V2::of(dy / len, -dx / len) : V2{0, 1};
@@ -2385,7 +2329,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			g.back().alignment = 1;
 		};
 		if (doc_.contains("objective") && doc_["objective"].is_object()) {
-			region(doc_["objective"].value("goal", json()), GOAL, "goal", lit("goal"));
+			region(doc_["objective"].value("goal", json()), style::GOAL_COLOR, "goal", lit("goal"));
 		}
 		if (doc_.contains("detectors") && doc_["detectors"].is_array()) {
 			for (size_t di = 0; di < doc_["detectors"].size(); di++) {
@@ -2409,13 +2353,13 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 					if (picked) {
 						g.push_back(line(a, b, SELECT, 9.0));
 					}
-					g.push_back(dashed(a, b, DETECTOR, 2.0, 8.0));
-					g.push_back(text_at(V2::of((double(a.x) + b.x) / 2 + 6, (double(a.y) + b.y) / 2 - 6), name, DETECTOR, 12));
+					g.push_back(dashed(a, b, style::DETECTOR_COLOR, 2.0, 8.0));
+					g.push_back(text_at(V2::of((double(a.x) + b.x) / 2 + 6, (double(a.y) + b.y) / 2 - 6), name, style::DETECTOR_COLOR, 12));
 					if (mk) {
 						render::marker(g, mk->shape, mk->color, V2::of((double(a.x) + b.x) / 2, (double(a.y) + b.y) / 2), std::max(3.0, 7.0 * zoom_));
 					}
 				} else {
-					region(d.value("region", json()), DETECTOR, name, picked);
+					region(d.value("region", json()), style::DETECTOR_COLOR, name, picked);
 					const json reg = d.value("region", json());
 					if (mk && reg.is_object()) {
 						std::optional<V2> at;
@@ -2454,7 +2398,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				if (lit("collider:" + std::to_string(i))) {
 					g.push_back(line(a, b, SELECT, 9.0));
 				}
-				g.push_back(line(a, b, COLLIDER, 3.0));
+				g.push_back(line(a, b, style::COLLIDER, 3.0));
 				// (hatching under it: a floor the player stands on)
 				const double dx = double(b.x) - a.x, dy = double(b.y) - a.y, len = std::hypot(dx, dy);
 				for (double t = 6.0; len > 0 && t < len; t += 10.0) {
@@ -2477,31 +2421,25 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			g.back().alignment = 1;
 		}
 		if (doc_.contains("objects") && doc_["objects"].is_array()) {
-			for (const json &o : doc_["objects"]) {
+			for (size_t k = 0; k < doc_["objects"].size(); k++) {
+				const json &o = doc_["objects"][k];
 				if (!o.is_object() || !o.contains("circle") || !o["circle"].is_object() || !is_point(o["circle"].value("center", json()))) {
 					continue;
 				}
 				const V2 c = to_screen(pt(o["circle"]["center"]));
 				const double r = o["circle"].value("radius", 16.0) * zoom_;
-				const bool pullable = o.value("kind", "pullable") == "pullable";
 				if (lit("object:" + o.value("name", ""))) {
 					g.push_back(arc(c, r, 0, TAU, SELECT, 9.0));
 				}
-				const std::string shape = o.value("shape", "circle");
-				std::vector<V2> outline = render::shape_outline(shape, c, r); // Stage 181: drawn in its shape, its circle faint
-				if (outline.empty()) {
-					g.push_back(arc(c, r, 0, TAU, pullable ? OBJECT : GRAY, 2.5));
-				} else {
-					g.push_back(arc(c, r, 0, TAU, render::with_alpha(pullable ? OBJECT : GRAY, 0.3), 1.0));
-					outline.push_back(outline.front());
-					Call k;
-					k.kind = Kind::Polyline;
-					k.pts = std::move(outline);
-					k.colors = {pullable ? OBJECT : GRAY};
-					k.width = 2.5;
-					g.push_back(std::move(k));
+				if (k < object_built_.size() && object_built_[k]) { // Stage 208: as the game draws it
+					std::vector<Call> look;
+					paint::surface(look, *object_built_[k], object_built_[k]->seg, -1, start_flags_);
+					render::transform(look, [&](const V2 &w) { return to_screen(w); }, zoom_);
+					g.insert(g.end(), look.begin(), look.end());
+				} else { // (a level that does not build: its outline)
+					g.push_back(arc(c, r, 0, TAU, GRAY, 2.5));
 				}
-				g.push_back(text_at(V2::of(c.x, double(c.y) - r - 4), o.value("name", ""), pullable ? OBJECT : GRAY, 12));
+				g.push_back(text_at(V2::of(c.x, double(c.y) - r - 4), o.value("name", ""), DIM, 12));
 				g.back().alignment = 1;
 			}
 		}
@@ -2588,41 +2526,35 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 		}
 		for (const BuiltSurface &b : drawn_[i].built) {
 			if (i < shade_of_.size() && shade_of_[i] != 0) { // Stage 153: a shade, in its colour
-				stroke(b.seg, shade_of_[i] == 1 ? rgba(0.55, 0.45, 0.95) : rgba(1.0, 0.85, 0.35), 2.0, true);
+				stroke(b.seg, shade_of_[i] == 1 ? style::SHADE_DARK : style::SHADE_LIGHT, 2.0, true);
 				continue;
 			}
 			if (b.pre_transform) {
-				stroke(b.seg, PRE_TRANSFORM, 1.5, true);
+				stroke(b.seg, style::PRE_TRANSFORM_COLOR, 1.5, true);
 				continue;
 			}
-			const Color left = surface_color(b, true), right = surface_color(b, false);
+			// Stage 208: drawn by the game's painter, under the level's starting flags (its marker the flag's, when it
+			// shows that), then the editor's own: a dashed hint when present only under a flag, its sides' ticks
+			BuiltSurface shown = b;
+			if (i < markers_.element.size()) {
+				shown.marker = markers_.element[i];
+			}
+			std::vector<Call> look;
+			paint::surface(look, shown, b.seg, -1, start_flags_);
+			render::transform(look, [&](const V2 &w) { return to_screen(w); }, zoom_);
+			calls.insert(calls.end(), look.begin(), look.end());
 			const bool gated = std::any_of(b.presence.begin(), b.presence.end(), [](const PresenceSpec &c) { return c.key.rfind("chan:", 0) != 0; });
-			if (shields(b, shown_side(b, true)) && shields(b, shown_side(b, false))) {
-				stroke(b.seg, SHIELD_BAND, 10.0, gated);
-			} else if (steel_band(b, shown_side(b, true), shown_side(b, false))) {
-				stroke(b.seg, STEEL_BAND, 10.0, gated);
+			if (gated && present(b, start_flags_)) { // (a spawner's channel is not such a flag)
+				stroke(b.seg, GATED, 1.0, true);
 			}
-			stroke(b.seg, left, 3.0, gated); // (dashed: present only under a flag; a spawner's channel is not drawn so)
-			if (is_door(b)) { // Stage 190: as the game draws it
-				stroke(b.seg, DOOR, 1.0, false);
-				if (!b.seg.full) {
-					for (const V2 &end : {b.seg.s, b.seg.e}) {
-						const auto [pa, pb] = door_post(b.seg, end, 8.0);
-						calls.push_back(line(to_screen(pa), to_screen(pb), DOOR, 3.0));
-					}
-				}
-			}
+			const BuiltSide *ls = active_side(b, Side::Left, start_flags_), *rs = active_side(b, Side::Right, start_flags_);
+			const Color left = side_look(b, ls), right = side_look(b, rs);
 			V2 m, n;
 			frame_of(b.seg, m, n);
 			const V2 sm = to_screen(m);
 			calls.push_back(line(sm, V2::of(double(sm.x) + n.x * 9, double(sm.y) + n.y * 9), left, 2.0));
-			if (right != left || shown_side(b, false) != nullptr) {
+			if (right != left || rs != nullptr) {
 				calls.push_back(line(sm, V2::of(double(sm.x) - n.x * 9, double(sm.y) - n.y * 9), right, 2.0));
-			}
-			// Stage 179: the designer's marker, as the game draws it (the flag's, when it shows that)
-			const std::optional<Marker> &mk = i < markers_.element.size() ? markers_.element[i] : b.marker;
-			if (mk) {
-				render::marker(calls, mk->shape, mk->color, to_screen(marker_point(b.seg)), std::max(3.0, 7.0 * zoom_));
 			}
 		}
 		for (const rc::arc::SegGeom &s : drawn_[i].broken) {
@@ -2730,7 +2662,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 			} else if ((tool_ == Tool::Goal || tool_ == Tool::Detector) && pts.size() == 1) {
 				const V2 c[4] = {pts[0], V2{at.x, pts[0].y}, at, V2{pts[0].x, at.y}};
 				for (int k = 0; k < 4; k++) {
-					pv.push_back(dashed(c[k], c[(k + 1) % 4], tool_ == Tool::Goal ? GOAL : DETECTOR, 1.0, 6.0));
+					pv.push_back(dashed(c[k], c[(k + 1) % 4], tool_ == Tool::Goal ? style::GOAL_COLOR : style::DETECTOR_COLOR, 1.0, 6.0));
 				}
 			} else if (!pts.empty()) {
 				pv.push_back(dashed(pts.back(), at, ACCENT, 1.0, 6.0));

@@ -514,6 +514,21 @@ TEST_CASE("steel bands: a surface that blocks while a side does not stop the arr
 	CHECK(banded == std::set<float>{600.0f, 700.0f, 800.0f, 900.0f});
 }
 
+TEST_CASE("draw order: the surfaces before the player, the cursor and the HUD, which share their z (Stage 208)") {
+	rcg::Session s(level_of(R"({"gravity": [0, 980], "elements": [{"kind": "platform", "start": [800, 900], "end": [1100, 900]}]})"));
+	s.settle();
+	const std::vector<rcg::render::Node> nodes = s.draw(); // (a host's order: by z, then as listed)
+	int last_surface = -1, player = -1;
+	for (size_t i = 0; i < nodes.size(); i++) {
+		const std::string kind = nodes[i].key[0].get<std::string>();
+		last_surface = kind == "surface" ? int(i) : last_surface;
+		player = kind == "player" ? int(i) : player;
+	}
+	REQUIRE(player >= 0);
+	REQUIRE(last_surface >= 0);
+	CHECK(last_surface < player);
+}
+
 TEST_CASE("crossings: by what an element does -- a door or a switchable that can stop the arrow cuts, a platform or a fence does not (Stage 192)") {
 	const auto cuts = [](const char *element) {
 		const std::string text = std::string(R"({"elements": [{"kind": "mirror", "name": "m", "start": [900, 300], "end": [900, 700]}, )") + element + "]}";

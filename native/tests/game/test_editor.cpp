@@ -1087,14 +1087,16 @@ TEST_CASE("editor: the level list is searchable -- soft matches first, their cha
 TEST_CASE("editor: the level's edges -- a panel field, drawn as their kind, their mistakes named (Stage 169)") {
 	rcg::Editor ed(&CLASSIC); // (the blank level before Stage 180)
 	ed.resize(1920, 1080);
-	auto faces = [&] { // the configured edges' strokes (an element's are 3 px too; this level has none)
-		int n = 0;
+	auto faces = [&] { // the configured edges' strokes, as the game draws them (Stage 208): one of 3 px, or a 1.5 px
+		// stroke per side when the sides differ (an element's are so too; this level has none)
+		int n = 0, halves = 0;
 		for (const auto &node : ed.draw()) {
 			for (const auto &c : *node.calls) {
 				n += c.kind == rcg::render::Kind::Line && c.width == 3.0 ? 1 : 0;
+				halves += c.kind == rcg::render::Kind::Line && c.width == 1.5 ? 1 : 0;
 			}
 		}
-		return n;
+		return n + halves / 2;
 	};
 	CHECK(faces() == 0); // (passes: the dashed bounds alone)
 	ok(ed, {{"op", "set"}, {"path", "/edges"}, {"value", "one_sided_mirror"}});
@@ -1488,4 +1490,31 @@ TEST_CASE("editor: a surface element's rows -- its face, back, body, and the fea
 	ok(ed, {{"op", "set"}, {"name", "b"}, {"key", "open"}, {"value", "det:plate"}});
 	CHECK(has("open"));
 	CHECK(ed.errors().empty());
+}
+
+TEST_CASE("editor: elements and objects drawn by the game's painter -- a shield's band, a fence's steel band, an object in its face's colour (Stage 208)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "shield"}, {"name", "s"}, {"start", {700.0, 300.0}}, {"end", {700.0, 500.0}}}}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "fence"}, {"name", "f"}, {"start", {800.0, 300.0}}, {"end", {800.0, 500.0}}}}});
+	ok(ed, {{"op", "set"}, {"path", "/objects"}, {"value", json::parse(R"([{"name": "box", "circle": {"center": [1000, 400], "radius": 16}}])")}});
+	REQUIRE(ed.errors().empty());
+	const rcg::render::Color shield_band{0.45f, 1.0f, 0.85f, 0.22f}, steel{0.6f, 0.72f, 0.85f, 0.3f}, red = rcg::render::hex(0xFF0000FF),
+			orange{0.95f, 0.6f, 0.3f, 1.0f};
+	int bands = 0, steels = 0, red_arcs = 0, orange_arcs = 0;
+	for (const auto &node : ed.draw()) {
+		for (const auto &c : *node.calls) {
+			if (c.colors.empty()) {
+				continue;
+			}
+			bands += c.colors[0] == shield_band;
+			steels += c.colors[0] == steel;
+			red_arcs += c.kind == rcg::render::Kind::Arc && c.colors[0] == red;
+			orange_arcs += c.kind == rcg::render::Kind::Arc && c.colors[0] == orange;
+		}
+	}
+	CHECK(bands == 1);
+	CHECK(steels == 1);
+	CHECK(red_arcs >= 1); // the box: a stop face, red as in the game (not the editor's old orange)
+	CHECK(orange_arcs == 0);
 }

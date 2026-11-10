@@ -75,6 +75,17 @@ Color hex(std::uint32_t p) {
 
 Color with_alpha(const Color &c, double a) { return {c[0], c[1], c[2], float(a)}; }
 
+void transform(std::vector<Call> &calls, const std::function<V2(const V2 &)> &to, double scale) {
+	for (Call &k : calls) {
+		for (size_t i = 0; i < k.pts.size(); i++) {
+			k.pts[i] = k.kind == Kind::Rect && i == 1 ? V2::of(double(k.pts[i].x) * scale, double(k.pts[i].y) * scale) : to(k.pts[i]);
+		}
+		if (k.kind == Kind::Arc || k.kind == Kind::Circle) {
+			k.radius *= scale;
+		}
+	}
+}
+
 void marker(std::vector<Call> &out, const std::string &shape, const Color &color, const V2 &at, double size, double alpha) {
 	const Color fill = with_alpha(color, double(color[3]) * alpha);
 	const Color edge{0.06f, 0.06f, 0.08f, float(0.9 * alpha)};

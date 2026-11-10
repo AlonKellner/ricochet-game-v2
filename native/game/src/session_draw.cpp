@@ -1609,6 +1609,26 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 			}
 		});
 	}
+	// the surfaces, one node per piece (Stage 208: before the player, the cursor and the HUD, which share their z0 and
+	// a host draws over them in list order)
+	const int crossing_id = journey_ && journey_->crossing && journey_->body >= 0 ? world_->bodies()[size_t(journey_->body)].id : -1;
+	for (const Node &n : nodes_) {
+		if (n.surface == crossing_id) {
+			continue; // (Stage 166: a body crossing a portal is drawn clipped, with its copy: the journey node)
+		}
+		const BuiltSurface *s = level_.shades.empty() ? world_->by_id(n.surface) : world_->undarkened(n.surface); // (Stage 153: drawn as it is, under the shadow)
+		if (s == nullptr) {
+			continue;
+		}
+		SurfaceDraw &c = surface_draw_[n.serial];
+		if (!c.calls || c.flags != flags_version_ || c.hover != n.hover || c.plan != n.plan || c.indices != n.plan_indices) {
+			std::vector<Call> calls;
+			paint::surface(calls, *s, n.segment, n.piece, flags_, n.hover, n.plan, n.plan_indices);
+			c = SurfaceDraw{flags_version_, n.hover, n.plan, n.plan_indices, nullptr, render::content_hash(calls)};
+			c.calls = std::make_shared<const std::vector<Call>>(std::move(calls));
+		}
+		nodes.push_back(render::FrameNode{render::NodeKey{NodeKind::Surface, n.surface, n.piece}, 0, V2{}, WHITE, c.calls, c.version});
+	}
 	const bool player_crossing = journey_ && journey_->crossing && journey_->body < 0;
 	if (level_.player_start && !player_crossing) {
 		std::vector<Call> calls;
@@ -1744,25 +1764,6 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		k.kind = Kind::Label;
 		k.text = hud_;
 		fresh(NodeKind::Hud, 0, V2{}, WHITE, {k});
-	}
-	// the surfaces, one node per piece
-	const int crossing_id = journey_ && journey_->crossing && journey_->body >= 0 ? world_->bodies()[size_t(journey_->body)].id : -1;
-	for (const Node &n : nodes_) {
-		if (n.surface == crossing_id) {
-			continue; // (Stage 166: a body crossing a portal is drawn clipped, with its copy: the journey node)
-		}
-		const BuiltSurface *s = level_.shades.empty() ? world_->by_id(n.surface) : world_->undarkened(n.surface); // (Stage 153: drawn as it is, under the shadow)
-		if (s == nullptr) {
-			continue;
-		}
-		SurfaceDraw &c = surface_draw_[n.serial];
-		if (!c.calls || c.flags != flags_version_ || c.hover != n.hover || c.plan != n.plan || c.indices != n.plan_indices) {
-			std::vector<Call> calls;
-			paint::surface(calls, *s, n.segment, n.piece, flags_, n.hover, n.plan, n.plan_indices);
-			c = SurfaceDraw{flags_version_, n.hover, n.plan, n.plan_indices, nullptr, render::content_hash(calls)};
-			c.calls = std::make_shared<const std::vector<Call>>(std::move(calls));
-		}
-		nodes.push_back(render::FrameNode{render::NodeKey{NodeKind::Surface, n.surface, n.piece}, 0, V2{}, WHITE, c.calls, c.version});
 	}
 	// the edge
 	{
