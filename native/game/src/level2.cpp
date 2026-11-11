@@ -968,4 +968,199 @@ FlagMarkers flag_markers(const json &v2, const Lowered &low) {
 	return out;
 }
 
+
+namespace {
+
+// Stage 217: an element's kinds -- the builtin ones and the level's own (a template that does not prepare: none)
+std::map<std::string, json> kinds_of(const json &v2) {
+	std::map<std::string, json> kinds = elements::builtin();
+	if (v2.contains("templates") && v2["templates"].is_object()) {
+		for (auto it = v2["templates"].begin(); it != v2["templates"].end(); ++it) {
+			try {
+				kinds[it.key()] = elements::prepare(it.value(), it.key());
+			} catch (const LevelError &) {
+			}
+		}
+	}
+	return kinds;
+}
+
+// ... an element's parameters, defaults filled in -- or as written when they do not read
+json env_of(const json &tmpl, const json &e, const std::string &name) {
+	try {
+		return elements::params_of(tmpl, e, name, "");
+	} catch (const LevelError &) {
+		json env = e;
+		env["name"] = name;
+		return env;
+	}
+}
+
+} // namespace
+
+std::vector<FlagUse> flag_index(const json &v2) {
+	std::vector<FlagUse> out;
+	auto use = [&](const std::string &flag) -> FlagUse & {
+		for (FlagUse &u : out) {
+			if (u.flag == flag) {
+				return u;
+			}
+		}
+		out.push_back({flag, {}, {}, {}, {}});
+		return out.back();
+	};
+	auto add = [](std::vector<std::string> &into, const std::string &v) {
+		if (!v.empty() && std::find(into.begin(), into.end(), v) == into.end()) {
+			into.push_back(v);
+		}
+	};
+	auto internal = [](const std::string &n) { return n.empty() || n.rfind("chan:", 0) == 0 || n == "ghost" || n == "true" || n == "false"; };
+	// who: its label; the element or detector it is (by name)
+	struct Who {
+		std::string label, element, detector;
+	};
+	auto mark = [&](FlagUse &u, const Who &w, bool writes) {
+		add(writes ? u.writers : u.readers, w.label);
+		add(u.elements, w.element);
+		add(u.detectors, w.detector);
+	};
+	auto write = [&](const std::string &flag, const Who &w) {
+		if (!internal(flag) && !rc::FlagExpr::is_expression(flag)) {
+			mark(use(flag), w, true);
+		}
+	};
+	auto read = [&](const std::string &key, const Who &w) {
+		std::vector<std::string> ns{key};
+		try {
+			if (const std::shared_ptr<const rc::FlagExpr> e = rc::FlagExpr::compile(key)) {
+				ns = e->names();
+			}
+		} catch (const std::invalid_argument &) {
+			return; // (a malformed expression reads nothing yet)
+		}
+		for (const std::string &n : ns) {
+			if (!internal(n)) {
+				mark(use(n), w, false);
+			}
+		}
+	};
+	// a raw surface's keys: a state hit's key written, any other key read (presence, a resolver, a hit's when)
+	std::function<void(const json &, const Who &)> walk = [&](const json &j, const Who &w) {
+		if (j.is_object()) {
+			if (j.value("key", json()).is_string()) {
+				if (j.value("kind", "") == "state") {
+					write(j["key"].get<std::string>(), w);
+				} else {
+					read(j["key"].get<std::string>(), w);
+				}
+			}
+			for (auto it = j.begin(); it != j.end(); ++it) {
+				walk(it.value(), w);
+			}
+		} else if (j.is_array()) {
+			for (const json &x : j) {
+				walk(x, w);
+			}
+		}
+	};
+	const std::map<std::string, json> kinds = kinds_of(v2);
+	const json es = v2.value("elements", json::array());
+	std::map<std::string, int> count;
+	for (const json &e : es.is_array() ? es : json::array()) {
+		if (!e.is_object() || !e.value("kind", json()).is_string()) {
+			continue;
+		}
+		const std::string kind = e["kind"].get<std::string>();
+		const std::string name = e.value("name", json()).is_string() ? e["name"].get<std::string>() : kind + "_" + std::to_string(++count[kind]);
+		const Who who{kind + " " + name, name, ""};
+		if (kind == "raw") {
+			walk(e.value("surface", json()), who);
+		}
+		const auto it = kinds.find(kind);
+		std::vector<std::string> tags;
+		for (const json *src : {it != kinds.end() ? &it->second : nullptr, &e}) {
+			if (src != nullptr && src->value("tags", json()).is_array()) {
+				for (const json &t : (*src)["tags"]) {
+					if (t.is_string()) {
+						tags.push_back(t.get<std::string>());
+					}
+				}
+			}
+		}
+		if (it != kinds.end()) {
+			const json env = env_of(it->second, e, name);
+			const json params = it->second.value("params", json::object());
+			for (auto p = params.begin(); p != params.end(); ++p) {
+				const std::string type = p.value().value("type", "");
+				const json v = env.value(p.key(), json());
+				if (!v.is_string() || v.get<std::string>().empty()) {
+					continue;
+				}
+				if (type == "flag") {
+					write(v.get<std::string>(), who);
+				} else if (type == "door") {
+					write("door:" + v.get<std::string>(), who);
+				} else if (type == "expr") {
+					read(v.get<std::string>(), who);
+				}
+			}
+		}
+		// its tags' own flags (written and read: a fire it catches and gives, a charge it swaps)
+		for (const json &h : tag_hits(name, tags)) {
+			write(h.value("key", ""), who);
+			for (const json &c : h.value("when", json::array())) {
+				read(c.value("key", ""), who);
+			}
+		}
+		// an opening's flag (Stage 202; default door:<name>)
+		if (e.value("motion_mode", json()) == "opening") {
+			const json m = e.value("motion", json::object());
+			read(m.is_object() && m.value("flag", json()).is_string() ? m["flag"].get<std::string>() : "door:" + name, who);
+		}
+	}
+	const json ds = v2.value("detectors", json::array());
+	for (const json &d : ds.is_array() ? ds : json::array()) {
+		if (d.is_object() && d.value("name", json()).is_string()) {
+			const std::string name = d["name"].get<std::string>();
+			write(d.value("flag", json()).is_string() ? d["flag"].get<std::string>() : "det:" + name, Who{"detector " + name, "", name});
+		}
+	}
+	const json obj = v2.value("objective", json::object());
+	for (const json &r : obj.is_object() && obj.value("requires", json()).is_array() ? obj["requires"] : json::array()) {
+		if (r.is_object() && r.value("key", json()).is_string()) {
+			read(r["key"].get<std::string>(), Who{"the goal", "", ""});
+		}
+	}
+	const json fs = v2.value("flags", json::object());
+	if (fs.is_object()) {
+		for (auto it = fs.begin(); it != fs.end(); ++it) {
+			write(it.key(), Who{"the start", "", ""});
+		}
+	}
+	for (const char *f : {"shot:fire", "shot:charge", "shot:frost"}) { // the arrow's own
+		mark(use(f), Who{"the arrow", "", ""}, true);
+	}
+	return out;
+}
+
+std::vector<std::string> door_names(const json &v2) {
+	std::vector<std::string> out;
+	const std::map<std::string, json> kinds = kinds_of(v2);
+	const json es = v2.value("elements", json::array());
+	for (const json &e : es.is_array() ? es : json::array()) {
+		if (!e.is_object() || !e.value("name", json()).is_string() || !e.value("kind", json()).is_string()) {
+			continue;
+		}
+		const auto it = kinds.find(e["kind"].get<std::string>());
+		if (it == kinds.end()) {
+			continue;
+		}
+		const json env = env_of(it->second, e, e["name"].get<std::string>());
+		if (env.value("open", json()).is_string() || e.value("motion_mode", json()) == "opening") {
+			out.push_back(e["name"].get<std::string>());
+		}
+	}
+	return out;
+}
+
 } // namespace rcg

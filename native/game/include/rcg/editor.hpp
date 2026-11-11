@@ -98,7 +98,7 @@ private:
 		std::string key;     // an element key, or a JSON pointer into the document (level fields)
 	};
 	struct Row {
-		enum Kind { Header, Text, Value, Error, Buttons, Chips, Nav, Level, Tools, Actions } kind = Text; // Actions (Stage 203): options run their cmds // Tools (Stage 161): the tools, one row of them // Chips: the palette's kinds (options), one row of them
+		enum Kind { Header, Text, Value, Error, Buttons, Chips, Nav, Level, Tools, Actions, Complete } kind = Text; // Complete (Stage 217): a flag the focused field may take // Actions (Stage 203): options run their cmds // Tools (Stage 161): the tools, one row of them // Chips: the palette's kinds (options), one row of them
 		std::string label, value, hint;
 		std::optional<Field> field;
 		std::string choice; // a value that cycles ("enum", "bool", "kind", "tool", "place", "options", "shape") or "" (typed)
@@ -197,6 +197,28 @@ private:
 	};
 	std::vector<Ranked> ranked_levels() const;
 	size_t level_pick_ = 0;
+	// Stage 217: completing a flag in the focused field -- the word at the caret, the level's flags ranked by it (the
+	// level search's soft match), the one picked (Up/Down; Tab or a click puts it in), the list closed (Esc) until the
+	// text changes
+	struct Completion {
+		std::string kind;   // flag (a flag written), expr (an expression read), door (a door's name), json (a key in JSON)
+		std::string word;   // the word at the caret
+		size_t from = 0, to = 0;
+		struct Item {
+			std::string flag, who;
+			std::vector<int> marks;
+			std::vector<std::string> elements, detectors;
+			bool written = true;
+		};
+		std::vector<Item> items; // ranked: matches first (best first), then the rest; empty word: all, written ones first
+	};
+	std::optional<Completion> completion() const;
+	std::string flag_field(const Field &f) const; // the field's kind of flag ("": none)
+	void accept_completion(size_t i);
+	size_t complete_pick_ = 0;
+	bool complete_closed_ = false;
+	mutable uint64_t flags_at_ = ~uint64_t(0);
+	mutable std::vector<FlagUse> flags_; // (the level's flags at version flags_at_)
 	std::string level_query() const; // the search's text (while it has the focus)
 	uint64_t version_ = 0;
 	Mode mode_ = Mode::Edit;

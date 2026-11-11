@@ -184,3 +184,25 @@ def test_a_level_renamed():
     ed.command({"op": "saved"})
     assert ed.command({"op": "state"})["renamed_from"] is None
     assert not ed.command({"op": "rename_level", "to": "a/two"})["ok"]
+
+
+def test_a_flag_completes_with_tab():
+    # Stage 217: a flag field completes from the level's flags -- Tab through the C API puts the pick in
+    ed = rc_host.Editor(json.dumps({"schema": "rc-level/2", "elements": [
+        {"kind": "switchable", "name": "s", "when": "open", "start": [700, 300], "end": [700, 500]},
+        {"kind": "button", "name": "b", "flag": "x", "start": [900, 300], "end": [1000, 300]}]}))
+    ed.resize(1920, 1080)
+    ed.command({"op": "select", "name": "b"})
+    row = next(r for r in ed.command({"op": "panel"})["rows"] if r["kind"] == "value" and r["label"] == "flag")
+    x, y = row["x"] + 150, row["y"] + 10
+    ed.pointer(rc_host.PTR_MOVE, x, y)
+    ed.pointer(rc_host.PTR_DOWN, x, y, rc_host.BTN_LEFT)
+    ed.pointer(rc_host.PTR_UP, x, y, rc_host.BTN_LEFT)
+    ed.key(rc_host.EDKEY_BACKSPACE)
+    ed.text("o")
+    ed.text("p")
+    assert ed.command({"op": "complete"})["items"][0]["flag"] == "open"
+    ed.key(rc_host.EDKEY_TAB)
+    ed.key(rc_host.EDKEY_ENTER)
+    doc = json.loads(ed.document())
+    assert next(e for e in doc["elements"] if e["name"] == "b")["flag"] == "open"

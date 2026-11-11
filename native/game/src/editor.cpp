@@ -1145,16 +1145,31 @@ json Editor::op(const json &cmd) {
 				{"new_prompt", new_prompt_}, {"copy_pick", copy_pick_}, {"rename_prompt", rename_prompt_},
 				{"renamed_from", rename_from_ && !rename_from_->empty() ? json(*rename_from_) : json()}};
 	}
+	if (o == "complete") { // Stage 217: the focused field's completion (tests, hosts)
+		const std::optional<Completion> c = completion();
+		if (!c) {
+			return {{"word", nullptr}, {"items", json::array()}};
+		}
+		json items = json::array();
+		for (const Completion::Item &it : c->items) {
+			items.push_back({{"flag", it.flag}, {"who", it.who}, {"marks", it.marks}, {"elements", it.elements}, {"detectors", it.detectors}});
+		}
+		return {{"kind", c->kind}, {"word", c->word}, {"items", items}, {"pick", complete_pick_}};
+	}
 	if (o == "panel") { // the panel's rows as drawn (tests, debugging): label, value, y
 		json rs = json::array();
 		for (const Row &r : rows()) {
-			static const char *const KINDS[] = {"header", "text", "value", "error", "buttons", "chips", "nav", "level", "tools", "actions"};
+			static const char *const KINDS[] = {"header", "text", "value", "error", "buttons", "chips", "nav", "level", "tools", "actions", "complete"};
 			rs.push_back({{"kind", KINDS[int(r.kind)]}, {"label", r.label}, {"value", r.value}, {"y", r.y},
 					{"x", width_ - PANEL_WIDTH + 20}});
 			if (r.kind == Row::Actions) {
 				rs.back()["options"] = r.options; // (Stage 203)
 				rs.back()["lit"] = r.lit;         // (Stage 212)
 				rs.back()["on"] = r.on;           // (Stage 215)
+			}
+			if (r.kind == Row::Complete) { // (Stage 217)
+				rs.back()["marks"] = r.marks;
+				rs.back()["picked"] = r.lit == 1;
 			}
 		}
 		return {{"rows", rs}};

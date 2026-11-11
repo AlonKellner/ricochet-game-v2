@@ -10,7 +10,7 @@
   "when": {
    "default": "",
    "doc": "the flag under which it is active (empty: always), e.g. el:wire:charge, det:plate, door:gate",
-   "type": "string"
+   "type": "expr"
   }
  },
  "priority": 70,
