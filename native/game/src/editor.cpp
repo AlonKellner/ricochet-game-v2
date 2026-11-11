@@ -436,12 +436,20 @@ void Editor::refresh() {
 	// what only the whole level shows (names, the level's own keys, ...)
 	shade_fill_ = {};
 	shade_of_.assign(es.size(), 0);
+	start_flags_ = {};
+	object_built_.clear();
 	markers_ = FlagMarkers{};
 	if (errors_.empty()) {
 		try {
 			markers_ = flag_markers(doc_, lower_level(doc_));
 			const Level lv = parse_level_json(doc_);
 			build_level(lv);
+			for (const auto &[k, v] : lv.flags) { // Stage 208: what the canvas draws under
+				start_flags_.set(k, v);
+			}
+			for (const Object &o : lv.objects) {
+				object_built_.push_back(build_spec(object_spec(o, o.center), 1, o.label).front());
+			}
 			// Stage 153: the shadow under the level's starting flags, and which elements are shades
 			if (!lv.shades.empty()) {
 				std::vector<shade::Region> regions;

@@ -8,6 +8,7 @@
 // I/O when a save is requested, and plays the document with an ordinary game.
 #pragma once
 
+#include "rc/flags.hpp"
 #include "rc/visibility.hpp"
 #include "rcg/build.hpp"
 #include "rcg/level2.hpp"
@@ -214,6 +215,8 @@ private:
 	FlagMarkers markers_;       // Stage 179: the markers the flags give (the whole level's; none while it does not lower)
 	Drawn edges_drawn_;         // Stage 169: the configured edges (none: they pass)
 	std::vector<int> shade_of_;  // Stage 153: per element, 1 a dark shade, 2 a light one
+	rc::Flags start_flags_;      // Stage 208: the level's starting flags (the elements drawn under them, as the game does)
+	std::vector<std::optional<BuiltSurface>> object_built_; // ... and its objects' surfaces (none while it does not build)
 	// Stage 203: an element's motion's steps or keys as the editor shows and edits them -- each part's two
 	// points (a translation's from and to, a rotation's pivot and aim; handles "step:<k>:<part>:<0|1>"), and the
 	// poses they lead to (an opening's after each step, the last its open pose; a motion's at each key), drawn faint

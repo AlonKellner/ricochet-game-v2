@@ -33,9 +33,15 @@ func test_the_draw_list_becomes_layers_in_draw_order() -> void:
 	assert_gt(_game.layer_count(), 3)
 	var layers: Node = _game.get_node("Layers")
 	var names: Array = layers.get_children().map(func(n): return String(n.name))
-	# (Stage 164: a level's colliders come right after the background, under the player)
-	var lead: Array = names.slice(0, 4).filter(func(n): return n != "colliders")
-	assert_eq(lead.slice(0, 3), ["background", "player", "cursor"], "z 0 in the scene's tree order")
+	# (Stage 164: a level's colliders come right after the background; Stage 208: the surfaces before the player and
+	# the cursor, which share their z and are drawn over them)
+	assert_eq(names[0], "background", "z 0 in the scene's tree order")
+	var last_surface := -1
+	for i in names.size():
+		if String(names[i]).begins_with("surface"):
+			last_surface = i
+	assert_lt(last_surface, names.find("player"), "the surfaces under the player")
+	assert_lt(names.find("player"), names.find("cursor"), "the cursor over the player")
 	var z := -1000
 	for n: Node2D in layers.get_children():
 		assert_true(n.z_index >= z, "layers by z")

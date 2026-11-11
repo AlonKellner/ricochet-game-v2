@@ -14,6 +14,7 @@
 
 #include <array>
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <string>
 #include <vector>
@@ -102,6 +103,10 @@ std::vector<V2> tessellate_arc(const V2 &center, double radius, double start, do
 // Godot's named colours (Color::hex) and helpers
 Color hex(std::uint32_t rgba);
 Color with_alpha(const Color &c, double a); // Color(c, a)
+
+// Stage 208: calls drawn in one frame mapped to another: points through `to` (a similarity), radii and a rect's
+// size by `scale`; widths, dashes and font sizes kept (the editor's constant pixels).
+void transform(std::vector<Call> &calls, const std::function<V2(const V2 &)> &to, double scale);
 
 // Stage 179: a designer's marker -- the shape (circle, square, triangle, diamond, star, cross) filled in the colour
 // over a dark outline, centred at `at`, `size` its radius; `alpha` scales both (a faded marker: an absent surface's)

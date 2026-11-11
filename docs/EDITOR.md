@@ -34,10 +34,12 @@ stands on the bottom edge).
 ## The window
 
 - **The canvas**, left: the level, with the grid (10 units, and 50), the bounds (dashed) and the room's walls.
-  Every element is drawn in its side's colour as the game colours it: red walls, blue mirrors, purple
-  inversions, cyan portals, orange projections, gray passes, yellow buttons and togglers. A short tick from the
-  middle of a surface points at its left side, a second one at its right side when that side does something.
-  A door, present only while its flag is unset, is dashed. An element with a problem has a red dashed overlay.
+  Every element and object is drawn by the game's own painter (Stage 208), as the game draws it under the level's
+  starting flags: its sides' colours (red walls, blue mirrors, purple inversions, cyan portals, orange projections,
+  gray passes, yellow buttons and togglers), its bands (a shield's, a steel band), a door's posts, its hit marks and
+  its designer marker. A surface absent at the start (an open door) is dashed gray as in the game; one present only
+  under a flag has a faint dashed hint over it. A short tick from the middle of a surface points at its left side,
+  a second one at its right side when that side does something. An element with a problem has a red dashed overlay.
   The player's start is the green circle. Each element's name is written beside it.
 - **The panel**, right: the buttons (undo, redo, save, play), the level menu, the tool and every tool as a chip
   with its key (a click uses it; Stage 161), what the tools place (every kind as a chip, with its description), then the selected element's fields or, with nothing selected, the level's fields. Last come the
