@@ -29,7 +29,7 @@ const std::set<std::string> COMMON = {"kind", "name", "start", "end", "via", "ci
 		"marker", "sync_marker"};
 // (Stage 179: a marker, like the geometry, is the element's and every one of its surfaces')
 const std::set<std::string> GEOMETRY = {"start", "end", "via", "circle", "straight", "marker"};
-const std::set<std::string> TYPES = {"string", "number", "bool", "point", "array", "object", "any"};
+const std::set<std::string> TYPES = {"string", "flag", "expr", "door", "number", "bool", "point", "array", "object", "any"};
 
 bool ident_start(char c) { return (c >= 'a' && c <= 'z') || (c >= 'A' && c <= 'Z') || c == '_'; }
 bool ident_char(char c) { return ident_start(c) || (c >= '0' && c <= '9'); }
@@ -136,10 +136,12 @@ std::string misfit(const json &spec, const json &v) {
 		return "one of " + opts + " expected";
 	}
 	const std::string t = param_type(spec);
-	const bool ok = t == "any" || (t == "string" && v.is_string()) || (t == "number" && v.is_number()) || (t == "bool" && v.is_boolean())
+	// (Stage 217: flag, expr and door are strings the editor completes -- a flag written, a flag expression read, a door's name)
+	const bool text = t == "string" || t == "flag" || t == "expr" || t == "door";
+	const bool ok = t == "any" || (text && v.is_string()) || (t == "number" && v.is_number()) || (t == "bool" && v.is_boolean())
 			|| (t == "point" && v.is_array() && v.size() == 2 && v[0].is_number() && v[1].is_number()) || (t == "array" && v.is_array())
 			|| (t == "object" && v.is_object());
-	return ok ? "" : "a" + std::string(t == "array" || t == "object" ? "n " : " ") + t + " expected";
+	return ok ? "" : "a" + std::string(t == "array" || t == "object" || t == "expr" ? "n " : " ") + (t == "expr" ? "expression" : t == "flag" ? "flag name" : t == "door" ? "door's name" : t) + " expected";
 }
 
 json eval(const json &node, const json &env, const std::string &path) {
@@ -515,7 +517,7 @@ void check_template(const json &t, const std::string &path) {
 			}
 		}
 		if (spec.contains("type") && (!spec["type"].is_string() || !TYPES.count(spec["type"].get<std::string>()))) {
-			fail(pp + ".type", "string, number, bool, point, array, object or any expected");
+			fail(pp + ".type", "string, flag, expr, door, number, bool, point, array, object or any expected");
 		}
 		if (spec.contains("enum") && (!spec["enum"].is_array() || spec["enum"].empty())) {
 			fail(pp + ".enum", "a non-empty array expected");

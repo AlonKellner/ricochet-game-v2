@@ -1439,7 +1439,10 @@ TEST_CASE("editor: one motion field, its motion_mode (cycle or opening) and an o
 	CHECK(element(ed, "w")["motion_mode"] == "opening");
 	CHECK(ed.errors().empty());
 	CHECK(row("  flag") == "(door:w)");
-	click_action(ed, "det:plate");
+	click_row(ed, "  flag"); // (Stage 217: one of the level's flags, completed)
+	ed.text("pl");
+	ed.key(rcg::Editor::KeyTab, 0, true);
+	ed.key(rcg::Editor::KeyEnter, 0, true);
 	CHECK(element(ed, "w")["motion"]["flag"] == "det:plate");
 	click_row(ed, "  flag");
 	for (int k = 0; k < 12; k++) {
@@ -1449,7 +1452,12 @@ TEST_CASE("editor: one motion field, its motion_mode (cycle or opening) and an o
 	ed.key(rcg::Editor::KeyEnter, 0, true);
 	CHECK(element(ed, "w")["motion"]["flag"] == "det:plate && !locked");
 	CHECK(ed.errors().empty());
-	click_action(ed, "door:w");
+	click_row(ed, "  flag"); // (empty: the default door:<name> again)
+	ed.key(rcg::Editor::KeyBackspace, rcg::Editor::ModCtrl, true);
+	for (int k = 0; k < 24; k++) {
+		ed.key(rcg::Editor::KeyBackspace, 0, true);
+	}
+	ed.key(rcg::Editor::KeyEnter, 0, true);
 	CHECK_FALSE(element(ed, "w")["motion"].contains("flag"));
 	// keys are the cycle's: none in the opening's mode
 	CHECK_FALSE(ed.command({{"op", "add_key"}, {"name", "w"}}).value("ok", true));
@@ -1722,4 +1730,142 @@ TEST_CASE("editor: elements and objects drawn by the game's painter -- a shield'
 	CHECK(steels == 1);
 	CHECK(red_arcs >= 1); // the box: a stop face, red as in the game (not the editor's old orange)
 	CHECK(orange_arcs == 0);
+}
+
+// Stage 217: a flag field completes -- the level's flags ranked by the word at the caret, the pick put in by Tab or a
+// click, the field still being edited; Esc closes the list; the pick's writers and readers outlined
+TEST_CASE("editor: flag names complete -- the level's flags, ranked by the word at the caret, Tab or a click (Stage 217)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "door"}, {"name", "gate"}, {"start", {700.0, 300.0}}, {"end", {700.0, 500.0}}}}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "button"}, {"name", "b"}, {"opens", "gate"}, {"start", {900.0, 300.0}}, {"end", {1000.0, 300.0}}}}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"name", "w"}, {"tags", {"conductive"}}, {"start", {900.0, 600.0}}, {"end", {1000.0, 600.0}}}}});
+	ok(ed, {{"op", "set"}, {"path", "/detectors"}, {"value", json::parse(R"([{"name": "plate", "region": {"rect": [1100, 500, 80, 40]}}])")}});
+	ok(ed, {{"op", "set"}, {"path", "/flags"}, {"value", json::parse(R"({"lamp": true})")}});
+	// the index: who writes and reads each flag
+	const std::vector<rcg::FlagUse> idx = rcg::flag_index(ed.document());
+	auto of = [&](const std::string &f) -> const rcg::FlagUse & {
+		for (const rcg::FlagUse &u : idx) {
+			if (u.flag == f) {
+				return u;
+			}
+		}
+		FAIL("no flag " << f);
+		return idx.front();
+	};
+	CHECK(of("door:gate").writers == std::vector<std::string>{"button b"});
+	CHECK(of("door:gate").readers == std::vector<std::string>{"door gate"});
+	CHECK(of("door:gate").elements == std::vector<std::string>{"gate", "b"});
+	CHECK(of("det:plate").writers == std::vector<std::string>{"detector plate"});
+	CHECK(of("lamp").writers == std::vector<std::string>{"the start"});
+	CHECK(of("el:w:charge").writers == std::vector<std::string>{"wall w"});
+	CHECK(of("shot:charge").writers.back() == "the arrow");
+	// the door's open: an expression, completed at the caret
+	ok(ed, {{"op", "select"}, {"name", "gate"}});
+	click_row(ed, "open");
+	json c = ok(ed, {{"op", "complete"}});
+	CHECK(c["kind"] == "expr");
+	CHECK(c["word"] == "");
+	CHECK(c["items"].size() >= 5);
+	ed.text("det:pl");
+	c = ok(ed, {{"op", "complete"}});
+	REQUIRE(!c["items"].empty());
+	CHECK(c["items"][0]["flag"] == "det:plate");
+	CHECK(c["items"][0]["marks"].size() == 6);
+	{ // the list under the field, the pick lit
+		const json panel = ok(ed, {{"op", "panel"}});
+		int rows = 0;
+		bool first_picked = false;
+		for (const json &r : panel["rows"]) {
+			if (r["kind"] == "complete") {
+				first_picked = first_picked || (rows == 0 && r["picked"] == true && r["label"] == "det:plate");
+				rows++;
+			}
+		}
+		CHECK(rows >= 1);
+		CHECK(first_picked);
+	}
+	// the picked flag's writer outlined on the canvas (a detector: its region lit)
+	ed.key(rcg::Editor::KeyTab, 0, true);
+	ed.text(" "); // (typed: a key at a time -- more is a paste, its spaces dropped)
+	ed.text("&& !la");
+	c = ok(ed, {{"op", "complete"}});
+	CHECK(c["word"] == "la");
+	CHECK(c["items"][0]["flag"] == "lamp");
+	ed.key(rcg::Editor::KeyTab, 0, true);
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(element(ed, "gate")["open"] == "det:plate && !lamp");
+	// a click on a row puts it in, the field still focused; Esc closes the list, typing opens it again
+	click_row(ed, "open");
+	for (int k = 0; k < 30; k++) {
+		ed.key(rcg::Editor::KeyBackspace, 0, true);
+	}
+	ed.text("gat");
+	ed.pointer(rcg::Editor::PtrMove, 1800, 500, 0, 0); // (the panel scrolled to the list)
+	ed.scroll(0, 20, 0);
+	{
+		const json panel = ok(ed, {{"op", "panel"}});
+		bool clicked = false;
+		for (const json &r : panel["rows"]) {
+			if (r["kind"] == "complete" && r["label"] == "door:gate") {
+				const float y = r["y"].get<float>() + 10, x = r["x"].get<float>() + 150;
+				ed.pointer(rcg::Editor::PtrMove, x, y, 0, 0);
+				ed.pointer(rcg::Editor::PtrDown, x, y, rcg::Editor::BtnLeft, 0);
+				ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
+				clicked = true;
+				break;
+			}
+		}
+		REQUIRE(clicked);
+	}
+	CHECK(ok(ed, {{"op", "state"}})["focus"] == "open");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(element(ed, "gate")["open"] == "door:gate");
+	// Esc: the list closed, the field kept; again: the edit cancelled
+	click_row(ed, "open");
+	ed.text("x");
+	CHECK_FALSE(ok(ed, {{"op", "complete"}})["items"].empty());
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(ok(ed, {{"op", "complete"}})["items"].empty());
+	CHECK(ok(ed, {{"op", "state"}})["focus"] == "open");
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["focus"].is_null());
+	CHECK(element(ed, "gate")["open"] == "door:gate");
+	// up/down pick; the pick's elements outlined: the door and its button
+	click_row(ed, "open");
+	for (int k = 0; k < 30; k++) {
+		ed.key(rcg::Editor::KeyBackspace, 0, true);
+	}
+	ed.text("door");
+	ed.key(rcg::Editor::KeyDown, 0, true);
+	CHECK(ok(ed, {{"op", "complete"}})["pick"] == 1);
+	ed.key(rcg::Editor::KeyUp, 0, true);
+	CHECK(ok(ed, {{"op", "complete"}})["pick"] == 0);
+	auto outlined = [&] { // (the pointer's outline: the door, the selected one, is drawn selected)
+		int n = 0;
+		for (const auto &node : ed.draw()) {
+			for (const auto &call : *node.calls) {
+				n += !call.colors.empty() && call.width == 9.0f && call.colors[0] == rcg::render::Color{1, 1, 1, 0.15f};
+			}
+		}
+		return n;
+	};
+	CHECK(outlined() >= 1); // (its button, b)
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(outlined() == 0); // (the list closed: nothing picked)
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	// a button's opens: the doors' names
+	ok(ed, {{"op", "select"}, {"name", "b"}});
+	click_row(ed, "opens");
+	c = ok(ed, {{"op", "complete"}});
+	CHECK(c["kind"] == "door");
+	CHECK(c["items"][0]["flag"] == "gate");
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	// a level with a problem still completes
+	ok(ed, {{"op", "set"}, {"name", "w"}, {"key", "body"}, {"value", "solid"}});
+	REQUIRE_FALSE(ed.errors().empty());
+	ok(ed, {{"op", "select"}, {"name", "gate"}});
+	click_row(ed, "open");
+	CHECK(ok(ed, {{"op", "complete"}})["items"].size() >= 5);
 }

@@ -65,6 +65,20 @@ struct FlagMarkers {
 	std::vector<std::optional<Marker>> element, detector;  // what each shows
 };
 FlagMarkers flag_markers(const nlohmann::json &v2, const Lowered &low);
+
+// Stage 217: every flag a level writes or reads, and who -- for the editor's completion. Read off the document (each
+// element's parameters by their types: flag written, expr read, door a door's name written as door:<name>; a raw
+// surface's keys; tags; an opening's flag; detectors, the goal, the starting flags, spread rules), so a level with
+// problems still has its flags; the arrow's shot:fire, shot:charge, shot:frost last. In first-use order.
+struct FlagUse {
+	std::string flag;
+	std::vector<std::string> writers, readers; // "button b", "detector plate", "the goal", "the start", "the arrow"
+	std::vector<std::string> elements;          // the elements among them, by name
+	std::vector<std::string> detectors;         // ... and the detectors
+};
+std::vector<FlagUse> flag_index(const nlohmann::json &v2);
+// ... the doors' names (an element with an open, or a door's)
+std::vector<std::string> door_names(const nlohmann::json &v2);
 // a marker as a document spells it ({"shape", "color"}: a palette colour by its name)
 nlohmann::json marker_json(const Marker &m);
 

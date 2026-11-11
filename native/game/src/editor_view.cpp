@@ -27,7 +27,8 @@ constexpr float PICK = 8.0f;         // how near a click picks (px)
 constexpr float ROW = 21.0f;         // a panel row
 constexpr int FONT = 14;
 constexpr float VALUE_X = 120.0f;    // the panel's value column
-constexpr size_t WRAP = 42;          // the panel's text width (characters)
+constexpr size_t WRAP = 42;
+constexpr size_t COMPLETE_ROWS = 8; // Stage 217: the completion's rows shown          // the panel's text width (characters)
 
 Color rgba(double r, double g, double b, double a = 1.0) { return {float(r), float(g), float(b), float(a)}; }
 
@@ -1164,6 +1165,22 @@ void Editor::key(int code, unsigned mods, bool down) {
 	}
 	if (focus_) {
 		const bool search = focus_->key == "#level_search"; // Stage 167: the level list's search
+		// Stage 217: the completion's keys -- up/down pick, Tab puts the pick in, Esc closes the list
+		if (const std::optional<Completion> c = search ? std::nullopt : completion(); c && !c->items.empty()) {
+			const size_t n = std::min(c->items.size(), COMPLETE_ROWS);
+			if (code == KeyUp || code == KeyDown) {
+				complete_pick_ = code == KeyUp ? (complete_pick_ > 0 ? complete_pick_ - 1 : 0) : std::min(complete_pick_ + 1, n - 1);
+				return;
+			}
+			if (code == KeyTab) {
+				accept_completion(std::min(complete_pick_, n - 1));
+				return;
+			}
+			if (code == KeyEscape) {
+				complete_closed_ = true;
+				return;
+			}
+		}
 		if (search && (code == KeyUp || code == KeyDown)) {
 			const size_t n = ranked_levels().size();
 			if (code == KeyUp && level_pick_ > 0) {
@@ -1199,14 +1216,19 @@ void Editor::key(int code, unsigned mods, bool down) {
 			focus_.reset();
 		} else if (code == KeyLeft || code == KeyRight) { // Stage 191: the caret (with Ctrl: to the text's start or end)
 			caret_ = (mods & ModCtrl) ? (code == KeyLeft ? 0 : buffer_.size()) : code == KeyLeft ? char_before(buffer_, caret_) : char_after(buffer_, caret_);
+			complete_pick_ = 0;
 		} else if (code == KeyBackspace && caret_ > 0) {
 			const size_t n = char_before(buffer_, caret_);
 			buffer_.erase(n, caret_ - n);
 			caret_ = n;
 			level_pick_ = 0;
+			complete_pick_ = 0;
+			complete_closed_ = false;
 		} else if (code == KeyDelete && caret_ < buffer_.size()) {
 			buffer_.erase(caret_, char_after(buffer_, caret_) - caret_);
 			level_pick_ = 0;
+			complete_pick_ = 0;
+			complete_closed_ = false;
 		}
 		return;
 	}
@@ -1357,6 +1379,8 @@ void Editor::text(const std::string &utf8) {
 	buffer_.insert(caret_, typed);
 	caret_ += typed.size();
 	level_pick_ = 0; // (Stage 167: a new query picks its best match)
+	complete_pick_ = 0; // (Stage 217: and a new word its completion)
+	complete_closed_ = false;
 }
 
 // Stage 165: the new level's name prompt (from: the level copied; empty: an empty level), in the level menu
@@ -1460,7 +1484,7 @@ void Editor::commit_field() {
 namespace {
 bool soft_match(const std::string &name, const std::string &q, double &score, std::vector<int> &marks) {
 	auto low = [](char c) { return char(std::tolower(static_cast<unsigned char>(c))); };
-	auto boundary = [&](size_t i) { return i == 0 || name[i - 1] == '/' || name[i - 1] == '_' || name[i - 1] == '-'; };
+	auto boundary = [&](size_t i) { return i == 0 || name[i - 1] == '/' || name[i - 1] == '_' || name[i - 1] == '-' || name[i - 1] == ':'; }; // (Stage 217: a flag's parts)
 	bool found = false;
 	for (size_t s = 0; s < name.size(); s++) {
 		if (low(name[s]) != low(q[0])) {
@@ -1494,6 +1518,130 @@ bool soft_match(const std::string &name, const std::string &q, double &score, st
 } // namespace
 
 std::string Editor::level_query() const { return focus_ && focus_->key == "#level_search" ? buffer_ : std::string(); }
+
+// Stage 217: the field's kind of flag -- an element's parameter by its type (flag, expr, door), an opening's flag, a
+// detector's, a key in the goal's requires or the starting flags (JSON)
+std::string Editor::flag_field(const Field &f) const {
+	if (!f.element.empty()) {
+		const int i = index_of(f.element);
+		if (i < 0) {
+			return "";
+		}
+		const json ks = kinds();
+		const std::string kind = doc_["elements"][size_t(i)].value("kind", "");
+		const std::string t = ks.contains(kind) ? ks[kind].value("params", json::object()).value(f.key, json::object()).value("type", "") : "";
+		return t == "flag" || t == "expr" || t == "door" ? t : "";
+	}
+	auto ends = [&](const std::string &tail) { return f.key.size() > tail.size() && f.key.compare(f.key.size() - tail.size(), tail.size(), tail) == 0; };
+	if (f.key.rfind("/elements/", 0) == 0 && ends("/motion/flag")) {
+		return "expr";
+	}
+	if (f.key.rfind("/detectors/", 0) == 0 && ends("/flag")) {
+		return "flag";
+	}
+	return f.key == "/objective/requires" || f.key == "/flags" ? "json" : "";
+}
+
+std::optional<Editor::Completion> Editor::completion() const {
+	if (!focus_ || complete_closed_ || focus_->key.rfind("#", 0) == 0) {
+		return std::nullopt;
+	}
+	Completion c;
+	c.kind = flag_field(*focus_);
+	if (c.kind.empty()) {
+		return std::nullopt;
+	}
+	// the word at the caret: an expression's flag between its operators; in JSON the string the caret is in
+	c.from = 0;
+	c.to = buffer_.size();
+	if (c.kind == "expr") {
+		auto op = [](char ch) { return ch == '&' || ch == '|' || ch == '^' || ch == '!' || ch == '(' || ch == ')' || ch == ' ' || ch == '\t'; };
+		c.from = caret_;
+		while (c.from > 0 && !op(buffer_[c.from - 1])) {
+			c.from--;
+		}
+		c.to = caret_;
+		while (c.to < buffer_.size() && !op(buffer_[c.to])) {
+			c.to++;
+		}
+	} else if (c.kind == "json") {
+		size_t quotes = 0;
+		for (size_t i = 0; i < caret_; i++) {
+			quotes += buffer_[i] == '"' && (i == 0 || buffer_[i - 1] != '\\') ? 1 : 0;
+		}
+		if (quotes % 2 == 0) {
+			return std::nullopt; // (not in a string)
+		}
+		c.from = buffer_.rfind('"', caret_ - 1) + 1;
+		c.to = std::min(buffer_.find('"', caret_), buffer_.size());
+	}
+	c.word = buffer_.substr(c.from, c.to - c.from);
+	std::vector<Completion::Item> all;
+	if (c.kind == "door") {
+		for (const std::string &n : door_names(doc_)) {
+			all.push_back({n, "a door", {}, {n}, {}, true});
+		}
+	} else {
+		if (flags_at_ != version_) {
+			flags_ = flag_index(doc_);
+			flags_at_ = version_;
+		}
+		auto join = [](const std::vector<std::string> &xs) {
+			std::string s;
+			for (size_t i = 0; i < xs.size() && i < 2; i++) {
+				s += (i ? ", " : "") + xs[i];
+			}
+			return xs.size() > 2 ? s + ", ..." : s;
+		};
+		for (const FlagUse &u : flags_) {
+			const std::string who = u.writers.empty() ? "read by " + join(u.readers) + " (nothing writes it)"
+					: join(u.writers) + (u.readers.empty() ? "" : " -> " + join(u.readers));
+			all.push_back({u.flag, who, {}, u.elements, u.detectors, !u.writers.empty()});
+		}
+	}
+	if (c.word.empty()) {
+		std::stable_partition(all.begin(), all.end(), [](const Completion::Item &it) { return it.written; });
+		c.items = std::move(all);
+		return c;
+	}
+	std::vector<std::pair<double, Completion::Item>> hits;
+	std::vector<Completion::Item> rest;
+	bool exact = false;
+	for (Completion::Item &it : all) {
+		double score = 0.0;
+		std::vector<int> marks;
+		exact = exact || it.flag == c.word;
+		if (soft_match(it.flag, c.word, score, marks)) {
+			it.marks = std::move(marks);
+			hits.push_back({score, std::move(it)});
+		} else {
+			rest.push_back(std::move(it));
+		}
+	}
+	std::stable_sort(hits.begin(), hits.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+	for (auto &[s, it] : hits) {
+		c.items.push_back(std::move(it));
+	}
+	for (Completion::Item &it : rest) {
+		c.items.push_back(std::move(it));
+	}
+	if (!exact && c.kind != "door") { // (a name nothing has yet: typed as it is)
+		c.items.push_back({c.word, "new: nothing writes or reads it yet", {}, {}, {}, false});
+	}
+	return c;
+}
+
+void Editor::accept_completion(size_t i) {
+	const std::optional<Completion> c = completion();
+	if (!c || i >= c->items.size()) {
+		return;
+	}
+	const std::string &f = c->items[i].flag;
+	buffer_.replace(c->from, c->to - c->from, f);
+	caret_ = c->from + f.size();
+	complete_pick_ = 0;
+	complete_closed_ = true; // (until the text changes: the word is what it says)
+}
 
 std::vector<Editor::Ranked> Editor::ranked_levels() const {
 	const std::string q = level_query();
@@ -1530,6 +1678,27 @@ std::vector<Editor::Row> Editor::rows() const {
 		r.y = y;
 		y += ROW;
 		std::vector<Row> chips = chip_rows(r); // (Stage 212: an enum's values under it)
+		// Stage 217: the flags the focused field may take, under it
+		const bool focused = r.kind == Row::Value && r.field && focus_ && focus_->element == r.field->element && focus_->key == r.field->key;
+		if (const std::optional<Completion> c = focused ? completion() : std::nullopt) {
+			for (size_t k = 0; k < c->items.size() && k < COMPLETE_ROWS; k++) {
+				Row cr;
+				cr.kind = Row::Complete;
+				cr.label = c->items[k].flag;
+				cr.value = c->items[k].who;
+				cr.marks = c->items[k].marks;
+				cr.lit = k == complete_pick_ ? 1 : 0;
+				cr.choice = std::to_string(k); // (its place in the list)
+				cr.hint = "Tab or a click: put it in; up/down: another; Enter: the field as typed; Esc: close the list";
+				chips.push_back(std::move(cr));
+			}
+			if (c->items.size() > COMPLETE_ROWS) {
+				Row more;
+				more.kind = Row::Text;
+				more.label = "  ... " + std::to_string(c->items.size() - COMPLETE_ROWS) + " more: type to narrow them";
+				chips.push_back(std::move(more));
+			}
+		}
 		out.push_back(std::move(r));
 		for (Row &c : chips) {
 			c.y = y;
@@ -1773,40 +1942,10 @@ std::vector<Editor::Row> Editor::rows() const {
 			};
 			if (mode == "opening") { // its flag: typed, or one of the level's
 				const std::string dflt = "door:" + selected_;
-				const std::string flag = mj.value("flag", json()).is_string() ? mj["flag"].get<std::string>() : dflt;
 				add({Row::Value, "  flag", mj.contains("flag") ? spell(mj["flag"]) : "(" + dflt + ")",
 						"the flag that opens it: a key or an expression (det:plate && !locked); default door:<name> (a button's opens: <name>); empty: the default",
 						Field{"", at + "/motion/flag"}, "", -1, 0, {}});
-				std::vector<std::string> flags{dflt};
-				if (doc_.contains("detectors") && doc_["detectors"].is_array()) {
-					for (const json &d : doc_["detectors"]) {
-						if (d.is_object() && d.value("name", json()).is_string()) {
-							flags.push_back(d.value("flag", json()).is_string() ? d["flag"].get<std::string>() : "det:" + d["name"].get<std::string>());
-						}
-					}
-				}
-				for (const std::string &f : markers_.active) {
-					flags.push_back(f);
-				}
-				std::vector<std::string> once;
-				for (const std::string &f : flags) {
-					if (std::find(once.begin(), once.end(), f) == once.end() && once.size() < 9) {
-						once.push_back(f);
-					}
-				}
-				for (size_t k = 0; k < once.size(); k += 3) {
-					std::vector<std::string> labels;
-					std::vector<json> cmds;
-					int lit = -1;
-					for (size_t q = k; q < std::min(k + 3, once.size()); q++) {
-						if (once[q] == flag) {
-							lit = int(q - k);
-						}
-						labels.push_back(once[q]);
-						cmds.push_back({{"op", "set"}, {"path", at + "/motion/flag"}, {"value", once[q] == dflt ? json() : json(once[q])}});
-					}
-					actions(labels, cmds, "the level's flags: click one to open it with that flag", lit);
-				}
+				// (Stage 217: the level's flags complete the field as it is typed -- the chips of Stage 204 retired)
 			}
 			// Stage 203: its steps (or its keys), each its JSON and its actions, then new ones -- placed by two clicks
 			auto place = [&](int k, bool rotate) { return json{{"op", "place_step"}, {"name", selected_}, {"index", k}, {"part", rotate ? "rotate" : "translate"}}; };
@@ -2068,6 +2207,10 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		const json res = command(c);
 		hint_ = res.value("ok", false) ? "" : res.value("error", std::string());
 	};
+	if (r.kind == Row::Complete) { // Stage 217: the flag put in; the field still being edited
+		accept_completion(size_t(std::stoul(r.choice)));
+		return;
+	}
 	if (focus_ && focus_->key != "#level_search") {
 		commit_field();
 	}
@@ -2307,6 +2450,8 @@ void Editor::click_row(const Row &r, unsigned mods) {
 	focus_ = f;
 	buffer_ = r.value.size() >= 2 && r.value.front() == '(' && r.value.back() == ')' ? "" : r.value;
 	caret_ = buffer_.size();
+	complete_pick_ = 0; // (Stage 217: its completion open)
+	complete_closed_ = false;
 }
 
 // ---------------------------------------------------------------- drawing
@@ -2352,6 +2497,17 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 		}
 	}
 	auto lit = [&](const std::string &e) { return std::find(lit_entries.begin(), lit_entries.end(), e) != lit_entries.end(); };
+	// Stage 217: the picked flag's writers and readers outlined, as the pointer outlines what it is over
+	std::vector<std::string> flag_lit;
+	if (const std::optional<Completion> c = completion(); c && complete_pick_ < c->items.size()) {
+		for (const std::string &e : c->items[complete_pick_].elements) {
+			flag_lit.push_back("element:" + e);
+		}
+		for (const std::string &d : c->items[complete_pick_].detectors) {
+			flag_lit.push_back("detector:" + d);
+		}
+	}
+	auto flagged = [&](const std::string &e) { return std::find(flag_lit.begin(), flag_lit.end(), e) != flag_lit.end(); };
 	// the grid: every 10 units when it is 6 px or more, every 50 when it is 6 px or more
 	{
 		std::vector<Call> g;
@@ -2493,7 +2649,7 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 					continue;
 				}
 				const std::string name = d.value("name", "");
-				const bool picked = lit("detector:" + name);
+				const bool picked = lit("detector:" + name) || flagged("detector:" + name); // (Stage 217: or the picked flag's)
 				std::optional<Marker> mk; // Stage 179: its marker (drawn at its middle, as in the game; the flag's when it shows that)
 				try {
 					if (di < markers_.detector.size()) {
@@ -2673,7 +2829,8 @@ void Editor::draw_canvas(std::vector<render::FrameNode> &nodes) const {
 				n = V2{-n.x, -n.y};
 			}
 		};
-		const bool picked = lit("element:" + doc_["elements"][i].value("name", "")), hover = int(i) == hov;
+		const bool picked = lit("element:" + doc_["elements"][i].value("name", "")),
+				   hover = int(i) == hov || flagged("element:" + doc_["elements"][i].value("name", ""));
 		for (const BuiltSurface &b : drawn_[i].built) {
 			if (picked || hover) {
 				stroke(b.seg, picked ? SELECT : HOVER, 9.0, false);
@@ -2993,6 +3150,29 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 				}
 				break;
 			}
+			case Row::Complete: { // Stage 217: a flag the field may take -- the picked one lit, its matched characters, who uses it
+				if (r.lit == 1 || over) {
+					p.push_back(rect(V2{x0 + VALUE_X - 4, r.y + 1}, V2{PANEL_WIDTH - VALUE_X - 6, ROW - 2}, r.lit == 1 ? rgba(1.0, 0.8, 0.3, 0.22) : rgba(1, 1, 1, 0.08)));
+				}
+				constexpr float CELL = 7.4f;
+				const std::string shown = r.label.size() > 24 ? r.label.substr(0, 23) + "." : r.label;
+				for (size_t i = 0; i < shown.size(); i++) {
+					const bool hit = std::find(r.marks.begin(), r.marks.end(), int(i)) != r.marks.end();
+					const float cx = x0 + VALUE_X + float(i) * CELL;
+					if (hit) {
+						p.push_back(rect(V2{cx - 0.5f, r.y + 3}, V2{CELL + 1, ROW - 6}, rgba(1.0, 0.8, 0.3, 0.28)));
+					}
+					p.push_back(text_at(V2{cx + CELL / 2, base}, std::string(1, shown[i]), hit || r.lit == 1 ? ACCENT : TEXT, FONT - 2));
+					p.back().alignment = 1;
+				}
+				std::string who = r.value;
+				const size_t room = 26 > shown.size() ? 26 - shown.size() : 0;
+				if (who.size() > room + 6) {
+					who = who.substr(0, room + 5) + ".";
+				}
+				p.push_back(text_at(V2{x0 + VALUE_X + float(shown.size() + 1) * CELL, base}, who, DIM, FONT - 3));
+				break;
+			}
 			case Row::Buttons: {
 				static const char *const LABELS[] = {"undo", "redo", "save", "play"};
 				const float bw = (PANEL_WIDTH - 20) / 4;
@@ -3037,6 +3217,34 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					v = v.substr(0, room - 3) + "...";
 				}
 				const bool dflt = !focused && v.size() >= 2 && v.front() == '(';
+				// Stage 217: completing, the picked flag's rest dim after the caret (the text a character per cell)
+				const std::optional<Completion> c = focused ? completion() : std::nullopt;
+				std::string ghost;
+				if (c && complete_pick_ < c->items.size() && caret_ == c->to) {
+					const std::string &f = c->items[complete_pick_].flag;
+					auto low = [](std::string s) {
+						std::transform(s.begin(), s.end(), s.begin(), [](unsigned char ch) { return char(std::tolower(ch)); });
+						return s;
+					};
+					if (f.size() > c->word.size() && low(f).rfind(low(c->word), 0) == 0) {
+						ghost = f.substr(c->word.size());
+					}
+				}
+				if (!ghost.empty() && v.size() + ghost.size() <= room + 8) {
+					constexpr float CELL = 7.4f;
+					const size_t at = v.find('|');
+					std::string laid = v.substr(0, at + 1) + ghost + v.substr(at + 1);
+					for (size_t i = 0; i < laid.size(); i++) {
+						if (i == at) { // (the caret a bar: a | among the characters reads as an l)
+							p.push_back(rect(V2{x0 + VALUE_X + float(i) * CELL + CELL / 2 - 0.75f, r.y + 4}, V2{1.5f, ROW - 8}, TEXT));
+							continue;
+						}
+						const bool dim = i > at && i <= at + ghost.size();
+						p.push_back(text_at(V2{x0 + VALUE_X + float(i) * CELL + CELL / 2, base}, std::string(1, laid[i]), dim ? DIM : TEXT, FONT - 1));
+						p.back().alignment = 1;
+					}
+					break;
+				}
 				p.push_back(text_at(V2{x0 + VALUE_X, base}, v, dflt ? DIM : r.choice.empty() ? TEXT : ACCENT, FONT - 1));
 				break;
 			}

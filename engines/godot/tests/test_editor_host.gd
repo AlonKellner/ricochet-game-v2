@@ -65,6 +65,28 @@ func test_a_fields_text_is_edited_at_the_caret() -> void:
 	_key(KEY_ENTER)
 	assert_true(JSON.parse_string(_editor.document())["name"].ends_with("acb"))
 
+# Stage 217: a flag field completes from the level's flags; Godot's Tab reaches it (no focus navigation)
+func test_tab_completes_a_flag() -> void:
+	_command({"op": "add", "element": {"kind": "button", "name": "b", "flag": "x", "start": [900, 300], "end": [1000, 300]}})
+	_command({"op": "select", "name": "b"})
+	var row: Dictionary = {}
+	for r in _command({"op": "panel"})["rows"]:
+		if r["kind"] == "value" and r["label"] == "flag":
+			row = r
+	for kind in ["move", "down", "up"]:
+		_command({"op": "pointer", "kind": kind, "x": row["x"] + 150, "y": row["y"] + 10, "button": "left"})
+	_key(KEY_BACKSPACE)
+	_key(KEY_O, false, 111)
+	_key(KEY_P, false, 112)
+	_key(KEY_TAB)
+	_key(KEY_ENTER)
+	var doc: Dictionary = JSON.parse_string(_editor.document())
+	var flag := ""
+	for e in doc["elements"]:
+		if e.get("name", "") == "b":
+			flag = e["flag"]
+	assert_eq(flag, "open", "the switchables' flag, completed")
+
 func test_a_save_writes_the_document() -> void:
 	_command({"op": "add", "element": {"kind": "wall", "start": [600, 300], "end": [600, 400]}})
 	_key(KEY_S, true)

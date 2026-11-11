@@ -131,7 +131,7 @@ A template is an object:
 | `label` | the surfaces' label (node prefix), an expression; the element's `label` overrides it |
 | `priority` | the order in which `rc_tool migrate` tries the kinds (lower first; default 100) |
 | `geometry` | `"any"` (default), `"segment"` or `"circle"`: what the element needs (the editor's tools) |
-| `params` | `{name: {"default": v, "enum": [...], "type": t, "doc": "..."}}`; without a default a parameter is required; `type` is one of string, number, bool, point, array, object, any (by default the default's) |
+| `params` | `{name: {"default": v, "enum": [...], "type": t, "doc": "..."}}`; without a default a parameter is required; `type` is one of string, number, bool, point, array, object, any (by default the default's); Stage 217: `flag` (a flag written), `expr` (a flag expression read) and `door` (a door's name) are strings the editor completes from the level's flags |
 | `example` | parameter values a new element starts with (the editor's palette: a portal placed with `d` already set) |
 | `tags` | the kind's tags (`flammable`, `conductive`, `frosted`, `burning`, `charged`, or any name a spread rule uses) |
 | `shade` | `{"type": "dark" \| "light", "side", "when"}` (expressions): the element bounds a region of that kind (GAME_SPEC 9.9) |

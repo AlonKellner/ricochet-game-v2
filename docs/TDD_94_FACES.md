@@ -15,7 +15,7 @@ The rules are GAME_SPEC 9.13 (the face, the Stage 216 note).
 | 216.4 | Migrate weighs what a kind does twice; hit_effects' portal spawner reads back as a spawner (no longer `raw`) | Done |
 | 216.5 | The editor: six face chips, a face's parameters under the faces, `d` scaled for any portal face | Done |
 | 216.6 | Goldens: none move (lowerings byte-identical, the session golden unchanged) | Done |
-| 216.7 | The user's interactive sign-off | Pending |
+| 216.7 | The user's interactive sign-off | Done ("Works perfectly! Proceed", 2026-11-11) |
 
 ## Decisions
 
