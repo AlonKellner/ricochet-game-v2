@@ -11,7 +11,7 @@ The rule is GAME_SPEC 22 (the door row).
 |---|---|---|
 | 213.1 | `is_door`: the label (Door, ChargedDoor), an opening's swing, or an `open` condition -- a presence entry `[DEFAULT, false]` not keyed by an element's own state or a channel | Done |
 | 213.2 | Goldens: none move (no level has an `open` on a surface other than a door's) | Done |
-| 213.3 | The user's interactive sign-off | Pending |
+| 213.3 | The user's interactive sign-off | Done ("Works perfectly, approved", 2026-11-11) |
 
 ## Decisions
 
