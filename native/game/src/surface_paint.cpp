@@ -14,6 +14,7 @@ using namespace style;
 
 namespace {
 constexpr int MAX_DASHES = 256;
+constexpr double PI_CAP = 3.141592653589793;
 } // namespace
 
 V2 vs(const V2 &v, double s) { return v * float(s); } // Vector2 * float (the scalar rounded first)
@@ -164,11 +165,8 @@ Color config_color(const BuiltSide *cfg) {
 		return GRAY;
 	}
 	const BuiltEffect &e = cfg->effect;
-	if (e.type == "pass") {
-		if (!cfg->hits.empty()) {
-			return writes_key(*cfg, "ghost", -1) ? GHOST_TOGGLER_COLOR : FLAG_TOGGLER_COLOR;
-		}
-		return GRAY;
+	if (e.type == "pass") { // (Stage 210: a pass side's hits say themselves by their marks, a button's by its key)
+		return !cfg->hits.empty() && writes_key(*cfg, "ghost", -1) ? GHOST_TOGGLER_COLOR : GRAY;
 	}
 	if (e.type == "terminal") return RED;
 	if (e.type == "reflection") return BLUE;
@@ -201,8 +199,31 @@ namespace {
 bool starts_with(const std::string &s, const char *p) { return s.rfind(p, 0) == 0; }
 bool ends_with(const std::string &s, const std::string &t) { return s.size() >= t.size() && s.compare(s.size() - t.size(), t.size(), t) == 0; }
 
-// Stage 209: what a hit's mark is. A grapple and a pull are drawn along the surface instead, and a pass side
-// writing a plain flag says so by its colour.
+// Stage 210: a write that makes its surface a button -- a flag of the level's (not the arrow's states, a break, the
+// ghost, an object's or an element's own state)
+bool button_write(const HitSpec &h) {
+	return h.kind == "state" && h.key != "ghost" && !starts_with(h.key, "shot:") && !starts_with(h.key, "obj:") && !starts_with(h.key, "el:");
+}
+
+// The flag a button writes (its first; any side, any resolver row), if it is one.
+std::optional<std::string> button_flag(const BuiltSurface &s) {
+	std::vector<const BuiltSide *> sides = {s.left ? &*s.left : nullptr, s.right ? &*s.right : nullptr};
+	for (const BuiltRow &r : s.resolver) {
+		sides.push_back(r.left ? &*r.left : nullptr);
+		sides.push_back(r.right ? &*r.right : nullptr);
+	}
+	for (const BuiltSide *side : sides) {
+		for (const HitSpec &h : side != nullptr ? side->hits : std::vector<HitSpec>{}) {
+			if (button_write(h)) {
+				return h.key;
+			}
+		}
+	}
+	return std::nullopt;
+}
+
+// Stage 209: what a hit's mark is. A grapple and a pull are drawn along the surface instead, and (Stage 210) a
+// button's write by its key.
 enum class Mark { None, Flag, Target, Spawn, Reset, Break, Pop, Fire, Charge, Frost };
 Mark mark_of(const HitSpec &h, const BuiltSide &side) {
 	if (h.kind == "target") return Mark::Target;
@@ -215,7 +236,7 @@ Mark mark_of(const HitSpec &h, const BuiltSide &side) {
 	if (ends_with(h.key, "fire")) return Mark::Fire;
 	if (ends_with(h.key, "charge")) return Mark::Charge;
 	if (ends_with(h.key, "frost")) return Mark::Frost;
-	return side.effect.type == "pass" ? Mark::None : Mark::Flag;
+	return button_write(h) || side.effect.type == "pass" ? Mark::None : Mark::Flag;
 }
 
 bool has_hit(const BuiltSide *side, const char *kind) {
@@ -358,7 +379,9 @@ struct SurfacePainter {
 	void marker(Mark m, bool deferred, const V2 &at, const V2 &dir) {
 		const double s = MARKER_SIZE;
 		const V2 n = rot90(dir);
-		if (m == Mark::Target) {
+		if (m == Mark::Target && registered()) { // Stage 210: a checkmark once registered
+			out.push_back(stroke(Kind::Polyline, {at + V2::of(-s, 0), at + V2::of(-s * 0.3, s * 0.7), at + V2::of(s, -s * 0.8)}, TARGET_COLOR, 2.0));
+		} else if (m == Mark::Target) {
 			out.push_back(arc(at, s, 0.0, rcg::TAU, 16, TARGET_COLOR, 1.5));
 			out.push_back(circle(at, 1.5, TARGET_COLOR));
 		} else if (m == Mark::Spawn) {
@@ -443,6 +466,67 @@ struct SurfacePainter {
 				}
 				marker(marks[i].mark, marks[i].deferred, at, along);
 			}
+		}
+	}
+
+	// Stage 210: a target whose flag the shots have set
+	bool registered() const { return flags.is_true("target:" + std::to_string(surface.id)); }
+
+	// Stage 210: the outline `half` about this piece -- a line's or an arc's capsule (round ends), as a closed polygon
+	std::vector<V2> capsule(double half) const {
+		std::vector<V2> pts;
+		constexpr int CAP = 8;
+		auto cap = [&](const V2 &at, const V2 &u, const V2 &w) { // from at + u*half round through at + w*half to at - u*half
+			for (int k = 0; k <= CAP; k++) {
+				const double t = PI_CAP * k / CAP;
+				pts.push_back(V2::of(double(at.x) + (double(u.x) * std::cos(t) + double(w.x) * std::sin(t)) * half,
+						double(at.y) + (double(u.y) * std::cos(t) + double(w.y) * std::sin(t)) * half));
+			}
+		};
+		if (seg.is_line()) {
+			const V2 d = (seg.e - seg.s).normalized(), n = rot90(d);
+			cap(seg.e, n, d);
+			cap(seg.s, -n, -d);
+		} else {
+			const ArcView a = arc_view();
+			const int count = std::max(8, a.pc);
+			const double outer = a.r + half, inner = std::max(a.r - half, 1.0), sgn = a.ea >= a.sa ? 1.0 : -1.0;
+			for (int k = 0; k <= count; k++) {
+				const double t = a.sa + (a.ea - a.sa) * k / count;
+				pts.push_back(V2::of(double(a.ctr.x) + outer * std::cos(t), double(a.ctr.y) + outer * std::sin(t)));
+			}
+			const V2 re = V2::of(std::cos(a.ea), std::sin(a.ea)), rs = V2::of(std::cos(a.sa), std::sin(a.sa));
+			cap(V2::of(double(a.ctr.x) + a.r * re.x, double(a.ctr.y) + a.r * re.y), re, V2::of(-double(re.y) * sgn, double(re.x) * sgn));
+			for (int k = count; k >= 0; k--) {
+				const double t = a.sa + (a.ea - a.sa) * k / count;
+				pts.push_back(V2::of(double(a.ctr.x) + inner * std::cos(t), double(a.ctr.y) + inner * std::sin(t)));
+			}
+			cap(V2::of(double(a.ctr.x) + a.r * rs.x, double(a.ctr.y) + a.r * rs.y), -rs, V2::of(double(rs.y) * sgn, -double(rs.x) * sgn));
+		}
+		return pts;
+	}
+
+	// Stage 210 (the user's option A): a button's key -- an amber outline about it, dim while its flag is off, bright and
+	// filled once it is on. `fill`: the fill (under the face), else the outline (over it).
+	void key(const std::string &flag, bool fill) {
+		const bool on = flags.is_true(flag);
+		if (seg.full) {
+			const ArcView a = arc_view();
+			if (fill && on) {
+				outline_seg(out, seg, KEY_FILL, 2 * KEY_HALF_WIDTH, false);
+			} else if (!fill) {
+				for (const double rr : {a.r + KEY_HALF_WIDTH, std::max(a.r - KEY_HALF_WIDTH, 1.0)}) {
+					out.push_back(arc(a.ctr, rr, 0.0, rcg::TAU, a.pc, on ? KEY_ON : KEY_OFF, 1.5));
+				}
+			}
+			return;
+		}
+		std::vector<V2> pts = capsule(KEY_HALF_WIDTH);
+		if (fill && on) {
+			out.push_back(polygon_n(pts, KEY_FILL));
+		} else if (!fill) {
+			pts.push_back(pts.front());
+			out.push_back(stroke(Kind::Polyline, std::move(pts), on ? KEY_ON : KEY_OFF, 1.5));
 		}
 	}
 
@@ -553,6 +637,15 @@ struct SurfacePainter {
 		if (surface.object && seg.full && piece_index <= 0) {
 			object_fill(left, right);
 		}
+		const std::optional<std::string> button = button_flag(surface);
+		if (button) {
+			key(*button, true);
+		}
+		const bool target = has_hit(left, "target") || has_hit(right, "target");
+		if (target && !registered()) { // Stage 210: a target not yet registered, haloed
+			outline_seg(out, seg, TARGET_HALO, TARGET_HALO_WIDTH, false);
+		}
+		const size_t face_from = out.size();
 		if (shaped()) {
 			shape_stroke(l_outer || lc == rc_ ? lc : rc_, LINE_WIDTH);
 		} else if (lc == rc_) {
@@ -582,6 +675,16 @@ struct SurfacePainter {
 			door_posts(1.0);
 		}
 		grapple_barbs(left, right);
+		if (button) {
+			key(*button, false);
+		}
+		if (target && registered()) { // Stage 210: done -- drawn faint (its checkmark is not)
+			for (size_t i = face_from; i < out.size(); i++) {
+				for (Color &c : out[i].colors) {
+					c[3] = float(double(c[3]) * TARGET_DONE_ALPHA);
+				}
+			}
+		}
 		std::vector<int> hover_sides;
 		for (const Overlay &o : hover) {
 			hover_sides.push_back(o.side);

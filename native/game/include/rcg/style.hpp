@@ -23,7 +23,8 @@ constexpr double INNER_CHEVRON_DIST = 2.0;
 constexpr double OUTER_CHEVRON_DIST = 18.0;
 constexpr double MARKER_SIZE = 5.0;    // a hit effect's mark
 constexpr double MARKER_SPACING = 14.0;
-constexpr double CROSSING_DOT = 2.5;
+constexpr double CROSSING_DOT = 3.0;     // Stage 210: 2.5 -> 3 (legible)
+constexpr double DIM_DOT = 3.0;          // Stage 210: an event mark's dim dot, a counterpart's (2 -> 3)
 constexpr double DASH = 8.0;
 constexpr double BAND_WIDTH = 10.0;    // Stage 186: a shield's band; Stage 207: the steel band
 constexpr double DOOR_POST = 8.0, DOOR_POST_WIDTH = 3.0, DOOR_CORE_WIDTH = 1.0;
@@ -33,11 +34,13 @@ constexpr double SHAPE_HITBOX_ALPHA = 0.3;   // Stage 181: a shaped object's cir
 constexpr double MARK_OFFSET = 13.0;         // Stage 209: a row of marks off its surface (clear of the designer's marker)
 constexpr double BARB_SPACING = 18.0, BARB_LENGTH = 7.0; // Stage 209: a grapple's barbs along it
 constexpr double HANDLE_LENGTH = 7.0;        // Stage 209: a pullable object's four handles
+constexpr double KEY_HALF_WIDTH = 8.0;       // Stage 210: a button's key outline about its surface
+constexpr double TARGET_HALO_WIDTH = 9.0;    // Stage 210: an unregistered target's halo
 
 // ---------------------------------------------------------------- the base colours
 inline const Color WHITE{1, 1, 1, 1};
 inline const Color GRAY = render::hex(0xBEBEBEFF);
-inline const Color BLUE = render::hex(0x0000FFFF);
+inline const Color BLUE = rgba(0.25, 0.45, 1.0); // Stage 210: lifted from 0000FF, legible on the dark background
 inline const Color PURPLE = render::hex(0xA020F0FF);
 inline const Color RED = render::hex(0xFF0000FF);
 inline const Color CYAN = render::hex(0x00FFFFFF);
@@ -66,6 +69,9 @@ inline const Color CROSSING_BODY = rgba(0.95, 0.6, 0.3);      // Stage 166: an o
 inline const Color FLAG_TOGGLER_COLOR = rgba(1.0, 0.85, 0.2); // a side that writes a flag
 inline const Color GHOST_TOGGLER_COLOR = rgba(0.75, 0.95, 1.0);
 inline const Color DOOR_COLOR = rgba(1.0, 0.72, 0.25);        // Stage 190: a door's posts and core (amber)
+inline const Color KEY_OFF = rgba(1.0, 0.72, 0.25, 0.45);    // Stage 210: a button's key while its flag is off
+inline const Color KEY_ON = rgba(1.0, 0.72, 0.25, 1.0);      // ... and on (filled)
+inline const Color KEY_FILL = rgba(1.0, 0.72, 0.25, 0.28);
 inline const Color DETECTOR_COLOR = rgba(1.0, 0.8, 0.25, 0.8); // Stage 145
 inline const Color DETECTOR_FILL = rgba(1.0, 0.8, 0.25, 0.18);
 inline const Color DEFERRED_DOT = rgba(0.1, 0.1, 0.1);        // a mark whose writes wait for the landing
@@ -74,9 +80,11 @@ inline const Color POP_COLOR = rgba(0.85, 0.95, 1.0);         // Stage 209: a bu
 
 // ---------------------------------------------------------------- targets, spawns, the goal
 inline const Color TARGET_COLOR = rgba(1.0, 0.85, 0.3);
-inline const Color SPAWN_COLOR = rgba(0.6, 0.95, 1.0);
+inline const Color TARGET_HALO = rgba(1.0, 0.85, 0.3, 0.25); // Stage 210: a target not yet registered
+constexpr double TARGET_DONE_ALPHA = 0.5;                    // ... and one registered (with a checkmark)
+inline const Color SPAWN_COLOR = rgba(0.3, 0.85, 0.8); // Stage 210: teal, off the frost and ghost cyan
 inline const Color RESET_COLOR = rgba(1.0, 0.55, 0.85);
-inline const Color GHOST_SPAWN_COLOR = rgba(0.6, 0.95, 1.0, 0.8);
+inline const Color GHOST_SPAWN_COLOR = rgba(0.3, 0.85, 0.8, 0.8);
 inline const Color VANISH_COLOR = rgba(1.0, 0.35, 0.3, 0.7);
 inline const Color GOAL_COLOR = rgba(0.3, 0.95, 0.45); // Stage 145
 inline const Color GOAL_WON_FILL = rgba(0.3, 0.95, 0.45, 0.25);

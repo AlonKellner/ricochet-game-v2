@@ -489,7 +489,7 @@ struct PathPainter {
 				const std::optional<double> f = rc::sweep::fraction_on(steps[size_t(d.step)], d.at);
 				col[3] = float(0.8 * (f ? seen_at(size_t(d.step), *f * drawn_length(steps[size_t(d.step)], shifts[size_t(d.step)])) : seen_end(size_t(d.step))));
 				if (col[3] > 0.0f) {
-					out.push_back(circle(at, 2.0, col));
+					out.push_back(circle(at, DIM_DOT, col));
 				}
 			}
 		}
@@ -577,7 +577,7 @@ struct PathPainter {
 					col = ghost_color(col);
 				}
 				col[3] = 0.5f;
-				out.push_back(circle(at, 2.0, col));
+				out.push_back(circle(at, DIM_DOT, col));
 			}
 		}
 	}
