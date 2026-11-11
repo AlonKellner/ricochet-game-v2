@@ -1,0 +1,36 @@
+{
+ "doc": "A torch: a surface on fire (tag burning). An arrow passing it catches fire (shot:fire), and a burning arrow lights what is flammable (GAME_SPEC 10.6).",
+ "label": "Torch",
+ "params": {
+  "body": {
+   "default": "pass",
+   "doc": "what the player and objects do: pass, or block (collide with it)",
+   "enum": ["pass", "block"]
+  }
+ },
+ "priority": 54,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": true
+   },
+   "player_solid": {
+    "$switch": "body",
+    "cases": {
+     "block": true,
+     "pass": false
+    }
+   },
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": true
+   }
+  }
+ ],
+ "tags": ["burning"]
+}

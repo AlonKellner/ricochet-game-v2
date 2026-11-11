@@ -1818,6 +1818,34 @@ std::vector<Editor::Row> Editor::rows() const {
 			add({Row::Value, "tags", e.contains("tags") ? spell(e["tags"]) : "(the kind's)",
 					"[tag, ...]: added to the kind's tags; the level's spread rules flow through them (flammable, conductive, powered)",
 					Field{selected_, "tags"}, "", -1, 0, {}});
+			{ // Stage 215: the tags as chips -- each one toggles; the kind's own lit and fixed
+				const json own = ks.contains(kind) ? ks[kind].value("tags", json::array()) : json::array();
+				const json mine = e.value("tags", json()).is_array() ? e["tags"] : json::array();
+				static const char *const TAGS[] = {"flammable", "burning", "conductive", "charged", "powered", "frosted"};
+				for (size_t k = 0; k < std::size(TAGS); k += 3) {
+					Row r;
+					r.kind = Row::Actions;
+					r.hint = "a tag: click to give or take it (lit: it has it; the kind's own stay) -- burning and charged start lit, flammable and conductive catch it, frosted frosts the arrow";
+					for (size_t q = k; q < k + 3; q++) {
+						const json t = TAGS[q];
+						const bool kinds = std::find(own.begin(), own.end(), t) != own.end();
+						const bool has = std::find(mine.begin(), mine.end(), t) != mine.end();
+						json next = json::array();
+						for (const json &m : mine) {
+							if (m != t) {
+								next.push_back(m);
+							}
+						}
+						if (!has) {
+							next.push_back(t);
+						}
+						r.options.push_back(TAGS[q]);
+						r.on.push_back(kinds || has ? 1 : 0);
+						r.cmds.push_back(kinds ? json() : json{{"op", "set"}, {"name", selected_}, {"key", "tags"}, {"value", next.empty() ? json() : next}});
+					}
+					add(r);
+				}
+			}
 			for (Row r : marker_rows(Field{selected_, "marker"})) { // Stage 179
 				add(std::move(r));
 			}
@@ -2029,7 +2057,7 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		const float x0 = width_ - PANEL_WIDTH + 10;
 		const size_t n = std::max<size_t>(r.options.size(), 1);
 		const size_t c = size_t(std::clamp(int((mouse_.x - x0) / ((PANEL_WIDTH - 20) / float(n))), 0, int(n) - 1));
-		if (c < r.cmds.size()) {
+		if (c < r.cmds.size() && !r.cmds[c].is_null()) { // (Stage 215: none -- the kind's own tag)
 			run(r.cmds[c]);
 			if (hint_.empty() && step_place_) {
 				hint_ = step_hint();
@@ -2857,7 +2885,7 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 				for (size_t c = 0; c < r.options.size(); c++) {
 					const float cx = x0 + 10 + float(c) * cw;
 					const json &cmd = c < r.cmds.size() ? r.cmds[c] : json();
-					const bool cur = int(c) == r.lit || (step_place_ && cmd.value("op", "") == "place_step" && cmd.value("index", -2) == step_place_->index
+					const bool cur = int(c) == r.lit || (c < r.on.size() && r.on[c] != 0) || (step_place_ && cmd.value("op", "") == "place_step" && cmd.value("index", -2) == step_place_->index
 							&& (cmd.value("part", "") == "rotate") == step_place_->rotate);
 					const bool hot = over && mouse_.x >= cx && mouse_.x < cx + cw;
 					p.push_back(rect(V2{cx + 2, r.y + 2}, V2{cw - 4, ROW - 4}, cur ? rgba(1.0, 0.8, 0.3, 0.30) : hot ? rgba(1, 1, 1, 0.16) : rgba(1, 1, 1, 0.05)));

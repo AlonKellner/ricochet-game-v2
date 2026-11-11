@@ -3,6 +3,7 @@
 
 #include "rcg/canon.hpp"
 #include "rcg/level.hpp"
+#include "rcg/level2.hpp"
 #include "rcg/surface_element.hpp"
 
 #include <algorithm>
@@ -683,6 +684,45 @@ json params_of(const json &tmpl, const json &element, const std::string &name, c
 	return env;
 }
 
+void apply_tags(std::vector<json> &surfaces, const std::string &name, const std::vector<std::string> &tags, const std::string &path) {
+	const json extra = tag_hits(name, tags);
+	if (extra.empty()) {
+		return;
+	}
+	const bool frost = std::find(tags.begin(), tags.end(), "frosted") != tags.end();
+	auto give = [&](json &sides) {
+		for (const char *k : {"left", "right"}) {
+			json &sd = sides[k];
+			if (sd.is_null()) {
+				sd = {{"effect", {{"type", "pass"}}}, {"interactive", false}};
+			}
+			const std::string t = sd.contains("effect") ? sd["effect"].value("type", "pass") : "pass";
+			if (frost && !frost_bearing(t)) {
+				fail(path + ".tags", "frosted: its sides must pass, reflect or invert (a " + t + " side cannot bear frost)");
+			}
+			if (!sd.contains("hits")) {
+				sd["hits"] = json::array();
+			}
+			for (const json &h : extra) {
+				sd["hits"].push_back(h);
+			}
+		}
+	};
+	for (json &s : surfaces) {
+		if (s.value("pre_transform", false)) {
+			continue;
+		}
+		give(s);
+		if (s.contains("resolver") && s["resolver"].is_object() && s["resolver"].value("table", json()).is_array()) {
+			for (json &row : s["resolver"]["table"]) {
+				if (row.is_array() && row.size() == 2 && row[1].is_object()) {
+					give(row[1]);
+				}
+			}
+		}
+	}
+}
+
 std::vector<json> expand(const json &tmpl, const json &element, const std::string &name, const std::string &path) {
 	const json env = params_of(tmpl, element, name, path);
 	const bool points = element.contains("start") || element.contains("end") || element.contains("via");
@@ -749,6 +789,84 @@ json evaluate(const json &tmpl, const json &element, const std::string &name, co
 	return eval(tmpl[key], params_of(tmpl, element, name, path), path);
 }
 
+namespace {
+
+// Stage 215: a template's tags (its own: an element's extra ones are not read back)
+std::vector<std::string> tags_of(const json &tmpl) {
+	std::vector<std::string> out;
+	for (const json &t : tmpl.value("tags", json::array())) {
+		if (t.is_string()) {
+			out.push_back(t.get<std::string>());
+		}
+	}
+	return out;
+}
+
+// ... the element's name the tags' hits say (el:<name>:fire, el:<name>:charge), if any
+std::optional<std::string> tagged_name(const json &surface) {
+	for (const char *k : {"left", "right"}) {
+		for (const json &h : surface.value(k, json()).is_object() ? surface[k].value("hits", json::array()) : json::array()) {
+			const std::string key = h.value("key", json()).is_string() ? h["key"].get<std::string>() : "";
+			for (const std::string tail : {":fire", ":charge"}) {
+				if (key.rfind("el:", 0) == 0 && key.size() > 3 + tail.size() && key.compare(key.size() - tail.size(), tail.size(), tail) == 0) {
+					return key.substr(3, key.size() - 3 - tail.size());
+				}
+			}
+		}
+	}
+	return std::nullopt;
+}
+
+// ... apply_tags undone on one surface (a preset's: a side its tags gave a pass, the missing side of a resolver's
+// surface, is missing again); none when its hits do not end with the tags'
+std::optional<json> untagged(json s, const std::string &name, const std::vector<std::string> &tags) {
+	const json extra = tag_hits(name, tags);
+	if (extra.empty()) {
+		return s;
+	}
+	auto take = [&](json &sides, bool top) {
+		for (const char *k : {"left", "right"}) {
+			json &sd = sides[k];
+			const json hits = sd.is_object() ? sd.value("hits", json::array()) : json::array();
+			if (!hits.is_array() || hits.size() < extra.size()) {
+				return false;
+			}
+			const size_t own = hits.size() - extra.size(); // (the tags' hits come last)
+			json rest = json::array();
+			for (size_t i = 0; i < hits.size(); i++) {
+				if (i < own) {
+					rest.push_back(hits[i]);
+				} else if (canonical(hits[i]) != canonical(extra[i - own])) {
+					return false;
+				}
+			}
+			if (rest.empty()) {
+				sd.erase("hits");
+			} else {
+				sd["hits"] = rest;
+			}
+			if (top && sd == json{{"effect", {{"type", "pass"}}}, {"interactive", false}}) {
+				sd = nullptr;
+			}
+		}
+		return true;
+	};
+	const bool resolved = s.contains("resolver") && s["resolver"].is_object() && s["resolver"].value("table", json()).is_array();
+	if (!take(s, resolved)) {
+		return std::nullopt;
+	}
+	if (resolved) {
+		for (json &row : s["resolver"]["table"]) {
+			if (row.is_array() && row.size() == 2 && row[1].is_object() && !take(row[1], false)) {
+				return std::nullopt;
+			}
+		}
+	}
+	return s;
+}
+
+} // namespace
+
 std::optional<json> match(const std::string &kind, const json &tmpl, const std::vector<json> &surfaces, size_t at,
 		const std::string &fallback_name, const std::set<std::string> &taken, bool relabel) {
 	const json &ts = tmpl["surfaces"];
@@ -772,14 +890,27 @@ std::optional<json> match(const std::string &kind, const json &tmpl, const std::
 		}
 		want.push_back(std::move(s));
 	}
+	const std::vector<std::string> tags = tags_of(tmpl);
 	auto attempt = [&](const bool flip) -> std::optional<json> {
 		Env env;
 		bool ok = true;
+		std::optional<std::string> tag_name; // (Stage 215: the name its tags' hits carry)
 		for (size_t i = 0; i < n && ok; i++) {
 			json val = without(want[i], GEOMETRY);
 			val.erase("label");
 			if (flip) {
 				swap_sides(val);
+			}
+			if (preset(tmpl) && !tags.empty()) { // Stage 215: its tags' hits are the tags', not its parameters
+				if (!tag_name) {
+					tag_name = tagged_name(val);
+				}
+				const auto u = untagged(val, tag_name.value_or(fallback_name), tags);
+				ok = u.has_value();
+				if (!ok) {
+					break;
+				}
+				val = *u;
 			}
 			if (preset(tmpl)) { // Stage 207: the surface element's parameters, read off the surface
 				const auto d = surface_element::decompose(val);
@@ -796,7 +927,10 @@ std::optional<json> match(const std::string &kind, const json &tmpl, const std::
 		if (!ok) {
 			return std::nullopt;
 		}
-		std::string name = fallback_name;
+		std::string name = tag_name.value_or(fallback_name);
+		if (tag_name && taken.count(name)) {
+			return std::nullopt;
+		}
 		if (auto it = env.find("name"); it != env.end()) {
 			name = it->second.get<std::string>();
 			if (taken.count(name)) {
@@ -815,7 +949,9 @@ std::optional<json> match(const std::string &kind, const json &tmpl, const std::
 		}
 		auto expands_to = [&](const json &e) -> std::optional<std::vector<json>> {
 			try {
-				return expand(tmpl, e, name, "");
+				std::vector<json> out = expand(tmpl, e, name, "");
+				apply_tags(out, name, tags, ""); // (Stage 215: as the lowering gives them)
+				return out;
 			} catch (const LevelError &) {
 				return std::nullopt;
 			}

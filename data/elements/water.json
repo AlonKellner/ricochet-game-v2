@@ -1,55 +1,14 @@
 {
- "doc": "Water: an arrow passing it is put out (its fire flag unset to false); the player passes it too.",
- "label": "Water",
- "params": {
-  "body": {
-   "default": "pass",
-   "doc": "what the player and objects do: pass, or block (collide with it)",
-   "enum": ["pass", "block"]
-  },
-  "fire": {
-   "default": "shot:fire",
-   "doc": "the fire's flag"
-  }
+ "defaults": {
+  "body": "pass",
+  "face": "pass",
+  "flag": "shot:fire",
+  "op": "set",
+  "value": false
  },
- "priority": 55,
- "surfaces": [
-  {
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "hits": [
-     {
-      "key": "$fire",
-      "kind": "state",
-      "op": "set",
-      "value": false
-     }
-    ],
-    "interactive": true
-   },
-   "player_solid": {
-    "$switch": "body",
-    "cases": {
-     "block": true,
-     "pass": false
-    }
-   },
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "hits": [
-     {
-      "key": "$fire",
-      "kind": "state",
-      "op": "set",
-      "value": false
-     }
-    ],
-    "interactive": true
-   }
-  }
- ]
+ "doc": "Water: an arrow passing it is put out (its fire flag unset to false); the player passes it too.",
+ "extends": "surface",
+ "features": ["button"],
+ "label": "Water",
+ "priority": 55
 }
