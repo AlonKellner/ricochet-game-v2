@@ -1025,3 +1025,47 @@ TEST_CASE("present: the dashes run on across the steps, by the walk's length fro
 	};
 	CHECK(rcg::dash_offsets(forked) == std::vector<double>{0.0, 30.0, 30.0, 70.0, 50.0});
 }
+
+// Stage 211 (the user): only what the fade leaves seen takes a lane. The physical walk fades out past the divergence
+// over the reach (a tenth of the level's diagonal); a planned step on its line where it has faded out is drawn on the
+// path itself, one where it still shows beside it.
+TEST_CASE("present: side by side only for what shows -- a step faded out takes no lane") {
+	rcg::Session s(level("test_levels/crossings.json")); // (bounds 0..1920 x 0..1080: the reach about 220)
+	const double r = std::hypot(1920.0, 1080.0) / 10.0;
+	auto st = [](rc::V2 a, rc::V2 b, rc::StepType t) {
+		rc::TraceStep x;
+		x.start = a;
+		x.end = b;
+		x.via = (a + b) / 2.0f;
+		x.type = t;
+		return x;
+	};
+	auto at = [&](double k) { return rc::V2::of(200.0, 100.0 + k * r); };
+	// the planned step on the physical walk's line between k0 and k1 reaches; the physical walk runs 3 reaches down
+	auto xs_on = [&](double k0, double k1) {
+		const std::vector<rc::TraceStep> steps = {
+			st(rc::V2{100, 100}, rc::V2{200, 100}, rc::StepType::Aligned),
+			st(rc::V2{200, 100}, rc::V2::of(300.0, 100.0 + k0 * r), rc::StepType::DivergedPlanned),
+			st(rc::V2::of(300.0, 100.0 + k0 * r), at(k0), rc::StepType::DivergedPlanned),
+			st(at(k0), at(k1), rc::StepType::DivergedPlanned),
+			st(rc::V2{200, 100}, at(3.0), rc::StepType::DivergedPhysical),
+		};
+		std::vector<rcg::render::Call> out;
+		s.paint_steps(steps, out, 0.0);
+		std::set<float> xs; // (what is drawn along the line, clear of the steps' ends)
+		for (const auto &c : out) {
+			for (const rc::V2 &q : c.pts) {
+				if (q.y > float(100.0 + (k0 + 0.1) * r) && q.y < float(100.0 + (k1 - 0.1) * r) && std::abs(q.x - 200.0f) < 5.0f) {
+					xs.insert(q.x);
+				}
+			}
+		}
+		return xs;
+	};
+	// past the physical walk's fade (it is over a reach past the divergence): the planned step alone, on the path
+	CHECK(xs_on(1.5, 2.5) == std::set<float>{200.0f});
+	// where the physical walk still shows: both, side by side
+	const std::set<float> both = xs_on(0.2, 0.5);
+	CHECK(both.count(200.0f) == 0);
+	CHECK(both.size() == 2);
+}
