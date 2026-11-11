@@ -98,7 +98,7 @@ private:
 		std::string key;     // an element key, or a JSON pointer into the document (level fields)
 	};
 	struct Row {
-		enum Kind { Header, Text, Value, Error, Buttons, Chips, Nav, Level, Tools, Actions, Complete } kind = Text; // Complete (Stage 217): a flag the focused field may take // Actions (Stage 203): options run their cmds // Tools (Stage 161): the tools, one row of them // Chips: the palette's kinds (options), one row of them
+		enum Kind { Header, Text, Value, Error, Buttons, Chips, Nav, Level, Tools, Actions, Complete, Found } kind = Text; // Complete (Stage 217): a flag the focused field may take; Found (Stage 219): what Ctrl+F finds // Actions (Stage 203): options run their cmds // Tools (Stage 161): the tools, one row of them // Chips: the palette's kinds (options), one row of them
 		std::string label, value, hint;
 		std::optional<Field> field;
 		std::string choice; // a value that cycles ("enum", "bool", "kind", "tool", "place", "options", "shape") or "" (typed)
@@ -217,6 +217,16 @@ private:
 	std::optional<Completion> completion() const;
 	std::string flag_field(const Field &f) const; // the field's kind of flag ("": none)
 	void accept_completion(size_t i);
+	// Stage 219: Ctrl+F -- what the level holds (elements, detectors, objects, carriers, the goal, the player), ranked by
+	// its name, its kind or a flag it touches; the one picked (Up/Down), selected and shown on Enter or a click
+	struct Found {
+		std::string entry, name, what; // the selection's entry ("element:<name>", "detector:<name>", "goal", ...)
+		std::vector<int> marks;
+	};
+	std::vector<Found> found() const;
+	void show_found(const std::string &entry);
+	std::string item_of_problem(const std::string &message) const; // a level problem's item (none: "")
+	size_t find_pick_ = 0;
 	std::optional<std::string> focus_draft_; // Stage 218: the default the field started from (applied unchanged: nothing written)
 	size_t complete_pick_ = 0;
 	bool complete_closed_ = false;

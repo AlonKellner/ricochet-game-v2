@@ -1159,13 +1159,17 @@ json Editor::op(const json &cmd) {
 	if (o == "panel") { // the panel's rows as drawn (tests, debugging): label, value, y
 		json rs = json::array();
 		for (const Row &r : rows()) {
-			static const char *const KINDS[] = {"header", "text", "value", "error", "buttons", "chips", "nav", "level", "tools", "actions", "complete"};
+			static const char *const KINDS[] = {"header", "text", "value", "error", "buttons", "chips", "nav", "level", "tools", "actions", "complete", "found"};
 			rs.push_back({{"kind", KINDS[int(r.kind)]}, {"label", r.label}, {"value", r.value}, {"y", r.y},
 					{"x", width_ - PANEL_WIDTH + 20}});
 			if (r.kind == Row::Actions) {
 				rs.back()["options"] = r.options; // (Stage 203)
 				rs.back()["lit"] = r.lit;         // (Stage 212)
 				rs.back()["on"] = r.on;           // (Stage 215)
+			}
+			if (r.kind == Row::Found || r.kind == Row::Error) { // (Stage 219: what it selects)
+				rs.back()["entry"] = r.choice;
+				rs.back()["marks"] = r.marks;
 			}
 			if (r.kind == Row::Complete) { // (Stage 217)
 				rs.back()["marks"] = r.marks;

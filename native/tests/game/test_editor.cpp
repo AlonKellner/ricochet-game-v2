@@ -1975,3 +1975,87 @@ TEST_CASE("editor: field editing -- defaults as text, Ctrl+S/Z through a field, 
 	CHECK(last > 0.0f);
 	CHECK(last + 21.0f <= view); // (the field moved up: its list below it shows)
 }
+
+// Stage 219: Ctrl+F finds what the level holds -- by its name, its kind or a flag it touches; Enter or a click selects
+// it and shows it; a level problem's click selects the item it names
+TEST_CASE("editor: Ctrl+F finds by name, kind or flag; a problem selects its item (Stage 219)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"name", "w1"}, {"start", {300.0, 300.0}}, {"end", {400.0, 300.0}}}}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "button"}, {"name", "b"}, {"flag", "lamp"}, {"start", {500.0, 300.0}}, {"end", {600.0, 300.0}}}}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "door"}, {"name", "gate"}, {"start", {1500.0, 700.0}}, {"end", {1500.0, 900.0}}}}});
+	ok(ed, {{"op", "set"}, {"path", "/detectors"}, {"value", json::parse(R"([{"name": "plate", "region": {"rect": [1100, 500, 80, 40]}}])")}});
+	ok(ed, {{"op", "set"}, {"path", "/objects"}, {"value", json::parse(R"([{"name": "box", "circle": {"center": [800, 400], "radius": 16}}])")}});
+	auto found = [&] {
+		const json panel = ok(ed, {{"op", "panel"}});
+		std::vector<std::string> out;
+		for (const json &r : panel["rows"]) {
+			if (r["kind"] == "found") {
+				out.push_back(r["entry"].get<std::string>() + (r.value("value", "") == "" ? "" : " = " + r["value"].get<std::string>()));
+			}
+		}
+		return out;
+	};
+	ed.key('F', rcg::Editor::ModCtrl, true);
+	CHECK(ok(ed, {{"op", "state"}})["focus"] == "#find");
+	CHECK(found().size() >= 5); // (three elements, the detector, the object; the player's start)
+	ed.text("gat");
+	REQUIRE_FALSE(found().empty());
+	CHECK(found()[0] == "element:gate = door");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["selected"] == "gate");
+	CHECK(ok(ed, {{"op", "state"}})["focus"].is_null());
+	const json view = ok(ed, {{"op", "state"}})["view"]["center"];
+	CHECK(view[0].get<double>() == doctest::Approx(1500.0));
+	CHECK(view[1].get<double>() == doctest::Approx(800.0));
+	// by a flag it writes; by its kind
+	ed.key('F', rcg::Editor::ModCtrl, true);
+	ed.text("lamp");
+	REQUIRE_FALSE(found().empty());
+	CHECK(found()[0] == "element:b = button (lamp)");
+	ed.key(rcg::Editor::KeyEscape, 0, true); // (cleared)
+	CHECK(ok(ed, {{"op", "state"}})["focus"] == "#find");
+	ed.text("detec");
+	REQUIRE_FALSE(found().empty());
+	CHECK(found()[0] == "detector:plate = detector");
+	{ // a click selects it
+		const json panel = ok(ed, {{"op", "panel"}});
+		for (const json &r : panel["rows"]) {
+			if (r["kind"] == "found") {
+				const float y = r["y"].get<float>() + 10, x = r["x"].get<float>() + 100;
+				ed.pointer(rcg::Editor::PtrMove, x, y, 0, 0);
+				ed.pointer(rcg::Editor::PtrDown, x, y, rcg::Editor::BtnLeft, 0);
+				ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
+				break;
+			}
+		}
+	}
+	CHECK(ok(ed, {{"op", "state"}})["item"] == "detector:plate");
+	// up/down pick
+	ed.key('F', rcg::Editor::ModCtrl, true);
+	ed.key(rcg::Editor::KeyDown, 0, true);
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["selected"] == "b"); // (the second in the document's order)
+	ed.key('F', rcg::Editor::ModCtrl, true);
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["focus"].is_null());
+	// a level problem names its object: a click selects it
+	ok(ed, {{"op", "set"}, {"path", "/objects/0/kind"}, {"value", "bogus"}});
+	REQUIRE_FALSE(ed.errors().empty());
+	{
+		const json panel = ok(ed, {{"op", "panel"}});
+		bool clicked = false;
+		for (const json &r : panel["rows"]) {
+			if (r["kind"] == "error" && r["entry"] == "object:box") {
+				const float y = r["y"].get<float>() + 10, x = r["x"].get<float>() + 100;
+				ed.pointer(rcg::Editor::PtrMove, x, y, 0, 0);
+				ed.pointer(rcg::Editor::PtrDown, x, y, rcg::Editor::BtnLeft, 0);
+				ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
+				clicked = true;
+				break;
+			}
+		}
+		REQUIRE(clicked);
+	}
+	CHECK(ok(ed, {{"op", "state"}})["item"] == "object:box");
+}

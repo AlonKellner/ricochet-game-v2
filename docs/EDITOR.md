@@ -75,6 +75,7 @@ stands on the bottom edge).
 | the list's `+ copy of a level` | pick a level, then name the copy (default `<level>_copy`): the copy opens under the new name, unsaved |
 | F2, the list's `~ rename this level`, the level's `name` field | rename the level: type its new name (a path under `data/levels`), Enter renames it and saves it under the new name at once (unsaved changes with it), the old file removed; Esc cancels. A name in use is refused. A level other files name (a scene's `level_path`, a session script, the lowerings) keeps those names: rename them too (Stage 170) |
 | F5 | play the level (refused while it has problems); Esc returns |
+| Ctrl+F | find (Stage 219): a field at the panel's top ranks what the level holds -- elements, detectors, objects, carriers, the goal, the player's start -- by the typed name (its letters lit), else its kind or a flag it writes or reads; Up/Down pick, Enter or a click selects it and centres the view on it, Esc clears, then closes |
 | G | the grid on or off (off: whole units) |
 | F | frame the level's bounds (the view frames them on every resize until you pan or zoom) |
 | wheel | zoom about the pointer (over the panel: scroll it) |
@@ -223,7 +224,8 @@ click puts it in place of the word, the field still being edited; **Enter** appl
 the list, a second Esc cancels the edit. The picked flag's writers and readers are outlined on the canvas.
 
 **Problems.** Every element is checked as the game checks it after every change (the reader's errors, then the
-builder's, `validate_spec`). Each problem names its element. Clicking a problem selects that element. A level
+builder's, `validate_spec`). Each problem names its element. Clicking a problem selects that element -- or the item a
+level problem names (a detector, an object, a carrier, a collider, the goal, the player's start; Stage 219). A level
 with problems cannot be played.
 
 ## Play-testing and saving
