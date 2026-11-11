@@ -255,9 +255,10 @@ void Editor::scroll(float, float dy, unsigned) {
 	}
 	if (mouse_.x >= width_ - PANEL_WIDTH) {
 		// the panel: scrolled, as far as its rows reach
+		(void)rows(); // (Stage 218: the scroll settled for this selection first -- the wheel scrolls from there)
 		const float before_scroll = panel_scroll_;
 		panel_scroll_ = 0;
-		const std::vector<Row> rs = rows();
+		const std::vector<Row> rs = laid_rows(); // (as laid: rows() would settle the scroll it measures)
 		const float bottom = rs.empty() ? 0.0f : rs.back().y + ROW + 20.0f;
 		panel_scroll_ = std::clamp(before_scroll + dy * 3 * ROW, 0.0f, std::max(0.0f, bottom - height_));
 		return;
@@ -1163,6 +1164,13 @@ void Editor::key(int code, unsigned mods, bool down) {
 		}
 		return;
 	}
+	// Stage 218: save, undo, redo and play while a field is edited -- the field applied first (refused: kept)
+	if (focus_ && focus_->key.rfind("#", 0) != 0 && (((mods & ModCtrl) && (code == 'S' || code == 'Z' || code == 'Y')) || code == KeyF1 + 4)) {
+		commit_field();
+		if (focus_) {
+			return;
+		}
+	}
 	if (focus_) {
 		const bool search = focus_->key == "#level_search"; // Stage 167: the level list's search
 		// Stage 217: the completion's keys -- up/down pick, Tab puts the pick in, Esc closes the list
@@ -1217,6 +1225,12 @@ void Editor::key(int code, unsigned mods, bool down) {
 		} else if (code == KeyLeft || code == KeyRight) { // Stage 191: the caret (with Ctrl: to the text's start or end)
 			caret_ = (mods & ModCtrl) ? (code == KeyLeft ? 0 : buffer_.size()) : code == KeyLeft ? char_before(buffer_, caret_) : char_after(buffer_, caret_);
 			complete_pick_ = 0;
+		} else if (code == KeyBackspace && (mods & ModCtrl)) { // Stage 218: all before the caret
+			buffer_.erase(0, caret_);
+			caret_ = 0;
+			level_pick_ = 0;
+			complete_pick_ = 0;
+			complete_closed_ = false;
 		} else if (code == KeyBackspace && caret_ > 0) {
 			const size_t n = char_before(buffer_, caret_);
 			buffer_.erase(n, caret_ - n);
@@ -1455,12 +1469,32 @@ void Editor::commit_field() {
 		}
 		return;
 	}
+	if (focus_draft_ && buffer_ == *focus_draft_ && !buffer_.empty()) {
+		focus_draft_.reset();
+		return; // (Stage 218: the default as it was -- nothing written)
+	}
+	focus_draft_.reset();
 	json value;
 	if (!buffer_.empty()) {
 		try {
 			value = json::parse(buffer_);
-		} catch (const json::exception &) {
+		} catch (const json::exception &e) {
+			const char first = buffer_.front();
+			if (first == '[' || first == '{' || first == '"') { // Stage 218: JSON that does not read is refused, not a string
+				hint_ = std::string("not JSON: ") + e.what();
+				focus_ = f;
+				return;
+			}
 			value = buffer_; // a bare word: a string
+		}
+	}
+	if (flag_field(f) == "expr" && value.is_string()) { // Stage 218: a flag expression that does not compile is refused
+		try {
+			(void)rc::FlagExpr::compile(value.get<std::string>());
+		} catch (const std::invalid_argument &e) {
+			hint_ = std::string("not a flag expression: ") + e.what();
+			focus_ = f;
+			return;
 		}
 	}
 	json r;
@@ -1671,7 +1705,48 @@ std::vector<Editor::Ranked> Editor::ranked_levels() const {
 	return out;
 }
 
+// Stage 218: the panel's rows, the scroll settled -- a new selection from the top, never past the rows, and a field
+// newly edited (and its completion's rows) brought into view
 std::vector<Editor::Row> Editor::rows() const {
+	std::vector<Row> out = laid_rows();
+	const float view = height_ - STATUS_HEIGHT;
+	bool moved = false;
+	const std::string sel = selected_ + "|" + item_ + "|" + std::to_string(group_.size());
+	if (sel != scrolled_for_) {
+		scrolled_for_ = sel;
+		moved = panel_scroll_ != 0.0f;
+		panel_scroll_ = 0.0f;
+	}
+	if (!moved && !out.empty()) {
+		const float bottom = out.back().y + ROW + panel_scroll_; // (the rows' extent, unscrolled)
+		const float most = std::max(0.0f, bottom - view);
+		if (panel_scroll_ > most) {
+			panel_scroll_ = most;
+			moved = true;
+		}
+	}
+	const std::string field = focus_ ? focus_->element + "|" + focus_->key : "";
+	if (!moved && field != followed_) {
+		followed_ = field;
+		for (size_t i = 0; focus_ && i < out.size(); i++) {
+			const Row &r = out[i];
+			if (r.kind == Row::Value && r.field && r.field->element == focus_->element && r.field->key == focus_->key) {
+				const float end = r.y + ROW * float(1 + std::min<size_t>(COMPLETE_ROWS, out.size() - i - 1)); // (room for its list)
+				if (r.y < 0.0f) {
+					panel_scroll_ = std::max(0.0f, panel_scroll_ + r.y - ROW);
+					moved = true;
+				} else if (end > view) {
+					panel_scroll_ += std::min(end - view, r.y - ROW);
+					moved = true;
+				}
+				break;
+			}
+		}
+	}
+	return moved ? laid_rows() : out;
+}
+
+std::vector<Editor::Row> Editor::laid_rows() const {
 	std::vector<Row> out;
 	float y = 10.0f - panel_scroll_;
 	auto add = [&](Row r) {
@@ -1831,13 +1906,23 @@ std::vector<Editor::Row> Editor::rows() const {
 			// arrow (face, back, plannable), the body, each feature it has (its parameters, and remove but for the kind's
 			// own), then the features it can take
 			const json params = ks.contains(kind) ? ks[kind].value("params", json::object()) : json::object();
+			json defaults = json::object(); // (Stage 218: its parameters' defaults as they read for it -- door:<its name>)
+			if (ks.contains(kind)) {
+				try {
+					defaults = elements::params_of(ks[kind], e, selected_, "");
+				} catch (const LevelError &) {
+				}
+			}
 			std::vector<std::string> shown;
 			auto param_row = [&](const std::string &key) {
 				if (std::find(shown.begin(), shown.end(), key) != shown.end()) {
 					return;
 				}
 				shown.push_back(key);
-				const json spec = params.value(key, json::object());
+				json spec = params.value(key, json::object());
+				if (!e.contains(key) && defaults.contains(key) && spec.contains("default") && !spec["default"].is_null()) {
+					spec["default"] = defaults[key];
+				}
 				const bool set = e.contains(key);
 				std::string value = set ? spell(e[key])
 						: key == "back" && spec.value("default", json()).is_null() ? "(the face)"
@@ -1852,7 +1937,11 @@ std::vector<Editor::Row> Editor::rows() const {
 				} else if (spec.value("default", json()).is_boolean() || spec.value("type", "") == "bool") {
 					choice = "bool";
 				}
-				add({Row::Value, key, value, spec.value("doc", ""), Field{selected_, key}, choice, -1, 0, {}});
+				Row r{Row::Value, key, value, spec.value("doc", ""), Field{selected_, key}, choice, -1, 0, {}};
+				if (!set && spec.contains("default") && !spec["default"].is_null()) {
+					r.draft = spell(spec["default"]);
+				}
+				add(r);
 			};
 			auto chips = [&](std::vector<std::string> labels, std::vector<json> cmds, const std::string &hint) {
 				Row r;
@@ -1942,9 +2031,11 @@ std::vector<Editor::Row> Editor::rows() const {
 			};
 			if (mode == "opening") { // its flag: typed, or one of the level's
 				const std::string dflt = "door:" + selected_;
-				add({Row::Value, "  flag", mj.contains("flag") ? spell(mj["flag"]) : "(" + dflt + ")",
+				Row fr{Row::Value, "  flag", mj.contains("flag") ? spell(mj["flag"]) : "(" + dflt + ")",
 						"the flag that opens it: a key or an expression (det:plate && !locked); default door:<name> (a button's opens: <name>); empty: the default",
-						Field{"", at + "/motion/flag"}, "", -1, 0, {}});
+						Field{"", at + "/motion/flag"}, "", -1, 0, {}};
+				fr.draft = mj.contains("flag") ? "" : dflt;
+				add(fr);
 				// (Stage 217: the level's flags complete the field as it is typed -- the chips of Stage 204 retired)
 			}
 			// Stage 203: its steps (or its keys), each its JSON and its actions, then new ones -- placed by two clicks
@@ -2448,7 +2539,10 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		return;
 	}
 	focus_ = f;
-	buffer_ = r.value.size() >= 2 && r.value.front() == '(' && r.value.back() == ')' ? "" : r.value;
+	// Stage 218: a default is edited from its text (applied unchanged it writes nothing); a word about one from empty
+	const bool dflt = r.value.size() >= 2 && r.value.front() == '(' && r.value.back() == ')';
+	buffer_ = dflt ? r.draft : r.value;
+	focus_draft_ = dflt ? std::optional<std::string>(r.draft) : std::nullopt;
 	caret_ = buffer_.size();
 	complete_pick_ = 0; // (Stage 217: its completion open)
 	complete_closed_ = false;
@@ -3191,8 +3285,16 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 			}
 			case Row::Value: {
 				const bool focused = focus_ && r.field && focus_->element == r.field->element && focus_->key == r.field->key;
+				bool malformed = false; // (Stage 218: an expression that does not compile, as it is typed)
+				if (focused && !buffer_.empty() && flag_field(*focus_) == "expr") {
+					try {
+						(void)rc::FlagExpr::compile(buffer_);
+					} catch (const std::invalid_argument &) {
+						malformed = true;
+					}
+				}
 				if (focused) {
-					p.push_back(rect(V2{x0 + VALUE_X - 4, r.y + 1}, V2{PANEL_WIDTH - VALUE_X - 6, ROW - 2}, rgba(1, 1, 1, 0.12)));
+					p.push_back(rect(V2{x0 + VALUE_X - 4, r.y + 1}, V2{PANEL_WIDTH - VALUE_X - 6, ROW - 2}, malformed ? rgba(1, 0.35, 0.3, 0.25) : rgba(1, 1, 1, 0.12)));
 				} else if (over) {
 					p.push_back(rect(V2{x0 + 4, r.y + 1}, V2{PANEL_WIDTH - 8, ROW - 2}, rgba(1, 1, 1, 0.06)));
 				}

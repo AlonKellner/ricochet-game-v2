@@ -776,6 +776,7 @@ TEST_CASE("editor: an element's tags and the level's spread rules are panel fiel
 	CHECK(ok(ed, {{"op", "document"}})["document"]["spread"][0]["flag"] == "glow");
 	CHECK(ed.errors().empty());
 	click_row(ed, "spread");
+	ed.key(rcg::Editor::KeyBackspace, rcg::Editor::ModCtrl, true); // (Stage 218: the field's text cleared)
 	ed.text(R"([{"flag": "glow"}])"); // no tag: the level's problem, shown
 	ed.key(rcg::Editor::KeyEnter, 0, true);
 	CHECK_FALSE(ed.errors().empty());
@@ -1440,6 +1441,7 @@ TEST_CASE("editor: one motion field, its motion_mode (cycle or opening) and an o
 	CHECK(ed.errors().empty());
 	CHECK(row("  flag") == "(door:w)");
 	click_row(ed, "  flag"); // (Stage 217: one of the level's flags, completed)
+	ed.key(rcg::Editor::KeyBackspace, rcg::Editor::ModCtrl, true); // (Stage 218: its default's text cleared)
 	ed.text("pl");
 	ed.key(rcg::Editor::KeyTab, 0, true);
 	ed.key(rcg::Editor::KeyEnter, 0, true);
@@ -1765,6 +1767,9 @@ TEST_CASE("editor: flag names complete -- the level's flags, ranked by the word 
 	click_row(ed, "open");
 	json c = ok(ed, {{"op", "complete"}});
 	CHECK(c["kind"] == "expr");
+	CHECK(c["word"] == "door:gate"); // (Stage 218: its default's text)
+	ed.key(rcg::Editor::KeyBackspace, rcg::Editor::ModCtrl, true);
+	c = ok(ed, {{"op", "complete"}});
 	CHECK(c["word"] == "");
 	CHECK(c["items"].size() >= 5);
 	ed.text("det:pl");
@@ -1868,4 +1873,105 @@ TEST_CASE("editor: flag names complete -- the level's flags, ranked by the word 
 	ok(ed, {{"op", "select"}, {"name", "gate"}});
 	click_row(ed, "open");
 	CHECK(ok(ed, {{"op", "complete"}})["items"].size() >= 5);
+}
+
+// Stage 218: a field edited as one expects -- a default from its text, the Ctrl keys through it, malformed text refused,
+// the panel's scroll settled
+TEST_CASE("editor: field editing -- defaults as text, Ctrl+S/Z through a field, malformed text refused, the scroll settled (Stage 218)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "door"}, {"name", "d"}, {"start", {700.0, 300.0}}, {"end", {700.0, 500.0}}}}});
+	ok(ed, {{"op", "select"}, {"name", "d"}});
+	// a default is edited from its text; applied unchanged it writes nothing
+	click_row(ed, "open");
+	CHECK(ok(ed, {{"op", "complete"}})["word"] == "door:d");
+	const size_t undo = ok(ed, {{"op", "state"}})["undo"].get<size_t>();
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK_FALSE(element(ed, "d").contains("open"));
+	CHECK(ok(ed, {{"op", "state"}})["undo"].get<size_t>() == undo);
+	click_row(ed, "open");
+	ed.text("x");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(element(ed, "d")["open"] == "door:dx");
+	// Ctrl+S and Ctrl+Z while editing: the field applied first
+	click_row(ed, "open");
+	ed.key(rcg::Editor::KeyBackspace, rcg::Editor::ModCtrl, true);
+	ed.text("lamp");
+	ed.key('S', rcg::Editor::ModCtrl, true);
+	CHECK(element(ed, "d")["open"] == "lamp");
+	CHECK(ok(ed, {{"op", "state"}})["save_requested"] == true);
+	CHECK(ok(ed, {{"op", "state"}})["focus"].is_null());
+	click_row(ed, "open");
+	ed.key(rcg::Editor::KeyBackspace, rcg::Editor::ModCtrl, true);
+	ed.text("q");
+	ed.key('Z', rcg::Editor::ModCtrl, true); // (q applied, then undone)
+	CHECK(element(ed, "d")["open"] == "lamp");
+	// an expression that does not compile: tinted as typed, refused
+	click_row(ed, "open");
+	ed.key(rcg::Editor::KeyBackspace, rcg::Editor::ModCtrl, true);
+	ed.text("a &");
+	ed.text("&");
+	int tinted = 0;
+	for (const auto &node : ed.draw()) {
+		for (const auto &call : *node.calls) {
+			tinted += !call.colors.empty() && call.colors[0] == rcg::render::Color{1, 0.35f, 0.3f, 0.25f};
+		}
+	}
+	CHECK(tinted == 1);
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["focus"] == "open");
+	CHECK(ok(ed, {{"op", "state"}})["hint"].get<std::string>().find("not a flag expression") != std::string::npos);
+	CHECK(element(ed, "d")["open"] == "lamp");
+	ed.text(" "); // (a key at a time)
+	ed.text("b");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(element(ed, "d")["open"] == "a && b");
+	// JSON that does not read: refused, not a string
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	const json bounds = ed.document().value("bounds", json());
+	click_row(ed, "bounds");
+	ed.key(rcg::Editor::KeyBackspace, rcg::Editor::ModCtrl, true);
+	ed.text("[1, 2");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["focus"] == "/bounds");
+	CHECK(ok(ed, {{"op", "state"}})["hint"].get<std::string>().find("not JSON") != std::string::npos);
+	CHECK(ed.document().value("bounds", json()) == bounds);
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	// a new selection from the top; a field newly edited, with its list, in view (a short window: the rows overflow)
+	ed.resize(1920, 700);
+	ok(ed, {{"op", "select"}, {"name", "d"}});
+	ed.pointer(rcg::Editor::PtrMove, 1800, 300, 0, 0);
+	ed.scroll(0, 3, 0);
+	CHECK(ok(ed, {{"op", "panel"}})["rows"][0]["y"].get<float>() < 10.0f);
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	(void)ed.draw(); // (a frame between: the panel drawn for the level)
+	ok(ed, {{"op", "select"}, {"name", "d"}});
+	CHECK(ok(ed, {{"op", "panel"}})["rows"][0]["y"].get<float>() == 10.0f);
+	const float view = 700.0f - rcg::Editor::STATUS_HEIGHT;
+	auto open_y = [&] {
+		const json panel = ok(ed, {{"op", "panel"}}); // (held: a range over a temporary's member dangles)
+		for (const json &r : panel["rows"]) {
+			if (r["kind"] == "value" && r["label"] == "open") {
+				return r["y"].get<float>();
+			}
+		}
+		return -1.0f;
+	};
+	for (int k = 0; k < 40 && open_y() > view - 21.0f; k++) { // (scrolled until the field is the view's last row)
+		ed.scroll(0, 1, 0);
+	}
+	REQUIRE(open_y() + 21.0f <= view); // (a wheel step is 63 px: it is among the view's last rows)
+	REQUIRE(open_y() >= view - 84.0f);
+	click_row(ed, "open");
+	ed.key(rcg::Editor::KeyBackspace, rcg::Editor::ModCtrl, true);
+	CHECK(ok(ed, {{"op", "state"}})["focus"] == "open");
+	float last = 0.0f;
+	const json panel = ok(ed, {{"op", "panel"}});
+	for (const json &r : panel["rows"]) {
+		if (r["kind"] == "complete") {
+			last = std::max(last, r["y"].get<float>());
+		}
+	}
+	CHECK(last > 0.0f);
+	CHECK(last + 21.0f <= view); // (the field moved up: its list below it shows)
 }
