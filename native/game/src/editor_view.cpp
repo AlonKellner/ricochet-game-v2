@@ -12,6 +12,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <set>
 
 namespace rcg {
 namespace {
@@ -1693,9 +1694,33 @@ std::vector<Editor::Row> Editor::rows() const {
 				add(r);
 			};
 			if (ks.contains(kind) && ks[kind].value("preset", false)) {
-				for (const char *key : {"face", "back", "plannable", "body"}) {
-					param_row(key);
+				param_row("face");
+				param_row("back");
+				{ // Stage 216: a projecting face's and a portal's parameters, under the faces
+					auto of = [&](const char *k) {
+						const json v = e.contains(k) ? e[k] : params.value(k, json::object()).value("default", json());
+						return v.is_string() ? v.get<std::string>() : std::string();
+					};
+					std::set<std::string> faces = {of("face"), of("back").empty() ? of("face") : of("back")};
+					for (const char *k : {"then_face", "then_back"}) {
+						if (e.contains("when") && !of(k).empty()) {
+							faces.insert(of(k));
+						}
+					}
+					if (faces.count("project")) {
+						param_row("projection");
+						param_row("reverse");
+						if (of("projection").find("directional") != std::string::npos) {
+							param_row("normal");
+						}
+					}
+					if (faces.count("portal")) {
+						param_row("d");
+						param_row("theta");
+					}
 				}
+				param_row("plannable");
+				param_row("body");
 				const json own = ks[kind].value("features", json::array());
 				std::vector<std::string> addable;
 				for (const surface_element::Feature &f : surface_element::features()) {

@@ -1,50 +1,13 @@
 {
- "doc": "A portal pair: the surface and its image, the surface moved by z -> e^{i theta} z + d (two ids). The arrow entering one leaves the other.",
+ "defaults": {
+  "body": "pass",
+  "face": "portal"
+ },
+ "doc": "A portal pair: the surface and its image, the surface moved by z -> e^{i theta} z + d (two ids). The arrow entering one leaves the other. Stage 216: a preset (the face portal).",
  "example": {
   "d": [200.0, 0.0]
  },
+ "extends": "surface",
  "label": "Portal",
- "params": {
-  "body": {
-   "default": "pass",
-   "doc": "what the player and objects do: pass, or block (collide with it)",
-   "enum": ["pass", "block"]
-  },
-  "d": {
-   "doc": "the displacement of the image",
-   "type": "point"
-  },
-  "theta": {
-   "default": 0.0,
-   "doc": "the rotation of the image (radians)"
-  }
- },
- "priority": 24,
- "surfaces": [
-  {
-   "left": {
-    "effect": {
-     "d": "$d",
-     "theta": "$theta",
-     "type": "portal"
-    },
-    "interactive": true
-   },
-   "player_solid": {
-    "$switch": "body",
-    "cases": {
-     "block": true,
-     "pass": false
-    }
-   },
-   "right": {
-    "effect": {
-     "d": "$d",
-     "theta": "$theta",
-     "type": "portal"
-    },
-    "interactive": true
-   }
-  }
- ]
+ "priority": 24
 }

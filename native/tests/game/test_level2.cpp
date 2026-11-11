@@ -271,9 +271,9 @@ TEST_CASE("rc-level/2: the schema is strict, and names the element") {
 	CHECK(err(level_of({}, {{"carriers", nullptr}})).find("an array of carriers expected") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "crystal"}})})).find("level.elements[0].kind: unknown element kind 'crystal'") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"shiny", true}})})).find("unknown key 'shiny' (parameters: armed, back, body, breaks,") != std::string::npos);
-	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"back", "maybe"}})})).find("level.elements[0] (one_sided_mirror_1).back: one of stop, pass, mirror expected")
+	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"back", "maybe"}})})).find("level.elements[0] (one_sided_mirror_1).back: one of stop, pass, mirror, invert, project, portal expected")
 			!= std::string::npos);
-	CHECK(err(level_of({seg({{"kind", "portal"}})})).find("'d' required") != std::string::npos);
+	CHECK(err(level_of({seg({{"kind", "portal"}})})).find(".d: a portal's displacement [x, y] expected") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "button"}})})).find("'flag' required") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "wall"}, {"name", "a"}}), seg({{"kind", "wall"}, {"name", "a"}})})).find("'a' names another element")
 			!= std::string::npos);

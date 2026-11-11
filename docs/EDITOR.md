@@ -179,7 +179,8 @@ selected item, Ctrl+D duplicates a detector or an object, and the arrows move it
 ## The panel
 
 Click a field to edit it:
-- **An enum** (a surface's `face`, `back` or `body`) cycles to its next value; Shift+click goes back. Under it a row
+- **An enum** (a surface's `face`, `back` or `body`) cycles to its next value; Shift+click goes back. A face that
+  projects or is a portal shows its parameters under the faces (`projection`, `reverse`, `normal`; `d`, `theta`; Stage 216). Under it a row
   of chips shows its values, the current one lit: a click sets one (Stage 212). A value that is the kind's default
   is unset, so the document says only what differs; `back`'s `= face` unsets it. An item's few options (an object's
   `kind`, `face`, `body`; a detector's `for`, `mode`; `motion_mode`) have chips too.

@@ -12,8 +12,8 @@
    "kind": "projection",
    "name": "projection_1",
    "normal": [1.0, 0.0],
+   "projection": "circle_directional_projection",
    "start": [850.0, 390.0],
-   "type": "circle_directional_projection",
    "via": [1000.0, 540.0]
   },
   {
@@ -21,9 +21,9 @@
    "kind": "projection",
    "name": "projection_2",
    "normal": [1.0, 0.0],
+   "projection": "circle_directional_projection",
    "reverse": true,
    "start": [1100.0, 390.0],
-   "type": "circle_directional_projection",
    "via": [1250.0, 540.0]
   }
  ],
