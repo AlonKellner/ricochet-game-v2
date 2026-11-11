@@ -17,7 +17,7 @@ The rules are docs/EDITOR.md (Completing a flag). The game does not change.
 | 217.3 | The completion: the word at the caret, ranked by the soft match, rows under the field, Up/Down, Tab, a click, Esc; the dim rest at the caret; the canvas outline | Done |
 | 217.4 | The opening flag's chips (Stage 204) retired: the list completes the field | Done |
 | 217.5 | Hosts: Tab reaches it from Godot (GUT) and the C API (pytest); `{"op": "complete"}` | Done |
-| 217.6 | The user's interactive sign-off | Pending |
+| 217.6 | The user's interactive sign-off | Done ("Works perfectly! Proceed", 2026-11-11) |
 
 ## Decisions
 
