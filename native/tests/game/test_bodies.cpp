@@ -568,7 +568,8 @@ TEST_CASE("marks: a grapple's barbs along it, an object's fill and handles, a ma
 		for (const auto &k : calls_in(s, flag)) {
 			diamonds += k.kind == rcg::render::Kind::ColoredPolygon;
 		}
-		CHECK(diamonds == 2); // the button's (the charger's pass sides are drawn in the flag's colour)
+		CHECK(diamonds == 0); // (Stage 210: a button's write says itself by its key)
+		CHECK(calls_in(s, rcg::render::Color{1.0f, 0.72f, 0.25f, 0.45f}).size() == 1); // its key, dim: its flag is off
 		const auto rings = calls_in(s, target);
 		std::vector<rcg::render::Call> ring_arcs;
 		for (const auto &k : rings) {
@@ -580,6 +581,41 @@ TEST_CASE("marks: a grapple's barbs along it, an object's fill and handles, a ma
 		CHECK(ring_arcs[0].pts[0].x == doctest::Approx(1100.0));
 		CHECK(ring_arcs[0].pts[0].y == doctest::Approx(600.0 - 60.0 - 13.0)); // at its top, MARK_OFFSET out
 	}
+}
+
+TEST_CASE("states: a button's key dim while its flag is off, bright and filled once on; a target haloed, then faint with a checkmark (Stage 210)") {
+	const rcg::render::Color key_off{1.0f, 0.72f, 0.25f, 0.45f}, key_on{1.0f, 0.72f, 0.25f, 1.0f}, key_fill{1.0f, 0.72f, 0.25f, 0.28f},
+			halo{1.0f, 0.85f, 0.3f, 0.25f}, gold{1.0f, 0.85f, 0.3f, 1.0f};
+	const char *button = R"("elements": [{"kind": "button", "flag": "lamp", "start": [800, 300], "end": [800, 500]}])";
+	rcg::Session off(level_of((std::string("{") + button + "}").c_str()));
+	off.settle();
+	CHECK(calls_in(off, key_off).size() == 1);
+	CHECK(calls_in(off, key_on).empty());
+	rcg::Session on(level_of((std::string(R"({"flags": {"lamp": true}, )") + button + "}").c_str()));
+	on.settle();
+	CHECK(calls_in(on, key_on).size() == 1);
+	CHECK(calls_in(on, key_fill).size() == 1);
+	// a target: a halo; registered (its flag target:<id>), its look at half and a checkmark instead of its ring
+	const char *target = R"("elements": [{"kind": "target", "start": [800, 300], "end": [800, 500]}])";
+	rcg::Session t(level_of((std::string("{") + target + "}").c_str()));
+	t.settle();
+	CHECK(calls_in(t, halo).size() == 1);
+	int id = -1;
+	for (const rcg::BuiltSurface &b : t.world().surfaces()) {
+		id = b.label == "Target" ? b.id : id;
+	}
+	REQUIRE(id >= 0);
+	rcg::Session done(level_of((std::string(R"({"flags": {"target:)") + std::to_string(id) + R"(": true}, )" + target + "}").c_str()));
+	done.settle();
+	CHECK(calls_in(done, halo).empty());
+	int checks = 0, rings = 0;
+	for (const auto &k : calls_in(done, gold)) {
+		checks += k.kind == rcg::render::Kind::Polyline;
+		rings += k.kind == rcg::render::Kind::Arc;
+	}
+	CHECK(checks == 2); // a side each
+	CHECK(rings == 0);
+	CHECK(calls_in(done, rcg::render::Color{1.0f, 0.0f, 0.0f, 0.5f}).size() == 1); // its stop face at half
 }
 
 TEST_CASE("draw order: the surfaces before the player, the cursor and the HUD, which share their z (Stage 208)") {
@@ -1895,7 +1931,7 @@ TEST_CASE("preview: a counterpart point gets the planned walk's dot, no ring (St
 		if (c.kind != rcg::render::Kind::Circle || c.pts.empty() || dist(c.pts[0], *at) > 4.0) { // (the lanes shift the mark a little)
 			continue;
 		}
-		dot = dot || (c.radius == 2.0 && c.colors[0][0] > c.colors[0][1]); // (red: the planned walk alone)
+		dot = dot || (c.radius == 3.0 && c.colors[0][0] > c.colors[0][1]); // (red: the planned walk alone; Stage 210: 3 units)
 		ring = ring || c.radius > 3.0;
 	}
 	CHECK(dot);

@@ -2409,10 +2409,10 @@ V1 uses a wireframe/debug aesthetic. No art assets required.
 | **Surfaces** | Colored lines/arcs. Color indicates effect type. |
 | **Player** | A white triangle turned toward the aim, at the player's position (the arrow origin); under gravity a light-gray rectangle under it, down to the feet (Stage 173, §25.1). |
 | **Arrow** | Line segment (length ~40 units) with a triangular head (30° angle, ~16 units). Single draw call. Rotates to follow the path tangent direction (including arc tangents). |
-| **Targets** | Distinct color (e.g., gold/yellow) and shape (e.g., thicker line, pulsing). |
-| **Cursor** | Crosshair or dot at mouse position. |
-| **Unhit targets** | Pulse or glow animation. |
-| **Hit targets (prior shots)** | Drawn dimmer with a checkmark overlay. |
+| **Targets** | A gold ring mark on each side that registers (§22.6). |
+| **Cursor** | Crosshair at the mouse position. |
+| **Unhit targets** | A gold halo along the surface (Stage 210: static, not a pulse -- each frame's draw list stays the same while nothing changes). |
+| **Hit targets (registered)** | Drawn at half strength, the ring a checkmark (Stage 210). |
 
 For arc steps in the visual frame, the tangent direction is perpendicular to the radius at the arrow's current position: `tangent = perpendicular(arrow_position - arc_center)`, oriented in the traversal direction.
 
@@ -2422,19 +2422,25 @@ For arc steps in the visual frame, the tangent direction is perpendicular to the
 
 | Surface type | Color |
 |-------------|-------|
-| Reflection | Blue |
+| Reflection | Blue (Stage 210: lifted, (0.25, 0.45, 1), for the dark background) |
 | Inversion | Purple |
 | Rigid motion | Cyan |
-| Projective | Orange |
+| Projective | Yellow-orange through, orange back |
 | Block | Red |
-| Pass-through | Gray |
+| Pass-through | Gray -- with hit effects too (Stage 210): what they do is said by their marks (§22.6), a button's by its key |
+| Ghost toggler | Pale cyan |
 | Platform (§25.1; its pass sides) | Wood brown |
 | Shield (a block the player passes, nothing else on its side; Stage 186) | Turquoise, in a translucent band |
 | Blocking, not stopping (body `block` with a face that passes or reflects: a fence, a solid mirror, a blocking button; §9.13, Stage 207) | Its face's colour over a steel band |
 | Door, charged door (Stage 190) | Its face's colour with an amber core, and amber posts across both ends (an open door: its posts, faint) |
-| Target | Gold |
+| Target | Its face's colour, a gold ring mark, a gold halo until registered (Stage 210) |
+| Button (writes a flag; §9.13, Stage 210, the user's option A) | Its face's colour inside a rounded amber key outline: dim while its flag is off, bright and filled once it is on |
+| Spawn, reset marks | Teal plus (Stage 210: off the frost and ghost cyan), pink cross |
 
-Target surfaces display their effect color on each side plus a **gold outline** or gold endpoint markers to indicate target status.
+The colours, widths and sizes are named in one table, `rcg/style.hpp`, grouped by meaning: what the arrow does (the
+side colours), what the player does (the bands, the platform's brown), flags (amber: doors, buttons' keys, detectors),
+targets (gold), journeys (mint: a grapple's barbs, a pullable object, the trip), the preview (green aligned, red and
+yellow diverged), light and shadow, the consequences.
 
 **Step types (preview path):**
 
@@ -2446,28 +2452,32 @@ Target surfaces display their effect color on each side plus a **gold outline** 
 | DIVERGED_PLANNED | Red | Solid (dark, with bright dashes over it; §4.3) |
 | DIVERGED_POST_PLANNED | Red | Dashed |
 
-Dashes run along the arrow's way; coinciding steps are drawn side by side (§4.3).
+Dashes run along the arrow's way; coinciding steps are drawn side by side (§4.3). Every step's dashes are 10 on, 5 off,
+aligned or diverged (Stage 210, the user: a cursor moving between aligned and diverged changes the colour only, not
+the pattern). An event mark's dim dot (and a counterpart's, §12.1) is 3 units, a piece's crossing dot 3.
 
 **Other:**
 
 | Element | Visual |
 |---------|--------|
-| Visibility region | White, semi-transparent fill |
-| Planned surface overlay | Numbered label, brightened |
+| Visibility region | White, semi-transparent fill (10%) |
+| Terminal region (Stage 197) | Light green fill (14%): the cones of a plan without its last terminal that reach it |
+| Planned surface overlay | A gradient across the planned side with chevrons in and out, white (red when invalid); its plan index |
 
 ### 22.3 Surface side indicators
 
 Each side of the surface is drawn in its own effect color. The left half (relative to the segment's traversal direction) uses the left effect's color; the right half uses the right effect's color. Implementation: draw the surface as two parallel lines/arcs slightly offset to each side of the carrier, each in its respective effect color. This makes it immediately clear what each side does. For surfaces where one side is null (pass-through), that side is drawn in gray.
 
-Offset distance: **2 pixels** per side from the carrier center line. Total visual width: 5px (1px center + 2px each side).
+Offset distance: **2 pixels** per side from the carrier center line, each side a 1.5 pixel stroke. Sides alike are
+drawn as one 3 pixel stroke.
 
-Non-interactive sides are drawn at **50% opacity** compared to interactive sides.
+When the sides differ, a non-interactive side is drawn at **50% opacity** compared to an interactive one.
 
 ### 22.4 Line widths
 
-Default surface line width: **3 pixels**. Default trajectory/preview line width: **2 pixels**. Arc rendering uses Godot's `draw_arc()` which handles arc geometry natively.
-
-Default `draw_arc()` point_count: **64 per full circle**, scaled by arc span (e.g., 90° arc = 16 points).
+Default surface line width: **3 pixels**. Default trajectory/preview line width: **2 pixels**. Arcs are draw-list arcs
+(centre, radius, angles, point count); a surface's arc takes its point count from the carrier (`arc_params`), an outline
+`span * r / 6` points, clamped to 8..128.
 
 ### 22.5 Designer markers (Stage 179)
 
@@ -2506,8 +2516,8 @@ shows **F's marker**, so a button and its door, a pad and the door it shuts, are
   short handles outside it (at 45, 135, 225 and 315 degrees), a static one faint gray. Its outline is its face's colour
   (or its shape's, §25.5).
 - **Every other feature has a mark of its own**, in a row by the surface's marker point (§22.5: a line's middle, an
-  arc's via, a full circle's top), 13 units off it on each side that has it, the row following an arc: a button (a
-  flag written on a side that does not pass: a pass side says it by its colour) a gold diamond; a target a ring; a
+  arc's via, a full circle's top), 13 units off it on each side that has it, the row following an arc: a button's
+  write none (its key, §22.2, Stage 210); another write a gold diamond; a target a ring; a
   spawn a plus; a reset a cross; a break a crack; a pop a burst of six rays; fire, charge and frost the arrow's own
   glyphs (§22.2's arrow states). A mark whose writes wait for the landing has a dark centre. A full circle whose sides
   mark alike shows them once, outside.
@@ -3269,4 +3279,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.105.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.106.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

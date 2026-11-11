@@ -793,7 +793,7 @@ TEST_CASE("present: significant events are ringed dots, other crossings small do
 	CHECK(discs[0]->radius == 5.5); // the ring
 	CHECK(discs[1]->radius == 4.0); // the dot in it
 	CHECK(discs[2]->pts[0] == rc::V2{300, 300});
-	CHECK(discs[2]->radius == 2.0); // a crossing
+	CHECK(discs[2]->radius == 3.0); // a crossing (Stage 210: 3 units)
 }
 
 // Stage 131 (the user): a passage of infinity off the level and a portal are one
