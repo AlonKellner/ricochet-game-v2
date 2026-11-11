@@ -648,8 +648,8 @@ TEST_CASE("crossings: by what an element does -- a door or a switchable that can
 	CHECK(cuts(R"({"kind": "platform", "start": [800, 500], "end": [1000, 500]})") == 0);
 	CHECK(cuts(R"({"kind": "fence", "start": [800, 500], "end": [1000, 500]})") == 0);
 	CHECK(cuts(R"({"kind": "passthrough", "start": [800, 500], "end": [1000, 500]})") == 0);
-	CHECK(cuts(R"({"kind": "switchable", "flag": "f", "on": "pass", "off": "pass", "start": [800, 500], "end": [1000, 500]})") == 0);
-	CHECK(cuts(R"({"kind": "switchable", "flag": "f", "on": "pass", "off": "stop", "start": [800, 500], "end": [1000, 500]})") == 1);
+	CHECK(cuts(R"({"kind": "switchable", "when": "f", "then_face": "pass", "face": "pass", "start": [800, 500], "end": [1000, 500]})") == 0);
+	CHECK(cuts(R"({"kind": "switchable", "when": "f", "then_face": "pass", "face": "stop", "start": [800, 500], "end": [1000, 500]})") == 1);
 	CHECK(cuts(R"({"kind": "door", "start": [800, 500], "end": [1000, 500]})") == 1);
 	CHECK(cuts(R"({"kind": "shield", "start": [800, 500], "end": [1000, 500]})") == 1);
 	CHECK(cuts(R"({"kind": "button", "opens": "x", "start": [800, 500], "end": [1000, 500]})") == 1);

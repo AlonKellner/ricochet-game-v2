@@ -54,6 +54,8 @@ const std::vector<Feature> &features() {
 			{"break", "breaks", {"breaks"}},
 			{"ghost", "ghost", {"ghost"}},
 			{"door", "open", {"open"}},
+			{"switch", "when", {"when", "then_face", "then_back"}}, // Stage 214
+			{"armed", "armed", {"armed"}},
 	};
 	return fs;
 }
@@ -100,6 +102,11 @@ const json &params() {
 			{"breaks", {{"default", false}, {"doc", "gone for the rest of the shot once hit, back when the arrow lands"}}},
 			{"ghost", {{"default", false}, {"doc", "the hit toggles the arrow's ghost mode"}}},
 			{"open", {{"default", nullptr}, {"type", "string"}, {"doc", "a flag expression: the surface is gone while it holds (a door)"}}},
+			// Stage 214: a face by flag; hits by flag
+			{"when", {{"default", nullptr}, {"type", "string"}, {"doc", "a flag expression: while it holds the sides are then_face and then_back (a switchable)"}}},
+			{"then_face", {{"default", "pass"}, {"enum", FACES}, {"doc", "the face while when holds"}}},
+			{"then_back", {{"default", nullptr}, {"enum", FACES}, {"doc", "the right side's face while when holds (unset: then_face)"}}},
+			{"armed", {{"default", nullptr}, {"type", "string"}, {"doc", "a flag expression: the hits apply only while it holds (a button only a charged arrow presses)"}}},
 	};
 	return ps;
 }
@@ -141,15 +148,39 @@ json compose(const json &env, const std::string &path) {
 	if (env.value("ghost", false)) {
 		hits.push_back({{"key", "ghost"}, {"kind", "state"}, {"op", "toggle"}, {"value", true}});
 	}
-	auto side = [&](const std::string &f) {
+	auto side = [&](const std::string &f, bool with_hits) {
 		json s = {{"effect", {{"type", effect_of(f)}}}};
-		if (!hits.empty()) {
+		if (with_hits && !hits.empty()) {
 			s["hits"] = hits;
 		}
-		s["interactive"] = set(env, "plannable") ? env["plannable"].get<bool>() : f == "mirror" || !hits.empty();
+		s["interactive"] = set(env, "plannable") ? env["plannable"].get<bool>() : f == "mirror" || (with_hits && !hits.empty());
 		return s;
 	};
-	json out = {{"left", side(face)}, {"right", side(back)}};
+	// Stage 214: a face by flag (switch: when) and hits by flag (armed) -- one resolver on the flag, its `true` row the
+	// then_ faces and the hits, its DEFAULT row the faces, with the hits unless armed (switchable's row order)
+	const bool switched = set(env, "when"), armed = set(env, "armed");
+	if (switched && armed && env["when"] != env["armed"]) {
+		fail(path + ".armed", "one flag per surface: when and armed differ");
+	}
+	json out;
+	if (switched || armed) {
+		const std::string then_face = switched ? env.value("then_face", "pass") : face;
+		const std::string then_back = switched ? (set(env, "then_back") ? env["then_back"].get<std::string>() : then_face) : back;
+		json on = json::object(), otherwise = json::object();
+		on["left"] = side(then_face, true);
+		on["right"] = side(then_back, true);
+		otherwise["left"] = side(face, !armed);
+		otherwise["right"] = side(back, !armed);
+		json table = json::array();
+		table.push_back(json::array({json("true"), on}));
+		table.push_back(json::array({json("DEFAULT"), otherwise}));
+		out = json::object();
+		out["left"] = nullptr;
+		out["right"] = nullptr;
+		out["resolver"] = json::object({{"key", switched ? env["when"] : env["armed"]}, {"table", table}});
+	} else {
+		out = {{"left", side(face, true)}, {"right", side(back, true)}};
+	}
 	const std::string body = env.value("body", "block");
 	if (body == "platform") {
 		out["platform"] = true;
@@ -174,31 +205,95 @@ std::optional<json> decompose(const json &s) {
 		return std::nullopt;
 	}
 	for (auto it = s.begin(); it != s.end(); ++it) {
-		static const std::set<std::string> keys = {"left", "right", "player_solid", "platform", "presence"};
+		static const std::set<std::string> keys = {"left", "right", "player_solid", "platform", "presence", "resolver"};
 		if (!keys.count(it.key())) {
 			return std::nullopt;
 		}
 	}
-	const json &l = s.value("left", json()), &r = s.value("right", json());
-	if (!l.is_object() || !r.is_object()) {
-		return std::nullopt;
-	}
-	for (const json *side : {&l, &r}) {
-		for (auto it = side->begin(); it != side->end(); ++it) {
-			if (it.key() != "effect" && it.key() != "hits" && it.key() != "interactive") {
+	// a pair of sides: their faces, their hits (one list for both), their interactivity
+	struct Pair {
+		std::string face, back;
+		json hits, li, ri;
+	};
+	auto read_pair = [](const json &l, const json &r) -> std::optional<Pair> {
+		if (!l.is_object() || !r.is_object()) {
+			return std::nullopt;
+		}
+		for (const json *side : {&l, &r}) {
+			for (auto it = side->begin(); it != side->end(); ++it) {
+				if (it.key() != "effect" && it.key() != "hits" && it.key() != "interactive") {
+					return std::nullopt;
+				}
+			}
+		}
+		const auto face = face_of(l.value("effect", json())), back = face_of(r.value("effect", json()));
+		const json hits = l.value("hits", json::array());
+		if (!face || !back || !hits.is_array() || canonical(hits) != canonical(r.value("hits", json::array()))) {
+			return std::nullopt;
+		}
+		return Pair{*face, *back, hits, l.value("interactive", json()), r.value("interactive", json())};
+	};
+	json env = json::object();
+	std::vector<std::pair<Pair, bool>> pairs; // (each pair, whether its hits are the surface's)
+	json hits;
+	if (s.contains("resolver")) { // Stage 214: a switch (when) or armed hits -- two rows, true and DEFAULT
+		const json &rv = s["resolver"];
+		if (!s.value("left", json()).is_null() || !s.value("right", json()).is_null() || !rv.is_object() || rv.size() != 2
+				|| !rv.value("key", json()).is_string() || !rv.value("table", json()).is_array() || rv["table"].size() != 2) {
+			return std::nullopt;
+		}
+		std::optional<Pair> on, otherwise;
+		for (const json &row : rv["table"]) {
+			if (!row.is_array() || row.size() != 2 || !row[1].is_object() || row[1].size() != 2) {
+				return std::nullopt;
+			}
+			std::optional<Pair> &slot = row[0] == "true" ? on : row[0] == "DEFAULT" ? otherwise : on;
+			if (row[0] != "true" && row[0] != "DEFAULT") {
+				return std::nullopt;
+			}
+			slot = read_pair(row[1].value("left", json()), row[1].value("right", json()));
+			if (!slot) {
 				return std::nullopt;
 			}
 		}
-	}
-	const auto face = face_of(l.value("effect", json())), back = face_of(r.value("effect", json()));
-	const json hits = l.value("hits", json::array());
-	if (!face || !back || !hits.is_array() || canonical(hits) != canonical(r.value("hits", json::array()))) {
-		return std::nullopt;
-	}
-	json env = json::object();
-	env["face"] = *face;
-	if (*back != *face) {
-		env["back"] = *back;
+		if (!on || !otherwise) {
+			return std::nullopt;
+		}
+		const bool armed = !on->hits.empty() && otherwise->hits.empty();
+		if (!armed && canonical(on->hits) != canonical(otherwise->hits)) {
+			return std::nullopt;
+		}
+		const bool switched = on->face != otherwise->face || on->back != otherwise->back;
+		if (!switched && !armed) {
+			return std::nullopt; // (two rows alike: no surface element writes it)
+		}
+		if (switched) {
+			env["when"] = rv["key"];
+			env["then_face"] = on->face;
+			if (on->back != on->face) {
+				env["then_back"] = on->back;
+			}
+		}
+		if (armed) {
+			env["armed"] = rv["key"];
+		}
+		env["face"] = otherwise->face;
+		if (otherwise->back != otherwise->face) {
+			env["back"] = otherwise->back;
+		}
+		hits = on->hits;
+		pairs = {{*on, true}, {*otherwise, !armed}};
+	} else {
+		const auto p = read_pair(s.value("left", json()), s.value("right", json()));
+		if (!p) {
+			return std::nullopt;
+		}
+		env["face"] = p->face;
+		if (p->back != p->face) {
+			env["back"] = p->back;
+		}
+		hits = p->hits;
+		pairs = {{*p, true}};
 	}
 	std::optional<bool> deferred;
 	auto agree = [&](bool d) {
@@ -254,17 +349,27 @@ std::optional<json> decompose(const json &s) {
 	if (deferred && *deferred) {
 		env["deferred"] = true;
 	}
-	// the interactivity: the rule's, or one value for both sides
-	const json li = l.value("interactive", json()), ri = r.value("interactive", json());
-	if (!li.is_boolean() || !ri.is_boolean()) {
-		return std::nullopt;
+	// the interactivity: the rule's on every side, or one value for all of them
+	std::vector<std::pair<json, bool>> sides; // (its value, the rule's)
+	for (const auto &[p, own] : pairs) {
+		const bool with = own && !hits.empty();
+		sides.push_back({p.li, p.face == "mirror" || with});
+		sides.push_back({p.ri, p.back == "mirror" || with});
 	}
-	const bool lauto = *face == "mirror" || !hits.empty(), rauto = *back == "mirror" || !hits.empty();
-	if (li.get<bool>() != lauto || ri.get<bool>() != rauto) {
-		if (li != ri) {
+	bool by_rule = true;
+	for (const auto &[v, rule] : sides) {
+		if (!v.is_boolean()) {
 			return std::nullopt;
 		}
-		env["plannable"] = li;
+		by_rule = by_rule && v.get<bool>() == rule;
+	}
+	if (!by_rule) {
+		for (const auto &[v, rule] : sides) {
+			if (v != sides.front().first) {
+				return std::nullopt;
+			}
+		}
+		env["plannable"] = sides.front().first;
 	}
 	if (s.value("platform", false)) {
 		if (s.contains("player_solid")) {

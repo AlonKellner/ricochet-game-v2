@@ -202,5 +202,5 @@ TEST_CASE("flag logic: the schema -- a flag read may be an expression (it must p
 	CHECK(err(json::parse(R"J({"objective": {"goal": {"rect": [0, 0, 10, 10]}, "requires": [{"key": "a &&", "values": ["true"]}]}})J")).find("flag expression 'a &&'") != std::string::npos);
 	CHECK(err(json::parse(R"J({"elements": [{"kind": "door", "name": "d", "start": [0, 0], "end": [0, 10], "open": "(a || b"}]})J")).find("not closed") != std::string::npos);
 	CHECK(err(json::parse(R"J({"elements": [{"kind": "button", "name": "b", "start": [0, 0], "end": [0, 10], "opens": "d", "flag": "!x"}]})J")).find("a flag written is a name") != std::string::npos);
-	CHECK(err(json::parse(R"J({"elements": [{"kind": "switchable", "name": "s", "start": [0, 0], "end": [0, 10], "flag": "x ^ y"}]})J")) == "no error");
+	CHECK(err(json::parse(R"J({"elements": [{"kind": "switchable", "name": "s", "start": [0, 0], "end": [0, 10], "when": "x ^ y"}]})J")) == "no error");
 }

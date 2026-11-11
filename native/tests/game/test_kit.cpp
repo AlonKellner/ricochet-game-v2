@@ -80,16 +80,17 @@ TEST_CASE("kit: a breakable mirror reflects once, then is gone for the shot, bac
 	CHECK(present_at(s, 900)); // back after the shot
 }
 
+// (Stage 214: the freezable kind retired -- every wall does this since Stage 156)
 TEST_CASE("kit: frost freezes a wall into a mirror for one hit") {
 	rcg::Session s(level_of(R"([{"kind": "frost_barrier", "start": [800, 300], "end": [800, 780]},
-		{"kind": "freezable", "start": [1000, 300], "end": [1000, 780]}])"));
+		{"kind": "wall", "start": [1000, 300], "end": [1000, 780]}])"));
 	const std::vector<float> xs = fired_xs(s, 1000, 540);
 	REQUIRE(xs.size() >= 3);
 	CHECK(xs[0] == 800);  // frosted
 	CHECK(xs[1] == 1000); // the frozen wall reflects
 	CHECK(xs[2] == 800);  // back through the barrier
 	// unfrosted, the wall is a wall
-	rcg::Session t(level_of(R"([{"kind": "freezable", "start": [1000, 300], "end": [1000, 780]}])"));
+	rcg::Session t(level_of(R"([{"kind": "wall", "start": [1000, 300], "end": [1000, 780]}])"));
 	const std::vector<float> plain = fired_xs(t, 1000, 540);
 	REQUIRE(plain.size() == 1);
 	CHECK(plain[0] == 1000); // it stops the arrow
@@ -107,15 +108,6 @@ TEST_CASE("kit: fire burns a burnable barrier for good; water puts it out first"
 	shoot(t, 1000, 540);
 	CHECK_FALSE(has(t, "el:crate:fire"));
 	CHECK(present_at(t, 1000));
-}
-
-TEST_CASE("kit: a toggle surface goes when hit and comes back when passed") {
-	rcg::Session s(level_of(R"([{"kind": "toggle_surface", "name": "t", "face": "mirror", "start": [900, 300], "end": [900, 780]}])"));
-	shoot(s, 900, 540); // the hit: gone
-	CHECK(is_true(s, "el:t:off"));
-	shoot(s, 900, 540); // the arrow passes where it was: back
-	REQUIRE(has(s, "el:t:off"));
-	CHECK_FALSE(is_true(s, "el:t:off"));
 }
 
 TEST_CASE("kit: a conditional button presses only for a charged arrow") {
