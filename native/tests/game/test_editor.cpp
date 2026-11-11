@@ -1557,6 +1557,38 @@ TEST_CASE("editor: an enum's values are chips under its row, the current lit; an
 	REQUIRE_FALSE(ed.errors().empty()); // (one flag per surface: when and armed differ)
 	CHECK(ed.errors().front().message.find("one flag per surface") != std::string::npos);
 	ok(ed, {{"op", "remove_feature"}, {"name", "w"}, {"feature", "armed"}});
+	// Stage 215: the tags as chips, several lit; the kind's own fixed
+	auto tag_on = [&](const std::string &tag) {
+		const json panel = ok(ed, {{"op", "panel"}});
+		for (const json &r : panel["rows"]) {
+			for (size_t c = 0; r["kind"] == "actions" && c < r["options"].size(); c++) {
+				if (r["options"][c] == tag) {
+					return r["on"].size() > c && r["on"][c] == 1;
+				}
+			}
+		}
+		FAIL("no tag chip " << tag);
+		return false;
+	};
+	CHECK_FALSE(tag_on("burning"));
+	click_action(ed, "burning");
+	click_action(ed, "conductive");
+	CHECK(element(ed, "w")["tags"] == json::parse(R"(["burning", "conductive"])"));
+	CHECK(tag_on("burning"));
+	CHECK(tag_on("conductive"));
+	click_action(ed, "burning");
+	CHECK(element(ed, "w")["tags"] == json::parse(R"(["conductive"])"));
+	click_action(ed, "conductive");
+	CHECK_FALSE(element(ed, "w").contains("tags"));
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "torch"}, {"name", "t"}, {"start", {700.0, 500.0}}, {"end", {800.0, 500.0}}}}});
+	ok(ed, {{"op", "select"}, {"name", "t"}});
+	CHECK(tag_on("burning")); // (the torch's own)
+	const size_t undo = ok(ed, {{"op", "state"}})["undo"].get<size_t>();
+	click_action(ed, "burning");
+	CHECK_FALSE(element(ed, "t").contains("tags"));
+	CHECK(ok(ed, {{"op", "state"}})["undo"].get<size_t>() == undo); // (nothing done)
+	CHECK(tag_on("burning"));
+	ok(ed, {{"op", "select"}, {"name", "w"}});
 	// an object's options (Stage 146's cycled rows) as chips too
 	ok(ed, {{"op", "set"}, {"path", "/objects"}, {"value", json::parse(R"([{"name": "box", "circle": {"center": [1000, 400], "radius": 16}}])")}});
 	ok(ed, {{"op", "select"}, {"item", "object:box"}});

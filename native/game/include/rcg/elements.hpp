@@ -46,6 +46,11 @@ json params_of(const json &tmpl, const json &element, const std::string &name, c
 // The element's surfaces: rc-level/1 surfaces without ids, labelled.
 std::vector<json> expand(const json &tmpl, const json &element, const std::string &name, const std::string &path);
 
+// Stage 215: what an element's tags give its surfaces (Stage 156; level2's lowering, match's inverse): every side --
+// a missing one a pass that carries them -- and every resolver row the tags' hits (tag_hits); frosted only on sides
+// that bear frost (LevelError naming `path`). A pre-transform surface takes none.
+void apply_tags(std::vector<json> &surfaces, const std::string &name, const std::vector<std::string> &tags, const std::string &path);
+
 // The template's key `key` (a template key holding expressions: "shade") evaluated
 // for the element; null when the template has none.
 json evaluate(const json &tmpl, const json &element, const std::string &name, const std::string &key, const std::string &path);

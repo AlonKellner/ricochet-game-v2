@@ -923,11 +923,15 @@ The surface kinds are **presets** of this element (docs/ELEMENTS.md): a name, a 
 `stop`, body `block`; a shield `stop`, `pass`; a fence `pass`, `block`; a passthrough `pass`, `pass`; a platform `pass`,
 `platform`; a mirror `mirror`, `pass`; a button a pass that writes its flag; a door a wall present while `door:<name>` is
 unset. Every preset takes every key: a button with body `block` is one the player stands on, a door that is also a button
-writes a flag when hit, a target may break. Kinds that need more than this (inversions, projections, portals, the kit of
-§10.6's arrow states) are templates that take `body` (`pass` \| `block`) for their solidity. Since Stage 214 a switchable
+writes a flag when hit, a target may break. Kinds that need more than this (inversions, projections, portals) are templates that take `body` (`pass` \| `block`) for their solidity. Since Stage 214 a switchable
 is a preset (a switch: face `stop`, `then_face` `pass`, body `pass`; labelled `FlagMirror` when it turns mirror, else
 `Gate`), and so is a conditional button (a button armed by `shot:charge`, face `stop`, op `set`); the toggle surface and
-the freezable wall are retired (no level used them; every wall reflects a frosted arrow since Stage 156).
+the freezable wall are retired (no level used them; every wall reflects a frosted arrow since Stage 156). Since Stage
+215 the kit of §10.6's arrow states is presets too, a preset taking default **tags** (§10.6.3) as a template does: a
+torch is a plannable pass tagged `burning`, a frost barrier the same tagged `frosted`, a conductor a pass tagged
+`conductive`, a battery a wall tagged `conductive`, `charged`, `powered`; a charged door a door on its own
+`el:<name>:charge`, tagged `conductive`; water and a charger buttons that set `shot:fire` false and `shot:charge` true; a
+burnable a switch on `shot:fire` (then a pass) and a door on its own `el:<name>:fire`, tagged `flammable`.
 
 **Its look** follows from the pair (§22.2): the face's colour, and a body that blocks while the face does not stop drawn
 with a steel band (a fence, a solid mirror, a blocking button). A wall (stop and block) is plain red, a shield (stop, not
@@ -3286,4 +3290,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.109.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.110.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

@@ -108,6 +108,7 @@ private:
 		std::vector<int> marks = {};      // Stage 167: a level row's characters the search matched
 		std::vector<nlohmann::json> cmds = {}; // Stage 203: an Actions row's commands, one per option
 		int lit = -1;                          // ... the option lit (Stage 204: the flag it has)
+		std::vector<char> on = {};             // ... the options lit, several (Stage 215: the tags it has)
 	};
 
 	// the document

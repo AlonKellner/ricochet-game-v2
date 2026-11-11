@@ -107,6 +107,12 @@ std::map<std::string, std::vector<Old>> retired() {
 								   {"off", {"pass", "stop", "mirror"}, [](const json &v) { return same("face", v); }}, keep("body", {"pass", "block"})}},
 			{"conditional_button", {keep("flag", {"lamp"}), keep("op", {"set", "toggle"}), keep("value", {true, 2.0}),
 										   {"when", {"shot:charge", "det:p && !q"}, [](const json &v) { return same("armed", v); }}, keep("body", {"pass", "block"})}},
+			// Stage 215: the kit (their tags compared on their own: the lowering gives them)
+			{"torch", {keep("body", {"pass", "block"})}}, {"frost_barrier", {keep("body", {"pass", "block"})}},
+			{"conductor", {keep("face", {"pass", "stop"}), keep("body", {"pass", "block"})}}, {"battery", {keep("body", {"pass", "block"})}},
+			{"charged_door", {keep("body", {"pass", "block"})}}, {"burnable", {keep("body", {"pass", "block"})}},
+			{"water", {{"fire", {"shot:fire", "lamp"}, [](const json &v) { return same("flag", v); }}, keep("body", {"pass", "block"})}},
+			{"charger", {{"charge", {"shot:charge", "lamp"}, [](const json &v) { return same("flag", v); }}, keep("body", {"pass", "block"})}},
 	};
 }
 
@@ -114,13 +120,14 @@ std::map<std::string, std::vector<Old>> retired() {
 
 TEST_CASE("surface element: every retired kind expands as its preset does, over every value of its parameters (Stage 207)") {
 	const auto kinds = retired();
-	CHECK(kinds.size() == 17);
+	CHECK(kinds.size() == 25);
 	size_t n = 0;
 	for (const auto &[kind, olds] : kinds) {
 		CAPTURE(kind);
 		const json old_t = rcg::elements::prepare(read_json(ROOT / "native" / "tests" / "game" / "retired_templates" / (kind + ".json")), kind);
 		const json &new_t = rcg::elements::builtin().at(kind);
 		CHECK(new_t.value("preset", false));
+		CHECK(new_t.value("tags", json::array()) == old_t.value("tags", json::array()));
 		// every combination of the parameters' values (and flip)
 		std::function<void(size_t, json, json)> each = [&](size_t i, json old_e, json new_e) {
 			if (i == olds.size()) {
@@ -354,4 +361,30 @@ TEST_CASE("surface element: a face by flag and hits by flag -- switch and armed 
 		}
 	}
 	CHECK(rcg::canonical(got) == rcg::canonical(lv["elements"]));
+}
+
+TEST_CASE("surface element: the kit as presets -- migrate reads a tagged kind back, its name from its tags' hits (Stage 215)") {
+	auto at = [](double x) { return json{{"start", {x, 300.0}}, {"end", {x, 700.0}}, {"via", {x, 500.0}}}; };
+	auto el = [&](const char *kind, const char *name, double x, json more = json::object()) {
+		json e = at(x);
+		e["kind"] = kind;
+		e["name"] = name;
+		e.update(more);
+		return e;
+	};
+	json lv = {{"schema", "rc-level/2"}, {"elements", json::array()}};
+	for (json e : {el("torch", "flame", 300), el("frost_barrier", "frost_barrier_1", 400), el("conductor", "wire", 500, {{"face", "stop"}}),
+				 el("battery", "cell", 600), el("charged_door", "gate", 700), el("water", "water_1", 800), el("charger", "charger_1", 900),
+				 el("burnable", "crate", 1000, {{"body", "pass"}})}) {
+		lv["elements"].push_back(e);
+	}
+	const json back = rcg::migrate_level(rcg::lower_level(lv).level);
+	json got = json::array();
+	for (const json &e : back["elements"]) {
+		if (e.value("kind", "") != "edges") {
+			got.push_back(e);
+		}
+	}
+	CHECK(rcg::canonical(got) == rcg::canonical(lv["elements"]));
+	CHECK_FALSE(back.contains("flags")); // (a battery's charge: its tag's, not the level's)
 }

@@ -200,7 +200,7 @@ each feature it has under the feature's name -- its parameters (a button's `flag
 `deferred`). The feature its kind is about is marked `(the kind's)` and has no `remove`: pick another kind to drop
 it. Then a row of `+ <feature>` chips adds the features it does not have, each with a starting value from the kind
 that is that feature's: `+ button` a `flag` "switch", `+ door` an `open` "door:<name>", `+ spawn` the spawner's
-surface, `+ reset` its channels, `+ switch` a `when` "switch", `+ armed` `shot:charge`, the others `true`. A feature typed into a field shows its rows too. Renaming an element carries the buttons that
+surface, `+ reset` its channels, `+ switch` a `when` "switch", `+ armed` `shot:charge`, the others `true`. Under an element's `tags` a row of chips gives or takes each of the six tags (`flammable`, `burning`, `conductive`, `charged`, `powered`, `frosted`; Stage 215): lit, it has it; the kind's own stay lit and fixed. A feature typed into a field shows its rows too. Renaming an element carries the buttons that
 open it (their `opens`). With nothing selected, the panel edits the level: its name, bounds, gravity, room,
 player's start, initial flags, goal, the goal's conditions (`requires`), detectors and objects. The goal (green),
 the detectors (yellow) and the objects (as the game draws them, Stage 208) are drawn on the canvas.

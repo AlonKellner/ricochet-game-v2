@@ -819,20 +819,28 @@ json Editor::op(const json &cmd) {
 				refuse("'" + e.value("name", "") + "' has the " + name + " already");
 			}
 			// its starting value: the kind of surface that is that feature's (its example, else its default) -- one about
-			// it alone first, then one about it among others (Stage 214: armed, the conditional button's) -- else true
+			// it alone first, then one about it among others (Stage 214: armed, the conditional button's), the first in
+			// the palette (Stage 215: a door's, not a charged door's) -- else true
 			json value = true;
 			bool found = false;
 			for (const bool alone : {true, false}) {
-				for (auto it = ks.begin(); it != ks.end() && !found; ++it) {
+				double best = 0.0;
+				for (auto it = ks.begin(); it != ks.end(); ++it) {
 					const json fs = it->value("features", json::array());
-					if (it->value("preset", false) && (alone ? fs.size() == 1 && fs[0] == name : std::find(fs.begin(), fs.end(), json(name)) != fs.end())) {
-						const json ex = it->value("example", json::object());
-						const json ds = it->value("params", json::object()).value(f->key, json::object()).value("default", json());
-						if (ex.contains(f->key) || (!ds.is_null() && ds != json(false))) {
-							value = ex.contains(f->key) ? ex[f->key] : ds;
-							found = true;
+					if (!found || it->value("priority", 1e9) < best) {
+						if (it->value("preset", false) && (alone ? fs.size() == 1 && fs[0] == name : std::find(fs.begin(), fs.end(), json(name)) != fs.end())) {
+							const json ex = it->value("example", json::object());
+							const json ds = it->value("params", json::object()).value(f->key, json::object()).value("default", json());
+							if (ex.contains(f->key) || (!ds.is_null() && ds != json(false))) {
+								value = ex.contains(f->key) ? ex[f->key] : ds;
+								found = true;
+								best = it->value("priority", 1e9);
+							}
 						}
 					}
+				}
+				if (found) {
+					break;
 				}
 			}
 			if (value.is_string()) { // (door:${name} -> door:<the element's name>)
@@ -1146,6 +1154,7 @@ json Editor::op(const json &cmd) {
 			if (r.kind == Row::Actions) {
 				rs.back()["options"] = r.options; // (Stage 203)
 				rs.back()["lit"] = r.lit;         // (Stage 212)
+				rs.back()["on"] = r.on;           // (Stage 215)
 			}
 		}
 		return {{"rows", rs}};

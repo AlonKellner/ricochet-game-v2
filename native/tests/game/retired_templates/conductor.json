@@ -1,0 +1,63 @@
+{
+ "doc": "A conductor (a wire, a metal plate): it passes charge to every conductive element and object it touches (GAME_SPEC 10.6). face: wall stops the arrow, pass lets it through.",
+ "label": "Conductor",
+ "params": {
+  "body": {
+   "default": "block",
+   "doc": "what the player and objects do: pass, or block (collide with it)",
+   "enum": ["pass", "block"]
+  },
+  "face": {
+   "default": "pass",
+   "doc": "the arrow passes it, or stops (pass or stop)",
+   "enum": ["pass", "stop"]
+  }
+ },
+ "priority": 60,
+ "surfaces": [
+  {
+   "left": {
+    "$switch": "face",
+    "cases": {
+     "pass": {
+      "effect": {
+       "type": "pass"
+      },
+      "interactive": false
+     },
+     "stop": {
+      "effect": {
+       "type": "terminal"
+      },
+      "interactive": false
+     }
+    }
+   },
+   "player_solid": {
+    "$switch": "body",
+    "cases": {
+     "block": true,
+     "pass": false
+    }
+   },
+   "right": {
+    "$switch": "face",
+    "cases": {
+     "pass": {
+      "effect": {
+       "type": "pass"
+      },
+      "interactive": false
+     },
+     "stop": {
+      "effect": {
+       "type": "terminal"
+      },
+      "interactive": false
+     }
+    }
+   }
+  }
+ ],
+ "tags": ["conductive"]
+}

@@ -419,41 +419,7 @@ Lowered lower_level(const json &v2) {
 			out.tagged.push_back({index, name, tags, at});
 		}
 		// Stage 156: what the tags give every side (a missing side: a pass that carries them), the flags they start
-		const json extra = tag_hits(name, tags);
-		if (!extra.empty()) {
-			const bool frost = std::find(tags.begin(), tags.end(), "frosted") != tags.end();
-			auto give = [&](json &sides) {
-				for (const char *k : {"left", "right"}) {
-					json &sd = sides[k];
-					if (sd.is_null()) {
-						sd = {{"effect", {{"type", "pass"}}}, {"interactive", false}};
-					}
-					const std::string t = sd.contains("effect") ? sd["effect"].value("type", "pass") : "pass";
-					if (frost && !frost_bearing(t)) {
-						fail(origin + ".tags", "frosted: its sides must pass, reflect or invert (a " + t + " side cannot bear frost)");
-					}
-					if (!sd.contains("hits")) {
-						sd["hits"] = json::array();
-					}
-					for (const json &h : extra) {
-						sd["hits"].push_back(h);
-					}
-				}
-			};
-			for (json &s : expanded) {
-				if (s.value("pre_transform", false)) {
-					continue;
-				}
-				give(s);
-				if (s.contains("resolver") && s["resolver"].is_object() && s["resolver"].value("table", json()).is_array()) {
-					for (json &row : s["resolver"]["table"]) {
-						if (row.is_array() && row.size() == 2 && row[1].is_object()) {
-							give(row[1]);
-						}
-					}
-				}
-			}
-		}
+		elements::apply_tags(expanded, name, tags, origin);
 		for (const std::string &k : tag_initial_flags(name, tags)) {
 			if (!out.flags.contains(k)) {
 				out.flags[k] = true;

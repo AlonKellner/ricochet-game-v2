@@ -54,6 +54,14 @@ shows). Every preset takes every key, for example a button the player stands on:
 | `door` | A door: a barrier that exists while its flag expression `open` is unset or false, and is gone (for the arrow and the player) while it is true. Drawn with amber posts across its ends and an amber core -- as is any surface given an `open` (Stage 213). A button opens it (`opens`: its name). | `open`="door:${name}" | `Door` |
 | `switchable` | A surface that switches with a flag (a categorical resolver, GAME_SPEC 9.4): its `then_face` (and `then_back`) sides while the flag expression `when` holds, its `face` (and `back`) otherwise. Present either way (see `door` for one that disappears). Stage 214: a preset (the switch feature). | `when` (required), `face`="stop", `then_face`="pass", `body`="pass" | `Gate` / `FlagMirror` (by `then_face`) |
 | `conditional_button` | A button only a charged (or burning, frosted...) arrow presses: while `armed` holds the hit sets or toggles `flag`; otherwise it is a wall. Stage 214: a preset (a button, armed). | `armed`="shot:charge", `flag` (required), `op`="set", `value`=true, `face`="stop", `body`="pass" | `CondButton` |
+| `torch` | A torch: a pass-through surface on fire (tag `burning`). An arrow passing it catches fire (`shot:fire`). Stage 215: a preset. | `face`="pass", `body`="pass", `plannable`=true; tags `burning` | `Torch` |
+| `frost_barrier` | A frost barrier (tag `frosted`): an arrow passing it is frosted (`shot:frost`); the barrier stays. A frosted arrow that would be stopped is reflected (a line) or inverted (a circle) instead, once. Stage 215: a preset. | `face`="pass", `body`="pass", `plannable`=true; tags `frosted` | `Frost` |
+| `conductor` | A conductor (tag `conductive`): touching it, the arrow and it swap their charge (`shot:charge`, `el:<name>:charge`). Stage 215: a preset. | `face`="pass", `body`="block"; tags `conductive` | `Conductor` |
+| `battery` | A battery (tags `conductive`, `charged`, `powered`): a conductor that starts charged. An uncharged arrow touching it takes the charge. Stage 215: a preset. | `face`="stop", `body`="block"; tags `conductive`, `charged`, `powered` | `Battery` |
+| `charged_door` | A charged door (tag `conductive`): a wall that is gone while charged (`el:<name>:charge`). A charged arrow gives it the charge and opens it. Stage 215: a preset, a door on its own charge. | `open`="el:${name}:charge", `face`="stop", `body`="block"; tags `conductive` | `ChargedDoor` |
+| `water` | Water: an extinguishing barrier. An arrow passing it is put out (`shot:fire` = false); the player passes it too. Stage 215: a preset, a button. | `flag`="shot:fire", `op`="set", `value`=false, `face`="pass", `body`="pass" | `Water` |
+| `charger` | A charger: an endless source. An arrow passing it is charged (`shot:charge`); the charger stays charged. Stage 215: a preset, a button. | `flag`="shot:charge", `op`="set", `value`=true, `face`="pass", `body`="pass" | `Charger` |
+| `burnable` | A burnable barrier (tag `flammable`): solid, but an arrow on fire burns through it. It catches fire (`el:<name>:fire`) and is gone from then on. Stage 215: a preset -- a switch on `shot:fire` (`then_face` pass), a door on its own fire. | `when`="shot:fire", `open`="el:${name}:fire", `face`="stop", `body`="block"; tags `flammable` | `Burnable` |
 | `grapple` | A grappling surface: when the arrow hits it, the player is pulled along the arrow's path to the hit (when the shot lands), stopping at whatever blocks the player first (a fence does; a shield does not). | `grapple`=true | `Grapple` |
 | `breakable` | A breakable surface: hit, it does what its face does, then it is gone for the rest of the shot; it is back when the arrow lands. Flag `shot:<name>:broken`. | `breaks`=true | `Breakable` |
 | `spawner` | A spawner (GAME_SPEC 10.6.1): when hit it places `spawn` (an `rc-level/1` surface in a local frame, centred on the origin) at the hit when the arrow lands; it is gone until a resetter re-arms its channel. | `face`="pass", `body`="pass"; requires `spawn` | `Spawner` |
@@ -63,7 +71,7 @@ shows). Every preset takes every key, for example a button the player stands on:
 ## The templates
 
 The other kinds are templates (below): what they do is more than the surface element says (a circle's inversion, a
-projection, a portal pair, the kit of arrow states). Each takes `body` (`pass` | `block`) for
+projection, a portal pair). Each takes `body` (`pass` | `block`) for
 its solidity.
 
 | Kind | What it is | Parameters (defaults) | Label |
@@ -72,14 +80,6 @@ its solidity.
 | `projection` | A projection (GAME_SPEC 10.4) on both sides: the arrow leaves along the carrier's normal (line/circle normal) or along a fixed direction (directional: `normal`), forward or back (`reverse`). | `type`="line_normal_projection" (or circle_normal_, line_directional_, circle_directional_projection), `reverse`=false, `normal` (directional), `body`="pass" | by type and reverse (`Projection`, `CircleDirBack`, ...) |
 | `portal` | A portal pair: the surface and its image, the surface moved by z -> e^{i theta} z + d (two ids). The arrow entering one leaves the other. | `d` (required), `theta`=0.0, `body`="pass" | `Portal` |
 | `pre_inversion` | A pre-transform inversion circle (GAME_SPEC 9.5): never hit, never clicked; the level starts after it (the horizon). Built after every other surface. | -- | `PreTransform` |
-| `frost_barrier` | A frost barrier (tag `frosted`): an arrow passing it is frosted (`shot:frost`); the barrier stays. A frosted arrow that would be stopped is reflected (a line) or inverted (a circle) instead, once. | `body`="pass" | `Frost` |
-| `torch` | A torch: a pass-through surface on fire (tag `burning`). An arrow passing it catches fire (`shot:fire`). | `body`="pass" | `Torch` |
-| `water` | Water: an extinguishing barrier. An arrow passing it is put out (`shot:fire` = false); the player passes it too. | `fire`="shot:fire", `body`="pass" | `Water` |
-| `burnable` | A burnable barrier (tag `flammable`): solid, but an arrow on fire burns through it. It catches fire (`el:<name>:fire`) and is gone from then on. | `body`="block" | `Burnable` |
-| `charger` | A charger: an endless source. An arrow passing it is charged (`shot:charge`); the charger stays charged. | `charge`="shot:charge", `body`="pass" | `Charger` |
-| `conductor` | A conductor (tag `conductive`): touching it, the arrow and it swap their charge (`shot:charge`, `el:<name>:charge`). | `face`="pass" (or "stop"), `body`="block" | `Conductor` |
-| `battery` | A battery (tags `conductive`, `charged`, `powered`): a conductor that starts charged. An uncharged arrow touching it takes the charge. | `body`="block" | `Battery` |
-| `charged_door` | A charged door (tag `conductive`): a wall that is gone while charged (`el:<name>:charge`). A charged arrow gives it the charge and opens it. | `body`="block" | `ChargedDoor` |
 | `dark` | A dark barrier: one side of its line (or the inside or outside of its circle) is a dark region (GAME_SPEC 9.9). Its surface is never present: the shadow's boundary is the game's. | `side`="auto" (left, inside), `when`="" (always) | none (drawn by the shadow) |
 | `light` | A light region: one side of its line, the inside of its circle (a light source's reach) or its outside. Light undoes the shadow wherever it reaches. | `side`="auto", `when`="" | none |
 
