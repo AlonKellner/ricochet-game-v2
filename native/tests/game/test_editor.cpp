@@ -1545,6 +1545,18 @@ TEST_CASE("editor: an enum's values are chips under its row, the current lit; an
 	CHECK(element(ed, "w")["body"] == "platform");
 	ok(ed, {{"op", "undo"}});
 	CHECK_FALSE(element(ed, "w").contains("body"));
+	// Stage 214: a switch's then_back, unset its then_face's
+	ok(ed, {{"op", "add_feature"}, {"name", "w"}, {"feature", "switch"}});
+	CHECK(element(ed, "w")["when"] == "switch");
+	CHECK(chips_under(ed, "then_back")["options"] == json::parse(R"(["= then_face", "stop", "pass", "mirror"])"));
+	CHECK(chips_under(ed, "then_back")["lit"] == 0);
+	click_chip(ed, "then_face", "mirror");
+	CHECK(element(ed, "w")["then_face"] == "mirror");
+	ok(ed, {{"op", "add_feature"}, {"name", "w"}, {"feature", "armed"}});
+	CHECK(element(ed, "w")["armed"] == "shot:charge");
+	REQUIRE_FALSE(ed.errors().empty()); // (one flag per surface: when and armed differ)
+	CHECK(ed.errors().front().message.find("one flag per surface") != std::string::npos);
+	ok(ed, {{"op", "remove_feature"}, {"name", "w"}, {"feature", "armed"}});
 	// an object's options (Stage 146's cycled rows) as chips too
 	ok(ed, {{"op", "set"}, {"path", "/objects"}, {"value", json::parse(R"([{"name": "box", "circle": {"center": [1000, 400], "radius": 16}}])")}});
 	ok(ed, {{"op", "select"}, {"item", "object:box"}});

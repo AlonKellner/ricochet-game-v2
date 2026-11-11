@@ -1671,6 +1671,7 @@ std::vector<Editor::Row> Editor::rows() const {
 				const bool set = e.contains(key);
 				std::string value = set ? spell(e[key])
 						: key == "back" && spec.value("default", json()).is_null() ? "(the face)"
+						: key == "then_back" && spec.value("default", json()).is_null() ? "(then_face)" // (Stage 214)
 						: key == "plannable" && spec.value("default", json()).is_null() ? "(auto)" // (Stage 212: by its sides)
 						: spec.contains("default") && spec["default"].is_null() ? "(none)"
 						: spec.contains("default") ? "(" + spell(spec["default"]) + ")"
@@ -1913,10 +1914,10 @@ std::vector<Editor::Row> Editor::chip_rows(const Row &r) const {
 			return out;
 		}
 		const json dflt = spec.value("default", json());
-		if (f.key == "back" && dflt.is_null()) {
-			lit = e.contains("back") ? -1 : 0;
-			labels.push_back("= face");
-			cmds.push_back({{"op", "set"}, {"name", f.element}, {"key", "back"}, {"value", nullptr}});
+		if ((f.key == "back" || f.key == "then_back") && dflt.is_null()) { // (Stage 214: then_back unset is then_face)
+			lit = e.contains(f.key) ? -1 : 0;
+			labels.push_back(f.key == "back" ? "= face" : "= then_face");
+			cmds.push_back({{"op", "set"}, {"name", f.element}, {"key", f.key}, {"value", nullptr}});
 		}
 		for (const json &v : values) {
 			if (e.contains(f.key) ? e[f.key] == v : dflt == v) {
@@ -2238,8 +2239,9 @@ void Editor::click_row(const Row &r, unsigned mods) {
 			opts.push_back(spell(v));
 		}
 		std::string cur = e.contains(f.key) ? spell(e[f.key]) : spell(spec.value("default", json()));
-		if (f.key == "back" && !e.contains("back") && spec.value("default", json()).is_null()) { // (Stage 207: unset, the face's)
-			cur = e.contains("face") ? spell(e["face"]) : spell(ks[e.value("kind", "")]["params"]["face"].value("default", json()));
+		if ((f.key == "back" || f.key == "then_back") && !e.contains(f.key) && spec.value("default", json()).is_null()) { // (Stage 207: unset, the face's)
+			const std::string of = f.key == "back" ? "face" : "then_face";
+			cur = e.contains(of) ? spell(e[of]) : spell(ks[e.value("kind", "")]["params"][of].value("default", json()));
 		}
 		const std::string next = cycle(opts, cur);
 		for (const json &v : spec["enum"]) {
