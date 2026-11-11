@@ -35,6 +35,11 @@ double wrapf(double value, double lo, double hi);
 void dashed(std::vector<Call> &out, const SegGeom &seg, const Color &color, double width);
 void outline_seg(std::vector<Call> &out, const SegGeom &seg, const Color &color, double width, bool dash);
 
+// Stage 209: the arrow's states as glyphs (an x of fire, a chevron of charge pointing along `dir`, a star of frost):
+// along its path, and as the marks of what gives them.
+enum class Glyph { Fire, Charge, Frost };
+void state_glyph(std::vector<Call> &out, Glyph g, const V2 &at, const V2 &dir, double size);
+
 // A side's colour by what it does (SurfaceNode.config_color).
 Color config_color(const BuiltSide *cfg);
 

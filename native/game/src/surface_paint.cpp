@@ -177,7 +177,50 @@ Color config_color(const BuiltSide *cfg) {
 	return e.back ? PROJ_BACK : PROJ_FWD;
 }
 
+void state_glyph(std::vector<Call> &out, Glyph g, const V2 &p, const V2 &d, double s) {
+	const V2 n = V2::of(-double(d.y), double(d.x));
+	auto seg = [&](double ax, double ay, double bx, double by, const Color &c) {
+		out.push_back(line(V2::of(double(p.x) + ax, double(p.y) + ay), V2::of(double(p.x) + bx, double(p.y) + by), c, 2.0));
+	};
+	if (g == Glyph::Fire) {
+		seg(-s, -s, s, s, MARK_FIRE);
+		seg(-s, s, s, -s, MARK_FIRE);
+	} else if (g == Glyph::Charge) {
+		seg(-d.x * s + n.x * s, -d.y * s + n.y * s, 0, 0, MARK_CHARGE);
+		seg(-d.x * s - n.x * s, -d.y * s - n.y * s, 0, 0, MARK_CHARGE);
+	} else {
+		for (int q = 0; q < 3; q++) {
+			const double a = 3.14159265358979 * q / 3.0;
+			seg(-std::cos(a) * s, -std::sin(a) * s, std::cos(a) * s, std::sin(a) * s, MARK_FROST);
+		}
+	}
+}
+
 namespace {
+
+bool starts_with(const std::string &s, const char *p) { return s.rfind(p, 0) == 0; }
+bool ends_with(const std::string &s, const std::string &t) { return s.size() >= t.size() && s.compare(s.size() - t.size(), t.size(), t) == 0; }
+
+// Stage 209: what a hit's mark is. A grapple and a pull are drawn along the surface instead, and a pass side
+// writing a plain flag says so by its colour.
+enum class Mark { None, Flag, Target, Spawn, Reset, Break, Pop, Fire, Charge, Frost };
+Mark mark_of(const HitSpec &h, const BuiltSide &side) {
+	if (h.kind == "target") return Mark::Target;
+	if (h.kind == "spawn") return Mark::Spawn;
+	if (h.kind == "reset") return Mark::Reset;
+	if (h.kind == "grapple" || h.kind == "pull") return Mark::None;
+	if (h.kind != "state") return Mark::Flag;
+	if (starts_with(h.key, "shot:") && ends_with(h.key, ":broken")) return Mark::Break;
+	if (starts_with(h.key, "obj:") && ends_with(h.key, ":popped")) return Mark::Pop;
+	if (ends_with(h.key, "fire")) return Mark::Fire;
+	if (ends_with(h.key, "charge")) return Mark::Charge;
+	if (ends_with(h.key, "frost")) return Mark::Frost;
+	return side.effect.type == "pass" ? Mark::None : Mark::Flag;
+}
+
+bool has_hit(const BuiltSide *side, const char *kind) {
+	return side != nullptr && std::any_of(side->hits.begin(), side->hits.end(), [&](const HitSpec &h) { return h.kind == kind; });
+}
 
 // One surface node's _draw (a piece of a surface).
 struct SurfacePainter {
@@ -311,17 +354,31 @@ struct SurfacePainter {
 		return (seg.determine_side(probe) == rc::Side::Left ? Side::Left : Side::Right) == side ? n : -n;
 	}
 
-	void marker(const HitSpec &h, const V2 &at) {
+	// a hit's mark at `at`, `dir` along the surface (Stage 209: one per feature)
+	void marker(Mark m, bool deferred, const V2 &at, const V2 &dir) {
 		const double s = MARKER_SIZE;
-		if (h.kind == "target") {
+		const V2 n = rot90(dir);
+		if (m == Mark::Target) {
 			out.push_back(arc(at, s, 0.0, rcg::TAU, 16, TARGET_COLOR, 1.5));
 			out.push_back(circle(at, 1.5, TARGET_COLOR));
-		} else if (h.kind == "spawn") {
+		} else if (m == Mark::Spawn) {
 			out.push_back(line(at - V2::of(s, 0), at + V2::of(s, 0), SPAWN_COLOR, 2.0));
 			out.push_back(line(at - V2::of(0, s), at + V2::of(0, s), SPAWN_COLOR, 2.0));
-		} else if (h.kind == "reset") {
+		} else if (m == Mark::Reset) {
 			out.push_back(line(at - V2::of(s, s), at + V2::of(s, s), RESET_COLOR, 2.0));
 			out.push_back(line(at - V2::of(s, -s), at + V2::of(s, -s), RESET_COLOR, 2.0));
+		} else if (m == Mark::Break) { // a crack: a zigzag across the surface
+			const V2 p0 = at - vs(n, s) - vs(dir, s * 0.3), p1 = at - vs(n, s * 0.3) + vs(dir, s * 0.5), p2 = at + vs(n, s * 0.3) - vs(dir, s * 0.5),
+					   p3 = at + vs(n, s) + vs(dir, s * 0.3);
+			out.push_back(stroke(Kind::Polyline, {p0, p1, p2, p3}, BREAK_COLOR, 2.0));
+		} else if (m == Mark::Pop) { // a burst: six short rays
+			for (int q = 0; q < 6; q++) {
+				const double a = rcg::TAU * q / 6.0;
+				const V2 u = V2::of(std::cos(a), std::sin(a));
+				out.push_back(line(at + vs(u, s * 0.4), at + vs(u, s * 1.1), POP_COLOR, 1.5));
+			}
+		} else if (m == Mark::Fire || m == Mark::Charge || m == Mark::Frost) {
+			state_glyph(out, m == Mark::Fire ? Glyph::Fire : m == Mark::Charge ? Glyph::Charge : Glyph::Frost, at, dir, s);
 		} else {
 			Call k;
 			k.kind = Kind::ColoredPolygon;
@@ -329,32 +386,116 @@ struct SurfacePainter {
 			k.colors = {FLAG_TOGGLER_COLOR};
 			out.push_back(k);
 		}
-		if (h.deferred) {
+		if (deferred) {
 			out.push_back(circle(at, 2.0, DEFERRED_DOT));
 		}
 	}
 
+	// Stage 209: the marks of each side's hits, in a row by the surface's marker point (a line's middle, an arc's
+	// via, a full circle's top), MARK_OFFSET off it on the side's half; along an arc the row follows it. A full
+	// circle whose sides mark alike shows them once, outside.
 	void hit_markers(const BuiltSide *left, const BuiltSide *right) {
-		const V2 via = seg.v;
-		const V2 tangent = marker_tangent(via);
-		for (Side side : {Side::Left, Side::Right}) {
-			const BuiltSide *cfg = side == Side::Left ? left : right;
+		struct Item {
+			Mark mark;
+			bool deferred;
+		};
+		auto marks_of = [&](const BuiltSide *cfg) {
+			std::vector<Item> out_marks;
 			if (cfg == nullptr) {
+				return out_marks;
+			}
+			for (const HitSpec &h : cfg->hits) {
+				const Mark m = mark_of(h, *cfg);
+				const bool seen = std::any_of(out_marks.begin(), out_marks.end(), [&](const Item &it) { return it.mark == m && it.deferred == h.deferred; });
+				if (m != Mark::None && !seen) {
+					out_marks.push_back({m, h.deferred});
+				}
+			}
+			return out_marks;
+		};
+		const std::vector<Item> lm = marks_of(left), rm = marks_of(right);
+		const bool same = lm.size() == rm.size() && std::equal(lm.begin(), lm.end(), rm.begin(), [](const Item &a, const Item &b) { return a.mark == b.mark && a.deferred == b.deferred; });
+		const V2 anchor = marker_point(surface.seg);
+		const bool round = !surface.seg.is_line();
+		const V2 ctr = round ? rc::arc::center_of(surface.seg.get_carrier()) : V2{};
+		const double r = round ? surface.seg.get_carrier().radius() : 0.0;
+		for (Side side : {Side::Left, Side::Right}) {
+			const std::vector<Item> &marks = side == Side::Left ? lm : rm;
+			if (marks.empty()) {
 				continue;
 			}
-			std::vector<const HitSpec *> marks;
-			for (const HitSpec &h : cfg->hits) {
-				if (h.kind == "state" && cfg->effect.type == "pass") {
-					continue;
-				}
-				marks.push_back(&h);
+			const V2 nrm = marker_normal(side, anchor);
+			const bool outward = !round || double(nrm.x) * (double(anchor.x) - ctr.x) + double(nrm.y) * (double(anchor.y) - ctr.y) > 0;
+			if (surface.seg.full && same && !outward) {
+				continue; // (drawn outside only)
 			}
-			const V2 normal = vs(marker_normal(side, via), MARKER_SIZE + 6.0);
+			const V2 dir = marker_tangent(anchor);
 			for (size_t i = 0; i < marks.size(); i++) {
 				const double k = double(i) - double(marks.size() - 1) / 2.0;
-				const V2 at = via + normal + vs(vs(tangent, MARKER_SPACING), k);
-				marker(*marks[i], at);
+				V2 at, along = dir;
+				if (round) { // on the offset arc, by arc length
+					const double rr = outward ? r + MARK_OFFSET : std::max(r - MARK_OFFSET, r * 0.5);
+					const double a0 = std::atan2(double(anchor.y) - ctr.y, double(anchor.x) - ctr.x) + k * MARKER_SPACING / rr;
+					at = V2::of(double(ctr.x) + rr * std::cos(a0), double(ctr.y) + rr * std::sin(a0));
+					along = V2::of(-std::sin(a0), std::cos(a0));
+				} else {
+					at = anchor + vs(nrm, MARK_OFFSET) + vs(vs(dir, MARKER_SPACING), k);
+				}
+				marker(marks[i].mark, marks[i].deferred, at, along);
 			}
+		}
+	}
+
+	// Stage 209 (the user's option B): a grapple's barbs along this piece, on each side that grapples, in the journey's
+	// mint -- every BARB_SPACING of its length, leaning back along it
+	void grapple_barbs(const BuiltSide *left, const BuiltSide *right) {
+		for (Side side : {Side::Left, Side::Right}) {
+			if (!has_hit(side == Side::Left ? left : right, "grapple")) {
+				continue;
+			}
+			const bool round = !seg.is_line();
+			double len = 0.0;
+			ArcView a{};
+			if (round) {
+				a = arc_view();
+				len = std::abs(a.span) * a.r;
+			} else {
+				len = double(seg.s.distance_to(seg.e));
+			}
+			const int n = std::max(1, int(len / BARB_SPACING));
+			for (int i = 0; i < n; i++) {
+				const double t = (double(i) + 0.5) / n;
+				V2 p, dir;
+				if (round) {
+					const double ang = a.sa + (a.ea - a.sa) * t;
+					p = V2::of(double(a.ctr.x) + a.r * std::cos(ang), double(a.ctr.y) + a.r * std::sin(ang));
+					const double sgn = a.ea >= a.sa ? 1.0 : -1.0;
+					dir = V2::of(-std::sin(ang) * sgn, std::cos(ang) * sgn);
+				} else {
+					p = V2::of(double(seg.s.x) + (double(seg.e.x) - seg.s.x) * t, double(seg.s.y) + (double(seg.e.y) - seg.s.y) * t);
+					dir = (seg.e - seg.s).normalized();
+				}
+				const V2 nrm = marker_normal(side, p);
+				const V2 root = p + vs(nrm, SIDE_OFFSET + 1.0);
+				const V2 tip = root + vs(V2::of(double(nrm.x) - dir.x, double(nrm.y) - dir.y).normalized(), BARB_LENGTH);
+				out.push_back(line(root, tip, JOURNEY, 2.0));
+			}
+		}
+	}
+
+	// Stage 209 (option B): an object filled -- the journey's mint and four handles when a pull brings it back, a
+	// faint gray when it stays -- its circle (what it collides as), under its outline
+	void object_fill(const BuiltSide *left, const BuiltSide *right) {
+		const ArcView a = arc_view();
+		const bool pullable = has_hit(left, "pull") || has_hit(right, "pull");
+		out.push_back(circle(a.ctr, a.r, pullable ? OBJECT_PULL_FILL : OBJECT_FILL));
+		if (!pullable) {
+			return;
+		}
+		for (int q = 0; q < 4; q++) {
+			const double ang = rcg::TAU * (q + 0.5) / 4.0;
+			const V2 u = V2::of(std::cos(ang), std::sin(ang));
+			out.push_back(line(a.ctr + vs(u, a.r + 3.0), a.ctr + vs(u, a.r + 3.0 + HANDLE_LENGTH), JOURNEY, 3.0));
 		}
 	}
 
@@ -409,6 +550,9 @@ struct SurfacePainter {
 		} else if (steel_band(surface, left, right) && !shaped()) {
 			outline_seg(out, seg, STEEL_BAND, BAND_WIDTH, false);
 		}
+		if (surface.object && seg.full && piece_index <= 0) {
+			object_fill(left, right);
+		}
 		if (shaped()) {
 			shape_stroke(l_outer || lc == rc_ ? lc : rc_, LINE_WIDTH);
 		} else if (lc == rc_) {
@@ -437,6 +581,7 @@ struct SurfacePainter {
 			outline_seg(out, seg, DOOR_COLOR, DOOR_CORE_WIDTH, false);
 			door_posts(1.0);
 		}
+		grapple_barbs(left, right);
 		std::vector<int> hover_sides;
 		for (const Overlay &o : hover) {
 			hover_sides.push_back(o.side);
