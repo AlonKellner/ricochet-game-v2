@@ -200,7 +200,7 @@ each feature it has under the feature's name -- its parameters (a button's `flag
 `deferred`). The feature its kind is about is marked `(the kind's)` and has no `remove`: pick another kind to drop
 it. Then a row of `+ <feature>` chips adds the features it does not have, each with a starting value from the kind
 that is that feature's: `+ button` a `flag` "switch", `+ door` an `open` "door:<name>", `+ spawn` the spawner's
-surface, `+ reset` its channels, the others `true`. A feature typed into a field shows its rows too. Renaming an element carries the buttons that
+surface, `+ reset` its channels, `+ switch` a `when` "switch", `+ armed` `shot:charge`, the others `true`. A feature typed into a field shows its rows too. Renaming an element carries the buttons that
 open it (their `opens`). With nothing selected, the panel edits the level: its name, bounds, gravity, room,
 player's start, initial flags, goal, the goal's conditions (`requires`), detectors and objects. The goal (green),
 the detectors (yellow) and the objects (as the game draws them, Stage 208) are drawn on the canvas.
@@ -232,7 +232,7 @@ Every action is a command, a JSON object, which is also how scripts and tests dr
 | `{"op": "remove", "name": n}` | remove it |
 | `{"op": "set", "name": n, "key": k, "value": v}` | set an element's key (`null`: remove it; `"name"`: a rename) |
 | `{"op": "set", "path": "/gravity", "value": v}` | set a value in the document by JSON pointer (`null`: remove it) |
-| `{"op": "add_feature" \| "remove_feature", "name": n, "feature": "button" \| "target" \| "grapple" \| "spawn" \| "reset" \| "break" \| "ghost" \| "door"}` | a surface element's feature: added with its starting value, or its parameters removed (Stage 212; refused: one it has, one it lacks, its kind's own, a kind not of surface) |
+| `{"op": "add_feature" \| "remove_feature", "name": n, "feature": "button" \| "target" \| "grapple" \| "spawn" \| "reset" \| "break" \| "ghost" \| "door" \| "switch" \| "armed"}` | a surface element's feature: added with its starting value, or its parameters removed (Stage 212; refused: one it has, one it lacks, its kind's own, a kind not of surface) |
 | `{"op": "rename", "name": n, "to": m}` | rename (the buttons with `opens: n` follow) |
 | `{"op": "move", "name": n, "handle": "start" \| "end" \| "via" \| "center" \| "radius", "to": v}` | move a handle |
 | `{"op": "move", "name": n, "handle": "body", "by": [dx, dy]}` | move the element |

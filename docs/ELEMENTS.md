@@ -52,6 +52,8 @@ shows). Every preset takes every key, for example a button the player stands on:
 | `button` | A button: when the arrow hits it (either side), it sets or toggles a flag, usually a door's (`opens`: the door's name). `body`="block": one the player stands on and objects rest on. | `face`="pass", `body`="pass"; requires `flag` or `opens` | `Button` |
 | `target` | A target: hitting it (either side) registers the flag target:<id> (GAME_SPEC 24). | `target`=true, `body`="pass" | `Target` |
 | `door` | A door: a barrier that exists while its flag expression `open` is unset or false, and is gone (for the arrow and the player) while it is true. Drawn with amber posts across its ends and an amber core -- as is any surface given an `open` (Stage 213). A button opens it (`opens`: its name). | `open`="door:${name}" | `Door` |
+| `switchable` | A surface that switches with a flag (a categorical resolver, GAME_SPEC 9.4): its `then_face` (and `then_back`) sides while the flag expression `when` holds, its `face` (and `back`) otherwise. Present either way (see `door` for one that disappears). Stage 214: a preset (the switch feature). | `when` (required), `face`="stop", `then_face`="pass", `body`="pass" | `Gate` / `FlagMirror` (by `then_face`) |
+| `conditional_button` | A button only a charged (or burning, frosted...) arrow presses: while `armed` holds the hit sets or toggles `flag`; otherwise it is a wall. Stage 214: a preset (a button, armed). | `armed`="shot:charge", `flag` (required), `op`="set", `value`=true, `face`="stop", `body`="pass" | `CondButton` |
 | `grapple` | A grappling surface: when the arrow hits it, the player is pulled along the arrow's path to the hit (when the shot lands), stopping at whatever blocks the player first (a fence does; a shield does not). | `grapple`=true | `Grapple` |
 | `breakable` | A breakable surface: hit, it does what its face does, then it is gone for the rest of the shot; it is back when the arrow lands. Flag `shot:<name>:broken`. | `breaks`=true | `Breakable` |
 | `spawner` | A spawner (GAME_SPEC 10.6.1): when hit it places `spawn` (an `rc-level/1` surface in a local frame, centred on the origin) at the hit when the arrow lands; it is gone until a resetter re-arms its channel. | `face`="pass", `body`="pass"; requires `spawn` | `Spawner` |
@@ -61,7 +63,7 @@ shows). Every preset takes every key, for example a button the player stands on:
 ## The templates
 
 The other kinds are templates (below): what they do is more than the surface element says (a circle's inversion, a
-projection, a portal pair, a side switched by a flag, the kit of arrow states). Each takes `body` (`pass` | `block`) for
+projection, a portal pair, the kit of arrow states). Each takes `body` (`pass` | `block`) for
 its solidity.
 
 | Kind | What it is | Parameters (defaults) | Label |
@@ -70,15 +72,11 @@ its solidity.
 | `projection` | A projection (GAME_SPEC 10.4) on both sides: the arrow leaves along the carrier's normal (line/circle normal) or along a fixed direction (directional: `normal`), forward or back (`reverse`). | `type`="line_normal_projection" (or circle_normal_, line_directional_, circle_directional_projection), `reverse`=false, `normal` (directional), `body`="pass" | by type and reverse (`Projection`, `CircleDirBack`, ...) |
 | `portal` | A portal pair: the surface and its image, the surface moved by z -> e^{i theta} z + d (two ids). The arrow entering one leaves the other. | `d` (required), `theta`=0.0, `body`="pass" | `Portal` |
 | `pre_inversion` | A pre-transform inversion circle (GAME_SPEC 9.5): never hit, never clicked; the level starts after it (the horizon). Built after every other surface. | -- | `PreTransform` |
-| `switchable` | A surface that switches with a flag (a categorical resolver, GAME_SPEC 9.4): its `on` sides while the flag is true, its `off` sides otherwise. Present either way (see `door` for one that disappears). | `flag` (required), `on`="pass", `off`="stop" (each "pass", "stop" or "mirror"), `body`="pass" | `Gate` / `FlagMirror` |
-| `toggle_surface` | A toggle surface: the hit removes it, and the arrow passing where it was brings it back (a twin pass-through stands in its place while it is gone). Flag `el:<name>:off`, kept across shots. | `face`="stop" (or "mirror", "pass"), `body`="block" | `Toggle` |
 | `frost_barrier` | A frost barrier (tag `frosted`): an arrow passing it is frosted (`shot:frost`); the barrier stays. A frosted arrow that would be stopped is reflected (a line) or inverted (a circle) instead, once. | `body`="pass" | `Frost` |
-| `freezable` | A wall a frosted arrow reflects off once, using the frost up. Since Stage 156 every wall does this; the kind stays for older levels. | `frost`="shot:frost", `body`="block" | `Freezable` |
 | `torch` | A torch: a pass-through surface on fire (tag `burning`). An arrow passing it catches fire (`shot:fire`). | `body`="pass" | `Torch` |
 | `water` | Water: an extinguishing barrier. An arrow passing it is put out (`shot:fire` = false); the player passes it too. | `fire`="shot:fire", `body`="pass" | `Water` |
 | `burnable` | A burnable barrier (tag `flammable`): solid, but an arrow on fire burns through it. It catches fire (`el:<name>:fire`) and is gone from then on. | `body`="block" | `Burnable` |
 | `charger` | A charger: an endless source. An arrow passing it is charged (`shot:charge`); the charger stays charged. | `charge`="shot:charge", `body`="pass" | `Charger` |
-| `conditional_button` | A button only a charged (or burning, frosted...) arrow presses: while `when` is true the hit sets or toggles `flag`; otherwise it is a wall. | `when`="shot:charge", `flag` (required), `op`="set", `value`=true, `body`="pass" | `CondButton` |
 | `conductor` | A conductor (tag `conductive`): touching it, the arrow and it swap their charge (`shot:charge`, `el:<name>:charge`). | `face`="pass" (or "stop"), `body`="block" | `Conductor` |
 | `battery` | A battery (tags `conductive`, `charged`, `powered`): a conductor that starts charged. An uncharged arrow touching it takes the charge. | `body`="block" | `Battery` |
 | `charged_door` | A charged door (tag `conductive`): a wall that is gone while charged (`el:<name>:charge`). A charged arrow gives it the charge and opens it. | `body`="block" | `ChargedDoor` |
@@ -192,11 +190,11 @@ flag) and state writes on hits:
 |---|---|---|
 | the arrow picks up a property | a pass-through side writing `shot:<p>` = true | `torch`, `frost_barrier`, `charger` |
 | it loses it | a pass-through side writing false | `water` |
-| a surface reacts only to it | a resolver on `shot:<p>`: the default row the plain surface, the `true` row the reaction | `freezable`, `conditional_button`, `burnable` |
-| a reaction that uses it up | the reaction's side writes `shot:<p>` = false | `freezable` (one hit) |
+| a surface reacts only to it | a resolver on `shot:<p>`: the default row the plain surface, the `true` row the reaction (the surface element's `switch` or `armed`, Stage 214) | `conditional_button`, `burnable`, any wall (a frosted arrow) |
+| a reaction that uses it up | the reaction's side writes `shot:<p>` = false | a wall a frosted arrow reflects off (one hit) |
 | gone for the shot | presence `[{"key": "shot:<name>:x", "values": ["DEFAULT"]}]` and a hit setting it | `breakable` |
 | gone for good | the same with `el:<name>:x` | `burnable` |
-| a state that comes back | two surfaces on one geometry, each present in one state, each writing the other | `toggle_surface` |
+| a state that comes back | two surfaces on one geometry, each present in one state, each writing the other | (the toggle surface, retired in Stage 214: no level used it) |
 
 What the kit cannot say needs a primitive. Moving surfaces have one: the level's `cycle` and an element's `motion`
 (GAME_SPEC 9.8, docs/TDD_56_MOTION.md); surfaces that move when a flag holds another: an opening, the same `motion` with `"motion_mode": "opening"` (a door
