@@ -144,7 +144,7 @@ TEST_CASE("objects: the schema") {
 		return std::string("no error");
 	};
 	CHECK(err(R"({"objects": [{"name": "a", "circle": {"center": [0, 0], "radius": 0}}]})").find("a positive radius") != std::string::npos);
-	CHECK(err(R"({"objects": [{"name": "a", "circle": {"center": [0, 0]}, "face": "glass"}]})").find("wall, mirror or pass") != std::string::npos);
+	CHECK(err(R"({"objects": [{"name": "a", "circle": {"center": [0, 0]}, "face": "glass"}]})").find("stop, mirror or pass") != std::string::npos);
 	CHECK(err(R"({"objects": [{"name": "a", "circle": {"center": [0, 0]}}, {"name": "a", "circle": {"center": [9, 0]}}]})").find("names another object")
 			!= std::string::npos);
 	CHECK(err(R"({"objects": [{"name": "a", "circle": {"center": [0, 0]}, "kind": "heavy"}]})").find("pullable or static") != std::string::npos);
@@ -152,7 +152,7 @@ TEST_CASE("objects: the schema") {
 
 TEST_CASE("bubbles: a bubble floats, carries a box, and the arrow pops it (Stage 150)") {
 	rcg::Session s(level_of(R"({"gravity": [0, 980], "player": {"start": [700, 827.92]}, "objects": [
-		{"name": "bubble", "circle": {"center": [900, 500], "radius": 24}, "gravity": -0.5, "pops": true, "face": "pass", "solid": false,
+		{"name": "bubble", "circle": {"center": [900, 500], "radius": 24}, "gravity": -0.5, "pops": true, "face": "pass", "body": "pass",
 		 "carries": "box"},
 		{"name": "box", "circle": {"center": [900, 540], "radius": 14}}]})"));
 	s.hold({}, 120);
@@ -467,7 +467,7 @@ TEST_CASE("shields: drawn unlike a wall -- a turquoise core and band, a plain si
 		{"kind": "wall", "start": [200, 100], "end": [200, 300]},
 		{"kind": "shield", "start": [400, 100], "end": [400, 300]},
 		{"kind": "shield", "start": [600, 100], "via": [650, 200], "end": [600, 300]},
-		{"kind": "target", "face": "terminal", "start": [800, 100], "end": [800, 300]}]})"));
+		{"kind": "target", "face": "stop", "start": [800, 100], "end": [800, 300]}]})"));
 	s.settle();
 	const rcg::render::Color core{0.45f, 1.0f, 0.85f, 1.0f}, band{0.45f, 1.0f, 0.85f, 0.22f}, red = rcg::render::hex(0xFF0000FF);
 	std::set<int> shields;
@@ -491,6 +491,29 @@ TEST_CASE("shields: drawn unlike a wall -- a turquoise core and band, a plain si
 	CHECK(reds >= 2); // the wall, the target
 }
 
+TEST_CASE("steel bands: a surface that blocks while a side does not stop the arrow -- a fence, a solid mirror, a blocking button; not a wall, a shield, a platform (Stage 207)") {
+	rcg::Session s(level_of(R"({"gravity": [0, 980], "elements": [
+		{"kind": "wall", "name": "wall", "start": [200, 100], "end": [200, 300]},
+		{"kind": "shield", "name": "shield", "start": [300, 100], "end": [300, 300]},
+		{"kind": "platform", "name": "platform", "start": [350, 400], "end": [450, 400]},
+		{"kind": "passthrough", "name": "pass", "start": [500, 100], "end": [500, 300]},
+		{"kind": "fence", "name": "fence", "start": [600, 100], "end": [600, 300]},
+		{"kind": "mirror", "name": "solid_mirror", "body": "block", "start": [700, 100], "end": [700, 300]},
+		{"kind": "button", "name": "button", "flag": "f", "body": "block", "start": [800, 100], "end": [800, 300]},
+		{"kind": "one_sided_mirror", "name": "osm", "back": "stop", "body": "block", "start": [900, 100], "end": [900, 300]}]})"));
+	s.settle();
+	const rcg::render::Color steel{0.6f, 0.72f, 0.85f, 0.3f};
+	std::set<float> banded; // by x
+	for (const rcg::render::Node &n : s.draw()) {
+		for (const rcg::render::Call &c : n.calls) {
+			if (c.kind == rcg::render::Kind::Line && c.colors.at(0) == steel) {
+				banded.insert(c.pts[0].x + n.position.x);
+			}
+		}
+	}
+	CHECK(banded == std::set<float>{600.0f, 700.0f, 800.0f, 900.0f});
+}
+
 TEST_CASE("crossings: by what an element does -- a door or a switchable that can stop the arrow cuts, a platform or a fence does not (Stage 192)") {
 	const auto cuts = [](const char *element) {
 		const std::string text = std::string(R"({"elements": [{"kind": "mirror", "name": "m", "start": [900, 300], "end": [900, 700]}, )") + element + "]}";
@@ -507,7 +530,7 @@ TEST_CASE("crossings: by what an element does -- a door or a switchable that can
 	CHECK(cuts(R"({"kind": "fence", "start": [800, 500], "end": [1000, 500]})") == 0);
 	CHECK(cuts(R"({"kind": "passthrough", "start": [800, 500], "end": [1000, 500]})") == 0);
 	CHECK(cuts(R"({"kind": "switchable", "flag": "f", "on": "pass", "off": "pass", "start": [800, 500], "end": [1000, 500]})") == 0);
-	CHECK(cuts(R"({"kind": "switchable", "flag": "f", "on": "pass", "off": "wall", "start": [800, 500], "end": [1000, 500]})") == 1);
+	CHECK(cuts(R"({"kind": "switchable", "flag": "f", "on": "pass", "off": "stop", "start": [800, 500], "end": [1000, 500]})") == 1);
 	CHECK(cuts(R"({"kind": "door", "start": [800, 500], "end": [1000, 500]})") == 1);
 	CHECK(cuts(R"({"kind": "shield", "start": [800, 500], "end": [1000, 500]})") == 1);
 	CHECK(cuts(R"({"kind": "button", "opens": "x", "start": [800, 500], "end": [1000, 500]})") == 1);
@@ -535,7 +558,7 @@ TEST_CASE("doors: a door in line with a wall shows where it stops -- posts acros
 	const auto posts = [](bool open) { // the amber strokes across the line: {x, alpha}
 		const std::string level = std::string(R"({"gravity": [0, 980], "flags": {"open_it": )") + (open ? "true" : "false") + R"(}, "elements": [
 			{"kind": "wall", "start": [500, 300], "end": [800, 300]},
-			{"kind": "door", "name": "d", "flag": "open_it", "start": [800, 300], "end": [1000, 300]},
+			{"kind": "door", "name": "d", "open": "open_it", "start": [800, 300], "end": [1000, 300]},
 			{"kind": "wall", "start": [1000, 300], "end": [1300, 300]}]})";
 		rcg::Session s(level_of(level.c_str()));
 		s.settle();
@@ -1469,7 +1492,7 @@ rcg::Level pulling_2() {
 	return rcg::parse_level_json(json::parse(R"({"schema": "rc-level/2", "name": "pulling_2", "edges": "wall",
 		"gravity": [0.0, 980.0], "player": {"start": [550.0, 1050.0]}, "room": {"rect": [560.0, 240.0, 800.0, 600.0], "built": false},
 		"detectors": [{"flag": "close", "for": "any", "mode": "while", "name": "detector_1", "region": {"rect": [800.0, 1050.0, 150.0, 30.0]}}],
-		"elements": [{"kind": "door", "name": "door_1", "flag": "!close", "start": [1100.0, 1080.0], "end": [1100.0, 900.0]}],
+		"elements": [{"kind": "door", "name": "door_1", "open": "!close", "start": [1100.0, 1080.0], "end": [1100.0, 900.0]}],
 		"objective": {"goal": {"rect": [1250.0, 950.0, 100.0, 130.0]}},
 		"objects": [{"name": "object_1", "circle": {"center": [890.0, 700.0], "radius": 16.0}}]})"));
 }

@@ -245,10 +245,10 @@ TEST_CASE("editor: commands edit the document, undo and redo restore it") {
 	ok(ed, {{"op", "rename"}, {"name", "door_1"}, {"to", "gate"}});
 	CHECK(element(ed, "button_1")["opens"] == "gate");
 	CHECK(ed.command({{"op", "rename"}, {"name", "gate"}, {"to", "button_1"}})["ok"] == false);
-	ok(ed, {{"op", "set"}, {"name", "gate"}, {"key", "closed"}, {"value", "mirror"}});
-	CHECK(element(ed, "gate")["closed"] == "mirror");
-	ok(ed, {{"op", "set"}, {"name", "gate"}, {"key", "closed"}, {"value", nullptr}});
-	CHECK_FALSE(element(ed, "gate").contains("closed"));
+	ok(ed, {{"op", "set"}, {"name", "gate"}, {"key", "face"}, {"value", "mirror"}});
+	CHECK(element(ed, "gate")["face"] == "mirror");
+	ok(ed, {{"op", "set"}, {"name", "gate"}, {"key", "face"}, {"value", nullptr}});
+	CHECK_FALSE(element(ed, "gate").contains("face"));
 	ok(ed, {{"op", "set"}, {"path", "/flags"}, {"value", {{"door:gate", true}}}});
 	CHECK(ed.document()["flags"]["door:gate"] == true);
 	ok(ed, {{"op", "move"}, {"name", "gate"}, {"handle", "body"}, {"by", {10.0, 0.0}}});
@@ -431,7 +431,7 @@ TEST_CASE("editor: the panel edits the selected element and the level") {
 	ok(ed, {{"op", "add"}, {"element", {{"kind", "one_sided_mirror"}, {"name", "m"}, {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}}}});
 	ok(ed, {{"op", "select"}, {"name", "m"}});
 	click_row(ed, "back"); // an enum cycles
-	CHECK(element(ed, "m")["back"] == "block");
+	CHECK(element(ed, "m")["back"] == "mirror");
 	click_row(ed, "flip"); // a bool toggles
 	CHECK(element(ed, "m")["flip"] == true);
 	click_row(ed, "label"); // a typed field: focus, text, Enter
@@ -1454,4 +1454,38 @@ TEST_CASE("editor: one motion field, its motion_mode (cycle or opening) and an o
 	click_row(ed, "motion_mode"); // back to the cycle: the steps are kept
 	CHECK(element(ed, "w")["motion_mode"] == "cycle");
 	CHECK(element(ed, "w")["motion"]["steps"].size() == 1);
+}
+
+TEST_CASE("editor: a surface element's rows -- its face, back, body, and the features it has (Stage 207)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "button"}, {"name", "b"}, {"flag", "lamp"}, {"start", {700.0, 300.0}}, {"end", {800.0, 300.0}}}}});
+	ok(ed, {{"op", "select"}, {"name", "b"}});
+	auto labels = [&] {
+		const json panel = ok(ed, {{"op", "panel"}});
+		std::vector<std::string> out;
+		for (const json &r : panel["rows"]) {
+			if (r["kind"] == "value") {
+				out.push_back(r["label"].get<std::string>());
+			}
+		}
+		return out;
+	};
+	auto has = [&](const std::string &l) {
+		const std::vector<std::string> ls = labels();
+		return std::find(ls.begin(), ls.end(), l) != ls.end();
+	};
+	for (const char *l : {"face", "back", "body", "plannable", "flag", "opens", "op", "value", "deferred"}) {
+		CHECK_MESSAGE(has(l), l);
+	}
+	CHECK_FALSE(has("spawn")); // a feature it does not have
+	CHECK_FALSE(has("open"));
+	click_row(ed, "body"); // the user's request: a button that blocks
+	CHECK(element(ed, "b")["body"] == "block");
+	click_row(ed, "back"); // unset, it is the face's: the next after pass
+	CHECK(element(ed, "b")["back"] == "mirror");
+	// a feature set by hand shows its rows
+	ok(ed, {{"op", "set"}, {"name", "b"}, {"key", "open"}, {"value", "det:plate"}});
+	CHECK(has("open"));
+	CHECK(ed.errors().empty());
 }

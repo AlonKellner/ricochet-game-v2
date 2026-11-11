@@ -2,9 +2,10 @@
  "doc": "A charged door: a door (a wall) that is gone while charge reaches it (flag el:<name>:charge), and back when the circuit breaks.",
  "label": "ChargedDoor",
  "params": {
-  "solid": {
-   "default": true,
-   "doc": "the player collides with the closed door"
+  "body": {
+   "default": "block",
+   "doc": "what the player and objects do: pass, or block (collide with it)",
+   "enum": ["pass", "block"]
   }
  },
  "priority": 62,
@@ -16,7 +17,13 @@
     },
     "interactive": false
    },
-   "player_solid": "$solid",
+   "player_solid": {
+    "$switch": "body",
+    "cases": {
+     "block": true,
+     "pass": false
+    }
+   },
    "presence": [
     {
      "key": "el:${name}:charge",

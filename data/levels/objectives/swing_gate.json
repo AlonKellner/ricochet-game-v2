@@ -35,7 +35,7 @@
   },
   {
    "end": [1250.0, 680.0],
-   "face": "terminal",
+   "face": "stop",
    "kind": "button",
    "name": "switch",
    "op": "set",

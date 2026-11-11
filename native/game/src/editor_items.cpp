@@ -429,9 +429,9 @@ std::vector<Editor::Row> Editor::item_rows() const {
 	} else {
 		row("name", *path + "/name", "the object's name");
 		row("kind", *path + "/kind", "pullable: falls, a pull brings it back; static: stays", "pullable", "options", {"pullable", "static"});
-		row("face", *path + "/face", "its sides: a wall, a mirror, a pass", "wall", "options", {"wall", "mirror", "pass"});
+		row("face", *path + "/face", "what the arrow does: stop, mirror, pass", "stop", "options", {"stop", "mirror", "pass"});
 		row("shape", *path + "/shape", "how it looks (it still collides as its circle)", "circle", "options", marker_shapes()); // Stage 181
-		row("solid", *path + "/solid", "the player collides with it", "true", "bool");
+		row("body", *path + "/body", "what the player does: block (collides with it) or pass", "block", "options", {"block", "pass"});
 		row("center", *path + "/circle/center", "[x, y]: drag it");
 		row("radius", *path + "/circle/radius", "drag its handle", "16");
 		row("label", *path + "/label", "the node prefix", "Object");
@@ -575,8 +575,10 @@ json Editor::item_op(const std::string &o, const json &cmd) {
 				d[ptr].erase("flag");
 			}
 			for (json &e : d["elements"]) {
-				if (e.is_object() && e.value("flag", json()) == from_flag) {
-					e["flag"] = to_flag;
+				for (const char *k : {"flag", "open"}) { // (a switchable's, a door's)
+					if (e.is_object() && e.value(k, json()) == from_flag) {
+						e[k] = to_flag;
+					}
 				}
 			}
 			if (d.contains("objective") && d["objective"].is_object() && d["objective"].contains("requires") && d["objective"]["requires"].is_array()) {
@@ -883,12 +885,14 @@ std::vector<std::string> Editor::paste(json &doc, const json &clip, double dx, d
 			if (e.value("carrier", json()).is_string()) {
 				e["carrier"] = rename(renamed_carriers, e["carrier"].get<std::string>());
 			}
-			if (e.value("flag", json()).is_string()) { // door:<name>, det:<name> of the pasted
-				const std::string f = e["flag"].get<std::string>();
-				if (f.rfind("door:", 0) == 0) {
-					e["flag"] = "door:" + rename(renamed_elements, f.substr(5));
-				} else if (f.rfind("det:", 0) == 0) {
-					e["flag"] = "det:" + rename(renamed_detectors, f.substr(4));
+			for (const char *key : {"flag", "open"}) { // door:<name>, det:<name> of the pasted (a button's, a door's)
+				if (e.value(key, json()).is_string()) {
+					const std::string f = e[key].get<std::string>();
+					if (f.rfind("door:", 0) == 0) {
+						e[key] = "door:" + rename(renamed_elements, f.substr(5));
+					} else if (f.rfind("det:", 0) == 0) {
+						e[key] = "det:" + rename(renamed_detectors, f.substr(4));
+					}
 				}
 			}
 			doc["elements"].push_back(std::move(e));

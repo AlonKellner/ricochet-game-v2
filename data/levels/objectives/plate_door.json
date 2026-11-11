@@ -18,9 +18,9 @@
  "elements": [
   {
    "end": [960.0, 840.0],
-   "flag": "det:plate",
    "kind": "door",
    "name": "gate",
+   "open": "det:plate",
    "start": [960.0, 240.0]
   }
  ],

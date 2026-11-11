@@ -1,23 +1,9 @@
 {
- "doc": "An arrow-pass barrier (an iron fence): the arrow passes, the player is blocked.",
+ "defaults": {
+  "face": "pass"
+ },
+ "doc": "An arrow-pass barrier (an iron fence): the arrow passes, the player and objects are blocked (face pass, body block). Drawn with a steel band.",
+ "extends": "surface",
  "label": "Fence",
- "params": {},
- "priority": 12,
- "surfaces": [
-  {
-   "left": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   },
-   "player_solid": true,
-   "right": {
-    "effect": {
-     "type": "pass"
-    },
-    "interactive": false
-   }
-  }
- ]
+ "priority": 12
 }

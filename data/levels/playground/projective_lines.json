@@ -15,10 +15,10 @@
    "via": [750.0, 540.0]
   },
   {
-   "back": true,
    "end": [1150.0, 780.0],
    "kind": "projection",
    "name": "projection_2",
+   "reverse": true,
    "start": [1150.0, 300.0],
    "via": [1150.0, 540.0]
   }

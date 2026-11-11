@@ -94,6 +94,13 @@ inline bool shields(const BuiltSurface &s, const BuiltSide *side) {
 	return !s.player_solid && !s.platform && side != nullptr && side->effect.type == "terminal" && !side->interactive && side->hits.empty();
 }
 
+// Stage 207: does this surface block the player and objects while some side does not stop the arrow -- a fence, a
+// solid mirror, a blocking button (GAME_SPEC 9.13, 22.2)? Drawn over a steel band. (A null side passes.)
+inline bool steel_band(const BuiltSurface &s, const BuiltSide *left, const BuiltSide *right) {
+	auto stops = [](const BuiltSide *side) { return side != nullptr && side->effect.type == "terminal"; };
+	return s.player_solid && !s.platform && !(stops(left) && stops(right));
+}
+
 // Stage 179: where a surface's designer marker sits -- a line's middle, an arc's via, a full circle's top.
 V2 marker_point(const rc::arc::SegGeom &seg);
 

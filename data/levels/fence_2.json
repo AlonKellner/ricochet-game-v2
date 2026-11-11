@@ -132,12 +132,6 @@
    "kind": "platform",
    "name": "platform_7",
    "start": [210.0, 650.0]
-  },
-  {
-   "end": [200.0, 650.0],
-   "kind": "platform",
-   "name": "platform_8",
-   "start": [200.0, 550.0]
   }
  ],
  "gravity": [0.0, 980.0],

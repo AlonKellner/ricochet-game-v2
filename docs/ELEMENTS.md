@@ -1,48 +1,87 @@
 # Element kinds and templates (`rc-level/2`)
 
 An `rc-level/2` level (docs/LEVEL_FORMAT.md) is a list of **elements**: a wall, a mirror, a door, a button.
-Every element kind is a **template**, which is data and never code. A template is a small JSON document that
+Every element kind is data, never code: a **template**, or a **preset** of the surface element (Stage 207). A template is a small JSON document that
 expands an element (its geometry and parameters) into `rc-level/1` surfaces: their sides' path effects, hit
 effects, resolvers, presence and player solidity. The builtin kinds are `data/elements/<kind>.json`, embedded
 into the game when it is built. A level's own `templates` adds kinds or replaces builtin ones. A new element
 can therefore be designed and played without touching the game's code, as long as it can be said with what a
 surface already does (GAME_SPEC 9-10).
 
-## The builtin kinds
+## The surface element and its presets (Stage 207)
+
+Most surfaces are one element, the **surface element** (GAME_SPEC 9.13): its properties are separate keys, so a
+surface may block the player whatever it does to the arrow, and carry any of the features.
+
+| Key | Values (default) | What it is |
+|---|---|---|
+| `face` | `stop`, `pass`, `mirror` (`stop`) | what the arrow does: the left side's, and both sides' unless `back` |
+| `back` | `stop`, `pass`, `mirror` (unset: the face) | the right side's face |
+| `body` | `pass`, `block`, `platform` (`block`) | what the player and objects do: pass it, collide with it, stand on it from above |
+| `plannable` | true, false (unset: a side that reflects or has a hit) | its sides can be planned |
+| `flag`, `opens`, `op`, `value`, `deferred` | `op`="toggle" (or "set"), `value`=true, `deferred`=false | **button**: a hit writes `flag` (`opens`: the door's, `door:<opens>`); deferred: when the arrow lands |
+| `target` | false | **target**: a hit registers `target:<id>` |
+| `grapple` | false | **grapple**: a hit pulls the player to it when the shot lands |
+| `spawn`, `channel`, `orientation`, `mirror_with_side`, `offset`, `trim` | `channel`="${name}", `orientation`="CARRIER_TANGENT" (or BEAM_TANGENT, BEAM_NORMAL, CARRIER_NORMAL, BEAM_REFLECTED, WORLD), `mirror_with_side`=false, `offset`=[0, 0], `trim`=true | **spawn**: a hit places `spawn` (a surface in a local frame) at the hit |
+| `channels` | -- | **reset**: a hit re-arms these spawn channels |
+| `breaks` | false | **break**: hit, it is gone for the rest of the shot (`shot:<name>:broken`) |
+| `ghost` | false | **ghost**: a hit toggles the arrow's ghost mode |
+| `open` | a flag expression | **door**: the surface exists while it is unset or false |
+
+The hits compose in the table's order on both sides, and the presence conditions (all required) are the door's, then
+the break's. **Its look** follows from its face and body: the face's colour, a steel band under a surface that blocks
+but does not stop (a fence, a solid mirror, a blocking button), turquoise for a shield, wood brown for a platform.
+
+The kinds below are **presets**: a label and defaults (`data/elements/<kind>.json`: `{"extends": "surface",
+"defaults": {...}, "features": [...]}`; `features`: the features the kind is about, which it requires and the editor
+shows). Every preset takes every key, for example a button the player stands on:
+
+```json
+{"kind": "button", "opens": "gate", "body": "block", "start": [600, 200], "end": [700, 200]}
+```
+
+| Kind | What it is | Defaults | Label |
+|---|---|---|---|
+| `wall` | A wall: the arrow stops at either side and the player and objects collide with it. Walls and most everyday surroundings. | -- | `Surface` |
+| `shield` | A shield (an energy field): stops the arrow; the player and objects pass. Drawn turquoise in a band, unlike a wall. | `body`="pass" | `Shield` |
+| `fence` | An arrow-pass barrier (an iron fence): the arrow passes, the player and objects are blocked. Drawn over a steel band. | `face`="pass" | `Fence` |
+| `passthrough` | A surface nothing collides with: the arrow passes as if it were not there (inert, GAME_SPEC 9.7) and so does the player. A marker. | `face`="pass", `body`="pass" | `PassThrough` |
+| `platform` | A one-way platform (GAME_SPEC 25.1): the arrow passes; the player and objects stand on its top and pass it from below or the side; the player holding down drops through; moving in any direction while overlapping it, the player engages it (gravity-free movement); a pulled object or a grappled player passes it. Drawn wood brown. Unlike a `fence`, which blocks the player every way and stops a pull. | `face`="pass", `body`="platform" | `Platform` |
+| `mirror` | A mirror reflecting on both sides, both plannable. | `face`="mirror", `body`="pass" | `Mirror` |
+| `one_sided_mirror` | A one-sided mirror: its left side (left of the walk start -> via -> end) reflects and is plannable; its back passes (or stops: `back`="stop"). `flip`: the mirror faces right. | `face`="mirror", `back`="pass", `body`="pass" | `OneSidedMirror` |
+| `button` | A button: when the arrow hits it (either side), it sets or toggles a flag, usually a door's (`opens`: the door's name). `body`="block": one the player stands on and objects rest on. | `face`="pass", `body`="pass"; requires `flag` or `opens` | `Button` |
+| `target` | A target: hitting it (either side) registers the flag target:<id> (GAME_SPEC 24). | `target`=true, `body`="pass" | `Target` |
+| `door` | A door: a barrier that exists while its flag expression `open` is unset or false, and is gone (for the arrow and the player) while it is true. Drawn with amber posts across its ends and an amber core. A button opens it (`opens`: its name). | `open`="door:${name}" | `Door` |
+| `grapple` | A grappling surface: when the arrow hits it, the player is pulled along the arrow's path to the hit (when the shot lands), stopping at whatever blocks the player first (a fence does; a shield does not). | `grapple`=true | `Grapple` |
+| `breakable` | A breakable surface: hit, it does what its face does, then it is gone for the rest of the shot; it is back when the arrow lands. Flag `shot:<name>:broken`. | `breaks`=true | `Breakable` |
+| `spawner` | A spawner (GAME_SPEC 10.6.1): when hit it places `spawn` (an `rc-level/1` surface in a local frame, centred on the origin) at the hit when the arrow lands; it is gone until a resetter re-arms its channel. | `face`="pass", `body`="pass"; requires `spawn` | `Spawner` |
+| `resetter` | A resetter: when hit it re-arms spawn channels (their spawned surfaces go, their spawners come back). | `face`="pass", `body`="pass"; requires `channels` | `Resetter` |
+| `ghost_gate` | A ghost toggler (GAME_SPEC 10.6, ghost mode): crossing it turns the arrow into a ghost that passes every surface until the next ghost gate. | `face`="pass", `body`="pass", `ghost`=true | `GhostToggle` |
+
+## The templates
+
+The other kinds are templates (below): what they do is more than the surface element says (a circle's inversion, a
+projection, a portal pair, a side switched by a flag, the kit of arrow states). Each takes `body` (`pass` | `block`) for
+its solidity.
 
 | Kind | What it is | Parameters (defaults) | Label |
 |---|---|---|---|
-| `wall` | A solid barrier: the arrow stops at either side (terminal) and the player collides with it. Walls and most everyday surroundings. | -- | `Surface` |
-| `shield` | A shield (an energy field): stops the arrow at either side; the player and objects pass. Drawn as a turquoise band, unlike a wall. | -- | `Shield` |
-| `fence` | An arrow-pass barrier (an iron fence): the arrow passes, the player is blocked. | -- | `Fence` |
-| `passthrough` | A surface nothing collides with: the arrow passes as if it were not there (inert, GAME_SPEC 9.7) and so does the player. A marker. | -- | `PassThrough` |
-| `platform` | A one-way platform (GAME_SPEC 25.1): the arrow passes; the player and objects stand on its top and pass it from below or the side; the player holding down drops through; moving in any direction while overlapping it, the player engages it: gravity-free movement; nothing held, it hangs only while the feet's line is on it; a pulled object or a grappled player passes it (ending half through it, put on top when its centre is above, else falling through). Drawn wood brown. Unlike a `fence`, which blocks the player every way and stops a pull. | -- | `Platform` |
-| `mirror` | A mirror reflecting on both sides, both plannable. | `solid`=false | `Mirror` |
-| `one_sided_mirror` | A one-sided mirror: its left side (left of the walk start -> via -> end) reflects and is plannable; its back passes or blocks. `flip`: the mirror faces right. | `back`="pass" (or "block"), `solid`=false | `OneSidedMirror` |
-| `inversion` | A circle inversion (an arc or a full circle): both sides invert, or only the left one (the other passes; `flip` for the right). | `sides`="both" (or "left"), `solid`=true | `FullInversion` / `Inversion` |
-| `projection` | A projection (GAME_SPEC 10.4) on both sides: the arrow leaves along the carrier's normal (line/circle normal) or along a fixed direction (directional: `normal`), forward or back. | `type`="line_normal_projection" (or circle_normal_, line_directional_, circle_directional_projection), `back`=false, `normal` (directional), `solid`=false | by type and back (`Projection`, `CircleDirBack`, ...) |
-| `portal` | A portal pair: the surface and its image, the surface moved by z -> e^{i theta} z + d (two ids). The arrow entering one leaves the other. | `d` (required), `theta`=0.0, `solid`=false | `Portal` |
+| `inversion` | A circle inversion (an arc or a full circle): both sides invert, or only the left one (`back`: `pass`; `flip` for the right). | `back`="invert" (or "pass"), `body`="block" | `FullInversion` / `Inversion` |
+| `projection` | A projection (GAME_SPEC 10.4) on both sides: the arrow leaves along the carrier's normal (line/circle normal) or along a fixed direction (directional: `normal`), forward or back (`reverse`). | `type`="line_normal_projection" (or circle_normal_, line_directional_, circle_directional_projection), `reverse`=false, `normal` (directional), `body`="pass" | by type and reverse (`Projection`, `CircleDirBack`, ...) |
+| `portal` | A portal pair: the surface and its image, the surface moved by z -> e^{i theta} z + d (two ids). The arrow entering one leaves the other. | `d` (required), `theta`=0.0, `body`="pass" | `Portal` |
 | `pre_inversion` | A pre-transform inversion circle (GAME_SPEC 9.5): never hit, never clicked; the level starts after it (the horizon). Built after every other surface. | -- | `PreTransform` |
-| `ghost_gate` | A ghost toggler (GAME_SPEC 10.6, ghost mode): crossing it turns the arrow into a ghost that passes every surface until the next ghost gate. | -- | `GhostToggle` |
-| `button` | A button: when the arrow hits it (either side), it sets or toggles a flag, usually a door's. | `flag`="door:${opens}", `opens` (a door's name), `op`="toggle" (or "set"), `value`=true, `deferred`=false, `face`="pass" (or "terminal", "reflection") | `Button` |
-| `target` | A target: hitting it (either side) registers the flag target:<id> (GAME_SPEC 24). | `face`="terminal", `interactive`=true, `solid`=false | `Target` |
-| `switchable` | A surface that switches with a flag (a categorical resolver, GAME_SPEC 9.4): its `on` sides while the flag is true, its `off` sides otherwise. Present either way (see `door` for one that disappears). | `flag` (required), `on`="pass", `off`="wall" (each "pass", "wall" or "mirror"), `solid`=false | `Gate` / `FlagMirror` |
-| `door` | A door: a barrier that exists while its flag is unset or false, and is gone (for the arrow and the player) while it is true. Drawn with amber posts across its ends and an amber core. A button opens it. | `flag`="door:${name}", `closed`="wall" (or "mirror", "fence"), `solid`=true | `Door` |
-| `grapple` | A grappling surface: when the arrow hits it, the player is pulled along the arrow's path to the hit (when the shot lands), stopping at whatever blocks the player first (a fence does; an arrow-block barrier does not). | `solid`=true | `Grapple` |
-| `spawner` | A spawner (GAME_SPEC 10.6.1): when hit it places `surface` (an `rc-level/1` surface in a local frame, centred on the origin) at the hit when the arrow lands; it is gone until a resetter re-arms its channel. | `surface` (required), `channel`="${name}", `orientation`="CARRIER_TANGENT", `mirror_with_side`=false, `offset`=[0.0, 0.0], `trim`=true, `deferred`=false, `face`="pass" | `Spawner` |
-| `resetter` | A resetter: when hit it re-arms spawn channels (their spawned surfaces go, their spawners come back). | `channels` (required), `deferred`=false, `face`="pass" | `Resetter` |
-| `breakable` | A breakable surface: hit, it does what its face does (a wall stops the arrow, a mirror reflects it), then it is gone for the rest of the shot; it is back when the arrow lands. Flag `shot:<name>:broken`. | `face`="wall" (or "mirror", "pass"), `solid`=true | `Breakable` |
-| `toggle_surface` | A toggle surface: the hit removes it, and the arrow passing where it was brings it back (a twin pass-through stands in its place while it is gone). Flag `el:<name>:off`, kept across shots. | `face`="wall", `solid`=true | `Toggle` |
-| `frost_barrier` | A frost barrier (tag `frosted`): an arrow passing it is frosted (`shot:frost`); the barrier stays. A frosted arrow that would be stopped is reflected (a line) or inverted (a circle) instead, once. | none | `Frost` |
-| `freezable` | A wall a frosted arrow reflects off once, using the frost up. Since Stage 156 every wall does this; the kind stays for older levels. | `frost`="shot:frost", `solid`=true | `Freezable` |
-| `torch` | A torch: a pass-through surface on fire (tag `burning`). An arrow passing it catches fire (`shot:fire`). | none | `Torch` |
-| `water` | Water: an extinguishing barrier. An arrow passing it is put out (`shot:fire` = false); the player passes it too. | `fire`="shot:fire" | `Water` |
-| `burnable` | A burnable barrier (tag `flammable`): solid, but an arrow on fire burns through it. It catches fire (`el:<name>:fire`) and is gone from then on. | `solid`=true | `Burnable` |
-| `charger` | A charger: an endless source. An arrow passing it is charged (`shot:charge`); the charger stays charged. | `charge`="shot:charge" | `Charger` |
-| `conditional_button` | A button only a charged (or burning, frosted...) arrow presses: while `when` is true the hit sets or toggles `flag`; otherwise it is a wall. | `when`="shot:charge", `flag` (required), `op`="set", `value`=true | `CondButton` |
-| `conductor` | A conductor (tag `conductive`): touching it, the arrow and it swap their charge (`shot:charge`, `el:<name>:charge`). | `face`="pass", `solid`=true | `Conductor` |
-| `battery` | A battery (tags `conductive`, `charged`, `powered`): a conductor that starts charged. An uncharged arrow touching it takes the charge. | `solid`=true | `Battery` |
-| `charged_door` | A charged door (tag `conductive`): a wall that is gone while charged (`el:<name>:charge`). A charged arrow gives it the charge and opens it. | `solid`=true | `ChargedDoor` |
+| `switchable` | A surface that switches with a flag (a categorical resolver, GAME_SPEC 9.4): its `on` sides while the flag is true, its `off` sides otherwise. Present either way (see `door` for one that disappears). | `flag` (required), `on`="pass", `off`="stop" (each "pass", "stop" or "mirror"), `body`="pass" | `Gate` / `FlagMirror` |
+| `toggle_surface` | A toggle surface: the hit removes it, and the arrow passing where it was brings it back (a twin pass-through stands in its place while it is gone). Flag `el:<name>:off`, kept across shots. | `face`="stop" (or "mirror", "pass"), `body`="block" | `Toggle` |
+| `frost_barrier` | A frost barrier (tag `frosted`): an arrow passing it is frosted (`shot:frost`); the barrier stays. A frosted arrow that would be stopped is reflected (a line) or inverted (a circle) instead, once. | `body`="pass" | `Frost` |
+| `freezable` | A wall a frosted arrow reflects off once, using the frost up. Since Stage 156 every wall does this; the kind stays for older levels. | `frost`="shot:frost", `body`="block" | `Freezable` |
+| `torch` | A torch: a pass-through surface on fire (tag `burning`). An arrow passing it catches fire (`shot:fire`). | `body`="pass" | `Torch` |
+| `water` | Water: an extinguishing barrier. An arrow passing it is put out (`shot:fire` = false); the player passes it too. | `fire`="shot:fire", `body`="pass" | `Water` |
+| `burnable` | A burnable barrier (tag `flammable`): solid, but an arrow on fire burns through it. It catches fire (`el:<name>:fire`) and is gone from then on. | `body`="block" | `Burnable` |
+| `charger` | A charger: an endless source. An arrow passing it is charged (`shot:charge`); the charger stays charged. | `charge`="shot:charge", `body`="pass" | `Charger` |
+| `conditional_button` | A button only a charged (or burning, frosted...) arrow presses: while `when` is true the hit sets or toggles `flag`; otherwise it is a wall. | `when`="shot:charge", `flag` (required), `op`="set", `value`=true, `body`="pass" | `CondButton` |
+| `conductor` | A conductor (tag `conductive`): touching it, the arrow and it swap their charge (`shot:charge`, `el:<name>:charge`). | `face`="pass" (or "stop"), `body`="block" | `Conductor` |
+| `battery` | A battery (tags `conductive`, `charged`, `powered`): a conductor that starts charged. An uncharged arrow touching it takes the charge. | `body`="block" | `Battery` |
+| `charged_door` | A charged door (tag `conductive`): a wall that is gone while charged (`el:<name>:charge`). A charged arrow gives it the charge and opens it. | `body`="block" | `ChargedDoor` |
 | `dark` | A dark barrier: one side of its line (or the inside or outside of its circle) is a dark region (GAME_SPEC 9.9). Its surface is never present: the shadow's boundary is the game's. | `side`="auto" (left, inside), `when`="" (always) | none (drawn by the shadow) |
 | `light` | A light region: one side of its line, the inside of its circle (a light source's reach) or its outside. Light undoes the shadow wherever it reaches. | `side`="auto", `when`="" | none |
 
@@ -62,24 +101,24 @@ Flags are named after what writes or reads them, so levels and templates agree w
 
 | Flag | Written by | Read by |
 |---|---|---|
-| `door:<name>` | a button with `opens` | the door `<name>` (present while unset or false) |
+| `door:<name>` | a button with `opens` | the door `<name>` (its `open`: present while unset or false) |
 | `target:<id>` | a target's side firing | the game (GAME_SPEC 24) |
 | `chan:<channel>` | spawners and resetters | the spawner and its spawned surface (GAME_SPEC 10.6) |
 | `ghost` | ghost gates | every side (the per-shot ghost mode) |
-| `det:<name>` | the detector `<name>` (GAME_SPEC 24.5) | a door (`"flag": "det:plate"`), the goal's `requires` |
+| `det:<name>` | the detector `<name>` (GAME_SPEC 24.5) | a door (`"open": "det:plate"`), the goal's `requires` |
 | `shot:*` | anything in a shot: `shot:fire`, `shot:frost`, `shot:charge`, `shot:<name>:broken` | erased when the arrow lands (GAME_SPEC 10.6): a state of the arrow, not of the world |
 | `el:<name>:*` | an element's own state: `el:<name>:off`, `el:<name>:burnt` | the element (kept across shots) |
 | `el:<name>:fire`, `el:<name>:charge` | the arrow and the element's or object's tags (Stage 156), or a spread rule | the element: `burnable`, `charged_door` |
 
 The level's `flags` sets any of them at the start. For example, `{"door:gate": true}` starts with the door open.
 
-**Flag expressions** (Stage 171, GAME_SPEC 9.11). A parameter that reads a flag -- a door's or a switchable's
+**Flag expressions** (Stage 171, GAME_SPEC 9.11). A parameter that reads a flag -- a door's `open`, a switchable's
 `flag`, a conditional button's condition -- may combine flags: `!` (not), `^` (exclusive or), `&&` (and), `||` (or)
 and parentheses, with C's precedence (`!`, then `^`, then `&&`, then `||`). A missing flag is false. For example:
 
 ```json
-{"kind": "door", "name": "trap", "start": [960, 240], "end": [960, 840], "flag": "!det:plate"}
-{"kind": "door", "name": "vault", "start": [1100, 240], "end": [1100, 840], "flag": "(det:red && det:blue) || det:key"}
+{"kind": "door", "name": "trap", "start": [960, 240], "end": [960, 840], "open": "!det:plate"}
+{"kind": "door", "name": "vault", "start": [1100, 240], "end": [1100, 840], "open": "(det:red && det:blue) || det:key"}
 ```
 
 The first is closed while the player stands on the plate (a `while` detector) and open otherwise; the second opens

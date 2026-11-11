@@ -2,11 +2,11 @@
  "edges": "wall",
  "elements": [
   {
-   "closed": "fence",
    "end": [150.0, 940.0],
-   "flag": "switch",
+   "face": "pass",
    "kind": "door",
    "name": "door_1",
+   "open": "switch",
    "start": [150.0, 800.0]
   },
   {
@@ -65,7 +65,7 @@
   },
   {
    "end": [50.0, 50.0],
-   "face": "terminal",
+   "face": "stop",
    "flag": "switch",
    "kind": "button",
    "name": "button_1",

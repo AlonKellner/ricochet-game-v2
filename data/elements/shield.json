@@ -1,23 +1,9 @@
 {
- "doc": "A shield (an energy field): stops the arrow at either side; the player and objects pass. Drawn as a turquoise band, unlike a wall.",
+ "defaults": {
+  "body": "pass"
+ },
+ "doc": "A shield (an energy field): stops the arrow at either side; the player and objects pass (face stop, body pass). Drawn as a turquoise band, unlike a wall.",
+ "extends": "surface",
  "label": "Shield",
- "params": {},
- "priority": 11,
- "surfaces": [
-  {
-   "left": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   },
-   "player_solid": false,
-   "right": {
-    "effect": {
-     "type": "terminal"
-    },
-    "interactive": false
-   }
-  }
- ]
+ "priority": 11
 }

@@ -140,7 +140,7 @@ TEST_CASE("rc-level/2: every builtin template expands to surfaces that build") {
 	const json local = {{"start", {-20.0, 0.0}}, {"end", {20.0, 0.0}}, {"via", {0.0, 0.0}},
 			{"left", {{"effect", {{"type", "reflection"}}}, {"interactive", true}}}, {"right", nullptr}};
 	const json required = {{"portal", {{"d", {300.0, 0.0}}}}, {"switchable", {{"flag", "open"}}}, {"button", {{"flag", "open"}}},
-			{"spawner", {{"surface", local}}}, {"resetter", {{"channels", {"spawner_1"}}}},
+			{"spawner", {{"spawn", local}}}, {"resetter", {{"channels", {"spawner_1"}}}},
 			{"conditional_button", {{"flag", "switch"}}}};
 	std::vector<json> elements;
 	double x = 300;
@@ -181,7 +181,7 @@ TEST_CASE("rc-level/2: the expansions") {
 		CHECK(ss[0]["left"]["interactive"] == true);
 		CHECK(ss[0]["right"]["effect"]["type"] == "pass");
 		CHECK(ss[0]["via"] == json::array({700.0, 500.0})); // via omitted: the middle point (a line)
-		ss = element_surfaces(level_of({seg({{"kind", "one_sided_mirror"}, {"back", "block"}, {"flip", true}})}));
+		ss = element_surfaces(level_of({seg({{"kind", "one_sided_mirror"}, {"back", "stop"}, {"flip", true}})}));
 		CHECK(ss[0]["left"]["effect"]["type"] == "terminal");
 		CHECK(ss[0]["right"]["effect"]["type"] == "reflection");
 	}
@@ -197,7 +197,7 @@ TEST_CASE("rc-level/2: the expansions") {
 		CHECK(ss[0]["right"]["hits"][0]["op"] == "set");
 	}
 	SUBCASE("labels: the template's, the element's own, none (not drawn)") {
-		const json inv = {{"kind", "inversion"}, {"sides", "left"}, {"circle", {{"center", {900.0, 500.0}}, {"radius", 50.0}}}};
+		const json inv = {{"kind", "inversion"}, {"back", "pass"}, {"circle", {{"center", {900.0, 500.0}}, {"radius", 50.0}}}};
 		CHECK(element_surfaces(level_of({inv}))[0]["label"] == "Inversion");
 		json named = inv;
 		named["label"] = "Lens";
@@ -270,8 +270,8 @@ TEST_CASE("rc-level/2: the schema is strict, and names the element") {
 	CHECK(err(level_of({}, {{"colour", 1}})).find("unknown key 'colour'") != std::string::npos);
 	CHECK(err(level_of({}, {{"carriers", nullptr}})).find("an array of carriers expected") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "crystal"}})})).find("level.elements[0].kind: unknown element kind 'crystal'") != std::string::npos);
-	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"shiny", true}})})).find("unknown key 'shiny' (parameters: back, solid)") != std::string::npos);
-	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"back", "maybe"}})})).find("level.elements[0] (one_sided_mirror_1).back: one of pass, block expected")
+	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"shiny", true}})})).find("unknown key 'shiny' (parameters: back, body, breaks,") != std::string::npos);
+	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"back", "maybe"}})})).find("level.elements[0] (one_sided_mirror_1).back: one of stop, pass, mirror expected")
 			!= std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "portal"}})})).find("'d' required") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "button"}})})).find("'flag' required") != std::string::npos);
@@ -392,7 +392,7 @@ TEST_CASE("rc-level/2: a marker -- on every surface of its element, on a detecto
 	for (const json &e : back["elements"]) {
 		if (e.value("kind", "") == "door") { // (named by the lowering's order; its flag the gate's)
 			found = true;
-			CHECK(e["flag"] == "door:gate");
+			CHECK(e["open"] == "door:gate");
 			CHECK(e["marker"] == door["marker"]);
 		}
 	}
@@ -441,8 +441,8 @@ TEST_CASE("rc-level/2: a marker -- on every surface of its element, on a detecto
 TEST_CASE("rc-level/2: the markers flags give -- a flag two things connect to marks both alike (through a NOT too); the level's choice; sync_marker false keeps its own") {
 	const json button = seg({{"kind", "button"}, {"name", "b"}, {"opens", "gate"}}, 600, 300, 600, 400);
 	const json door = seg({{"kind", "door"}, {"name", "gate"}});
-	const json hatch = seg({{"kind", "door"}, {"name", "hatch"}, {"flag", "!det:pad"}}, 800, 300, 800, 700); // open until the pad
-	const json both = seg({{"kind", "door"}, {"name", "both"}, {"flag", "det:pad && door:gate"}}, 900, 300, 900, 700);
+	const json hatch = seg({{"kind", "door"}, {"name", "hatch"}, {"open", "!det:pad"}}, 800, 300, 800, 700); // open until the pad
+	const json both = seg({{"kind", "door"}, {"name", "both"}, {"open", "det:pad && door:gate"}}, 900, 300, 900, 700);
 	const json lone = seg({{"kind", "door"}, {"name", "lone"}}, 1000, 300, 1000, 700); // nothing opens it
 	const json pads = json::parse(R"([{"name": "pad", "region": {"rect": [600, 600, 40, 40]}}])");
 	json lv = level_of({button, door, hatch, both, lone}, {{"detectors", pads}});

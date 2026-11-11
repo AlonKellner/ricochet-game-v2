@@ -1,0 +1,23 @@
+{
+ "doc": "An arrow-pass barrier (an iron fence): the arrow passes, the player is blocked.",
+ "label": "Fence",
+ "params": {},
+ "priority": 12,
+ "surfaces": [
+  {
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   }
+  }
+ ]
+}

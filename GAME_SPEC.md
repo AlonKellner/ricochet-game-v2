@@ -886,6 +886,46 @@ button's `opens: <name>` opens it). All the element's surfaces move together, a 
 An opening plays steps, not keys (keys are the cycle's), and a shade or an edge has no motion. A level with an opening
 records each opening's time (`openings`).
 
+### 9.13 The surface element
+
+> **Status: implemented (Stage 207, docs/TDD_85_SURFACE_ELEMENT.md).** The user's request and decisions (2026-11-10): any
+> surface may block the player and objects or not, independently of what it does to the arrow; the kinds are presets.
+
+A surface's properties are orthogonal, and an element states each one on its own:
+- **`face`**: what the arrow does at the surface: `stop` (a terminal), `pass` or `mirror` (a reflection). It is the left
+  side's (§9.2), and both sides' unless **`back`** gives the right side its own (a one-sided mirror: face `mirror`,
+  back `pass`).
+- **`body`**: what the player and objects do: `pass`, `block` (they collide with it: `player_solid`) or `platform` (they
+  stand on it from above, §25.1).
+- **`plannable`**: whether its sides can be planned. Unset, a side is plannable when it reflects or has a hit effect.
+- **Features**, each on when its key is set, any number on one surface:
+
+| Feature | Keys | What a hit does (§10.6), or what it changes |
+|---|---|---|
+| button | `flag` (or `opens`: the door's name, flag `door:<name>`), `op` (`toggle` \| `set`), `value`, `deferred` | writes the flag |
+| target | `target` | registers `target:<id>` (§24) |
+| grapple | `grapple` | pulls the player to the hit (§25.6) |
+| spawn | `spawn` (a surface in a local frame), `channel`, `orientation`, `mirror_with_side`, `offset`, `trim`, `deferred` | places the surface at the hit (§10.6.1) |
+| reset | `channels`, `deferred` | re-arms the channels |
+| break | `breaks` | the surface is gone for the rest of the shot (`shot:<name>:broken`) |
+| ghost | `ghost` | toggles the arrow's ghost mode |
+| door | `open` (a flag expression, §9.11) | the surface exists while it is unset or false (§9.6) |
+
+The features compose in a fixed order: the hits, on both sides, in the table's order (button, target, grapple, spawn,
+reset, break, ghost); the presence conditions (§9.6, all required) the door's, then the break's. `deferred` applies to
+every write a hit makes.
+
+The surface kinds are **presets** of this element (docs/ELEMENTS.md): a name, a label, and defaults. A wall is face
+`stop`, body `block`; a shield `stop`, `pass`; a fence `pass`, `block`; a passthrough `pass`, `pass`; a platform `pass`,
+`platform`; a mirror `mirror`, `pass`; a button a pass that writes its flag; a door a wall present while `door:<name>` is
+unset. Every preset takes every key: a button with body `block` is one the player stands on, a door that is also a button
+writes a flag when hit, a target may break. Kinds that need more than this (inversions, projections, portals, the kit of
+§10.6's arrow states, switching sides by a flag) are templates that take `body` (`pass` \| `block`) for their solidity.
+
+**Its look** follows from the pair (§22.2): the face's colour, and a body that blocks while the face does not stop drawn
+with a steel band (a fence, a solid mirror, a blocking button). A wall (stop and block) is plain red, a shield (stop, not
+blocking) turquoise, a platform wood brown.
+
 ## 10. Effect system
 
 ### 10.1 Effect base class and hierarchy
@@ -2384,6 +2424,7 @@ For arc steps in the visual frame, the tangent direction is perpendicular to the
 | Pass-through | Gray |
 | Platform (§25.1; its pass sides) | Wood brown |
 | Shield (a block the player passes, nothing else on its side; Stage 186) | Turquoise, in a translucent band |
+| Blocking, not stopping (body `block` with a face that passes or reflects: a fence, a solid mirror, a blocking button; §9.13, Stage 207) | Its face's colour over a steel band |
 | Door, charged door (Stage 190) | Its face's colour with an amber core, and amber posts across both ends (an open door: its posts, faint) |
 | Target | Gold |
 
@@ -2628,8 +2669,8 @@ a floor stays on it).
 
 > **Status: implemented (Stage 146, docs/TDD_51_BODIES.md).**
 
-An **object** is a circle body with a surface: a full circle whose sides are a wall's (terminal), a mirror's or a
-pass, player-solid by default. A **pullable** object falls under the level's gravity and rests on what holds it,
+An **object** is a circle body with a surface: a full circle whose `face` is `stop` (terminal;
+the default), `mirror` or `pass`, and whose `body` is `block` (player-solid; the default) or `pass` (§9.13). A **pullable** object falls under the level's gravity and rests on what holds it,
 moved by the player's controller at its own radius. It and the player **pass each other** (Stage 173, the user:
 neither stops the other), and it does not meet other objects (v1). It stands on platforms (§25.1) and never drops through one (it holds no down). A **static** object stays. Its surface takes the next ids after the level's
 surfaces, so it is planned and hit like any surface, and it moves with the body. While an object moves, nothing
@@ -3204,4 +3245,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.102.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.103.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

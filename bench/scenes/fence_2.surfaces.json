@@ -432,29 +432,9 @@
   },
   {
    "circle": null,
-   "end": [200.0, 650.0],
-   "full": false,
-   "id": 23,
-   "is_target": false,
-   "left": {
-    "interactive": false,
-    "type": "pass"
-   },
-   "line": true,
-   "platform": true,
-   "player_solid": false,
-   "right": {
-    "interactive": false,
-    "type": "pass"
-   },
-   "start": [200.0, 550.0],
-   "via": [200.0, 600.0]
-  },
-  {
-   "circle": null,
    "end": [0.0, 0.0],
    "full": false,
-   "id": 24,
+   "id": 23,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -473,7 +453,7 @@
    "circle": null,
    "end": [1920.0, 0.0],
    "full": false,
-   "id": 25,
+   "id": 24,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -492,7 +472,7 @@
    "circle": null,
    "end": [1920.0, 1080.0],
    "full": false,
-   "id": 26,
+   "id": 25,
    "is_target": false,
    "left": {
     "interactive": false,
@@ -511,7 +491,7 @@
    "circle": null,
    "end": [0.0, 1080.0],
    "full": false,
-   "id": 27,
+   "id": 26,
    "is_target": false,
    "left": {
     "interactive": false,

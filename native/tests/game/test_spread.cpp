@@ -33,7 +33,7 @@ void shoot(rcg::Session &s, double x, double y) {
 
 const char *CIRCUIT = R"([
 	{"kind": "battery", "name": "cell", "start": [600, 300], "end": [600, 400]},
-	{"kind": "door", "name": "breaker", "tags": ["conductive"], "closed": "fence", "start": [600, 400], "end": [700, 400]},
+	{"kind": "door", "name": "breaker", "tags": ["conductive"], "face": "pass", "start": [600, 400], "end": [700, 400]},
 	{"kind": "conductor", "name": "w1", "start": [700, 400], "end": [800, 400]},
 	{"kind": "conductor", "name": "w2", "start": [840, 400], "end": [1000, 400]},
 	{"kind": "charged_door", "name": "gate", "start": [1000, 240], "end": [1000, 840]},

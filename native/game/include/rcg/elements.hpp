@@ -27,7 +27,12 @@ using json = nlohmann::json;
 // The keys every element may carry besides its parameters.
 const std::set<std::string> &common_keys();
 
-// The builtin kinds (kind -> template), parsed and checked once.
+// A template checked (check_template) and ready to expand: a preset of the surface
+// element (Stage 207: {"extends": "surface", "defaults": {...}}) takes the surface
+// element's parameters, with its defaults, and one composed surface.
+json prepare(const json &tmpl, const std::string &path);
+
+// The builtin kinds (kind -> prepared template), parsed and checked once.
 const std::map<std::string, json> &builtin();
 
 // A template that does not follow the template schema: LevelError naming `path`.
@@ -48,8 +53,9 @@ json evaluate(const json &tmpl, const json &element, const std::string &name, co
 // The element of kind `kind` whose expansion is surfaces[at, at + n) (n: the
 // template's surface count), labels compared after the match (a differing one is
 // the element's `label`). The element's name: what the match bound, else
-// `fallback_name`; a bound name in `taken` fails the match.
+// `fallback_name`; a bound name in `taken` fails the match. relabel false: a
+// differing label fails it.
 std::optional<json> match(const std::string &kind, const json &tmpl, const std::vector<json> &surfaces, size_t at,
-		const std::string &fallback_name, const std::set<std::string> &taken);
+		const std::string &fallback_name, const std::set<std::string> &taken, bool relabel = true);
 
 } // namespace rcg::elements

@@ -29,7 +29,7 @@ too).
 | `templates` | `{kind: template}`: the level's own element kinds, added to the builtin ones or replacing one (docs/ELEMENTS.md) | `{}` |
 | `objective` | `{"goal": region, "requires": [{"key", "values"}]}`: reach the goal while every condition holds to win (GAME_SPEC 24.6); none: every target hit wins | none |
 | `detectors` | `[{"name", "region": region \| "segment": {"a", "b"}, "mode": "while" \| "enter" \| "toggle", "flag", "value", "for"}]`: flags written as the player moves (GAME_SPEC 24.5; flag default `det:<name>`, mode `while`, value `true`, for `player`); `marker` and `sync_marker` (Stage 179) as an element's, at its centre | `[]` |
-| `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "wall" \| "mirror" \| "pass", "solid", "label", "gravity", "pops", "carries", "tags", "shape"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, wall, solid, label `Object` by default); their surfaces take the ids after the level's. Stage 150: `gravity` a factor of the level's (default 1; negative floats up), `pops` (the arrow pops it: flag `obj:<name>:popped`), `carries` another object until it pops. Stage 152: `tags` (what spread rules flow through: `["conductive"]`). Stage 181: `shape` its look (circle, square, triangle, diamond, star or cross; default circle; display only, it collides as its circle) | `[]` |
+| `objects` | `[{"name", "circle": {"center", "radius"}, "kind": "pullable" \| "static", "face": "stop" \| "mirror" \| "pass", "body": "block" \| "pass", "label", "gravity", "pops", "carries", "tags", "shape"}]`: circle bodies (GAME_SPEC 25.5; radius 16, pullable, face stop, body block, label `Object` by default); their surfaces take the ids after the level's. Stage 150: `gravity` a factor of the level's (default 1; negative floats up), `pops` (the arrow pops it: flag `obj:<name>:popped`), `carries` another object until it pops. Stage 152: `tags` (what spread rules flow through: `["conductive"]`). Stage 181: `shape` its look (circle, square, triangle, diamond, star or cross; default circle; display only, it collides as its circle) | `[]` |
 | `cycle` | `{"period": s, "resume_after": s}`: the moving elements' cycle (GAME_SPEC 9.8; 4 and 10 by default) | |
 | `spread` | `[{"flag", "tag", "persist", "sources"}]`: flags flowing through tagged elements and objects that touch (GAME_SPEC 10.6, docs/ELEMENTS.md "Fire, charge and frost: tags"; `persist` false and `sources` `[]` by default) | none (Stage 156) |
 | `edges` | the level's edges -- the four walls along `bounds`: a kind (`"wall"`, `"mirror"`, ...) or `{"kind", ...params}` for all four, their faces (left sides) toward the level; `"wrap"` (the right edge a portal to the left, the bottom to the top); or `{"top", "right", "bottom", "left"}` of those and `"pass"` (GAME_SPEC 9.10, Stage 169) | passes (the arrow wraps there) |
@@ -69,6 +69,16 @@ it, so the solver sees one exact line or circle across all of them (GAME_SPEC 19
 A point moves to the carrier's nearest exact point: a fraction of a pixel on a line, about 1-5 px on a circle (more
 on a large one). An exact circle holds arcs, not its whole.
 
+**The surface element** (Stage 207, GAME_SPEC 9.13): the surface kinds (wall, shield, fence, passthrough, platform,
+mirror, one_sided_mirror, button, target, door, grapple, breakable, spawner, resetter, ghost_gate) are presets of one
+element, so each takes every key of it: `face` (`stop` | `pass` | `mirror`), `back`, `body` (`pass` | `block` |
+`platform`), `plannable` and the features (`flag`/`opens`, `target`, `grapple`, `spawn`, `channels`, `breaks`, `ghost`,
+`open`). The templates that remain take `body` (`pass` | `block`). Stage 207 retired the older spellings (the levels were
+rewritten; an old key is an error): `solid` (now `body`), the `wall`/`terminal`/`reflection` faces (now `stop`/`mirror`),
+a door's `closed` (its `face`) and `flag` (its `open`; a door's `flag` is now a button's), a spawner's `surface`
+(`spawn`), a target's `interactive` (`plannable`), an inversion's `sides` (`back`: `invert` | `pass`), a projection's
+`back` (`reverse`), a one-sided mirror's back `block` (`stop`), and an object's `face` `wall` and `solid` (`stop`, `body`).
+
 Two kinds are the format's own: `{"kind": "edges"}` places the four edge walls where it stands, and
 `{"kind": "raw", "surface": {...}}` is an `rc-level/1` surface (without ids) taken as it is -- the escape hatch
 for what no template expresses.
@@ -82,8 +92,8 @@ for what no template expresses.
 `rc_tool lower <levels> <out>` writes the lowerings (`bench/lowered/<dir>__<name>.json`, `make lowered`: the
 oracle's independent builder reads them; the lowered gate fails while they are stale). `rc_tool migrate
 [--check] <files>` rewrites `rc-level/1` levels as `rc-level/2`: the room and edge walls implicit where they are
-the generated ones (configured edges read back as the `edges` key), every run of surfaces the first template (by priority) that expands to exactly it, else a
-`raw` element; a migration is written only when its lowering is the original byte for byte.
+the generated ones (configured edges read back as the `edges` key), every run of surfaces the first kind (by priority) of its label that expands to exactly it -- else (its label
+written) the kind writing the fewest parameters beyond its own features (Stage 207), else a `raw` element; a migration is written only when its lowering is the original byte for byte.
 
 ## The lowered level (`rc-level/1`)
 

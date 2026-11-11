@@ -2,7 +2,7 @@
  "gravity": [0.0, 980.0],
  "name": "mirror_4",
  "player": {
-  "start": [960.0, 1040.0]
+  "start": [950.0, 750.0]
  },
  "room": {
   "built": false,
@@ -11,7 +11,7 @@
  "schema": "rc-level/1",
  "surfaces": [
   {
-   "end": [1050.0, 850.0],
+   "end": [1050.0, 700.0],
    "ids": [1],
    "label": "Mirror",
    "left": {
@@ -27,12 +27,300 @@
     },
     "interactive": true
    },
-   "start": [1050.0, 650.0],
+   "start": [1050.0, 600.0],
+   "via": [1050.0, 650.0]
+  },
+  {
+   "end": [500.0, 800.0],
+   "ids": [2],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [500.0, 400.0],
+   "via": [500.0, 600.0]
+  },
+  {
+   "end": [1600.0, 800.0],
+   "ids": [3],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [500.0, 800.0],
+   "via": [1050.0, 800.0]
+  },
+  {
+   "end": [1600.0, 400.0],
+   "ids": [4],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1600.0, 800.0],
+   "via": [1600.0, 600.0]
+  },
+  {
+   "end": [1050.0, 700.0],
+   "ids": [5],
+   "label": "Door",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "switch_1",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1050.0, 800.0],
    "via": [1050.0, 750.0]
   },
   {
+   "end": [1500.0, 650.0],
+   "ids": [6],
+   "label": "Door",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "!switch_1",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1500.0, 800.0],
+   "via": [1500.0, 725.0]
+  },
+  {
+   "end": [1600.0, 400.0],
+   "ids": [7],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [500.0, 400.0],
+   "via": [1050.0, 400.0]
+  },
+  {
+   "end": [1600.0, 650.0],
+   "ids": [8],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1100.0, 650.0],
+   "via": [1350.0, 650.0]
+  },
+  {
+   "end": [1550.0, 450.0],
+   "ids": [9],
+   "label": "Button",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "hits": [
+     {
+      "key": "switch_1",
+      "kind": "state",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "interactive": true
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "hits": [
+     {
+      "key": "switch_1",
+      "kind": "state",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "interactive": true
+   },
+   "start": [1550.0, 600.0],
+   "via": [1550.0, 525.0]
+  },
+  {
+   "end": [710.0, 600.0],
+   "ids": [10],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [710.0, 800.0],
+   "via": [710.0, 700.0]
+  },
+  {
+   "end": [720.0, 600.0],
+   "ids": [11],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [720.0, 800.0],
+   "via": [720.0, 700.0]
+  },
+  {
+   "end": [730.0, 600.0],
+   "ids": [12],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [730.0, 800.0],
+   "via": [730.0, 700.0]
+  },
+  {
+   "end": [740.0, 600.0],
+   "ids": [13],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [740.0, 800.0],
+   "via": [740.0, 700.0]
+  },
+  {
+   "end": [750.0, 600.0],
+   "ids": [14],
+   "label": "Platform",
+   "left": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "platform": true,
+   "right": {
+    "effect": {
+     "type": "pass"
+    },
+    "interactive": false
+   },
+   "start": [700.0, 600.0],
+   "via": [725.0, 600.0]
+  },
+  {
    "end": [0.0, 0.0],
-   "ids": [2],
+   "ids": [15],
    "label": "Surface",
    "left": {
     "effect": {
@@ -52,7 +340,7 @@
   },
   {
    "end": [1920.0, 0.0],
-   "ids": [3],
+   "ids": [16],
    "label": "Surface",
    "left": {
     "effect": {
@@ -72,7 +360,7 @@
   },
   {
    "end": [1920.0, 1080.0],
-   "ids": [4],
+   "ids": [17],
    "label": "Surface",
    "left": {
     "effect": {
@@ -92,7 +380,7 @@
   },
   {
    "end": [0.0, 1080.0],
-   "ids": [5],
+   "ids": [18],
    "label": "Surface",
    "left": {
     "effect": {

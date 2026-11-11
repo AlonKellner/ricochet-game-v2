@@ -80,7 +80,7 @@ TEST_CASE("arrow states: charge -- the arrow and a conductor swap it; a battery 
 	CHECK(s.flags().get("el:cell:charge") != nullptr);
 	CHECK_FALSE(s.flags().is_true("el:cell:charge"));
 	// a conductive object that stops the arrow takes its charge (one passed through is touched twice: given, then taken back)
-	rcg::Session o(level_of(R"({"objects": [{"name": "box", "kind": "static", "face": "wall", "circle": {"center": [1000, 540], "radius": 20},
+	rcg::Session o(level_of(R"({"objects": [{"name": "box", "kind": "static", "face": "stop", "circle": {"center": [1000, 540], "radius": 20},
 		"tags": ["conductive"]}], "elements": [{"kind": "charger", "start": [750, 300], "end": [750, 780]}]})"));
 	shoot(o, 1200, 540);
 	CHECK(o.flags().is_true("el:box:charge"));

@@ -18,8 +18,7 @@
    "name": "spawner_1",
    "offset": [160.0, 0.0],
    "orientation": "BEAM_TANGENT",
-   "start": [600.0, 150.0],
-   "surface": {
+   "spawn": {
     "end": [60.0, 0.0],
     "left": {
      "effect": {
@@ -37,6 +36,7 @@
     "start": [-60.0, 0.0],
     "via": [0.0, 0.0]
    },
+   "start": [600.0, 150.0],
    "via": [600.0, 220.0]
   },
   {
@@ -46,8 +46,7 @@
    "label": "Spec",
    "name": "spawner_2",
    "orientation": "BEAM_NORMAL",
-   "start": [600.0, 320.0],
-   "surface": {
+   "spawn": {
     "end": [60.0, 0.0],
     "left": {
      "effect": {
@@ -65,17 +64,17 @@
     "start": [-60.0, 0.0],
     "via": [0.0, 0.0]
    },
+   "start": [600.0, 320.0],
    "via": [600.0, 390.0]
   },
   {
    "channel": "c",
    "end": [600.0, 630.0],
-   "face": "terminal",
+   "face": "stop",
    "kind": "spawner",
    "label": "Spec",
    "name": "spawner_3",
-   "start": [600.0, 490.0],
-   "surface": {
+   "spawn": {
     "end": [50.0, 0.0],
     "left": {
      "effect": {
@@ -93,18 +92,18 @@
     "start": [-50.0, 0.0],
     "via": [0.0, 0.0]
    },
+   "start": [600.0, 490.0],
    "via": [600.0, 560.0]
   },
   {
    "channel": "d",
    "end": [530.0, 750.0],
-   "face": "reflection",
+   "face": "mirror",
    "kind": "spawner",
    "label": "Spec",
    "name": "spawner_4",
    "orientation": "CARRIER_NORMAL",
-   "start": [370.0, 750.0],
-   "surface": {
+   "spawn": {
     "circle": {
      "center": [0.0, 0.0],
      "radius": 30.0
@@ -123,6 +122,7 @@
      "interactive": true
     }
    },
+   "start": [370.0, 750.0],
    "via": [450.0, 670.0]
   },
   {
@@ -221,8 +221,7 @@
    "label": "Spec",
    "name": "spawner_5",
    "orientation": "WORLD",
-   "start": [1100.0, 350.0],
-   "surface": {
+   "spawn": {
     "circle": {
      "center": [0.0, 0.0],
      "radius": 25.0
@@ -241,6 +240,7 @@
      "interactive": false
     }
    },
+   "start": [1100.0, 350.0],
    "via": [1100.0, 400.0]
   },
   {
@@ -250,8 +250,7 @@
    "label": "Spec",
    "name": "spawner_6",
    "orientation": "WORLD",
-   "start": [1100.0, 480.0],
-   "surface": {
+   "spawn": {
     "circle": {
      "center": [0.0, 0.0],
      "radius": 25.0
@@ -270,6 +269,7 @@
      "interactive": false
     }
    },
+   "start": [1100.0, 480.0],
    "via": [1100.0, 530.0]
   },
   {

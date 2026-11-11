@@ -31,10 +31,10 @@
    "via": [1400.0, 350.0]
   },
   {
+   "back": "pass",
    "end": [700.0, 600.0],
    "kind": "inversion",
    "name": "inversion_1",
-   "sides": "left",
    "start": [700.0, 300.0],
    "via": [820.0, 450.0]
   },

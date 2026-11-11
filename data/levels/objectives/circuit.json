@@ -48,6 +48,7 @@
  },
  "objects": [
   {
+   "body": "pass",
    "carries": "box",
    "circle": {
     "center": [920.0, 270.0],
@@ -57,8 +58,7 @@
    "gravity": -0.5,
    "label": "Bubble",
    "name": "bubble",
-   "pops": true,
-   "solid": false
+   "pops": true
   },
   {
    "circle": {

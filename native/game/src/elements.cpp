@@ -3,6 +3,7 @@
 
 #include "rcg/canon.hpp"
 #include "rcg/level.hpp"
+#include "rcg/surface_element.hpp"
 
 #include <algorithm>
 #include <functional>
@@ -405,6 +406,27 @@ bool unify(const json &tmpl, const json &pat, const json &val, Env &env) {
 	return canonical(pat) == canonical(val);
 }
 
+// Stage 207: a preset as a template: the surface element's parameters, its defaults
+// the preset's, and one surface (composed, never evaluated)
+json prepare_preset(const json &t) {
+	json out = t;
+	json ps = surface_element::params();
+	const json d = t.value("defaults", json::object());
+	for (auto it = d.begin(); it != d.end(); ++it) {
+		ps[it.key()]["default"] = it.value();
+	}
+	out.erase("extends");
+	out.erase("defaults");
+	out.erase("features");
+	out["features"] = t.value("features", json::array());
+	out["params"] = std::move(ps);
+	out["surfaces"] = json::array({json::object()});
+	out["preset"] = true;
+	return out;
+}
+
+bool preset(const json &tmpl) { return tmpl.value("preset", false); }
+
 json without(const json &j, const std::set<std::string> &keys) {
 	json out = j;
 	for (const std::string &k : keys) {
@@ -421,11 +443,48 @@ void check_template(const json &t, const std::string &path) {
 	if (!t.is_object()) {
 		fail(path, "a template object expected");
 	}
+	const bool preset = t.contains("extends"); // Stage 207: a preset of the surface element
 	for (auto it = t.begin(); it != t.end(); ++it) {
 		static const std::set<std::string> keys = {"doc", "label", "priority", "geometry", "params", "surfaces", "example", "tags", "shade"};
-		if (!keys.count(it.key())) {
-			fail(path, "unknown key '" + it.key() + "'");
+		static const std::set<std::string> preset_keys = {"doc", "label", "priority", "geometry", "extends", "defaults", "features", "example", "tags"};
+		if (!(preset ? preset_keys : keys).count(it.key())) {
+			fail(path, "unknown key '" + it.key() + "'" + (preset ? " (a preset: doc, label, priority, geometry, defaults, example, tags)" : ""));
 		}
+	}
+	if (preset) {
+		if (t["extends"] != "surface") {
+			fail(path + ".extends", "\"surface\" expected");
+		}
+		const json d = t.value("defaults", json::object());
+		if (!d.is_object()) {
+			fail(path + ".defaults", "an object of parameter values expected");
+		}
+		const json fs = t.value("features", json::array()); // the features it is about (the editor's, migrate's)
+		if (!fs.is_array()) {
+			fail(path + ".features", "an array of feature names expected");
+		}
+		for (const json &f : fs) {
+			const auto &all = surface_element::features();
+			if (!f.is_string() || std::none_of(all.begin(), all.end(), [&](const auto &x) { return x.name == f.get<std::string>(); })) {
+				fail(path + ".features", "a feature name expected (button, target, grapple, spawn, reset, break, ghost, door)");
+			}
+		}
+		const json &ps = surface_element::params();
+		for (auto it = d.begin(); it != d.end(); ++it) {
+			if (!ps.contains(it.key())) {
+				fail(path + ".defaults", "'" + it.key() + "' is not a parameter of the surface element");
+			}
+			const bool interp = it.value().is_string() && interpolated(pieces(it.value().get<std::string>()));
+			const std::string why = interp ? "" : misfit(ps[it.key()], it.value());
+			if (!why.empty()) {
+				fail(path + ".defaults." + it.key(), why);
+			}
+		}
+		json as_template = prepare_preset(t);
+		as_template.erase("preset");
+		as_template.erase("features");
+		check_template(as_template, path);
+		return;
 	}
 	if (t.contains("priority") && !t["priority"].is_number()) {
 		fail(path + ".priority", "a number expected");
@@ -543,17 +602,21 @@ void check_template(const json &t, const std::string &path) {
 	}
 }
 
+json prepare(const json &tmpl, const std::string &path) {
+	check_template(tmpl, path);
+	json t = tmpl.contains("extends") ? prepare_preset(tmpl) : tmpl;
+	if (!t.contains("params")) {
+		t["params"] = json::object();
+	}
+	return t;
+}
+
 const std::map<std::string, json> &builtin() {
 	static const std::map<std::string, json> kinds = [] {
 		std::map<std::string, json> out;
 		for (unsigned i = 0; i < embedded::COUNT; i++) {
 			const std::string kind = embedded::FILES[i].kind;
-			json t = json::parse(embedded::FILES[i].text);
-			check_template(t, "data/elements/" + kind + ".json");
-			if (!t.contains("params")) {
-				t["params"] = json::object();
-			}
-			out[kind] = std::move(t);
+			out[kind] = prepare(json::parse(embedded::FILES[i].text), "data/elements/" + kind + ".json");
 		}
 		return out;
 	}();
@@ -582,6 +645,17 @@ json params_of(const json &tmpl, const json &element, const std::string &name, c
 			env[it.key()] = element[it.key()];
 		} else if (!it.value().contains("default")) {
 			fail(path, "'" + it.key() + "' required");
+		}
+	}
+	// Stage 207: a preset's own features are on (a button writes a flag, a spawner spawns)
+	for (const json &f : tmpl.value("features", json::array())) {
+		for (const auto &feature : surface_element::features()) {
+			const bool on = (env.contains(feature.key) && !env[feature.key].is_null() && env[feature.key] != json(false))
+					|| (feature.name == "button" && env.contains("opens") && !env["opens"].is_null());
+			if (feature.name == f.get<std::string>() && !on && !(tmpl["params"].contains(feature.key) && tmpl["params"][feature.key].contains("default")
+						&& !tmpl["params"][feature.key]["default"].is_null() && tmpl["params"][feature.key]["default"] != json(false))) {
+				fail(path, "'" + feature.key + "' required" + (feature.name == "button" ? " (or opens)" : ""));
+			}
 		}
 	}
 	// the defaults: plain ones first, then the ones that interpolate other parameters
@@ -644,7 +718,7 @@ std::vector<json> expand(const json &tmpl, const json &element, const std::strin
 	std::vector<json> out;
 	const json &ts = tmpl["surfaces"];
 	for (size_t i = 0; i < ts.size(); i++) {
-		json s = eval(ts[i], env, path);
+		json s = preset(tmpl) ? surface_element::compose(env, path) : eval(ts[i], env, path);
 		if (element.contains("label") || !s.contains("label")) {
 			s["label"] = label;
 		}
@@ -676,7 +750,7 @@ json evaluate(const json &tmpl, const json &element, const std::string &name, co
 }
 
 std::optional<json> match(const std::string &kind, const json &tmpl, const std::vector<json> &surfaces, size_t at,
-		const std::string &fallback_name, const std::set<std::string> &taken) {
+		const std::string &fallback_name, const std::set<std::string> &taken, bool relabel) {
 	const json &ts = tmpl["surfaces"];
 	const size_t n = ts.size();
 	if (at + n > surfaces.size()) {
@@ -698,7 +772,7 @@ std::optional<json> match(const std::string &kind, const json &tmpl, const std::
 		}
 		want.push_back(std::move(s));
 	}
-	for (const bool flip : {false, true}) {
+	auto attempt = [&](const bool flip) -> std::optional<json> {
 		Env env;
 		bool ok = true;
 		for (size_t i = 0; i < n && ok; i++) {
@@ -707,16 +781,26 @@ std::optional<json> match(const std::string &kind, const json &tmpl, const std::
 			if (flip) {
 				swap_sides(val);
 			}
-			ok = unify(tmpl, without(ts[i], {"label"}), val, env);
+			if (preset(tmpl)) { // Stage 207: the surface element's parameters, read off the surface
+				const auto d = surface_element::decompose(val);
+				ok = d.has_value();
+				if (ok) {
+					for (auto it = d->begin(); it != d->end(); ++it) {
+						env[it.key()] = it.value();
+					}
+				}
+			} else {
+				ok = unify(tmpl, without(ts[i], {"label"}), val, env);
+			}
 		}
 		if (!ok) {
-			continue;
+			return std::nullopt;
 		}
 		std::string name = fallback_name;
 		if (auto it = env.find("name"); it != env.end()) {
 			name = it->second.get<std::string>();
 			if (taken.count(name)) {
-				continue;
+				return std::nullopt;
 			}
 			env.erase(it);
 		}
@@ -738,7 +822,7 @@ std::optional<json> match(const std::string &kind, const json &tmpl, const std::
 		};
 		std::optional<std::vector<json>> got = expands_to(element);
 		if (!got) {
-			continue;
+			return std::nullopt;
 		}
 		// the label: the template's, else the run's own (one for every surface)
 		bool labels_match = true;
@@ -746,6 +830,9 @@ std::optional<json> match(const std::string &kind, const json &tmpl, const std::
 			labels_match = labels_match && canonical((*got)[i].value("label", json())) == canonical(want[i].value("label", json()));
 		}
 		if (!labels_match) {
+			if (!relabel) {
+				return std::nullopt;
+			}
 			element["label"] = want[0].value("label", json());
 			got = expands_to(element);
 		}
@@ -761,7 +848,7 @@ std::optional<json> match(const std::string &kind, const json &tmpl, const std::
 			return true;
 		};
 		if (!same(got)) {
-			continue;
+			return std::nullopt;
 		}
 		// the parameters left at their defaults are not written
 		for (auto it = tmpl["params"].begin(); it != tmpl["params"].end(); ++it) {
@@ -775,6 +862,15 @@ std::optional<json> match(const std::string &kind, const json &tmpl, const std::
 			}
 		}
 		return element;
+	};
+	if (preset(tmpl)) { // a preset says a flipped surface either way: the shorter element
+		const auto a = attempt(false), b = attempt(true);
+		return a && b ? (b->size() < a->size() ? b : a) : a ? a : b;
+	}
+	for (const bool flip : {false, true}) {
+		if (auto e = attempt(flip)) {
+			return e;
+		}
 	}
 	return std::nullopt;
 }

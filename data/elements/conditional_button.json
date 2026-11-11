@@ -5,6 +5,11 @@
  },
  "label": "CondButton",
  "params": {
+  "body": {
+   "default": "pass",
+   "doc": "what the player and objects do: pass, or block (collide with it)",
+   "enum": ["pass", "block"]
+  },
   "flag": {
    "doc": "the flag it writes",
    "type": "string"
@@ -28,7 +33,13 @@
  "surfaces": [
   {
    "left": null,
-   "player_solid": false,
+   "player_solid": {
+    "$switch": "body",
+    "cases": {
+     "block": true,
+     "pass": false
+    }
+   },
    "resolver": {
     "key": "$when",
     "table": [

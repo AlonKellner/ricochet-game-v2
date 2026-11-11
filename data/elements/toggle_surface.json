@@ -2,14 +2,15 @@
  "doc": "A toggle surface: the hit removes it, and the arrow passing where it was brings it back (a twin pass-through stands in its place while it is gone). Flag el:<name>:off, kept across shots.",
  "label": "Toggle",
  "params": {
-  "face": {
-   "default": "wall",
-   "doc": "its sides' path effect",
-   "enum": ["wall", "mirror", "pass"]
+  "body": {
+   "default": "block",
+   "doc": "what the player and objects do: pass, or block (collide with it)",
+   "enum": ["pass", "block"]
   },
-  "solid": {
-   "default": true,
-   "doc": "the player collides with it while it is there"
+  "face": {
+   "default": "stop",
+   "doc": "its sides' face: stop, mirror or pass",
+   "enum": ["stop", "mirror", "pass"]
   }
  },
  "priority": 51,
@@ -25,7 +26,7 @@
       "pass": {
        "type": "pass"
       },
-      "wall": {
+      "stop": {
        "type": "terminal"
       }
      }
@@ -40,7 +41,13 @@
     ],
     "interactive": true
    },
-   "player_solid": "$solid",
+   "player_solid": {
+    "$switch": "body",
+    "cases": {
+     "block": true,
+     "pass": false
+    }
+   },
    "presence": [
     {
      "key": "el:${name}:off",
@@ -57,7 +64,7 @@
       "pass": {
        "type": "pass"
       },
-      "wall": {
+      "stop": {
        "type": "terminal"
       }
      }

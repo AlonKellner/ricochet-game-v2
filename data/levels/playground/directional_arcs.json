@@ -17,11 +17,11 @@
    "via": [1000.0, 540.0]
   },
   {
-   "back": true,
    "end": [1100.0, 690.0],
    "kind": "projection",
    "name": "projection_2",
    "normal": [1.0, 0.0],
+   "reverse": true,
    "start": [1100.0, 390.0],
    "type": "circle_directional_projection",
    "via": [1250.0, 540.0]

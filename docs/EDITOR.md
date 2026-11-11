@@ -177,7 +177,7 @@ selected item, Ctrl+D duplicates a detector or an object, and the arrows move it
 ## The panel
 
 Click a field to edit it:
-- **An enum** (a mirror's `back`, a door's `closed`) cycles to its next value; Shift+click goes back.
+- **An enum** (a surface's `face`, `back` or `body`) cycles to its next value; Shift+click goes back.
 - **A switch** (`flip`, a bool parameter, the room's `built`) toggles.
 - **The kind**: click it, then a kind in the palette, and the element becomes one (Shift+click: the next kind;
   Esc: no change). The element keeps its parameters, and the problems show what the new kind does not accept.
@@ -187,7 +187,10 @@ Click a field to edit it:
   Ctrl (Command on a Mac) to the text's start or end; typing, Backspace and Delete work at the caret. Ctrl+V pastes the
   system clipboard at the caret: its lines joined, the white space around it dropped (Stage 191).
 
-A parameter left at its default shows the default in parentheses. Renaming an element carries the buttons that
+A parameter left at its default shows the default in parentheses. A surface element (a wall, a fence, a button, a
+door ... GAME_SPEC 9.13, Stage 207) shows its `face`, `back` (unset: the face), `body` and `plannable`, then the
+parameters of each feature it has or its kind is about (a button's `flag`, `opens`, `op`, `value`, `deferred`); a
+feature typed into a field it does not show yet (`open`, `breaks`, `target`) shows its rows from then on. Renaming an element carries the buttons that
 open it (their `opens`). With nothing selected, the panel edits the level: its name, bounds, gravity, room,
 player's start, initial flags, goal, the goal's conditions (`requires`), detectors and objects. The goal (green),
 the detectors (yellow) and the objects (orange: pullable; gray: static) are drawn on the canvas.
