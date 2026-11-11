@@ -62,7 +62,7 @@ stands on the bottom edge).
 | B | an object: one click (a pullable circle of radius 16; edit it in the panel's `objects`) |
 | K, Shift+K | a carrier: a line by two points, a circle by its center and a point on it (drawn faint and dashed across the canvas) |
 | X | a collider: two clicks, a player-only segment -- a floor or a ledge the player stands on, which arrows pass (Stage 164) |
-| Tab / Shift+Tab, 1-9, or a kind in the panel's palette | what the line, arc and circle tools place (every kind, the level's own last; clicking a kind also picks the line tool, the circle tool for a circle-only kind) |
+| Tab / Shift+Tab, 1-9, or a kind in the panel's palette (Tab in a flag field: its completion, below) | what the line, arc and circle tools place (every kind, the level's own last; clicking a kind also picks the line tool, the circle tool for a circle-only kind) |
 | Delete, Backspace | remove the selection |
 | Ctrl+D | duplicate it (offset by 20, 20) |
 | Ctrl+C, Ctrl+X, Ctrl+V | copy, cut, paste the selection: pasted at the pointer (the copied box's center there, whole grid steps away), else 20, 20 on; the clipboard outlives the level (Stage 175) |
@@ -206,6 +206,17 @@ open it (their `opens`). With nothing selected, the panel edits the level: its n
 player's start, initial flags, goal, the goal's conditions (`requires`), detectors and objects. The goal (green),
 the detectors (yellow) and the objects (as the game draws them, Stage 208) are drawn on the canvas.
 
+**Completing a flag** (Stage 217). A field that takes a flag -- a parameter typed `flag` (a button's `flag`), `expr` (a
+door's `open`, a switch's `when`, `armed`, a shade's `when`) or `door` (a button's `opens`), an opening's flag, a
+detector's flag, a key inside the goal's `requires` or the starting `flags` -- lists under it, while you type, every
+flag the level writes or reads (`rcg::flag_index`: who writes it and who reads it, even while the level has problems;
+the arrow's `shot:fire`, `shot:charge`, `shot:frost` last), or the doors' names for `opens`. The word at the caret ranks
+them: in an expression only the flag the caret is in, between its operators; the level search's soft match, the matched
+characters lit, a flag's `:` a word start. With nothing typed the written flags come first; a typed name nothing has yet
+is offered as itself (`new`). Up and Down pick one (the top is picked), its rest drawn dim after the caret; **Tab** or a
+click puts it in place of the word, the field still being edited; **Enter** applies the field as typed; **Esc** closes
+the list, a second Esc cancels the edit. The picked flag's writers and readers are outlined on the canvas.
+
 **Problems.** Every element is checked as the game checks it after every change (the reader's errors, then the
 builder's, `validate_spec`). Each problem names its element. Clicking a problem selects that element. A level
 with problems cannot be played.
@@ -253,7 +264,8 @@ Every action is a command, a JSON object, which is also how scripts and tests dr
 | `{"op": "rename_level", "to": m}` | rename the level (Stage 170): a save is requested at once; `{"op": "state"}`'s `renamed_from` names the old file until the save (`{"name", "from"}`) |
 | `{"op": "play"}`, `{"op": "stop"}` | play mode (`{"from": [x, y]}`), edit mode |
 | `{"op": "document"}`, `{"op": "lower"}` | the document (`"document"`, `"text"`); its `rc-level/1` lowering (`"level"`) |
-| `{"op": "state"}`, `{"op": "panel"}` | the tool, kind, selection, mode, undo depth, focus, hint...; the panel's rows (an actions row's `options` and `lit`) |
+| `{"op": "state"}`, `{"op": "panel"}` | the tool, kind, selection, mode, undo depth, focus, hint...; the panel's rows (an actions row's `options` and `lit`; a completion row's `marks`, `picked`) |
+| `{"op": "complete"}` | the focused field's completion (Stage 217): `{"kind", "word", "items": [{"flag", "who", "marks", "elements", "detectors"}], "pick"}` |
 | `{"op": "pointer", "kind": "down" \| "up" \| "move", "x", "y", "button": "left" \| "right" \| "middle", "mods": ["shift", "ctrl", "alt"]}` | input as a host forwards it |
 | `{"op": "key", "key": "L" \| "escape" \| "f5" \| code, "mods": [...], "down": bool?}` | a key (a press and a release without `down`) |
 | `{"op": "text", "text": s}`, `{"op": "scroll", "dy": d}`, `{"op": "resize", "w": w, "h": h}` | typed text; the wheel; the window |
