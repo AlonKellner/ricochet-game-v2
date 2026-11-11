@@ -351,6 +351,7 @@ std::vector<Editor::Row> Editor::item_rows() const {
 		r.value = value(p);
 		if (r.value.empty() && !dflt.empty()) {
 			r.value = "(" + dflt + ")";
+			r.draft = dflt.rfind("none", 0) == 0 ? "" : dflt; // (Stage 218: a value, not a word about one)
 		}
 		r.hint = hint;
 		r.field = Field{"", p};

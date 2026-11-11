@@ -109,6 +109,7 @@ private:
 		std::vector<nlohmann::json> cmds = {}; // Stage 203: an Actions row's commands, one per option
 		int lit = -1;                          // ... the option lit (Stage 204: the flag it has)
 		std::vector<char> on = {};             // ... the options lit, several (Stage 215: the tags it has)
+		std::string draft = {};                // Stage 218: the text editing a default starts from (none: empty)
 	};
 
 	// the document
@@ -164,6 +165,7 @@ private:
 	void drag_to(const V2 &screen, unsigned mods);
 	void commit_field();
 	std::vector<Row> rows() const;
+	std::vector<Row> laid_rows() const; // (rows() lays them out, then settles the scroll: Stage 218)
 	std::vector<Row> marker_rows(const Field &owner) const; // Stage 179: an element's or a detector's marker (shape, colour)
 	std::vector<Row> chip_rows(const Row &r) const;          // Stage 212: an enum's (or a few options') values as chips
 	void click_row(const Row &r, unsigned mods);
@@ -215,6 +217,7 @@ private:
 	std::optional<Completion> completion() const;
 	std::string flag_field(const Field &f) const; // the field's kind of flag ("": none)
 	void accept_completion(size_t i);
+	std::optional<std::string> focus_draft_; // Stage 218: the default the field started from (applied unchanged: nothing written)
 	size_t complete_pick_ = 0;
 	bool complete_closed_ = false;
 	mutable uint64_t flags_at_ = ~uint64_t(0);
@@ -273,7 +276,8 @@ private:
 	V2 center_{960, 540};
 	double zoom_ = 1.0;
 	bool view_touched_ = false; // the user panned or zoomed: a resize keeps the view (else it frames the level again)
-	float panel_scroll_ = 0;    // the panel scrolled down by (px)
+	mutable float panel_scroll_ = 0; // the panel scrolled down by (px) -- Stage 218: settled by rows()
+	mutable std::string scrolled_for_, followed_; // (the selection it was scrolled for; the field it last showed)
 	bool kind_pick_ = false;    // the next palette click sets the selected element's kind
 	// the pointer
 	V2 mouse_;

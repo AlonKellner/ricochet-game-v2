@@ -191,7 +191,12 @@ Click a field to edit it:
   (`[700, 300]`, `true`, `{"door:gate": true}`), and a bare word is a string (`gate`). Empty text removes the
   field: a parameter returns to its default, a label to the kind's. The left and right arrows move the caret, with
   Ctrl (Command on a Mac) to the text's start or end; typing, Backspace and Delete work at the caret. Ctrl+V pastes the
-  system clipboard at the caret: its lines joined, the white space around it dropped (Stage 191).
+  system clipboard at the caret: its lines joined, the white space around it dropped (Stage 191). Stage 218: a field at
+  its default starts from the default's text (`door:gate`, `16`), and applied unchanged writes nothing; Ctrl+Backspace
+  clears what is before the caret; Ctrl+S, Ctrl+Z, Ctrl+Y and F5 apply the field first, then save, undo, redo or play.
+  Text that starts like JSON (`[`, `{`, `"`) and does not read is refused with the reason (the field kept), not taken as
+  a string; a flag expression that does not compile is tinted red as it is typed and refused. The panel keeps a field
+  newly edited, with its completion, in view; a new selection shows the panel from its top.
 
 A parameter left at its default shows the default in parentheses (`(none)`: unset; `plannable`'s `(auto)`: by its
 sides). A surface element (a wall, a fence, a button, a door ... GAME_SPEC 9.13, Stage 207) shows, after its
