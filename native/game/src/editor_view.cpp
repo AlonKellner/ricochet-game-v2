@@ -998,8 +998,8 @@ void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods
 		}
 		return;
 	}
-	if (focus_ && focus_->key == "#level_search") {
-		focus_.reset(); // (Stage 167: a click elsewhere leaves the search, opening nothing)
+	if (focus_ && (focus_->key == "#level_search" || focus_->key == "#find")) {
+		focus_.reset(); // (Stage 167: a click elsewhere leaves the search, opening nothing; Stage 219: and the find)
 	} else if (focus_) {
 		commit_field();
 	}
@@ -1189,6 +1189,32 @@ void Editor::key(int code, unsigned mods, bool down) {
 				return;
 			}
 		}
+		if (focus_->key == "#find") { // Stage 219: up/down pick, Enter shows it, Esc clears, then closes
+			const size_t n = std::min<size_t>(found().size(), 12);
+			if (code == KeyUp || code == KeyDown) {
+				find_pick_ = code == KeyUp ? (find_pick_ > 0 ? find_pick_ - 1 : 0) : (n == 0 ? 0 : std::min(find_pick_ + 1, n - 1));
+				return;
+			}
+			if (code == KeyEnter) {
+				const std::vector<Found> fs = found();
+				if (!fs.empty()) {
+					const std::string entry = fs[std::min(find_pick_, fs.size() - 1)].entry;
+					focus_.reset();
+					show_found(entry);
+				}
+				return;
+			}
+			if (code == KeyEscape) {
+				if (!buffer_.empty()) {
+					buffer_.clear();
+					caret_ = 0;
+					find_pick_ = 0;
+				} else {
+					focus_.reset();
+				}
+				return;
+			}
+		}
 		if (search && (code == KeyUp || code == KeyDown)) {
 			const size_t n = ranked_levels().size();
 			if (code == KeyUp && level_pick_ > 0) {
@@ -1251,6 +1277,14 @@ void Editor::key(int code, unsigned mods, bool down) {
 		hint_ = r.value("ok", false) ? "" : r.value("error", std::string());
 	};
 	if (mods & ModCtrl) {
+		if (code == 'F') { // Stage 219: find
+			focus_ = Field{"", "#find"};
+			buffer_.clear();
+			caret_ = 0;
+			find_pick_ = 0;
+			panel_scroll_ = 0;
+			return;
+		}
 		if (code == 'Z') {
 			run({{"op", (mods & ModShift) ? "redo" : "undo"}});
 		} else if (code == 'Y') {
@@ -1393,6 +1427,7 @@ void Editor::text(const std::string &utf8) {
 	buffer_.insert(caret_, typed);
 	caret_ += typed.size();
 	level_pick_ = 0; // (Stage 167: a new query picks its best match)
+	find_pick_ = 0;  // (Stage 219: the find too)
 	complete_pick_ = 0; // (Stage 217: and a new word its completion)
 	complete_closed_ = false;
 }
@@ -1677,6 +1712,120 @@ void Editor::accept_completion(size_t i) {
 	complete_closed_ = true; // (until the text changes: the word is what it says)
 }
 
+// Stage 219: what the level holds, ranked by the query -- a name's match first (its letters lit), then a kind's or a
+// flag's it touches (a little less); empty, all of it in the document's order
+std::vector<Editor::Found> Editor::found() const {
+	struct Thing {
+		std::string entry, name, what;
+	};
+	std::vector<Thing> things;
+	const json es = doc_.value("elements", json::array());
+	for (const json &e : es.is_array() ? es : json::array()) {
+		if (e.is_object() && e.value("name", json()).is_string()) {
+			things.push_back({"element:" + e["name"].get<std::string>(), e["name"].get<std::string>(), e.value("kind", "")});
+		}
+	}
+	for (const auto &[list, kind] : std::vector<std::pair<const char *, const char *>>{{"detectors", "detector"}, {"objects", "object"}, {"carriers", "carrier"}}) {
+		const json xs = doc_.value(list, json::array());
+		for (const json &x : xs.is_array() ? xs : json::array()) {
+			if (x.is_object() && x.value("name", json()).is_string()) {
+				things.push_back({std::string(kind) + ":" + x["name"].get<std::string>(), x["name"].get<std::string>(), kind});
+			}
+		}
+	}
+	if (item_path("goal")) {
+		things.push_back({"goal", "goal", "the goal"});
+	}
+	if (item_path("player")) {
+		things.push_back({"player", "player", "the player's start"});
+	}
+	const std::string q = focus_ && focus_->key == "#find" ? buffer_ : "";
+	std::vector<Found> out;
+	if (q.empty()) {
+		for (const Thing &t : things) {
+			out.push_back({t.entry, t.name, t.what, {}});
+		}
+		return out;
+	}
+	if (flags_at_ != version_) {
+		flags_ = flag_index(doc_);
+		flags_at_ = version_;
+	}
+	std::vector<std::pair<double, Found>> hits;
+	for (const Thing &t : things) {
+		double score = 0.0, other = 0.0;
+		std::vector<int> marks, none;
+		std::string what = t.what;
+		const bool by_name = soft_match(t.name, q, score, marks);
+		if (!by_name && soft_match(t.what, q, other, none)) {
+			score = other * 0.5;
+		}
+		if (!by_name) { // (a flag it writes or reads)
+			for (const FlagUse &u : flags_) {
+				const bool mine = (std::find(u.elements.begin(), u.elements.end(), t.name) != u.elements.end() && t.entry.rfind("element:", 0) == 0)
+						|| (std::find(u.detectors.begin(), u.detectors.end(), t.name) != u.detectors.end() && t.entry.rfind("detector:", 0) == 0);
+				if (mine && soft_match(u.flag, q, other, none) && other * 0.5 > score) {
+					score = other * 0.5;
+					what = t.what + " (" + u.flag + ")";
+				}
+			}
+		}
+		if (by_name || score > 0.0) {
+			hits.push_back({score, {t.entry, t.name, what, by_name ? marks : std::vector<int>{}}});
+		}
+	}
+	std::stable_sort(hits.begin(), hits.end(), [](const auto &a, const auto &b) { return a.first > b.first; });
+	for (auto &[s, f] : hits) {
+		out.push_back(std::move(f));
+	}
+	return out;
+}
+
+// ... selected, and the view centred on it
+void Editor::show_found(const std::string &entry) {
+	const json r = entry.rfind("element:", 0) == 0 ? command({{"op", "select"}, {"name", entry.substr(8)}}) : command({{"op", "select"}, {"item", entry}});
+	hint_ = r.value("ok", false) ? "" : r.value("error", std::string());
+	if (const std::optional<Box> b = box_of({entry})) {
+		center_ = V2::of((b->x0 + b->x1) / 2, (b->y0 + b->y1) / 2);
+		view_touched_ = true;
+	}
+}
+
+// Stage 219: the item a level problem names, by its path (level.detectors[0] ..., level.objective...); none: ""
+std::string Editor::item_of_problem(const std::string &message) const {
+	auto index = [&](const std::string &list) -> long {
+		const size_t at = message.find("." + list + "[");
+		if (at == std::string::npos) {
+			return -1;
+		}
+		size_t i = at + list.size() + 2;
+		long n = 0;
+		bool digits = false;
+		for (; i < message.size() && std::isdigit(static_cast<unsigned char>(message[i])); i++) {
+			n = n * 10 + (message[i] - '0');
+			digits = true;
+		}
+		return digits ? n : -1;
+	};
+	for (const auto &[list, kind] : std::vector<std::pair<std::string, std::string>>{{"detectors", "detector"}, {"objects", "object"}, {"carriers", "carrier"}}) {
+		const long i = index(list);
+		const json xs = doc_.value(list, json::array());
+		if (i >= 0 && xs.is_array() && size_t(i) < xs.size() && xs[size_t(i)].value("name", json()).is_string()) {
+			return kind + ":" + xs[size_t(i)]["name"].get<std::string>();
+		}
+	}
+	if (const long i = index("colliders"); i >= 0) {
+		return "collider:" + std::to_string(i);
+	}
+	if (message.find(".objective") != std::string::npos && item_path("goal")) {
+		return "goal";
+	}
+	if (message.find(".player") != std::string::npos && item_path("player")) {
+		return "player";
+	}
+	return "";
+}
+
 std::vector<Editor::Ranked> Editor::ranked_levels() const {
 	const std::string q = level_query();
 	std::vector<Ranked> out;
@@ -1850,6 +1999,26 @@ std::vector<Editor::Row> Editor::laid_rows() const {
 			add(r);
 		}
 		return out;
+	}
+	if (focus_ && focus_->key == "#find") { // Stage 219: Ctrl+F
+		add({Row::Value, "find", buffer_, "type a name, a kind or a flag: up/down picks, Enter selects it and shows it, Esc clears, then closes",
+				Field{"", "#find"}, "", -1, 0, {}});
+		const std::vector<Found> fs = found();
+		for (size_t k = 0; k < fs.size() && k < 12; k++) {
+			Row r;
+			r.kind = Row::Found;
+			r.label = fs[k].name;
+			r.value = fs[k].what;
+			r.marks = fs[k].marks;
+			r.lit = k == find_pick_ ? 1 : 0;
+			r.choice = fs[k].entry;
+			r.hint = "click or Enter: select it, the view on it";
+			add(r);
+		}
+		if (fs.empty()) {
+			text_rows("  nothing by that name, kind or flag", Row::Text, -1);
+		}
+		y += 8;
 	}
 	add({Row::Value, "tool", TOOL_NAMES[int(tool_)], "V select, L line, A arc, C circle, P the player's start, O the goal, D a detector, B an object, K a line carrier, shift+K a circle carrier, X a collider", std::nullopt,
 			"tool", -1, 0, {}});
@@ -2151,7 +2320,12 @@ std::vector<Editor::Row> Editor::laid_rows() const {
 	y += 8;
 	add({Row::Header, errors_.empty() ? "no problems" : std::to_string(errors_.size()) + " problem(s)", "", "", std::nullopt, "", -1, 0, {}});
 	for (const Error &er : errors_) {
+		const size_t first = out.size();
 		text_rows(er.message, Row::Error, er.element);
+		const std::string item = er.element < 0 ? item_of_problem(er.message) : ""; // (Stage 219: a level problem's item)
+		for (size_t k = first; k < out.size(); k++) {
+			out[k].choice = item;
+		}
 	}
 	return out;
 }
@@ -2302,6 +2476,14 @@ void Editor::click_row(const Row &r, unsigned mods) {
 		accept_completion(size_t(std::stoul(r.choice)));
 		return;
 	}
+	if (r.kind == Row::Found) { // Stage 219: selected, shown; the find closed
+		focus_.reset();
+		show_found(r.choice);
+		return;
+	}
+	if (focus_ && focus_->key == "#find") {
+		focus_.reset(); // (a click elsewhere leaves the find)
+	}
 	if (focus_ && focus_->key != "#level_search") {
 		commit_field();
 	}
@@ -2381,6 +2563,10 @@ void Editor::click_row(const Row &r, unsigned mods) {
 	}
 	if (r.kind == Row::Error && r.error_element >= 0 && size_t(r.error_element) < doc_["elements"].size()) {
 		select_element(doc_["elements"][size_t(r.error_element)].value("name", ""));
+		return;
+	}
+	if (r.kind == Row::Error && !r.choice.empty()) { // Stage 219: a level problem's item (a detector, an object, the goal)
+		run({{"op", "select"}, {"item", r.choice}});
 		return;
 	}
 	const bool back = (mods & ModShift) != 0;
@@ -3242,6 +3428,24 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					p.push_back(text_at(V2{cx + CELL / 2, base}, std::string(1, r.label[i]), hit ? ACCENT : base_c, FONT - 1));
 					p.back().alignment = 1;
 				}
+				break;
+			}
+			case Row::Found: { // Stage 219: what the find found -- the picked one lit, its name's matched characters, what it is
+				if (r.lit == 1 || over) {
+					p.push_back(rect(V2{x0 + 4, r.y + 1}, V2{PANEL_WIDTH - 8, ROW - 2}, r.lit == 1 ? rgba(1.0, 0.8, 0.3, 0.22) : rgba(1, 1, 1, 0.08)));
+				}
+				constexpr float CELL = 7.4f;
+				const std::string shown = r.label.size() > 22 ? r.label.substr(0, 21) + "." : r.label;
+				for (size_t i = 0; i < shown.size(); i++) {
+					const bool hit = std::find(r.marks.begin(), r.marks.end(), int(i)) != r.marks.end();
+					const float cx = x0 + 14 + float(i) * CELL;
+					if (hit) {
+						p.push_back(rect(V2{cx - 0.5f, r.y + 3}, V2{CELL + 1, ROW - 6}, rgba(1.0, 0.8, 0.3, 0.28)));
+					}
+					p.push_back(text_at(V2{cx + CELL / 2, base}, std::string(1, shown[i]), hit || r.lit == 1 ? ACCENT : TEXT, FONT - 1));
+					p.back().alignment = 1;
+				}
+				p.push_back(text_at(V2{x0 + 14 + float(std::max<size_t>(shown.size() + 1, 14)) * CELL, base}, r.value, DIM, FONT - 3));
 				break;
 			}
 			case Row::Complete: { // Stage 217: a flag the field may take -- the picked one lit, its matched characters, who uses it
