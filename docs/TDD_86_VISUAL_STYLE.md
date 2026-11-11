@@ -17,7 +17,7 @@ The rules are GAME_SPEC 22 (the Stage 208 note).
 | 208.2 | The surface painter public `rcg/surface_paint.hpp` (draw lists byte-identical) | Done |
 | 208.3 | The editor paints elements, edges and objects with it (`render::transform`, the level's starting flags) | Done |
 | 208.4 | The surfaces before the player, the cursor and the HUD (z0; the digest unchanged) | Done |
-| 208.5 | The user's interactive sign-off | Pending |
+| 208.5 | The user's interactive sign-off | Done ("Works perfectly! All stages are approved", 2026-11-11) |
 
 ## Decisions
 

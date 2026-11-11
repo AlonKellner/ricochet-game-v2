@@ -26,7 +26,7 @@ The rules are GAME_SPEC 9.13 (the element, its features, their composition, the 
 | 207.5 | The editor's rows for a surface element (its sides, body, plannable, the features it has) | Done |
 | 207.6 | The look: the steel band in the game and the editor (approved 2026-11-10) | Done |
 | 207.7 | Goldens: the session golden's draw shas (17 sessions: main, objectives/circuit, the inversion playgrounds) | Done |
-| 207.8 | The user's interactive sign-off | Pending |
+| 207.8 | The user's interactive sign-off | Done ("Works perfectly! All stages are approved", 2026-11-11) |
 
 ## Decisions
 

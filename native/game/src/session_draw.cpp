@@ -757,12 +757,18 @@ bool on_one_another(const StepGeom &a, const StepGeom &b) {
 // physical path's on the right
 bool physical_lane(rc::StepType t) { return t == rc::StepType::DivergedPhysical; }
 
-std::vector<Shift> side_by_side(const std::vector<rc::TraceStep> &steps) {
+// `shown`: how much of each step the fade leaves seen, a fraction from its start (none: all of it)
+std::vector<Shift> side_by_side(const std::vector<rc::TraceStep> &steps, const std::vector<double> *shown = nullptr) {
 	const size_t n = steps.size();
 	std::vector<Shift> out(n);
 	std::vector<StepGeom> g(n);
 	for (size_t i = 0; i < n; i++) {
-		g[i] = geom_of(steps[i]);
+		// Stage 211 (the user): only what shows takes a lane -- a step faded out is no step on another, one fading out
+		// is the part of it still seen
+		const double f = shown != nullptr ? (*shown)[i] : 1.0;
+		if (f > 0.0) {
+			g[i] = geom_of(f < 1.0 ? part_of(steps[i], 1.0, 0.0, f) : steps[i]);
+		}
 	}
 	// Stage 135 (the user): lanes by passes, not steps. A pass is a run of one
 	// walk's consecutive steps that go on from one another along one carrier
@@ -1073,6 +1079,33 @@ PathReveal reveal_of(const std::vector<rc::TraceStep> &steps, const std::vector<
 	return r;
 }
 
+// Stage 211 (the user): the lanes of what the fade leaves seen, and the fade they give. The fade is first measured
+// with every step's lane (an arc's length is its lane's); then each step takes a lane for the part of it still seen.
+struct Laid {
+	std::vector<Shift> shifts;
+	PathReveal reveal;
+};
+Laid lay_out(const std::vector<rc::TraceStep> &steps, double reach, bool full, const std::vector<PlanEntry> *never_reached, bool to_terminal) {
+	std::vector<Shift> all = side_by_side(steps);
+	PathReveal first = reveal_of(steps, all, reach, full, never_reached, to_terminal);
+	if (full) {
+		return {std::move(all), std::move(first)};
+	}
+	std::vector<double> shown;
+	for (size_t i = 0; i < steps.size(); i++) {
+		if (!first.fade[i]) {
+			shown.push_back(1.0);
+			continue;
+		}
+		const double to = *first.fade[i] + reach - first.along[i]; // (where its fade is over, from the step's start)
+		const double length = first.lengths[i];
+		shown.push_back(length > 0.0 ? std::clamp(to / length, 0.0, 1.0) : (to > 0.0 ? 1.0 : 0.0));
+	}
+	std::vector<Shift> shifts = side_by_side(steps, &shown);
+	PathReveal reveal = reveal_of(steps, shifts, reach, full, never_reached, to_terminal);
+	return {std::move(shifts), std::move(reveal)};
+}
+
 } // namespace
 
 std::vector<double> dash_offsets(const std::vector<rc::TraceStep> &steps) { return walk_lengths(steps, side_by_side(steps)); }
@@ -1121,8 +1154,9 @@ void Session::paint_steps(const std::vector<rc::TraceStep> &steps, std::vector<C
 		out.normal = n / len;
 		return out;
 	};
-	const std::vector<Shift> shifts = side_by_side(steps);
-	const PathReveal reveal = reveal_of(steps, shifts, preview_reach(), full_preview_, plan_never_reached(shown()), planned_to_terminal(shown()));
+	const Laid laid = lay_out(steps, preview_reach(), full_preview_, plan_never_reached(shown()), planned_to_terminal(shown()));
+	const std::vector<Shift> &shifts = laid.shifts;
+	const PathReveal &reveal = laid.reveal;
 	const std::vector<double> &along = reveal.along;
 	for (size_t i = 0; i < steps.size(); i++) {
 		const rc::TraceStep &ms = steps[i];
@@ -1175,7 +1209,7 @@ double Session::preview_reach() const { return std::hypot(double(level_.bounds.w
 
 std::vector<std::array<double, 2>> Session::preview_seen() const {
 	const Preview &pv = shown();
-	const PathReveal r = reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), full_preview_, plan_never_reached(pv), planned_to_terminal(pv));
+	const PathReveal r = lay_out(pv.merged, preview_reach(), full_preview_, plan_never_reached(pv), planned_to_terminal(pv)).reveal;
 	std::vector<std::array<double, 2>> out;
 	for (size_t i = 0; i < pv.merged.size(); i++) {
 		out.push_back({r.seen(i, 0.0), r.seen(i, r.lengths[i])});
@@ -1191,7 +1225,7 @@ void Session::paint_path(std::vector<Call> &out, double dash_phase) const {
 		if (display_mode_ == 0) {
 			if (!pv.merged.empty()) {
 				paint_steps(pv.merged, out, dash_phase, &pv.dots, &pv.marks);
-				const PathReveal reveal = reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), full_preview_, plan_never_reached(pv), planned_to_terminal(pv));
+				const PathReveal reveal = lay_out(pv.merged, preview_reach(), full_preview_, plan_never_reached(pv), planned_to_terminal(pv)).reveal;
 				for (const auto &[pt, col] : truncation_markers(pv)) {
 					// (Stage 195: a stop past where the path fades out is not shown)
 					double seen = 1.0;
@@ -1209,7 +1243,7 @@ void Session::paint_path(std::vector<Call> &out, double dash_phase) const {
 			// Stage 195: each walk alone shows as it does in the merge: to its cursor, the physical one to a divergence
 			// (Stage 205: where its steps in the merge begin to fade -- a planned walk that never reaches its cursor
 			// past its first unplanned event, one that goes on to a planned terminal whole to it)
-			const PathReveal merged = reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), false, plan_never_reached(pv), planned_to_terminal(pv));
+			const PathReveal merged = lay_out(pv.merged, preview_reach(), false, plan_never_reached(pv), planned_to_terminal(pv)).reveal;
 			std::optional<double> fade_at;
 			for (size_t i = 0; i < pv.merged.size(); i++) {
 				const rc::StepType t = pv.merged[i].type;
@@ -1391,7 +1425,7 @@ std::vector<render::FrameNode> Session::draw_frame() const {
 		if (!things.empty() || preview) {
 			cached(glow_draw_, {flags_version_, preview ? (trace_version_ * (READY_RISE + READY_FALL + 1) + int(ready_ * (READY_RISE + READY_FALL))) * 2 + (full_preview_ ? 1 : 0) : -1, world_->version()}, NodeKind::Glow, 1, V2{}, WHITE,
 					[&](std::vector<Call> &out) {
-						const PathReveal reveal = preview ? reveal_of(pv.merged, side_by_side(pv.merged), preview_reach(), full_preview_, plan_never_reached(pv), planned_to_terminal(pv)) : PathReveal{};
+						const PathReveal reveal = preview ? lay_out(pv.merged, preview_reach(), full_preview_, plan_never_reached(pv), planned_to_terminal(pv)).reveal : PathReveal{};
 						auto seen = [&](size_t step) { return reveal.seen(step, std::numeric_limits<double>::infinity()); };
 						auto tagged = [&](const std::string &name, const char *tag) {
 							for (const Tagged &t : level_.tagged) {
