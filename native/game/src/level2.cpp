@@ -581,7 +581,11 @@ size_t written(const json &tmpl, const json &element) {
 	}
 	size_t n = 0;
 	for (auto it = element.begin(); it != element.end(); ++it) {
-		n += tmpl["params"].contains(it.key()) && !own.count(it.key());
+		// (Stage 216: what it does written counts twice -- a face, a feature it is not about: a kind is about what the
+		// arrow meets; its body and its plannable count once. An inversion with body pass, not a shield with face invert;
+		// a spawner with face stop, not a shield that spawns)
+		const bool does = it.key() == "face" || it.key() == "back" || !surface_element::feature_of(it.key()).empty();
+		n += tmpl["params"].contains(it.key()) && !own.count(it.key()) ? (does ? 2 : 1) : 0;
 	}
 	return n;
 }

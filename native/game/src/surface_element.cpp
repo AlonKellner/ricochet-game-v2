@@ -13,22 +13,73 @@ namespace {
 
 [[noreturn]] void fail(const std::string &path, const std::string &what) { throw LevelError(path + ": " + what); }
 
-const json FACES = {"stop", "pass", "mirror"};
+// Stage 216: invert, project and portal too, with their parameters (projection, reverse, normal; d, theta)
+const json FACES = {"stop", "pass", "mirror", "invert", "project", "portal"};
+const json PROJECTIONS = {"line_normal_projection", "circle_normal_projection", "line_directional_projection", "circle_directional_projection"};
 
-std::string effect_of(const std::string &face) { return face == "stop" ? "terminal" : face == "mirror" ? "reflection" : "pass"; }
+bool set(const json &env, const char *p) { return env.contains(p) && !env[p].is_null(); }
 
-std::optional<std::string> face_of(const json &effect) {
-	if (!effect.is_object() || effect.size() != 1 || !effect.contains("type") || !effect["type"].is_string()) {
+bool directional(const std::string &t) { return t == "line_directional_projection" || t == "circle_directional_projection"; }
+
+// what a face does to the arrow, its effect (a projection's and a portal's parameters the element's)
+json effect_of(const std::string &face, const json &env, const std::string &path) {
+	if (face == "project") {
+		const std::string t = env.value("projection", "line_normal_projection");
+		json e = {{"type", t}, {"back", env.value("reverse", false)}};
+		if (directional(t)) {
+			e["normal"] = env.value("normal", json());
+		}
+		return e;
+	}
+	if (face == "portal") {
+		if (!set(env, "d")) {
+			fail(path + ".d", "a portal's displacement [x, y] expected");
+		}
+		return {{"type", "portal"}, {"d", env["d"]}, {"theta", env.value("theta", json(0.0))}};
+	}
+	return {{"type", face == "stop" ? "terminal" : face == "mirror" ? "reflection" : face == "invert" ? "inversion" : "pass"}};
+}
+
+// a face the arrow meets: the plan may meet it (unset plannable) -- all but stop and pass
+bool acts(const std::string &face) { return face != "stop" && face != "pass"; }
+
+// ... and back: the face an effect is, its parameters into `fp` (none: not a face, or parameters that disagree with fp's)
+std::optional<std::string> face_of(const json &effect, json &fp) {
+	if (!effect.is_object() || !effect.value("type", json()).is_string()) {
 		return std::nullopt;
 	}
 	const std::string t = effect["type"].get<std::string>();
+	auto agree = [&](const char *k, const json &v) {
+		if (fp.contains(k) && fp[k] != v) {
+			return false;
+		}
+		fp[k] = v;
+		return true;
+	};
+	if (std::find(PROJECTIONS.begin(), PROJECTIONS.end(), json(t)) != PROJECTIONS.end()) {
+		if (effect.size() != (directional(t) ? 3u : 2u) || !effect.value("back", json()).is_boolean() || (directional(t) && !effect.contains("normal"))) {
+			return std::nullopt;
+		}
+		if (!agree("projection", t) || !agree("reverse", effect["back"]) || (directional(t) && !agree("normal", effect["normal"]))) {
+			return std::nullopt;
+		}
+		return "project";
+	}
+	if (t == "portal") {
+		if (effect.size() != 3 || !effect.contains("d") || !effect.contains("theta") || !agree("d", effect["d"]) || !agree("theta", effect["theta"])) {
+			return std::nullopt;
+		}
+		return "portal";
+	}
+	if (effect.size() != 1) {
+		return std::nullopt;
+	}
 	if (t == "terminal") return "stop";
 	if (t == "reflection") return "mirror";
 	if (t == "pass") return "pass";
+	if (t == "inversion") return "invert";
 	return std::nullopt;
 }
-
-bool set(const json &env, const char *p) { return env.contains(p) && !env[p].is_null(); }
 
 std::string broken(const std::string &name) { return "shot:" + name + ":broken"; }
 
@@ -79,7 +130,7 @@ std::string feature_of(const std::string &param) {
 
 const json &params() {
 	static const json ps = {
-			{"face", {{"default", "stop"}, {"enum", FACES}, {"doc", "what the arrow does: stop, pass or mirror (the left side; both unless back)"}}},
+			{"face", {{"default", "stop"}, {"enum", FACES}, {"doc", "what the arrow does: stop, pass, mirror, invert (a circle), project or portal (the left side; both unless back)"}}},
 			{"back", {{"default", nullptr}, {"enum", FACES}, {"doc", "the right side's face (unset: the face)"}}},
 			{"body", {{"default", "block"}, {"enum", {"pass", "block", "platform"}}, {"doc", "what the player and objects do: pass, block, or stand on it from above"}}},
 			{"plannable", {{"default", nullptr}, {"type", "bool"}, {"doc", "the sides can be planned (unset: a side that reflects or has hits)"}}},
@@ -107,6 +158,13 @@ const json &params() {
 			{"then_face", {{"default", "pass"}, {"enum", FACES}, {"doc", "the face while when holds"}}},
 			{"then_back", {{"default", nullptr}, {"enum", FACES}, {"doc", "the right side's face while when holds (unset: then_face)"}}},
 			{"armed", {{"default", nullptr}, {"type", "string"}, {"doc", "a flag expression: the hits apply only while it holds (a button only a charged arrow presses)"}}},
+			// Stage 216: a projecting face's and a portal's parameters
+			{"projection", {{"default", "line_normal_projection"}, {"enum", PROJECTIONS},
+								   {"doc", "a projecting face's: along the carrier's normal, or a fixed direction (normal); line_* on a line, circle_* on a circle"}}},
+			{"reverse", {{"default", false}, {"doc", "a projecting face projects back instead of through"}}},
+			{"normal", {{"default", nullptr}, {"type", "point"}, {"doc", "a directional projection's direction"}}},
+			{"d", {{"default", nullptr}, {"type", "point"}, {"doc", "a portal's displacement: its image is the surface moved by z -> e^{i theta} z + d"}}},
+			{"theta", {{"default", 0.0}, {"doc", "a portal's rotation (radians)"}}},
 	};
 	return ps;
 }
@@ -149,18 +207,25 @@ json compose(const json &env, const std::string &path) {
 		hits.push_back({{"key", "ghost"}, {"kind", "state"}, {"op", "toggle"}, {"value", true}});
 	}
 	auto side = [&](const std::string &f, bool with_hits) {
-		json s = {{"effect", {{"type", effect_of(f)}}}};
+		json s = {{"effect", effect_of(f, env, path)}};
 		if (with_hits && !hits.empty()) {
 			s["hits"] = hits;
 		}
-		s["interactive"] = set(env, "plannable") ? env["plannable"].get<bool>() : f == "mirror" || (with_hits && !hits.empty());
+		s["interactive"] = set(env, "plannable") ? env["plannable"].get<bool>() : acts(f) || (with_hits && !hits.empty());
 		return s;
 	};
+	// a portal is one portal, both sides, and switches nothing (the builder's pair)
+	if ((face == "portal") != (back == "portal")) {
+		fail(path + ".back", "a portal's sides are one portal: face and back both portal");
+	}
 	// Stage 214: a face by flag (switch: when) and hits by flag (armed) -- one resolver on the flag, its `true` row the
 	// then_ faces and the hits, its DEFAULT row the faces, with the hits unless armed (switchable's row order)
 	const bool switched = set(env, "when"), armed = set(env, "armed");
 	if (switched && armed && env["when"] != env["armed"]) {
 		fail(path + ".armed", "one flag per surface: when and armed differ");
+	}
+	if ((switched || armed) && (face == "portal" || env.value("then_face", "") == "portal" || env.value("then_back", json()) == "portal")) {
+		fail(path + ".when", "a portal switches nothing: no when, no armed");
 	}
 	json out;
 	if (switched || armed) {
@@ -215,7 +280,8 @@ std::optional<json> decompose(const json &s) {
 		std::string face, back;
 		json hits, li, ri;
 	};
-	auto read_pair = [](const json &l, const json &r) -> std::optional<Pair> {
+	json fp = json::object(); // (Stage 216: the faces' parameters, one set for every side)
+	auto read_pair = [&fp](const json &l, const json &r) -> std::optional<Pair> {
 		if (!l.is_object() || !r.is_object()) {
 			return std::nullopt;
 		}
@@ -226,7 +292,7 @@ std::optional<json> decompose(const json &s) {
 				}
 			}
 		}
-		const auto face = face_of(l.value("effect", json())), back = face_of(r.value("effect", json()));
+		const auto face = face_of(l.value("effect", json()), fp), back = face_of(r.value("effect", json()), fp);
 		const json hits = l.value("hits", json::array());
 		if (!face || !back || !hits.is_array() || canonical(hits) != canonical(r.value("hits", json::array()))) {
 			return std::nullopt;
@@ -353,8 +419,8 @@ std::optional<json> decompose(const json &s) {
 	std::vector<std::pair<json, bool>> sides; // (its value, the rule's)
 	for (const auto &[p, own] : pairs) {
 		const bool with = own && !hits.empty();
-		sides.push_back({p.li, p.face == "mirror" || with});
-		sides.push_back({p.ri, p.back == "mirror" || with});
+		sides.push_back({p.li, acts(p.face) || with});
+		sides.push_back({p.ri, acts(p.back) || with});
 	}
 	bool by_rule = true;
 	for (const auto &[v, rule] : sides) {
@@ -391,6 +457,9 @@ std::optional<json> decompose(const json &s) {
 		} else if (!(env.contains("name") && key == broken(env["name"].get<std::string>()) && c.value("values", json()) == json::array({"DEFAULT"}))) {
 			return std::nullopt;
 		}
+	}
+	for (auto it = fp.begin(); it != fp.end(); ++it) { // (Stage 216: a projection's, a portal's)
+		env[it.key()] = it.value();
 	}
 	return env;
 }

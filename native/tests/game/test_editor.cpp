@@ -1506,17 +1506,26 @@ json chips_under(rcg::Editor &ed, const std::string &label) {
 }
 
 // ... a click on its option `option`
+// (every chip row under it: Stage 216's six faces take two)
 void click_chip(rcg::Editor &ed, const std::string &label, const std::string &option) {
-	const json r = chips_under(ed, label);
-	REQUIRE(r.is_object());
-	const json &os = r["options"];
-	for (size_t c = 0; c < os.size(); c++) {
-		if (os[c] == option) {
-			const float w = rcg::Editor::PANEL_WIDTH - 20, x = r["x"].get<float>() - 10 + w * (float(c) + 0.5f) / float(os.size()), y = r["y"].get<float>() + 10;
-			ed.pointer(rcg::Editor::PtrMove, x, y, 0, 0);
-			ed.pointer(rcg::Editor::PtrDown, x, y, rcg::Editor::BtnLeft, 0);
-			ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
-			return;
+	const json panel = ok(ed, {{"op", "panel"}});
+	const json &rows = panel["rows"];
+	for (size_t k = 0; k < rows.size(); k++) {
+		if (rows[k]["kind"] != "value" || rows[k]["label"] != label) {
+			continue;
+		}
+		for (size_t q = k + 1; q < rows.size() && rows[q]["kind"] == "actions"; q++) {
+			const json &r = rows[q];
+			const json &os = r["options"];
+			for (size_t c = 0; c < os.size(); c++) {
+				if (os[c] == option) {
+					const float w = rcg::Editor::PANEL_WIDTH - 20, x = r["x"].get<float>() - 10 + w * (float(c) + 0.5f) / float(os.size()), y = r["y"].get<float>() + 10;
+					ed.pointer(rcg::Editor::PtrMove, x, y, 0, 0);
+					ed.pointer(rcg::Editor::PtrDown, x, y, rcg::Editor::BtnLeft, 0);
+					ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
+					return;
+				}
+			}
 		}
 	}
 	FAIL("no chip " << option << " under " << label);
@@ -1527,9 +1536,9 @@ TEST_CASE("editor: an enum's values are chips under its row, the current lit; an
 	ed.resize(1920, 1080);
 	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"name", "w"}, {"start", {700.0, 300.0}}, {"end", {800.0, 300.0}}}}});
 	ok(ed, {{"op", "select"}, {"name", "w"}});
-	CHECK(chips_under(ed, "face")["options"] == json::parse(R"(["stop", "pass", "mirror"])"));
+	CHECK(chips_under(ed, "face")["options"] == json::parse(R"(["stop", "pass", "mirror"])")); // (and invert, project, portal)
 	CHECK(chips_under(ed, "face")["lit"] == 0); // (unset: the kind's stop)
-	CHECK(chips_under(ed, "back")["options"] == json::parse(R"(["= face", "stop", "pass", "mirror"])"));
+	CHECK(chips_under(ed, "back")["options"] == json::parse(R"(["= face", "stop", "pass"])")); // (Stage 216: seven, three rows)
 	CHECK(chips_under(ed, "back")["lit"] == 0);
 	CHECK(chips_under(ed, "body")["lit"] == 1); // block
 	click_chip(ed, "face", "mirror");
@@ -1548,7 +1557,7 @@ TEST_CASE("editor: an enum's values are chips under its row, the current lit; an
 	// Stage 214: a switch's then_back, unset its then_face's
 	ok(ed, {{"op", "add_feature"}, {"name", "w"}, {"feature", "switch"}});
 	CHECK(element(ed, "w")["when"] == "switch");
-	CHECK(chips_under(ed, "then_back")["options"] == json::parse(R"(["= then_face", "stop", "pass", "mirror"])"));
+	CHECK(chips_under(ed, "then_back")["options"] == json::parse(R"(["= then_face", "stop", "pass"])"));
 	CHECK(chips_under(ed, "then_back")["lit"] == 0);
 	click_chip(ed, "then_face", "mirror");
 	CHECK(element(ed, "w")["then_face"] == "mirror");
@@ -1589,6 +1598,36 @@ TEST_CASE("editor: an enum's values are chips under its row, the current lit; an
 	CHECK(ok(ed, {{"op", "state"}})["undo"].get<size_t>() == undo); // (nothing done)
 	CHECK(tag_on("burning"));
 	ok(ed, {{"op", "select"}, {"name", "w"}});
+	// Stage 216: a face's parameters under the faces -- a projection's, a directional one's normal, a portal's
+	auto value_rows = [&] {
+		const json panel = ok(ed, {{"op", "panel"}});
+		std::vector<std::string> out;
+		for (const json &r : panel["rows"]) {
+			if (r["kind"] == "value") {
+				out.push_back(r["label"].get<std::string>());
+			}
+		}
+		return out;
+	};
+	auto shows = [&](const std::string &l) {
+		const std::vector<std::string> ls = value_rows();
+		return std::find(ls.begin(), ls.end(), l) != ls.end();
+	};
+	ok(ed, {{"op", "remove_feature"}, {"name", "w"}, {"feature", "switch"}});
+	CHECK_FALSE(shows("projection"));
+	click_chip(ed, "face", "project");
+	CHECK(element(ed, "w")["face"] == "project");
+	CHECK(shows("projection"));
+	CHECK(shows("reverse"));
+	CHECK_FALSE(shows("normal"));
+	ok(ed, {{"op", "set"}, {"name", "w"}, {"key", "projection"}, {"value", "line_directional_projection"}});
+	CHECK(shows("normal"));
+	click_chip(ed, "face", "portal");
+	CHECK(shows("d"));
+	CHECK(shows("theta"));
+	CHECK_FALSE(shows("projection"));
+	ok(ed, {{"op", "set"}, {"name", "w"}, {"key", "face"}, {"value", nullptr}});
+	ok(ed, {{"op", "set"}, {"name", "w"}, {"key", "projection"}, {"value", nullptr}});
 	// an object's options (Stage 146's cycled rows) as chips too
 	ok(ed, {{"op", "set"}, {"path", "/objects"}, {"value", json::parse(R"([{"name": "box", "circle": {"center": [1000, 400], "radius": 16}}])")}});
 	ok(ed, {{"op", "select"}, {"item", "object:box"}});
@@ -1653,7 +1692,7 @@ TEST_CASE("editor: a surface element's features -- grouped under their names, ad
 	ok(ed, {{"op", "select"}, {"name", "b"}});
 	CHECK(has("text", "button (the kind's)"));
 	CHECK_FALSE(has("actions", "remove button"));
-	ok(ed, {{"op", "add"}, {"element", {{"kind", "portal"}, {"name", "p"}, {"start", {700.0, 500.0}}, {"end", {800.0, 500.0}}}}});
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "pre_inversion"}, {"name", "p"}, {"circle", {{"center", {700.0, 500.0}}, {"radius", 50.0}}}}}});
 	CHECK_FALSE(ed.command({{"op", "add_feature"}, {"name", "p"}, {"feature", "target"}}).value("ok", true));
 	CHECK_FALSE(ed.command({{"op", "add_feature"}, {"name", "w"}, {"feature", "laser"}}).value("ok", true));
 }

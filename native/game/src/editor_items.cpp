@@ -694,7 +694,7 @@ void Editor::scale(json &doc, const std::vector<std::string> &entries, const Sca
 			if (g.contains("circle")) {
 				circle(g["circle"]);
 			}
-			if (e.value("kind", "") == "portal" && is_point(e.value("d", json()))) { // the image's displacement
+			if (is_point(e.value("d", json()))) { // the image's displacement (Stage 216: any portal face's)
 				const json d = e["d"];
 				e["d"] = jpoint(snapped(d[0].get<double>() * t.sx), snapped(d[1].get<double>() * t.sy));
 			}

@@ -113,6 +113,12 @@ std::map<std::string, std::vector<Old>> retired() {
 			{"charged_door", {keep("body", {"pass", "block"})}}, {"burnable", {keep("body", {"pass", "block"})}},
 			{"water", {{"fire", {"shot:fire", "lamp"}, [](const json &v) { return same("flag", v); }}, keep("body", {"pass", "block"})}},
 			{"charger", {{"charge", {"shot:charge", "lamp"}, [](const json &v) { return same("flag", v); }}, keep("body", {"pass", "block"})}},
+			// Stage 216: inversion, projection and portal as faces
+			{"inversion", {keep("back", {"invert", "pass"}), keep("body", {"pass", "block"})}},
+			{"projection", {{"type", {"line_normal_projection", "circle_normal_projection", "line_directional_projection", "circle_directional_projection"},
+								   [](const json &v) { return same("projection", v); }},
+								   keep("reverse", {false, true}), keep("normal", {json::array({0.0, 1.0})}), keep("body", {"pass", "block"})}},
+			{"portal", {keep("d", {json::array({200.0, 0.0}), json::array({-50.0, 30.0})}), keep("theta", {0.0, 0.5}), keep("body", {"pass", "block"})}},
 	};
 }
 
@@ -120,7 +126,7 @@ std::map<std::string, std::vector<Old>> retired() {
 
 TEST_CASE("surface element: every retired kind expands as its preset does, over every value of its parameters (Stage 207)") {
 	const auto kinds = retired();
-	CHECK(kinds.size() == 25);
+	CHECK(kinds.size() == 28);
 	size_t n = 0;
 	for (const auto &[kind, olds] : kinds) {
 		CAPTURE(kind);
@@ -219,8 +225,50 @@ TEST_CASE("surface element: a surface's parameters read back from it (Stage 207)
 		}
 	}
 	CHECK(n > 1000);
+	// Stage 216: the faces with parameters -- invert, project (each projection, either way, a direction), portal
+	for (const char *face : {"invert", "project", "portal"}) {
+		for (const json &back : {json(), json("pass"), json("stop"), json("mirror")}) {
+			for (const json &projection : {json("line_normal_projection"), json("circle_directional_projection")}) {
+				for (const bool reverse : {false, true}) {
+					for (int features = 0; features < 1 << 8; features += 37) {
+						if (std::string(face) == "portal" && (!back.is_null() || projection != "line_normal_projection" || reverse)) {
+							continue; // (a portal: one portal both sides; its parameters d, theta)
+						}
+						json env = {{"name", "e"}};
+						for (auto it = ps.begin(); it != ps.end(); ++it) {
+							env[it.key()] = it.value()["default"];
+						}
+						env["channel"] = "e";
+						env["face"] = face;
+						env["back"] = back;
+						env["projection"] = projection;
+						env["reverse"] = reverse;
+						env["normal"] = json::array({0.0, 1.0});
+						env["d"] = json::array({200.0, 0.0});
+						env["theta"] = 0.25;
+						if (features & 1) env["flag"] = "lamp";
+						if (features & 2) env["target"] = true;
+						if (features & 32) env["breaks"] = true;
+						if (features & 128) env["open"] = "!det:plate";
+						const json s = se::compose(env, "test");
+						const auto d = se::decompose(s);
+						CAPTURE(env);
+						REQUIRE(d.has_value());
+						json again = env;
+						for (auto it = d->begin(); it != d->end(); ++it) {
+							again[it.key()] = it.value();
+						}
+						CHECK(rcg::canonical(se::compose(again, "test")) == rcg::canonical(s));
+						n++;
+					}
+				}
+			}
+		}
+	}
 	// what no surface element composes
-	CHECK_FALSE(se::decompose(json::parse(R"({"left": {"effect": {"type": "inversion"}, "interactive": true}, "right": null, "player_solid": true})")));
+	CHECK_FALSE(se::decompose(json::parse(R"({"left": {"effect": {"type": "inversion"}, "interactive": true}, "right": null, "player_solid": true})"))); // (a missing side)
+	CHECK_FALSE(se::decompose(json::parse(R"({"left": {"effect": {"type": "line_normal_projection", "back": true}, "interactive": true},
+		"right": {"effect": {"type": "line_normal_projection", "back": false}, "interactive": true}, "player_solid": false})"))); // (two projections)
 	CHECK_FALSE(se::decompose(json::parse(R"({"left": null, "right": null, "player_solid": false, "resolver": {"key": "f", "table": []}})")));
 	CHECK_FALSE(se::decompose(json::parse(R"({"left": null, "right": null, "player_solid": false, "resolver": {"key": "f", "table": [
 		["true", {"left": {"effect": {"type": "pass"}, "interactive": false}, "right": {"effect": {"type": "pass"}, "interactive": false}}],
@@ -387,4 +435,35 @@ TEST_CASE("surface element: the kit as presets -- migrate reads a tagged kind ba
 	}
 	CHECK(rcg::canonical(got) == rcg::canonical(lv["elements"]));
 	CHECK_FALSE(back.contains("flags")); // (a battery's charge: its tag's, not the level's)
+}
+
+TEST_CASE("surface element: inversion, projection and portal as faces -- any surface's (Stage 216)") {
+	auto err = [](const json &element) {
+		try {
+			rcg::lower_level(level_of(element));
+		} catch (const rcg::LevelError &e) {
+			return std::string(e.what());
+		}
+		return std::string("no error");
+	};
+	// a blocking projection that is a button; a portal that is a target
+	const json low = rcg::lower_level(level_of(json{{"kind", "wall"}, {"name", "w"}, {"face", "project"}, {"reverse", true}, {"flag", "lamp"},
+														 {"start", {700.0, 300.0}}, {"end", {800.0, 300.0}}}))
+							 .level;
+	bool found = false;
+	for (const json &s : low["surfaces"]) {
+		if (s.value("label", json()) == "Surface" && s["left"].contains("hits")) { // (not the room's walls)
+			found = true;
+			CHECK(s["left"]["effect"] == json::parse(R"({"type": "line_normal_projection", "back": true})"));
+			CHECK(s["player_solid"] == true);
+			CHECK(s["left"]["hits"].size() == 1);
+		}
+	}
+	CHECK(found);
+	CHECK(err(json{{"kind", "target"}, {"face", "portal"}, {"d", {300.0, 0.0}}, {"start", {0.0, 0.0}}, {"end", {0.0, 10.0}}}) == "no error");
+	CHECK(err(json{{"kind", "wall"}, {"face", "portal"}, {"start", {0.0, 0.0}}, {"end", {0.0, 10.0}}}).find(".d: a portal's displacement") != std::string::npos);
+	CHECK(err(json{{"kind", "wall"}, {"face", "portal"}, {"back", "stop"}, {"d", {300.0, 0.0}}, {"start", {0.0, 0.0}}, {"end", {0.0, 10.0}}}).find("one portal")
+			!= std::string::npos);
+	CHECK(err(json{{"kind", "portal"}, {"d", {300.0, 0.0}}, {"when", "f"}, {"start", {0.0, 0.0}}, {"end", {0.0, 10.0}}}).find("a portal switches nothing")
+			!= std::string::npos);
 }

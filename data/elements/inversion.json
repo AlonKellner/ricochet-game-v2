@@ -1,58 +1,21 @@
 {
- "doc": "A circle inversion (an arc or a full circle): both sides invert, or only the left one (the other passes; flip for the right).",
+ "defaults": {
+  "back": "invert",
+  "face": "invert"
+ },
+ "doc": "A circle inversion (an arc or a full circle): both sides invert, or only the left one (back: pass, or any face; flip for the right). Stage 216: a preset (the face invert).",
+ "extends": "surface",
  "geometry": "circle",
  "label": {
   "$switch": "back",
   "cases": {
    "invert": "FullInversion",
-   "pass": "Inversion"
+   "mirror": "Inversion",
+   "pass": "Inversion",
+   "portal": "Inversion",
+   "project": "Inversion",
+   "stop": "Inversion"
   }
  },
- "params": {
-  "back": {
-   "default": "invert",
-   "doc": "the right side: inverts too, or passes",
-   "enum": ["invert", "pass"]
-  },
-  "body": {
-   "default": "block",
-   "doc": "what the player and objects do: pass, or block (collide with it)",
-   "enum": ["pass", "block"]
-  }
- },
- "priority": 22,
- "surfaces": [
-  {
-   "left": {
-    "effect": {
-     "type": "inversion"
-    },
-    "interactive": true
-   },
-   "player_solid": {
-    "$switch": "body",
-    "cases": {
-     "block": true,
-     "pass": false
-    }
-   },
-   "right": {
-    "$switch": "back",
-    "cases": {
-     "invert": {
-      "effect": {
-       "type": "inversion"
-      },
-      "interactive": true
-     },
-     "pass": {
-      "effect": {
-       "type": "pass"
-      },
-      "interactive": false
-     }
-    }
-   }
-  }
- ]
+ "priority": 22
 }
