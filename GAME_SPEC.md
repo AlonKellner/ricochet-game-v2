@@ -910,17 +910,24 @@ A surface's properties are orthogonal, and an element states each one on its own
 | break | `breaks` | the surface is gone for the rest of the shot (`shot:<name>:broken`) |
 | ghost | `ghost` | toggles the arrow's ghost mode |
 | door | `open` (a flag expression, §9.11) | the surface exists while it is unset or false (§9.6) |
+| switch (Stage 214) | `when` (a flag expression), `then_face`, `then_back` (unset: `then_face`) | while `when` holds its sides are `then_face`/`then_back`, otherwise `face`/`back` (a categorical resolver on `when`, §9.4) |
+| armed (Stage 214) | `armed` (a flag expression) | its hits apply only while `armed` holds (a button only a charged arrow presses) |
 
 The features compose in a fixed order: the hits, on both sides, in the table's order (button, target, grapple, spawn,
 reset, break, ghost); the presence conditions (§9.6, all required) the door's, then the break's. `deferred` applies to
-every write a hit makes.
+every write a hit makes. A switch, or armed hits, make the surface one resolver on that flag (§9.4): its `true` row the
+`then_` faces with the hits, its `DEFAULT` row the faces, with the hits unless armed. A surface has one such flag: `when`
+and `armed` both set must be the same expression.
 
 The surface kinds are **presets** of this element (docs/ELEMENTS.md): a name, a label, and defaults. A wall is face
 `stop`, body `block`; a shield `stop`, `pass`; a fence `pass`, `block`; a passthrough `pass`, `pass`; a platform `pass`,
 `platform`; a mirror `mirror`, `pass`; a button a pass that writes its flag; a door a wall present while `door:<name>` is
 unset. Every preset takes every key: a button with body `block` is one the player stands on, a door that is also a button
 writes a flag when hit, a target may break. Kinds that need more than this (inversions, projections, portals, the kit of
-§10.6's arrow states, switching sides by a flag) are templates that take `body` (`pass` \| `block`) for their solidity.
+§10.6's arrow states) are templates that take `body` (`pass` \| `block`) for their solidity. Since Stage 214 a switchable
+is a preset (a switch: face `stop`, `then_face` `pass`, body `pass`; labelled `FlagMirror` when it turns mirror, else
+`Gate`), and so is a conditional button (a button armed by `shot:charge`, face `stop`, op `set`); the toggle surface and
+the freezable wall are retired (no level used them; every wall reflects a frosted arrow since Stage 156).
 
 **Its look** follows from the pair (§22.2): the face's colour, and a body that blocks while the face does not stop drawn
 with a steel band (a fence, a solid mirror, a blocking button). A wall (stop and block) is plain red, a shield (stop, not
@@ -3279,4 +3286,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.108.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.109.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

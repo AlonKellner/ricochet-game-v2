@@ -466,7 +466,7 @@ void check_template(const json &t, const std::string &path) {
 		for (const json &f : fs) {
 			const auto &all = surface_element::features();
 			if (!f.is_string() || std::none_of(all.begin(), all.end(), [&](const auto &x) { return x.name == f.get<std::string>(); })) {
-				fail(path + ".features", "a feature name expected (button, target, grapple, spawn, reset, break, ghost, door)");
+				fail(path + ".features", "a feature name expected (button, target, grapple, spawn, reset, break, ghost, door, switch, armed)");
 			}
 		}
 		const json &ps = surface_element::params();

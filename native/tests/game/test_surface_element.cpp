@@ -1,6 +1,7 @@
 // Stage 207: the surface element (rcg/surface_element.hpp, GAME_SPEC 9.13).
 // The 15 kinds it replaced (native/tests/game/retired_templates, their
-// templates as Stage 206 left them) expand exactly as their presets do over
+// templates as Stage 206 left them; Stage 214: switchable and conditional_button
+// as Stage 213 left them) expand exactly as their presets do over
 // every value of their parameters; a surface's parameters read back from it;
 // the features combine (a blocking button, a door that is a button); migrate
 // picks the preset of the run's label.
@@ -14,6 +15,7 @@
 #include <doctest/doctest.h>
 #include <nlohmann/json.hpp>
 
+#include <algorithm>
 #include <filesystem>
 #include <fstream>
 #include <functional>
@@ -45,9 +47,18 @@ json level_of(const json &element) {
 	return lv;
 }
 
+// (a resolver's rows by their values: a row matching the flag's value wins, else DEFAULT -- with one of each the order
+// says nothing; Stage 214's switch writes switchable's, true first)
 std::vector<json> expand(const json &tmpl, json element) {
 	element.update(SEG);
-	return rcg::elements::expand(tmpl, element, "e", "test");
+	std::vector<json> out = rcg::elements::expand(tmpl, element, "e", "test");
+	for (json &s : out) {
+		if (s.contains("resolver") && s["resolver"].value("table", json()).is_array()) {
+			std::sort(s["resolver"]["table"].begin(), s["resolver"]["table"].end(),
+					[](const json &a, const json &b) { return rcg::canonical(a[0]) < rcg::canonical(b[0]); });
+		}
+	}
+	return out;
 }
 
 // An old parameter: its values, and its new spelling (name, value; a null name: dropped).
@@ -90,6 +101,12 @@ std::map<std::string, std::vector<Old>> retired() {
 								keep("orientation", {"BEAM_TANGENT", "BEAM_NORMAL", "CARRIER_TANGENT", "CARRIER_NORMAL", "BEAM_REFLECTED", "WORLD"}),
 								keep("mirror_with_side", {false, true}), keep("trim", {true, false}), keep("channel", {"e", "other"}), keep("offset", {json::array({0.0, 0.0}), json::array({3.0, -4.0})})}},
 			{"resetter", {keep("channels", {json::array({"a", "b"})}), face({"pass", "terminal", "reflection"}), keep("deferred", {false, true})}},
+			// Stage 214: a face by flag, hits by flag
+			{"switchable", {{"flag", {"open", "x ^ y"}, [](const json &v) { return same("when", v); }},
+								   {"on", {"pass", "stop", "mirror"}, [](const json &v) { return same("then_face", v); }},
+								   {"off", {"pass", "stop", "mirror"}, [](const json &v) { return same("face", v); }}, keep("body", {"pass", "block"})}},
+			{"conditional_button", {keep("flag", {"lamp"}), keep("op", {"set", "toggle"}), keep("value", {true, 2.0}),
+										   {"when", {"shot:charge", "det:p && !q"}, [](const json &v) { return same("armed", v); }}, keep("body", {"pass", "block"})}},
 	};
 }
 
@@ -97,7 +114,7 @@ std::map<std::string, std::vector<Old>> retired() {
 
 TEST_CASE("surface element: every retired kind expands as its preset does, over every value of its parameters (Stage 207)") {
 	const auto kinds = retired();
-	CHECK(kinds.size() == 15);
+	CHECK(kinds.size() == 17);
 	size_t n = 0;
 	for (const auto &[kind, olds] : kinds) {
 		CAPTURE(kind);
@@ -155,7 +172,7 @@ TEST_CASE("surface element: a surface's parameters read back from it (Stage 207)
 		for (const json &back : {json(), json("stop"), json("pass"), json("mirror")}) {
 			for (const char *body : {"pass", "block", "platform"}) {
 				for (const json &plannable : {json(), json(true), json(false)}) {
-					for (int features = 0; features < 1 << 8; features += 7) { // (a sample of the 256 sets)
+					for (int features = 0; features < 1 << 10; features += 7) { // (a sample of the 1024 sets)
 						json env = {{"name", "e"}};
 						for (auto it = ps.begin(); it != ps.end(); ++it) {
 							env[it.key()] = it.value()["default"];
@@ -173,6 +190,11 @@ TEST_CASE("surface element: a surface's parameters read back from it (Stage 207)
 						if (features & 32) env["breaks"] = true;
 						if (features & 64) env["ghost"] = true;
 						if (features & 128) env["open"] = "!det:plate";
+						if (features & 256) { // Stage 214: a face by flag (another face than its own)
+							env["when"] = "f";
+							env["then_face"] = std::string(face) == "pass" ? "mirror" : "pass";
+						}
+						if ((features & 512) && (features & 127)) env["armed"] = "f"; // (hits by flag: some hits)
 						const json s = se::compose(env, "test");
 						const auto d = se::decompose(s);
 						CAPTURE(env);
@@ -193,6 +215,9 @@ TEST_CASE("surface element: a surface's parameters read back from it (Stage 207)
 	// what no surface element composes
 	CHECK_FALSE(se::decompose(json::parse(R"({"left": {"effect": {"type": "inversion"}, "interactive": true}, "right": null, "player_solid": true})")));
 	CHECK_FALSE(se::decompose(json::parse(R"({"left": null, "right": null, "player_solid": false, "resolver": {"key": "f", "table": []}})")));
+	CHECK_FALSE(se::decompose(json::parse(R"({"left": null, "right": null, "player_solid": false, "resolver": {"key": "f", "table": [
+		["true", {"left": {"effect": {"type": "pass"}, "interactive": false}, "right": {"effect": {"type": "pass"}, "interactive": false}}],
+		["DEFAULT", {"left": {"effect": {"type": "pass"}, "interactive": false}, "right": {"effect": {"type": "pass"}, "interactive": false}}]]}})"))); // (rows alike)
 	CHECK_FALSE(se::decompose(json::parse(
 			R"({"left": {"effect": {"type": "pass"}, "hits": [{"kind": "target"}], "interactive": true}, "right": {"effect": {"type": "pass"}, "interactive": false}, "player_solid": false})")));
 }
@@ -273,6 +298,54 @@ TEST_CASE("surface element: migrate picks the preset of the run's label, writing
 										 {"via", {1000.0, 500.0}}},
 								 json{{"kind", "door"}, {"name", "door_1"}, {"face", "mirror"}, {"start", {1100.0, 300.0}}, {"end", {1100.0, 700.0}},
 										 {"via", {1100.0, 500.0}}}})}};
+	const json back = rcg::migrate_level(rcg::lower_level(lv).level);
+	json got = json::array();
+	for (const json &e : back["elements"]) {
+		if (e.value("kind", "") != "edges") {
+			got.push_back(e);
+		}
+	}
+	CHECK(rcg::canonical(got) == rcg::canonical(lv["elements"]));
+}
+
+TEST_CASE("surface element: a face by flag and hits by flag -- switch and armed (Stage 214)") {
+	auto surface = [](const json &element) {
+		const json low = rcg::lower_level(level_of(element)).level; // (held: a temporary's member dies before the loop)
+		for (const json &s : low["surfaces"]) {
+			if (s.contains("resolver")) {
+				return s;
+			}
+		}
+		return json();
+	};
+	// a wall that turns mirror while the lamp is on; it presses (a button) either way
+	json s = surface(json{{"kind", "wall"}, {"name", "w"}, {"when", "lamp"}, {"then_face", "mirror"}, {"flag", "door:gate"}, {"start", {700.0, 300.0}}, {"end", {800.0, 300.0}}});
+	REQUIRE(s.is_object());
+	CHECK(s["resolver"]["key"] == "lamp");
+	CHECK(s["resolver"]["table"][0][0] == "true");
+	CHECK(s["resolver"]["table"][0][1]["left"]["effect"]["type"] == "reflection");
+	CHECK(s["resolver"]["table"][1][1]["left"]["effect"]["type"] == "terminal");
+	CHECK(s["resolver"]["table"][1][1]["left"]["hits"].size() == 1);
+	// a conditional button: its hits only while armed holds
+	s = surface(json{{"kind", "conditional_button"}, {"name", "c"}, {"flag", "lamp"}, {"start", {700.0, 300.0}}, {"end", {800.0, 300.0}}});
+	REQUIRE(s.is_object());
+	CHECK(s["resolver"]["key"] == "shot:charge");
+	CHECK(s["resolver"]["table"][0][1]["left"]["hits"] == json::parse(R"([{"key": "lamp", "kind": "state", "op": "set", "value": true}])"));
+	CHECK_FALSE(s["resolver"]["table"][1][1]["left"].contains("hits"));
+	CHECK(s["resolver"]["table"][1][1]["left"]["interactive"] == false);
+	// one flag per surface
+	try {
+		rcg::lower_level(level_of(json{{"kind", "button"}, {"flag", "x"}, {"when", "a"}, {"armed", "b"}, {"start", {0.0, 0.0}}, {"end", {0.0, 10.0}}}));
+		FAIL("no error");
+	} catch (const rcg::LevelError &e) {
+		CHECK(std::string(e.what()).find("one flag per surface") != std::string::npos);
+	}
+	// migrate finds the presets
+	const json lv = {{"schema", "rc-level/2"},
+			{"elements", json::array({json{{"kind", "switchable"}, {"name", "switchable_1"}, {"when", "open"}, {"then_face", "mirror"}, {"face", "pass"},
+											  {"start", {700.0, 300.0}}, {"end", {700.0, 700.0}}, {"via", {700.0, 500.0}}},
+								 json{{"kind", "conditional_button"}, {"name", "conditional_button_1"}, {"flag", "lamp"}, {"start", {800.0, 300.0}},
+										 {"end", {800.0, 700.0}}, {"via", {800.0, 500.0}}}})}};
 	const json back = rcg::migrate_level(rcg::lower_level(lv).level);
 	json got = json::array();
 	for (const json &e : back["elements"]) {

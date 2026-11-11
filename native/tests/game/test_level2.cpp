@@ -136,10 +136,10 @@ TEST_CASE("rc-level/2: every level lowers to its committed lowering, and migrate
 
 TEST_CASE("rc-level/2: every builtin template expands to surfaces that build") {
 	const auto &kinds = rcg::elements::builtin();
-	CHECK(kinds.size() == 33);
+	CHECK(kinds.size() == 31); // (Stage 214: toggle_surface and freezable retired)
 	const json local = {{"start", {-20.0, 0.0}}, {"end", {20.0, 0.0}}, {"via", {0.0, 0.0}},
 			{"left", {{"effect", {{"type", "reflection"}}}, {"interactive", true}}}, {"right", nullptr}};
-	const json required = {{"portal", {{"d", {300.0, 0.0}}}}, {"switchable", {{"flag", "open"}}}, {"button", {{"flag", "open"}}},
+	const json required = {{"portal", {{"d", {300.0, 0.0}}}}, {"switchable", {{"when", "open"}}}, {"button", {{"flag", "open"}}},
 			{"spawner", {{"spawn", local}}}, {"resetter", {{"channels", {"spawner_1"}}}},
 			{"conditional_button", {{"flag", "switch"}}}};
 	std::vector<json> elements;
@@ -164,7 +164,7 @@ TEST_CASE("rc-level/2: every builtin template expands to surfaces that build") {
 	}
 	const rcg::Level lv = rcg::parse_level_json(level_of(elements));
 	const std::vector<rcg::BuiltSurface> built = rcg::build_level(lv);
-	CHECK(built.size() == 4 + 33 + 1 + 1 + 4); // (a toggle surface stands two surfaces) // the room, the elements (a portal's image), the edges
+	CHECK(built.size() == 4 + 31 + 1 + 4); // the room, the elements (a portal's image), the edges
 	// docs/ELEMENTS.md lists every builtin kind
 	const std::string doc = read_text(ROOT / "docs" / "ELEMENTS.md");
 	for (const auto &[kind, tmpl] : kinds) {
@@ -270,7 +270,7 @@ TEST_CASE("rc-level/2: the schema is strict, and names the element") {
 	CHECK(err(level_of({}, {{"colour", 1}})).find("unknown key 'colour'") != std::string::npos);
 	CHECK(err(level_of({}, {{"carriers", nullptr}})).find("an array of carriers expected") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "crystal"}})})).find("level.elements[0].kind: unknown element kind 'crystal'") != std::string::npos);
-	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"shiny", true}})})).find("unknown key 'shiny' (parameters: back, body, breaks,") != std::string::npos);
+	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"shiny", true}})})).find("unknown key 'shiny' (parameters: armed, back, body, breaks,") != std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "one_sided_mirror"}, {"back", "maybe"}})})).find("level.elements[0] (one_sided_mirror_1).back: one of stop, pass, mirror expected")
 			!= std::string::npos);
 	CHECK(err(level_of({seg({{"kind", "portal"}})})).find("'d' required") != std::string::npos);

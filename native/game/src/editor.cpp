@@ -810,7 +810,7 @@ json Editor::op(const json &cmd) {
 			f = g.name == name ? &g : f;
 		}
 		if (f == nullptr) {
-			refuse("no feature '" + name + "' (button, target, grapple, spawn, reset, break, ghost, door)");
+			refuse("no feature '" + name + "' (button, target, grapple, spawn, reset, break, ghost, door, switch, armed)");
 		}
 		const json params = ks[kind].value("params", json::object());
 		const json own = ks[kind].value("features", json::array());
@@ -818,15 +818,21 @@ json Editor::op(const json &cmd) {
 			if (surface_element::on(*f, e, params)) {
 				refuse("'" + e.value("name", "") + "' has the " + name + " already");
 			}
-			// its starting value: the kind of surface that is that feature's (its example, else its default), else true
+			// its starting value: the kind of surface that is that feature's (its example, else its default) -- one about
+			// it alone first, then one about it among others (Stage 214: armed, the conditional button's) -- else true
 			json value = true;
-			for (auto it = ks.begin(); it != ks.end(); ++it) {
-				const json fs = it->value("features", json::array());
-				if (it->value("preset", false) && fs.size() == 1 && fs[0] == name) {
-					const json ex = it->value("example", json::object());
-					const json ds = it->value("params", json::object()).value(f->key, json::object()).value("default", json());
-					value = ex.contains(f->key) ? ex[f->key] : !ds.is_null() && ds != json(false) ? ds : value;
-					break;
+			bool found = false;
+			for (const bool alone : {true, false}) {
+				for (auto it = ks.begin(); it != ks.end() && !found; ++it) {
+					const json fs = it->value("features", json::array());
+					if (it->value("preset", false) && (alone ? fs.size() == 1 && fs[0] == name : std::find(fs.begin(), fs.end(), json(name)) != fs.end())) {
+						const json ex = it->value("example", json::object());
+						const json ds = it->value("params", json::object()).value(f->key, json::object()).value("default", json());
+						if (ex.contains(f->key) || (!ds.is_null() && ds != json(false))) {
+							value = ex.contains(f->key) ? ex[f->key] : ds;
+							found = true;
+						}
+					}
 				}
 			}
 			if (value.is_string()) { // (door:${name} -> door:<the element's name>)

@@ -1,154 +1,22 @@
 {
- "doc": "A surface that switches with a flag (a categorical resolver, GAME_SPEC 9.4): its 'on' sides while the flag is true, its 'off' sides otherwise. Present either way (see door for one that disappears).",
- "example": {
-  "flag": "switch"
+ "defaults": {
+  "body": "pass",
+  "face": "stop",
+  "then_face": "pass"
  },
+ "doc": "A surface that switches with a flag (a categorical resolver, GAME_SPEC 9.4): its then_face (and then_back) sides while the flag expression when holds, its face (and back) otherwise. Present either way (see door for one that disappears).",
+ "example": {
+  "when": "switch"
+ },
+ "extends": "surface",
+ "features": ["switch"],
  "label": {
-  "$switch": "on",
+  "$switch": "then_face",
   "cases": {
    "mirror": "FlagMirror",
    "pass": "Gate",
    "stop": "Gate"
   }
  },
- "params": {
-  "body": {
-   "default": "pass",
-   "doc": "what the player and objects do: pass, or block (collide with it)",
-   "enum": ["pass", "block"]
-  },
-  "flag": {
-   "doc": "the flag it reads",
-   "type": "string"
-  },
-  "off": {
-   "default": "stop",
-   "doc": "the sides otherwise",
-   "enum": ["pass", "stop", "mirror"]
-  },
-  "on": {
-   "default": "pass",
-   "doc": "the sides while the flag is true",
-   "enum": ["pass", "stop", "mirror"]
-  }
- },
- "priority": 33,
- "surfaces": [
-  {
-   "left": null,
-   "player_solid": {
-    "$switch": "body",
-    "cases": {
-     "block": true,
-     "pass": false
-    }
-   },
-   "resolver": {
-    "key": "$flag",
-    "table": [
-     [
-      "true",
-      {
-       "$switch": "on",
-       "cases": {
-        "mirror": {
-         "left": {
-          "effect": {
-           "type": "reflection"
-          },
-          "interactive": true
-         },
-         "right": {
-          "effect": {
-           "type": "reflection"
-          },
-          "interactive": true
-         }
-        },
-        "pass": {
-         "left": {
-          "effect": {
-           "type": "pass"
-          },
-          "interactive": false
-         },
-         "right": {
-          "effect": {
-           "type": "pass"
-          },
-          "interactive": false
-         }
-        },
-        "stop": {
-         "left": {
-          "effect": {
-           "type": "terminal"
-          },
-          "interactive": false
-         },
-         "right": {
-          "effect": {
-           "type": "terminal"
-          },
-          "interactive": false
-         }
-        }
-       }
-      }
-     ],
-     [
-      "DEFAULT",
-      {
-       "$switch": "off",
-       "cases": {
-        "mirror": {
-         "left": {
-          "effect": {
-           "type": "reflection"
-          },
-          "interactive": true
-         },
-         "right": {
-          "effect": {
-           "type": "reflection"
-          },
-          "interactive": true
-         }
-        },
-        "pass": {
-         "left": {
-          "effect": {
-           "type": "pass"
-          },
-          "interactive": false
-         },
-         "right": {
-          "effect": {
-           "type": "pass"
-          },
-          "interactive": false
-         }
-        },
-        "stop": {
-         "left": {
-          "effect": {
-           "type": "terminal"
-          },
-          "interactive": false
-         },
-         "right": {
-          "effect": {
-           "type": "terminal"
-          },
-          "interactive": false
-         }
-        }
-       }
-      }
-     ]
-    ]
-   },
-   "right": null
-  }
- ]
+ "priority": 33
 }
