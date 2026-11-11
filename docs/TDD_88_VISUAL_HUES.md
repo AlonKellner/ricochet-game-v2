@@ -16,7 +16,7 @@ The rules are GAME_SPEC 22 (22.1, 22.2, 22.3, 22.4, 22.6).
 | 210.4 | Hues: spawn teal, the reflection blue lifted; projections unchanged | Done |
 | 210.5 | Accessibility: dim and crossing dots 3 units (diverged steps stay dashed: the user) | Done |
 | 210.6 | GAME_SPEC 22 rewritten from the style table | Done |
-| 210.7 | Goldens (every session's draw shas) and the user's interactive sign-off | Pending |
+| 210.7 | Goldens (every session's draw shas) and the user's interactive sign-off | Done ("Works perfectly! All stages are approved", 2026-11-11) |
 
 ## Decisions
 
