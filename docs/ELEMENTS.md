@@ -49,6 +49,9 @@ shows). Every preset takes every key, for example a button the player stands on:
 | `platform` | A one-way platform (GAME_SPEC 25.1): the arrow passes; the player and objects stand on its top and pass it from below or the side; the player holding down drops through; moving in any direction while overlapping it, the player engages it (gravity-free movement); a pulled object or a grappled player passes it. Drawn wood brown. Unlike a `fence`, which blocks the player every way and stops a pull. | `face`="pass", `body`="platform" | `Platform` |
 | `mirror` | A mirror reflecting on both sides, both plannable. | `face`="mirror", `body`="pass" | `Mirror` |
 | `one_sided_mirror` | A one-sided mirror: its left side (left of the walk start -> via -> end) reflects and is plannable; its back passes (or stops: `back`="stop"). `flip`: the mirror faces right. | `face`="mirror", `back`="pass", `body`="pass" | `OneSidedMirror` |
+| `inversion` | A circle inversion (an arc or a full circle): both sides invert, or only the left one (`back`: `pass`, or any face; `flip` for the right). Stage 216: a preset, the face `invert`. | `face`="invert", `back`="invert", `body`="block" | `FullInversion` / `Inversion` |
+| `projection` | A projection (GAME_SPEC 10.4) on both sides: the arrow leaves along the carrier's normal (line/circle normal) or along a fixed direction (directional: `normal`), forward or back (`reverse`). Stage 216: a preset, the face `project`. | `face`="project", `projection`="line_normal_projection" (or circle_normal_, line_directional_, circle_directional_projection), `reverse`=false, `normal` (directional), `body`="pass" | by projection and reverse (`Projection`, `CircleDirBack`, ...) |
+| `portal` | A portal pair: the surface and its image, the surface moved by z -> e^{i theta} z + d (two ids). The arrow entering one leaves the other. Stage 216: a preset, the face `portal` (both sides; no switch). | `face`="portal", `d` (required), `theta`=0.0, `body`="pass" | `Portal` |
 | `button` | A button: when the arrow hits it (either side), it sets or toggles a flag, usually a door's (`opens`: the door's name). `body`="block": one the player stands on and objects rest on. | `face`="pass", `body`="pass"; requires `flag` or `opens` | `Button` |
 | `target` | A target: hitting it (either side) registers the flag target:<id> (GAME_SPEC 24). | `target`=true, `body`="pass" | `Target` |
 | `door` | A door: a barrier that exists while its flag expression `open` is unset or false, and is gone (for the arrow and the player) while it is true. Drawn with amber posts across its ends and an amber core -- as is any surface given an `open` (Stage 213). A button opens it (`opens`: its name). | `open`="door:${name}" | `Door` |
@@ -70,15 +73,11 @@ shows). Every preset takes every key, for example a button the player stands on:
 
 ## The templates
 
-The other kinds are templates (below): what they do is more than the surface element says (a circle's inversion, a
-projection, a portal pair). Each takes `body` (`pass` | `block`) for
-its solidity.
+The other kinds are templates (below): what they do is more than the surface element says (a pre-transform circle,
+light and shadow).
 
 | Kind | What it is | Parameters (defaults) | Label |
 |---|---|---|---|
-| `inversion` | A circle inversion (an arc or a full circle): both sides invert, or only the left one (`back`: `pass`; `flip` for the right). | `back`="invert" (or "pass"), `body`="block" | `FullInversion` / `Inversion` |
-| `projection` | A projection (GAME_SPEC 10.4) on both sides: the arrow leaves along the carrier's normal (line/circle normal) or along a fixed direction (directional: `normal`), forward or back (`reverse`). | `type`="line_normal_projection" (or circle_normal_, line_directional_, circle_directional_projection), `reverse`=false, `normal` (directional), `body`="pass" | by type and reverse (`Projection`, `CircleDirBack`, ...) |
-| `portal` | A portal pair: the surface and its image, the surface moved by z -> e^{i theta} z + d (two ids). The arrow entering one leaves the other. | `d` (required), `theta`=0.0, `body`="pass" | `Portal` |
 | `pre_inversion` | A pre-transform inversion circle (GAME_SPEC 9.5): never hit, never clicked; the level starts after it (the horizon). Built after every other surface. | -- | `PreTransform` |
 | `dark` | A dark barrier: one side of its line (or the inside or outside of its circle) is a dark region (GAME_SPEC 9.9). Its surface is never present: the shadow's boundary is the game's. | `side`="auto" (left, inside), `when`="" (always) | none (drawn by the shadow) |
 | `light` | A light region: one side of its line, the inside of its circle (a light source's reach) or its outside. Light undoes the shadow wherever it reaches. | `side`="auto", `when`="" | none |
