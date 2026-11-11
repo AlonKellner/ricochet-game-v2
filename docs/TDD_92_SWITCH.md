@@ -15,7 +15,7 @@ The rules are GAME_SPEC 9.13 (the switch and armed rows, the Stage 214 note).
 | 214.3 | switchable and conditional_button presets; flag_switches rewritten; toggle_surface and freezable retired | Done |
 | 214.4 | The editor's `+ switch` and `+ armed` chips (their starting values from the presets) | Done |
 | 214.5 | Goldens: none move (lowerings byte-identical, the session golden unchanged) | Done |
-| 214.6 | The user's interactive sign-off | Pending |
+| 214.6 | The user's interactive sign-off | Done ("Looks good, proceed", 2026-11-11) |
 
 ## Decisions
 
