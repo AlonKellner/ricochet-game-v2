@@ -75,8 +75,19 @@ inline bool is_inert(const BuiltSurface &s) {
 }
 
 // Stage 190: a door -- its posts across its ends show where it stops, beside a wall in line with it
-// (Stage 202: and an opening's surface, a platform's aside)
-inline bool is_door(const BuiltSurface &s) { return s.label == "Door" || s.label == "ChargedDoor" || (s.swings && !s.platform); }
+// (Stage 202: and an opening's surface, a platform's aside; Stage 213: any surface with an `open` -- gone while a flag
+// expression holds, present where it is false or unset -- but an element's own state, el:<name>:..., and a channel's)
+inline bool is_door(const BuiltSurface &s) {
+	if (s.label == "Door" || s.label == "ChargedDoor" || (s.swings && !s.platform)) {
+		return true;
+	}
+	for (const PresenceSpec &p : s.presence) {
+		if (p.values == std::vector<std::string>{"DEFAULT", "false"} && p.key.rfind("el:", 0) != 0 && p.key.rfind("chan:", 0) != 0) {
+			return true;
+		}
+	}
+	return false;
+}
 // A post's ends, half long either way across the surface at its end `at` (radial on an arc).
 inline std::pair<V2, V2> door_post(const rc::arc::SegGeom &seg, const V2 &at, double half) {
 	V2 across;
