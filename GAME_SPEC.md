@@ -2432,7 +2432,7 @@ For arc steps in the visual frame, the tangent direction is perpendicular to the
 | Platform (§25.1; its pass sides) | Wood brown |
 | Shield (a block the player passes, nothing else on its side; Stage 186) | Turquoise, in a translucent band |
 | Blocking, not stopping (body `block` with a face that passes or reflects: a fence, a solid mirror, a blocking button; §9.13, Stage 207) | Its face's colour over a steel band |
-| Door, charged door (Stage 190) | Its face's colour with an amber core, and amber posts across both ends (an open door: its posts, faint) |
+| Door, charged door (Stage 190); any surface with an `open` (Stage 213) | Its face's colour with an amber core, and amber posts across both ends (an open door: its posts, faint). A door is a door by what it does: a wall, a mirror or a button given an `open` (the editor's `+ door`) is drawn so too; an element's own state (`el:<name>:...`, a burnable's fire) is not |
 | Target | Its face's colour, a gold ring mark, a gold halo until registered (Stage 210) |
 | Button (writes a flag; §9.13, Stage 210, the user's option A) | Its face's colour inside a rounded amber key outline: dim while its flag is off, bright and filled once it is on |
 | Spawn, reset marks | Teal plus (Stage 210: off the frost and ghost cyan), pink cross |
@@ -3279,4 +3279,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.107.1.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.108.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

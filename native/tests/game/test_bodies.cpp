@@ -696,6 +696,31 @@ TEST_CASE("doors: a door in line with a wall shows where it stops -- posts acros
 	CHECK(posts(true) == std::vector<std::pair<float, float>>{{800.0f, 0.5f}, {1000.0f, 0.5f}});
 }
 
+// Stage 213 (the user's queue): a door is any surface with an `open` -- a wall given one (the editor's `+ door`) shows
+// the door's posts; an element's own state (el:<name>:...) is not a door
+TEST_CASE("doors: any surface with an open is a door -- a wall's posts; not an element's own state (Stage 213)") {
+	const auto posts = [](const char *kind, const char *open, bool flag) { // the amber strokes across the line: {x, alpha}
+		const std::string level = std::string(R"({"gravity": [0, 980], "flags": {"open_it": )") + (flag ? "true" : "false")
+				+ R"(}, "elements": [{"kind": ")" + kind + R"(", "name": "d", "open": ")" + open + R"(", "start": [800, 300], "end": [1000, 300]}]})";
+		rcg::Session s(level_of(level.c_str()));
+		s.settle();
+		std::vector<std::pair<float, float>> out;
+		for (const rcg::render::Node &n : s.draw()) {
+			for (const rcg::render::Call &c : n.calls) {
+				if (c.kind == rcg::render::Kind::Line && c.colors.at(0)[0] == 1.0f && c.colors.at(0)[1] == 0.72f && c.pts[0].x == c.pts[1].x) {
+					out.push_back({c.pts[0].x, c.colors.at(0)[3]});
+				}
+			}
+		}
+		std::sort(out.begin(), out.end());
+		return out;
+	};
+	CHECK(posts("wall", "open_it", false) == std::vector<std::pair<float, float>>{{800.0f, 1.0f}, {1000.0f, 1.0f}});
+	CHECK(posts("wall", "open_it", true) == std::vector<std::pair<float, float>>{{800.0f, 0.5f}, {1000.0f, 0.5f}});
+	CHECK(posts("mirror", "det:plate && !locked", false) == std::vector<std::pair<float, float>>{{800.0f, 1.0f}, {1000.0f, 1.0f}});
+	CHECK(posts("wall", "el:d:fire", false).empty()); // (its own state: a burnable's)
+}
+
 // Stage 188 (the user): no shot while the player physically moves; the preview muted, brightening once it is still
 
 namespace {
