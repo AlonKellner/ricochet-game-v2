@@ -14,7 +14,7 @@ The rules are GAME_SPEC 9.13 (the Stage 215 note) and 10.6.3 (tags).
 | 215.3 | `match` reads a tagged preset back: its tags' hits stripped (a resolver's missing sides restored), its name from them | Done |
 | 215.4 | The editor's tag chips (several lit; the kind's own fixed); `+ feature` starting values from the first kind in the palette | Done |
 | 215.5 | Goldens: none move (lowerings byte-identical, the session golden unchanged) | Done |
-| 215.6 | The user's interactive sign-off | Pending |
+| 215.6 | The user's interactive sign-off | Done ("Approved, proceed to the next stages", 2026-11-11) |
 
 ## Decisions
 
