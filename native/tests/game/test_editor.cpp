@@ -1492,6 +1492,128 @@ TEST_CASE("editor: a surface element's rows -- its face, back, body, and the fea
 	CHECK(ed.errors().empty());
 }
 
+// Stage 212: the chip row under the panel row `label` -- its options and the one lit
+json chips_under(rcg::Editor &ed, const std::string &label) {
+	const json panel = ok(ed, {{"op", "panel"}});
+	const json &rows = panel["rows"];
+	for (size_t k = 0; k + 1 < rows.size(); k++) {
+		if (rows[k]["kind"] == "value" && rows[k]["label"] == label) {
+			return rows[k + 1]["kind"] == "actions" ? rows[k + 1] : json();
+		}
+	}
+	FAIL("no panel row " << label);
+	return json();
+}
+
+// ... a click on its option `option`
+void click_chip(rcg::Editor &ed, const std::string &label, const std::string &option) {
+	const json r = chips_under(ed, label);
+	REQUIRE(r.is_object());
+	const json &os = r["options"];
+	for (size_t c = 0; c < os.size(); c++) {
+		if (os[c] == option) {
+			const float w = rcg::Editor::PANEL_WIDTH - 20, x = r["x"].get<float>() - 10 + w * (float(c) + 0.5f) / float(os.size()), y = r["y"].get<float>() + 10;
+			ed.pointer(rcg::Editor::PtrMove, x, y, 0, 0);
+			ed.pointer(rcg::Editor::PtrDown, x, y, rcg::Editor::BtnLeft, 0);
+			ed.pointer(rcg::Editor::PtrUp, x, y, rcg::Editor::BtnLeft, 0);
+			return;
+		}
+	}
+	FAIL("no chip " << option << " under " << label);
+}
+
+TEST_CASE("editor: an enum's values are chips under its row, the current lit; an object's options too (Stage 212)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"name", "w"}, {"start", {700.0, 300.0}}, {"end", {800.0, 300.0}}}}});
+	ok(ed, {{"op", "select"}, {"name", "w"}});
+	CHECK(chips_under(ed, "face")["options"] == json::parse(R"(["stop", "pass", "mirror"])"));
+	CHECK(chips_under(ed, "face")["lit"] == 0); // (unset: the kind's stop)
+	CHECK(chips_under(ed, "back")["options"] == json::parse(R"(["= face", "stop", "pass", "mirror"])"));
+	CHECK(chips_under(ed, "back")["lit"] == 0);
+	CHECK(chips_under(ed, "body")["lit"] == 1); // block
+	click_chip(ed, "face", "mirror");
+	CHECK(element(ed, "w")["face"] == "mirror");
+	CHECK(chips_under(ed, "face")["lit"] == 2);
+	click_chip(ed, "face", "stop"); // the kind's default: unset again
+	CHECK_FALSE(element(ed, "w").contains("face"));
+	click_chip(ed, "back", "pass");
+	CHECK(element(ed, "w")["back"] == "pass");
+	click_chip(ed, "back", "= face");
+	CHECK_FALSE(element(ed, "w").contains("back"));
+	click_chip(ed, "body", "platform");
+	CHECK(element(ed, "w")["body"] == "platform");
+	ok(ed, {{"op", "undo"}});
+	CHECK_FALSE(element(ed, "w").contains("body"));
+	// an object's options (Stage 146's cycled rows) as chips too
+	ok(ed, {{"op", "set"}, {"path", "/objects"}, {"value", json::parse(R"([{"name": "box", "circle": {"center": [1000, 400], "radius": 16}}])")}});
+	ok(ed, {{"op", "select"}, {"item", "object:box"}});
+	CHECK(chips_under(ed, "kind")["options"] == json::parse(R"(["pullable", "static"])"));
+	CHECK(chips_under(ed, "kind")["lit"] == 0);
+	click_chip(ed, "face", "mirror");
+	CHECK(ed.document()["objects"][0]["face"] == "mirror");
+	CHECK(ed.errors().empty());
+}
+
+TEST_CASE("editor: a surface element's features -- grouped under their names, added by a chip, removed but the kind's own (Stage 212)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"name", "w"}, {"start", {700.0, 300.0}}, {"end", {800.0, 300.0}}}}});
+	ok(ed, {{"op", "select"}, {"name", "w"}});
+	auto rows_of = [&](const char *kind) {
+		const json panel = ok(ed, {{"op", "panel"}});
+		std::vector<std::string> out;
+		for (const json &r : panel["rows"]) {
+			if (r["kind"] == kind) {
+				for (const json &o : r.value("options", json::array({r["label"]}))) {
+					out.push_back(o.get<std::string>());
+				}
+			}
+		}
+		return out;
+	};
+	auto has = [&](const char *kind, const std::string &l) {
+		const std::vector<std::string> ls = rows_of(kind);
+		return std::find(ls.begin(), ls.end(), l) != ls.end();
+	};
+	for (const char *f : {"+ button", "+ target", "+ grapple", "+ spawn", "+ reset", "+ break", "+ ghost", "+ door"}) {
+		CHECK_MESSAGE(has("actions", f), f);
+	}
+	// the user's case: a wall that is a button too -- its starting flag, its rows under its name
+	click_action(ed, "+ button");
+	CHECK(element(ed, "w")["flag"] == "switch");
+	CHECK(has("text", "button"));
+	CHECK(has("value", "opens"));
+	CHECK(has("actions", "remove button"));
+	CHECK_FALSE(has("actions", "+ button"));
+	click_action(ed, "+ door");
+	CHECK(element(ed, "w")["open"] == "door:w");
+	click_action(ed, "+ spawn");
+	CHECK(element(ed, "w")["spawn"].is_object());
+	CHECK(ed.errors().empty());
+	// deferred is the button's and the spawn's: removing one keeps it
+	ok(ed, {{"op", "set"}, {"name", "w"}, {"key", "deferred"}, {"value", true}});
+	click_action(ed, "remove spawn");
+	CHECK_FALSE(element(ed, "w").contains("spawn"));
+	CHECK(element(ed, "w")["deferred"] == true);
+	ok(ed, {{"op", "remove_feature"}, {"name", "w"}, {"feature", "button"}});
+	CHECK_FALSE(element(ed, "w").contains("flag"));
+	CHECK_FALSE(element(ed, "w").contains("deferred"));
+	ok(ed, {{"op", "undo"}});
+	CHECK(element(ed, "w")["flag"] == "switch");
+	// refused: one it has, one it lacks, the kind's own, a kind not of surface, an unknown feature
+	CHECK_FALSE(ed.command({{"op", "add_feature"}, {"name", "w"}, {"feature", "door"}}).value("ok", true));
+	CHECK_FALSE(ed.command({{"op", "remove_feature"}, {"name", "w"}, {"feature", "ghost"}}).value("ok", true));
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "button"}, {"name", "b"}, {"flag", "lamp"}, {"start", {700.0, 400.0}}, {"end", {800.0, 400.0}}}}});
+	CHECK_FALSE(ed.command({{"op", "remove_feature"}, {"name", "b"}, {"feature", "button"}}).value("ok", true));
+	ok(ed, {{"op", "select"}, {"name", "b"}});
+	CHECK(has("text", "button (the kind's)"));
+	CHECK_FALSE(has("actions", "remove button"));
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "portal"}, {"name", "p"}, {"start", {700.0, 500.0}}, {"end", {800.0, 500.0}}}}});
+	CHECK_FALSE(ed.command({{"op", "add_feature"}, {"name", "p"}, {"feature", "target"}}).value("ok", true));
+	CHECK_FALSE(ed.command({{"op", "add_feature"}, {"name", "w"}, {"feature", "laser"}}).value("ok", true));
+}
+
 TEST_CASE("editor: elements and objects drawn by the game's painter -- a shield's band, a fence's steel band, an object in its face's colour (Stage 208)") {
 	rcg::Editor ed(&CLASSIC);
 	ed.resize(1920, 1080);

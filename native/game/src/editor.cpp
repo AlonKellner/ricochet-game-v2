@@ -5,6 +5,7 @@
 
 #include "rcg/canon.hpp"
 #include "rcg/elements.hpp"
+#include "rcg/surface_element.hpp"
 #include "rcg/landing.hpp"
 #include "rcg/level2.hpp"
 
@@ -795,6 +796,73 @@ json Editor::op(const json &cmd) {
 		});
 		return {};
 	}
+	if (o == "add_feature" || o == "remove_feature") { // Stage 212: a surface element's feature, added or removed
+		editing();
+		const int i = element("name");
+		const json &e = doc_["elements"][size_t(i)];
+		const json ks = kinds();
+		const std::string kind = e.value("kind", ""), name = cmd.value("feature", "");
+		if (!ks.contains(kind) || !ks[kind].value("preset", false)) {
+			refuse("features are a surface element's ('" + kind + "' is not a kind of surface)");
+		}
+		const surface_element::Feature *f = nullptr;
+		for (const surface_element::Feature &g : surface_element::features()) {
+			f = g.name == name ? &g : f;
+		}
+		if (f == nullptr) {
+			refuse("no feature '" + name + "' (button, target, grapple, spawn, reset, break, ghost, door)");
+		}
+		const json params = ks[kind].value("params", json::object());
+		const json own = ks[kind].value("features", json::array());
+		if (o == "add_feature") {
+			if (surface_element::on(*f, e, params)) {
+				refuse("'" + e.value("name", "") + "' has the " + name + " already");
+			}
+			// its starting value: the kind of surface that is that feature's (its example, else its default), else true
+			json value = true;
+			for (auto it = ks.begin(); it != ks.end(); ++it) {
+				const json fs = it->value("features", json::array());
+				if (it->value("preset", false) && fs.size() == 1 && fs[0] == name) {
+					const json ex = it->value("example", json::object());
+					const json ds = it->value("params", json::object()).value(f->key, json::object()).value("default", json());
+					value = ex.contains(f->key) ? ex[f->key] : !ds.is_null() && ds != json(false) ? ds : value;
+					break;
+				}
+			}
+			if (value.is_string()) { // (door:${name} -> door:<the element's name>)
+				std::string s = value.get<std::string>();
+				for (size_t at = s.find("${name}"); at != std::string::npos; at = s.find("${name}", at)) {
+					s.replace(at, 7, e.value("name", ""));
+				}
+				value = s;
+			}
+			change([&](json &d) { d["elements"][size_t(i)][f->key] = value; });
+			return {};
+		}
+		if (std::find(own.begin(), own.end(), json(name)) != own.end()) {
+			refuse("the " + name + " is the kind's own ('" + kind + "'): pick another kind to drop it");
+		}
+		if (!surface_element::on(*f, e, params)) {
+			refuse("'" + e.value("name", "") + "' has no " + name);
+		}
+		// its parameters, but one another feature it has reads too (deferred)
+		std::vector<std::string> keys;
+		for (const std::string &p : f->params) {
+			bool shared = false;
+			for (const surface_element::Feature &g : surface_element::features()) {
+				shared = shared || (&g != f && surface_element::on(g, e, params) && std::find(g.params.begin(), g.params.end(), p) != g.params.end());
+			}
+			if (!shared) {
+				keys.push_back(p);
+			}
+		}
+		change([&](json &d) {
+			for (const std::string &p : keys) {
+				d["elements"][size_t(i)].erase(p);
+			}
+		});
+		return {};
+	}
 	if (o == "set") {
 		editing();
 		const json value = cmd.value("value", json());
@@ -1071,6 +1139,7 @@ json Editor::op(const json &cmd) {
 					{"x", width_ - PANEL_WIDTH + 20}});
 			if (r.kind == Row::Actions) {
 				rs.back()["options"] = r.options; // (Stage 203)
+				rs.back()["lit"] = r.lit;         // (Stage 212)
 			}
 		}
 		return {{"rows", rs}};

@@ -58,6 +58,14 @@ const std::vector<Feature> &features() {
 	return fs;
 }
 
+bool on(const Feature &f, const json &element, const json &params) {
+	auto set_or_default = [&](const std::string &p) {
+		const json v = element.contains(p) ? element[p] : params.value(p, json::object()).value("default", json());
+		return !v.is_null() && v != json(false);
+	};
+	return set_or_default(f.key) || (f.name == "button" && set_or_default("opens"));
+}
+
 std::string feature_of(const std::string &param) {
 	for (const Feature &f : features()) { // (deferred: the button's, the first that reads it)
 		if (std::find(f.params.begin(), f.params.end(), param) != f.params.end()) {

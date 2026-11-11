@@ -164,6 +164,7 @@ private:
 	void commit_field();
 	std::vector<Row> rows() const;
 	std::vector<Row> marker_rows(const Field &owner) const; // Stage 179: an element's or a detector's marker (shape, colour)
+	std::vector<Row> chip_rows(const Row &r) const;          // Stage 212: an enum's (or a few options') values as chips
 	void click_row(const Row &r, unsigned mods);
 	void frame_all();
 

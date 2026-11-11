@@ -1528,7 +1528,13 @@ std::vector<Editor::Row> Editor::rows() const {
 	auto add = [&](Row r) {
 		r.y = y;
 		y += ROW;
+		std::vector<Row> chips = chip_rows(r); // (Stage 212: an enum's values under it)
 		out.push_back(std::move(r));
+		for (Row &c : chips) {
+			c.y = y;
+			y += ROW;
+			out.push_back(std::move(c));
+		}
 	};
 	auto text_rows = [&](const std::string &s, Row::Kind kind, int element) {
 		for (const std::string &l : wrap(s, WRAP)) {
@@ -1651,6 +1657,75 @@ std::vector<Editor::Row> Editor::rows() const {
 			if (e.contains("circle")) {
 				add({Row::Value, "circle", spell(e["circle"]), "{\"center\": [x, y], \"radius\": r}", Field{selected_, "circle"}, "", -1, 0, {}});
 			}
+			// the kind's parameters: a template's in its order; a surface element's (Stage 212) by what they say -- the
+			// arrow (face, back, plannable), the body, each feature it has (its parameters, and remove but for the kind's
+			// own), then the features it can take
+			const json params = ks.contains(kind) ? ks[kind].value("params", json::object()) : json::object();
+			std::vector<std::string> shown;
+			auto param_row = [&](const std::string &key) {
+				if (std::find(shown.begin(), shown.end(), key) != shown.end()) {
+					return;
+				}
+				shown.push_back(key);
+				const json spec = params.value(key, json::object());
+				const bool set = e.contains(key);
+				std::string value = set ? spell(e[key])
+						: key == "back" && spec.value("default", json()).is_null() ? "(the face)"
+						: key == "plannable" && spec.value("default", json()).is_null() ? "(auto)" // (Stage 212: by its sides)
+						: spec.contains("default") && spec["default"].is_null() ? "(none)"
+						: spec.contains("default") ? "(" + spell(spec["default"]) + ")"
+						: "(required)";
+				std::string choice;
+				if (spec.contains("enum")) {
+					choice = "enum";
+				} else if (spec.value("default", json()).is_boolean() || spec.value("type", "") == "bool") {
+					choice = "bool";
+				}
+				add({Row::Value, key, value, spec.value("doc", ""), Field{selected_, key}, choice, -1, 0, {}});
+			};
+			auto chips = [&](std::vector<std::string> labels, std::vector<json> cmds, const std::string &hint) {
+				Row r;
+				r.kind = Row::Actions;
+				r.hint = hint;
+				r.options = std::move(labels);
+				r.cmds = std::move(cmds);
+				add(r);
+			};
+			if (ks.contains(kind) && ks[kind].value("preset", false)) {
+				for (const char *key : {"face", "back", "plannable", "body"}) {
+					param_row(key);
+				}
+				const json own = ks[kind].value("features", json::array());
+				std::vector<std::string> addable;
+				for (const surface_element::Feature &f : surface_element::features()) {
+					const bool owned = std::find(own.begin(), own.end(), json(f.name)) != own.end();
+					if (!owned && !surface_element::on(f, e, params)) {
+						addable.push_back(f.name);
+						continue;
+					}
+					text_rows(owned ? f.name + " (the kind's)" : f.name, Row::Text, -1);
+					for (const std::string &p : f.params) {
+						param_row(p);
+					}
+					if (!owned) {
+						chips({"remove " + f.name}, {{{"op", "remove_feature"}, {"name", selected_}, {"feature", f.name}}},
+								"the " + f.name + "'s parameters removed (one another feature reads stays)");
+					}
+				}
+				for (size_t k = 0; k < addable.size(); k += 4) {
+					std::vector<std::string> labels;
+					std::vector<json> cmds;
+					for (size_t q = k; q < std::min(k + 4, addable.size()); q++) {
+						labels.push_back("+ " + addable[q]);
+						cmds.push_back({{"op", "add_feature"}, {"name", selected_}, {"feature", addable[q]}});
+					}
+					chips(labels, cmds, "a feature: what a hit does besides its face (button, target, grapple, spawn, reset, break, ghost; a door's open)");
+				}
+			} else {
+				for (auto it = params.begin(); it != params.end(); ++it) {
+					param_row(it.key());
+				}
+			}
 			// Stage 204: its motion -- by keys or steps, played by the cycle or (an opening) by its flag
 			const std::string at = "/elements/" + std::to_string(i);
 			const std::string mode = e.value("motion_mode", json("cycle")).is_string() ? e.value("motion_mode", std::string("cycle")) : "cycle";
@@ -1745,44 +1820,6 @@ std::vector<Editor::Row> Editor::rows() const {
 			for (Row r : marker_rows(Field{selected_, "marker"})) { // Stage 179
 				add(std::move(r));
 			}
-			const json params = ks.contains(kind) ? ks[kind].value("params", json::object()) : json::object();
-			std::vector<std::string> keys; // the rows: a template's parameters; a preset's sides, body and features on (Stage 207)
-			if (ks.contains(kind) && ks[kind].value("preset", false)) {
-				keys = {"face", "back", "body", "plannable"};
-				const json own = ks[kind].value("features", json::array());
-				auto on = [&](const std::string &p) {
-					const json v = e.contains(p) ? e[p] : params[p].value("default", json());
-					return !v.is_null() && v != json(false);
-				};
-				for (const surface_element::Feature &f : surface_element::features()) {
-					if (std::find(own.begin(), own.end(), json(f.name)) != own.end() || on(f.key) || (f.name == "button" && on("opens"))) {
-						for (const std::string &p : f.params) {
-							if (std::find(keys.begin(), keys.end(), p) == keys.end()) {
-								keys.push_back(p);
-							}
-						}
-					}
-				}
-			} else {
-				for (auto it = params.begin(); it != params.end(); ++it) {
-					keys.push_back(it.key());
-				}
-			}
-			for (const std::string &key : keys) {
-				const json &spec = params[key];
-				const bool set = e.contains(key);
-				std::string value = set ? spell(e[key])
-						: key == "back" && spec.value("default", json()).is_null() ? "(the face)"
-						: spec.contains("default") ? "(" + spell(spec["default"]) + ")"
-						: "(required)";
-				std::string choice;
-				if (spec.contains("enum")) {
-					choice = "enum";
-				} else if (spec.value("default", json()).is_boolean() || spec.value("type", "") == "bool") {
-					choice = "bool";
-				}
-				add({Row::Value, key, value, spec.value("doc", ""), Field{selected_, key}, choice, -1, 0, {}});
-			}
 		}
 	} else if (!group_.empty()) { // Stage 175: several selected
 		add({Row::Header, std::to_string(group_.size()) + " selected", "", "", std::nullopt, "", -1, 0, {}});
@@ -1839,6 +1876,69 @@ std::vector<Editor::Row> Editor::rows() const {
 // detector with one active flag whether it shows that flag's marker (sync marker): then the rows edit the flag's,
 // which every element and detector on that flag shows. `owner`: an element's (name, "marker"), a detector's (its path
 // + "/marker").
+// Stage 212: an enum's values -- or a cycled field's options, up to six -- as chips under its row: a click sets one, the
+// current lit. An element's value that is its kind's default is unset (the document says what differs); `back` unset is
+// the face's.
+std::vector<Editor::Row> Editor::chip_rows(const Row &r) const {
+	std::vector<Row> out;
+	if (r.kind != Row::Value || !r.field || (r.choice != "enum" && r.choice != "options")) {
+		return out;
+	}
+	const Field &f = *r.field;
+	std::vector<std::string> labels;
+	std::vector<json> cmds;
+	int lit = -1;
+	if (r.choice == "options") {
+		if (r.options.empty() || r.options.size() > 6) {
+			return out;
+		}
+		for (const std::string &o : r.options) {
+			if (r.value == o || r.value == "(" + o + ")") {
+				lit = int(labels.size());
+			}
+			labels.push_back(o);
+			cmds.push_back({{"op", "set"}, {"path", f.key}, {"value", o}});
+		}
+	} else {
+		const int i = index_of(f.element);
+		if (i < 0) {
+			return out;
+		}
+		const json &e = doc_["elements"][size_t(i)];
+		const json ks = kinds();
+		const std::string kind = e.value("kind", "");
+		const json spec = ks.contains(kind) ? ks[kind].value("params", json::object()).value(f.key, json::object()) : json::object();
+		const json values = spec.value("enum", json::array());
+		if (values.empty() || values.size() > 6) {
+			return out;
+		}
+		const json dflt = spec.value("default", json());
+		if (f.key == "back" && dflt.is_null()) {
+			lit = e.contains("back") ? -1 : 0;
+			labels.push_back("= face");
+			cmds.push_back({{"op", "set"}, {"name", f.element}, {"key", "back"}, {"value", nullptr}});
+		}
+		for (const json &v : values) {
+			if (e.contains(f.key) ? e[f.key] == v : dflt == v) {
+				lit = int(labels.size());
+			}
+			labels.push_back(spell(v));
+			cmds.push_back({{"op", "set"}, {"name", f.element}, {"key", f.key}, {"value", v == dflt ? json() : v}});
+		}
+	}
+	const size_t per = labels.size() <= 4 ? labels.size() : 3;
+	for (size_t k = 0; k < labels.size(); k += per) {
+		Row c;
+		c.kind = Row::Actions;
+		c.hint = r.hint;
+		c.options.assign(labels.begin() + long(k), labels.begin() + long(std::min(k + per, labels.size())));
+		c.cmds.assign(cmds.begin() + long(k), cmds.begin() + long(std::min(k + per, cmds.size())));
+		c.lit = lit >= int(k) && lit < int(k + per) ? lit - int(k) : -1;
+		out.push_back(std::move(c));
+	}
+	return out;
+}
+
 std::vector<Editor::Row> Editor::marker_rows(const Field &owner) const {
 	json o;
 	const std::vector<std::string> *flags = nullptr;

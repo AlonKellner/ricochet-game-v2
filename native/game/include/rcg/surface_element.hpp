@@ -34,6 +34,10 @@ struct Feature {
 };
 const std::vector<Feature> &features();
 
+// Stage 212: whether an element (of a kind whose parameters are `params`) has a feature: its key set, or by the kind's
+// default (a button by `opens` too).
+bool on(const Feature &f, const json &element, const json &params);
+
 // The parameter specs, in a template's `params` form (default, enum, type, doc).
 const json &params();
 
