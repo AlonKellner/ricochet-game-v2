@@ -227,6 +227,8 @@ private:
 	void show_found(const std::string &entry);
 	std::string item_of_problem(const std::string &message) const; // a level problem's item (none: "")
 	size_t find_pick_ = 0;
+	std::string hint_shown_; // Stage 220: the hint the pointer saw, and the panel row it was over then
+	int hint_row_ = -1;
 	std::optional<std::string> focus_draft_; // Stage 218: the default the field started from (applied unchanged: nothing written)
 	size_t complete_pick_ = 0;
 	bool complete_closed_ = false;

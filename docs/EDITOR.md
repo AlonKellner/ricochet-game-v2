@@ -212,6 +212,12 @@ open it (their `opens`). With nothing selected, the panel edits the level: its n
 player's start, initial flags, goal, the goal's conditions (`requires`), detectors and objects. The goal (green),
 the detectors (yellow) and the objects (as the game draws them, Stage 208) are drawn on the canvas.
 
+**The status bar** shows the tool, the kind it places, the grid, the problems and whether the level is unsaved, then a
+hint: the last command's (a refusal, what is selected) until the next key or until the pointer moves to another row
+of the panel (a placement's instructions until it ends), else the hovered row's -- a value cut in the panel shown whole,
+a chip's whole label (Stage 220). It is red while it says the problems, not over a hint. Chips' labels are cut where
+their chips end.
+
 **Completing a flag** (Stage 217). A field that takes a flag -- a parameter typed `flag` (a button's `flag`), `expr` (a
 door's `open`, a switch's `when`, `armed`, a shade's `when`) or `door` (a button's `opens`), an opening's flag, a
 detector's flag, a key inside the goal's `requires` or the starting `flags` -- lists under it, while you type, every
