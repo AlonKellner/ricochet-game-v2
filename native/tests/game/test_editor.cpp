@@ -2059,3 +2059,76 @@ TEST_CASE("editor: Ctrl+F finds by name, kind or flag; a problem selects its ite
 	}
 	CHECK(ok(ed, {{"op", "state"}})["item"] == "object:box");
 }
+
+// Stage 220: the panel's frictions -- a chip's label cut where its chip ends (the whole on hover), a long value whole on
+// hover, a hint cleared by the next key or another row, the status red only while it says the problems
+TEST_CASE("editor: the panel's small frictions -- chips by width, whole values on hover, hints that clear, the status's red (Stage 220)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	auto status = [&] { // the status line's text and colour
+		for (const auto &node : ed.draw()) {
+			for (const auto &call : *node.calls) {
+				if (call.kind == rcg::render::Kind::Text && call.pts.size() == 1 && call.pts[0].y == 1080.0f - 8.0f) {
+					return std::make_pair(call.text, call.colors.at(0));
+				}
+			}
+		}
+		return std::make_pair(std::string(), rcg::render::Color{});
+	};
+	auto hover = [&](const std::string &kind, const std::string &label, float dx) {
+		const json panel = ok(ed, {{"op", "panel"}});
+		for (const json &r : panel["rows"]) {
+			if (r["kind"] == kind && (label.empty() || r["label"] == label)) {
+				ed.pointer(rcg::Editor::PtrMove, r["x"].get<float>() + dx, r["y"].get<float>() + 10, 0, 0);
+				return true;
+			}
+		}
+		return false;
+	};
+	// the palette's one_sided_mirror chip: cut, its whole name on hover
+	{
+		const json panel = ok(ed, {{"op", "panel"}});
+		bool found = false;
+		for (const json &r : panel["rows"]) {
+			const json os = r.value("options", json::array());
+			for (size_t c = 0; r["kind"] == "chips" && c < os.size(); c++) {
+				if (os[c] == "one_sided_mirror") {
+					const float cw = (rcg::Editor::PANEL_WIDTH - 20) / 3;
+					ed.pointer(rcg::Editor::PtrMove, r["x"].get<float>() - 10 + cw * (float(c) + 0.5f), r["y"].get<float>() + 10, 0, 0);
+					found = true;
+				}
+			}
+		}
+		REQUIRE(found);
+	}
+	CHECK(status().first.find("one_sided_mirror  --") != std::string::npos);
+	// a long value whole on hover
+	ok(ed, {{"op", "set"}, {"path", "/flags"}, {"value", json::parse(R"({"a_rather_long_flag_name": true, "another_one": false})")}});
+	REQUIRE(hover("value", "flags", 150));
+	CHECK(status().first.find("flags = {\"a_rather_long_flag_name\"") != std::string::npos);
+	// a hint lasts until the next key, or another row
+	ok(ed, {{"op", "select"}, {"name", nullptr}});
+	click_row(ed, "bounds");
+	ed.key(rcg::Editor::KeyBackspace, rcg::Editor::ModCtrl, true);
+	ed.text("[1, 2");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["hint"].get<std::string>().find("not JSON") != std::string::npos);
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	CHECK(ok(ed, {{"op", "state"}})["hint"] == "");
+	click_row(ed, "bounds");
+	ed.key(rcg::Editor::KeyBackspace, rcg::Editor::ModCtrl, true);
+	ed.text("[1, 2");
+	ed.key(rcg::Editor::KeyEnter, 0, true);
+	REQUIRE(hover("value", "bounds", 40)); // (seen over its row)
+	CHECK(ok(ed, {{"op", "state"}})["hint"] != "");
+	REQUIRE(hover("value", "gravity", 40)); // (another row: gone)
+	CHECK(ok(ed, {{"op", "state"}})["hint"] == "");
+	ed.key(rcg::Editor::KeyEscape, 0, true);
+	// the status red while it says the problems, not over a hint
+	ok(ed, {{"op", "add"}, {"element", {{"kind", "wall"}, {"name", "w"}, {"body", "solid"}, {"start", {300.0, 300.0}}, {"end", {400.0, 300.0}}}}});
+	REQUIRE_FALSE(ed.errors().empty());
+	ed.pointer(rcg::Editor::PtrMove, 600, 500, 0, 0); // (the canvas: no hint)
+	CHECK(status().second == rcg::render::Color{1.0f, 0.45f, 0.4f, 1.0f});
+	REQUIRE(hover("value", "tool", 40));
+	CHECK(status().second != rcg::render::Color{1.0f, 0.45f, 0.4f, 1.0f});
+}

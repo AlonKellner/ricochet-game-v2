@@ -28,7 +28,12 @@ constexpr float ROW = 21.0f;         // a panel row
 constexpr int FONT = 14;
 constexpr float VALUE_X = 120.0f;    // the panel's value column
 constexpr size_t WRAP = 42;
-constexpr size_t COMPLETE_ROWS = 8; // Stage 217: the completion's rows shown          // the panel's text width (characters)
+constexpr size_t COMPLETE_ROWS = 8; // Stage 217: the completion's rows shown
+// Stage 220: a chip's label cut where its chip ends (a small font's average character), not at fifteen characters
+std::string fitted(const std::string &label, float width) {
+	const size_t fits = size_t(std::max(4.0f, (width - 8.0f) / 6.2f));
+	return label.size() > fits ? label.substr(0, fits - 1) + "." : label;
+}          // the panel's text width (characters)
 
 Color rgba(double r, double g, double b, double a = 1.0) { return {float(r), float(g), float(b), float(a)}; }
 
@@ -938,6 +943,16 @@ void Editor::drag_to(const V2 &screen, unsigned mods) {
 }
 
 void Editor::pointer(int kind, float x, float y, unsigned buttons, unsigned mods) {
+	// Stage 220: a hint stays until the pointer moves to another of the panel's rows (over the canvas: it stays)
+	if (kind == PtrMove && !hint_.empty()) {
+		const int row = x >= width_ - PANEL_WIDTH ? int(std::floor((y + panel_scroll_) / ROW)) : -1;
+		if (hint_ != hint_shown_) {
+			hint_shown_ = hint_;
+			hint_row_ = row;
+		} else if (row != hint_row_ && row >= 0) {
+			hint_.clear();
+		}
+	}
 	mouse_ = V2{x, y};
 	if (mode_ == Mode::Play) {
 		return;
@@ -1157,6 +1172,9 @@ void Editor::key(int code, unsigned mods, bool down) {
 	}
 	if (!down) {
 		return;
+	}
+	if (!step_place_) {
+		hint_.clear(); // (Stage 220: a hint lasts until the next key -- a placement's instructions until it ends)
 	}
 	if (mode_ == Mode::Play) {
 		if (code == KeyEscape || code == KeyF1 + 4) {
@@ -3333,9 +3351,9 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					const bool cur = r.options[c] == kind_;
 					const bool hot = over && mouse_.x >= cx && mouse_.x < cx + cw;
 					p.push_back(rect(V2{cx + 2, r.y + 2}, V2{cw - 4, ROW - 4}, cur ? rgba(1.0, 0.8, 0.3, 0.30) : hot ? rgba(1, 1, 1, 0.16) : rgba(1, 1, 1, 0.05)));
-					std::string label = r.options[c];
-					if (label.size() > 15) {
-						label = label.substr(0, 14) + ".";
+					const std::string label = fitted(r.options[c], cw);
+					if (hot && label != r.options[c]) {
+						hover_hint = r.options[c] + (r.hint.empty() ? "" : "  --  " + r.hint); // (Stage 220: whole)
 					}
 					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
 					p.back().alignment = 1;
@@ -3351,9 +3369,9 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 							&& (cmd.value("part", "") == "rotate") == step_place_->rotate);
 					const bool hot = over && mouse_.x >= cx && mouse_.x < cx + cw;
 					p.push_back(rect(V2{cx + 2, r.y + 2}, V2{cw - 4, ROW - 4}, cur ? rgba(1.0, 0.8, 0.3, 0.30) : hot ? rgba(1, 1, 1, 0.16) : rgba(1, 1, 1, 0.05)));
-					std::string label = r.options[c];
-					if (label.size() > 15) {
-						label = label.substr(0, 14) + ".";
+					const std::string label = fitted(r.options[c], cw);
+					if (hot && label != r.options[c]) {
+						hover_hint = r.options[c] + (r.hint.empty() ? "" : "  --  " + r.hint); // (Stage 220: whole)
 					}
 					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
 					p.back().alignment = 1;
@@ -3520,6 +3538,9 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 						v = (start > 0 ? "..." : "") + v.substr(start, end - start) + (end < v.size() ? "..." : "");
 					}
 				} else if (v.size() > room) {
+					if (over) { // Stage 220: the whole value, hovered
+						hover_hint = r.label + " = " + v + (r.hint.empty() ? "" : "  --  " + r.hint);
+					}
 					v = v.substr(0, room - 3) + "...";
 				}
 				const bool dflt = !focused && v.size() >= 2 && v.front() == '(';
@@ -3566,7 +3587,8 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 	if (!extra.empty()) {
 		line_text += "  |  " + extra;
 	}
-	s.push_back(text_at(V2{10, height_ - 8}, line_text, errors_.empty() ? TEXT : ERROR_TEXT, FONT - 1));
+	// (Stage 220: red while it says the level's problems, not over a hint)
+	s.push_back(text_at(V2{10, height_ - 8}, line_text, errors_.empty() || !extra.empty() ? TEXT : ERROR_TEXT, FONT - 1));
 	out.add(L_STATUS, 0, 11, std::move(s));
 }
 

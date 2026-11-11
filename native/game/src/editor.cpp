@@ -1167,6 +1167,9 @@ json Editor::op(const json &cmd) {
 				rs.back()["lit"] = r.lit;         // (Stage 212)
 				rs.back()["on"] = r.on;           // (Stage 215)
 			}
+			if (r.kind == Row::Chips || r.kind == Row::Tools) { // (Stage 220: the palette's and the tools' chips)
+				rs.back()["options"] = r.options;
+			}
 			if (r.kind == Row::Found || r.kind == Row::Error) { // (Stage 219: what it selects)
 				rs.back()["entry"] = r.choice;
 				rs.back()["marks"] = r.marks;
