@@ -179,7 +179,10 @@ selected item, Ctrl+D duplicates a detector or an object, and the arrows move it
 ## The panel
 
 Click a field to edit it:
-- **An enum** (a surface's `face`, `back` or `body`) cycles to its next value; Shift+click goes back.
+- **An enum** (a surface's `face`, `back` or `body`) cycles to its next value; Shift+click goes back. Under it a row
+  of chips shows its values, the current one lit: a click sets one (Stage 212). A value that is the kind's default
+  is unset, so the document says only what differs; `back`'s `= face` unsets it. An item's few options (an object's
+  `kind`, `face`, `body`; a detector's `for`, `mode`; `motion_mode`) have chips too.
 - **A switch** (`flip`, a bool parameter, the room's `built`) toggles.
 - **The kind**: click it, then a kind in the palette, and the element becomes one (Shift+click: the next kind;
   Esc: no change). The element keeps its parameters, and the problems show what the new kind does not accept.
@@ -189,13 +192,18 @@ Click a field to edit it:
   Ctrl (Command on a Mac) to the text's start or end; typing, Backspace and Delete work at the caret. Ctrl+V pastes the
   system clipboard at the caret: its lines joined, the white space around it dropped (Stage 191).
 
-A parameter left at its default shows the default in parentheses. A surface element (a wall, a fence, a button, a
-door ... GAME_SPEC 9.13, Stage 207) shows its `face`, `back` (unset: the face), `body` and `plannable`, then the
-parameters of each feature it has or its kind is about (a button's `flag`, `opens`, `op`, `value`, `deferred`); a
-feature typed into a field it does not show yet (`open`, `breaks`, `target`) shows its rows from then on. Renaming an element carries the buttons that
+A parameter left at its default shows the default in parentheses (`(none)`: unset; `plannable`'s `(auto)`: by its
+sides). A surface element (a wall, a fence, a button, a door ... GAME_SPEC 9.13, Stage 207) shows, after its
+geometry, what it does (Stage 212): the arrow's `face`, `back` (unset: the face) and `plannable`, the `body`, then
+each feature it has under the feature's name -- its parameters (a button's `flag`, `opens`, `op`, `value`,
+`deferred`) and a `remove <feature>` chip, which removes them (a parameter another feature it has reads stays:
+`deferred`). The feature its kind is about is marked `(the kind's)` and has no `remove`: pick another kind to drop
+it. Then a row of `+ <feature>` chips adds the features it does not have, each with a starting value from the kind
+that is that feature's: `+ button` a `flag` "switch", `+ door` an `open` "door:<name>", `+ spawn` the spawner's
+surface, `+ reset` its channels, the others `true`. A feature typed into a field shows its rows too. Renaming an element carries the buttons that
 open it (their `opens`). With nothing selected, the panel edits the level: its name, bounds, gravity, room,
 player's start, initial flags, goal, the goal's conditions (`requires`), detectors and objects. The goal (green),
-the detectors (yellow) and the objects (orange: pullable; gray: static) are drawn on the canvas.
+the detectors (yellow) and the objects (as the game draws them, Stage 208) are drawn on the canvas.
 
 **Problems.** Every element is checked as the game checks it after every change (the reader's errors, then the
 builder's, `validate_spec`). Each problem names its element. Clicking a problem selects that element. A level
@@ -224,6 +232,7 @@ Every action is a command, a JSON object, which is also how scripts and tests dr
 | `{"op": "remove", "name": n}` | remove it |
 | `{"op": "set", "name": n, "key": k, "value": v}` | set an element's key (`null`: remove it; `"name"`: a rename) |
 | `{"op": "set", "path": "/gravity", "value": v}` | set a value in the document by JSON pointer (`null`: remove it) |
+| `{"op": "add_feature" \| "remove_feature", "name": n, "feature": "button" \| "target" \| "grapple" \| "spawn" \| "reset" \| "break" \| "ghost" \| "door"}` | a surface element's feature: added with its starting value, or its parameters removed (Stage 212; refused: one it has, one it lacks, its kind's own, a kind not of surface) |
 | `{"op": "rename", "name": n, "to": m}` | rename (the buttons with `opens: n` follow) |
 | `{"op": "move", "name": n, "handle": "start" \| "end" \| "via" \| "center" \| "radius", "to": v}` | move a handle |
 | `{"op": "move", "name": n, "handle": "body", "by": [dx, dy]}` | move the element |
@@ -243,7 +252,7 @@ Every action is a command, a JSON object, which is also how scripts and tests dr
 | `{"op": "rename_level", "to": m}` | rename the level (Stage 170): a save is requested at once; `{"op": "state"}`'s `renamed_from` names the old file until the save (`{"name", "from"}`) |
 | `{"op": "play"}`, `{"op": "stop"}` | play mode (`{"from": [x, y]}`), edit mode |
 | `{"op": "document"}`, `{"op": "lower"}` | the document (`"document"`, `"text"`); its `rc-level/1` lowering (`"level"`) |
-| `{"op": "state"}`, `{"op": "panel"}` | the tool, kind, selection, mode, undo depth, focus, hint...; the panel's rows |
+| `{"op": "state"}`, `{"op": "panel"}` | the tool, kind, selection, mode, undo depth, focus, hint...; the panel's rows (an actions row's `options` and `lit`) |
 | `{"op": "pointer", "kind": "down" \| "up" \| "move", "x", "y", "button": "left" \| "right" \| "middle", "mods": ["shift", "ctrl", "alt"]}` | input as a host forwards it |
 | `{"op": "key", "key": "L" \| "escape" \| "f5" \| code, "mods": [...], "down": bool?}` | a key (a press and a release without `down`) |
 | `{"op": "text", "text": s}`, `{"op": "scroll", "dy": d}`, `{"op": "resize", "w": w, "h": h}` | typed text; the wheel; the window |
