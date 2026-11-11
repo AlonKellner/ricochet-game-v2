@@ -34,9 +34,9 @@
    "end": [1000.0, 450.0],
    "kind": "projection",
    "name": "projection_2",
+   "projection": "circle_normal_projection",
    "reverse": true,
    "start": [1000.0, 310.0],
-   "type": "circle_normal_projection",
    "via": [1070.0, 380.0]
   }
  ],

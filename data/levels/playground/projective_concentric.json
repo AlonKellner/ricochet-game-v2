@@ -26,8 +26,8 @@
    "end": [960.0, 640.0],
    "kind": "projection",
    "name": "projection_1",
+   "projection": "circle_normal_projection",
    "start": [960.0, 440.0],
-   "type": "circle_normal_projection",
    "via": [1060.0, 540.0]
   }
  ],
