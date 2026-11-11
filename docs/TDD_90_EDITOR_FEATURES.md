@@ -15,7 +15,7 @@ The rules are docs/EDITOR.md (the panel, the commands). The game does not change
 | 212.2 | The commands `add_feature` (a starting value from the feature's kind) and `remove_feature` (its parameters, but one another feature reads) | Done |
 | 212.3 | The panel: after the geometry the arrow, the body, each feature under its name with `remove` (not the kind's own), then `+ feature` chips | Done |
 | 212.4 | Enum chips: an enum's values (an item's options, up to six) as an actions row under it, the current lit, the kind's default unset | Done |
-| 212.5 | The user's interactive sign-off | Pending |
+| 212.5 | The user's interactive sign-off | Done ("Very good, approved", 2026-11-11) |
 
 ## Decisions
 
