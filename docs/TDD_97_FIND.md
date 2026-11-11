@@ -12,7 +12,7 @@ The rules are docs/EDITOR.md (Ctrl+F, Problems). The game does not change.
 | 219.1 | Ctrl+F: a find field at the panel's top, what the level holds ranked by name (its letters lit), then by kind or a flag it touches | Done |
 | 219.2 | Up/Down pick; Enter or a click selects it and centres the view on it; Esc clears, then closes; a click elsewhere leaves it | Done |
 | 219.3 | A level problem's click selects the item its path names (`level.detectors[0]`, `level.objects[1]`, `level.objective`, ...) | Done |
-| 219.4 | The user's interactive sign-off | Pending |
+| 219.4 | The user's interactive sign-off | Done ("approved, proceed", 2026-11-11) |
 
 ## Decisions
 

@@ -13,7 +13,7 @@ The rules are docs/EDITOR.md (the panel). The game does not change.
 | 218.2 | Keys through a field: Ctrl+S, Ctrl+Z, Ctrl+Y, F5 apply it first; Ctrl+Backspace clears before the caret | Done |
 | 218.3 | Malformed text refused: JSON that does not read (it was taken as a string), a flag expression that does not compile (tinted as typed) | Done |
 | 218.4 | The scroll settled: a new selection from the top, never past the rows, a newly edited field and its list in view | Done |
-| 218.5 | The user's interactive sign-off | Pending |
+| 218.5 | The user's interactive sign-off | Done ("approved, proceed", 2026-11-11) |
 
 ## Decisions
 

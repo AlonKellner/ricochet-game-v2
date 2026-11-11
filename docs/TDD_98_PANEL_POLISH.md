@@ -12,7 +12,7 @@ The rules are docs/EDITOR.md (the status bar). The game does not change.
 | 220.1 | A command's hint lasts until the next key or until the pointer moves to another of the panel's rows (a placement's instructions until it ends) | Done |
 | 220.2 | The status bar red only while it says the problems, not over a hint | Done |
 | 220.3 | A value cut in the panel shown whole on hover; a chip's label cut where its chip ends, whole on hover | Done |
-| 220.4 | The user's interactive sign-off | Pending |
+| 220.4 | The user's interactive sign-off | Done ("approved, proceed", 2026-11-11) |
 
 ## Decisions
 
