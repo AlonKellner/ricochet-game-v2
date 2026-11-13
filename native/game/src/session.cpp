@@ -1439,7 +1439,9 @@ bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Co
 		return false;
 	}
 	bool guide_moved = false;
-	if (dist(pos, j.guide) <= j.lead) {
+	const bool held = j.touched || dist(pos, j.guide) <= j.lead;
+	j.touched = false;
+	if (held) {
 		double left = JOURNEY_SPEED * dt;
 		while (left > 0.0 && j.next < j.path.size()) {
 			if (j.jump[j.next]) { // a portal's entry: the traveller holds it -- it crosses
@@ -1551,7 +1553,18 @@ bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Co
 	if (j.next >= j.path.size() && after <= 1e-3) {
 		return true; // at the guide, at the path's end
 	}
-	return !guide_moved && !(after < before - 1e-6); // no closer to a waiting guide
+	if (guide_moved || after < before - 1e-6) {
+		return false;
+	}
+	// no closer to a waiting guide. Stage 221 (the user's grapple_mirror_3): one within the traveller's whole shape (the
+	// head to the feet, and the skins) is held -- the tall player's feet resting on the solid surface the arrow bounced
+	// off, the guide on it, out of its head's reach -- and moves on the next tick
+	const double below = std::clamp(double(j.guide.y) - pos.y, 0.0, shape.feet());
+	if (j.next < j.path.size() && dist(V2::of(pos.x, double(pos.y) + below), j.guide) <= j.lead) {
+		j.touched = true;
+		return false;
+	}
+	return true;
 }
 
 // The traveller moves along the path at JOURNEY_SPEED, swept against what it

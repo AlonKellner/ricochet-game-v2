@@ -422,6 +422,7 @@ private:
 		size_t next = 1;          // the guide's next path point
 		V2 guide;                 // the guide
 		double lead = 0.0;        // close enough: the guide inside the traveller (its radius)
+		bool touched = false;     // Stage 221: no closer to the guide, which is within its whole shape: it holds it
 		bool crossing = false;    // through a portal
 		V2 cross_dir;             // ... the way it moves in
 		double cross_left = 0.0;  // ... the distance still to go (until the whole traveller is through)

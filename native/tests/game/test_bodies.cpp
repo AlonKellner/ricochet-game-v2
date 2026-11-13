@@ -1691,15 +1691,54 @@ TEST_CASE("pull: a box resting on the floor comes to the player from anywhere, t
 	}
 }
 
+namespace {
+
+// the user's levels as in their Stage 221 dumps (the levels have moved on since)
+rcg::Level grapple_mirror_2() {
+	return rcg::parse_level_json(json::parse(R"({"schema": "rc-level/2", "name": "grapple_mirror_2", "edges": "wall",
+		"gravity": [0.0, 980.0], "player": {"start": [1350.0, 1000.0]}, "room": {"rect": [560.0, 240.0, 800.0, 600.0], "built": false},
+		"elements": [{"kind": "grapple", "name": "grapple_1", "start": [700.0, 550.0], "end": [700.0, 400.0]},
+			{"kind": "mirror", "name": "mirror_1", "body": "block", "start": [500.0, 50.0], "end": [500.0, 550.0]},
+			{"kind": "wall", "name": "wall_1", "start": [500.0, 550.0], "end": [750.0, 550.0]},
+			{"kind": "wall", "name": "wall_2", "start": [500.0, 550.0], "end": [500.0, 1050.0]},
+			{"kind": "wall", "name": "wall_3", "start": [500.0, 1050.0], "end": [1400.0, 1050.0]},
+			{"kind": "wall", "name": "wall_4", "start": [900.0, 550.0], "end": [1400.0, 550.0]},
+			{"kind": "wall", "name": "wall_5", "start": [1400.0, 50.0], "end": [1400.0, 1050.0]},
+			{"kind": "wall", "name": "wall_7", "start": [1400.0, 50.0], "end": [500.0, 50.0]},
+			{"kind": "grapple", "name": "grapple_2", "start": [1350.0, 100.0], "end": [1350.0, 250.0]},
+			{"kind": "platform", "name": "platform_1", "start": [1200.0, 250.0], "end": [1350.0, 250.0]}],
+		"objective": {"goal": {"rect": [560.0, 460.0, 80.0, 80.0]}}})"));
+}
+
+rcg::Level grapple_mirror_3() {
+	return rcg::parse_level_json(json::parse(R"({"schema": "rc-level/2", "name": "grapple_mirror_3", "edges": "wall",
+		"gravity": [0.0, 980.0], "player": {"start": [550.0, 800.0]}, "room": {"rect": [560.0, 240.0, 800.0, 600.0], "built": false},
+		"elements": [{"kind": "mirror", "name": "mirror_1", "body": "block", "start": [850.0, 500.0], "end": [1050.0, 500.0]},
+			{"kind": "grapple", "name": "grapple_2", "start": [1150.0, 700.0], "end": [750.0, 700.0]},
+			{"kind": "grapple", "name": "grapple_4", "start": [750.0, 200.0], "end": [1150.0, 200.0]},
+			{"kind": "platform", "name": "platform_1", "start": [750.0, 300.0], "end": [1150.0, 300.0]},
+			{"kind": "wall", "name": "wall_1", "start": [950.0, 150.0], "end": [950.0, 400.0]},
+			{"kind": "wall", "name": "wall_2", "start": [950.0, 600.0], "end": [950.0, 850.0]},
+			{"kind": "wall", "name": "wall_3", "start": [400.0, 850.0], "end": [1500.0, 850.0]},
+			{"kind": "wall", "name": "wall_4", "start": [1500.0, 850.0], "end": [1500.0, 150.0]},
+			{"kind": "wall", "name": "wall_5", "start": [1500.0, 150.0], "end": [400.0, 150.0]},
+			{"kind": "wall", "name": "wall_6", "start": [400.0, 150.0], "end": [400.0, 850.0]},
+			{"kind": "wall", "name": "wall_7", "start": [1050.0, 500.0], "end": [1500.0, 500.0]},
+			{"kind": "wall", "name": "wall_8", "start": [750.0, 200.0], "end": [750.0, 600.0]},
+			{"kind": "wall", "name": "wall_9", "start": [1050.0, 500.0], "end": [1050.0, 400.0]},
+			{"kind": "wall", "name": "wall_10", "start": [850.0, 500.0], "end": [850.0, 400.0]}]})"));
+}
+
+} // namespace
+
 TEST_CASE("grapple: the user's grapple_mirror_2 -- off a solid mirror the player follows the bounce on to the grapple, wherever the guide waits (Stage 221)") {
 	// the user's F12 dumps (2026-11-12, 2026-11-13): the guide's 15 px strides waited 0.068 px past the bounce, and
 	// 0.027 px short of it -- within the skin of the mirror the player rests against, out of the player's reach (12),
 	// so the journey ended at the mirror; the third (0.41 px short) followed on
-	const std::filesystem::path root = RC_REPO_ROOT;
 	for (const auto &[cx, cy] : {std::pair{0x1.530c3p+9, 0x1.a3aebcp+8}, std::pair{0x1.45145p+9, 0x1.9e9a68p+8}, std::pair{0x1.45b6dap+9, 0x1.a1249p+8}}) {
 		CAPTURE(cx);
 		CAPTURE(cy);
-		rcg::Session s(rcg::load_level((root / "data/levels/grapple_mirror_2.json").string()));
+		rcg::Session s(grapple_mirror_2());
 		s.teleport(rc::V2::of(0x1.4e7ae2p+10, 0x1.abd70ap+7)); // on the platform, against the second grapple
 		s.hold({}, 60);
 		REQUIRE(s.player().x == 0x1.4e7ae2p+10f);
@@ -1743,6 +1782,48 @@ TEST_CASE("pull and grapple: off a solid mirror the traveller follows the bounce
 		rcg::Session s(level_of(pull.c_str()), cfg);
 		shoot(s, 610, 550);
 		CHECK(dist(body(s), s.player()) < 1e-3); // at the arrow's origin
+	}
+}
+
+TEST_CASE("grapple: off a solid floor the tall player follows the bounce -- its feet on the floor, the guide waiting there is held (Stage 221, the user's grapple_mirror_3)") {
+	// the user's F12 dump (2026-11-13): the arrow down to a solid mirror lying flat (y 500) and up to a grapple (y 200);
+	// the player's feet (24 below its head) rest on the mirror, its head 36.08 above the bounce, out of the guide's
+	// reach (12.16): the journey ended there
+	{
+		rcg::Session s(grapple_mirror_3());
+		s.teleport(rc::V2::of(0x1.a23d4cp+9, 0x1.07eb86p+8)); // on the platform
+		s.hold({}, 60);
+		REQUIRE(s.player().x == 0x1.a23d4cp+9f);
+		REQUIRE(s.player().y == 0x1.07eb86p+8f);
+		plan_at(s, 0x1.d71c7p+9, 0x1.e1e79cp+8); // the mirror's left
+		REQUIRE(s.plan().size() == 1);
+		s.set_cursor(rc::V2::of(0x1.04a28ap+10, 0x1.b8a286p+7));
+		s.settle();
+		const std::optional<rc::V2> end = s.preview_trip_end();
+		REQUIRE(end.has_value());
+		CHECK(end->y == doctest::Approx(200 + 12 + 0.08).epsilon(1e-4)); // under the grapple, not on the mirror (463.92)
+		CHECK(end->x > 1000.0f);
+		shoot(s, 0x1.04a28ap+10, 0x1.b8a286p+7);
+		CHECK(s.player().x == end->x); // the shot ends where the preview said
+		CHECK(s.player().y == end->y);
+	}
+	// under gravity (the tall player), standing on a platform: a flat solid mirror under it, a grapple over it -- down to
+	// the mirror, up to the grapple, from anywhere
+	rcg::SessionConfig cfg;
+	cfg.visibility = false;
+	const char *floor = R"({"gravity": [0, 980], "elements": [{"kind": "mirror", "body": "block", "start": [600, 700], "end": [1300, 700]},
+		{"kind": "grapple", "start": [600, 300], "end": [1300, 300]}, {"kind": "platform", "start": [600, 580], "end": [1300, 580]}]})";
+	for (int i = 0; i < 40; i++) {
+		const double px = 700.0 + 0.37 * i;
+		CAPTURE(px);
+		rcg::Session s(level_of(floor), cfg);
+		s.teleport(rc::V2::of(px, 540));
+		s.hold({}, 60); // (on the platform: its head 36.08 above it)
+		const rc::V2 p = s.player();
+		REQUIRE(p.y == doctest::Approx(580 - 36.08).epsilon(1e-4));
+		shoot(s, p.x + 20, p.y + 50);
+		CHECK(s.player().y == doctest::Approx(300 + 12 + 0.08).epsilon(1e-4));
+		CHECK(s.player().x == doctest::Approx(p.x + (700 - p.y) * 0.4 + 160).epsilon(1e-3)); // (to the bounce, back up)
 	}
 }
 
