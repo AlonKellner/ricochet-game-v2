@@ -13,7 +13,7 @@ The rules are docs/EDITOR.md (the status bar). The game does not change.
 | 222.1 | A button's label starts 8 px into its cell (6 inside its fill), left-aligned: the palette's and the tools' chips, the actions, undo/redo/save/play, the level's name | Done |
 | 222.2 | The level menu's arrows in the middle of their buttons; the level's name cut to its button | Done |
 | 222.3 | A tool's label cut where its chip ends, whole on hover (as the palette's chips since Stage 220) | Done |
-| 222.4 | The user's interactive sign-off | Pending |
+| 222.4 | The user's interactive sign-off | Done ("Looks perfect, approved, proceed", 2026-11-13) |
 
 ## Decisions
 
