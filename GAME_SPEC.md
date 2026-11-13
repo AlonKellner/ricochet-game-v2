@@ -2757,7 +2757,17 @@ half through a platform is settled by its centre (§25.1): above it, it is put o
 stays and falls on. The preview's trip ends where the shot's settles (§14.12), drawn as the traveller (Stage
 181, the user): the player's triangle, facing the cursor from there, and under gravity its body; an object's shape. A step that starts where the last
 did not end (a portal) is crossed by a jump, and a step through infinity ends the path. The game is paused during
-a journey as during a flight (`flying`), and the journey is part of the shot.
+a journey as during a flight (`flying`), and the journey is part of the shot: any key speeds it up as it does the
+arrow, and a shot sped up in flight stays sped up through its journey (Stage 223, the user).
+
+**The journey's detectors (Stage 223, the user: "the simulation which shows the preview should be the exact animation
+that's played eventually").** The world is frozen during a journey but for the traveller, so its whole course is
+fixed when it starts: it is run tick by tick to its end at once, the detectors (§24.5) read at every tick with the
+traveller where it is (the player's feet crossing a segment, an object's centre in a region; everything else where
+it stood). A detector that changes the flags changes what blocks the traveller from the next tick, as a door opened
+or closed mid-flight does for the arrow: an object pulled off the plate that holds a door open meets the door, closed
+before it. The shot plays that run, tick by tick with its flags, at any frame rate; the preview shows the same run,
+and the flags it leaves are the consequences of the journey's hit (a door that closes, a goal that opens).
 
 
 **The journey in three layers (Stage 166, the user).** (1) The raw path: the solver's, up to the pull's or grapple's
@@ -2781,8 +2791,8 @@ every free point half way toward its neighbours' middle and then out of anything
 the raw tick rests). So the traveller bends away a little before an obstacle and comes back gradually, never into
 anything; on a straight even stretch nothing moves. The first and last points are the raw ones (it ends exactly
 where it did), and a portal crossing and the points either side of its jump are not smoothed. The shot plays the
-run a tick per physics step (part way between ticks for a longer frame); when a detector the traveller passes
-changes the flags, the ticks after the last one reached are run again under them. The preview shows the same run.
+run a tick per physics step (part way between ticks for a longer frame), each tick's point smoothed among what
+blocked it at that tick (Stage 223: the detectors on the way). The preview shows the same run.
 
 ### 25.4 Visual
 
@@ -3298,4 +3308,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.111.6.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.112.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
