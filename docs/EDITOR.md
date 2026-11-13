@@ -216,7 +216,9 @@ the detectors (yellow) and the objects (as the game draws them, Stage 208) are d
 hint: the last command's (a refusal, what is selected) until the next key or until the pointer moves to another row
 of the panel (a placement's instructions until it ends), else the hovered row's -- a value cut in the panel shown whole,
 a chip's whole label (Stage 220). It is red while it says the problems, not over a hint. Chips' labels are cut where
-their chips end.
+their chips end, the tools' too (Stage 222). A button's label -- a chip's, an action's, undo/redo/save/play, the level's
+name -- starts at its left, a little inside (Stage 222: the hosts draw a label from its point, so a label put at the
+middle left the button's left half empty); the level menu's arrows sit in the middle of theirs.
 
 **Completing a flag** (Stage 217). A field that takes a flag -- a parameter typed `flag` (a button's `flag`), `expr` (a
 door's `open`, a switch's `when`, `armed`, a shade's `when`) or `door` (a button's `opens`), an opening's flag, a
