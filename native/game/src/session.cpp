@@ -1282,9 +1282,10 @@ std::optional<Session::Journey> Session::journey_of(const rc::TracePath &path, i
 			std::reverse(j.path.begin(), j.path.end());
 		}
 		// Stage 166: the guide starts where the path does (a pull: the hit; a grapple: the player), close enough
-		// when it is inside the traveller
+		// when it is inside the traveller (Stage 221, the user's grapple_mirror_2: and its skin -- a guide waiting at a
+		// bounce on a solid surface is on the line the traveller rests a skin from; the second skin a margin)
 		j.guide = j.path.front();
-		j.lead = j.body >= 0 ? world_->bodies()[size_t(j.body)].object.radius : kinematics::RADIUS;
+		j.lead = (j.body >= 0 ? world_->bodies()[size_t(j.body)].object.radius : kinematics::RADIUS) + 2 * kinematics::SKIN;
 		if (j.path.size() < 2) {
 			return std::nullopt;
 		}

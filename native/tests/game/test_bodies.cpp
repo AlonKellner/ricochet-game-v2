@@ -1691,6 +1691,61 @@ TEST_CASE("pull: a box resting on the floor comes to the player from anywhere, t
 	}
 }
 
+TEST_CASE("grapple: the user's grapple_mirror_2 -- off a solid mirror the player follows the bounce on to the grapple, wherever the guide waits (Stage 221)") {
+	// the user's F12 dumps (2026-11-12, 2026-11-13): the guide's 15 px strides waited 0.068 px past the bounce, and
+	// 0.027 px short of it -- within the skin of the mirror the player rests against, out of the player's reach (12),
+	// so the journey ended at the mirror; the third (0.41 px short) followed on
+	const std::filesystem::path root = RC_REPO_ROOT;
+	for (const auto &[cx, cy] : {std::pair{0x1.530c3p+9, 0x1.a3aebcp+8}, std::pair{0x1.45145p+9, 0x1.9e9a68p+8}, std::pair{0x1.45b6dap+9, 0x1.a1249p+8}}) {
+		CAPTURE(cx);
+		CAPTURE(cy);
+		rcg::Session s(rcg::load_level((root / "data/levels/grapple_mirror_2.json").string()));
+		s.teleport(rc::V2::of(0x1.4e7ae2p+10, 0x1.abd70ap+7)); // on the platform, against the second grapple
+		s.hold({}, 60);
+		REQUIRE(s.player().x == 0x1.4e7ae2p+10f);
+		REQUIRE(s.player().y == 0x1.abd70ap+7f);
+		plan_at(s, 0x1.0269a6p+9, 0x1.998618p+8); // the mirror's left
+		plan_at(s, 0x1.56db6cp+9, 0x1.bf9e78p+8); // the grapple's left
+		REQUIRE(s.plan().size() == 2);
+		s.set_cursor(rc::V2::of(cx, cy));
+		s.settle();
+		const std::optional<rc::V2> end = s.preview_trip_end();
+		REQUIRE(end.has_value());
+		CHECK(end->x == doctest::Approx(700 - 12 - 0.08).epsilon(1e-4)); // at the grapple, not the mirror (x 512)
+		shoot(s, cx, cy);
+		CHECK(s.player().x == end->x); // the shot ends where the preview said
+		CHECK(s.player().y == end->y);
+	}
+}
+
+TEST_CASE("pull and grapple: off a solid mirror the traveller follows the bounce, wherever along the path the guide waits (Stage 221)") {
+	// the guide strides 15 px; the traveller rests a skin (0.08) off the mirror, so a guide waiting within the skin of
+	// the mirror's line was out of reach (the traveller's radius): about 1 in 100 of the strides' phases. Each sweep
+	// moves the path's length to the bounce through a whole stride, 0.03 px at a time (no visibility: only the shot).
+	rcg::SessionConfig cfg;
+	cfg.visibility = false;
+	const char *grapple = R"({"elements": [{"kind": "grapple", "start": [1200, 300], "end": [1200, 800]},
+		{"kind": "mirror", "body": "block", "start": [600, 300], "end": [600, 800]}]})";
+	for (int i = 0; i < 500; i++) {
+		const double px = 660.0 + 0.03 * i;
+		CAPTURE(px);
+		rcg::Session s(level_of(grapple), cfg);
+		s.teleport(rc::V2::of(px, 540));
+		shoot(s, px - 50, 550); // to the mirror, back to the grapple
+		CHECK(s.player().x == doctest::Approx(1200 - 12 - 0.08).epsilon(1e-4));
+	}
+	for (int i = 0; i < 500; i++) {
+		const double ox = 1000.0 + 0.03 * i;
+		CAPTURE(ox);
+		// the box on the bounced path: from (660, 540) a fifth down, from the mirror (x 600, y 552) a fifth down again
+		const std::string pull = R"({"elements": [{"kind": "mirror", "body": "block", "start": [600, 300], "end": [600, 800]}],
+			"objects": [{"name": "box", "circle": {"center": [)" + std::to_string(ox) + ", " + std::to_string(552 + (ox - 600) / 5) + R"(], "radius": 16}}]})";
+		rcg::Session s(level_of(pull.c_str()), cfg);
+		shoot(s, 610, 550);
+		CHECK(dist(body(s), s.player()) < 1e-3); // at the arrow's origin
+	}
+}
+
 TEST_CASE("pull and grapple: the preview's end is drawn as what moves -- the player's triangle (and its body under gravity), the object's shape; an object drawn in its shape (Stage 181)") {
 	using rcg::render::Kind;
 	// the closed outlines (point counts) the preview's end draws in its colour, and the circles' radii
