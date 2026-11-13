@@ -22,7 +22,7 @@ the air's deceleration took it back. Objects the same.
 | 224.1 | The end of a line steeper than 45 degrees is never a floor: in the sweep (a contact marked `slip`; of two at once, one that may be a floor first), the push out of an overlap, and the floor snap | Done |
 | 224.2 | A body resting on such an end (within the skin and SLIP_REACH, the end within 45 degrees under one of its circles) is pushed off at SLIP_SPEED (90 px/s) a tick, to its centre's side; exactly over, the way it moves, still the right | Done |
 | 224.3 | Tests: the player and an object dropped on a wall's end at 81 offsets; a floor's end, a floor's corner on a wall, a wall's end under a floor still hold; sliding down a wall's side past its lower end no push | Done |
-| 224.4 | The user's interactive sign-off | Pending |
+| 224.4 | The user's interactive sign-off | Done ("Works perfectly! Approved, proceed", 2026-11-14) |
 
 ## Decisions
 
