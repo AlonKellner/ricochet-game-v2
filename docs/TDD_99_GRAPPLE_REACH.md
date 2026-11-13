@@ -32,7 +32,7 @@ was out of the head's reach (12.16) whatever the stride's phase -- every aim.
 | 221.1 | The guide's reach: the traveller's radius and two skins (the skin it rests off what it touches, and a margin) | Done |
 | 221.2 | Tests; the session record re-recorded after your approval; `make gate` | Done |
 | 221.3 | The tall player: a traveller no closer to a waiting guide within its whole shape (head to feet, and the reach's skins) holds it; the guide moves on the next tick. Tests; no session record changes | Done |
-| 221.4 | The user's interactive sign-off | Pending |
+| 221.4 | The user's interactive sign-off | Done ("It works perfectly, approved, proceed", 2026-11-13) |
 
 ## Decisions
 
