@@ -40,6 +40,12 @@
 // up to MAX_FALL. A full held jump keeps the old reach: 85 px up, 167 px across
 // at full speed on the level, in 50 ticks. Objects keep the plain motion.
 //
+// Stage 224 (the user): a steep wall's end is slippery -- the end of a line steeper
+// than 45 degrees is never a floor (for the player and objects alike; a floor
+// whose end is there still holds), and a body resting on one is pushed off it at
+// SLIP_SPEED to the side its centre is on (exactly over it: the way it moves, else
+// the right), so no place on a wall's end holds anything for long.
+//
 // Stage 184 (the user: the momentum too hard to stop in the air): the air's
 // control -- held against the motion it slows at AIR_TURN (the ground's), released
 // at AIR_DECEL; a reverse in 15 ticks (was 54), a stop in 10 (was 40).
@@ -64,6 +70,8 @@ constexpr double FLOOR_SNAP = 1.0;
 constexpr int MAX_SLIDES = 4;
 constexpr double FLOOR_MIN_DOT = 0.7071067811865476; // cos 45 degrees
 constexpr double STEP = 1.0 / 60.0;                  // the physics tick
+constexpr double SLIP_SPEED = 90.0;                  // Stage 224: px/s off a steep wall's end it rests on
+constexpr double SLIP_REACH = 0.5;                   // ... resting on it: within the skin and this, the end within 45 degrees under it
 constexpr double BODY = 24.0;                        // Stage 173: the player's feet below its head (the arrow origin)
 // Stage 182: the player's feel (see above)
 constexpr double FEEL_JUMP_VELOCITY = 395.0; // (the apex hang and the faster fall: the old arc's height and reach)
