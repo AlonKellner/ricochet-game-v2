@@ -2764,7 +2764,8 @@ a journey as during a flight (`flying`), and the journey is part of the shot.
 hit. (2) The guide: a point moving along it -- for a pull from the hit back toward the player, for a grapple from
 the player to the hit -- at the journey speed, but only while the traveller holds it (the guide inside the
 traveller's circle and its skin, Stage 221: a guide waiting at a bounce off a solid surface, on the line the traveller
-rests a skin from, is held); otherwise it waits. (3) The traveller (the object, the player): each tick it moves straight
+rests a skin from, is held; so is one within its whole shape -- the tall player's feet -- once it can get no
+closer); otherwise it waits. (3) The traveller (the object, the player): each tick it moves straight
 toward the guide, a little faster than the guide moves, swept against what blocks it, and slides along a contact at
 its full step (the slide normalized to the pull's speed, up to the point nearest the guide); no gravity during the
 journey. It stops when it reaches the guide at the path's end, or cannot get closer to a waiting guide. So an object
