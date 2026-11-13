@@ -74,18 +74,39 @@ bool circle_exit_toi(double px, double py, double dx, double dy, double qx, doub
 struct Hit {
 	double t = 2.0;
 	double nx = 0, ny = 0;
+	bool slip = false; // Stage 224: at a steep wall's end (no floor)
 };
 
 // a floor: a contact normal within 45 degrees of up (0, -1)
 bool floor_like(double, double ny) { return -ny >= FLOOR_MIN_DOT - 1e-12; }
 
-// Stage 172: a platform's contacts are its floor-like ones only (met from above)
-void consider(Hit &best, double t, double nx, double ny, bool floor_only) {
+// Stage 224 (the user): a line steeper than 45 degrees (no floor itself): its ends are slippery
+bool steep(const Collider &c) {
+	if (c.arc || c.platform) {
+		return false;
+	}
+	const double ex = c.bx - c.ax, ey = c.by - c.ay, len = std::sqrt(ex * ex + ey * ey);
+	return len > 0.0 && std::abs(ex) / len < FLOOR_MIN_DOT - 1e-12;
+}
+
+// ... the point nearest (px, py) on a steep line is one of its ends
+bool at_slippery_end(const Collider &c, double px, double py) {
+	if (!steep(c)) {
+		return false;
+	}
+	const double ex = c.bx - c.ax, ey = c.by - c.ay;
+	const double u = ((px - c.ax) * ex + (py - c.ay) * ey) / (ex * ex + ey * ey);
+	return u <= 0.0 || u >= 1.0;
+}
+
+// Stage 172: a platform's contacts are its floor-like ones only (met from above); Stage 224: of two contacts at once,
+// one that may be a floor before a slippery end's
+void consider(Hit &best, double t, double nx, double ny, bool floor_only, bool slip = false) {
 	if (floor_only && !floor_like(nx, ny)) {
 		return;
 	}
-	if (t < best.t) {
-		best = Hit{t, nx, ny};
+	if (t < best.t || (t == best.t && best.slip && !slip)) {
+		best = Hit{t, nx, ny, slip};
 	}
 }
 
@@ -113,13 +134,14 @@ void sweep(const Collider &c, double px, double py, double dx, double dy, Hit &b
 				}
 			}
 		}
+		const bool slip = steep(c);
 		for (const auto &[qx, qy] : {std::pair{c.ax, c.ay}, std::pair{c.bx, c.by}}) {
 			double t;
 			if (circle_toi(px, py, dx, dy, qx, qy, R0, t)) {
 				const double cx = px + dx * t - qx, cy = py + dy * t - qy;
 				const double n = std::sqrt(cx * cx + cy * cy);
 				if (n > 0.0) {
-					consider(best, t, cx / n, cy / n, c.platform);
+					consider(best, t, cx / n, cy / n, c.platform, slip);
 				}
 			}
 		}
@@ -225,9 +247,10 @@ bool push_out(const Collider &c, double &px, double &py, double drop, double R0,
 	if (d >= R0 - EPS || (c.platform && !floor_like(nx, ny))) {
 		return false;
 	}
+	const bool slip = at_slippery_end(c, px, py + drop);
 	px += nx * (R0 - d);
 	py += ny * (R0 - d);
-	on_floor = on_floor || floor_like(nx, ny);
+	on_floor = on_floor || (floor_like(nx, ny) && !slip);
 	return true;
 }
 
@@ -448,6 +471,31 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 	double px = body.pos.x, py = body.pos.y;
 	double vx = v.x, vy = v.y;
 	double mx = vx * STEP, my = vy * STEP;
+	// Stage 224 (the user): resting on a steep wall's end -- no floor, and no balance on it: pushed off it, to the
+	// side its centre is on (exactly over it: the way it moves, else the right), within a moment
+	if (has_gravity && !body.engaged && !body.on_floor) {
+		for (size_t i = 0; i < colliders.size(); i++) {
+			if (off[i] || !steep(colliders[i])) {
+				continue;
+			}
+			bool perched = false;
+			double side = 0.0;
+			for (const auto &[qx, qy] : {std::pair{colliders[i].ax, colliders[i].ay}, std::pair{colliders[i].bx, colliders[i].by}}) {
+				for (int k = 0; k < shape.n && !perched; k++) {
+					const double cy = py + shape.drop[k], d = std::hypot(px - qx, cy - qy);
+					// (on it: where it used to stand, the end within 45 degrees under it -- not brushing past it)
+					if (d > 0.0 && d <= R0 + SLIP_REACH && floor_like((px - qx) / d, (cy - qy) / d)) {
+						perched = true;
+						side = px > qx ? 1.0 : px < qx ? -1.0 : vx < 0.0 ? -1.0 : 1.0;
+					}
+				}
+			}
+			if (perched) {
+				mx += side * SLIP_SPEED * STEP;
+				break;
+			}
+		}
+	}
 	bool on_floor = false;
 	for (int slide = 0; slide < MAX_SLIDES; slide++) {
 		if (mx * mx + my * my < 1e-18) {
@@ -466,7 +514,7 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 		}
 		px += mx * best.t;
 		py += my * best.t;
-		on_floor = on_floor || floor_like(best.nx, best.ny);
+		on_floor = on_floor || (floor_like(best.nx, best.ny) && !best.slip);
 		double rx = mx * (1.0 - best.t), ry = my * (1.0 - best.t);
 		const double into = rx * best.nx + ry * best.ny;
 		rx -= best.nx * into;
@@ -500,8 +548,16 @@ void step_body(Body &body, const Input &in, const V2 &gravity, const std::vector
 			if (off[i]) {
 				continue;
 			}
-			double nx, ny;
-			const double d = distance(colliders[i], shape, px, py, nx, ny);
+			double nx = 0, ny = 0, d = std::numeric_limits<double>::infinity();
+			for (int k = 0; k < shape.n; k++) { // (Stage 224: the nearest circle's contact, unless at a slippery end)
+				double cx, cy;
+				const double dk = distance(colliders[i], px, py + shape.drop[k], cx, cy);
+				if (dk < d && !at_slippery_end(colliders[i], px, py + shape.drop[k])) {
+					d = dk;
+					nx = cx;
+					ny = cy;
+				}
+			}
 			if (d <= R0 + FLOOR_SNAP && floor_like(nx, ny) && d < best_d) {
 				best_d = d;
 				bnx = nx;

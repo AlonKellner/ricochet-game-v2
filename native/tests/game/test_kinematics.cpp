@@ -899,3 +899,70 @@ TEST_CASE("engaging kills the momentum at once: running into a rope, up held, it
 	CHECK(b.vel.x == 0.0f);
 	CHECK(b.vel.y == -float(k::SPEED));
 }
+
+// Stage 224 (the user): a steep wall's end is slippery -- no floor for the player or an object, and one resting on it
+// is pushed off within a moment, even balanced exactly on it (to the side its centre is on; the right when exactly over)
+
+TEST_CASE("slippery ends: the player and an object slip off a vertical wall's top end, wherever they land on it (Stage 224)") {
+	const std::vector<k::Collider> cs{wall(500, 600, 500, 1000), wall(0, 1000, 1000, 1000)};
+	for (int i = -40; i <= 40; i++) {
+		const double x = 500 + 0.25 * i; // (exactly over the end at i = 0)
+		CAPTURE(x);
+		// the player, its feet dropped onto the end
+		k::Body p{V2::of(x, 600 - k::BODY - REST - 30), V2{}, false};
+		int off = -1;
+		for (int t = 0; t < 120 && off < 0; t++) {
+			k::step(p, k::Input{}, G, cs);
+			if (double(p.pos.y) + k::BODY > 600 + 1) { // its feet below the end
+				off = t;
+			}
+		}
+		CHECK(off >= 0);
+		CHECK(off < 60); // (within a second, the drop onto it included)
+		if (i == 0) {
+			CHECK(p.pos.x > 500.0f); // (exactly over: to the right)
+		} else {
+			CHECK((p.pos.x > 500.0f) == (i > 0)); // (to its centre's side)
+		}
+		// an object (a circle of 16, no feel)
+		k::Body o{V2::of(x, 600 - 16 - k::SKIN - 30), V2{}, false};
+		off = -1;
+		for (int t = 0; t < 120 && off < 0; t++) {
+			k::step_body(o, k::Input{}, G, cs, 16.0);
+			if (o.pos.y > 600 + 1) {
+				off = t;
+			}
+		}
+		CHECK(off >= 0);
+		CHECK(off < 60);
+	}
+}
+
+TEST_CASE("slippery ends: a floor's end still holds -- a ledge, a floor's corner on a wall, a wall's end under a floor (Stage 224)") {
+	const double stand = 600 - k::BODY - REST;
+	const std::vector<std::vector<k::Collider>> levels{
+		{wall(500, 600, 800, 600)},                           // a ledge: a floor's free end
+		{wall(500, 600, 800, 600), wall(500, 600, 500, 1000)}, // the corner of a floor on a wall (the end shared)
+		{wall(300, 600, 800, 600), wall(500, 600, 500, 1000)}, // a wall's end under a floor
+	};
+	for (size_t l = 0; l < levels.size(); l++) {
+		CAPTURE(l);
+		for (const double x : {495.0, 500.0, 505.0}) { // (the centre past the end, over it, on the floor)
+			CAPTURE(x);
+			k::Body p{V2::of(x, stand), V2{}, true};
+			for (int t = 0; t < 120; t++) {
+				k::step(p, k::Input{}, G, levels[l]);
+			}
+			CHECK(p.on_floor);
+			CHECK(std::abs(p.pos.x - x) < 1.0); // (it stays; past the end it rests on the corner point, a little lower)
+			CHECK(double(p.pos.y) + k::BODY < 600 - REST + 1.5);
+		}
+	}	// falling down along a wall's side past its lower end: no push (the end was never under it)
+	const std::vector<k::Collider> side{wall(500, 300, 500, 600), wall(0, 1000, 1000, 1000)};
+	k::Body p{V2::of(500 - REST, 300), V2{}, false};
+	for (int t = 0; t < 120; t++) {
+		k::step(p, k::Input{}, G, side);
+	}
+	CHECK(p.on_floor);
+	CHECK(std::abs(p.pos.x - (500 - REST)) < 0.05); // (a push would be 1.5 px a tick; 0.011 is the end's rounding, as before)
+}
