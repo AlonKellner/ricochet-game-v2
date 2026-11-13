@@ -34,6 +34,9 @@ std::string fitted(const std::string &label, float width) {
 	const size_t fits = size_t(std::max(4.0f, (width - 8.0f) / 6.2f));
 	return label.size() > fits ? label.substr(0, fits - 1) + "." : label;
 }          // the panel's text width (characters)
+// Stage 222 (the user): a button's label starts this far inside its button, not at its middle (the hosts draw a label from
+// its point -- docs/PORTING.md, TEXT -- so a centred one left the button's left half empty)
+constexpr float LABEL_PAD = 8.0f;
 
 Color rgba(double r, double g, double b, double a = 1.0) { return {float(r), float(g), float(b), float(a)}; }
 
@@ -3355,8 +3358,7 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					if (hot && label != r.options[c]) {
 						hover_hint = r.options[c] + (r.hint.empty() ? "" : "  --  " + r.hint); // (Stage 220: whole)
 					}
-					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
-					p.back().alignment = 1;
+					p.push_back(text_at(V2{cx + LABEL_PAD, base}, label, cur ? ACCENT : TEXT, FONT - 3));
 				}
 				break;
 			}
@@ -3373,8 +3375,7 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					if (hot && label != r.options[c]) {
 						hover_hint = r.options[c] + (r.hint.empty() ? "" : "  --  " + r.hint); // (Stage 220: whole)
 					}
-					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
-					p.back().alignment = 1;
+					p.push_back(text_at(V2{cx + LABEL_PAD, base}, label, cur ? ACCENT : TEXT, FONT - 3));
 				}
 				break;
 			}
@@ -3385,15 +3386,18 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					const bool cur = r.options[c] == TOOL_NAMES[int(tool_)];
 					const bool hot = over && mouse_.x >= cx && mouse_.x < cx + cw;
 					p.push_back(rect(V2{cx + 2, r.y + 2}, V2{cw - 4, ROW - 4}, cur ? rgba(1.0, 0.8, 0.3, 0.30) : hot ? rgba(1, 1, 1, 0.16) : rgba(1, 1, 1, 0.05)));
-					std::string label = r.options[c];
+					std::string whole = r.options[c];
 					for (size_t t = 0; t < std::size(TOOL_NAMES); t++) {
-						if (label == TOOL_NAMES[t]) {
-							label = TOOL_LABELS[t];
+						if (whole == TOOL_NAMES[t]) {
+							whole = TOOL_LABELS[t];
 							break;
 						}
 					}
-					p.push_back(text_at(V2{cx + cw / 2, base}, label, cur ? ACCENT : TEXT, FONT - 3));
-					p.back().alignment = 1;
+					const std::string label = fitted(whole, cw); // (Stage 222: cut where its chip ends, whole on hover)
+					if (hot && label != whole) {
+						hover_hint = whole + (r.hint.empty() ? "" : "  --  " + r.hint);
+					}
+					p.push_back(text_at(V2{cx + LABEL_PAD, base}, label, cur ? ACCENT : TEXT, FONT - 3));
 				}
 				break;
 			}
@@ -3406,11 +3410,14 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					p.push_back(rect(V2{cells[b] + 2, r.y + 1}, V2{cells[b + 1] - cells[b] - 4, ROW - 2},
 							on ? rgba(1.0, 0.8, 0.3, 0.30) : hot ? rgba(1, 1, 1, 0.18) : rgba(1, 1, 1, 0.07)));
 					std::string label = b == 0 ? "<" : b == 2 ? ">" : r.label;
-					if (label.size() > 30) {
-						label = "..." + label.substr(label.size() - 27);
+					// (Stage 222: the level's name from the left of its button, cut to its width; an arrow in the middle of its
+					// own, half a character back)
+					const size_t fits = size_t(std::max(8.0f, (cells[2] - cells[1] - 2 * LABEL_PAD) / 7.4f));
+					if (label.size() > fits) {
+						label = "..." + label.substr(label.size() - (fits - 3));
 					}
-					p.push_back(text_at(V2{(cells[b] + cells[b + 1]) / 2, base}, label, on ? ACCENT : TEXT, FONT - 1));
-					p.back().alignment = 1;
+					const float lx = b == 1 ? cells[b] + LABEL_PAD : (cells[b] + cells[b + 1]) / 2 - 3.7f;
+					p.push_back(text_at(V2{lx, base}, label, on ? ACCENT : TEXT, FONT - 1));
 				}
 				break;
 			}
@@ -3500,8 +3507,7 @@ void Editor::draw_panel(std::vector<render::FrameNode> &nodes) const {
 					if (b == 2 && dirty_) {
 						label += " *";
 					}
-					p.push_back(text_at(V2{bx + bw / 2, base}, label, TEXT, FONT - 1));
-					p.back().alignment = 1;
+					p.push_back(text_at(V2{bx + LABEL_PAD, base}, label, TEXT, FONT - 1));
 				}
 				break;
 			}

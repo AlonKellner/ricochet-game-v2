@@ -2132,3 +2132,62 @@ TEST_CASE("editor: the panel's small frictions -- chips by width, whole values o
 	REQUIRE(hover("value", "tool", 40));
 	CHECK(status().second != rcg::render::Color{1.0f, 0.45f, 0.4f, 1.0f});
 }
+
+TEST_CASE("editor: a button's label starts at its left, a little inside, not at its middle; a tool's cut to its chip, whole on hover (Stage 222)") {
+	rcg::Editor ed(&CLASSIC);
+	ed.resize(1920, 1080);
+	// the label's text call with a button under it (the same text may stand elsewhere: a value, the canvas)
+	auto button_of = [&](const std::string &label) {
+		const std::vector<rcg::render::FrameNode> nodes = ed.draw();
+		for (const auto &tn : nodes) {
+			for (const auto &text : *tn.calls) {
+				if (text.kind != rcg::render::Kind::Text || text.text != label) {
+					continue;
+				}
+				const rc::V2 at = text.pts.at(0);
+				for (const auto &node : nodes) {
+					for (const auto &call : *node.calls) {
+						if (call.kind == rcg::render::Kind::Rect && call.pts.at(1).x < rcg::Editor::PANEL_WIDTH - 30 && call.pts[0].x <= at.x
+								&& at.x < call.pts[0].x + call.pts[1].x && call.pts[0].y <= at.y - 4 && at.y - 4 < call.pts[0].y + call.pts[1].y) {
+							return std::make_pair(text, call);
+						}
+					}
+				}
+			}
+		}
+		FAIL("no button labelled " << label);
+		return std::make_pair(rcg::render::Call{}, rcg::render::Call{});
+	};
+	for (const std::string label : {"undo", "play", "wall", "mirror", "select  V", "(untitled)"}) {
+		CAPTURE(label);
+		const auto [text, button] = button_of(label);
+		CHECK(text.alignment == 0);
+		CHECK(text.pts[0].x - button.pts[0].x == doctest::Approx(6)); // (8 inside the button's cell, its fill 2 inside)
+	}
+	// the arrows round the level's name: in the middle of their buttons
+	for (const std::string label : {"<", ">"}) {
+		const auto [text, button] = button_of(label);
+		CHECK(std::abs(text.pts[0].x + 3.7f - (button.pts[0].x + button.pts[1].x / 2)) < 1e-3);
+	}
+	// the circle carrier's tool: cut where its chip ends, whole on hover
+	const json panel = ok(ed, {{"op", "panel"}});
+	bool found = false;
+	for (const json &r : panel["rows"]) {
+		const json os = r.value("options", json::array());
+		for (size_t c = 0; r["kind"] == "tools" && c < os.size(); c++) {
+			if (os[c] == "carrier_circle") {
+				const auto [text, button] = button_of("circle carrier.");
+				ed.pointer(rcg::Editor::PtrMove, button.pts[0].x + button.pts[1].x / 2, button.pts[0].y + button.pts[1].y / 2, 0, 0);
+				found = true;
+			}
+		}
+	}
+	REQUIRE(found);
+	bool whole = false;
+	for (const auto &node : ed.draw()) {
+		for (const auto &call : *node.calls) {
+			whole = whole || (call.kind == rcg::render::Kind::Text && call.pts.at(0).y == 1080.0f - 8.0f && call.text.find("circle carrier  shift K") != std::string::npos);
+		}
+	}
+	CHECK(whole);
+}
