@@ -227,6 +227,8 @@ public:
 	}
 	const std::optional<rc::Flags> &preview_predicted() const { return shown().predicted; } // Stage 159
 	std::optional<V2> preview_trip_end() const { return shown().trip ? std::optional<V2>(shown().trip->trail.back()) : std::nullopt; }
+	// Stage 223 (tests): the previewed journey's trail -- where the shot shows the traveller, tick by tick (empty: none)
+	std::vector<V2> preview_trip_trail() const { return shown().trip ? shown().trip->trail : std::vector<V2>{}; }
 	// Stage 147 (tests, tools): the preview's physical trace -- the path a shot now takes (none: no trace)
 	const rc::TracePath *physical_trace() const { return preview_.pair ? &preview_.pair->physical : nullptr; }
 	const rc::TracePath *planned_trace() const { return preview_.pair ? &preview_.pair->planned : nullptr; } // (Stage 205)
@@ -407,6 +409,8 @@ private:
 	bool won_ = false;
 	std::vector<bool> inside_; // per detector: the player inside (a region's)
 	void detect(const V2 &from, const V2 &to); // the detectors after a move from -> to
+	// Stage 223: the same on given flags and insides, a body (`moved`, unless -1) at `at` -- a journey's run
+	void detect_into(rc::Flags &flags, std::vector<bool> &inside, const V2 &from, const V2 &to, int moved, const V2 &at) const;
 	bool goal_open() const;                    // the objective's conditions hold
 	void check_won();
 	// Stage 146: the bodies and the journeys (a grapple takes the player, a pull an
@@ -438,19 +442,29 @@ private:
 	std::optional<Journey> journey_of(const rc::TracePath &path, int *hit_index = nullptr) const; // Stage 159
 	bool journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Collider> &cs, const kinematics::Shape &shape, double dt) const;
 	// Stage 178 (the user: choppy where the traveller is turned aside by what it passes): a journey simulated tick
-	// by tick (journey_move at the physics step) to its end, then smoothed -- what the shot plays and the preview shows
+	// by tick (journey_move at the physics step) to its end, then smoothed -- what the shot plays and the preview shows.
+	// Stage 223 (the user: the journey is part of the shot, its consequence fixed when it starts): the run holds the
+	// detectors the traveller passes, tick by tick -- the world else frozen -- and the flags they leave; what blocks
+	// the traveller from then on follows them (a door a detector closes). The preview shows this run; the shot plays it.
 	struct JourneyRun {
 		std::vector<V2> at;            // the traveller after each tick (at[0]: where it starts)
 		std::vector<Journey> state;    // ... the journey's state then (its path and jumps left out)
 		std::vector<bool> exits;       // exits[k]: tick k came out of a portal (a jump from at[k - 1])
+		std::vector<rc::Flags> flags;  // ... the flags after it (the detectors on the traveller there)
+		std::vector<std::vector<bool>> inside; // ... the detectors' insides then
+		std::vector<size_t> era;       // ... the colliders it moved among (an index into eras: one per change of the flags)
+		std::vector<std::vector<kinematics::Collider>> eras;
+		V2 end;                        // where it ends, settled (onto a platform it ends half through)
+		bool floor = false;            // ... on a floor
+		rc::Flags end_flags;           // ... the flags then (the detectors on it there)
+		std::vector<bool> end_inside;
 		std::vector<V2> shown;         // at, smoothed: where the traveller is shown, and goes
 	};
-	// from tick `from` of a run (its state and position), under these colliders, to the journey's end
-	void run_journey(JourneyRun &r, size_t from, const Journey &j, const std::vector<kinematics::Collider> &cs, const kinematics::Shape &shape) const;
-	void smooth_run(JourneyRun &r, size_t fixed_until, const std::vector<kinematics::Collider> &cs, const kinematics::Shape &shape) const;
+	// the run from `at` (its first point, already in r.at) under these flags and detectors' insides, to its end
+	void run_journey(JourneyRun &r, const Journey &j, const rc::Flags &flags, const std::vector<bool> &inside, const kinematics::Shape &shape) const;
+	void smooth_run(JourneyRun &r, const kinematics::Shape &shape) const;
 	JourneyRun journey_run_;   // the live journey's
 	double journey_clock_ = 0; // ... the ticks played
-	int journey_flags_ = 0;      // ... the flags' version it was run under (a detector it passes may change them)
 	std::vector<int> body_ids() const; // (Stage 173: the objects' surfaces, which the player passes)
 	// Stage 151: the cycle
 	double phase_ = 0.0;
