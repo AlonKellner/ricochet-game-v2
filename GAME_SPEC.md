@@ -2685,6 +2685,14 @@ A **floor** is a contact whose normal is within 45° of up `(0, -1)`. With gravi
 floor and is not rising keeps to it within **1 unit** (a floor snap: walking off a ledge drops, walking along
 a floor stays on it).
 
+**Slippery wall ends** (Stage 224, the user: "no position on the edge of the wall allows the player to stay for more
+than a second or so"). The end of a line steeper than 45° (a wall's top) is never a floor, for the player and for
+objects: a body resting on one -- the end within 45° under one of its circles, where it used to stand -- is pushed
+off it at **90 units/s** to the side its centre is on; exactly over it, the way it moves, and still, to the right.
+So it leaves any wall's end within about a quarter of a second. A floor whose end is at the same point (the corner
+of a floor on a wall, a wall's end under a floor) still holds it; a body sliding down a wall's side past its lower
+end is not pushed.
+
 **Arrow origin:** the arrow originates from the **player's position**: the centre of its collision circle, under gravity its head's (Stage 173).
 
 **Arrow–player interaction:** the arrow does **not** collide with the player. The player is not a surface for ray tracing purposes. The player can stand on or near a surface without blocking their own shot.
@@ -3308,4 +3316,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.112.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.113.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
