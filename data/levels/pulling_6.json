@@ -1,0 +1,101 @@
+{
+ "detectors": [
+  {
+   "flag": "open",
+   "for": "any",
+   "mode": "while",
+   "name": "detector_1",
+   "region": {
+    "rect": [910.0, 510.0, 80.0, 80.0]
+   }
+  },
+  {
+   "flag": "open_2",
+   "for": "any",
+   "mode": "while",
+   "name": "detector_2",
+   "region": {
+    "rect": [760.0, 510.0, 80.0, 80.0]
+   }
+  }
+ ],
+ "edges": "wall",
+ "elements": [
+  {
+   "end": [1300.0, 600.0],
+   "kind": "wall",
+   "name": "wall_1",
+   "start": [750.0, 600.0]
+  },
+  {
+   "end": [1300.0, 350.0],
+   "kind": "wall",
+   "name": "wall_2",
+   "start": [1300.0, 600.0]
+  },
+  {
+   "end": [750.0, 350.0],
+   "kind": "wall",
+   "name": "wall_3",
+   "start": [1300.0, 350.0]
+  },
+  {
+   "end": [750.0, 350.0],
+   "kind": "wall",
+   "name": "wall_4",
+   "start": [750.0, 600.0]
+  },
+  {
+   "end": [1200.0, 350.0],
+   "kind": "door",
+   "name": "door_2",
+   "open": "!open",
+   "start": [1200.0, 600.0]
+  },
+  {
+   "end": [1000.0, 350.0],
+   "kind": "door",
+   "name": "door_3",
+   "open": "open_2",
+   "start": [1000.0, 600.0]
+  },
+  {
+   "end": [1100.0, 350.0],
+   "kind": "door",
+   "name": "door_1",
+   "open": "!open_2",
+   "start": [1100.0, 600.0]
+  },
+  {
+   "end": [1300.0, 500.0],
+   "kind": "platform",
+   "name": "platform_1",
+   "start": [750.0, 500.0]
+  }
+ ],
+ "gravity": [0.0, 980.0],
+ "name": "pulling_6",
+ "objective": {
+  "goal": {
+   "rect": [1210.0, 410.0, 80.0, 80.0]
+  }
+ },
+ "objects": [
+  {
+   "circle": {
+    "center": [1050.0, 450.0],
+    "radius": 16.0
+   },
+   "name": "object_1",
+   "shape": "square"
+  }
+ ],
+ "player": {
+  "start": [880.0, 570.0]
+ },
+ "room": {
+  "built": false,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/2"
+}

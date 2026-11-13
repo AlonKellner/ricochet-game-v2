@@ -924,6 +924,7 @@ bool Session::start_fire() {
 		return false; // (Stage 146: nothing is fired while anything moves; Stage 188: the player above all)
 	}
 	checkpoints_.push_back(capture());
+	flight_multiplier_ = 1.0; // (Stage 223: the shot's speed, its journey's too)
 	std::optional<rc::TracePair> pair;
 	if (async_) {
 		// Stage 121: the exact preview of these inputs is the shot's trace (waiting
@@ -971,7 +972,7 @@ bool Session::start_fire() {
 }
 
 void Session::speed_up() {
-	if (flying_) {
+	if (flying()) { // (Stage 223: a journey too -- it is part of the shot -- and one pressed in flight goes on in it)
 		flight_multiplier_ *= 10.0;
 	}
 }
@@ -1100,10 +1101,19 @@ bool crosses(const V2 &from, const V2 &to, const V2 &a, const V2 &b) {
 // toggle) or while the player is in it (while: the value inside, unset
 // outside); a segment's when the player crosses it.
 void Session::detect(const V2 &from, const V2 &to) {
-	if (inside_.size() != level_.detectors.size()) {
-		inside_.assign(level_.detectors.size(), false);
-	}
 	rc::Flags f = flags_;
+	detect_into(f, inside_, from, to, -1, V2{});
+	const int before = flags_version_;
+	set_flags(f);
+	if (flags_version_ != before) {
+		hud_ = hud_text();
+	}
+}
+
+void Session::detect_into(rc::Flags &f, std::vector<bool> &inside, const V2 &from, const V2 &to, int moved, const V2 &at) const {
+	if (inside.size() != level_.detectors.size()) {
+		inside.assign(level_.detectors.size(), false);
+	}
 	for (size_t i = 0; i < level_.detectors.size(); i++) {
 		const Detector &d = level_.detectors[i];
 		// the player (for player | any), the objects (for object | any: a region only, by their centers)
@@ -1111,14 +1121,14 @@ void Session::detect(const V2 &from, const V2 &to) {
 		if (!d.segment) {
 			in = d.target != "object" && d.region.contains(to);
 			if (d.target != "player") {
-				for (const World::Body &b : world_->bodies()) {
-					in = in || d.region.contains(b.pos);
+				for (size_t b = 0; b < world_->bodies().size(); b++) {
+					in = in || d.region.contains(int(b) == moved ? at : world_->bodies()[b].pos);
 				}
 			}
 		}
-		const bool fire = d.segment ? d.target != "object" && crosses(from, to, d.a, d.b) : in && !inside_[i];
+		const bool fire = d.segment ? d.target != "object" && crosses(from, to, d.a, d.b) : in && !inside[i];
 		if (d.mode == "while") {
-			if (in != inside_[i]) {
+			if (in != inside[i]) {
 				if (in) {
 					f.set(d.flag, d.value);
 				} else {
@@ -1128,12 +1138,7 @@ void Session::detect(const V2 &from, const V2 &to) {
 		} else if (fire) {
 			f = f.applied(rc::StateChangeDef{d.flag, d.mode == "toggle", d.value});
 		}
-		inside_[i] = in;
-	}
-	const int before = flags_version_;
-	set_flags(f);
-	if (flags_version_ != before) {
-		hud_ = hud_text();
+		inside[i] = in;
 	}
 }
 
@@ -1300,16 +1305,15 @@ std::optional<Session::Journey> Session::journey_of(const rc::TracePath &path, i
 void Session::start_journey() {
 	if (std::optional<Journey> j = journey_of(pending_path_)) {
 		journey_ = std::move(j);
-		// Stage 178: run to its end and smoothed now; played tick by tick
+		// Stage 178: run to its end and smoothed now; played tick by tick (Stage 223: with what the detectors it passes
+		// do -- nothing else moves meanwhile, so this is how it goes)
 		const bool player = journey_->body < 0;
 		const kinematics::Shape shape = player ? player_shape() : kinematics::Shape{world_->bodies()[size_t(journey_->body)].object.radius};
-		const std::vector<kinematics::Collider> cs = colliders_except(journey_->body, flags_, true);
 		journey_run_ = JourneyRun{};
 		journey_run_.at.push_back(player ? player_ : world_->bodies()[size_t(journey_->body)].pos);
-		run_journey(journey_run_, 0, *journey_, cs, shape);
-		smooth_run(journey_run_, 0, cs, shape);
+		run_journey(journey_run_, *journey_, flags_, inside_, shape);
+		smooth_run(journey_run_, shape);
 		journey_clock_ = 0.0;
-		journey_flags_ = flags_version_;
 	}
 }
 
@@ -1332,28 +1336,61 @@ template <class J> void restore_state(J &j, const J &state) {
 }
 } // namespace
 
-void Session::run_journey(JourneyRun &r, size_t from, const Journey &start, const std::vector<kinematics::Collider> &cs,
+void Session::run_journey(JourneyRun &r, const Journey &start, const rc::Flags &flags, const std::vector<bool> &inside,
 		const kinematics::Shape &shape) const {
-	Journey j = start; // (its state: the run's at `from`, or the start's own)
-	if (from < r.state.size()) {
-		restore_state(j, r.state[from]);
-	}
-	r.at.resize(from + 1);
-	r.state.resize(from);
-	r.exits.resize(from);
-	r.state.push_back(bare(j));
-	r.exits.push_back(false);
-	V2 pos = r.at[from];
+	Journey j = start;
+	const bool player = j.body < 0;
+	rc::Flags f = flags;
+	std::vector<bool> in = inside;
+	r.at.resize(1);
+	r.state.assign(1, bare(j));
+	r.exits.assign(1, false);
+	r.flags.assign(1, f);
+	r.inside.assign(1, in);
+	r.era.assign(1, 0);
+	r.eras.assign(1, colliders_except(j.body, f, true));
+	V2 pos = r.at[0];
+	// Stage 223: the detectors on the traveller after a tick (the player's feet crossing, or the body there) -- a change
+	// of the flags is a new era of colliders from the next tick (a door they close blocks it)
+	auto detected = [&](const V2 &from, const V2 &to) {
+		if (level_.detectors.empty()) {
+			return false;
+		}
+		const rc::Flags was = f;
+		if (player) {
+			detect_into(f, in, feet(from), feet(to), -1, V2{});
+		} else {
+			detect_into(f, in, feet(player_), feet(player_), j.body, to);
+		}
+		return digest::encode(flags_json(f)) != digest::encode(flags_json(was));
+	};
 	for (int tick = 0; tick < 20000; tick++) {
 		const bool was_crossing = j.crossing;
-		const bool done = journey_move(j, pos, cs, shape, kinematics::STEP);
+		const V2 from = pos;
+		const bool done = journey_move(j, pos, r.eras.back(), shape, kinematics::STEP);
+		const size_t era = r.eras.size() - 1; // (the colliders it moved among)
+		if (detected(from, pos)) {
+			r.eras.push_back(colliders_except(j.body, f, true));
+		}
 		r.at.push_back(pos);
 		r.state.push_back(bare(j));
 		r.exits.push_back(was_crossing && !j.crossing); // (through a portal: it goes on from the exit)
+		r.flags.push_back(f);
+		r.inside.push_back(in);
+		r.era.push_back(era);
 		if (done) {
 			break;
 		}
 	}
+	// where it ends: settled as the journey's end is (Stage 172: half through a platform, by its centre), the detectors
+	// on it there
+	kinematics::Body settled{pos, V2{}, false};
+	kinematics::settle(settled, colliders_except(j.body, f), shape);
+	r.end = settled.pos;
+	r.floor = settled.on_floor;
+	(void)detected(pos, r.end);
+	r.end_flags = f;
+	r.end_inside = in;
 }
 
 // Stage 178 (the user): where what the traveller passes turns it aside, a tick turns at once -- along a contact, then
@@ -1362,22 +1399,22 @@ void Session::run_journey(JourneyRun &r, size_t from, const Journey &start, cons
 // raw one rests). So it bends away a little before and comes back gradually, never into anything. Fixed: the first
 // point and the last (where it ends is the raw end), the points before `fixed_until` (already shown), a portal
 // crossing's (its drawing is clipped at the portal lines) and the points either side of an exit's jump.
-void Session::smooth_run(JourneyRun &r, size_t fixed_until, const std::vector<kinematics::Collider> &cs, const kinematics::Shape &shape) const {
+void Session::smooth_run(JourneyRun &r, const kinematics::Shape &shape) const {
 	const size_t n = r.at.size();
 	std::vector<double> x(n), y(n);
 	for (size_t i = 0; i < n; i++) {
-		const V2 p = i <= fixed_until && i < r.shown.size() ? r.shown[i] : r.at[i];
-		x[i] = p.x;
-		y[i] = p.y;
+		x[i] = r.at[i].x;
+		y[i] = r.at[i].y;
 	}
 	const double R0 = shape.radius + kinematics::SKIN;
 	std::vector<char> fixed(n, 0);
 	std::vector<std::vector<size_t>> near(n);
 	for (size_t i = 0; i < n; i++) {
-		fixed[i] = i <= fixed_until || i + 1 >= n || r.exits[i] || r.exits[i + 1] || r.state[i].crossing || r.state[i + 1].crossing;
+		fixed[i] = i == 0 || i + 1 >= n || r.exits[i] || r.exits[i + 1] || r.state[i].crossing || r.state[i + 1].crossing;
 		if (fixed[i]) {
 			continue;
 		}
+		const std::vector<kinematics::Collider> &cs = r.eras[r.era[i]]; // (Stage 223: what it moved among there)
 		for (size_t c = 0; c < cs.size(); c++) {
 			double nx, ny;
 			if (kinematics::distance(cs[c], shape, r.at[i].x, r.at[i].y, nx, ny) < R0 + JOURNEY_NEAR) {
@@ -1399,7 +1436,7 @@ void Session::smooth_run(JourneyRun &r, size_t fixed_until, const std::vector<ki
 			for (int k = 0; k < 2; k++) {
 				for (size_t c : near[i]) {
 					double ux, uy;
-					const double d = kinematics::distance(cs[c], shape, px, py, ux, uy);
+					const double d = kinematics::distance(r.eras[r.era[i]][c], shape, px, py, ux, uy);
 					if (d < R0) {
 						px += ux * (R0 - d);
 						py += uy * (R0 - d);
@@ -1574,19 +1611,10 @@ bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Co
 void Session::advance_journey(double dt) {
 	Journey &j = *journey_;
 	const bool player = j.body < 0;
-	const kinematics::Shape shape = player ? player_shape() : kinematics::Shape{world_->bodies()[size_t(j.body)].object.radius};
-	const V2 from = player ? player_ : world_->bodies()[size_t(j.body)].pos;
-	// Stage 178: the run played, a tick per physics step (between two ticks, part way)
+	// Stage 178: the run played, a tick per physics step (between two ticks, part way); Stage 223 (the user): the shot's
+	// speed-up too -- the journey is part of the shot -- and the flags as the run had them at the tick reached
 	JourneyRun &r = journey_run_;
-	const size_t played = size_t(std::floor(journey_clock_)); // (the last tick reached)
-	if (flags_version_ != journey_flags_ && played + 1 < r.at.size()) {
-		// a detector it passed changed the flags: the ticks after the last one reached run again under them
-		journey_flags_ = flags_version_;
-		const std::vector<kinematics::Collider> cs = colliders_except(j.body, flags_, true);
-		run_journey(r, played, j, cs, shape);
-		smooth_run(r, played, cs, shape);
-	}
-	journey_clock_ = std::min(double(r.at.size() - 1), journey_clock_ + dt / kinematics::STEP);
+	journey_clock_ = std::min(double(r.at.size() - 1), journey_clock_ + dt * flight_multiplier_ / kinematics::STEP);
 	const size_t k = size_t(std::floor(journey_clock_));
 	V2 pos = r.shown[k];
 	if (k + 1 < r.shown.size() && !r.exits[k + 1]) {
@@ -1595,12 +1623,17 @@ void Session::advance_journey(double dt) {
 	}
 	restore_state(j, r.state[k]); // (the drawing: a portal's crossing)
 	const bool done = k + 1 >= r.at.size();
-	bool floor = false;
+	const bool floor = done && r.floor;
 	if (done) {
-		kinematics::Body settled{pos, V2{}, false};
-		kinematics::settle(settled, colliders_except(j.body), shape);
-		pos = settled.pos;
-		floor = settled.on_floor;
+		pos = r.end;
+	}
+	if (!level_.detectors.empty()) {
+		inside_ = done ? r.end_inside : r.inside[k];
+		const int before = flags_version_;
+		set_flags(done ? r.end_flags : r.flags[k]);
+		if (flags_version_ != before) {
+			hud_ = hud_text();
+		}
 	}
 	if (player) {
 		player_ = pos;
@@ -1612,16 +1645,10 @@ void Session::advance_journey(double dt) {
 		if (floor) {
 			on_floor_ = true;
 		}
-		if (!level_.detectors.empty()) {
-			detect(feet(from), feet(pos));
-		}
 		shadow(); // (Stage 168: the player's light follows)
 	} else {
 		world_->set_body(size_t(j.body), pos, V2{}, floor);
 		sync_nodes();
-		if (!level_.detectors.empty()) {
-			detect(feet(player_), feet(player_));
-		}
 	}
 	if (done) {
 		journey_.reset();
@@ -2237,12 +2264,12 @@ void Session::arrow_states(Preview &p) const {
 			const bool player = j->body < 0;
 			V2 pos = player ? player_ : world_->bodies()[size_t(j->body)].pos;
 			const kinematics::Shape shape = player ? player_shape() : kinematics::Shape{world_->bodies()[size_t(j->body)].object.radius};
-			const std::vector<kinematics::Collider> cs = colliders_except(j->body, landed, true);
-			// (Stage 178: the shot's run, smoothed as the shot plays it)
+			// (Stage 178: the shot's run, smoothed as the shot plays it; Stage 223: the very run, the detectors it passes
+			// and what they change on the way -- from the flags the shot lands with, as the shot starts it)
 			JourneyRun run;
 			run.at.push_back(pos);
-			run_journey(run, 0, *j, cs, shape);
-			smooth_run(run, 0, cs, shape);
+			run_journey(run, *j, landed, inside_, shape);
+			smooth_run(run, shape);
 			trip.trail = run.shown;
 			for (size_t k = 1; k < run.exits.size(); k++) {
 				if (run.exits[k]) {
@@ -2257,11 +2284,15 @@ void Session::arrow_states(Preview &p) const {
 				const double arrive = j->lead + 1.0; // (Stage 173: a pulled object no longer stops at the player)
 				trip.blocked = std::hypot(double(pos.x) - last.x, double(pos.y) - last.y) > arrive;
 				// (Stage 172: settled as the live journey's end is -- onto a platform it ends half through)
-				kinematics::Body settled{pos, V2{}, false};
-				kinematics::settle(settled, colliders_except(j->body, landed), shape);
-				if (settled.pos.x != pos.x || settled.pos.y != pos.y) {
-					trip.trail.push_back(settled.pos);
+				if (run.end.x != pos.x || run.end.y != pos.y) {
+					trip.trail.push_back(run.end);
 				}
+			}
+			// Stage 223: what the detectors it passes change, a consequence of the journey's hit
+			rc::Flags after = lasting(run.end_flags);
+			if (after.canonical_key() != landed.canonical_key()) {
+				p.consequences.push_back({trip.step, landed, after});
+				landed = std::move(after);
 			}
 			p.trip = std::move(trip);
 		}

@@ -1827,6 +1827,100 @@ TEST_CASE("grapple: off a solid floor the tall player follows the bounce -- its 
 	}
 }
 
+namespace {
+
+// the user's pulling_3 (2026-11-13): a box on a detector holds `open`: door_1 open, door_2 closed; the player between
+// them. The box where the dump's shot hit it (its centre x 863.84, on the floor), the player where it stood.
+rcg::Session pulling_3(rcg::SessionConfig cfg = {}) {
+	rcg::Session s(rcg::parse_level_json(json::parse(R"({"schema": "rc-level/2", "name": "pulling_3", "edges": "wall",
+		"gravity": [0.0, 980.0], "player": {"start": [700.0, 600.0]}, "room": {"rect": [560.0, 240.0, 800.0, 600.0], "built": false},
+		"detectors": [{"flag": "open", "for": "any", "mode": "while", "name": "detector_1", "region": {"rect": [820.0, 620.0, 150.0, 30.0]}}],
+		"elements": [{"kind": "door", "name": "door_1", "open": "open", "start": [1300.0, 650.0], "end": [1300.0, 450.0]},
+			{"kind": "wall", "name": "wall_1", "start": [650.0, 650.0], "end": [1550.0, 650.0]},
+			{"kind": "wall", "name": "wall_2", "start": [1550.0, 650.0], "end": [1550.0, 250.0]},
+			{"kind": "wall", "name": "wall_3", "start": [1550.0, 250.0], "end": [650.0, 250.0]},
+			{"kind": "wall", "name": "wall_4", "start": [650.0, 650.0], "end": [650.0, 250.0]},
+			{"kind": "door", "name": "door_2", "open": "!open", "start": [1400.0, 650.0], "end": [1400.0, 450.0]}],
+		"objective": {"goal": {"rect": [1460.0, 510.0, 80.0, 130.0]}},
+		"objects": [{"circle": {"center": [863.84, 630.0], "radius": 16.0}, "name": "object_1", "shape": "square"}]})")), cfg);
+	s.hold({}, 60); // the box rests on the detector: door_1 opens
+	s.teleport(rc::V2::of(0x1.5afae2p+10, 0x1.32f5c2p+9));
+	s.hold({}, 60);
+	REQUIRE(s.player().x == 0x1.5afae2p+10f);
+	REQUIRE(s.player().y == 0x1.32f5c2p+9f);
+	REQUIRE(s.flags().is_true("open"));
+	return s;
+}
+
+} // namespace
+
+TEST_CASE("pull: the user's pulling_3 -- the box leaves the detector, the door it held open closes before it; the preview shows the shot's very run (Stage 223)") {
+	const double cx = 0x1.e98616p+9, cy = 0x1.3bdf7ep+9;
+	for (const double frame : {1.0 / 60.0, 1.0 / 144.0, 1.0 / 7.0}) { // (any frame rate: the same run)
+		CAPTURE(frame);
+		rcg::Session s = pulling_3();
+		s.set_cursor(rc::V2::of(cx, cy));
+		s.settle();
+		const std::vector<rc::V2> trail = s.preview_trip_trail();
+		REQUIRE(trail.size() > 10);
+		CHECK(trail.back().x == doctest::Approx(1300 - 16 - 0.08).epsilon(1e-4)); // against door_1, not at the player
+		REQUIRE(s.preview_predicted().has_value());
+		CHECK_FALSE(s.preview_predicted()->is_true("open")); // (the doors' change shown: door_1 closes, door_2 opens)
+		REQUIRE(s.start_fire());
+		std::vector<rc::V2> played; // the box at each frame once its journey began
+		for (int frames = 0; s.flying() && frames < 5000; frames++) {
+			s.advance(frame, {});
+			played.push_back(body(s));
+		}
+		CHECK(body(s).x == trail.back().x); // where the preview said
+		CHECK(body(s).y == trail.back().y);
+		CHECK_FALSE(s.flags().is_true("open"));
+		if (frame == 1.0 / 60.0) { // a tick a frame: every frame where the preview's trail is
+			size_t matched = 0;
+			for (const rc::V2 &p : played) {
+				matched += std::any_of(trail.begin(), trail.end(), [&](const rc::V2 &t) { return t.x == p.x && t.y == p.y; }) ? 1 : 0;
+			}
+			CHECK(matched + 2 >= played.size()); // (but the arrow's frames, where the box rests on the detector)
+		}
+	}
+}
+
+TEST_CASE("pull and grapple: the shot's speed-up goes on through its journey, and works in the journey too (Stage 223)") {
+	const double cx = 0x1.e98616p+9, cy = 0x1.3bdf7ep+9;
+	auto frames_of = [&](int speedup_at) {
+		rcg::Session s = pulling_3();
+		s.set_cursor(rc::V2::of(cx, cy));
+		s.settle();
+		const rcg::Flight f = s.fire(speedup_at, 1.0 / 60.0);
+		CHECK(body(s).x == doctest::Approx(1300 - 16 - 0.08).epsilon(1e-4)); // (the same end)
+		return f.frames;
+	};
+	const int plain = frames_of(-1), sped = frames_of(1);
+	CHECK(plain > 30);
+	CHECK(sped * 5 < plain); // (ten times faster from the first frame: the arrow and the journey both)
+	// pressed during the journey (the arrow landed): from then on ten times faster
+	rcg::Session s = pulling_3();
+	s.set_cursor(rc::V2::of(cx, cy));
+	s.settle();
+	REQUIRE(s.start_fire());
+	int arrow = 0;
+	while (s.flying() && body(s).x < 870) { // (the arrow's frames: the box still)
+		s.advance(1.0 / 60.0, {});
+		arrow++;
+	}
+	REQUIRE(s.flying());
+	s.speed_up();
+	int journey = 0;
+	while (s.flying()) {
+		s.advance(1.0 / 60.0, {});
+		journey++;
+	}
+	CAPTURE(arrow);
+	CAPTURE(journey);
+	CHECK(journey * 5 < plain - arrow); // (the journey alone: about 29 frames unhurried)
+	CHECK(body(s).x == doctest::Approx(1300 - 16 - 0.08).epsilon(1e-4));
+}
+
 TEST_CASE("pull and grapple: the preview's end is drawn as what moves -- the player's triangle (and its body under gravity), the object's shape; an object drawn in its shape (Stage 181)") {
 	using rcg::render::Kind;
 	// the closed outlines (point counts) the preview's end draws in its colour, and the circles' radii
