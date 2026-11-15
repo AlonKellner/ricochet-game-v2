@@ -24,7 +24,7 @@ the door to the goal. The arrow never crossed the shield -- the traveller's body
 |---|---|---|
 | 225.1 | A journey's colliders (`colliders_except(..., journey = true)`, every era of flags) include every present surface with a side that `shields()` under those flags; the free bodies, the player's walk and the journey's end settle unchanged | Done |
 | 225.2 | Tests: the user's shield_5 as dumped (the box stops against the shield, the preview agrees, it then rests on the left, `open` stays unset); a grapple whose arrow passes over a low shield stops at the tall player's feet, and the player then walks through the shield | Done |
-| 225.3 | The user's interactive sign-off | Pending |
+| 225.3 | The user's interactive sign-off | Done ("Works perfectly! Approved, proceed", 2026-11-15) |
 
 ## Decisions
 
