@@ -28,7 +28,7 @@
     ],
     "interactive": true
    },
-   "player_solid": false,
+   "player_solid": true,
    "right": {
     "effect": {
      "type": "terminal"

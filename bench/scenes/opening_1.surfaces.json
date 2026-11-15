@@ -19,7 +19,7 @@
     "type": "terminal"
    },
    "line": true,
-   "player_solid": false,
+   "player_solid": true,
    "right": {
     "interactive": true,
     "states": [
