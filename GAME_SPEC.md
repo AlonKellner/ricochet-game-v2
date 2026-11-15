@@ -2757,9 +2757,14 @@ physical path:
   it, over the player's feet (Stage 173).
 
 The traveller moves at 900 px/s, swept against what it collides with: present player-solid surfaces and
-colliders (a pulled object passes the player, Stage 173; a grappled player is its whole tall shape). It stops at
-the first contact or at the path's end. A fence (an
-arrow-pass barrier) stops it; a shield is not solid and does not. **A platform does not stop it**
+colliders (a pulled object passes the player, Stage 173; a grappled player is its whole tall shape), and present
+shields. It stops at the first contact or at the path's end. A fence (an
+arrow-pass barrier) stops it. **A shield stops it** (Stage 225, the user: "shots are blocked by shields, and that
+include pulls and grapples"): the journey is the shot, so a surface with a side that is a shield in the flags of the
+moment (§9.13's preset, face `stop`, body `pass`; a switch may turn it) is solid to the traveller, both ways, for as long
+as it is pulled or grappled -- a pulled object never ends across one, the tall player's feet are held by one the arrow
+passed over. Before and after the journey a shield is passed as ever: the object falls, the player walks, through it
+freely. **A platform does not stop it**
 (Stage 172): a pulled object or a grappled player passes through platforms. Where the journey ends, a traveller
 half through a platform is settled by its centre (§25.1): above it, it is put on top and stands; below it, it
 stays and falls on. The preview's trip ends where the shot's settles (§14.12), drawn as the traveller (Stage
@@ -3316,4 +3321,4 @@ The following are intentionally left open — they are content or product design
 
 ---
 
-**Current version: 2.113.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.
+**Current version: 2.114.0.** See [CHANGELOG.md](CHANGELOG.md) for revision history.

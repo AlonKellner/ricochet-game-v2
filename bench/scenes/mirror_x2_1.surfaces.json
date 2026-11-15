@@ -1,0 +1,425 @@
+{
+ "scene": "res://scenes/mirror_x2_1.tscn",
+ "surfaces": [
+  {
+   "circle": null,
+   "end": [600.0, 650.0],
+   "full": false,
+   "id": 1,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [600.0, 350.0],
+   "via": [600.0, 500.0]
+  },
+  {
+   "circle": null,
+   "end": [1350.0, 650.0],
+   "full": false,
+   "id": 2,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [600.0, 650.0],
+   "via": [975.0, 650.0]
+  },
+  {
+   "circle": null,
+   "end": [1350.0, 350.0],
+   "full": false,
+   "id": 3,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1350.0, 650.0],
+   "via": [1350.0, 500.0]
+  },
+  {
+   "circle": null,
+   "end": [600.0, 350.0],
+   "full": false,
+   "id": 4,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1350.0, 350.0],
+   "via": [975.0, 350.0]
+  },
+  {
+   "circle": null,
+   "end": [610.0, 360.0],
+   "full": false,
+   "id": 5,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "start": [610.0, 450.0],
+   "via": [610.0, 405.0]
+  },
+  {
+   "circle": null,
+   "end": [700.0, 360.0],
+   "full": false,
+   "id": 6,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "type": "reflection"
+   },
+   "start": [610.0, 360.0],
+   "via": [655.0, 360.0]
+  },
+  {
+   "circle": null,
+   "end": [800.0, 500.0],
+   "full": false,
+   "id": 7,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "states": [
+     {
+      "key": "switch",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "states": [
+     {
+      "key": "switch",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "type": "terminal"
+   },
+   "start": [750.0, 500.0],
+   "via": [775.0, 500.0]
+  },
+  {
+   "circle": null,
+   "end": [1000.0, 500.0],
+   "full": false,
+   "id": 8,
+   "is_target": false,
+   "left": {
+    "interactive": true,
+    "states": [
+     {
+      "key": "switch_2",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": false,
+   "right": {
+    "interactive": true,
+    "states": [
+     {
+      "key": "switch_2",
+      "op": "toggle",
+      "value": true
+     }
+    ],
+    "type": "terminal"
+   },
+   "start": [950.0, 500.0],
+   "via": [975.0, 500.0]
+  },
+  {
+   "circle": null,
+   "end": [1200.0, 650.0],
+   "full": false,
+   "id": 9,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "switch",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1200.0, 350.0],
+   "via": [1200.0, 500.0]
+  },
+  {
+   "circle": null,
+   "end": [1250.0, 650.0],
+   "full": false,
+   "id": 10,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "switch_2",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1250.0, 350.0],
+   "via": [1250.0, 500.0]
+  },
+  {
+   "circle": null,
+   "end": [750.0, 510.0],
+   "full": false,
+   "id": 11,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [750.0, 500.0],
+   "via": [750.0, 505.0]
+  },
+  {
+   "circle": null,
+   "end": [800.0, 510.0],
+   "full": false,
+   "id": 12,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [800.0, 500.0],
+   "via": [800.0, 505.0]
+  },
+  {
+   "circle": null,
+   "end": [750.0, 510.0],
+   "full": false,
+   "id": 13,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [800.0, 510.0],
+   "via": [775.0, 510.0]
+  },
+  {
+   "circle": null,
+   "end": [950.0, 510.0],
+   "full": false,
+   "id": 14,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [950.0, 500.0],
+   "via": [950.0, 505.0]
+  },
+  {
+   "circle": null,
+   "end": [1000.0, 510.0],
+   "full": false,
+   "id": 15,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [950.0, 510.0],
+   "via": [975.0, 510.0]
+  },
+  {
+   "circle": null,
+   "end": [1000.0, 500.0],
+   "full": false,
+   "id": 16,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1000.0, 510.0],
+   "via": [1000.0, 505.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 0.0],
+   "full": false,
+   "id": 17,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1920.0, 0.0],
+   "via": [960.0, 0.0]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 0.0],
+   "full": false,
+   "id": 18,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [1920.0, 1080.0],
+   "via": [1920.0, 540.0]
+  },
+  {
+   "circle": null,
+   "end": [1920.0, 1080.0],
+   "full": false,
+   "id": 19,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [0.0, 1080.0],
+   "via": [960.0, 1080.0]
+  },
+  {
+   "circle": null,
+   "end": [0.0, 1080.0],
+   "full": false,
+   "id": 20,
+   "is_target": false,
+   "left": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "line": true,
+   "player_solid": true,
+   "right": {
+    "interactive": false,
+    "type": "terminal"
+   },
+   "start": [0.0, 0.0],
+   "via": [0.0, 540.0]
+  }
+ ]
+}

@@ -2,6 +2,7 @@
  "edges": "wall",
  "elements": [
   {
+   "body": "block",
    "end": [1100.0, 650.0],
    "face": "stop",
    "flag": "switch",

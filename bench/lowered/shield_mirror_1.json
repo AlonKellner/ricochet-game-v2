@@ -1,0 +1,240 @@
+{
+ "gravity": [0.0, 980.0],
+ "name": "shield_mirror_1",
+ "player": {
+  "start": [1000.0, 710.0]
+ },
+ "room": {
+  "built": false,
+  "rect": [560.0, 240.0, 800.0, 600.0]
+ },
+ "schema": "rc-level/1",
+ "surfaces": [
+  {
+   "end": [1400.0, 300.0],
+   "ids": [1],
+   "label": "Door",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "presence": [
+    {
+     "key": "open",
+     "values": ["DEFAULT", "false"]
+    }
+   ],
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1400.0, 750.0],
+   "via": [1400.0, 525.0]
+  },
+  {
+   "end": [1500.0, 750.0],
+   "ids": [2],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [800.0, 750.0],
+   "via": [1150.0, 750.0]
+  },
+  {
+   "end": [800.0, 300.0],
+   "ids": [3],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [800.0, 750.0],
+   "via": [800.0, 525.0]
+  },
+  {
+   "end": [1500.0, 300.0],
+   "ids": [4],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [800.0, 300.0],
+   "via": [1150.0, 300.0]
+  },
+  {
+   "end": [1500.0, 750.0],
+   "ids": [5],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1500.0, 300.0],
+   "via": [1500.0, 525.0]
+  },
+  {
+   "end": [1050.0, 750.0],
+   "ids": [6],
+   "label": "Shield",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1050.0, 550.0],
+   "via": [1050.0, 650.0]
+  },
+  {
+   "end": [1150.0, 350.0],
+   "ids": [7],
+   "label": "Mirror",
+   "left": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "player_solid": false,
+   "right": {
+    "effect": {
+     "type": "reflection"
+    },
+    "interactive": true
+   },
+   "start": [950.0, 350.0],
+   "via": [1050.0, 350.0]
+  },
+  {
+   "end": [0.0, 0.0],
+   "ids": [8],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1920.0, 0.0],
+   "via": [960.0, 0.0]
+  },
+  {
+   "end": [1920.0, 0.0],
+   "ids": [9],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [1920.0, 1080.0],
+   "via": [1920.0, 540.0]
+  },
+  {
+   "end": [1920.0, 1080.0],
+   "ids": [10],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [0.0, 1080.0],
+   "via": [960.0, 1080.0]
+  },
+  {
+   "end": [0.0, 1080.0],
+   "ids": [11],
+   "label": "Surface",
+   "left": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "player_solid": true,
+   "right": {
+    "effect": {
+     "type": "terminal"
+    },
+    "interactive": false
+   },
+   "start": [0.0, 0.0],
+   "via": [0.0, 540.0]
+  }
+ ]
+}
