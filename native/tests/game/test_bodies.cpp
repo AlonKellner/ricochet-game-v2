@@ -108,6 +108,63 @@ TEST_CASE("pull and grapple: a fence stops the traveller, a pass-through does no
 	}
 }
 
+TEST_CASE("pull: the user's shield_5 -- a box pulled toward a player beside a shield stops at the shield, the shot's own; then rests on its side (Stage 225)") {
+	// the user's F12 dump (2026-11-15): the player stood 5.5 px left of a shield, the box 16 in radius; pulled to the
+	// player's head it straddled the shield, and a second pull from the right brought it through onto the detector
+	rcg::Session s(rcg::parse_level_json(json::parse(R"({"schema": "rc-level/2", "name": "shield_5", "edges": "wall",
+		"gravity": [0.0, 980.0], "player": {"start": [1200.0, 700.0]}, "room": {"rect": [560.0, 240.0, 800.0, 600.0], "built": false},
+		"detectors": [{"flag": "open", "for": "any", "mode": "while", "name": "detector_1", "region": {"rect": [960.0, 610.0, 130.0, 130.0]}}],
+		"elements": [{"end": [1250.0, 350.0], "kind": "door", "name": "door_1", "open": "open", "start": [1250.0, 750.0]},
+			{"end": [1400.0, 750.0], "kind": "wall", "name": "wall_1", "start": [800.0, 750.0]},
+			{"end": [950.0, 600.0], "kind": "shield", "name": "shield_1", "start": [950.0, 750.0]},
+			{"end": [800.0, 350.0], "kind": "wall", "name": "wall_2", "start": [800.0, 750.0]},
+			{"end": [1400.0, 350.0], "kind": "wall", "name": "wall_3", "start": [800.0, 350.0]},
+			{"end": [1400.0, 750.0], "kind": "wall", "name": "wall_4", "start": [1400.0, 350.0]}],
+		"objective": {"goal": {"rect": [1310.0, 660.0, 80.0, 80.0]}},
+		"objects": [{"circle": {"center": [850.0, 700.0], "radius": 16.0}, "name": "object_1"}]})")));
+	s.hold({}, 60); // the box rests on the floor
+	s.teleport(rc::V2::of(0x1.d83fdp+9, 0x1.64f5c2p+9));
+	s.hold({}, 60);
+	REQUIRE(s.player().x == 0x1.d83fdp+9f);
+	REQUIRE(body(s).y == doctest::Approx(750 - 16 - 0.08).epsilon(1e-6));
+	s.set_cursor(rc::V2::of(0x1.b7fffep+9, 0x1.6d6596p+9)); // the dump's aim, short of the box
+	s.settle();
+	const std::optional<rc::V2> end = s.preview_trip_end();
+	REQUIRE(end.has_value());
+	CHECK(end->x == doctest::Approx(950 - 16 - 0.08).epsilon(1e-6)); // against the shield, not at the player
+	shoot(s, 0x1.b7fffep+9, 0x1.6d6596p+9);
+	CHECK(body(s).x == end->x); // the live journey ends where the preview said
+	CHECK(body(s).y == end->y);
+	s.hold({}, 90); // (after the shot it is free: it falls by the shield, on its side)
+	CHECK(body(s).x == doctest::Approx(950 - 16 - 0.08).epsilon(1e-6));
+	CHECK(body(s).y == doctest::Approx(750 - 16 - 0.08).epsilon(1e-6));
+	CHECK_FALSE(s.flags().is_true("open"));
+}
+
+TEST_CASE("grapple: a shield the arrow passes over stops the tall player's feet on the way; after the journey the player walks through it (Stage 225)") {
+	auto grappled = [](bool shield) {
+		const std::string level = std::string(R"({"gravity": [0, 980], "player": {"start": [700, 800]}, "elements": [
+			{"kind": "grapple", "start": [1200, 300], "end": [1200, 840]})") +
+				(shield ? R"(, {"kind": "shield", "start": [900, 840], "end": [900, 815]})" : "") + "]}";
+		rcg::Session s(level_of(level.c_str()));
+		s.hold({}, 60);
+		REQUIRE(s.player().y == doctest::Approx(840 - 24 - 12 - 0.08).epsilon(1e-6)); // standing: the head 803.92
+		s.set_cursor(rc::V2::of(1200, s.player().y)); // level: over the shield's top (815)
+		s.settle();
+		const std::optional<rc::V2> end = s.preview_trip_end();
+		REQUIRE(end.has_value());
+		shoot(s, 1200, s.player().y);
+		CHECK(s.player().x == end->x);
+		CHECK(s.player().y == end->y);
+		return s;
+	};
+	CHECK(grappled(false).player().x == doctest::Approx(1200 - 12 - 0.08).epsilon(1e-4)); // (free: at the grapple)
+	rcg::Session s = grappled(true);
+	CHECK(s.player().x == doctest::Approx(900 - 12 - 0.08).epsilon(1e-4)); // its feet against the shield
+	s.hold({"move_right"}, 60);
+	CHECK(s.player().x > 950.0f); // (no journey: the shield passes the player)
+}
+
 TEST_CASE("objects: a detector for objects sees a pulled object pass") {
 	rcg::Session s(level_of(R"({"objects": [{"name": "box", "circle": {"center": [1200, 540], "radius": 20}}],
 		"detectors": [{"name": "plate", "for": "object", "region": {"rect": [760, 500, 80, 80]}, "mode": "enter"}]})"));

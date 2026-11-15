@@ -1164,8 +1164,13 @@ std::vector<kinematics::Collider> Session::colliders_except(int body) const { re
 std::vector<kinematics::Collider> Session::colliders_except(int body, const rc::Flags &flags, bool journey) const {
 	std::vector<kinematics::Collider> out;
 	const int skip = body >= 0 ? world_->bodies()[size_t(body)].id : -1;
+	// Stage 225 (the user): a shield stops the arrow, and a pull or a grapple is the shot -- solid to the traveller while
+	// it journeys (a side that shields in these flags: a switch may turn it), passed by anything after
+	auto shield = [&](const BuiltSurface &s) {
+		return journey && (shields(s, active_side(s, Side::Left, flags)) || shields(s, active_side(s, Side::Right, flags)));
+	};
 	for (const BuiltSurface &s : world_->surfaces()) {
-		if (s.id != skip && (s.player_solid || (s.platform && !journey)) && !s.pre_transform && present(s, flags)) {
+		if (s.id != skip && (s.player_solid || (s.platform && !journey) || shield(s)) && !s.pre_transform && present(s, flags)) {
 			out.push_back(kinematics::collider_of(s.seg));
 			out.back().platform = s.platform;
 		}
@@ -1605,8 +1610,8 @@ bool Session::journey_move(Journey &j, V2 &pos, const std::vector<kinematics::Co
 }
 
 // The traveller moves along the path at JOURNEY_SPEED, swept against what it
-// meets: it stops at the first contact (a fence stops it, an arrow-only barrier
-// or a platform does not), or at the path's end. Ending half through a platform,
+// meets: it stops at the first contact (a fence or a shield stops it -- Stage 225: the shot's own -- a platform
+// does not), or at the path's end. Ending half through a platform,
 // its centre decides: above, it is put on top; below, it falls through (Stage 172).
 void Session::advance_journey(double dt) {
 	Journey &j = *journey_;
